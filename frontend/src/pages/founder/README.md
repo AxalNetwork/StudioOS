@@ -112,3 +112,7 @@ the shared parts and `RecordChatTool.jsx`'s tab bar (`SubTabs`), and reads
 three channels built, D1309's "Today" panel is gone.
 
 - `FounderCoMarketingPage.jsx` reuses the published feed in Grow › Partner network; `CoMarketingFounderRedirect.jsx` counts only the founder’s legacy forward, retaining query and hash (D4439, #4439).
+For D4587 (#4587), `InterviewReviewPage.jsx` keys list/detail/receipt state to
+the originating interview and selected-session request generation. Only a
+detail that names the visible session enables review actions. `sessionPlayer.js`
+also discards and revokes audio that finishes loading after a session switch.

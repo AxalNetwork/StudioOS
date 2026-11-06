@@ -55,10 +55,10 @@ test('the focus: no interview gives the canvas\'s first-conversation card; other
   assert.equal(phoneFocus({ cards: [{ slug: 'x', next: { text: 'Go', href: 'https://evil.example' } }] }), null, 'only in-app paths');
   assert.equal(phoneFocus({ cards: [] }), null);
   // #1609's shape: { rule, eyebrow, headline, why, cta: { label, href }, then }.
-  const worker = phoneFocus({ ...RAW, focus: { rule: 'review', eyebrow: 'Validate · Next', headline: 'Review the interview with Dana from 12 Oct.', why: 'It is transcribed but not yet placed.', cta: { label: 'Review the interview', href: '/validate/interviews/41' }, then: null } });
+  const worker = phoneFocus({ ...RAW, focus: { rule: 'review', eyebrow: 'Validate · Next', headline: 'Review the interview with Dana from 12 Oct.', why: 'It is transcribed but not yet placed.', cta: { label: 'Review the interview', href: '/validate/customer-research/41?project_id=8&session=19' }, then: null } });
   assert.equal(worker.headline, 'Review the interview with Dana from 12 Oct.');
   assert.equal(worker.cta, 'Review the interview');
-  assert.equal(worker.href, '/validate/interviews/41');
+  assert.equal(worker.href, '/validate/customer-research/41?project_id=8&session=19', 'the venture and intended session survive the phone adapter');
   assert.equal(worker.then, null);
 });
 

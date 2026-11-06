@@ -6,8 +6,9 @@
  *
  * THE FOCUS is the first rule that holds:
  *   1. the venture has no interview: record the first conversation;
- *   2. the newest session needs review (transcribed, or structured with
- *      pending placements) and the caller can write: review it. The why line
+ *   2. the newest actionable session needs review (transcribed, or structured
+ *      with pending placements) and the caller can write: review it. Completed,
+ *      draft and already-cleared sessions do not hide older pending work. The why line
  *      counts what its placements would move, in pain themes (phrases resolved
  *      through the pain-group model, so two wordings of one theme count once)
  *      and hypotheses, never in placements. A pain that names one of the
@@ -38,6 +39,8 @@ import {
 export type { Focus };
 
 const recordHref = (projectId: number) => `/validate/record?project=${projectId}`;
+export const reviewHref = (projectId: number, interviewId: number, sessionId: number) =>
+  `/validate/customer-research/${interviewId}?project_id=${projectId}&session=${sessionId}`;
 
 /** What a session's pending placements would move: distinct themes and hypotheses. */
 export async function pendingMoves(env: Env, projectId: number, sessionId: number) {
@@ -82,12 +85,16 @@ export async function focusOf(
     };
   }
   if (canWriteVenture) {
-    const s = await env.DB.prepare(
+    // Stable queue order: newest recorded activity, then id. We inspect every
+    // potentially actionable row; a newer completed/draft session must not
+    // hide an older transcript or a structured session with pending findings.
+    const candidates = (await env.DB.prepare(
       `SELECT s.id, s.interview_id, s.status, COALESCE(s.stopped_at, s.updated_at, s.created_at) AS at, i.interviewee_name
          FROM interview_sessions s JOIN discovery_interviews i ON i.id = s.interview_id
-        WHERE s.project_id = ? ORDER BY s.id DESC LIMIT 1`,
-    ).bind(projectId).first<{ id: number; interview_id: number; status: string; at: string | null; interviewee_name: string | null }>();
-    if (s && (s.status === 'transcribed' || s.status === 'structured')) {
+        WHERE s.project_id = ? AND s.status IN ('transcribed', 'structured')
+        ORDER BY COALESCE(s.stopped_at, s.updated_at, s.created_at) DESC, s.id DESC`,
+    ).bind(projectId).all<{ id: number; interview_id: number; status: string; at: string | null; interviewee_name: string | null }>()).results ?? [];
+    for (const s of candidates) {
       const moves = s.status === 'structured' ? await pendingMoves(env, projectId, s.id) : null;
       if (s.status === 'transcribed' || (moves && moves.placements > 0)) {
         const who = s.interviewee_name?.trim() || 'your interviewee';
@@ -99,7 +106,7 @@ export async function focusOf(
           why: s.status === 'transcribed' ? 'It is transcribed but not yet placed.'
             : parts.length ? `Its findings would move ${parts.join(' and ')}.` : 'Its findings are waiting for you to accept or discard them.',
           // D704 decision 9: the interview's record, opened on this session.
-          cta: { label: 'Review the interview', href: `/validate/customer-research/${s.interview_id}?session=${s.id}` },
+          cta: { label: 'Review the interview', href: reviewHref(projectId, s.interview_id, s.id) },
           then: null,
         };
       }

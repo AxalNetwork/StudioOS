@@ -328,6 +328,11 @@ D659 (#1472): `cycleCards.ts` is the shape every cycle read returns: `Figure`,
 source into that one card's `unreadable`. Build, Raise and Grow import it.
 `cycleFocus.ts` (D692, #1701) is the phone root's shape every overview read returns (`focus`, `meter`, `index`), its helpers (`part`, `sentence`, `cardFocus`, `cardValue`, `usdShort`), and Build's, Raise's and Grow's parts (`buildPhone`, `raisePhone`, `growPhone`).
 `validateFocus.ts` (D685 §5.12, #1584; D692, #1701) is what Validate's overview leads with on a phone, in `cycleFocus.ts`'s shape: the focus (record the first conversation; for a writer, review the newest session, counting the pain themes and hypotheses its pending placements would move, else record the next conversation with the meter in the why; for anyone else, the first card's next), the interviews meter against `interviews_month_target` with its `display`, and the index rows, Verdict only for a decision reader. `indexCountsOf` stays as Customer research's two counts, which `../routes/founder_profile.ts` also reads.
+
+D4587 (#4587) makes that review choice the newest *actionable* session by
+activity time then id, across the full transcribed/structured candidate set.
+Its record CTA carries both `project_id` and `session`; completed, draft or
+cleared newer sessions no longer hide older pending review work.
 `cycleValidate.ts` computes Validate's figures, cards and records from records
 at read time and stores nothing. `validateWriters.ts` has one writer per
 migration 440 record. The manual routes and #1471's interview accept path both

@@ -207,46 +207,76 @@ export default function InterviewRecord({
   const parts = recordParts(read);
   const declarations = declaredActions(read);
   const [list, setList] = useState(undefined);
-  const [detail, setDetail] = useState(undefined);
-  const [receipt, setReceipt] = useState(undefined);
+  const [detailRead, setDetailRead] = useState({ sessionId: null, value: undefined });
+  const [receiptRead, setReceiptRead] = useState({ sessionId: null, value: undefined });
   const [summarising, setSummarising] = useState({ busy: false, error: null });
   // D771 (#2097): while the summary is written, the rail is that option's.
   useRailOption(summarising.busy ? 'summarise:session' : null, 'Summarise');
   const [search, setSearch] = useState('');
 
   // The session routes answer only the venture's own: read them only when the read sends Transcript.
-  const loadList = useCallback(() => (parts.sessions ? sessions.list(id).then(setList).catch(() => setList(null)) : undefined), [parts.sessions, sessions, id]);
-  useEffect(() => { void loadList(); }, [loadList]);
+  useEffect(() => {
+    let current = true;
+    setList(undefined);
+    if (parts.sessions) void sessions.list(id).then((value) => { if (current) setList(value); }).catch(() => { if (current) setList(null); });
+    return () => { current = false; };
+  }, [parts.sessions, sessions, id, projectId]);
   const chosen = pickSession(list?.items, params.get('session'));
   const chosenId = chosen?.id ?? null;
   // D778 part 8 (#2103): the session open now; a Summarise answers only the one it was pressed on.
   const openSession = useRef(chosenId);
   openSession.current = chosenId;
+  const selectedRequest = useRef({ generation: 0, sessionId: chosenId });
   const { player, held, audioError, setAudioError, open: openRecording, seek, rate, setRate } = useSessionPlayer(sessions, chosenId);
   const [playerShown, setPlayerShown] = useState(false);
   const header = useRecordHeader();
   const tab = tabOf(params.get('tab'));
   const chooseTab = (key) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', key); return n; }, { replace: true });
-  const loadDetail = useCallback(() => (chosenId == null ? undefined : sessions.get(chosenId).then(setDetail).catch(() => setDetail(null))), [sessions, chosenId]);
-  const loadReceipt = useCallback(() => (chosenId == null ? undefined : sessions.receipt(chosenId).then(setReceipt).catch(() => setReceipt(null))), [sessions, chosenId]);
+  const isCurrentRequest = useCallback((generation, sessionId) => selectedRequest.current.generation === generation
+    && String(selectedRequest.current.sessionId) === String(sessionId), []);
+  const loadDetail = useCallback(() => {
+    if (chosenId == null) return undefined;
+    const generation = selectedRequest.current.generation;
+    const sessionId = chosenId;
+    return sessions.get(sessionId).then((value) => {
+      if (!isCurrentRequest(generation, sessionId)) return;
+      const matches = String(value?.session?.id) === String(sessionId);
+      setDetailRead({ sessionId, value: matches ? value : null });
+    }).catch(() => { if (isCurrentRequest(generation, sessionId)) setDetailRead({ sessionId, value: null }); });
+  }, [sessions, chosenId, projectId, isCurrentRequest]);
+  const loadReceipt = useCallback(() => {
+    if (chosenId == null) return undefined;
+    const generation = selectedRequest.current.generation;
+    const sessionId = chosenId;
+    return sessions.receipt(sessionId).then((value) => {
+      if (isCurrentRequest(generation, sessionId)) setReceiptRead({ sessionId, value });
+    }).catch(() => { if (isCurrentRequest(generation, sessionId)) setReceiptRead({ sessionId, value: null }); });
+  }, [sessions, chosenId, projectId, isCurrentRequest]);
   useEffect(() => {
-    setDetail(undefined); setReceipt(undefined); setSummarising({ busy: false, error: null }); setAudioError('');
+    selectedRequest.current = { generation: selectedRequest.current.generation + 1, sessionId: chosenId };
+    setDetailRead({ sessionId: chosenId, value: undefined }); setReceiptRead({ sessionId: chosenId, value: undefined });
+    setSummarising({ busy: false, error: null }); setAudioError('');
     void loadDetail(); void loadReceipt();
   }, [loadDetail, loadReceipt]);
 
   const items = Array.isArray(list?.items) ? list.items : [];
-  const session = detail?.session || chosen;
-  const reviewable = !!session && REVIEWABLE.has(session.status);
+  const detail = String(detailRead.sessionId) === String(chosenId) ? detailRead.value : undefined;
+  const receipt = String(receiptRead.sessionId) === String(chosenId) ? receiptRead.value : undefined;
+  const loadedSession = detail?.session && String(detail.session.id) === String(chosenId) ? detail.session : null;
+  const session = loadedSession || chosen;
+  const reviewable = !!loadedSession && REVIEWABLE.has(loadedSession.status);
   const segments = Array.isArray(detail?.segments) ? detail.segments : [];
   const hasFinal = segments.some((s) => s.source === 'final');
   const shown = findPassages(segments, search);
 
   const summarise = async () => {
     const pressedFor = chosenId;
+    const target = loadedSession;
+    if (!target || String(target.id) !== String(pressedFor)) return;
     setSummarising({ busy: true, error: null });
     try {
       // The press names its own option, keeping the mounted rail's page.
-      await sessions.summarise(session.id, undefined, railPressHeaders('summarise:session'));
+      await sessions.summarise(target.id, undefined, railPressHeaders('summarise:session'));
       if (openSession.current !== pressedFor) return;
       setSummarising({ busy: false, error: null });
       loadDetail(); loadReceipt();
@@ -256,8 +286,14 @@ export default function InterviewRecord({
     }
   };
   const assign = async (segId, label) => {
-    await sessions.setSpeaker(session.id, segId, label);
-    setDetail((d) => ({ ...d, segments: d.segments.map((s) => (s.id === segId ? { ...s, speaker_label: label } : s)) }));
+    const target = loadedSession;
+    const generation = selectedRequest.current.generation;
+    if (!target || String(target.id) !== String(chosenId)) return;
+    await sessions.setSpeaker(target.id, segId, label);
+    if (!isCurrentRequest(generation, target.id)) return;
+    setDetailRead((current) => String(current.sessionId) === String(target.id) && current.value
+      ? { ...current, value: { ...current.value, segments: current.value.segments.map((s) => (s.id === segId ? { ...s, speaker_label: label } : s)) } }
+      : current);
   };
 
   // ---- The record's own actions -------------------------------------------
@@ -345,7 +381,7 @@ export default function InterviewRecord({
   const placementsCard = (section) => (
     <Frame key={section.key || 'placements'} section={section} testid="interview-review-findings">
       {reviewable
-        ? <ReviewStep api={sessions} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
+        ? <ReviewStep api={sessions} sessionId={loadedSession.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
         : <p className={MUTED}>{session ? 'Nothing is proposed until the session has a transcript.' : 'No session recorded for this interview yet.'}</p>}
     </Frame>
   );

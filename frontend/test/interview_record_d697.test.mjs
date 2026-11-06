@@ -28,6 +28,7 @@ import { TranscriptReview } from '../src/pages/founder/InterviewSessionPage.jsx'
 import { PainSeverity } from '../src/pages/founder/validatePieces.jsx';
 import { api } from '../src/lib/api.js';
 import InterviewRecord from '../src/pages/founder/InterviewReviewPage.jsx';
+import { useSessionPlayer } from '../src/pages/founder/sessionPlayer.js';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { recordParts } from '../src/pages/founder/interviewReviewModel.js';
 import { PLACEMENTS_ONE_RUN } from './_interview_review_fixtures.mjs';
@@ -221,6 +222,7 @@ function fakes({ items = [S(9, 'draft'), S(7, 'transcribed'), S(6, 'reviewed')],
   const actFn = async (key, body) => { actCalls.push([key, body]); return { ok: true }; };
   return { calls, sessions, api: apiFake, act: actFn, actCalls };
 }
+const deferred = () => { let resolve; let reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
 /** A fake DOM with the helpers both harnesses share. */
 function dom() {
@@ -347,6 +349,76 @@ test('7: the placements and Cost show; switching the session re-reads its receip
     assert.match(cost, /whisper-of-6/);
     assert.doesNotMatch(cost, /whisper-of-7/);
   } finally { await m.close(); }
+});
+
+test('7: late detail and receipt success or failure cannot replace the newly selected session', async () => {
+  const items = [S(7, 'transcribed'), S(6, 'reviewed')];
+  const detail = new Map([[7, deferred()], [6, deferred()]]);
+  const receipts = new Map([[7, deferred()], [6, deferred()]]);
+  const calls = [];
+  const f = fakes({ items });
+  f.sessions.get = (id) => { calls.push(['get', id]); return detail.get(Number(id)).promise; };
+  f.sessions.receipt = (id) => { calls.push(['receipt', id]); return receipts.get(Number(id)).promise; };
+  f.sessions.setSpeaker = async (id, segId, label) => { calls.push(['setSpeaker', id, segId, label]); };
+  const m = await recordMount(f);
+  try {
+    await m.change('session-switcher', '6');
+    await act(async () => {
+      detail.get(6).resolve({ session: S(6, 'reviewed'), summary: null, processing: null, segments: SEGMENTS });
+      receipts.get(6).resolve({ items: [{ kind: 'final', model: 'chosen-six', cost_microusd: 6000 }] });
+      await Promise.resolve();
+    });
+    await m.settle();
+    assert.match(m.text(m.by('record-cost')), /chosen-six/);
+    assert.equal(m.fiber('ReviewStep').memoizedProps.sessionId, 6, 'actions target the visibly loaded selection');
+
+    await act(async () => {
+      detail.get(7).resolve({ session: S(7, 'transcribed'), summary: { headline: 'Stale seven' }, processing: null, segments: [] });
+      receipts.get(7).reject(new Error('obsolete receipt failure'));
+      await Promise.resolve();
+    });
+    await m.settle();
+    assert.match(m.text(m.by('record-cost')), /chosen-six/);
+    assert.doesNotMatch(m.text(), /Stale seven|Unreadable: the receipt/);
+    const transcript = m.fiber('TranscriptReview');
+    await act(async () => { await transcript.memoizedProps.onAssign(91, 'Customer'); });
+    assert.deepEqual(calls.filter((c) => c[0] === 'setSpeaker'), [['setSpeaker', 6, 91, 'Customer']]);
+  } finally { await m.close(); }
+});
+
+test('8: audio loaded for an obsolete session is released and cannot replace the current player', async () => {
+  const restore = installDocument();
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const pending = new Map([[7, deferred()], [6, deferred()]]);
+  const staleFetch = deferred();
+  const revoked = [];
+  const previous = { fetch: globalThis.fetch, create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  globalThis.fetch = async (url) => String(url).includes('seven') ? staleFetch.promise : ({ ok: true, blob: async () => new Blob([String(url)]) });
+  let blobNumber = 0;
+  URL.createObjectURL = () => `blob:${blobNumber++}`;
+  URL.revokeObjectURL = (url) => revoked.push(url);
+  let current;
+  const sessions = { audio: (id) => pending.get(Number(id)).promise };
+  function Player({ sessionId }) { current = useSessionPlayer(sessions, sessionId); return h('audio', { ref: current.player }); }
+  try {
+    await act(async () => root.render(h(Player, { sessionId: 7 })));
+    const oldOpen = current.open();
+    pending.get(7).resolve({ parts: [{ seq: 0, url: '/audio/seven' }] });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => root.render(h(Player, { sessionId: 6 })));
+    const newOpen = current.open();
+    await act(async () => { pending.get(6).resolve({ parts: [{ seq: 0, url: '/audio/six' }] }); await newOpen; });
+    const selectedSrc = current.player.current.src;
+    assert.match(selectedSrc, /^blob:/);
+    await act(async () => { staleFetch.resolve({ ok: true, blob: async () => new Blob(['seven']) }); await oldOpen; });
+    assert.equal(current.held.current.session, 6);
+    assert.equal(current.player.current.src, selectedSrc, 'obsolete audio never repopulates the current player');
+  } finally {
+    await act(async () => root.unmount()); restore();
+    Object.assign(globalThis, { fetch: previous.fetch }); URL.createObjectURL = previous.create; URL.revokeObjectURL = previous.revoke;
+  }
+  assert.equal(revoked.length, 1, 'the obsolete object URL is released');
 });
 
 test('7: What it fed, Session, Activity and the four tools show; Record a session opens the lightbox for this interview', async () => {

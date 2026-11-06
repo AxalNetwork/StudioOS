@@ -34,11 +34,17 @@ export function useSessionPlayer(sessions, sessionId) {
   const rateRef = useRef(1);
   const player = useRef(null);
   const held = useRef({ session: null, urls: [], parts: [] });
+  const generation = useRef(0);
 
   // The blobs belong to one session: a new session, or leaving the page, frees them.
-  useEffect(() => () => {
+  useEffect(() => {
+    generation.current += 1;
+    const el = player.current;
+    if (el) { el.pause?.(); el.removeAttribute?.('src'); el.load?.(); }
     for (const url of held.current.urls) URL.revokeObjectURL?.(url);
     held.current = { session: null, urls: [], parts: [] };
+    setAudioError('');
+    return () => { generation.current += 1; };
   }, [sessionId]);
 
   const playFrom = useCallback((index, offsetMs = 0) => {
@@ -68,22 +74,31 @@ export function useSessionPlayer(sessions, sessionId) {
   /** Fetch every part once; true when they are held. */
   const load = useCallback(async () => {
     if (held.current.session === sessionId && held.current.urls.length) return true;
+    const started = generation.current;
+    const belongs = () => generation.current === started;
+    const discard = (urls) => { for (const url of urls) URL.revokeObjectURL?.(url); };
+    const urls = [];
     try {
       let partsList = bySeq((await sessions.audio(sessionId))?.parts);
-      const urls = [];
+      if (!belongs()) return false;
       for (let i = 0; i < partsList.length; i += 1) {
         let url;
         try { url = await fetchPart(partsList[i]); } catch {
+          if (!belongs()) { discard(urls); return false; }
           // Expired or refused: fresh URLs, then go on from this part.
           partsList = bySeq((await sessions.audio(sessionId))?.parts);
+          if (!belongs()) { discard(urls); return false; }
           url = await fetchPart(partsList.find((p) => Number(p.seq) === Number(partsList[i]?.seq)) || partsList[i]);
         }
         urls.push(url);
+        if (!belongs()) { discard(urls); return false; }
       }
+      if (!belongs()) { discard(urls); return false; }
       held.current = { session: sessionId, urls, parts: partsList };
       return true;
     } catch (e) {
-      setAudioError(e?.message && !['expired', 'refused'].includes(e.message) ? e.message : 'The recording could not be played.');
+      discard(urls);
+      if (belongs()) setAudioError(e?.message && !['expired', 'refused'].includes(e.message) ? e.message : 'The recording could not be played.');
       return false;
     }
   }, [sessions, sessionId]);

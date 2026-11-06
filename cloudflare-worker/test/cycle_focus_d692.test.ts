@@ -181,10 +181,27 @@ test('2: rule order — no interview, then a session to review, then the next co
   const review = (await vRead(db)).body.focus;
   assert.equal(review.rule, 'review');
   // D704 (#1783) moved rule 2's href to the interview's record (D-b).
-  assert.equal(review.cta.href, `/validate/customer-research/${iv}?session=1`);
+  assert.equal(review.cta.href, `/validate/customer-research/${iv}?project_id=${P}&session=1`);
   assert.ok(routed(review.cta.href, routesOf()), 'the review href is a route');
   db.exec("UPDATE interview_sessions SET status = 'reviewed'");
   assert.equal((await vRead(db)).body.focus.rule, 'next_interview');
+});
+
+test('2: a newer completed or cleared session does not hide older actionable review work', async () => {
+  const db = fixture(null);
+  const older = interview(db, P);
+  const newer = interview(db, P);
+  db.prepare(`INSERT INTO interview_sessions (id, uid, project_id, interview_id, created_by_user_id, channel, status, stopped_at)
+    VALUES (11, 'older-review', ?, ?, ?, 'video', 'transcribed', ?),
+           (12, 'newer-done', ?, ?, ?, 'video', 'reviewed', ?),
+           (13, 'newer-draft', ?, ?, ?, 'video', 'draft', ?)`)
+    .run(P, older, FOUNDER, `${day(-3)} 10:00:00`, P, newer, FOUNDER, `${day(-1)} 10:00:00`, P, newer, FOUNDER, `${day(0)} 10:00:00`);
+  const focus = (await vRead(db)).body.focus;
+  assert.equal(focus.rule, 'review');
+  assert.equal(focus.cta.href, `/validate/customer-research/${older}?project_id=${P}&session=11`);
+
+  db.prepare("UPDATE interview_sessions SET status = 'reviewed' WHERE id = 11").run();
+  assert.equal((await vRead(db)).body.focus.rule, 'next_interview', 'completing the item advances past the cleared queue');
 });
 
 test('3: a partner on Validate gets the card rule, never a write; with no card next, no focus', async () => {

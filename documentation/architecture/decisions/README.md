@@ -60,3 +60,4 @@ and citations by number keep working.
 | `D4486.md` | #4486: Distribution Channels, compatible kinds and read-only connection cards. |
 | `D4496.md` | Distribution cross-tab states and responsive layouts (#4496). |
 | `D4576.md` | Adds 32 specialist agent skills and synthetic golden cases through the existing library contract. |
+| `D4587.md` | Validate review queue ordering, venture-aware links and selected-session request identity. |
