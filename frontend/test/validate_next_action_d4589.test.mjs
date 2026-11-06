@@ -161,6 +161,19 @@ test('a Stop draws no interview meter on the phone; the desktop overview draws t
   assert.ok(out.includes('data-rule="stopped"'));
 });
 
+test('a focus the Worker could not send falls back on both without crashing the desktop panel', () => {
+  // The focus part failed (null): the adapter's own fallbacks carry no Worker `secondary`.
+  const empty = { focus: null, figures: [], index: [], meter: null, cards: [{ slug: 'customer-research', name: 'Customer research', state: 'empty' }] };
+  const card = { focus: null, figures: [], index: [], meter: null, cards: [{ slug: 'problem-discovery', name: 'Problem discovery', next: { text: 'Open the pain map', href: `/validate/problem-discovery${Q}` } }] };
+  for (const r of [empty, card]) {
+    const d = seen(renderToStaticMarkup(h(MemoryRouter, null, h(ValidateNextAction, { raw: r, search: Q }))), DESK);
+    const p = seen(renderToStaticMarkup(h(MemoryRouter, null, h(PhoneCycleRoot, { cycle: 'validate', raw: r, search: Q, projectId: P }))), PHONE);
+    assert.ok(d.cta, 'the desktop panel draws the fallback');
+    assert.deepEqual(d.secondary, []);
+    assert.equal(d.cta.href, p.cta.href);
+  }
+});
+
 test('no focus draws no panel; a loading overview draws no lead', () => {
   assert.equal(desktop(null), '');
   const out = renderToStaticMarkup(h(MemoryRouter, null, h(CycleOverview, {
