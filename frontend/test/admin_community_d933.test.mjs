@@ -96,7 +96,7 @@ function overview(over = {}) {
 }
 
 const GLANCE = { approvals: { lanes: [{ key: 'events', count: 2 }, { key: 'jobs', count: 2 }] } };
-const READS = (o = overview()) => ({ glance: ok(GLANCE), events: ok([]), analytics: ok({ events: [], unreadable: [] }), jobs: ok([]), circles: ok([]), roster: ok([]), overview: ok(o) });
+const READS = (o = overview()) => ({ glance: ok(GLANCE), events: ok([]), analytics: ok({ events: [], unreadable: [] }), jobs: ok([]), circles: ok([]), overview: ok(o) });
 const tile = (tiles, key) => tiles.find((t) => t.key === key);
 
 // ---------------------------------------------------------------- the period
@@ -326,10 +326,9 @@ function worker({ fail = [], answer = overview, pin = false } = {}) {
     }
     if (p === '/api/admin/studio/glance') return json({ tier: 'hq', approvals: { label: 'HQ', lanes: [{ key: 'events', label: 'Events', count: 2 }, { key: 'jobs', label: 'Jobs', count: 2 }], pending_total: 4 } });
     if (p === '/api/admin/events/analytics') return json({ events: [], unreadable: [] });
-    if (p === '/api/admin/events') return json({ events: u.searchParams.get('status') === 'pending_review' ? [{ id: 9, title: 'Pricing Clinic', status: 'pending_review', submitted_at: new Date(Date.now() - 100 * 3_600_000).toISOString(), created_at: '2026-01-01 00:00:00' }] : [] });
+    if (p === '/api/admin/events') return json({ events: u.searchParams.get('status') === 'pending_review' ? [{ id: 9, title: 'Pricing Clinic', status: 'pending_review', submitted_at: new Date(NOW - 100 * 3_600_000).toISOString() /* #4717: waits are measured from the read's as_of (NOW) */, created_at: '2026-01-01 00:00:00' }] : [] });
     if (p === '/api/admin/jobs') return json({ jobs: [] });
     if (p === '/api/admin/circles') return json({ circles: [] });
-    if (p === '/api/admin/network-profiles') return json({ profiles: [] });
     return json({});
   };
   return seen;
