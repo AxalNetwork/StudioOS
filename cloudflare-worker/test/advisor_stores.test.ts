@@ -906,13 +906,9 @@ test('the cohort read writes nothing to the Spin-Out Lab', async () => {
 // ---------------------------------------------------------------------------
 
 /** A request whose deferred work is collected, so a test can await it. */
-async function callCollecting(
-  e: any, method: string, path: string, who: { user: number; role: string }, body?: any,
-) {
+async function callCollecting(e: any, method: string, path: string, who: { user: number; role: string }) {
   const deferred: Promise<unknown>[] = [];
-  const headers: Record<string, string> = { Authorization: `Bearer ${await token(who.user, who.role)}` };
-  const init: RequestInit = { method, headers };
-  if (body !== undefined) { headers['Content-Type'] = 'application/json'; (init as any).body = JSON.stringify(body); }
+  const init: RequestInit = { method, headers: { Authorization: `Bearer ${await token(who.user, who.role)}` } };
   const res = await advisors.request(path, init, e, { waitUntil(p: Promise<unknown>) { deferred.push(p); }, passThroughOnException() {} } as any);
   await Promise.allSettled(deferred);
   return { status: res.status, body: await res.json().catch(() => null) };
