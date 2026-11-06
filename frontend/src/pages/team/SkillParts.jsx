@@ -143,7 +143,7 @@ export function SkillRow({ s, version, retired, why, toolState, check, children 
  * SK4, SK9b: the agent's radar, computed from its skills by the Worker (A2).
  * `vector` null draws the empty ring and "Not recorded", never zeros.
  */
-export function AgentRadar({ vector, radar, height = 200, label = 'Computed from its skills.' }) {
+export function AgentRadar({ vector, radar, height = 200, label = 'Computed from its skills.', empty = 'This agent has no skills yet.' }) {
   const lines = radarLines(radar);
   return (
     <div className="flex flex-wrap items-center gap-4" data-testid="agent-radar">
@@ -158,7 +158,7 @@ export function AgentRadar({ vector, radar, height = 200, label = 'Computed from
       <div className="flex flex-col gap-1.5 text-[12.5px] text-axal-ink dark:text-gray-200">
         <span>{label}</span>
         {vector ? lines.map((l) => <span key={l.label}><b>{l.label}</b> · {l.text}</span>)
-          : <span className={MUTED}>This agent has no skills yet.</span>}
+          : <span className={MUTED}>{empty}</span>}
       </div>
     </div>
   );
