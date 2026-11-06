@@ -14,6 +14,7 @@
     "test:meeting-bot": "node --experimental-strip-types --no-warnings --test 'meeting-bot/test/*.test.ts' && npx --no-install tsc -p meeting-bot/tsconfig.json",
     "test:retention": "node --test 'scripts/lib/*.test.mjs'",
     "test:drift": "npm run test:frontend && npm run test:worker && npm run test:meeting-bot && npm run test:retention && npm run test:guards && npm run test:types && npm run test:types:frontend && npm run lint:undef && node scripts/check-dark-mode.mjs",
+    "bench:d1": "node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs scripts/d1-benchmark.mjs",
     "test:e2e": "playwright test",
     "build": "node scripts/build-frontend.mjs",
     "predeploy": "node scripts/migrate-d1.mjs --remote",

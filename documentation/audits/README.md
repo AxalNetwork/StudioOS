@@ -9,6 +9,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 
 | File | Covers |
 | --- | --- |
+| `D1_BASELINE_2026-11-06.md`, `D1_BASELINE_2026-11-06.json` | The D1 contention benchmark's first results (simulated): statements per operation and stage, the scans that grow with the platform, load steps, growth, invariants, and what production's baseline must still supply (D4567). |
 | `SCALE_1000_DAU_AUDIT_2026-09-18.md` | Worker + D1 + SPA load for the first 1,000 daily users, with a Claude Code implementation plan. |
 | `PLATFORM-DELIVERY-AUDIT.md` | The most recent canvas-by-canvas delivery sweep. Start here for “what shipped.” |
 | `BETA_READINESS_AUDIT_2026-05-20.md`, `BETA_READINESS_AUDIT_2026-06-03.md`, `BETA_READINESS_AUDIT_2026-07-03.md` | Three successive beta-readiness passes. |
