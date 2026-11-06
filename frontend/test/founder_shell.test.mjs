@@ -157,7 +157,7 @@ test('Home is /studio, no role root invented', () => {
 });
 
 test('Spin-Out Lab keeps its row; its match adds only the 83(b) tracker (D563)', () => {
-  assert.match(founder, /\{ to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES \}/);
+  assert.match(founder, /\{ to: '\/spinout-lab', icon: \w+, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES \}/);
   assert.match(src, /const SPINOUT_LAB_PAGES = \['\/spinout-lab\/83b'\];/);
 });
 

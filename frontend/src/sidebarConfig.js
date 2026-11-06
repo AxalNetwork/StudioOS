@@ -16,12 +16,12 @@
 //   - Items must not appear in more than one group within a role.
 
 import {
-  LayoutDashboard, Target, FileText, Users, Handshake, Rocket,
-  UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
-  TrendingUp, MessageSquare, Package, Calendar,
+  FileText, Users, Handshake,
+  UserCircle, Shield, ShieldCheck, Network,
+  TrendingUp, Calendar,
   DoorOpen, FlaskConical, Cog, Sprout, Telescope, BriefcaseBusiness,
   BookOpen, UsersRound, GraduationCap, Route, Wrench, ScrollText,
-  Inbox, Radar, Wallet, Landmark, Mail,
+  Inbox, Landmark, Mail,
   Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck, KeyRound, Bot, Megaphone,
 } from 'lucide-react';
 

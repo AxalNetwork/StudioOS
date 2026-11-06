@@ -1,4 +1,4 @@
-import { Check, Mail, ShieldCheck, Cog, Coins, Sprout } from 'lucide-react';
+import { Mail, ShieldCheck, Cog, Coins, Sprout } from 'lucide-react';
 import { SIDEBAR_GROUPS } from '../sidebarConfig.js';
 
 /**
@@ -30,7 +30,7 @@ import { SIDEBAR_GROUPS } from '../sidebarConfig.js';
 /** The canvas's founder tabs, in its order (CO:219). */
 export const FOUNDER_TAB_PATHS = ['/validate', '/build', '/raise', '/grow'];
 
-/** The canvas's tab icons (CO:593): a check, a briefcase, a dollar, a trend line. */
+/** The icons for the four founder cycle tabs. */
 export const TAB_ICONS = {
   '/validate': ShieldCheck,
   '/build': Cog,
