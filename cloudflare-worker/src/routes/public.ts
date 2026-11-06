@@ -697,6 +697,61 @@ async function fetchHealthSnapshot(c: Parameters<typeof requireAuth>[0]): Promis
   }
 }
 
+/**
+ * Probe StudioOS's own MCP endpoint through its public OAuth discovery. This
+ * checks the live Worker route and its resource metadata without attempting a
+ * member sign-in, invoking a tool, or contacting an external MCP provider.
+ */
+async function probeMcpServer(c: Parameters<typeof requireAuth>[0]): Promise<ServiceHealth> {
+  const enabled = c.env.MCP_SERVER_ENABLED === 'true' && !!(c.env as unknown as { OAUTH_KV?: unknown }).OAUTH_KV;
+  const base = {
+    name: 'MCP server',
+    match: 'mcp server assistants',
+    availability: enabled ? 'Enabled' : 'Not enabled',
+  };
+  if (!enabled) {
+    return { ...base, status: 'unknown', monitoring: 'not_monitored',
+      note: 'Live service health is not monitored here because the MCP server is disabled or its OAuth store is missing.' };
+  }
+
+  try {
+    const origin = new URL(c.req.url).origin;
+    const [authorizationResponse, resourceResponse, transportResponse] = await Promise.all([
+      fetch(`${origin}/.well-known/oauth-authorization-server`, { headers: { 'User-Agent': 'axal-status-page' } }),
+      fetch(`${origin}/.well-known/oauth-protected-resource/mcp`, { headers: { 'User-Agent': 'axal-status-page' } }),
+      fetch(`${origin}/mcp`, {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'axal-status-page',
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          'MCP-Protocol-Version': '2025-06-18',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 'status-probe', method: 'tools/list', params: {} }),
+      }),
+    ]);
+    if (!authorizationResponse.ok || !resourceResponse.ok || transportResponse.status !== 401) {
+      return { ...base, status: 'down' };
+    }
+
+    const [authorization, resource] = await Promise.all([
+      authorizationResponse.json() as Promise<Record<string, unknown>>,
+      resourceResponse.json() as Promise<Record<string, unknown>>,
+    ]);
+    const reachable = authorization.issuer === origin
+      && authorization.authorization_endpoint === `${origin}/api/oauth/authorize`
+      && authorization.token_endpoint === `${origin}/api/oauth/token`
+      && resource.resource === `${origin}/mcp`
+      && Array.isArray(resource.authorization_servers)
+      && resource.authorization_servers.includes(origin)
+      && (transportResponse.headers.get('www-authenticate') || '').includes(`${origin}/.well-known/oauth-protected-resource/mcp`);
+    return { ...base, status: reachable ? 'operational' : 'down',
+      note: reachable ? 'Live check: MCP transport and OAuth discovery responded; sign-in is required.' : undefined };
+  } catch {
+    return { ...base, status: 'down' };
+  }
+}
+
 async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<ServiceHealth[]> {
   const env = c.env;
   const snap = await fetchHealthSnapshot(c);
@@ -739,6 +794,7 @@ async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<Serv
   services.push({ name: 'Published pages', match: 'publications', status: presence('PUBLICATIONS') });
   services.push({ name: 'Backups', match: 'backups', status: presence('BACKUPS') });
   services.push({ name: 'Document rendering', match: 'browser rendering pdf', status: presence('BROWSER') });
+  services.push(await probeMcpServer(c));
 
   // Public capability coverage, not member connection checks. Never contact a
   // remote MCP server, read credentials or run a tool on this anonymous GET.
@@ -746,8 +802,6 @@ async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<Serv
     services.push({ name, match, availability, status: 'unknown', monitoring: 'not_monitored',
       note: 'Availability reflects platform settings. Live service health is not monitored here.' });
   };
-  unmonitored('MCP server', 'mcp server assistants',
-    env.MCP_SERVER_ENABLED === 'true' && bound('OAUTH_KV') ? 'Enabled' : 'Not enabled');
   unmonitored('Member API keys', 'member api keys', env.API_KEYS_ENABLED === 'true' ? 'Enabled' : 'Not enabled');
   unmonitored('MCP clients', 'mcp clients shared client', 'Available');
   for (const provider of Object.values(MCP_PROVIDERS)) {
