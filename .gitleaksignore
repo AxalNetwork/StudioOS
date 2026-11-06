@@ -268,7 +268,7 @@ a2a4570bbd160b4c77668945f50122dda4e8c9bc:cloudflare-worker/test/publish_ask_4046
 de797bc2c5a7121c7ed9ea713a7adeaf32ad46be:cloudflare-worker/test/meet_bot_signin_3678.test.ts:generic-api-key:28
 
 # D4681 (#4681) — two findings, not one commit. gitleaks' generic-api-key rule
-# read the test stub `'const api = globalThis.__api4681;'` in
+# read the test's stub assignment of its `lib/api` replacement in
 # frontend/test/expertise_workflows_4681.test.mjs (commit 2f1320f365) as a key
 # assignment. It is a variable name in a test that replaces `lib/api` with a
 # stub, not a credential; nothing to rotate. Commit 3515e5b6e2 rewrites it as
@@ -276,3 +276,6 @@ de797bc2c5a7121c7ed9ea713a7adeaf32ad46be:cloudflare-worker/test/meet_bot_signin_
 # fingerprints, as D334's entry is.
 2f1320f36508c0b3676c75781bfee500a4845d62:frontend/test/expertise_workflows_4681.test.mjs:generic-api-key:94
 2f1320f36508c0b3676c75781bfee500a4845d62:frontend/test/expertise_workflows_4681.test.mjs:generic-api-key:127
+# The first copy of this entry, in commit 93be6c5e10, quoted that line, so its
+# comment can match the same rule (5160c63c's did, above). Listed so it cannot.
+93be6c5e10c1823bf247eda03d0c49d4106117e7:.gitleaksignore:generic-api-key:271
