@@ -124,6 +124,57 @@ const audits = (w: W) => {
   try { return (w.db.prepare('SELECT action, filters_json FROM admin_audit_log ORDER BY id').all() as any[]).map((r) => ({ action: r.action, details: JSON.parse(r.filters_json) })); } catch { return []; }
 };
 
+test('HQ library reads 180 skills in a fixed number of queries and keeps the detail evaluation summary', async () => {
+  const w = world();
+  const uid = await newSkill(w);
+  await setCases(w, uid, ['first', 'second']);
+  assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/review`, { reviewer_uid: 'u-super2' })).status, 201);
+  const detail = await call(w, SUPER, 'GET', `${HQ}/${uid}`);
+  assert.equal(detail.status, 200, detail.text);
+  const hash = detail.body.skill.draft_hash;
+  const { id } = w.db.prepare('SELECT id FROM agent_skills WHERE uid = ?').get(uid) as { id: number };
+  const [live, removed] = w.db.prepare('SELECT id FROM agent_skill_cases WHERE skill_id = ? ORDER BY id').all(id) as { id: number }[];
+  const record = w.db.prepare(`INSERT INTO agent_skill_eval_results (case_id, skill_id, draft_hash, model_id, result, run_by, run_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  record.run(live.id, id, hash, 'model-one', 'fail', SUPER, '2026-11-04 09:00:00');
+  record.run(live.id, id, hash, 'model-one', 'pass', SUPER, '2026-11-04 10:00:00');
+  record.run(removed.id, id, hash, 'model-two', 'pass', SUPER, '2026-11-04 11:00:00');
+  record.run(live.id, id, '0'.repeat(64), 'stale-model', 'pass', SUPER, '2026-11-04 12:00:00');
+  w.db.prepare('UPDATE agent_skill_cases SET removed_at = CURRENT_TIMESTAMP WHERE id = ?').run(removed.id);
+  const updated = await call(w, SUPER, 'GET', `${HQ}/${uid}`);
+  assert.equal(updated.status, 200, updated.text);
+
+  const db = w.env.DB;
+  let reads = 0;
+  w.env.DB = { ...db, prepare: (query: string) => { reads++; return db.prepare(query); } };
+  const small = await call(w, SUPER, 'GET', HQ);
+  assert.equal(small.status, 200, small.text);
+  const smallReads = reads;
+
+  const insert = w.db.prepare(`INSERT INTO agent_skills (uid, scope, slug, name, purpose, output_kind, created_by)
+    VALUES (?, 'hq', ?, ?, 'A synthetic draft.', 'draft', ?)`);
+  for (let i = 1; i < 180; i++) {
+    insert.run(`fixture-${i}`, `fixture-${i}`, `Fixture ${i}`, SUPER);
+  }
+  reads = 0;
+  const large = await call(w, SUPER, 'GET', HQ);
+  assert.equal(large.status, 200, large.text);
+  assert.equal(large.body.skills.length, 180);
+  assert.equal(large.body.next_page, null);
+  assert.equal(reads, smallReads);
+  const row = large.body.skills.find((skill: { uid: string }) => skill.uid === uid);
+  assert.equal(row.status, 'in_review');
+  assert.equal(row.status, updated.body.skill.status);
+  assert.deepEqual(row.golden, { pass: 1, total: 2, meets_bar: false });
+  assert.equal(row.last_eval, updated.body.evals.last_run);
+  assert.equal(row.last_eval, '2026-11-04 11:00:00');
+
+  const second = await call(w, SUPER, 'GET', `${HQ}?page=2`);
+  assert.equal(second.status, 200, second.text);
+  assert.deepEqual(second.body.skills, large.body.skills.slice(10, 20));
+  assert.equal(second.body.next_page, 3);
+});
+
 test('D4160: Super Admin only', async () => {
   // Mutation checked: `requireSuperAdmin` → `requireAdmin` → the plain admin is let in and this fails.
   const w = world();

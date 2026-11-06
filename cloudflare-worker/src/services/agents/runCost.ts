@@ -71,20 +71,28 @@ export type Estimate =
     baseline: RunFigure; cheapest: RunFigure; runs: Array<RunFigure & { skill_id: number }>;
   };
 
-/** Each pinned version's `context_tokens` (stored, else worked out from the version), or null when any cannot be read. */
-export async function pinTokens(env: Env, pins: readonly Pin[]): Promise<number[] | null> {
-  if (!pins.length) return [];
+export async function pinTokenMap(env: Env, pins: readonly Pin[]): Promise<Map<string, number>> {
+  if (!pins.length) return new Map();
   try {
     const rs = await env.DB.prepare(
       `SELECT v.*, c.context_tokens
          FROM agent_skill_versions v LEFT JOIN agent_skill_version_costs c ON c.skill_id = v.skill_id AND c.version = v.version
         WHERE v.skill_id || ':' || v.version IN (SELECT value FROM json_each(?))`,
     ).bind(JSON.stringify(pins.map((p) => `${p.skill_id}:${p.version}`))).all<any>();
-    const by = new Map((rs.results ?? []).map((r) => [`${r.skill_id}:${r.version}`, r.context_tokens == null ? contextTokensOf(r) : Number(r.context_tokens)]));
-    const out: number[] = [];
-    for (const p of pins) { const t = by.get(`${p.skill_id}:${p.version}`); if (t == null) return null; out.push(t); }
-    return out;
-  } catch { return null; }
+    return new Map((rs.results ?? []).map((r) => [`${r.skill_id}:${r.version}`, r.context_tokens == null ? contextTokensOf(r) : Number(r.context_tokens)]));
+  } catch { return new Map(); }
+}
+
+/** Each pinned version's `context_tokens` (stored, else worked out from the version), or null when any cannot be read. */
+export async function pinTokens(env: Env, pins: readonly Pin[]): Promise<number[] | null> {
+  const by = await pinTokenMap(env, pins);
+  const out: number[] = [];
+  for (const p of pins) {
+    const tokens = by.get(`${p.skill_id}:${p.version}`);
+    if (tokens == null) return null;
+    out.push(tokens);
+  }
+  return out;
 }
 
 /** The price of a run of `tokensIn` in and `tokensOut` out on `model`, at `multiplier`, in micro-USD; null when it cannot be priced. */
