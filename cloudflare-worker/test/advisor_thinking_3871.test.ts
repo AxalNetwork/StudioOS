@@ -54,7 +54,7 @@ test('a week-window prepare() failure uses the same existing error response', t 
 
 test('a successfully read empty shelf keeps real zero counts', async t => {
   const f = await fixture(t), r = await shelf(f);
-  assert.deepEqual([r.status, r.body], [200, { items: [], counts: { published: 0, drafts: 0, best_reach: null, total_reach: null, talk_reach: null } }]);
+  assert.deepEqual([r.status, r.body], [200, { items: [], page: { offset: 0, limit: 100, total: 0, next_offset: null }, counts: { published: 0, drafts: 0, best_reach: null, total_reach: null, talk_reach: null } }]);
 });
 test('a successful shelf counts only the caller’s writing and published reach', async t => {
   const f = await fixture(t);

@@ -3,13 +3,16 @@ import { Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
+  Field, MoreRows, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { FillFormBar, useScopedFill } from '../../../ui/useScopedFill.jsx';
+import { usePagedList } from './pages';
+
+const readServicesPage = (page) => api.listMyAdvisorServices(page);
 import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 
 /**
@@ -46,7 +49,11 @@ const KINDS = [
 const BLANK = { title: '', kind: 'fixed', duration_note: '', price: '', scope: '' };
 
 export default function ServicesZone() {
-  const [state, setState] = useState({ loading: true, error: '', items: [] });
+  // #4689: a page at a time; the tiles read `counts`, the whole list's figures.
+  const list = usePagedList(readServicesPage, { errorText: 'Your services could not be read.' });
+  const state = { loading: list.loading, error: list.error, items: list.rows };
+  const counts = list.res?.counts || null;
+  const load = list.load;
   const [draft, setDraft] = useState(BLANK);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
@@ -63,16 +70,6 @@ export default function ServicesZone() {
     scope: SCOPED_FORMS.service, values: { title: draft.title, scope: draft.scope },
     onValues: (v) => setDraft((d) => ({ ...d, ...v })),
   });
-
-  const load = useCallback(async () => {
-    setState((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorServices();
-      setState({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [] });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your services could not be read.', items: [] });
-    }
-  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -174,7 +171,7 @@ export default function ServicesZone() {
       {state.items.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: 'Services', value: String(state.items.length), note: `${priced.length} priced, ${unpriced.length} not` },
+            { label: 'Services', value: String(counts?.total ?? state.items.length), note: counts ? `${counts.priced} priced, ${counts.unpriced} not` : `${priced.length} priced, ${unpriced.length} not` },
             {
               label: 'Booked',
               value: bookedCents == null ? <Unrecorded /> : money(bookedCents),
@@ -185,7 +182,7 @@ export default function ServicesZone() {
               value: mostSold?.title || <Unrecorded />,
               note: mostSold ? `${unitsFor(mostSold)} units` : 'nothing counts sales per service yet',
             },
-            { label: 'Unpriced', value: String(unpriced.length), note: unpriced.length ? 'scope settled, price is not' : 'all priced' },
+            { label: 'Unpriced', value: String(counts?.unpriced ?? unpriced.length), note: (counts?.unpriced ?? unpriced.length) ? 'scope settled, price is not' : 'all priced' },
           ].map((s) => (
             <Card key={s.label} padding="md">
               <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{s.label}</div>
@@ -248,7 +245,7 @@ export default function ServicesZone() {
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
-          <p className="text-[12.5px] text-axal-muted">{`No ${view} service is listed. ${state.items.length} in total.`}</p>
+          <p className="text-[12.5px] text-axal-muted">{`No ${view} service is listed. ${counts?.total ?? state.items.length} in total.`}</p>
         )}
         <div className="space-y-3">
           {shown.map((row) => (
@@ -284,6 +281,7 @@ export default function ServicesZone() {
               </div>
             </Card>
           ))}
+          <MoreRows line={list.line} onMore={list.more} busy={list.moreBusy} error={list.moreError} testid="advisor-services-more" />
           <p className="text-[11px] leading-relaxed text-axal-faint">
             How many times each service has been delivered is not shown. Nothing in the product links
             a booking to a service — a booking records a free-text topic — so a count here would be a
