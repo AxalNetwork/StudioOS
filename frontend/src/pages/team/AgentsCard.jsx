@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pill, Skeleton, Unrecorded } from '../../ui';
-import { AgentAvatar } from './AgentCard.jsx';
+import { AgentArchetypeBadge, AgentAvatar } from './AgentCard.jsx';
 import { AgentTile } from './AgentMark.jsx';
-import { personaArchetypeLabel } from './personaModel.js';
 import SkillsLink from './SkillsLink.jsx';
 import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, TeamCard } from './teamUi.jsx';
 import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamModel.js';
@@ -61,7 +60,6 @@ const GRID = 'md:grid-cols-[minmax(0,1.75fr)_minmax(0,1.9fr)_minmax(0,1fr)_minma
 const COLS = ['Agent', 'Source', 'Sponsor', 'Status', 'This month', 'Last activity'];
 
 function AgentRow({ row, onOpen }) {
-  const archetype = personaArchetypeLabel(row.persona);
   return (
     <div role="row" tabIndex={0} onClick={() => onOpen?.(row)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen?.(row); }}
       className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] ${GRID} items-center gap-3 border-b border-axal-hairline py-2.5 last:border-b-0 hover:bg-axal-ground/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-axal-violet/50 dark:border-gray-800 dark:hover:bg-gray-800/50`}
@@ -71,7 +69,7 @@ function AgentRow({ row, onOpen }) {
           <AgentAvatar persona={{ ...row.persona, name: row.name }} size={32} />
           <span className="min-w-0">
             <b className="block truncate text-[13.5px] font-extrabold text-axal-ink dark:text-gray-100">{row.name}</b>
-            {archetype ? <span className="mt-0.5 inline-block max-w-full rounded-axal-pill border border-axal-lavender-edge bg-axal-lavender px-2 py-0.5 text-[11px] font-semibold text-axal-violet-deep dark:border-violet-700/60 dark:bg-violet-900/30 dark:text-violet-300" data-testid="agent-archetype">{archetype}</span> : null}
+            <AgentArchetypeBadge persona={row.persona} />
             {row.role ? <span className="hidden md:block truncate text-[12px] text-axal-muted dark:text-gray-400">{row.role}</span> : null}
           </span>
         </span>
