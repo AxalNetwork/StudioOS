@@ -1,0 +1,58 @@
+{
+  "skill": "reliability-objective-review",
+  "version": 1,
+  "note": "Synthetic fixture only; all repositories, people, advisories, identifiers and measurements are invented for evaluation. No production data.",
+  "input": {
+    "records": {
+      "build.records": {
+        "id": "slo-orders-october",
+        "service": "synthetic-order-api",
+        "environment": "fixture-production",
+        "window_start": "2026-10-01T00:00:00Z",
+        "window_end": "2026-11-01T00:00:00Z",
+        "availability_objective_fraction": 0.9995,
+        "indicator": {
+          "eligible": "All production HTTP requests in the window",
+          "good": "HTTP requests without a service error",
+          "approved_exclusions": []
+        },
+        "latency_objective": null
+      },
+      "vercel.deployments": {
+        "telemetry": {
+          "id": "telemetry-orders-october",
+          "service": "synthetic-order-api",
+          "environment": "fixture-production",
+          "window_start": "2026-10-01T00:00:00Z",
+          "window_end": "2026-11-01T00:00:00Z",
+          "complete": true,
+          "eligible_events": 1000000,
+          "good_events": 999000,
+          "maintenance_labeled_bad_events": 600
+        },
+        "latency_export": {
+          "status": "unreadable",
+          "reason": "Histogram export unavailable."
+        }
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Missed",
+      "99.9%",
+      "200%",
+      "Unreadable",
+      "99.95%"
+    ],
+    "must_say_not_recorded": [
+      "latency objective"
+    ],
+    "must_not_include": [
+      "Availability achieved 99.96%",
+      "The error budget remains available",
+      "No failures occurred"
+    ]
+  }
+}

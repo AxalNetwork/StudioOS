@@ -1,0 +1,91 @@
+{
+  "skill": "migration-rollout-plan",
+  "version": 1,
+  "note": "Synthetic fixture only; all repositories, people, advisories, identifiers and measurements are invented for evaluation. No production data.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "repository": "synthetic-order-service",
+        "revision": "fixture-rev-82",
+        "schema": {
+          "id": "schema-orders-before",
+          "table": "orders",
+          "columns": [
+            {
+              "name": "id",
+              "nullable": false
+            },
+            {
+              "name": "customer_name",
+              "nullable": false
+            }
+          ]
+        },
+        "migration": {
+          "id": "migration-orders-customer",
+          "sql": "ALTER TABLE orders ADD COLUMN customer_id TEXT NOT NULL;",
+          "default_value": null
+        },
+        "application_versions": [
+          {
+            "id": "api-v1",
+            "active": true,
+            "writes_columns": [
+              "id",
+              "customer_name"
+            ],
+            "reads_columns": [
+              "id",
+              "customer_name"
+            ]
+          },
+          {
+            "id": "api-v2",
+            "active": false,
+            "writes_columns": [
+              "id",
+              "customer_name",
+              "customer_id"
+            ],
+            "reads_columns": [
+              "id",
+              "customer_id"
+            ],
+            "tolerates_null_customer_id": false
+          }
+        ]
+      },
+      "build.records": {
+        "id": "rollout-request-82",
+        "environment": "fixture-production",
+        "recorded_row_count": 6000,
+        "row_count_as_of": "2026-11-01T12:00:00Z",
+        "customer_mapping": {
+          "source": "customer directory",
+          "unmatched_orders": 37
+        },
+        "restore_rehearsal": null,
+        "backfill_implementation": null,
+        "owner": "Leon Vale"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "migration-orders-customer",
+      "Expand",
+      "Backfill",
+      "Contract",
+      "legacy writer"
+    ],
+    "must_say_not_recorded": [
+      "restore rehearsal"
+    ],
+    "must_not_include": [
+      "I approved the deployment",
+      "I migrated the data successfully",
+      "I completed the restoration"
+    ]
+  }
+}
