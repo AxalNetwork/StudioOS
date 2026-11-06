@@ -105,20 +105,22 @@
 .sm-dim { opacity: .62; }
 
 /* The module map (SM6). */
-.sm-map { display: flex; flex-direction: column; gap: 16px; }
+.sm-map { display: flex; flex-direction: column; gap: 20px; padding: 20px; }
+.sm-map > p { margin: 0; }
 .sm-search { width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid var(--sm-line2); border-radius: 9px; background: var(--sm-card); color: var(--sm-ink); font-size: 13.5px; }
 .sm-search:focus { outline: 2px solid #7c3aed; outline-offset: 0; }
 .sm-group h3 { margin: 0 0 8px; font-size: 14px; font-weight: 800; }
 .sm-group h3 span { margin-left: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--sm-mut); }
 .sm-group[data-tone="lav"] { padding: 12px; border-radius: 12px; background: var(--sm-lav); }
-.sm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 10px; }
-.sm-entry { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--sm-line); border-radius: 12px; background: var(--sm-card); }
+.sm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+.sm-entry { display: flex; min-width: 0; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--sm-line); border-radius: 12px; background: var(--sm-card); }
 .sm-entry[data-locked="true"] { background: var(--sm-raised); color: var(--sm-mut); }
-.sm-artifact-cover { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--sm-line); border-radius: 8px; background: var(--sm-raised); }
-.sm-artifact-details { display: grid; gap: 4px; min-width: 0; }
+.sm-artifact-cover { display: grid; place-items: center; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--sm-line); border-radius: 8px; background: var(--sm-raised); }
+.sm-artifact-cover img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: cover; }
+.sm-artifact-details { display: grid; align-content: start; gap: 4px; flex: 1; min-width: 0; }
 .sm-artifact-details h4 { margin: 0; font-size: 13px; font-weight: 800; color: var(--sm-ink); }
 .sm-artifact-details p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--sm-mut); }
-.sm-entry-actions { padding: 4px 2px 0; }
+.sm-entry-actions { padding-top: 2px; }
 .sm-added { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--sm-pos); }
 .sm-add { min-height: 30px; padding: 0 10px; border: 1px solid var(--sm-vio); border-radius: 9px; background: transparent; color: var(--sm-vtx); font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .sm-add[aria-disabled="true"] { opacity: .5; cursor: not-allowed; border-color: var(--sm-line2); color: var(--sm-mut); }

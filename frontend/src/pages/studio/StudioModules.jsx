@@ -19,7 +19,7 @@ import './studioModules.css';
 
 export const EDIT_HINT = 'Drag a module by its handle, choose a size, or remove it. Move up and Move down are in each module’s ⋯ menu.';
 export const EDIT_HINT_PHONE = 'Press and hold a module to move it, or use Move up and Move down in its ⋯ menu. On the phone every module is full width.';
-export const EMPTY_LINE = 'Your Studio has no modules. Add modules from the Module map.';
+export const EMPTY_LINE = 'Your Studio has no modules. Add modules from the Artifact map.';
 
 export default function StudioModules({ studio, tiles, extra = [], withheld = false }) {
   const byKey = new Map((studio.catalogue || []).map((m) => [m.key, m]));

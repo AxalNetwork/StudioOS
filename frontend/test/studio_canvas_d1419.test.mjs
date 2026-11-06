@@ -248,6 +248,10 @@ test('the module map: groups, Recommended, a locked entry names its plan, the ca
   const preview = html(h(ModuleMapBody, { profile: 'founder', catalogue: FOUNDER.modules, groups: FOUNDER.groups, draft: [], onAdd() {}, onLocked() {}, query: 'Customer research' }));
   assert.match(renderedText(preview), /Customer research, in a line\./);
   assert.match(preview, /aria-label="Add Customer research"/);
+  assert.match(preview, /src="\/site\/tool-discovery\.webp"/);
+  const map = html(h(StudioModules, { studio: { ...founder(), editing: true, mapOpen: true }, tiles: TILES }));
+  assert.match(map, /role="dialog"[^>]*aria-label="Artifact map"/);
+  assert.match(map, /data-testid="studio-map-company_progress"[^>]*>[^]*?class="sm-artifact-mark"/);
   const open = body(DEFAULT.layout.slice(0, 1));
   assert.match(open, /Founder modules · 1 of 12 placed/);
   assert.match(open, /Recommended for you2/);
