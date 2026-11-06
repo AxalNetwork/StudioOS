@@ -18,6 +18,7 @@ export * from './api/adminDeckBeta.js';
 export * from './api/adminDeckGrid.js';
 export * from './api/adminDeckModels.js';
 export * from './api/adminFeatureFlags.js';
+export * from './api/adminGovernance.js';
 export * from './api/adminHqSkills.js';
 export * from './api/adminIncorporations.js';
 export * from './api/adminInfluencers.js';
