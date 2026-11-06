@@ -72,7 +72,14 @@ const UNAVAILABLE = [
   ['experiments unreadable', base({ results: UNREAD }), /The experiments could not be read/],
 ];
 
-const decode = (s) => s.replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/<[^>]+>/g, '').trim();
+// One pass over the three entities React emits (no double unescaping), then tags
+// stripped until none is left (code scanning 6940, 6941). Test-only text reading.
+const ENTITIES = { '&amp;': '&', '&#x27;': "'", '&quot;': '"' };
+const decode = (s) => {
+  let text = s.replace(/&(?:amp|#x27|quot);/g, (m) => ENTITIES[m]);
+  for (let prev = null; prev !== text;) { prev = text; text = text.replace(/<[^<>]*>/g, ''); }
+  return text.trim();
+};
 /** Every `<a>` or element carrying `data-testid="<id>"`: its href and its text. */
 function pick(out, id) {
   const found = [];
