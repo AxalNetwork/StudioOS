@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { Check, Info, Lock } from 'lucide-react';
 import { Lightbox } from '../../ui';
+import StudioArtifactMark from './StudioArtifactMark';
 import { CAP_LINE, STUDIO_MAX, canAdd, grouped, includedIn, recommended, search } from './studioLayoutModel';
 
 const PROFILE_NAME = { founder: 'Founder', investor: 'Investor', advisor: 'Advisor', partner: 'Operating partner' };
@@ -18,11 +19,15 @@ const PROFILE_NAME = { founder: 'Founder', investor: 'Investor', advisor: 'Advis
 function Entry({ mod, placed, full, onAdd, onLocked }) {
   const added = placed.has(mod.key);
   return (
-    <div className="sm-entry" data-locked={mod.locked_by_plan ? 'true' : undefined} data-testid={`studio-map-${mod.key}`}>
-      <span className="sm-preview" aria-hidden="true" />
-      <b>{mod.title}</b>
-      {mod.purpose && <p>{mod.purpose}</p>}
-      <div>
+    <article className="sm-entry sm-artifact" data-locked={mod.locked_by_plan ? 'true' : undefined} data-testid={`studio-map-${mod.key}`}>
+      <div className="sm-artifact-cover">
+        <StudioArtifactMark group={mod.group} />
+        <div className="sm-artifact-details">
+          <h4>{mod.title}</h4>
+          {mod.purpose && <p>{mod.purpose}</p>}
+        </div>
+      </div>
+      <div className="sm-entry-actions">
         {mod.locked_by_plan ? (
           <button type="button" className="sm-locked sm-btn-t" onClick={() => onLocked(mod.key)}>
             <Lock size={12} aria-hidden="true" /> {includedIn(mod.plan)}
@@ -39,7 +44,7 @@ function Entry({ mod, placed, full, onAdd, onLocked }) {
           >+ Add</button>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 

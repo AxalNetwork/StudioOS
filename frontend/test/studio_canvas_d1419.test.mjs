@@ -245,6 +245,9 @@ test('SM8b: dropped modules are named above the grid; SM12a: no Studio profile s
 test('the module map: groups, Recommended, a locked entry names its plan, the cap turns every Add off, and an empty search says so', () => {
   // Mutations checked: Add left on at 12; the plan name dropped from the locked line.
   const body = (draft, query = '') => text(h(ModuleMapBody, { profile: 'founder', catalogue: FOUNDER.modules, groups: FOUNDER.groups, draft, onAdd() {}, onLocked() {}, query }));
+  const preview = html(h(ModuleMapBody, { profile: 'founder', catalogue: FOUNDER.modules, groups: FOUNDER.groups, draft: [], onAdd() {}, onLocked() {}, query: 'Customer research' }));
+  assert.match(renderedText(preview), /Customer research, in a line\./);
+  assert.match(preview, /aria-label="Add Customer research"/);
   const open = body(DEFAULT.layout.slice(0, 1));
   assert.match(open, /Founder modules · 1 of 12 placed/);
   assert.match(open, /Recommended for you2/);
