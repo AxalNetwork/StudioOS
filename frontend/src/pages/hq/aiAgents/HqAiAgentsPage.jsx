@@ -9,7 +9,7 @@ import AdminPageHeader, { HeaderTab } from '../../../ui/AdminPageHeader';
 import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
 import {
-  BUILD, COMPANY_COLUMNS, NOT_RECORDED, REASON_MIN,
+  COMPANY_COLUMNS, NOT_RECORDED, REASON_MIN,
   ROSTER_COLUMNS, SUBTITLE, areaTiles, notYet, skillRow, viewFor,
   PERSONA_STATUS, VALUE_KEYS, actionWord, defaultsArmed, filterRoster, fitLabel, historyLine, identityChanges, retireLines,
   rosterCounts, rosterRefusal, rosterRow, saveArmed, statusArmed, teamLine, usd, valueLabel,
@@ -42,32 +42,6 @@ const TONE = {
 
 function Chip({ tone = 'muted', children }) {
   return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11.5px] font-semibold ${TONE[tone] ?? TONE.muted}`}>{children}</span>;
-}
-
-/** A board whose build task has not landed: what it will hold, and the issue. */
-function NotYet({ build, children, testId }) {
-  const b = BUILD[build];
-  return (
-    <Card className="space-y-2 px-4 py-4" data-testid={testId ?? `ai-agents-not-yet-${build}`}>
-      <p role="status" className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">
-        {notYet(build)}{' '}
-        <a className="text-axal-violet underline dark:text-violet-300" href={`https://github.com/AxalNetwork/StudioOS/issues/${b.issue}`} target="_blank" rel="noreferrer">#{b.issue}</a>
-      </p>
-      {children}
-    </Card>
-  );
-}
-
-/** A table head and one row saying why it is empty — never a row of zeros. */
-function EmptyTable({ columns, line, testId }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-[12.5px]" data-testid={testId}>
-        <thead className={EYEBROW}><tr className="text-left">{columns.map((c) => <th key={c} className="py-1.5 pr-3">{c}</th>)}</tr></thead>
-        <tbody><tr><td colSpan={columns.length} className="py-6 text-center text-axal-muted dark:text-gray-400">{line}</td></tr></tbody>
-      </table>
-    </div>
-  );
 }
 
 // ─── SA0 · Overview ─────────────────────────────────────────────────────────
