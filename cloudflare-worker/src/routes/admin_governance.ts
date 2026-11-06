@@ -137,21 +137,23 @@ governance.patch('/documents/:uid', async (c) => {
   const doc = await visible(c, superAdmin);
   if (doc instanceof Response) return doc;
   const b = await c.req.json().catch(() => ({} as any));
-  const sets: string[] = [];
-  const vals: unknown[] = [];
+  // The row as it will be written: every field starts as stored, and one fixed, fully bound UPDATE writes it.
+  const next = { title: doc.title, effective_date: doc.effective_date, confidential: Number(doc.confidential), template_slug: doc.template_slug,
+    envelope_id: doc.envelope_id, executed_version: doc.executed_version, status: doc.status };
+  let changed = false;
   if (b.title !== undefined) {
     const t = typeof b.title === 'string' ? b.title.trim().slice(0, 200) : '';
     if (!t) return c.json({ error: 'title cannot be empty' }, 400);
-    sets.push('title = ?'); vals.push(t);
+    next.title = t; changed = true;
   }
   if (b.effective_date !== undefined) {
     const d = b.effective_date === null || b.effective_date === '' ? null : dateOf(b.effective_date);
     if (b.effective_date && !d) return c.json({ error: 'effective_date must be a date, YYYY-MM-DD' }, 400);
-    sets.push('effective_date = ?'); vals.push(d);
+    next.effective_date = d; changed = true;
   }
   if (b.confidential !== undefined) {
     if (!superAdmin) return refuse(c, 403, { code: 'super_admin_only', message: 'Only the Super Admin can change who sees a governance document.' });
-    sets.push('confidential = ?'); vals.push(b.confidential === true ? 1 : 0);
+    next.confidential = b.confidential === true ? 1 : 0; changed = true;
   }
   const links = await linksOf(c, b);
   if (links instanceof Response) return links;
@@ -160,8 +162,8 @@ governance.patch('/documents/:uid', async (c) => {
   if (staysExecuted && links.envelope_id !== undefined && links.envelope_id !== (doc.envelope_id == null ? null : Number(doc.envelope_id))) {
     return refuse(c, 409, { code: 'executed_link_locked', message: 'An executed document keeps the envelope it was signed in. Archive it to change it. Nothing was saved.' });
   }
-  if (links.template_slug !== undefined) { sets.push('template_slug = ?'); vals.push(links.template_slug); }
-  if (links.envelope_id !== undefined) { sets.push('envelope_id = ?'); vals.push(links.envelope_id); }
+  if (links.template_slug !== undefined) { next.template_slug = links.template_slug; changed = true; }
+  if (links.envelope_id !== undefined) { next.envelope_id = links.envelope_id; changed = true; }
   let status = doc.status;
   if (b.status !== undefined) {
     if (!isStatus(b.status)) return c.json({ error: `status must be one of ${GOVERNANCE_STATUSES.join(', ')}` }, 400);
@@ -170,21 +172,24 @@ governance.patch('/documents/:uid', async (c) => {
       // An unsigned draft is never marked executed: a signed version, or a completed envelope (the one being linked counts), names what was signed.
       const evidence = await executedEvidence(c.env, { ...doc, envelope_id: links.envelope_id !== undefined ? links.envelope_id : doc.envelope_id }, await readVersions(c.env, doc.uid));
       if (!evidence) return refuse(c, 409, { code: 'not_signed', message: 'Upload the signed copy, or link the signed envelope, before marking this document executed. Nothing was saved.' });
-      sets.push('executed_version = ?'); vals.push(evidence.version);
-      if (evidence.envelope != null && links.envelope_id === undefined) { sets.push('envelope_id = ?'); vals.push(evidence.envelope); }
+      next.executed_version = evidence.version;
+      if (evidence.envelope != null && links.envelope_id === undefined) next.envelope_id = evidence.envelope;
     }
-    sets.push('status = ?'); vals.push(b.status);
+    next.status = b.status; changed = true;
     status = b.status;
   }
-  if (!sets.length) return c.json({ error: 'nothing to change' }, 400);
-  sets.push('updated_by = ?', 'updated_at = ?'); vals.push(Number(user.id), now());
-  await c.env.DB.prepare(`UPDATE governance_documents SET ${sets.join(', ')} WHERE uid = ?`).bind(...vals, doc.uid).run();
+  if (!changed) return c.json({ error: 'nothing to change' }, 400);
+  await c.env.DB.prepare(
+    `UPDATE governance_documents SET title = ?, effective_date = ?, confidential = ?, template_slug = ?, envelope_id = ?,
+       executed_version = ?, status = ?, updated_by = ?, updated_at = ? WHERE uid = ?`,
+  ).bind(next.title, next.effective_date, next.confidential, next.template_slug, next.envelope_id,
+    next.executed_version, next.status, Number(user.id), now(), doc.uid).run();
   await audit(c, user, b.status !== undefined && b.status !== doc.status ? 'governance_document_status' : 'governance_document_updated', {
     uid: doc.uid, entity: doc.entity_key, category: doc.category, from: doc.status, status, fields: Object.keys(b).filter((k) => b[k] !== undefined),
   });
-  const next = (await readDoc(c.env, doc.uid))!;
+  const saved = (await readDoc(c.env, doc.uid))!;
   const versions = await readVersions(c.env, doc.uid);
-  return c.json({ document: docView(next, versions[0] ?? null, versions.length) });
+  return c.json({ document: docView(saved, versions[0] ?? null, versions.length) });
 });
 
 governance.post('/documents/:uid/versions', async (c) => {
