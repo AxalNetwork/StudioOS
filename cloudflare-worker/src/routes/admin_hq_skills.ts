@@ -40,7 +40,7 @@ import { logAdminAction } from '../services/adminAudit';
 import { notify } from '../services/notify';
 import { newUid } from './_t13t14t15_helpers';
 import { agentModels } from './team_agents';
-import { skillByUid, taxonomyMaps, versionOf, type SkillRow, type VersionRow } from '../services/agents/skillLinks';
+import { axesOf, skillByUid, taxonomyMaps, versionOf, type SkillRow, type VersionRow } from '../services/agents/skillLinks';
 import { draftParts, draftPartsOf, publishDraft } from '../services/agents/skillPublish';
 import { pinTokenMap } from '../services/agents/runCost';
 import {
@@ -222,6 +222,7 @@ adminHqSkills.get('/:uid', async (c) => {
     skill: {
       uid: s.uid, ...d, ...areaAndLevel(d, tax.category),
       status: lifecycleStatus(s.status, open, hash), version: s.current_version || null, draft_hash: hash,
+      radar: { axes: axesOf(d.tags, tax.category) },
       agents: await pinnedAgents(c.env, s.id), author: await personOf(c.env, s.created_by), updated_by: await personOf(c.env, s.updated_by),
     },
     review: { open: await reviewDto(c.env, open, hash), approved: !!(await approvalFor(c.env, s.id, hash)), history: await Promise.all(history.map((r) => reviewDto(c.env, r, hash))) },
