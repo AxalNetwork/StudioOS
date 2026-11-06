@@ -1,0 +1,59 @@
+{
+  "skill": "rolling-cash-flow-forecast",
+  "version": 1,
+  "note": "Synthetic fixture for #4576; all entities, identifiers and figures are made up. Phrase checks are not a model evaluation.",
+  "input": {
+    "records": {
+      "mercury.balances": {
+        "record_id": "CASH-01",
+        "entity": "Synthetic Venture",
+        "as_of": "2026-11-02",
+        "currency": "USD",
+        "unrestricted_cash_cents": 10000000,
+        "restricted_cash_cents": 3000000
+      },
+      "grow.records": {
+        "record_id": "CF-01",
+        "currency": "USD",
+        "forecast_start": "2026-11-02",
+        "weeks": [
+          {
+            "week_start": "2026-11-02",
+            "receipts_cents": 2000000,
+            "payments_cents": 3500000
+          },
+          {
+            "week_start": "2026-11-09",
+            "receipts_cents": null,
+            "payments_cents": 2500000
+          }
+        ],
+        "financing": [
+          {
+            "record_id": "FIN-01",
+            "status": "unsigned",
+            "proceeds_cents": 50000000
+          }
+        ],
+        "entity": "Synthetic Venture"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "USD 85,000.00",
+      "2026-11-02",
+      "unsigned"
+    ],
+    "must_say_not_recorded": [
+      "2026-11-09",
+      "receipts"
+    ],
+    "must_not_include": [
+      "The financing is secured",
+      "Liquidity is guaranteed",
+      "USD 585,000.00"
+    ]
+  }
+}

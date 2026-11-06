@@ -546,13 +546,22 @@ export default function HqAiAgentsPage() {
   const view = viewFor(pathname);
   const [skills, setSkills] = useState({ status: 'loading', hq: null });
 
-  const load = useCallback(() => {
+  const showLibrary = view.tab === 'skills' && view.sub === 'axal';
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!showLibrary) return;
+    const controller = new AbortController();
     setSkills({ status: 'loading', hq: null });
-    adminHqSkillsApi.listAll()
-      .then((r) => { if (!Array.isArray(r?.skills)) throw new Error('unreadable'); setSkills({ status: 'ready', hq: r.skills }); })
-      .catch(() => setSkills({ status: 'unreadable', hq: null }));
-  }, []);
-  useEffect(() => { load(); }, [load]);
+    adminHqSkillsApi.list({ signal: controller.signal })
+      .then((r) => {
+        if (!Array.isArray(r?.skills)) throw new Error('unreadable');
+        if (!controller.signal.aborted) setSkills({ status: 'ready', hq: r.skills });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSkills({ status: 'unreadable', hq: null });
+      });
+    return () => controller.abort();
+  }, [showLibrary, attempt]);
 
   const hqCount = skills.status === 'ready' ? skills.hq.length : null;
   const tabs = (
@@ -574,10 +583,10 @@ export default function HqAiAgentsPage() {
         data-testid="ai-agents-header"
       />
       <SubTabs view={view} />
-      {view.tab === 'overview' ? <Overview skills={skills} /> : null}
+      {view.tab === 'overview' ? <Overview /> : null}
       {view.tab === 'roster' ? <Roster view={view} /> : null}
-      {view.tab === 'skills' && view.sub === 'axal' ? <FromAxal skills={skills} onRetry={load} /> : null}
-      {view.tab === 'skills' && view.sub === 'editor' ? <Editor view={view} skills={skills} /> : null}
+      {showLibrary ? <FromAxal skills={skills} onRetry={() => setAttempt((n) => n + 1)} /> : null}
+      {view.tab === 'skills' && view.sub === 'editor' ? <Editor view={view} /> : null}
       {view.tab === 'skills' && view.sub === 'companies' ? <CompanySkills /> : null}
       {view.tab === 'operations' && view.sub === 'runs' ? <Runs /> : null}
       {view.tab === 'operations' && view.sub === 'spend' ? <Spend /> : null}

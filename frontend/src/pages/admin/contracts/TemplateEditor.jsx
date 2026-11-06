@@ -4,6 +4,7 @@ import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { templateState } from '../../../lib/templateCatalogModel';
 import { mapOffset, pairAnchors, sourceAnchors } from '../../../lib/paneSync';
+import { editorStoredFormat } from '../../../lib/templateFormatState';
 import PaperPreview, { paperRequest } from '../../../components/PaperPreview';
 import { Pill } from '../../../ui';
 import { input } from './parts';
@@ -110,12 +111,13 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
   useRecordCrumb(saved ? (saved.title || slug) : null, 'template', saved ? slug : null);
 
   const take = useCallback((t) => {
+    const format = editorStoredFormat(t);
     setSaved(t);
     setTitle(t.title || '');
     setCategory(t.category || layers?.[0]?.[0] || 'gp');
     setBody(t.body_md || '');
-    setKind(t.doc_kind ?? null);
-    setParty(t.axal_party ?? null);
+    setKind(format.kind);
+    setParty(format.party);
   }, [layers]);
 
   const load = useCallback(async (target, alive = () => true) => {
