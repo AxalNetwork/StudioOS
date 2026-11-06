@@ -86,6 +86,11 @@ const BANK_KEY = /(^|_)(bank|balance|balances|account|accounts|iban|routing|coun
 const BAND_PREFIX = /^(scorecard|pmf|band)_/;
 const BAND_SUFFIX = /_band$/;
 const isBandKey = (key: string) => BAND_PREFIX.test(key) || BAND_SUFFIX.test(key);
+/** Template-resolved fields still carry the same disclosure meaning as blocks. */
+const QUOTE_FIELD_KEY = /(^|[_.])quotes?\d*([_.]|$)/;
+const CAP_TABLE_FIELD_KEY = /(^|[_.])(cap_?table|ct_holders|holders|ownership|shares)([_.]|$)/;
+const FIGURE_FIELD_KEY = /(^|[_.])(tam|sam|som|raise_amount|runway|revenue|arr|mrr|burn|valuation)([_.]|$)/;
+const TEAM_PHOTO_FIELD_KEY = /(^|[_.])team[^.]*([_.])(photo|image|avatar)([_.]|$)/;
 
 /** The stored `include_json`, or the default for a link that has none or one that cannot be read. */
 export function parseShareInclude(raw: unknown): ShareInclude {
@@ -142,16 +147,23 @@ function shareBinding(b: any, evidence = false): { grade: string | null; as_of: 
   return out;
 }
 
-function fieldKept(f: any, inc: ShareInclude): boolean {
+function fieldKept(f: any, inc: ShareInclude, gates: ShareGates = NO_GATES): boolean {
   if (!f || typeof f !== 'object') return false;
+  const fieldKey = String(f.key || '').toLowerCase();
   // A field is judged by its own key and by the slot it is bound to (D896).
-  for (const key of [String(f.key || '').toLowerCase(), boundSlot(f.binding)]) {
+  for (const key of [fieldKey, boundSlot(f.binding)]) {
     if (!key) continue;
     if (INTERNAL_SCORE_KEY.test(key) || BANK_KEY.test(key)) return false;
     if (isBandKey(key) && !inc.bands) return false;
   }
-  if (f.kind === 'quote' && f.consent !== true) return false;
-  if (f.kind === 'metric_grid' && !inc.figures) return false;
+  // D4595: a visual template does not get a side door around the ordinary
+  // block contract. Its flattened fields are classified by their stable keys.
+  if (CAP_TABLE_FIELD_KEY.test(fieldKey) && !inc.cap_table) return false;
+  if (TEAM_PHOTO_FIELD_KEY.test(fieldKey) && !inc.team_photos) return false;
+  if ((f.kind === 'quote' || QUOTE_FIELD_KEY.test(fieldKey))
+    && f.consent !== true
+    && !(typeof f.session_uid === 'string' && gates.quote_sessions.has(f.session_uid))) return false;
+  if ((f.kind === 'metric_grid' || FIGURE_FIELD_KEY.test(fieldKey)) && !inc.figures) return false;
   return true;
 }
 
@@ -174,7 +186,7 @@ export function shareSlides(slides: unknown, include: ShareInclude, gates: Share
       const out: any = withSharedBinding({ ...s }, include.evidence);
       if (!include.notes) delete out.notes;
       if (Array.isArray(s.fields)) {
-        out.fields = s.fields.filter((f: any) => fieldKept(f, include)).map((f: any) => {
+        out.fields = s.fields.filter((f: any) => fieldKept(f, include, gates)).map((f: any) => {
           const g = withSharedBinding(f, include.evidence);
           if (include.notes || !('notes' in g)) return g;
           const { notes: _n, ...rest } = g;
@@ -217,7 +229,7 @@ export function sharedProofRefs(slides: unknown, include: ShareInclude, gates: S
   for (const s of slides as any[]) {
     if (!s || typeof s !== 'object' || (!include.sources && s.appendix)) continue;
     add(s.binding);
-    for (const f of Array.isArray(s.fields) ? s.fields : []) if (fieldKept(f, include)) add(f.binding);
+    for (const f of Array.isArray(s.fields) ? s.fields : []) if (fieldKept(f, include, gates)) add(f.binding);
     for (const b of Array.isArray(s.blocks) ? s.blocks : []) { const kept = blockKept(b, include, gates); if (kept) addAll(kept); }
   }
   return refs;
@@ -345,9 +357,9 @@ export async function shareGatesFor(env: Pick<Env, 'DB'>, projectId: number): Pr
 }
 
 /** The Spin-Out fields baked onto a shared deck, with the same two "never" rules. */
-export function shareSpinoutFields(fields: Record<string, string> | null): Record<string, string> | null {
+export function shareSpinoutFields(fields: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!fields) return fields;
-  const out: Record<string, string> = {};
+  const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(fields)) {
     const key = k.toLowerCase();
     if (!INTERNAL_SCORE_KEY.test(key) && !BANK_KEY.test(key)) out[k] = v;

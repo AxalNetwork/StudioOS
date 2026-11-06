@@ -30,7 +30,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 import decks from './decks';

@@ -21,7 +21,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { getDeckRow, rowToDeck } from './decks';
 import { elementModelFor } from './deck_element_models';
 import { aiLicenceKey } from '../services/aiBudget';

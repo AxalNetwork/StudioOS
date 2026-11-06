@@ -277,6 +277,29 @@ test('a link without the NDA opens at once, sends only what it includes, and say
   assert.deepEqual(r.body.frozen, { version: 2, as_of: '2026-10-21 09:00:00' });
 });
 
+test('a visual template renders the filtered saved snapshot and later source changes cannot alter it', async () => {
+  const db = fixture();
+  const slides = [{ title: 'Frozen', method_id: 'axal_spinout_demoday', fields: [
+    { key: 'cover_headline', kind: 'paragraph', value: 'Saved headline' },
+    { key: 'validation_quote1_takeaway', kind: 'paragraph', value: 'Unconsented words' },
+    { key: 'market_tam', kind: 'paragraph', value: '$5m' },
+    { key: 'ct_holders', kind: 'metric_grid', value: [{ label: 'Founder', value: '80%' }] },
+  ] }];
+  db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = ?').run(JSON.stringify(slides), V2);
+  const link = await studioLink(db, { include: { figures: false, cap_table: false } });
+  const path = `/api/decks/share/${tokenOf(link.share_path)}`;
+  const before = await req(db, 'GET', path);
+  assert.deepEqual(before.body.spinout_fields, { cover_headline: 'Saved headline' });
+  assert.deepEqual(before.body.slides[0].fields.map((f: any) => f.key), ['cover_headline']);
+
+  db.exec("UPDATE projects SET name = 'Changed after save' WHERE id = 1");
+  db.exec("INSERT INTO spinout_deck_overrides(project_id, field_key, value) VALUES(1, 'cover.headline', '\"Changed override\"')");
+  const after = await req(db, 'GET', path);
+  assert.deepEqual(after.body.spinout_fields, before.body.spinout_fields);
+  assert.deepEqual(after.body.slides, before.body.slides);
+  assert.doesNotMatch(JSON.stringify(after.body), /Unconsented words|\$5m|80%|Changed override/);
+});
+
 test('a link made before 540 opens with answer A', async () => {
   const db = fixture();
   const { token } = await createShareLink(envOf(db), { deckId: V2, deckVersion: 2, userId: ADMIN, actorEmail: null, ttlSeconds: null, projectId: P });

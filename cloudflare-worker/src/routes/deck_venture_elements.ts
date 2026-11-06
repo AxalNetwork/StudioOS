@@ -33,8 +33,7 @@ import { flagsFor, notSwitchedOn } from '../services/featureFlags';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
-import { isSupportSession } from '../integrations/providers/mercury';
+import { projectOwned } from '../services/decks/access';
 import { ensureSchema, getDeckRow } from './decks';
 import { imageUrl } from './deck_images';
 import { refuse } from '../util/refusal';
@@ -54,9 +53,10 @@ async function deckProject(c: any, write: boolean): Promise<{ deckId: number; pr
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, deckId); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id), write ? { write: true } : {}); } catch { return c.json({ error: 'forbidden' }, 403); }
-  if (write && await isSupportSession(c)) {
-    return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot record a customer\'s logo or permission for this member.' });
+  try { await projectOwned(c, user, Number(row.project_id), write ? { write: true } : {}); }
+  catch (e: any) {
+    if (e?.message === 'SupportSessionRefused') return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot record a customer\'s logo or permission for this member.' });
+    return c.json({ error: 'forbidden' }, 403);
   }
   return { deckId, projectId: Number(row.project_id), userId: Number(user.id) };
 }

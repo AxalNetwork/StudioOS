@@ -27,7 +27,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { refuse } from '../util/refusal';
 import { doNamespace } from '../util/doNamespace';
 import { auditDeckWrite, ensureSchema, getDeckRow, insertVersion, rowToDeck, sanitizeImageUrl, sanitizeSlides, themeOfRow } from './decks';

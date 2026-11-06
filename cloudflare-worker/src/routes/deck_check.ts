@@ -33,7 +33,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { raiseEvidenceContext, RaiseEvidenceError } from '../services/raiseEvidence';

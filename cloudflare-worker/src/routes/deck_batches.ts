@@ -38,7 +38,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { roleOf } from '../services/decks/ensembles';
 import { refuse } from '../util/refusal';
 import { D1GenRuntime, modelLabel, type BatchStatus, type StepRow } from '../services/decks/genRuntime';

@@ -15,7 +15,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { ensureSchema, getDeckRow } from './decks';
 import { figuresOf } from '../services/decks/figures';
 

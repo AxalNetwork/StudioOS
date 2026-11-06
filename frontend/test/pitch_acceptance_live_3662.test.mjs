@@ -27,6 +27,11 @@ test('the run starts only when configured, on https or localhost, against a conf
 
 test('a page that broke or drew nothing fails; a drawn page passes', () => {
   assert.equal(pageVerdict('Decks · Fixture complete deck · version 3 · Edit · Present · Share').ok, true);
+  assert.equal(pageVerdict('Decks · Fixture complete deck · version 3 · Edit · Present · Share', { expectedPath: '/raise/pitch', finalUrl: 'https://staging.example.test/raise/pitch?project_id=12' }).ok, true);
+  assert.equal(pageVerdict('Welcome back. Sign in to continue to Axal VC and manage your Pitch deck.', { expectedPath: '/raise/pitch', finalUrl: 'https://staging.example.test/login' }).ok, false);
+  assert.equal(pageVerdict('Pitch deck studio · Upgrade to unlock Pitch and all premium deck tools.', { expectedPath: '/raise/pitch', finalUrl: 'https://staging.example.test/raise/pitch' }).ok, false);
+  assert.equal(pageVerdict('Axal VC founder home with enough content to satisfy the old length-only check.', { expectedPath: '/raise/pitch', finalUrl: 'https://staging.example.test/raise' }).ok, false);
+  assert.equal(pageVerdict('Your venture workspace loaded successfully with lots of ordinary text.', { expectedPath: '/raise/pitch', finalUrl: 'https://staging.example.test/raise/pitch' }).ok, false);
   assert.equal(pageVerdict('Something went wrong. Reload the page and try again, please.').ok, false);
   assert.equal(pageVerdict("TypeError: Cannot read properties of undefined (reading 'slides') and more").ok, false);
   assert.equal(pageVerdict('   Loading   ').ok, false);
