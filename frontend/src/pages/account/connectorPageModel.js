@@ -108,7 +108,7 @@ export function pageAction(p, { view = 'idle' } = {}) {
   const act = cardAction(p);
   if (act === 'notify' || act === 'joined') return { kind: 'waitlist', joined: act === 'joined', label: act === 'joined' ? 'We’ll tell you' : 'Notify me' };
   if (act === 'unavailable') {
-    return p.unreadable
+    return p.unreadable || p.connectionUnreadable
       ? { kind: 'unavailable', label: 'Status unreadable', note: `Axal couldn't read whether ${name} is set up here.` }
       : { kind: 'unavailable', label: 'Not set up here', note: `${name} isn't set up on Axal yet, so it can't be connected.` };
   }
