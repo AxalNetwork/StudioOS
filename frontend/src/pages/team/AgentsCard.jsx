@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pill, Skeleton, Unrecorded } from '../../ui';
-import { AgentIdentity, AgentTile } from './AgentMark.jsx';
+import { AgentAvatar } from './AgentCard.jsx';
+import { AgentTile } from './AgentMark.jsx';
+import { personaArchetypeLabel } from './personaModel.js';
 import SkillsLink from './SkillsLink.jsx';
 import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, TeamCard } from './teamUi.jsx';
 import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamModel.js';
@@ -23,14 +25,14 @@ import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamMo
  *                                 `include=projects` groups each project's
  *                                 agents under its name, with the scope filter (TM1e)
  *
- * Every agent is drawn with its tile and the "AI agent" pill; spend and last
+ * The row shows the agent portrait and Studio archetype; spend and last
  * activity the Worker did not answer read "Not recorded", never "$0". A paused
  * pill is amber with brown text, never red, with its reason and its one fix;
  * D4387: the fix opens the profile on its dialog (`onOpen(row, action)`:
  * Choose a new sponsor, or Edit cap).
  *
  * Below `md` a row keeps what the canvas's phone row keeps (TM9d1): the name
- * and pill, then one line with the role and this month's spend (or that it is
+ * and archetype, then one line with the role and this month's spend (or that it is
  * not recorded) and the status pill.
  *
  * #4363: the header carries a Skills link to this scope's Skills tab
@@ -59,12 +61,20 @@ const GRID = 'md:grid-cols-[minmax(0,1.75fr)_minmax(0,1.9fr)_minmax(0,1fr)_minma
 const COLS = ['Agent', 'Source', 'Sponsor', 'Status', 'This month', 'Last activity'];
 
 function AgentRow({ row, onOpen }) {
+  const archetype = personaArchetypeLabel(row.persona);
   return (
     <div role="row" tabIndex={0} onClick={() => onOpen?.(row)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen?.(row); }}
       className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] ${GRID} items-center gap-3 border-b border-axal-hairline py-2.5 last:border-b-0 hover:bg-axal-ground/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-axal-violet/50 dark:border-gray-800 dark:hover:bg-gray-800/50`}
       data-testid={`agent-${row.uid}`}>
       <span role="cell" className="min-w-0">
-        <AgentIdentity name={row.name} role={row.role} roleClassName="hidden md:block" />
+        <span className="flex min-w-0 items-center gap-2.5">
+          <AgentAvatar persona={{ ...row.persona, name: row.name }} size={32} />
+          <span className="min-w-0">
+            <b className="block truncate text-[13.5px] font-extrabold text-axal-ink dark:text-gray-100">{row.name}</b>
+            {archetype ? <span className="mt-0.5 inline-block max-w-full rounded-axal-pill border border-axal-lavender-edge bg-axal-lavender px-2 py-0.5 text-[11px] font-semibold text-axal-violet-deep dark:border-violet-700/60 dark:bg-violet-900/30 dark:text-violet-300" data-testid="agent-archetype">{archetype}</span> : null}
+            {row.role ? <span className="hidden md:block truncate text-[12px] text-axal-muted dark:text-gray-400">{row.role}</span> : null}
+          </span>
+        </span>
         <span className="mt-1 flex flex-wrap items-center gap-1.5 pl-[42px] md:hidden" data-testid="agent-phone-line">
           <span className="text-[12px] text-axal-ink dark:text-gray-200">{row.role || <Unrecorded />} · {row.spend ? <span className="font-mono">{row.spend}</span> : <>this month <Unrecorded /></>}</span>
           <StatusPill row={row} />

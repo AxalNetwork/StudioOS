@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { AgentPill } from './AgentMark.jsx';
 import { AREA_LABEL, NOT_RECORDED, RISK_WORDS, avatarAlt, initialsOf, pronouns, topValueChips } from './personaModel.js';
@@ -13,23 +13,26 @@ import { AREA_LABEL, NOT_RECORDED, RISK_WORDS, avatarAlt, initialsOf, pronouns, 
  *   compact  a row in a list: portrait, name, pill, tagline, the top 3 chips.
  *   chip     inline: a small portrait and the name, with the spark.
  *
- * THE PORTRAIT (R2, #4118). The 16 pixel-art portraits are not attached yet,
- * so the card draws the agent mark (a rounded square, never a circle: an
- * agent is never drawn as a person, D1497) with the persona's initials, and
- * its alt text says the portrait is not added yet ("[Name], [tagline]").
+ * Portraits use the persona's configured asset. If it cannot load, the
+ * rounded square falls back to the persona's initials.
  *
  * No job title, philosophy or Schwartz value is drawn (D4117).
  */
 
 const SQ = 'relative inline-flex shrink-0 items-center justify-center border border-axal-lavender-edge bg-axal-lavender font-mono font-bold text-axal-violet-deep dark:border-violet-700/60 dark:bg-violet-900/30 dark:text-violet-300';
 
-/** The persona's portrait; until R2, the agent mark with initials. */
+/** The persona's portrait, with initials as a fallback. */
 export function AgentAvatar({ persona, size = 40 }) {
+  const [failedAvatar, setFailedAvatar] = useState(null);
+  const avatar = persona?.avatar;
+  const hasPortrait = Boolean(avatar && avatar !== failedAvatar);
   const r = Math.max(6, Math.round(size * 0.28));
   return (
     <span className={SQ} style={{ width: size, height: size, borderRadius: r, fontSize: Math.max(9, Math.round(size * 0.32)) }}
-      role="img" aria-label={avatarAlt(persona)} data-testid="agent-avatar" data-shape="square">
-      <span aria-hidden="true">{initialsOf(persona?.name)}</span>
+      role="img" aria-label={avatarAlt(persona, { portrait: hasPortrait })} data-testid="agent-avatar" data-shape="square">
+      {hasPortrait ? (
+        <img src={avatar} alt="" width={size} height={size} style={{ borderRadius: r }} className="size-full object-cover" onError={() => setFailedAvatar(avatar)} />
+      ) : <span aria-hidden="true">{initialsOf(persona?.name)}</span>}
       {size >= 28 ? (
         <span aria-hidden="true" className="absolute -bottom-1 -right-1 inline-flex items-center justify-center rounded-full border border-white bg-axal-violet text-white dark:border-gray-900"
           style={{ width: Math.round(size * 0.38), height: Math.round(size * 0.38) }}>
