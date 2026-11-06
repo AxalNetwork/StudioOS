@@ -162,10 +162,54 @@ export async function casesOf(env: Env, s: Pick<SkillRow, 'id' | 'slug'>): Promi
 export type Regression = { skill_uid: string; skill: string; version: number; case: string; model: string; detail: string | null };
 export type EvalDeps = { runCase: typeof runCase; tellHq: typeof tellHq };
 
+type Alerts = typeof import('./alerts');
+type Done = { results: number; regressions: Regression[]; cases: Array<{ key: string; name: string }> };
+/** Writes one result; a campaign writes its item in the same batch, so the two stand or fall together. */
+type Record_ = (s: SkillRow, v: VersionRow, c: GoldenCase, model: string, r: { result: string; detail: string | null; usage_log_id: number | null }) => Promise<void>;
+
+/**
+ * Every golden case of one skill's version `v` on `models`: record each result,
+ * tell HQ of each regression once. `skip` names the case|model units already
+ * done (a resumed campaign), which are neither run nor charged again.
+ */
+async function evaluateSkill(env: Env, s: SkillRow, v: VersionRow, models: string[], adminId: number, d: EvalDeps, alerts: Alerts,
+  record: Record_, skip: Set<string> = new Set()): Promise<Done> {
+  const parts = versionParts(v);
+  const out: Done = { results: 0, regressions: [], cases: [] };
+  for (const c of await casesOf(env, s)) {
+    out.cases.push({ key: c.key, name: c.name });
+    for (const model of models) {
+      if (skip.has(`${c.key}|${model}`)) continue;
+      const before = await env.DB.prepare(
+        'SELECT result FROM agent_skill_version_evals WHERE skill_id = ? AND case_key = ? AND model_id = ? AND result <> ? ORDER BY id DESC LIMIT 1',
+      ).bind(s.id, c.key, model, 'not_run').first<{ result: 'pass' | 'fail' }>();
+      const r = await d.runCase(env, parts, c.input, c.expect, model, adminId);
+      await record(s, v, c, model, r);
+      out.results += 1;
+      if (before?.result === 'pass' && r.result === 'fail') {
+        const reg: Regression = { skill_uid: s.uid, skill: s.name, version: v.version, case: c.name, model, detail: r.detail };
+        out.regressions.push(reg);
+        if (await alerts.firstInWindow(env, `agents:alert:skill_regressed:${s.id}:${v.version}:${c.key}:${model}`, REGRESSION_ALERT_TTL)) {
+          await d.tellHq(env, {
+            type: 'agent_skill_regressed',
+            title: `${s.name} failed a golden case it used to pass`,
+            body: `${c.name} on ${model}, version ${v.version}: ${r.detail ?? 'It no longer meets the case.'}`,
+            link: `/hq/ai-agents/skills/${s.uid}/edit`,
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+const EVAL_INSERT = `INSERT INTO agent_skill_version_evals (skill_id, version, case_key, case_name, model_id, result, detail, usage_log_id, run_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
 /**
  * Run every golden case of each published Axal skill (at most `SKILLS_PER_RUN`)
  * on `models`, on its current version; record each result; tell HQ of each
- * regression once.
+ * regression once. With `onlySkillId`, that one skill. A global evaluation that
+ * must reach every skill is a campaign (`startCampaign`, `continueCampaign`).
  */
 export async function evaluatePublished(env: Env, adminId: number, models: string[], deps: Partial<EvalDeps> = {}, onlySkillId: number | null = null):
   Promise<{ skills: number; results: number; regressions: Regression[] }> {
@@ -175,38 +219,177 @@ export async function evaluatePublished(env: Env, adminId: number, models: strin
   const skills = (await env.DB.prepare(
     `SELECT * FROM agent_skills WHERE scope = 'hq' AND status = 'published' AND current_version >= 1 AND (? IS NULL OR id = ?) ORDER BY id LIMIT ?`,
   ).bind(onlySkillId, onlySkillId, SKILLS_PER_RUN).all<SkillRow>()).results ?? [];
+  const record: Record_ = async (s, v, c, model, r) => {
+    await env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, c.key, c.name, model, r.result, r.detail, r.usage_log_id, adminId).run();
+  };
   const regressions: Regression[] = [];
   let results = 0;
   for (const s of skills) {
     const v = await versionOf(env, s.id, s.current_version);
     if (!v) continue;
-    const parts = versionParts(v);
-    for (const c of await casesOf(env, s)) {
-      for (const model of models) {
-        const before = await env.DB.prepare(
-          'SELECT result FROM agent_skill_version_evals WHERE skill_id = ? AND case_key = ? AND model_id = ? AND result <> ? ORDER BY id DESC LIMIT 1',
-        ).bind(s.id, c.key, model, 'not_run').first<{ result: 'pass' | 'fail' }>();
-        const r = await d.runCase(env, parts, c.input, c.expect, model, adminId);
-        await env.DB.prepare(
-          `INSERT INTO agent_skill_version_evals (skill_id, version, case_key, case_name, model_id, result, detail, usage_log_id, run_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).bind(s.id, v.version, c.key, c.name, model, r.result, r.detail, r.usage_log_id, adminId).run();
-        results += 1;
-        if (before?.result === 'pass' && r.result === 'fail') {
-          const reg: Regression = { skill_uid: s.uid, skill: s.name, version: v.version, case: c.name, model, detail: r.detail };
-          regressions.push(reg);
-          if (await alerts.firstInWindow(env, `agents:alert:skill_regressed:${s.id}:${v.version}:${c.key}:${model}`, REGRESSION_ALERT_TTL)) {
-            await d.tellHq(env, {
-              type: 'agent_skill_regressed',
-              title: `${s.name} failed a golden case it used to pass`,
-              body: `${c.name} on ${model}, version ${v.version}: ${r.detail ?? 'It no longer meets the case.'}`,
-              link: `/hq/ai-agents/skills/${s.uid}/edit`,
-            });
-          }
-        }
-      }
-    }
+    const done = await evaluateSkill(env, s, v, models, adminId, d, alerts, record);
+    results += done.results;
+    regressions.push(...done.regressions);
   }
   return { skills: skills.length, results, regressions };
+}
+
+// ── Campaigns (D4668, #4668) ────────────────────────────────────────────────
+//
+// A campaign is a global evaluation that reaches every eligible skill, a batch
+// of at most SKILLS_PER_RUN per press. Its MANIFEST is written when it starts:
+// each published Axal skill at the version it had then, in id order. When a
+// skill's turn comes it is checked again: still published, an Axal skill, not
+// suspended (`not_eligible`), still at that version (`version_changed`; the
+// campaign never evaluates a version it did not start with), and readable
+// (`version_unreadable`). A skipped skill is listed with its reason, never run.
+// Skills published after the start are not in it: the next campaign takes them.
+// The case suite is a skill's live cases when its turn comes, and the items
+// name each case run. The models are the campaign's, fixed at the start.
+//
+// Each skill, version, case and model is one ITEM, written in the same batch as
+// its result: a resumed press skips the items it finds, so done work is never
+// run or charged twice in a campaign; a new attempt is a new campaign. A press
+// holds a short lease, so two never run one batch at once. A batch that stops
+// part-way (an error, a cancel between skills) leaves its skill pending, and
+// the next press runs only what is missing. Cancelled is final.
+
+export const CAMPAIGN_LEASE_MS = 15 * 60_000;
+export type CampaignStatus = 'running' | 'complete' | 'cancelled';
+type CampaignRow = { id: number; uid: string; models_json: string; status: CampaignStatus; started_at: string; finished_at: string | null; lease_until: string | null };
+export type CampaignProgress = {
+  uid: string; status: CampaignStatus; models: string[]; started_at: string; finished_at: string | null;
+  /** Skills in the manifest, and how many are done, skipped and still pending. */
+  total: number; done: number; skipped: number; pending: number;
+  /** Over the results this campaign recorded. */
+  results: { pass: number; fail: number; not_run: number };
+  skipped_skills: Array<{ skill_uid: string; version: number; reason: string }>;
+};
+export type CampaignBatch = {
+  skills: number; results: number; regressions: Regression[];
+  /** What this press ran: each skill at its version, the cases and the models. */
+  evaluated: Array<{ skill_uid: string; name: string; version: number; cases: Array<{ key: string; name: string }>; models: string[]; results: number }>;
+  campaign: CampaignProgress;
+};
+export type CampaignRefusal = { ok: false; status: number; code: string; message: string; campaign?: CampaignProgress };
+
+const campaignByUid = (env: Env, uid: unknown) => typeof uid === 'string' && /^[a-f0-9]{32}$/.test(uid)
+  ? env.DB.prepare('SELECT * FROM agent_skill_eval_campaigns WHERE uid = ?').bind(uid).first<CampaignRow>() : Promise.resolve(null);
+
+/** A campaign's progress; null when there is no campaign `uid`. */
+export async function campaignProgress(env: Env, uid: unknown): Promise<CampaignProgress | null> {
+  const c = await campaignByUid(env, uid);
+  return c ? progressOf(env, c) : null;
+}
+
+async function progressOf(env: Env, c: CampaignRow): Promise<CampaignProgress> {
+  const states = (await env.DB.prepare('SELECT state, COUNT(*) AS n FROM agent_skill_eval_campaign_skills WHERE campaign_id = ? GROUP BY state')
+    .bind(c.id).all<{ state: string; n: number }>()).results ?? [];
+  const n = (k: string) => Number(states.find((r) => r.state === k)?.n ?? 0);
+  const res = (await env.DB.prepare(
+    'SELECT e.result, COUNT(*) AS n FROM agent_skill_eval_campaign_items i JOIN agent_skill_version_evals e ON e.id = i.eval_id WHERE i.campaign_id = ? GROUP BY e.result',
+  ).bind(c.id).all<{ result: string; n: number }>()).results ?? [];
+  const r = (k: string) => Number(res.find((x) => x.result === k)?.n ?? 0);
+  const skipped = (await env.DB.prepare(
+    `SELECT s.uid, m.version, m.skip_reason FROM agent_skill_eval_campaign_skills m JOIN agent_skills s ON s.id = m.skill_id
+      WHERE m.campaign_id = ? AND m.state = 'skipped' ORDER BY m.skill_id`,
+  ).bind(c.id).all<{ uid: string; version: number; skip_reason: string }>()).results ?? [];
+  return {
+    uid: c.uid, status: c.status, models: parse<string[]>(c.models_json, []), started_at: c.started_at, finished_at: c.finished_at,
+    total: n('pending') + n('done') + n('skipped'), done: n('done'), skipped: n('skipped'), pending: n('pending'),
+    results: { pass: r('pass'), fail: r('fail'), not_run: r('not_run') },
+    skipped_skills: skipped.map((x) => ({ skill_uid: x.uid, version: Number(x.version), reason: x.skip_reason })),
+  };
+}
+
+/** Start a campaign on `models`: its manifest is every eligible published Axal skill, now, at its current version. */
+export async function startCampaign(env: Env, adminId: number, models: string[], uid: string): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO agent_skill_eval_campaigns (uid, models_json, started_by) VALUES (?, ?, ?)').bind(uid, JSON.stringify(models), adminId),
+    env.DB.prepare(
+      `INSERT INTO agent_skill_eval_campaign_skills (campaign_id, skill_id, version)
+       SELECT (SELECT id FROM agent_skill_eval_campaigns WHERE uid = ?), id, current_version
+         FROM agent_skills WHERE scope = 'hq' AND status = 'published' AND current_version >= 1 ORDER BY id`,
+    ).bind(uid),
+  ]);
+}
+
+/**
+ * The campaign's next batch: at most SKILLS_PER_RUN pending skills, each checked
+ * again and run on the campaign's models; then its progress. A campaign that
+ * has nothing pending is complete.
+ */
+export async function continueCampaign(env: Env, adminId: number, uid: unknown, now: Date, deps: Partial<EvalDeps> = {}):
+  Promise<({ ok: true } & CampaignBatch) | CampaignRefusal> {
+  const c = await campaignByUid(env, uid);
+  if (!c) return { ok: false, status: 404, code: 'campaign_not_found', message: 'There is no such evaluation campaign.' };
+  if (c.status === 'cancelled') return { ok: false, status: 409, code: 'campaign_cancelled', message: 'This evaluation campaign was cancelled. Start a new one.', campaign: await progressOf(env, c) };
+  const empty = { skills: 0, results: 0, regressions: [], evaluated: [] };
+  if (c.status === 'complete') return { ok: true, ...empty, campaign: await progressOf(env, c) };
+  const iso = now.toISOString();
+  const lease = await env.DB.prepare(
+    `UPDATE agent_skill_eval_campaigns SET lease_until = ? WHERE id = ? AND status = 'running' AND (lease_until IS NULL OR lease_until <= ?)`,
+  ).bind(new Date(now.getTime() + CAMPAIGN_LEASE_MS).toISOString(), c.id, iso).run();
+  if (!lease.meta?.changes) return { ok: false, status: 409, code: 'campaign_busy', message: 'Another press is running this campaign\'s next batch. Try again when it finishes.', campaign: await progressOf(env, c) };
+
+  const alerts = await import('./alerts');
+  const d: EvalDeps = { runCase, tellHq: alerts.tellHq, ...deps };
+  const models = parse<string[]>(c.models_json, []);
+  const batch: CampaignBatch = { ...empty, regressions: [], evaluated: [], campaign: null as unknown as CampaignProgress };
+  const record: Record_ = async (s, v, k, model, r) => {
+    await env.DB.batch([
+      env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, k.key, k.name, model, r.result, r.detail, r.usage_log_id, adminId),
+      env.DB.prepare(`INSERT INTO agent_skill_eval_campaign_items (campaign_id, skill_id, version, case_key, model_id, eval_id)
+        VALUES (?, ?, ?, ?, ?, last_insert_rowid())`).bind(c.id, s.id, v.version, k.key, model),
+    ]);
+  };
+  const settle = (skillId: number, state: 'done' | 'skipped', reason: string | null) => env.DB.prepare(
+    `UPDATE agent_skill_eval_campaign_skills SET state = ?, skip_reason = ?, finished_at = ? WHERE campaign_id = ? AND skill_id = ? AND state = 'pending'`,
+  ).bind(state, reason, iso, c.id, skillId).run();
+  try {
+    const next = (await env.DB.prepare(
+      `SELECT skill_id, version FROM agent_skill_eval_campaign_skills WHERE campaign_id = ? AND state = 'pending' ORDER BY skill_id LIMIT ?`,
+    ).bind(c.id, SKILLS_PER_RUN).all<{ skill_id: number; version: number }>()).results ?? [];
+    for (const m of next) {
+      // A cancel between skills stops the batch; the skill it reached stays pending.
+      const live = await env.DB.prepare('SELECT status FROM agent_skill_eval_campaigns WHERE id = ?').bind(c.id).first<{ status: CampaignStatus }>();
+      if (live?.status !== 'running') break;
+      const version = Number(m.version);
+      const s = await env.DB.prepare('SELECT * FROM agent_skills WHERE id = ?').bind(m.skill_id).first<SkillRow>();
+      if (!s || s.scope !== 'hq' || s.status !== 'published' || await skillRunRefusal(env, s.id, version)) { await settle(m.skill_id, 'skipped', 'not_eligible'); continue; }
+      if (Number(s.current_version) !== version) { await settle(m.skill_id, 'skipped', 'version_changed'); continue; }
+      const v = await versionOf(env, s.id, version);
+      if (!v) { await settle(m.skill_id, 'skipped', 'version_unreadable'); continue; }
+      const had = (await env.DB.prepare('SELECT case_key, model_id FROM agent_skill_eval_campaign_items WHERE campaign_id = ? AND skill_id = ? AND version = ?')
+        .bind(c.id, s.id, version).all<{ case_key: string; model_id: string }>()).results ?? [];
+      const done = await evaluateSkill(env, s, v, models, adminId, d, alerts, record, new Set(had.map((x) => `${x.case_key}|${x.model_id}`)));
+      await settle(s.id, 'done', null);
+      batch.skills += 1;
+      batch.results += done.results;
+      batch.regressions.push(...done.regressions);
+      batch.evaluated.push({ skill_uid: s.uid, name: s.name, version, cases: done.cases, models, results: done.results });
+    }
+    await env.DB.prepare(
+      `UPDATE agent_skill_eval_campaigns SET status = 'complete', finished_at = ?
+        WHERE id = ? AND status = 'running' AND NOT EXISTS (SELECT 1 FROM agent_skill_eval_campaign_skills WHERE campaign_id = ? AND state = 'pending')`,
+    ).bind(iso, c.id, c.id).run();
+  } finally {
+    await env.DB.prepare('UPDATE agent_skill_eval_campaigns SET lease_until = NULL WHERE id = ?').bind(c.id).run();
+  }
+  const after = await env.DB.prepare('SELECT * FROM agent_skill_eval_campaigns WHERE id = ?').bind(c.id).first<CampaignRow>();
+  batch.campaign = await progressOf(env, after ?? c);
+  return { ok: true, ...batch };
+}
+
+/** Cancel a running campaign: final; what it ran stays recorded. Cancelling a cancelled one changes nothing. */
+export async function cancelCampaign(env: Env, adminId: number, uid: unknown, now: Date): Promise<{ ok: true; campaign: CampaignProgress } | CampaignRefusal> {
+  const c = await campaignByUid(env, uid);
+  if (!c) return { ok: false, status: 404, code: 'campaign_not_found', message: 'There is no such evaluation campaign.' };
+  if (c.status === 'complete') return { ok: false, status: 409, code: 'campaign_complete', message: 'This evaluation campaign already finished, so there is nothing to cancel.', campaign: await progressOf(env, c) };
+  await env.DB.prepare(`UPDATE agent_skill_eval_campaigns SET status = 'cancelled', finished_at = ?, cancelled_by = ? WHERE id = ? AND status = 'running'`)
+    .bind(now.toISOString(), adminId, c.id).run();
+  const after = await env.DB.prepare('SELECT * FROM agent_skill_eval_campaigns WHERE id = ?').bind(c.id).first<CampaignRow>();
+  return { ok: true, campaign: await progressOf(env, after ?? c) };
 }
 
 export type SkillBoardRow = {
