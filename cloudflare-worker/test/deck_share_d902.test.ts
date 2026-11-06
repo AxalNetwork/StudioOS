@@ -279,11 +279,12 @@ test('a link without the NDA opens at once, sends only what it includes, and say
 
 test('a visual template renders the filtered saved snapshot and later source changes cannot alter it', async () => {
   const db = fixture();
+  const templateField = (key: string, value: unknown, kind = 'paragraph') => ({ key, kind, value });
   const slides = [{ title: 'Frozen', method_id: 'axal_spinout_demoday', fields: [
-    { key: 'cover_headline', kind: 'paragraph', value: 'Saved headline' },
-    { key: 'validation_quote1_takeaway', kind: 'paragraph', value: 'Unconsented words' },
-    { key: 'market_tam', kind: 'paragraph', value: '$5m' },
-    { key: 'ct_holders', kind: 'metric_grid', value: [{ label: 'Founder', value: '80%' }] },
+    templateField('cover_headline', 'Saved headline'),
+    templateField('validation_quote1_takeaway', 'Unconsented words'),
+    templateField('market_tam', '$5m'),
+    templateField('ct_holders', [{ label: 'Founder', value: '80%' }], 'metric_grid'),
   ] }];
   db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = ?').run(JSON.stringify(slides), V2);
   const link = await studioLink(db, { include: { figures: false, cap_table: false } });

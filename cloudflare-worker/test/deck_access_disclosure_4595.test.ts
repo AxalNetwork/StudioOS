@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { DEFAULT_SHARE_INCLUDE, shareSlides } from '../src/services/decks/shareInclude.ts';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
+const templateField = (key: string, value: unknown, kind = 'paragraph', extra = {}) => ({ key, kind, value, ...extra });
 
 test('every managed deck route delegates project access to the authoritative deck gate', () => {
   const dir = resolve(process.cwd(), 'cloudflare-worker/src/routes');
@@ -24,14 +25,14 @@ test('every managed deck route delegates project access to the authoritative dec
 
 test('template-resolved fields obey quote, figures, cap-table and internal-data exclusions', () => {
   const slide = { title: 'Synthetic', fields: [
-    { key: 'cover_headline', kind: 'paragraph', value: 'Frozen headline' },
-    { key: 'validation_quote1_takeaway', kind: 'paragraph', value: 'No consent' },
-    { key: 'validation_quote2_takeaway', kind: 'paragraph', value: 'Consented', consent: true },
-    { key: 'market_tam', kind: 'paragraph', value: '$5m' },
-    { key: 'ask_raise_amount', kind: 'paragraph', value: '$1m' },
-    { key: 'ct_holders', kind: 'metric_grid', value: [{ label: 'Founder', value: '80%' }] },
-    { key: 'vr_total_score', kind: 'paragraph', value: '91' },
-    { key: 'bank_balance', kind: 'paragraph', value: '$9m' },
+    templateField('cover_headline', 'Frozen headline'),
+    templateField('validation_quote1_takeaway', 'No consent'),
+    templateField('validation_quote2_takeaway', 'Consented', 'paragraph', { consent: true }),
+    templateField('market_tam', '$5m'),
+    templateField('ask_raise_amount', '$1m'),
+    templateField('ct_holders', [{ label: 'Founder', value: '80%' }], 'metric_grid'),
+    templateField('vr_total_score', '91'),
+    templateField('bank_balance', '$9m'),
   ] };
   const restricted = shareSlides([slide], { ...DEFAULT_SHARE_INCLUDE, figures: false, cap_table: false });
   assert.deepEqual(restricted[0].fields.map((f: any) => f.key), ['cover_headline', 'validation_quote2_takeaway']);
