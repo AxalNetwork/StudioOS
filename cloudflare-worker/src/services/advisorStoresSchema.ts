@@ -1,6 +1,7 @@
 /**
  * Lazy schema bootstrap for the advisor's own stores — migrations 201–206,
- * with 367's notice ledger and opt-outs and 565's assignment history.
+ * with 367's notice ledger and opt-outs, 565's assignment history, and
+ * 202611062216's attestation codes, answer history and pinned claim (D4670).
  *
  * WHY THIS EXISTS, and it is a rule rather than a precaution.
  * `documentation/architecture/GOTCHAS.md` states it directly: an `ALTER` file
@@ -200,6 +201,43 @@ const TABLES = [
      ON advisor_cohort_assignment_events(assignment_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_advisor_cohort_assignment_events_cycle
      ON advisor_cohort_assignment_events(cohort_cycle_id, created_at)`,
+  // 202611062216 (D4670) — the attester's one-time codes and the answer history.
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_codes (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     consent_id INTEGER NOT NULL REFERENCES advisor_proof_consents(id),
+     code_hash TEXT NOT NULL,
+     expires_at TEXT NOT NULL,
+     attempts INTEGER NOT NULL DEFAULT 0,
+     used_at TEXT,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_proof_consent_codes_consent
+     ON advisor_proof_consent_codes(consent_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     consent_id INTEGER NOT NULL,
+     kind TEXT NOT NULL CHECK (kind IN ('requested', 'confirmed', 'declined', 'withdrawn', 'reconfirmed')),
+     claim_sha256 TEXT,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_proof_consent_events_consent
+     ON advisor_proof_consent_events(consent_id, id)`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_events_block_update
+   BEFORE UPDATE ON advisor_proof_consent_events
+   BEGIN
+       SELECT RAISE(ABORT, 'advisor_proof_consent_events is append-only (D4670).');
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_events_block_delete
+   BEFORE DELETE ON advisor_proof_consent_events
+   BEGIN
+       SELECT RAISE(ABORT, 'advisor_proof_consent_events is append-only (D4670).');
+   END`,
+];
+
+/** 202611062216 (D4670) — the claim a confirmation was asked about. */
+const CONSENT_COLUMNS: Array<[string, string]> = [
+  ['claim_sha256', 'ALTER TABLE advisor_proof_consents ADD COLUMN claim_sha256 TEXT'],
+  ['claim_json', 'ALTER TABLE advisor_proof_consents ADD COLUMN claim_json TEXT'],
 ];
 
 async function addMissingColumns(
@@ -329,6 +367,7 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     await renameLegacySlotOwnerColumn(env);
     await addMissingColumns(env, 'PRAGMA table_info(advisors)', PROFILE_COLUMNS);
     await addMissingColumns(env, 'PRAGMA table_info(advisor_bookings)', BOOKING_COLUMNS);
+    await addMissingColumns(env, 'PRAGMA table_info(advisor_proof_consents)', CONSENT_COLUMNS);
     // D573 / migration 394: nullable facts, including databases adopted by baseline.
     await addMissingColumns(env, 'PRAGMA table_info(advisor_deliverables)', [
       ['due_date', 'ALTER TABLE advisor_deliverables ADD COLUMN due_date TEXT'],
@@ -356,3 +395,4 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
 /** Exported so a test can hold these against the migration files. */
 export const ADVISOR_PROFILE_COLUMNS = PROFILE_COLUMNS.map(([n]) => n);
 export const ADVISOR_BOOKING_COLUMNS = BOOKING_COLUMNS.map(([n]) => n);
+export const ADVISOR_CONSENT_COLUMNS = CONSENT_COLUMNS.map(([n]) => n);

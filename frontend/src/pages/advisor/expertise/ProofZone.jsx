@@ -3,8 +3,8 @@ import { Check, Copy, Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, ghostButtonClass, inputClass,
+  ASK_REFUSALS, Field, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
+  buttonClass, ghostButtonClass, inputClass, refusalText,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
@@ -23,15 +23,18 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
  * self-stated. It becomes attested only when the named person answers through
  * their own link.
  *
- * THE LINK IS SHOWN ONCE. The worker returns `request_token` on the request and
- * on no later read — an advisor who could read the token back could answer on
- * the attester's behalf, which would make every attestation here self-issued.
- * So the link lives in this component's state until the page is left, and the
- * copy says so rather than letting someone discover it by coming back.
+ * THE LINK IS AN INVITATION (D4670). Each pending ask carries `invite_token`
+ * on every read, so the link is drawn from the list and a refresh never loses
+ * it. Holding it lets someone read the claim, not answer it: answering needs a
+ * code that Axal emails, when the attester asks for one, to the address named
+ * here. That is why the address is required and cannot be the advisor's own.
  *
- * NOTHING IS SENT FROM HERE. Recording the ask and delivering it are separate,
- * and a page that quietly emailed an address someone typed would be deciding
- * the second one on its own.
+ * NOTHING IS SENT FROM HERE. Recording the ask and handing over the link are
+ * the advisor's; the only mail is the attester's own code, sent on their
+ * request.
+ *
+ * A REFUSAL READS AS A FIXED SENTENCE keyed on its code (`ASK_REFUSALS` in
+ * the kit), never the raw error text.
  */
 
 const KINDS = [
@@ -43,17 +46,27 @@ const KINDS = [
 
 const BLANK = { kind: 'engagement', title: '', organization: '', period_note: '', detail: '' };
 
+/** What a consent row says, as the advisor reads it (`state` from the Worker). */
+export const CONSENT_STATES = Object.freeze({
+  pending: 'Waiting for an answer',
+  confirmed: 'Confirmed',
+  declined: 'Declined',
+  withdrawn: 'Withdrawn',
+  needs_reconfirmation: 'Confirmed before verification, or about an earlier wording: ask again',
+});
+
 function ConsentLink({ token }) {
   const [copied, setCopied] = useState(false);
   const url = `${window.location.origin}/attest/${token}`;
   return (
     <Card variant="accent" padding="md" className="mt-3">
       <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-        Send this link yourself — shown once
+        Send this link yourself
       </div>
       <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
         Nothing was emailed. Give this to the person you named, through whatever channel you
-        already have with them. It will not be shown again after you leave this page.
+        already have with them. It shows them the claim; to answer, they ask for a code that Axal
+        emails to the address you gave, so the link alone cannot confirm anything.
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-lg bg-white/70 px-2 py-1.5 text-[11.5px] dark:bg-gray-900/70">{url}</code>
@@ -75,28 +88,33 @@ function AskForm({ item, onDone }) {
   const [draft, setDraft] = useState({ attester_name: '', attester_email: '', attester_role: '', relationship: '' });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
-  const [token, setToken] = useState(null);
 
   const submit = async (e) => {
     e.preventDefault();
     setNote(null);
     if (!draft.attester_name.trim()) {
-      setNote({ ok: false, text: 'Name the person you are asking.' });
+      setNote({ ok: false, text: ASK_REFUSALS.attester_name_required });
+      return;
+    }
+    if (!draft.attester_email.trim()) {
+      setNote({ ok: false, text: ASK_REFUSALS.attester_email_required });
       return;
     }
     setBusy(true);
     try {
       const res = await api.requestAdvisorProofConsent(item.id, {
         attester_name: draft.attester_name.trim(),
-        attester_email: draft.attester_email.trim() || null,
+        attester_email: draft.attester_email.trim(),
         attester_role: draft.attester_role.trim() || null,
         relationship: draft.relationship.trim() || null,
       });
-      setToken(res?.request_token || null);
-      setNote({ ok: true, text: 'Request recorded. The claim stays self-stated until they answer.' });
+      setDraft({ attester_name: '', attester_email: '', attester_role: '', relationship: '' });
+      setNote({ ok: true, text: res?.invite_token
+        ? 'Request recorded. Its link is on the claim below. The claim stays self-stated until they answer.'
+        : 'Request recorded. The claim stays self-stated until they answer.' });
       onDone?.();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'The request could not be recorded.' });
+      setNote({ ok: false, text: refusalText(err, 'The request could not be recorded. Nothing was saved.') });
     } finally {
       setBusy(false);
     }
@@ -109,8 +127,8 @@ function AskForm({ item, onDone }) {
           <input className={inputClass} value={draft.attester_name}
             onChange={(e) => setDraft({ ...draft, attester_name: e.target.value })} />
         </Field>
-        <Field label="Their email" hint="Optional. Recorded for your reference; nothing is sent.">
-          <input className={inputClass} value={draft.attester_email}
+        <Field label="Their email" hint="Required. When they answer, Axal emails their code here. It cannot be your own.">
+          <input type="email" className={inputClass} value={draft.attester_email}
             onChange={(e) => setDraft({ ...draft, attester_email: e.target.value })} />
         </Field>
         <Field label="Their role">
@@ -126,7 +144,6 @@ function AskForm({ item, onDone }) {
         {busy ? 'Recording…' : 'Record the ask'}
       </button>
       <SaveNote note={note} />
-      {token && <ConsentLink token={token} />}
     </form>
   );
 }
@@ -145,7 +162,7 @@ export default function ProofZone() {
       const res = await api.listMyAdvisorProof();
       setState({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [] });
     } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your proof record could not be read.', items: [] });
+      setState({ loading: false, error: refusalText(e, 'Your proof record could not be read.'), items: [] });
     }
   }, []);
 
@@ -168,7 +185,7 @@ export default function ProofZone() {
       setNote({ ok: true, text: 'Added — self-stated until someone confirms it.' });
       await load();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be saved.' });
+      setNote({ ok: false, text: refusalText(err, 'That could not be saved.') });
     } finally {
       setBusy(false);
     }
@@ -180,13 +197,13 @@ export default function ProofZone() {
       await api.deleteMyAdvisorProof(row.id);
       await load();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be removed.' });
+      setNote({ ok: false, text: refusalText(err, 'That could not be removed.') });
     }
   };
 
   const attested = state.items.filter((p) => p.attested);
   const selfStated = state.items.filter((p) => !p.attested);
-  const awaiting = state.items.filter((p) => (p.consents || []).some((c) => !c.consent_given && !c.withdrawn_at));
+  const awaiting = state.items.filter((p) => (p.consents || []).some((c) => c.state === 'pending'));
   // D392 — the chips are the strip's three counts, as views.
   const PROOF_VIEWS = { attested: attested, awaiting: awaiting, self: selfStated };
   const shown = PROOF_VIEWS[view] || state.items;
@@ -274,9 +291,10 @@ export default function ProofZone() {
         )}
         <div className="space-y-3">
           {shown.map((row) => {
-            const live = (row.consents || []).filter((c) => c.consent_given && !c.withdrawn_at);
-            const pending = (row.consents || []).filter((c) => !c.consent_given && !c.withdrawn_at);
-            const withdrawn = (row.consents || []).filter((c) => c.withdrawn_at);
+            const live = (row.consents || []).filter((c) => c.state === 'confirmed');
+            const pending = (row.consents || []).filter((c) => c.state === 'pending');
+            const withdrawn = (row.consents || []).filter((c) => c.state === 'withdrawn' || c.state === 'declined');
+            const stale = (row.consents || []).filter((c) => c.state === 'needs_reconfirmation');
             return (
               <Card key={row.id} padding="md">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -326,6 +344,19 @@ export default function ProofZone() {
                   <p className="mt-2 text-[11.5px] text-axal-faint">
                     Waiting on {pending.map((c) => c.attester_name).join(', ')}. Asking is not being
                     told yes — this stays self-stated until they answer.
+                  </p>
+                )}
+                {/* D4670: each pending ask's link, from the list, so a refresh never loses it. */}
+                {pending.filter((c) => c.invite_token).map((c) => (
+                  <div key={`link-${c.id}`}>
+                    <p className="mt-2 text-[11px] font-semibold">For {c.attester_name}</p>
+                    <ConsentLink token={c.invite_token} />
+                  </div>
+                ))}
+                {stale.length > 0 && (
+                  <p className="mt-2 text-[11.5px] text-amber-700 dark:text-amber-300" data-testid="proof-needs-reconfirmation">
+                    {stale.map((c) => c.attester_name).join(', ')}: {CONSENT_STATES.needs_reconfirmation}. Their earlier
+                    answer is kept on the record and no longer counts as confirmed.
                   </p>
                 )}
                 {withdrawn.length > 0 && (

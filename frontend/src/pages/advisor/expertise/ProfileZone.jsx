@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
+  Field, SaveNote, Unrecorded, ZoneBody, ZoneHeading, refusalText,
   buttonClass, inputClass,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -153,7 +153,7 @@ export default function ProfileZone() {
         linkedin_url: profile?.linkedin_url || '',
       });
     } catch (e) {
-      setState({ loading: false, error: e?.message || 'The profile could not be read.', profile: null });
+      setState({ loading: false, error: refusalText(e, 'The profile could not be read.'), profile: null });
     }
   }, []);
 
@@ -187,7 +187,7 @@ export default function ProfileZone() {
     } catch (err) {
       // Named, not swallowed. The reported defect on the old surface was a
       // save that reported success while the worker discarded nine fields.
-      setNote({ ok: false, text: err?.message || 'The profile could not be saved. Nothing was changed.' });
+      setNote({ ok: false, text: refusalText(err, 'The profile could not be saved. Nothing was changed.') });
     } finally {
       setSaving(false);
     }
