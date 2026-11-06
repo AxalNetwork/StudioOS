@@ -6,6 +6,7 @@ import { AUDIO_PREFIX, MAX_CHUNK_BYTES, UPLOAD_BYTES_PER_SECOND, WAV_HEADER_BYTE
 import { assembleBotTranscript, BOT_NAME, type BotEvent, type BotPassage } from './channels/botTranscript';
 import { NOVA_3 } from './sttFormats';
 import { writableSession } from './interviewIntake';
+import { ensureDiscoveryTranscriptProjectionOwnerColumn } from './discoveryInterviewSchema';
 
 export class BotAssemblyError extends Error {
   readonly code: string;
@@ -191,6 +192,9 @@ export async function commitBotAssembly(env: Env, prepared: Awaited<ReturnType<t
   if (run.participants_enc) return false; // A retry never duplicates final rows or receipts.
   const participants = prepared.participants.map(p=>({ name:p.name, joined_ms:p.joined_at_ms, left_ms:p.left_at_ms }));
   const encrypted = await encryptColumn(env,'meeting_bots','participants_enc',uid,JSON.stringify(participants));
+  if (!await ensureDiscoveryTranscriptProjectionOwnerColumn(env)) {
+    throw new Error('transcript_projection_owner_unavailable');
+  }
   const results = await env.DB.batch([
     env.DB.prepare(`UPDATE meeting_bots SET participants_enc = ? WHERE uid = ? AND user_id = ? AND session_id = ? AND participants_enc IS NULL
       AND (status IN ('processing','stopped') OR status = 'failed' AND failure_code IN ('processing_failed','processing_timeout'))
@@ -209,9 +213,10 @@ export async function commitBotAssembly(env: Env, prepared: Awaited<ReturnType<t
     env.DB.prepare(`UPDATE interview_sessions SET status = 'transcribed', language = COALESCE(?,language), final_model = ?, updated_at = datetime('now')
       WHERE id = ? AND EXISTS (SELECT 1 FROM meeting_bots WHERE uid = ? AND participants_enc = ?)`)
       .bind(prepared.language,prepared.model,session.id,uid,encrypted),
-    env.DB.prepare(`UPDATE discovery_interviews SET transcript = ?, transcribed_at = datetime('now'), transcribed_by_model = ?, updated_at = datetime('now')
+    env.DB.prepare(`UPDATE discovery_interviews SET transcript = ?, transcribed_at = datetime('now'), transcribed_by_model = ?,
+      transcript_session_uid = ?, updated_at = datetime('now')
       WHERE id = ? AND EXISTS (SELECT 1 FROM meeting_bots WHERE uid = ? AND participants_enc = ?)`)
-      .bind(prepared.segments.map(s=>s.text).join('\n'),prepared.model,session.interview_id,uid,encrypted),
+      .bind(prepared.segments.map(s=>s.text).join('\n'),prepared.model,session.uid,session.interview_id,uid,encrypted),
     env.DB.prepare(`INSERT INTO interview_session_receipts(session_id,kind,model,requested_model,fallback_used,audio_minutes,cost_microusd,outcome)
       SELECT ?, 'final', ?, ?, ?, ?, ?, 'ok' WHERE EXISTS (SELECT 1 FROM meeting_bots WHERE uid = ? AND participants_enc = ?)`)
       .bind(session.id,prepared.model,NOVA_3,prepared.fallback?1:0,prepared.audioMinutes,prepared.costMicro,uid,encrypted),

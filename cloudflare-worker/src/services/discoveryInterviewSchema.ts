@@ -102,6 +102,38 @@ export async function ensureDiscoveryEvidenceColumns(env: Env): Promise<boolean>
 }
 
 const RECORDING_READY = new WeakMap<object, boolean>();
+const TRANSCRIPT_PROJECTION_OWNER_READY = new WeakMap<object, boolean>();
+
+/**
+ * Ensure D4626's nullable transcript projection owner exists. Deploys apply
+ * the canonical migration first; this narrow bootstrap keeps partial local
+ * fixtures and an interrupted preview migration from turning transcription or
+ * deletion into an untracked parent write. Readiness is cached only on
+ * success, matching the older discovery column helpers below.
+ */
+export async function ensureDiscoveryTranscriptProjectionOwnerColumn(env: Env): Promise<boolean> {
+  const key = env.DB as unknown as object;
+  if (TRANSCRIPT_PROJECTION_OWNER_READY.get(key)) return true;
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+    if (!(info.results || []).some((row) => row.name === 'transcript_session_uid')) {
+      try {
+        await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN transcript_session_uid TEXT`).run();
+      } catch (e) {
+        const recheck = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+        if (!(recheck.results || []).some((row) => row.name === 'transcript_session_uid')) {
+          console.warn('[discoveryInterviewSchema] transcript projection owner ALTER failed', e);
+          return false;
+        }
+      }
+    }
+    TRANSCRIPT_PROJECTION_OWNER_READY.set(key, true);
+    return true;
+  } catch (e) {
+    console.warn('[discoveryInterviewSchema] transcript projection owner bootstrap failed', e);
+    return false;
+  }
+}
 
 /**
  * Ensure migration 215's eight recording columns exist. Canonical migration is

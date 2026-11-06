@@ -181,6 +181,8 @@ const scenarios: Record<string, (m: Module) => Promise<void>> = {
     assert.equal(participants[0].joined_ms,0);
     assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM interview_transcript_segments WHERE session_id=?').get(w.session).n,3);
     assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM interview_session_receipts WHERE session_id=?').get(w.session).n,1);
+    assert.equal(w.db.prepare('SELECT transcript_session_uid FROM discovery_interviews WHERE id=1').get().transcript_session_uid,
+      w.db.prepare('SELECT uid FROM interview_sessions WHERE id=?').get(w.session).uid);
     const parallel=await world(), p=await m.prepareBotAssembly(parallel.env,parallel.uid);
     assert.equal((await Promise.all([m.commitBotAssembly(parallel.env,p),m.commitBotAssembly(parallel.env,p)])).filter(Boolean).length,1);
   },
@@ -226,7 +228,9 @@ const scenarios: Record<string, (m: Module) => Promise<void>> = {
   async 'audio deletion keeps final labels; session deletion removes the run and its private events'(m) {
     const w=await world();await m.commitBotAssembly(w.env,await m.prepareBotAssembly(w.env,w.uid));
     const encoded=w.db.prepare('SELECT participants_enc FROM meeting_bots WHERE uid=?').get(w.uid).participants_enc;
+    const projected=w.db.prepare('SELECT transcript,transcript_session_uid FROM discovery_interviews WHERE id=1').get();
     await deleteSessionAudio(w.env,(await loadSession(w.env,w.session))!,FOUNDER,'deleted');
+    assert.deepEqual(w.db.prepare('SELECT transcript,transcript_session_uid FROM discovery_interviews WHERE id=1').get(),projected);
     assert.equal(w.db.prepare('SELECT participants_enc FROM meeting_bots WHERE uid=?').get(w.uid).participants_enc,encoded);
     assert.equal((await m.readBotFinalParticipants(w.env,w.uid,FOUNDER)).participants!.length,3);
     await assert.rejects(m.readBotFinalParticipants(w.env,w.uid,3));
@@ -234,6 +238,8 @@ const scenarios: Record<string, (m: Module) => Promise<void>> = {
     await deleteSession(w.env,(await loadSession(w.env,w.session))!,FOUNDER);
     assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM meeting_bots').get().n,0);
     assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM meeting_bot_events').get().n,0);
+    assert.deepEqual({...w.db.prepare('SELECT transcript,transcribed_at,transcribed_by_model,transcript_session_uid FROM discovery_interviews WHERE id=1').get()},
+      {transcript:null,transcribed_at:null,transcribed_by_model:null,transcript_session_uid:null});
   },
   async 'processing failures can be retried from paid stages without rewriting terminal run status'(m) {
     const w=await world();w.db.prepare("UPDATE meeting_bots SET status='failed',failure_code='processing_failed'").run();

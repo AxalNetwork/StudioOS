@@ -16,8 +16,9 @@
  *     withdrawal still stops it (`sessionDigestConsentBlocks`).
  *   - A chunk is stored once per sequence number (`putChunk`).
  *   - The final transcript replaces the live draft and is copied, as plain
- *     text, to `discovery_interviews.transcript`, so every existing reader of
- *     that column keeps working (`replaceWithFinal`).
+ *     text, to `discovery_interviews.transcript`, with the supplying session
+ *     named so whole-session deletion can remove that projection
+ *     (`replaceWithFinal`).
  *   - The duration is the server's, summed over recording intervals on the
  *     Worker's clock (`transition`).
  *   - Deleting a session deletes its audio from R2 and leaves an audit row
@@ -29,6 +30,7 @@ import { markInterviewHeld } from './sessionSetup';
 import { closeAttachedRefs } from './channels/meetings';
 import { consentRequired } from './channels/types';
 import { presentTables } from './interviewFindings';
+import { ensureDiscoveryTranscriptProjectionOwnerColumn } from './discoveryInterviewSchema';
 
 export const CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
 export type Channel = typeof CHANNELS[number];
@@ -319,11 +321,15 @@ export function labelSegments(segments: SttSegment[], intervieweeName: string | 
  * sees both or neither: the session's segments are deleted, the final ones
  * written, the session marked transcribed with its language and model, and the
  * plain text copied to `discovery_interviews.transcript` for every existing
- * reader of that column.
+ * reader of that column. The parent names this session as the projection's
+ * owner; session segments remain the source of truth.
  */
 export async function replaceWithFinal(
   env: Env, session: SessionRow, segments: StoredSegment[], model: string, language: string | null, status = 'transcribed',
 ): Promise<string> {
+  if (!await ensureDiscoveryTranscriptProjectionOwnerColumn(env)) {
+    throw new Error('transcript_projection_owner_unavailable');
+  }
   const text = segments.map((s) => s.text).join('\n');
   const stmts = [
     env.DB.prepare('DELETE FROM interview_transcript_segments WHERE session_id = ?').bind(session.id),
@@ -337,9 +343,10 @@ export async function replaceWithFinal(
     ).bind(status, language, model, session.id),
     env.DB.prepare(
       `UPDATE discovery_interviews
-          SET transcript = ?, transcribed_at = datetime('now'), transcribed_by_model = ?, updated_at = datetime('now')
+          SET transcript = ?, transcribed_at = datetime('now'), transcribed_by_model = ?,
+              transcript_session_uid = ?, updated_at = datetime('now')
         WHERE id = ?`,
-    ).bind(text, model, session.interview_id),
+    ).bind(text, model, session.uid, session.interview_id),
   ];
   await env.DB.batch(stmts);
   if (session.outputs != null && !['recording', 'paused'].includes(session.status)) {
@@ -409,6 +416,9 @@ export async function deleteSessionAudio(env: Env, session: SessionRow, actorUse
  * are never deleted, whatever a row says.
  */
 export async function deleteSession(env: Env, session: SessionRow, actorUserId: number): Promise<{ keys: string[] }> {
+  if (!await ensureDiscoveryTranscriptProjectionOwnerColumn(env)) {
+    throw new Error('transcript_projection_owner_unavailable');
+  }
   if (env.MEETING_BOT_RUN) {
     const { stopSessionBot } = await import('./meetingBots');
     await stopSessionBot(env, session.id, session.created_by_user_id);
@@ -422,6 +432,11 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
             (SELECT COUNT(*) FROM interview_session_marks WHERE session_id = ?) AS marks,
             (SELECT COALESCE(SUM(cost_microusd), 0) FROM interview_session_receipts WHERE session_id = ?) AS cost_microusd`,
   ).bind(session.id, session.id, session.id).first<{ segments: number; marks: number; cost_microusd: number }>();
+  const finalSegments = await env.DB.prepare(
+    `SELECT text FROM interview_transcript_segments
+      WHERE session_id = ? AND source = 'final' ORDER BY id`,
+  ).bind(session.id).all<{ text: string }>();
+  const finalText = (finalSegments.results || []).map((segment) => segment.text).join('\n');
   // D757 §2.13 (#1923) — the findings this session's suggestions became keep
   // their row (the founder accepted them) and lose the interviewee's words.
   const findings = (await presentTables(env, ['interview_findings'])).has('interview_findings')
@@ -429,6 +444,20 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
     : [];
   const botTables = await presentTables(env, ['meeting_bots', 'meeting_bot_events']);
   await env.DB.batch([
+    // D4626: remove the parent copy only when this session still owns it and
+    // its text still matches. A newer session changes the owner; a channel or
+    // direct-upload rewrite changes the text. In either case this deletion
+    // cannot erase the newer projection. With surviving older sessions we
+    // deliberately leave the parent empty rather than resurrect stale words.
+    env.DB.prepare(
+      `UPDATE discovery_interviews
+          SET transcript = CASE WHEN transcript = ? THEN NULL ELSE transcript END,
+              transcribed_at = CASE WHEN transcript = ? THEN NULL ELSE transcribed_at END,
+              transcribed_by_model = CASE WHEN transcript = ? THEN NULL ELSE transcribed_by_model END,
+              transcript_session_uid = NULL,
+              updated_at = CASE WHEN transcript = ? THEN datetime('now') ELSE updated_at END
+        WHERE id = ? AND transcript_session_uid = ?`,
+    ).bind(finalText, finalText, finalText, finalText, session.interview_id, session.uid),
     ...(botTables.has('meeting_bots') && botTables.has('meeting_bot_events') ? [env.DB.prepare('DELETE FROM meeting_bot_events WHERE run_uid IN (SELECT uid FROM meeting_bots WHERE session_id = ?)').bind(session.id)] : []),
     ...(botTables.has('meeting_bots') ? [env.DB.prepare('DELETE FROM meeting_bots WHERE session_id = ?').bind(session.id)] : []),
     ...findings,

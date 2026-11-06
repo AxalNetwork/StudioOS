@@ -1563,7 +1563,7 @@ CREATE TABLE discovery_interviews (
     pains_json TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-, featured INTEGER NOT NULL DEFAULT 0, validation_rating INTEGER, validation_comment TEXT, icp_fit TEXT, quote_consent INTEGER, interviewee_company TEXT, recording_r2_key TEXT, recording_mime TEXT, recording_size_bytes INTEGER, recording_duration_sec INTEGER, recording_uploaded_at TEXT, transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT);
+, featured INTEGER NOT NULL DEFAULT 0, validation_rating INTEGER, validation_comment TEXT, icp_fit TEXT, quote_consent INTEGER, interviewee_company TEXT, recording_r2_key TEXT, recording_mime TEXT, recording_size_bytes INTEGER, recording_duration_sec INTEGER, recording_uploaded_at TEXT, transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT, transcript_session_uid TEXT);
 
 CREATE TABLE documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
