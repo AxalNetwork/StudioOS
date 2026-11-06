@@ -159,17 +159,51 @@ async function byUid(env: Env, uid: string): Promise<LicenceRow | null> {
     .bind(uid).first<LicenceRow>();
 }
 
+/**
+ * One row of the licence's append-only history. D4707: `change` keeps what the
+ * write replaced beside what it left, and `outcome` says how the write ended.
+ * The row is immutable (migration 269's triggers), so a write that pushes to
+ * the branch logs AFTER the push, with the outcome already known.
+ */
 async function logEvent(
   env: Env, licenceId: number, event: string, actorId: number,
   detail?: unknown, note?: string | null,
-) {
+  change?: { before: unknown; after: unknown },
+  outcome: 'committed' | 'partial' = 'committed',
+): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
-     VALUES (?,?,?,?,?,?)`,
+    `INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at,
+                                 before_json, after_json, outcome)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
   ).bind(
     licenceId, event, detail === undefined ? null : JSON.stringify(detail),
     note ?? null, actorId, nowIso(),
+    change ? JSON.stringify(change.before ?? null) : null,
+    change ? JSON.stringify(change.after ?? null) : null,
+    outcome,
   ).run();
+}
+
+/**
+ * D4707 — a write whose push to the branch did not land is PARTIAL: HQ holds
+ * the change and the branch's copy does not yet (the scheduled retry owns the
+ * rest). A licence with no branch has nothing to push, so it is committed.
+ */
+const pushOutcome = (pushed: { ok: boolean; code?: string | null }): 'committed' | 'partial' =>
+  (!pushed.ok && pushed.code ? 'partial' : 'committed');
+
+async function seatsOf(env: Env, licenceId: number): Promise<Record<string, number>> {
+  const q = await env.DB.prepare('SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ?')
+    .bind(licenceId).all<{ seat_type: string; seats_licensed: number }>();
+  const out: Record<string, number> = {};
+  for (const x of q.results || []) out[x.seat_type] = Number(x.seats_licensed);
+  return out;
+}
+
+async function countriesOf(env: Env, licenceId: number): Promise<string[]> {
+  const q = await env.DB.prepare('SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code')
+    .bind(licenceId).all<{ country_code: string }>();
+  return (q.results || []).map((x) => x.country_code);
 }
 
 /**
@@ -501,6 +535,7 @@ r.put('/:uid/territories', async (c) => {
       }, 409);
     }
 
+    const beforeCountries = await countriesOf(c.env, licence.id);
     const stmts = [
       c.env.DB.prepare('DELETE FROM licence_territories WHERE licence_id = ?').bind(licence.id),
       ...wanted.map((code) => c.env.DB.prepare(
@@ -513,10 +548,11 @@ r.put('/:uid/territories', async (c) => {
     // claimed a country between the check above and here, this batch fails
     // rather than double-recording it.
     await c.env.DB.batch(stmts);
-    await logEvent(c.env, licence.id, 'territory_changed', admin.id, { countries: wanted });
     // D272 — this changes what the branch's copy holds, so it pushes like
     // every status transition; a push that does not land is retried.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
+    await logEvent(c.env, licence.id, 'territory_changed', admin.id, { countries: wanted }, null,
+      { before: { countries: beforeCountries }, after: { countries: wanted } }, pushOutcome(pushed));
     return c.json({ ok: true, countries: wanted, pushed });
   } catch (e) { return mapError(c, e); }
 });
@@ -534,6 +570,7 @@ r.put('/:uid/seats', async (c) => {
       if (n !== null && n < 0) return c.json({ error: `${t} seats cannot be negative` }, 400);
       seats[t] = n ?? 0;
     }
+    const beforeSeats = await seatsOf(c.env, licence.id);
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM licence_seats WHERE licence_id = ?').bind(licence.id),
       ...SEAT_TYPES.map((t) => c.env.DB.prepare(
@@ -542,10 +579,11 @@ r.put('/:uid/seats', async (c) => {
       c.env.DB.prepare('UPDATE territory_licences SET updated_at = ? WHERE id = ?')
         .bind(nowIso(), licence.id),
     ]);
-    await logEvent(c.env, licence.id, 'seats_changed', admin.id, seats);
     // D272 — this changes what the branch's copy holds, so it pushes like
     // every status transition; a push that does not land is retried.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
+    await logEvent(c.env, licence.id, 'seats_changed', admin.id, seats, null,
+      { before: beforeSeats, after: seats }, pushOutcome(pushed));
     return c.json({ ok: true, seats, pushed });
   } catch (e) { return mapError(c, e); }
 });
@@ -583,10 +621,17 @@ r.patch('/:uid/terms', async (c) => {
       terms.term_years, terms.annual_fee_cents, terms.currency, terms.revenue_share_bps,
       terms.token_split_bps, terms.starts_on, terms.renews_on, nowIso(), licence.id,
     ).run();
-    await logEvent(c.env, licence.id, 'terms_changed', admin.id, terms);
+    const beforeTerms = {
+      term_years: licence.term_years ?? null, annual_fee_cents: licence.annual_fee_cents ?? null,
+      currency: licence.currency ?? null, revenue_share_bps: licence.revenue_share_bps ?? null,
+      token_split_bps: licence.token_split_bps ?? null, starts_on: licence.starts_on ?? null,
+      renews_on: licence.renews_on ?? null,
+    };
     // D272 — this changes what the branch's copy holds, so it pushes like
     // every status transition; a push that does not land is retried.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
+    await logEvent(c.env, licence.id, 'terms_changed', admin.id, terms, null,
+      { before: beforeTerms, after: terms }, pushOutcome(pushed));
     return c.json({ ok: true, ...terms, pushed });
   } catch (e) { return mapError(c, e); }
 });
@@ -717,8 +762,9 @@ r.post('/:uid/activate', async (c) => {
     await c.env.DB.prepare(
       "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
     ).bind(nowIso(), licence.id).run();
-    await logEvent(c.env, licence.id, 'activated', admin.id);
     const pushed = await pushLicenceToBranch(c.env, licence.id);
+    await logEvent(c.env, licence.id, 'activated', admin.id, undefined, null,
+      { before: { status: licence.status }, after: { status: 'active' } }, pushOutcome(pushed));
     return c.json({ ok: true, status: 'active', pushed });
   } catch (e) { return mapError(c, e); }
 });
@@ -738,7 +784,6 @@ r.post('/:uid/suspend', async (c) => {
     await c.env.DB.prepare(
       "UPDATE territory_licences SET status = 'suspended', status_note = ?, suspended_at = ?, updated_at = ? WHERE id = ?",
     ).bind(note, nowIso(), nowIso(), licence.id).run();
-    await logEvent(c.env, licence.id, 'suspended', admin.id, null, note);
     // D135 — THIS FILE HAD ZERO `notify()` CALLS. Suspending a licence changed
     // four columns in HQ's ledger and told the holder nothing: they found out by
     // hitting a 423. "First admins get notified" is the ladder's first sentence,
@@ -753,6 +798,8 @@ r.post('/:uid/suspend', async (c) => {
     // branch does; `pushed.ok === false` is a fact about the branch, and a 502
     // here would ask an operator to re-suspend something already suspended.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
+    await logEvent(c.env, licence.id, 'suspended', admin.id, null, note,
+      { before: { status: licence.status }, after: { status: 'suspended' } }, pushOutcome(pushed));
     return c.json({ ok: true, status: 'suspended', territory_released: false, pushed });
   } catch (e) { return mapError(c, e); }
 });
@@ -768,7 +815,6 @@ r.post('/:uid/reinstate', async (c) => {
     await c.env.DB.prepare(
       "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
     ).bind(nowIso(), licence.id).run();
-    await logEvent(c.env, licence.id, 'reinstated', admin.id);
     await notifyLicenceAdmins(c.env, licence.id, {
       type: 'licence_reinstated',
       title: 'Your licence is active again',
@@ -776,6 +822,8 @@ r.post('/:uid/reinstate', async (c) => {
       payload: { licence_uid: licence.uid },
     });
     const pushed = await pushLicenceToBranch(c.env, licence.id);
+    await logEvent(c.env, licence.id, 'reinstated', admin.id, undefined, null,
+      { before: { status: 'suspended' }, after: { status: 'active' } }, pushOutcome(pushed));
     return c.json({ ok: true, status: 'active', pushed });
   } catch (e) { return mapError(c, e); }
 });
@@ -803,8 +851,9 @@ r.post('/:uid/renew', async (c) => {
     await c.env.DB.prepare(
       'UPDATE territory_licences SET renews_on = ?, updated_at = ? WHERE id = ?',
     ).bind(next, nowIso(), licence.id).run();
-    await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next });
     const pushed = await pushLicenceToBranch(c.env, licence.id);
+    await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next }, null,
+      { before: { renews_on: licence.renews_on ?? null }, after: { renews_on: next } }, pushOutcome(pushed));
     return c.json({ ok: true, renews_on: next, pushed });
   } catch (e) { return mapError(c, e); }
 });
@@ -1032,7 +1081,8 @@ r.post('/:uid/terminate', async (c) => {
         "UPDATE territory_licences SET status = 'terminated', status_note = ?, terminated_at = ?, updated_at = ? WHERE id = ?",
       ).bind(note, nowIso(), nowIso(), licence.id),
     ]);
-    await logEvent(c.env, licence.id, 'terminated', admin.id, { released: codes }, note);
+    await logEvent(c.env, licence.id, 'terminated', admin.id, { released: codes }, note,
+      { before: { status: licence.status, countries: codes }, after: { status: 'terminated', countries: [] } });
 
     // D139 — THE LADDER WOULD OTHERWISE GO ON FREEZING PEOPLE OVER A LICENCE
     // THAT NO LONGER EXISTS. `auth.ts`'s compliance gate reads `admin_notices`
@@ -2300,6 +2350,76 @@ r.get('/:uid/fee-invoices/:invoiceUid/pdf', async (c) => {
     return new Response(pdf.bytes, {
       status: 200,
       headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${pdf.filename}"`, 'Cache-Control': 'private, no-store' },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D4707 — GET /api/admin/licences/:uid/events?before=<id>&limit=<n>
+ *
+ * The licence's history, newest first, a page at a time (keyset on `id`, so a
+ * row written while someone pages is never skipped or shown twice). Each row
+ * names its ACTOR (`actor_user_id` joined to the account's name; an account
+ * since deleted reads as unknown, not as nobody), carries the structured
+ * `before` and `after` the write recorded, and its `outcome`. A row written
+ * before D4707, or by a path that records none of these, says so with
+ * `recorded: false` rather than an empty change.
+ *
+ * `next_before` is the cursor for the next page, or null at the start of the
+ * history: the page is never silently capped.
+ */
+export const EVENTS_PAGE_MAX = 100;
+const parseJson = (raw: unknown): { ok: boolean; value: unknown } => {
+  if (raw === null || raw === undefined) return { ok: true, value: null };
+  try { return { ok: true, value: JSON.parse(String(raw)) }; } catch { return { ok: false, value: null }; }
+};
+
+r.get('/:uid/events', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const limitRaw = Number(c.req.query('limit') || 50);
+    const limit = Number.isInteger(limitRaw) ? Math.min(EVENTS_PAGE_MAX, Math.max(1, limitRaw)) : 50;
+    const beforeRaw = c.req.query('before');
+    const before = beforeRaw === undefined || beforeRaw === '' ? null : Number(beforeRaw);
+    if (before !== null && (!Number.isInteger(before) || before < 1)) {
+      return c.json({ error: 'bad_cursor', message: 'before is the id of the oldest row already shown.' }, 400);
+    }
+    const q = await c.env.DB.prepare(
+      `SELECT e.id, e.event, e.note, e.detail_json, e.before_json, e.after_json, e.outcome, e.created_at,
+              e.actor_user_id, u.name AS actor_name, u.email AS actor_email
+         FROM licence_events e LEFT JOIN users u ON u.id = e.actor_user_id
+        WHERE e.licence_id = ? AND (? IS NULL OR e.id < ?)
+        ORDER BY e.id DESC LIMIT ?`,
+    ).bind(licence.id, before, before, limit + 1).all<any>();
+    const rows = (q.results || []) as any[];
+    const page = rows.slice(0, limit);
+    const items = page.map((e) => {
+      const detail = parseJson(e.detail_json);
+      const b = parseJson(e.before_json);
+      const a = parseJson(e.after_json);
+      const recorded = e.before_json !== null || e.after_json !== null;
+      return {
+        id: e.id,
+        event: e.event,
+        note: e.note ?? null,
+        created_at: e.created_at,
+        actor: e.actor_user_id === null || e.actor_user_id === undefined
+          ? { state: 'none' }
+          : (e.actor_name || e.actor_email
+            ? { state: 'known', id: e.actor_user_id, name: e.actor_name || e.actor_email }
+            : { state: 'unknown', id: e.actor_user_id }),
+        change: !recorded
+          ? { recorded: false }
+          : (b.ok && a.ok ? { recorded: true, before: b.value, after: a.value } : { recorded: true, readable: false }),
+        detail: detail.ok ? detail.value : null,
+        outcome: e.outcome ?? null,
+      };
+    });
+    return c.json({
+      items,
+      next_before: rows.length > limit && page.length ? page[page.length - 1].id : null,
     });
   } catch (e) { return mapError(c, e); }
 });

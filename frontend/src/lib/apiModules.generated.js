@@ -23,6 +23,7 @@ export * from './api/adminIncorporations.js';
 export * from './api/adminInfluencers.js';
 export * from './api/adminLab.js';
 export * from './api/adminLearning.js';
+export * from './api/adminLicenceHistory.js';
 export * from './api/adminMeetingBots.js';
 export * from './api/adminMercury.js';
 export * from './api/adminNetwork.js';
