@@ -61,3 +61,4 @@ and citations by number keep working.
 | `D4496.md` | Distribution cross-tab states and responsive layouts (#4496). |
 | `D4576.md` | Adds 32 specialist agent skills and synthetic golden cases through the existing library contract. |
 | `D4589.md` | Validate next-action policy shared by the desktop overview and the phone root (#4589). |
+| `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
