@@ -23,8 +23,8 @@ import { codeOnly } from './_codeOnly.mjs';
 import FounderStudioBody from '../src/pages/founder/FounderStudioBody.jsx';
 import { studioFromReads } from '../src/pages/studio/useStudioLayout.js';
 import {
-  summaryOf, progressOf, actionsOf, modulesOf, profileOf, questionsOf, headerOf, companyProgress,
-  failedRead, READY, LOADING, UNREADABLE, NOT_RECORDED, EMPTY,
+  summaryOf, progressOf, modulesOf, profileOf, questionsOf, headerOf, companyProgress,
+  failedRead, READY, LOADING, UNREADABLE, NOT_RECORDED,
 } from '../src/pages/founder/founderStudioModel.js';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 
@@ -76,7 +76,8 @@ test('/studio draws the fixed blocks and the founder default’s modules', () =>
   }
   assert.match(t, /Week 2 · Day 11/);
   assert.match(t, /NovaCraft AI · Fay Founder · Cohort 4/);
-  assert.match(t, /Continue where you left off/);
+  assert.doesNotMatch(t, /Continue where you left off/);
+  assert.match(t, /Customise/);
   assert.match(t, /Have you ever owned a revenue number end to end\?/);
   assert.match(t, /18 answered · 5 open/);
   assert.match(t, /Readiness71/);
@@ -90,9 +91,7 @@ test('D1419: "Do these next", "Activity across the platform" and the activity re
   assert.doesNotMatch(body, /Do these next|Activity across the platform|activityOf/);
   const home = codeOnly(readFileSync(new URL('../src/pages/founder/FounderStudioHome.jsx', import.meta.url), 'utf8'));
   assert.doesNotMatch(home, /getRecentActivity/);
-  // Continue still links the checklist's first open item, never a done one.
-  const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(FounderStudioBody, { user: USER, reads: READS, onRetry: () => {}, studio: STUDIO })));
-  assert.match(html, /data-testid="link-founder-continue" href="\/build\/roadmap"/);
+
 });
 
 test('the summary strip reads each store, and a missing one is Not recorded, never a zero', () => {
@@ -135,7 +134,7 @@ test('every read still in flight is loading, never empty and never a zero', () =
   const t = render({});
   assert.doesNotMatch(t, /No question is waiting/);
   assert.match(t, /Reading…/);
-  for (const z of [actionsOf({}), progressOf(undefined), questionsOf({}), modulesOf({})]) {
+  for (const z of [progressOf(undefined), questionsOf({}), modulesOf({})]) {
     assert.equal(z.state, LOADING);
   }
   assert.ok(summaryOf({}).every((x) => x.state === LOADING || x.state === NOT_RECORDED));
@@ -143,15 +142,12 @@ test('every read still in flight is loading, never empty and never a zero', () =
 });
 
 test('empty is said as empty: nothing waiting', () => {
-  assert.equal(actionsOf({ ...READS, lifecycle: { checklist: [{ label: 'x', done: true }] } }).state, EMPTY);
   const t = render({ ...READS, lifecycle: { checklist: [] }, queue: { queue: [] } });
   assert.match(t, /No question is waiting on you/);
-  assert.doesNotMatch(t, /Continue where you left off/, 'Continue links nothing when nothing is open');
 });
 
-test('with no company record the strip and the actions say so', () => {
+test('with no company record the strip says so', () => {
   const reads = { ...READS, project: null, lifecycle: null, scores: null };
-  assert.deepEqual(actionsOf(reads).items.map((a) => a.title), ['Create your startup record']);
   assert.equal(summaryOf(reads).find((x) => x.k === 'Readiness').state, NOT_RECORDED);
   assert.match(render(reads), /No company record yet/);
 });
