@@ -55,7 +55,7 @@ export const EXPORT_COLUMNS: ReadonlyArray<{ key: string; head: string }> = [
   { key: 'access', head: 'Limited access' }, { key: 'joined', head: 'Joined (UTC)' },
 ];
 
-const PROFILE_WORDS: Record<string, string> = {
+export const PROFILE_WORDS: Record<string, string> = {
   founder: 'Founder', investor: 'Investor', advisor: 'Advisor', partner: 'Operating Partner', exploring: 'Explorer', admin: 'Admin',
 };
 const IDENTITY_WORDS: Record<string, string> = {

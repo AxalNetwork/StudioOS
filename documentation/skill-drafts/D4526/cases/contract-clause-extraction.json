@@ -1,0 +1,36 @@
+{
+  "skill": "contract-clause-extraction",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "document": "C-12",
+        "page_1": "Section 1 Term: twelve months.",
+        "page_2": null,
+        "page_3": "Section 8 Liability refers to Schedule A."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "C-12",
+      "Section 1",
+      "Section 8"
+    ],
+    "must_say_not_recorded": [
+      "page 2"
+    ],
+    "must_not_include": [
+      "Schedule A contains a liability cap"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why page 2 is missing rather than inventing it.",
+    "Do not assert: Schedule A contains a liability cap.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "C-12; Section 1; Section 8. page 2: Not recorded. Human review required."
+}

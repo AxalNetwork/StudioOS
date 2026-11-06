@@ -279,8 +279,8 @@ test('the header carries New and Subscribe, and the IC gate matches canScheduleI
   assert.ok(page.includes('Subscribe · .ics'), 'the header lost "Subscribe · .ics"');
   assert.match(page, /const canIC = role === 'admin' \|\| role === 'investor';/,
     'the IC gate no longer mirrors canScheduleIc');
-  assert.match(route, /return r === 'admin' \|\| r === 'investor';/,
-    'canScheduleIc changed — the page gate must follow it');
+  assert.match(route, /return user\.role === 'admin' \|\| holdsLicence\(user, 'investor'\);/,
+    'the Worker must retain primary Admin/Investor admission and add the held Investor union (D4472; frontend union follows in part 2)');
   // Absent, not disabled — and the reason where the control would have been.
   const model = readFileSync(new URL('../src/pages/calendarItemModel.js', import.meta.url), 'utf8');
   assert.match(model, /if \(r === 'admin' \|\| r === 'investor'\) out\.push\(\{ key: 'ic', label: 'IC meeting' \}\);/,

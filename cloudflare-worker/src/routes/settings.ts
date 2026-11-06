@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 import { memberFileStatement, missingMemberFileStatement, recheckMemberFileStatement } from '../services/memberFiles';
 /**
  * Epic 3 — Settings page backend.
@@ -1121,7 +1122,7 @@ settings.post('/totp/recovery-codes/regenerate', async (c) => {
 settings.get('/founder/invites', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
-  if (user.role !== 'founder') return c.json({ error: 'Founder role required' }, 403);
+  if (!holdsLicence(user, 'founder')) return c.json({ error: 'Founder role required' }, 403);
   const sql = getSQL(c.env);
   const rows = await sql`
     SELECT id, project_id, invitee_email, invitee_name, role, created_at, expires_at, accepted_at, revoked_at
@@ -1137,7 +1138,7 @@ settings.get('/founder/invites', async (c) => {
 settings.post('/founder/invites', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
-  if (user.role !== 'founder') return c.json({ error: 'Founder role required' }, 403);
+  if (!holdsLicence(user, 'founder')) return c.json({ error: 'Founder role required' }, 403);
   const body = await c.req.json().catch(() => ({} as any));
   const inviteeEmail = clampStr(body?.invitee_email, 254);
   if (!inviteeEmail || !isEmail(inviteeEmail)) return c.json({ error: 'Valid invitee_email required' }, 400);
@@ -1201,7 +1202,7 @@ settings.post('/founder/invites', async (c) => {
 settings.delete('/founder/invites/:id', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
-  if (user.role !== 'founder') return c.json({ error: 'Founder role required' }, 403);
+  if (!holdsLicence(user, 'founder')) return c.json({ error: 'Founder role required' }, 403);
   const id = parseInt(c.req.param('id') || '0', 10);
   if (!id) return c.json({ error: 'invite id required' }, 400);
   const sql = getSQL(c.env);

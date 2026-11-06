@@ -426,7 +426,7 @@ test('Continue learning reads my record', () => {
   assert.match(flat(markup), /Seed basics 50%/);
   assert.match(markup, /href="\/learning\/courses\/seed-basics"/);
   assert.equal(count(markup, 'data-testid="row-continue"'), 1, 'a bare lesson with nowhere to open was listed');
-  assert.match(text(h(ContinueLearning, { state: { status: 'ready', in_progress: [], completed: [] } })), /Nothing in progress/);
+  assert.match(text(h(ContinueLearning, { state: { status: 'ready', in_progress: [], completed: [] } })), /No course in progress\./);
   assert.match(html(h(ContinueLearning, { state: { status: 'loading' } })), /learning-loading/);
   assert.match(flat(html(h(ContinueLearning, { state: { status: 'unreadable' }, onRetry: () => {} }))), /Your progress could not be read\. This is not a claim that you have started nothing\./);
 });
@@ -475,7 +475,7 @@ test('a lesson plays its item: a YouTube link embedded, its transcript, previous
   assert.match(flat(markup), /A seed round is the first priced round\. It sets the pre-money valuation\./);
   assert.doesNotMatch(markup, /No transcript is recorded/);
   assert.match(tagOf(markup, 'link-lesson-next'), /href="\/learning\/courses\/seed-basics\/l2"/);
-  assert.match(flat(markup), /Foundations · lesson 1 of 3/);
+  assert.match(flat(markup), /Lesson 1 of 3 in Foundations/);
   // l1 is completed in the course read; l2 is not, and its button is live.
   assert.match(markup, /data-testid="text-lesson-completed"/);
   const l2 = html(h(LessonView, { courseState, itemState: { status: 'ready', ...readItemShape(ITEM_READING) }, lessonUid: 'l2', onMark: () => {} }));

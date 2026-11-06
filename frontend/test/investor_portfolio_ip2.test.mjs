@@ -323,7 +323,7 @@ test('the AI band mounts the half that has somewhere to land, and refuses the ha
   // The gather is scoped the way every read in `routes/positions.ts` is, and
   // short-circuits an empty accessible set: the CSV predicate reads NULL as
   // "all rows", so `[]` reaching the query is a cross-tenant read.
-  assert.match(spec, /if \(role !== 'admin' && role !== 'partner' && role !== 'investor'\) return \[\];/,
+  assert.match(spec, /if \(role !== 'admin' && !\(await heldLicences\(c\.env\.DB, \{ id: userId, role \}\)\)\.some\(licence => licence === 'partner' \|\| licence === 'investor'\)\) return \[\];/,
     'the gather no longer gates on the caller’s role');
   assert.match(spec, /if \(ids != null && ids\.length === 0\) return \[\];/,
     'an empty accessible set now reaches the query, which reads NULL as every row');

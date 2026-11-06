@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /** `/api/monitoring`: admin monitoring, its analytics sub-router (Task #3) and the AI router's observability (Task #1). */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -275,7 +276,7 @@ Detected anomalies: ${anomalies.length === 0 ? 'none' : anomalies.map(a => `${a.
 // a reader can be added without touching this gate.
 monitoring.get('/throughput', async (c) => {
   const user = await requireAuth(c);
-  if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner') && !holdsLicence(user, 'investor')) {
     return c.json({ detail: 'Forbidden' }, 403);
   }
   const sql = getSQL(c.env);

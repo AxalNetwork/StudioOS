@@ -170,7 +170,9 @@ test('the source token is its only key: purpose-scoped, one hour, one item and o
   assert.ok(await verifySourceToken(f.env, await hmacToken(`${SOURCE_TOKEN_PURPOSE}:${JWT_SECRET}`, `${SOURCE_TOKEN_PURPOSE}|vid-1|${KEY}|${Math.floor(Date.now() / 1000) + 600}`)), 'the same construction with this purpose verifies');
   // Tampered and expired.
   const [p, s] = token.split('.');
-  assert.equal(await refused(`${p}.${s.slice(0, -2)}AA`), 404);
+  // Change a full base64 digit so the signature always decodes to different bytes.
+  const tampered = `${s[0] === 'A' ? 'B' : 'A'}${s.slice(1)}`;
+  assert.equal(await refused(`${p}.${tampered}`), 404);
   assert.equal(await verifySourceToken(f.env, (await signSourceToken(f.env, 'vid-1', KEY, Date.now() - 2 * 3600_000))!), null, 'an hour-old token is spent');
   // The item replaced its file: the old token reads nothing.
   f.db.prepare('UPDATE learning_items SET r2_key = ? WHERE uid = ?').run(`learning/videos/vid-1/${'9'.repeat(32)}.mp4`, 'vid-1');

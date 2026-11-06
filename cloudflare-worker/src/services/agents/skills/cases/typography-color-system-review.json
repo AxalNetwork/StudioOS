@@ -1,0 +1,34 @@
+{
+  "skill": "typography-color-system-review",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Typography and Color System Review",
+        "task_scope": "Reviews typography and colour choices for hierarchy, readability, accessibility and cross-surface consistency.",
+        "evidence": [
+          "type hierarchy and semantic colour roles"
+        ],
+        "omitted_field": "contrast evidence"
+      },
+      "research.library": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for type hierarchy and semantic colour roles."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "type hierarchy and semantic colour roles"
+    ],
+    "must_say_not_recorded": [
+      "contrast evidence"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

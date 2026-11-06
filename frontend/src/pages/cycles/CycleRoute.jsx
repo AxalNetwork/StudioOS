@@ -30,6 +30,16 @@ import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView, { RecordPhoneProvider } from './RecordView';
 import { HEADER_BUTTON, RecordHeaderProvider } from './RecordHeader.jsx';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import DistributionTabs from './distribution/DistributionTabs.jsx';
+import OverviewTab from './distribution/OverviewTab.jsx';
+import ChannelsTab from './distribution/ChannelsTab.jsx';
+import ProspectsPage from './distribution/ProspectsPage.jsx';
+import DistributionAskIntent from './distribution/DistributionAskIntent.jsx';
+import InboxTab, { InboxNeedsYou, useInboxUnread } from './distribution/InboxTab.jsx';
+import CampaignsTab from './distribution/CampaignsTab.jsx';
+import NewCampaignPage from './distribution/NewCampaignPage.jsx';
+import { ComingSoon } from './distribution/DistributionParts.jsx';
+import { distributionPrimary } from './distribution/distributionModel.js';
 import { EmailAction } from '../email/emailParts.jsx';
 import RecordEmailSheet from '../email/RecordEmailSheet.jsx';
 import { emailHref, personOfRecord } from '../email/emailModel.js';
@@ -54,7 +64,7 @@ import RaisePosthog from './RaisePosthog';
 import { ImprovementPosthog, RevenuePosthog } from './GrowPosthog';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
-import ContentCalendar from './ContentCalendar';
+import CalendarTab, { CalendarWeek } from './distribution/CalendarTab.jsx';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -348,6 +358,7 @@ const CYCLE_DEFS = {
     path: 'update',
     Mount: GrowMount,
     action: (q, open) => ({ label: 'Share an update', href: `/grow/update${q}`, onOpen: open }),
+    actions: toFnMap({ distribution: distributionPrimary }),
     tools: toFnMap({
       'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
       'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
@@ -385,9 +396,8 @@ const CYCLE_DEFS = {
       </>),
       // The replies customer and partner asks brought in, beside the rows.
       distribution: (data, ctx) => (<>
-        <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
         {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
-        <ContentCalendar part={data?.parts?.content_calendar} channels={data?.records?.rows} projectId={ctx.projectId} reload={ctx.reload} />
+        <CalendarWeek projectId={ctx.projectId} />
         {fromMercury('distribution', data, ctx)}
         <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
       </>),
@@ -477,6 +487,12 @@ const CYCLE_DEFS = {
 };
 
 const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}:${v}`).join(',');
+
+/** D4484: a module may replace its cycle's primary without changing its neighbours. */
+export function primaryForModule(cycle, slug, search = '', open) {
+  const def = Object.hasOwn(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
+  return fnOf(def?.actions, slug)?.(search, open) ?? def?.action(search, open);
+}
 
 export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = false } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -776,8 +792,8 @@ function RecordCrumb({ title, type = null, id = null }) {
 /** D1178: a Use of funds page under a tab, and the tab it sits under. */
 const UOF_SUB_TAB = { forecast: 'runway', compare: 'scenarios' };
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null }) {
-  const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
+export default function CycleRoute({ cycle, tab = null, campaignNew = false, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null }) {
+  const { slug: routeSlug, id: recordId, uid: campaignUid, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
@@ -788,6 +804,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // Under the lightbox is the module page the founder was on, when it is one of
   // this cycle's modules; otherwise (a deep link, or the interview log) the overview.
   const slug = lightbox ? underModule(def?.modules, location.state?.under, cycle, def?.path) : suppliedSlug ?? routeSlug;
+  const distribution = cycle === 'grow' && slug === 'distribution' && !record && !lightbox && !adding;
+  const distributionTab = tab || 'overview';
   const [searchParams, setSearchParams] = useSearchParams();
   const [projectsKey, setProjectsKey] = useState(0);
   // D1464 (#4021): a per-open support read of the Data room or Capital relationships is showing; the rail goes read only.
@@ -795,6 +813,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // Build's lightbox reads a sign-in's return or `?tool=` once; the venture's write drops those keys too (#1597).
   const [connectDrop] = useState(() => (lightbox && cycle === 'build' ? toolDeepLink(location.search, [])?.strip || [] : []));
   const { projectId, status: projectStatus, writeProject } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null, drop: connectDrop, immediate: record });
+  const inboxUnread = useInboxUnread(distribution && projectStatus === 'ready' ? projectId : null, { enabled: distributionTab !== 'inbox' });
   const creates = Boolean(def?.creates);
   const [creating, setCreating] = useState(() => creates && searchParams.get('new') === '1');
   // Followed, not only seeded: the Command Palette can address `?new=1` from
@@ -955,6 +974,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
 
   useEffect(() => {
     if (record || !slug || !known || !projectId || !def) return undefined;
+    if (distribution && distributionTab !== 'overview') return undefined;
     let alive = true;
     setModuleStatus('loading');
     cyclesApi.module(cycle, projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort, page: query.page })
@@ -973,7 +993,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         } else setModuleStatus('unreadable');
       });
     return () => { alive = false; };
-  }, [record, cycle, slug, known, projectId, query, reload, def]);
+  }, [record, cycle, slug, known, projectId, query, reload, def, distribution, distributionTab]);
 
   // One card re-read: the module read returns that card on its own, so the
   // others stay drawn (D656: a failing source leaves the others alone).
@@ -1081,7 +1101,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       navigate(to, to.startsWith('/validate/session/') ? { state: { interview }, replace: true } : { replace: true });
     }
     : cycle === 'grow' ? (uid) => navigate(`/updates/${encodeURIComponent(uid)}`, { replace: true }) : undefined;
-  const action = def.action(q, openAction);
+  const action = primaryForModule(cycle, slug, q, openAction);
   const Mount = def.Mount || null;
   const rail = (
     <WorkerRail
@@ -1244,12 +1264,14 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         cycle={cycle}
         slug={slug}
         moduleName={moduleName}
+        header={distribution ? null : undefined}
         cards={tabs}
         data={module}
         status={projectStatus === 'unreadable' ? 'unreadable' : moduleStatus}
         message={moduleStatus === 'refused' ? moduleMessage : undefined}
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
+        showRecords={!distribution}
         recordsStatus={moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
@@ -1306,6 +1328,24 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       </ModulePage>
     );
   }
+  // D4485: DS1 cards sit above the existing channels, draft and connector tools.
+  if (distribution && distributionTab === 'overview' && projectStatus === 'ready') {
+    body = <OverviewTab key={projectId} projectId={projectId} search={q} refresh={reload}>{body}</OverviewTab>;
+  }
+  // D4484: Overview keeps the existing module body; unlanded tabs read no campaign data.
+  // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
+  if (distribution) {
+    if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} />{body}</>;
+    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} />;
+    if (distributionTab === 'channels' && projectStatus === 'ready') body = <ChannelsTab projectId={projectId} refresh={reload} onChanged={() => setReload((n) => n + 1)} fillFor={fillFor} />;
+    if (distributionTab === 'prospects' && projectStatus === 'ready') body = <ProspectsPage key={projectId} projectId={projectId} />;
+    if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} DraftIntent={DistributionAskIntent} onUnreadChange={inboxUnread.acceptRead} />;
+    body = campaignNew ? (projectStatus === 'ready' ? <NewCampaignPage key={`${projectId}:${location.search}`} projectId={projectId} role={user?.role} search={q} aiOff={!fillsOn} /> : body) : <DistributionTabs projectId={projectStatus==='ready'?projectId:null} tab={distributionTab} search={q} action={action} aiOff={!fillsOn} inboxCount={inboxUnread.count}
+      loading={projectStatus === 'loading' || (distributionTab === 'overview' && projectStatus === 'ready' && moduleStatus === 'loading')}>
+      {['channels', 'inbox', 'calendar', 'prospects'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : <ComingSoon />}
+    </DistributionTabs>;
+  }
+
   // D914: nothing of the narrative is drawn for an admin before their reason; then it is read only.
   if (narrativeAdmin && projectStatus !== 'none' && !actionPage) {
     body = <NarrativeAdminGate projectId={projectId} onOpened={() => setReload((n) => n + 1)} back={{ to: `/raise${q}`, label: 'Back to Raise' }}>{body}</NarrativeAdminGate>;
@@ -1319,7 +1359,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // docks to the edge.
   return (
     <RailCrumbsProvider section={name} module={moduleName}>
-    <RailFrame rail={rail} data-testid={`cycle-route-${cycle}`}>
+    <RailFrame rail={rail} className={distribution ? 'distribution-frame' : undefined} data-testid={`cycle-route-${cycle}`}>
       {/* Every cycle path is full-bleed (`cyclePaths.js`, D694), so this is the
           one gutter: the canvas's 22/24/30px (CO:54), 14/14/40px in a cycle
           column under 760px (CO:18), and 14/22/18px on a phone (CO:25-26).
@@ -1330,7 +1370,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           content, so neither the size container nor the body is drawn. */}
       {!actionPage && (
       <div className="@container/cycle min-w-0">
-      <div className={CYCLE_GUTTER} data-testid="cycle-route-body">
+      <div className={distribution ? 'min-w-0' : CYCLE_GUTTER} data-testid="cycle-route-body">
         <LightboxBarProvider bar={phone ? phoneBar(pageBack) : null}>
         {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}
         </LightboxBarProvider>

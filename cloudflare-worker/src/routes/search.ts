@@ -97,8 +97,9 @@ const ROLE_ALLOWED: Record<string, EntityType[]> = {
   investor: ['project', 'deal', 'document'],
 };
 
-function allowedTypes(role: string): EntityType[] {
-  return ROLE_ALLOWED[role] || ['project'];
+function allowedTypes(role: string, licences: readonly string[] = []): EntityType[] {
+  const allowed = new Set([role, ...licences].flatMap(key => ROLE_ALLOWED[key] || ['project']));
+  return VALID_TYPES.filter(type => allowed.has(type));
 }
 
 function scrubSnippet(h: SearchHit): SearchHit {
@@ -128,7 +129,7 @@ search.get('/', async (c) => {
 
   await ensureAcademySchema(c.env);
 
-  const allowed = allowedTypes((user as any).role || 'founder');
+  const allowed = allowedTypes(user.role || 'founder', user.licences);
 
   if (requestedType && !allowed.includes(requestedType)) {
     return c.json({ query: q, type: requestedType, hits: [], groups: {}, warning: 'type not available for your role' });

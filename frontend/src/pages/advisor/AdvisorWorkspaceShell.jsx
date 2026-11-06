@@ -8,10 +8,10 @@ const TONE = {
 };
 
 export const advisorTabs = [
-  { to: '/advisor/advisory/opportunities', label: 'Opportunities' },
+  { to: '/practice/opportunities', label: 'Opportunities' },
   { to: '/advisor/advisory/clients', label: 'Clients' },
-  { to: '/advisor/advisory/engagements', label: 'Engagements' },
-  { to: '/advisor/advisory/delivery', label: 'Delivery' },
+  { to: '/practice/engagements', label: 'Engagements' },
+  { to: '/practice/delivery', label: 'Delivery' },
   { to: '/advisor/advisory/contracts', label: 'Contracts' },
 ];
 

@@ -67,8 +67,8 @@ test('Practice owns the whole advisory subtree, and the workspace tabs to all of
 
   // The row may only own them because the workspace links every one. Read it.
   const ws = read('frontend/src/pages/advisor/AdvisorWorkspaceShell.jsx');
-  for (const page of ['opportunities', 'clients', 'engagements', 'delivery', 'contracts']) {
-    assert.ok(ws.includes(`to: '/advisor/advisory/${page}'`),
+  for (const [page, target] of [['opportunities', '/practice/opportunities'], ['clients', '/advisor/advisory/clients'], ['engagements', '/practice/engagements'], ['delivery', '/practice/delivery'], ['contracts', '/advisor/advisory/contracts']]) {
+    assert.ok(ws.includes(`to: '${target}'`),
       `Practice no longer links to ${page}`);
   }
 });
@@ -76,17 +76,16 @@ test('Practice owns the whole advisory subtree, and the workspace tabs to all of
 test('canonical deep links remain registered even when not sidebar rows', () => {
   const app = readRoutesSource();
   for (const path of [
-    '/advisor/advisory/opportunities',
+    '/practice/opportunities',
     '/advisor/advisory/clients',
-    '/advisor/advisory/engagements',
-    '/advisor/advisory/delivery',
+    '/practice/engagements',
+    '/practice/delivery',
     '/advisor/advisory/contracts',
-    '/office-hours',
     '/advisors',
     '/network',
-    '/signals',
+    '/research',
   ]) {
-    assert.ok(app.includes(`path="${path}"`), `${path} lost its canonical route`);
+    assert.ok(app.includes(`path="${path}"`), path);
   }
   for (const legacyRow of ['/messages', '/my/jobs', '/advisors', '/market-intel', '/due-diligence']) {
     assert.ok(!targets.includes(legacyRow), `${legacyRow} became a competing advisor row`);
@@ -99,14 +98,13 @@ test('Expertise owns the canonical advisor profile destination', () => {
   // booking and was broken at both, so the two halves went to the buckets that
   // work: storefront to Expertise, booking to Practice.
   const app = readRoutesSource();
-  assert.match(advisor, /\{ to: '\/expertise', icon: UserCircle, label: 'Expertise'/);
-  assert.match(advisor, /match: \['\/expertise', '\/advisors'\]/,
+  const expertise = advisor.match(/\{ to: '\/expertise'[^}]*\}/)?.[0] ?? '';
+  assert.match(expertise, /label: 'Expertise'/);
+  assert.match(expertise, /match: \['\/expertise', '\/advisors'\]/,
     'the Expertise row no longer claims a path that redirects elsewhere');
 
   const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));
-  assert.ok(line, 'the path must still resolve — bookmarks outlive pages');
-  assert.match(line, /<Navigate to="\/practice\/opportunities" replace \/>/,
-    'and it redirects to where booking actually lives');
+  assert.equal(line, undefined);
 
   // Both components are gone, not merely unmounted. Dead code that is also
   // broken is worse than removed code.

@@ -4,6 +4,7 @@
 // while it is not exactly what the script writes.
 // api-modules:begin
 export * from './api/accountCompanies.js';
+export * from './api/accountLicences.js';
 export * from './api/accountPortfolio.js';
 export * from './api/adminAccountWrites.js';
 export * from './api/adminAccounts.js';
@@ -151,6 +152,12 @@ export * from './api/fundStructure.js';
 export * from './api/googleSignIn.js';
 export * from './api/googleWorkspace.js';
 export * from './api/googleWorkspaceBuild.js';
+export * from './api/growAds.js';
+export * from './api/growCalendar.js';
+export * from './api/growChannels.js';
+export * from './api/growDistributionAsk.js';
+export * from './api/growInbox.js';
+export * from './api/growProspects.js';
 export * from './api/growTalent.js';
 export * from './api/helpCenter.js';
 export * from './api/hqDeckStageNorms.js';

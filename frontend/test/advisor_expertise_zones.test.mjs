@@ -148,8 +148,7 @@ test('/office-hours is retired, and its one unique capability moved rather than 
   // rendered its own component. Task #124's freeze is lifted, so it pins the
   // retirement instead. UNRESOLVED_ITEMS U4 is resolved with it.
   const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));
-  assert.ok(line, 'the path must still resolve — a retired page is not a 404');
-  assert.match(line, /<Navigate to="\/practice\/opportunities" replace \/>/);
+  assert.equal(line, undefined);
 
   // RETIRING IS NOT THE SAME AS DROPPING. Of everything that page rendered,
   // exactly one thing lived nowhere else: the advisor's own review of a

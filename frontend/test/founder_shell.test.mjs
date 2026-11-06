@@ -117,17 +117,20 @@ test('A7 owns the founder Research landing, and /signals only redirects to it', 
   // D422: the landing is `/research`'s; bare `/signals` redirects there. D670
   // retired the Signals feed, so the redirect is everyone's and no route
   // mounts a Research tab bar any more.
-  assert.match(line, /<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>/);
+  assert.equal(line, undefined);
   assert.match(app, /founderResearchLanding\s*\?\s*guard\([^)]*\), <FounderResearchDesk \/>\)/);
   assert.doesNotMatch(app, /<SignalsPage\b|FounderWorkspaceTabs set="research"/);
 });
 
 test('a founder never gets two tab bars on one page', () => {
-  // /comarketing already carried the Partner Offers bar. The fix is a branch,
-  // not a second bar stacked on the first.
+  // D4439: the founder's old address forwards; the canonical page owns one Grow frame.
+  // Partners retain their Offers bar at the original address.
   const comarketing = app.split('\n').find((l) => l.includes('path="/comarketing"'));
-  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', founderEditor\(/,
-    '/comarketing must serve founders the Grow bar INSTEAD of the Partner bar');
+  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*<CoMarketingFounderRedirect \/>/,
+    '/comarketing must forward founders to Partner network');
+  const founderPage = readFileSync('frontend/src/pages/founder/FounderCoMarketingPage.jsx', 'utf8');
+  assert.match(founderPage, /<FounderWorkspacePage page="grow" hideHeader>/);
+  assert.doesNotMatch(founderPage, /PartnerWorkspaceTabs|FounderWorkspaceTabs/, 'the founder feed must not stack tab bars');
   assert.ok(comarketing.includes('<PartnerWorkspaceTabs set="offers"'),
     '/comarketing must still serve everyone else the Partner bar');
 
@@ -154,7 +157,7 @@ test('Home is /studio, no role root invented', () => {
 });
 
 test('Spin-Out Lab keeps its row; its match adds only the 83(b) tracker (D563)', () => {
-  assert.match(founder, /\{ to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES \}/);
+  assert.match(founder, /\{ to: '\/spinout-lab', icon: \w+, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES \}/);
   assert.match(src, /const SPINOUT_LAB_PAGES = \['\/spinout-lab\/83b'\];/);
 });
 

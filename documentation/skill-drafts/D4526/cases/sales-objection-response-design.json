@@ -1,0 +1,40 @@
+{
+  "skill": "sales-objection-response-design",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "objection": "Need offline use",
+        "capability": "Online only",
+        "approved_discount": null
+      },
+      "company.profile": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "offline",
+      "Online only",
+      "cannot"
+    ],
+    "must_say_not_recorded": [
+      "approved discount"
+    ],
+    "must_not_include": [
+      "offline supported"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why approved discount is missing rather than inventing it.",
+    "Do not assert: offline supported.",
+    "Return a proposal only; do not perform any external action.",
+    "Draft an honest customer response stating online-only operation; no invented offline workaround."
+  ],
+  "predicate_witness": "offline; Online only; cannot. approved discount: Not recorded. Human review required."
+}

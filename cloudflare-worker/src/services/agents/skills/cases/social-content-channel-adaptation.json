@@ -1,0 +1,34 @@
+{
+  "skill": "social-content-channel-adaptation",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Social Content Channel Adaptation",
+        "task_scope": "Adapts approved source assets into channel-native formats while preserving core claims, evidence and brand voice.",
+        "evidence": [
+          "channel-native content adaptation"
+        ],
+        "omitted_field": "approved source asset"
+      },
+      "research.library": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for channel-native content adaptation."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "channel-native content adaptation"
+    ],
+    "must_say_not_recorded": [
+      "approved source asset"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

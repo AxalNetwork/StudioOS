@@ -260,6 +260,41 @@ test('A2 add-agent takes skills through the same gates; a refused skill adds no 
   assert.deepEqual(links(w).map((l) => [l.skill, l.version]), [[cfo, 1]]);
 });
 
+test('Team Skills lists a large HQ draft catalogue with bounded queries and keeps drafts scoped to writers', async () => {
+  const w = world();
+  try {
+    const publishedUid = await published(w, update());
+    await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid: publishedUid }] });
+    const companyDraft = await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1', name: 'Acme draft' }));
+    assert.equal(companyDraft.status, 201, companyDraft.text);
+    const before = await call(w, SUPER, 'GET', '/skills?company=co-uid-1');
+    assert.equal(before.status, 200, before.text);
+
+    const insert = w.db.prepare(`INSERT INTO agent_skills (uid, scope, slug, name, purpose, steps_json, allowed_tools_json, output_kind, created_by)
+      VALUES (?, 'hq', ?, ?, 'An unpublished draft.', '[]', '[]', 'draft', ?)`);
+    for (let i = 0; i < 180; i++) insert.run((1000 + i).toString(16).padStart(32, '0'), `draft-${i}`, `Extra draft ${i}`, SUPER);
+    const originalPrepare = w.env.DB.prepare.bind(w.env.DB);
+    let queries = 0;
+    w.env.DB.prepare = (statement: string) => { queries++; return originalPrepare(statement); };
+
+    const preview = await call(w, SUPER, 'GET', '/skills?company=co-uid-1');
+    assert.equal(preview.status, 200, preview.text);
+    assert.ok(queries <= 20, `expected a bounded catalogue read, prepared ${queries} queries`);
+    assert.equal(preview.body.hq.length, 181);
+    assert.equal(preview.body.company.skills.length, 0, 'HQ cannot read a company draft as its editor');
+    assert.deepEqual(preview.body.hq[0], before.body.hq[0], 'published card and token costs survive a large draft catalogue');
+    assert.equal(preview.body.hq[0].used_by, 1);
+    assert.ok(preview.body.hq[0].context_tokens > 0);
+    assert.equal(preview.body.hq[1].can_write, true);
+
+    const editor = await call(w, EDITOR, 'GET', '/skills?company=co-uid-1&role=cfo');
+    assert.deepEqual(editor.body.hq.map((s: any) => [s.uid, s.can_write, s.draft]), [[publishedUid, false, undefined]]);
+    assert.deepEqual(editor.body.company.skills.map((s: any) => [s.uid, s.draft]), [[companyDraft.body.skill.uid, companyDraft.body.skill.draft]]);
+    const other = await call(w, OTHER_EDITOR, 'GET', '/skills?company=co-uid-1');
+    assert.equal(other.status, 404);
+  } finally { w.db.close(); }
+});
+
 test('A2 coverage: per axis the people\'s highest level and the agents\'; an agent-only axis has people_level null', async () => {
   // Mutations checked: people_level from 0 self-ratings (0 counted as a level) → the null assert fails;
   // the agents read across every company → Globex's axis shows and the product assert fails.

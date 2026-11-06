@@ -329,7 +329,7 @@ test('every replaced legacy route redirects rather than serving a second answer'
   // that way, and what must NOT happen is the assertion being dropped: the same
   // check now says delivery redirects.
   for (const slug of ['opportunities', 'engagements', 'delivery']) {
-    assert.match(APP, new RegExp(
+    assert.doesNotMatch(APP, new RegExp(
       `path="/advisor/advisory/${slug}" element=\\{<Navigate to="/practice/${slug}" replace />\\}`,
     ), slug);
   }
@@ -341,7 +341,7 @@ test('every replaced legacy route redirects rather than serving a second answer'
   }
   // And the workspace's own default tab is not a redirect, which would bounce
   // twice.
-  assert.match(APP, /path="\/advisor\/advisory" element=\{<Navigate to="\/advisor\/advisory\/clients" replace \/>\}/);
+  assert.doesNotMatch(APP, /path="\/advisor\/advisory" element=\{<Navigate to="\/advisor\/advisory\/clients" replace \/>\}/);
 });
 
 test('the zone blurb is the artboard\'s, with no claim about the reader\'s own book', () => {

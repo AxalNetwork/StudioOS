@@ -1,0 +1,34 @@
+{
+  "skill": "enterprise-account-plan",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Enterprise Account Planning",
+        "task_scope": "Maps strategic enterprise accounts, buying committees, whitespace, objectives, procurement and engagement risks.",
+        "evidence": [
+          "multi-threaded stakeholder map"
+        ],
+        "omitted_field": "budget owner"
+      },
+      "network.relationships": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for multi-threaded stakeholder map."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "multi-threaded stakeholder map"
+    ],
+    "must_say_not_recorded": [
+      "budget owner"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

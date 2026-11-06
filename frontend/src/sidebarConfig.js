@@ -16,10 +16,12 @@
 //   - Items must not appear in more than one group within a role.
 
 import {
-  LayoutDashboard, Target, FileText, Users, Handshake, Rocket,
-  UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
-  TrendingUp, MessageSquare, Package, Calendar,
-  Inbox, Radar, Wallet, Landmark, Mail,
+  FileText, Users, Handshake,
+  UserCircle, Shield, ShieldCheck, Network,
+  TrendingUp, Calendar,
+  DoorOpen, FlaskConical, Cog, Sprout, Telescope, BriefcaseBusiness,
+  BookOpen, UsersRound, GraduationCap, Route, Wrench, ScrollText,
+  Inbox, Landmark, Mail,
   Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck, KeyRound, Bot, Megaphone,
 } from 'lucide-react';
 
@@ -189,7 +191,7 @@ export const SIDEBAR_GROUPS = {
   // exists to answer.
   branch_admin: [
     { key: 'branch', label: 'Branch', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/studio', icon: DoorOpen, label: 'Studio' },
       { to: '/branch/accounts', icon: Users, label: 'Accounts' },
       { to: '/branch/approvals', icon: Inbox, label: 'Approvals' },
       { to: '/branch/programs', icon: Calendar, label: 'Programs' },
@@ -233,7 +235,7 @@ export const SIDEBAR_GROUPS = {
   // there is no `/admin` tab left to light one by query.
   admin: [
     { key: 'admin', label: 'Admin', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/studio', icon: DoorOpen, label: 'Studio' },
       // D941 (#2746): Accounts takes /admin/accounts and lights on its subtree.
       { to: '/admin/accounts', icon: Users, label: 'Accounts', match: ['/admin/accounts', '/admin/persona-segments', '/admin/exploring', '/admin/trash'] },
       // D506 — the Spin-Out moderation console joined the lanes Approvals
@@ -309,8 +311,7 @@ export const SIDEBAR_GROUPS = {
   //     Trust Center "Identity" tab (Task #25). The /kyc route stays registered
   //     and reachable (the onboarding KYC gate still redirects there).
   //
-  // Newly surfaced (routes already existed and are founder-accessible, they just
-  // weren't in the founder nav): Co-Marketing (/comarketing, Launch).
+  // D4439: co-marketing is opened from Grow › Partner network; the old root only forwards founders.
   // Founder shell — the canvas declares nine rows (Home · Validate · Build ·
   // Raise · Grow · Network · Research · Trust · Company Settings). Eight land
   // here; Trust is deliberately absent, pinned out of every sidebar by
@@ -354,32 +355,32 @@ export const SIDEBAR_GROUPS = {
     // D564 (#1168): no separate home, so no group says Home. The row is Studio
     // (/studio), and the group carries no label, as partner's does.
     { key: 'home', label: '', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      { to: '/studio', icon: DoorOpen, label: 'Studio' },
       // Spin-Out Lab keeps its own tree, untouched by the shell migration.
-      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES },
+      { to: '/spinout-lab', icon: FlaskConical, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES },
       // Each row points at the workspace ROOT, which renders that workspace's
       // overview. Pointing a row at a section page is how the overviews were
       // lost: a rebuild took the desk's slot, the desk was re-mounted on
       // whatever path was free, and the row was never pointed back. `match`
       // keeps every legacy and section URL highlighting the right row.
-      { to: '/validate', icon: MessageSquare, label: 'Validate',
+      { to: '/validate', icon: ShieldCheck, label: 'Validate',
         match: ['/validate', '/build/marketplace'] },
-      { to: '/build', icon: Briefcase, label: 'Build',
+      { to: '/build', icon: Cog, label: 'Build',
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'] },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
       // D1384: /compliance is retired into Calendar, so it lights nothing here.
-      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/incorporate'] },
-      { to: '/grow', icon: TrendingUp, label: 'Grow',
-        match: ['/grow', '/build/team', '/advisors', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks'] },
+      { to: '/raise', icon: Coins, label: 'Raise', match: ['/raise', '/incorporate'] },
+      { to: '/grow', icon: Sprout, label: 'Grow',
+        match: ['/grow', '/build/team', '/advisors', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/perks'] },
       // Points at /network, not at the first zone: /network is the one route
       // that role-branches its element, so it is the landing every license can
       // open, and it forwards to the zone. The three /network/* zone routes are
       // still founder-guarded — widening them is the Network half of this
       // migration and has not landed yet.
-      { to: '/network', icon: Handshake, label: 'Network',
+      { to: '/network', icon: Network, label: 'Network',
         match: ['/network', '/relationships', '/contacts'] },
-      { to: '/research', icon: Radar, label: 'Research',
+      { to: '/research', icon: Telescope, label: 'Research',
         match: ['/research'] },
     ]},
   ],
@@ -478,8 +479,8 @@ export const SIDEBAR_GROUPS = {
   // Firm Settings is the COMPANY's settings; Account is a different page.
   partner: [
     { key: 'shell', label: '', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+      { to: '/studio', icon: DoorOpen, label: 'Studio' },
+      { to: '/spinout-lab', icon: FlaskConical, label: 'Spin-Out Lab' },
       // EVERY WORKSPACE ROW POINTS AT ITS BUCKET ROOT. Pipeline, Delivery,
       // Offers and Research used to point at legacy destinations — /needs,
       // the retired /partner/operations/overview, /services, /signals — so the
@@ -489,21 +490,21 @@ export const SIDEBAR_GROUPS = {
       // render stay in `match` so a deep link still lights the right row, and
       // each retired /partner/operations address is replaced by the successor
       // D395 redirects it to (D505).
-      { to: '/pipeline', icon: Target, label: 'Pipeline',
+      { to: '/pipeline', icon: Route, label: 'Pipeline',
         match: ['/pipeline', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'] },
       // The retired Overview's job went to `/company-settings` (the firm
       // profile card, D390/D395). That page is the sidebar's pinned footer for
       // every role (see the investor block's note), so it is NOT listed here:
       // a `match` entry would light Delivery beside the footer's own row, two
       // rows for one page. The other successors sit under this row's root.
-      { to: '/delivery', icon: Briefcase, label: 'Delivery',
+      { to: '/delivery', icon: Wrench, label: 'Delivery',
         match: ['/delivery', '/delivery/health'] },
-      { to: '/offers', icon: Package, label: 'Offers',
+      { to: '/offers', icon: ScrollText, label: 'Offers',
         match: ['/offers', '/perks', '/comarketing', '/partner/office-hours',
                 '/offers/catalog'] },
-      { to: '/network', icon: Users, label: 'Network',
+      { to: '/network', icon: Network, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/my/jobs'] },
-      { to: '/research', icon: Radar, label: 'Research', match: ['/research'] },
+      { to: '/research', icon: Telescope, label: 'Research', match: ['/research'] },
     ]},
   ],
 
@@ -514,8 +515,8 @@ export const SIDEBAR_GROUPS = {
     // D564 (#1168): no separate home, so no group says Home. The row is Studio
     // (/studio), and the group carries no label, as partner's does.
     { key: 'home', label: '', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+      { to: '/studio', icon: DoorOpen, label: 'Studio' },
+      { to: '/spinout-lab', icon: FlaskConical, label: 'Spin-Out Lab' },
       // EVERY ROW POINTS AT ITS WORKSPACE ROOT, not at the first zone. Deals,
       // Portfolio and Research each pointed one level down — at
       // /deals/pipeline, /portfolio/health and /research/ask — and that is the
@@ -534,11 +535,11 @@ export const SIDEBAR_GROUPS = {
       // the root.
       // D563: the launcher's investor pages outside /portfolio lit it too;
       // Watchlist, Capital and Liquidity were removed (owner, 2026-10-20).
-      { to: '/portfolio', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
+      { to: '/portfolio', icon: BriefcaseBusiness, label: 'Portfolio', match: ['/portfolio'] },
       { to: '/spinout-lab/investor-workspace', icon: Landmark, label: 'Axal VC Fund' },
-      { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds'], requiredInvestorTier: 'institutional' },
+      { to: '/funds', icon: Coins, label: 'Fund', match: ['/funds'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-      { to: '/research', icon: Radar, label: 'Research', match: ['/research'] },
+      { to: '/research', icon: Telescope, label: 'Research', match: ['/research'] },
       { to: '/trust/me', icon: ShieldCheck, label: 'Trust' },
       // NO Company Settings row. The canvas asks for one; the shipped decision
       // is that /company-settings is the sidebar's PINNED FOOTER for every
@@ -556,8 +557,8 @@ export const SIDEBAR_GROUPS = {
     // D564 (#1168): no separate home, so no group says Home. The row is Studio
     // (/studio), and the group carries no label, as partner's does.
     { key: 'home', label: '', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+      { to: '/studio', icon: DoorOpen, label: 'Studio' },
+      { to: '/spinout-lab', icon: FlaskConical, label: 'Spin-Out Lab' },
       // EVERY WORKSPACE ROW POINTS AT ITS BUCKET. These five used to point
       // outside their own buckets — Practice at /advisor/advisory/opportunities,
       // Expertise at /office-hours, Research at /signals — because two shipped
@@ -572,15 +573,15 @@ export const SIDEBAR_GROUPS = {
       // role to /studio — so for that viewer the Practice and Expertise rows
       // did not open a workspace at all. That is the whole of "Practice and
       // Expertise lands on Studio page".
-      { to: '/practice', icon: Briefcase, label: 'Practice',
+      { to: '/practice', icon: BookOpen, label: 'Practice',
         match: ['/practice', '/advisor/advisory'] },
       // Cohorts reads Spin-Out Lab data read-only and owns none of it.
-      { to: '/cohorts', icon: Users, label: 'Cohorts', match: ['/cohorts'] },
-      { to: '/expertise', icon: UserCircle, label: 'Expertise',
+      { to: '/cohorts', icon: UsersRound, label: 'Cohorts', match: ['/cohorts'] },
+      { to: '/expertise', icon: GraduationCap, label: 'Expertise',
         match: ['/expertise', '/advisors'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/advisor/network', '/my/jobs'] },
-      { to: '/research', icon: Radar, label: 'Research',
+      { to: '/research', icon: Telescope, label: 'Research',
         match: ['/research'] },
       // NO Trust row (it belongs to the user dropdown) and NO Practice Settings
       // row (the pinned footer is the single entry point). The canvas asks for
@@ -590,10 +591,10 @@ export const SIDEBAR_GROUPS = {
 
   exploring: [
     { key: 'home', label: 'Home', items: [
-      { to: '/exploring', icon: LayoutDashboard, label: 'Studio', highlight: true },
+      { to: '/exploring', icon: DoorOpen, label: 'Studio', highlight: true },
       // Task #13 — surface the Spin-Out Lab program to explorers so they can
       // see the full 28-day pipeline before committing.
-      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+      { to: '/spinout-lab', icon: FlaskConical, label: 'Spin-Out Lab' },
       { to: '/email', icon: Mail, label: 'Email' },
     ]},
     { key: 'account', label: 'Account', items: [

@@ -63,9 +63,9 @@ export function viewFor(pathname = '') {
 export const BUILD = {
   H1: { issue: 4158, live: true, what: 'The roster admin API', boards: 'SA1, SA2' },
   H2: { issue: 4160, live: false, what: 'Review, golden cases and retire for From Axal skills', boards: 'SA3 actions, SA4' },
-  H3: { issue: 4161, live: false, what: 'Company skills moderation', boards: 'SA5' },
-  H4: { issue: 4162, live: false, what: 'Platform AI policy and the kill switch', boards: 'SA6' },
-  H5: { issue: 4163, live: false, what: 'Runs, spend and the admin audit', boards: 'SA0 tiles, SA7, SA8' },
+  H3: { issue: 4161, live: true, what: 'Company skills moderation', boards: 'SA5' },
+  H4: { issue: 4162, live: true, what: 'Platform AI policy and the kill switch', boards: 'SA6' },
+  H5: { issue: 4163, live: true, what: 'Runs, spend and the admin audit', boards: 'SA0 tiles, SA7, SA8' },
 };
 
 export const notYet = (key) => {
@@ -101,6 +101,7 @@ const levelWord = (l) => {
 
 /** A skill's area: the category most of its tags sit in (ties in radar order). */
 export function areaOf(card) {
+  if (card?.area?.slug) return card.area.slug;
   const counts = new Map();
   for (const t of card?.tags ?? []) if (t.category) counts.set(t.category, (counts.get(t.category) ?? 0) + 1);
   let best = null;
@@ -110,6 +111,7 @@ export function areaOf(card) {
 
 /** Its level: the highest tag level in its area. */
 export function levelOf(card) {
+  if (card?.level) return card.level;
   const area = areaOf(card);
   const ranks = (card?.tags ?? []).filter((t) => t.category === area).map((t) => (typeof t.level === 'number' ? t.level : LEVELS.findIndex((w) => w.toLowerCase() === String(t.level).toLowerCase()) + 1)).filter((n) => n > 0);
   return ranks.length ? levelWord(Math.max(...ranks)) : null;
@@ -138,10 +140,10 @@ export function skillRow(card) {
     level: levelOf(card) ?? NOT_RECORDED,
     version: card.version ? `v${card.version}` : 'Not published',
     status: statusOf(card.status),
-    agents: shown(card.used_by),
+    agents: shown(card.agents ?? card.used_by),
     tools: (card.tools ?? []).map((t) => (typeof t === 'string' ? t : t.label ?? t.key)).filter(Boolean),
-    golden: NOT_RECORDED,
-    lastEval: NOT_RECORDED,
+    golden: card.golden ? `${card.golden.pass} / ${card.golden.total}` : NOT_RECORDED,
+    lastEval: card.last_eval ?? NOT_RECORDED,
   };
 }
 

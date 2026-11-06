@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence, heldLicences } from './accountLicences';
 import type { Env, User } from '../types';
 import { positiveCents, validClose, counselApproved, termsHash, deckContentHash, readiness, ventureReadiness, matchReasons, founderRecipient, writableCall, roundCallsEnabled, verifiedInvestor } from './roundCallPolicy';
 import type { RoundCallTerms, InvestorThesis } from './roundCallPolicy';
@@ -41,11 +42,12 @@ function enabled(env: Env) {
 async function verifiedReader(env: Env, actor: User) {
   enabled(env);
   const current=await env.DB.prepare('SELECT role,is_active,kyc_status FROM users WHERE id=?').bind(actor.id).first<User>();
+  if (current) current.licences = await heldLicences(env.DB, { id: actor.id, role: current.role });
   if(!current||!verifiedInvestor(current)) throw new RoundCallError('verified_investor_required',403);
 }
 /** The venture's owner: a founder (or a Spin-Out Lab explorer) whose founder record owns the project. */
 function ownsProject(current: Pick<User,'role'|'founder_id'|'spinout_lab_active'|'is_active'>, project: { founder_id: number | null }) {
-  return Number(current.is_active)===1 && (current.role==='founder'||(current.role==='exploring'&&Number(current.spinout_lab_active)===1))
+  return Number(current.is_active)===1 && (holdsLicence(current, 'founder')||(current.role==='exploring'&&Number(current.spinout_lab_active)===1))
     && current.founder_id!=null && current.founder_id===project.founder_id;
 }
 /**
@@ -54,7 +56,7 @@ function ownsProject(current: Pick<User,'role'|'founder_id'|'spinout_lab_active'
  * no membership, never an error.
  */
 export async function ventureMember(env: Env, projectId: number, user: Pick<User,'id'|'role'|'is_active'>): Promise<boolean> {
-  if(Number(user.is_active)!==1||user.role==='investor'||user.role==='admin') return false;
+  if(Number(user.is_active)!==1||holdsOnlyLicence(user, 'investor')||user.role==='admin') return false;
   try {
     const row=await env.DB.prepare("SELECT 1 AS ok FROM project_members WHERE project_id=? AND user_id=? AND status='accepted' AND role IN ('owner','cofounder') LIMIT 1").bind(projectId,user.id).first();
     return !!row;
@@ -70,6 +72,7 @@ async function founderActor(env: Env, actor: User, projectId: number, members = 
   enabled(env);
   const project=await projectFacts(env,projectId);
   const current=await env.DB.prepare('SELECT id,role,founder_id,spinout_lab_active,is_active FROM users WHERE id=?').bind(actor.id).first<User>();
+  if (current) current.licences = await heldLicences(env.DB, current);
   if(current&&ownsProject(current,project)) return 'owner';
   if(members&&current&&await ventureMember(env,projectId,current)) return 'member';
   throw new RoundCallError('project_not_found',404);

@@ -1,3 +1,4 @@
+import { holdsLicence } from '../accountLicences';
 /**
  * D840 part 2 (#2347) — the founder's own Mercury feeds their Raise modules.
  * READ-ONLY: every read goes through `RaiseReads`, which `raiseReadsOf` binds
@@ -467,7 +468,7 @@ async function fundsPart(env: Env, i: number, p: number) {
 
 /** D1174: accepted mappings only, from this founder's own active connection. No provider call. */
 export async function fundSectionActual(env: Env, user: User, projectId: number, key: string) {
-  if (user.role !== 'founder' || !SECTION_KEYS.includes(key)) return null;
+  if (!holdsLicence(user, 'founder') || !SECTION_KEYS.includes(key)) return null;
   const connection = await env.DB.prepare(
     `SELECT i.id FROM integrations i JOIN users u ON u.id = i.user_id AND u.is_active = 1
        JOIN projects p ON p.founder_id = u.founder_id

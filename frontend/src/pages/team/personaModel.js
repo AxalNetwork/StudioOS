@@ -18,8 +18,34 @@
  */
 
 import { NOT_RECORDED } from '../../lib/absence.js';
+import { archetypeMeta } from '../../lib/assessmentMeta.js';
 
 export { NOT_RECORDED };
+
+// Editorial matches for the built-in personas, based on their published profiles.
+// Studio owns the labels. Persona keys survive HQ renames and team role changes.
+const STUDIO_ARCHETYPE_BY_PERSONA = new Map([
+  ['vesta', 'mt_accountability_anchor'],
+  ['orrin', 'inv_disciplined_allocator'],
+  ['ilyse', 'fo_rocketeer'],
+  ['kade', 'pt_growth_catalyst'],
+  ['sylva', 'fo_missionary'],
+  ['solen', 'inv_hands_on_partner'],
+  ['tessaly', 'pt_systems_builder'],
+  ['corvane', 'fo_architect'],
+  ['juno', 'pt_embedded_operator'],
+  ['brann', 'mt_craft_master'],
+  ['seren', 'pt_strategic_connector'],
+  ['corin', 'inv_network_amplifier'],
+  ['ryssa', 'inv_thesis_backer'],
+  ['draxen', 'fo_maverick'],
+  ['elara', 'mt_sage_guide'],
+  ['aurel', 'inv_hands_on_partner'],
+]);
+
+export function personaArchetypeLabel(persona) {
+  return archetypeMeta(STUDIO_ARCHETYPE_BY_PERSONA.get(persona?.key))?.label ?? null;
+}
 
 /** The six Axal values, in `FIT_V2_VALUES` order (D4117 §1). The persona read carries its own legend; this is the order. */
 export const VALUE_ORDER = ['integrity', 'stewardship', 'curiosity', 'resilience', 'collaboration', 'ambition'];
@@ -107,8 +133,8 @@ export function fitLine(persona) {
 }
 
 /**
- * The avatar's alt text: "[Name], [tagline]" (D4116 R3 note). Until R2's
- * portraits land, the card draws the agent mark with initials and says so.
+ * The avatar's alt text: "[Name], [tagline]" (D4116 R3 note). The fallback
+ * with initials indicates when a portrait is unavailable.
  */
 export function avatarAlt(persona, { portrait = false } = {}) {
   const name = String(persona?.name || '').trim() || 'An AI agent';

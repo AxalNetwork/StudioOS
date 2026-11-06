@@ -1,3 +1,4 @@
+import { holdsLicence, heldLicences } from '../services/accountLicences';
 /**
  * T13 — Advisors + office-hour slots + bookings + reviews.
  * Mounted at /api/advisors. Port of backend/app/api/routes/advisors.py.
@@ -20,7 +21,7 @@ const execCtx = (c: any) => { try { return c.executionCtx; } catch { return unde
 import { logAdminAction } from '../services/adminAudit';
 import { ensureTier, type TierUser } from '../middleware/requireTier';
 import {
-  isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull, role,
+  isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull,
 } from './_t13t14t15_helpers';
 import {
   loadUserVectors,
@@ -252,6 +253,7 @@ async function loadAdvisorById(env: Env, id: number): Promise<AdvisorRow | null>
   return env.DB.prepare('SELECT * FROM advisors WHERE id = ?').bind(id).first<AdvisorRow>();
 }
 async function myAdvisor(env: Env, user: User): Promise<AdvisorRow | null> {
+  if (!holdsLicence(user, 'advisor') && !isAdmin(user)) return null;
   if ((user as any).advisor_id) {
     const row = await env.DB.prepare('SELECT * FROM advisors WHERE id = ?')
       .bind((user as any).advisor_id).first<AdvisorRow>();
@@ -1148,7 +1150,7 @@ async function requireMyAdvisor(c: Context<{ Bindings: Env }>, user: User): Prom
 // to the shared booking DTO or the founder's client brief.
 async function requireRosterClient(c: Context<{ Bindings: Env }>) {
   const user = await requireAuth(c);
-  if (String(user.role).toLowerCase() !== 'advisor') throw c.json({ detail: 'Advisor required' }, 403);
+  if (!holdsLicence(user, 'advisor')) throw c.json({ detail: 'Advisor required' }, 403);
   const advisor = await requireMyAdvisor(c, user);
   if (advisor.user_id !== user.id) throw c.json({ detail: 'Your advisor profile is not attached to this account' }, 403);
   const clientId = Number(c.req.param('clientId'));
@@ -2359,7 +2361,7 @@ advisors.get('/me/tax-summary', async (c) => {
  * overlay, which is a suggestion rather than a grant.
  */
 export function mayHoldCohortAssignment(u: { role: string } | null | undefined): boolean {
-  return !!u && role(u) === 'advisor';
+  return !!u && holdsLicence(u, 'advisor');
 }
 
 /**
@@ -2951,7 +2953,7 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
 advisors.get('/me/thinking', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (role(user) !== 'advisor') {
+    if (!holdsLicence(user, 'advisor')) {
       return c.json({ detail: 'Only an advisor has a thinking shelf' }, 403);
     }
     const rows = await c.env.DB.prepare(
@@ -3012,7 +3014,8 @@ advisors.get('/admin/cohort-assignments/assignable', async (c) => {
       `SELECT u.id AS id, u.name AS name, u.email AS email, a.id AS advisor_profile_id
          FROM users u
          LEFT JOIN advisors a ON a.user_id = u.id
-        WHERE LOWER(u.role) = 'advisor' AND u.is_active = 1
+        WHERE u.is_active = 1 AND (LOWER(u.role) = 'advisor' OR EXISTS (
+          SELECT 1 FROM account_licences l WHERE l.user_id = u.id AND l.licence = 'advisor' AND l.revoked_at IS NULL))
         ORDER BY u.name ASC
         LIMIT 500`
     ).all<{ id: number; name: string | null; email: string | null; advisor_profile_id: number | null }>();
@@ -3207,6 +3210,7 @@ advisors.post('/admin/cohort-assignments', async (c) => {
     const target = await c.env.DB.prepare('SELECT id, role, is_active FROM users WHERE id = ?')
       .bind(advisorUserId).first<{ id: number; role: string; is_active: number }>();
     if (!target) return c.json({ detail: 'No such user' }, 404);
+    Object.assign(target, { licences: await heldLicences(c.env.DB, target) });
     // `role` was SELECTed here from the day this shipped and never read, so the
     // only check was that the id existed. The parameter is named
     // `advisor_user_id`; accepting any user made that name a lie, and removed
@@ -4551,7 +4555,7 @@ advisors.get('/me/booking-links', async (c) => {
 advisors.get('/me/visibility', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (role(user) !== 'advisor') return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
     const m = await requireMyAdvisor(c, user);
     return c.json(await advisorVisibility(c.env, { advisorId: m.id, userId: user.id }, c.req.query('days')));
   } catch (e) { return mapError(c, e); }
@@ -4560,7 +4564,7 @@ advisors.get('/me/visibility', async (c) => {
 advisors.get('/me/access-log', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (role(user) !== 'advisor') return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
     await requireMyAdvisor(c, user);
     const rows = await c.env.DB.prepare(
       `SELECT l.action, l.created_at, p.uid AS project_uid, p.name AS client,
@@ -4578,7 +4582,7 @@ advisors.get('/me/access-log', async (c) => {
 advisors.patch('/me/booking-links/:id', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (role(user) !== 'advisor') return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
     const m = await requireMyAdvisor(c, user);
     const body = await c.req.json().catch(() => ({} as any));
     if (typeof body.is_active !== 'boolean') return c.json({ detail: 'is_active must be a boolean' }, 400);

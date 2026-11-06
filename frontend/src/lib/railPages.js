@@ -513,7 +513,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/due-diligence/:uid', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/due-diligence/:uid/:tab', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/partner/insights', roles: ['investor'], why: 'Demand’s rail is the operating partner’s (D773: PartnerWorkspaceTabs draws it for a partner only); an investor on it gets the page alone until their profile’s rollout gives them one.' },
-  { route: '/comarketing', roles: ['founder', 'investor'], why: 'Visibility’s rail is the operating partner’s (D773: PartnerWorkspaceTabs draws it for a partner only); a founder gets the Grow editor and an investor the page alone, and neither profile’s map has a co-marketing board.' },
+  { route: '/comarketing', roles: ['founder'], why: 'D4439: a founder only forwards to Grow › Partner network here. Partners retain the Offers rail; investors are no longer admitted.' },
   { route: '/admin/programs/spinout-lab', prefix: true, roles: ['admin'], why: 'A Spin-Out Lab page: D317 keeps Eadwyn out of the Lab (D774), and D937 (#2374) keeps it so at the Lab’s address under Programs. The boards keep their keys.' },
   { route: '/admin/spinout-moderation', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
 ];

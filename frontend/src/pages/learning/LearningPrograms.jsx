@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { EmptyState, RailFrame, WorkerRail } from '../../ui';
+import { EmptyState, RailFrame } from '../../ui';
 import ProgramsTable from './ProgramsTable';
 import ProgramLearnersTable, { LearnerRecord, ReadOnlyStrip } from './ProgramLearnersTable';
 import { LearningEmpty, LearningHeader, SectionCard } from './LearningStates';
@@ -24,19 +24,6 @@ import useLearningRead from './useLearningRead';
 const LEARNING = { to: '/learning', label: 'Learning' };
 const PROGRAMS = { to: '/learning/programs', label: 'Programs' };
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
-function ProgramsRail({ coverage }) {
-  return (
-    <WorkerRail
-      workspace="Learning programs"
-      // Steel, the admin accent: the canvas draws the assigned admin's views in its branch colours.
-      role="admin"
-      stance="Read-only program view"
-      note="Eadwyn reads back what this page has loaded. A program view writes nothing: content and enrolment are managed at HQ."
-      coverage={coverage}
-    />
-  );
-}
 
 /** A route's refusal, in its own words: not a failed read, and not an empty one. */
 export function Refused({ refusal, cta, testid = 'learning-refused' }) {
@@ -63,9 +50,8 @@ export function AssignedProgramsView({ state, onRetry }) {
 
 export function ProgramsPage({ sub }) {
   const [state, retry] = useLearningRead(readAssignedPrograms, [], { scope: 'assigned-programs' });
-  const coverage = state.status === 'ready' && !state.refused ? [`${plural(state.programs.length, 'program')} assigned to you`] : [];
   return (
-    <RailFrame rail={<ProgramsRail coverage={coverage} />} data-testid="learning-programs">
+    <RailFrame data-testid="learning-programs">
       <div className="space-y-4">
         <LearningHeader title="Programs" sub={sub} back={LEARNING} />
         <AssignedProgramsView state={state} onRetry={retry} />
@@ -115,8 +101,8 @@ export function ProgramLearnersView({ state, learnerState = { status: 'idle' }, 
   }
   return (
     <>
-      <ReadOnlyStrip />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <ReadOnlyStrip programName={ready ? state.program?.name : null} />
+      <div className="grid min-w-0 grid-cols-1 gap-4 [&>*]:min-w-0 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <ProgramLearnersTable
           status={readStatus(state)}
           program={ready ? state.program : null}
@@ -138,7 +124,7 @@ export function learnersCoverage(state) {
   return [`${plural(state.learners.length, 'member')} and ${plural(state.contents.length, 'content item')} in “${state.program.name}”`];
 }
 
-export function ProgramPage({ uid, sub }) {
+export function ProgramPage({ uid }) {
   const [params] = useSearchParams();
   const selected = params.get('learner') || '';
   const [state, retry] = useLearningRead(() => readProgramLearners(uid), [uid], { scope: 'program-learners' });
@@ -146,12 +132,12 @@ export function ProgramPage({ uid, sub }) {
     { enabled: Boolean(selected), scope: 'program-learner' });
   const program = state.status === 'ready' && !state.refused ? state.program : null;
   return (
-    <RailFrame rail={<ProgramsRail coverage={learnersCoverage(state)} />} data-testid="learning-program">
+    <RailFrame data-testid="learning-program">
       <div className="space-y-4">
         <LearningHeader
           eyebrow={program?.region ? `Learning · ${program.region}` : 'Learning'}
           title={program?.name || 'Program'}
-          sub={sub}
+          sub="Enrolled members against the program’s content. Nothing here can be changed."
           back={PROGRAMS}
         />
         <ProgramLearnersView

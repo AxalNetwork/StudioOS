@@ -5,6 +5,7 @@
 // file and running `node scripts/build-route-registry.mjs`;
 // cloudflare-worker/test/route_registry_4105.test.ts fails while stale.
 import type { RegisteredModule } from '../util/routeRegistry';
+import { mount as account_licencesMount } from './account_licences';
 import { mount as admin_agentsMount } from './admin_agents';
 import { mount as admin_ai_agentsMount } from './admin_ai_agents';
 import { mount as admin_ai_agents_policyMount } from './admin_ai_agents_policy';
@@ -42,6 +43,12 @@ import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
 import { mount as deck_voiceMount } from './deck_voice';
 import { mount as event_recommendationsMount } from './event_recommendations';
+import { mount as grow_adsMount } from './grow_ads';
+import { mount as grow_calendarMount } from './grow_calendar';
+import { mount as grow_channelsMount } from './grow_channels';
+import { mount as grow_distribution_askMount } from './grow_distribution_ask';
+import { mount as grow_inboxMount } from './grow_inbox';
+import { mount as grow_prospectsMount } from './grow_prospects';
 import { mount as influencerMount } from './influencer';
 import { mount as influencer_analyticsMount } from './influencer_analytics';
 import { mount as influencer_offersMount } from './influencer_offers';
@@ -54,6 +61,7 @@ import { mount as team_platform_statusMount } from './team_platform_status';
 import { mount as votesMount } from './votes';
 
 export const ROUTE_MODULES: readonly RegisteredModule[] = [
+  { file: 'account_licences', mount: account_licencesMount },
   { file: 'admin_agents', mount: admin_agentsMount },
   { file: 'admin_ai_agents', mount: admin_ai_agentsMount },
   { file: 'admin_ai_agents_policy', mount: admin_ai_agents_policyMount },
@@ -91,6 +99,12 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
   { file: 'deck_voice', mount: deck_voiceMount },
   { file: 'event_recommendations', mount: event_recommendationsMount },
+  { file: 'grow_ads', mount: grow_adsMount },
+  { file: 'grow_calendar', mount: grow_calendarMount },
+  { file: 'grow_channels', mount: grow_channelsMount },
+  { file: 'grow_distribution_ask', mount: grow_distribution_askMount },
+  { file: 'grow_inbox', mount: grow_inboxMount },
+  { file: 'grow_prospects', mount: grow_prospectsMount },
   { file: 'influencer', mount: influencerMount },
   { file: 'influencer_analytics', mount: influencer_analyticsMount },
   { file: 'influencer_offers', mount: influencer_offersMount },

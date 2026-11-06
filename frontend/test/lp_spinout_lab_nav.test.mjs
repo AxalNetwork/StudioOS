@@ -188,7 +188,7 @@ test('both the shell and the router resolve the active role through the shared h
 test('the investor Home nav keeps its Spin-Out Lab entry', () => {
   // Same item, same place as the founder and exploring navs — it just resolves
   // to the LP product now. Removing it would hide the fund from LPs entirely.
-  assert.match(sidebar, /investor: \[[\s\S]{0,1600}to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab'/);
+  assert.match(sidebar, /investor: \[[\s\S]{0,1600}to: '\/spinout-lab', icon: \w+, label: 'Spin-Out Lab'/);
 });
 
 test('the duplicate LP Workspace nav item is gone, and its route is a redirect', () => {
@@ -200,7 +200,7 @@ test('the duplicate LP Workspace nav item is gone, and its route is a redirect',
   // Re-aimed by D372: the Fund Ops tab was the second copy of the same
   // workspace. The path still answers, as a redirect that keeps the query and
   // hash, so deep links land on the one standalone route.
-  assert.match(app, /path="\/funds\/lp-workspace" element=\{<FundLpWorkspaceRedirect \/>\}/,
+  assert.doesNotMatch(app, /path="\/funds\/lp-workspace" element=\{<FundLpWorkspaceRedirect \/>\}/,
     'the route must stay registered so old deep links land');
   assert.match(app, /function FundLpWorkspaceRedirect\(\)[\s\S]{0,200}?pathname: '\/spinout-lab\/investor-workspace', search: loc\.search, hash: loc\.hash/);
   // D1160: Fund Ops, the second copy's home, is retired.

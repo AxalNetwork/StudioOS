@@ -1,0 +1,34 @@
+{
+  "skill": "wcag-interface-audit",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "synthetic_fixture": true,
+        "skill_name": "WCAG Interface Audit",
+        "task_scope": "Reviews supplied UI artefacts and code against relevant WCAG criteria without claiming formal certification.",
+        "evidence": [
+          "keyboard focus and semantic controls"
+        ],
+        "omitted_field": "contrast ratio"
+      },
+      "build.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for keyboard focus and semantic controls."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "keyboard focus and semantic controls"
+    ],
+    "must_say_not_recorded": [
+      "contrast ratio"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

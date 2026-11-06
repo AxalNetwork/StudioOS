@@ -6,7 +6,7 @@
 //   · a radar with no skills, and the cost line until R5, read "Not recorded";
 //   · the gallery's filters (top core value, natural fit, risk) and search;
 //   · a persona already on the team shows "On your team" and cannot be chosen;
-//   · avatars carry "[Name], [tagline]" (and say the portrait is not added yet);
+//   · avatars carry "[Name], [tagline]" and fall back to initials;
 //   · people and agents draw their values with the same component; the agent
 //     profile shows six bars with exactly three highlighted, captioned Fixed.
 //
@@ -56,16 +56,16 @@ const BLOCK = { available: true, value: { personas: PERSONAS, values: LEGEND, ar
 const titleRe = new RegExp(`\\b(${FORBIDDEN_TITLES.map((t) => t.replace(/ /g, '\\s')).join('|')})\\b`);
 const valuesRe = new RegExp(`\\b(${FORBIDDEN_VALUES.join('|')})\\b`, 'i');
 
-test('the card at three sizes: name, pill, tagline, top 3 values, risk and natural fit; no job title, no Schwartz value', () => {
+test('the card at three sizes: name, archetype, tagline, top 3 values, risk and natural fit; no job title, no Schwartz value', () => {
   const full = renderedText(render(h(AgentCard, { persona: PERSONAS[2], legend: LEGEND })));
-  assert.match(full, /OrrinAI agent/);
+  assert.match(full, /OrrinDisciplined Allocator/);
   assert.match(full, /He\/him/);
   assert.match(full, /“Every road ends at a market\.”/);
   assert.match(full, /Core valuesStewardshipIntegrityResilience/);
   assert.match(full, /RiskCautious[^]*Bold/);
   assert.match(full, /Natural fitFinanceLegal/);
   const compact = renderedText(render(h(AgentCard, { persona: PERSONAS[0], size: 'compact' })));
-  assert.match(compact, /VestaAI agentNo gate opens without its seal\./);
+  assert.match(compact, /VestaAccountability AnchorNo gate opens without its seal\./);
   const chip = render(h(AgentCard, { persona: PERSONAS[1], size: 'chip' }));
   assert.match(chip, /data-testid="agent-card-chip"/);
   assert.match(renderedText(chip), /Kade/);
@@ -76,7 +76,7 @@ test('the card at three sizes: name, pill, tagline, top 3 values, risk and natur
   assert.equal(riskLine({ risk: 9 }), 'Not recorded');
 });
 
-test('avatars: a square agent mark with initials until R2, alt "[Name], [tagline]" and that the portrait is not added yet', () => {
+test('avatars: a square agent mark with initials when the portrait is missing, alt "[Name], [tagline]" and that the portrait is not added yet', () => {
   const html = render(h(AgentAvatar, { persona: PERSONAS[0], size: 40 }));
   assert.match(html, /role="img"/);
   assert.match(html, /aria-label="Vesta, No gate opens without its seal\. \(portrait not added yet\)"/);
@@ -108,6 +108,15 @@ test('the gallery filters by top core value, natural fit and risk, searches by n
   assert.doesNotMatch(html, titleRe);
 });
 
+test('the Add agent picker shows Ilyse’s portrait and Studio archetype', () => {
+  const ilyse = { ...P('ilyse', 'Ilyse', 'woman', 5, ['curiosity', 'ambition', 'resilience'], ['gtm', 'marketing'], 'What lies past the last beacon?'), avatar: '/agents/ilyse.webp' };
+  const block = { available: true, value: { ...BLOCK.value, personas: [ilyse] } };
+  const html = render(h(WhoStep, { block, scopeName: 'x', onTeam: new Set(), chosen: null, setChosen() {} }));
+  assert.match(html, /<img src="\/agents\/ilyse\.webp"/);
+  assert.match(renderedText(html), /IlyseThe Rocketeer/);
+  assert.doesNotMatch(html, /data-testid="agent-pill"|portrait not added yet/);
+});
+
 test('a persona already on the team shows "On your team" and cannot be chosen twice', () => {
   const onTeam = onTeamKeys([{ persona: { key: 'kade' }, status: 'active' }, { persona: { key: 'vesta' }, status: 'removed' }]);
   assert.deepEqual([...onTeam], ['kade'], 'a removed agent frees its persona');
@@ -132,6 +141,7 @@ test('Compare holds up to three, side by side: six value bars each (top 3 highli
   const t = renderedText(html);
   assert.match(t, /Compare 2 agents/);
   assert.match(t, /Values and risk are fixed\. Skills are added after you choose\./);
+  assert.match(t, /VestaAccountability Anchor/);
   assert.match(t, /Vesta's story\./);
   assert.match(t, /Choose Kade/);
   assert.equal((html.match(/data-testid="agent-compare-values-vesta-bar"/g) || []).length, 6);
@@ -153,7 +163,7 @@ test('the profile: the full card, Story and goal, and Values — six bars, three
   const agent = { uid: 'a1', role_key: 'cfo', persona: PERSONAS[2], status: 'active', sponsor: { name: '[Avery Stone]' }, monthly_cap_microusd: 25_000_000 };
   const html = render(h(AgentProfile, { data: { agent, matrix: [], month_spend: { available: true, value_microusd: 1_000_000 }, events: [] }, legend: LEGEND }));
   const t = renderedText(html);
-  assert.match(t, /OrrinAI agent/);
+  assert.match(t, /OrrinDisciplined Allocator/);
   assert.match(t, /Sponsor: \[Avery Stone\]/);
   assert.match(t, /StoryOrrin's story\.Goal · Orrin's goal\./);
   assert.equal((html.match(/data-testid="agent-value-bar"/g) || []).length, 6, 'the six Axal values');

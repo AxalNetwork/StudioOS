@@ -113,6 +113,7 @@ export type TaskClass =
   | 'course_cover'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
+  | 'distribution_draft'
   // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
   | 'studio_layout'
   // D1583 (#3830): a memo written from a deck's own words, around its figures' placeholders.
@@ -816,6 +817,13 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // page explanation. A mid model with the same priced alternates; no cache: a
   // draft quotes figures read at the press.
   mail_draft: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  // D4488: Distribution text proposals, metered separately, never cached.
+  distribution_draft: {
     provider: 'workers-ai',
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],
@@ -3095,7 +3103,7 @@ export type GuardrailCounters = {
    * shape and changing what its tiles mean is not this function's business.)
    */
   verdicts:
-    | { available: true; evaluated: number; safe_count: number; unsafe_count: number; safe_rate: number | null }
+    | { available: true; evaluated: number; safe_count: number; unsafe_count: number; no_verdict_count: number; safe_rate: number | null }
     | { available: false; reason: string };
   /**
    * What the guard CAUSED, over `advisor_turn_audit`.
@@ -3158,11 +3166,12 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
 
   const safety = await env.DB.prepare(
     `SELECT
+        SUM(CASE WHEN safety_score IS NULL THEN 1 ELSE 0 END) AS no_verdict_count,
         SUM(CASE WHEN safety_score IS NOT NULL THEN 1 ELSE 0 END) AS evaluated,
         SUM(CASE WHEN safety_score >= 0.5 THEN 1 ELSE 0 END) AS safe_count,
         SUM(CASE WHEN safety_score IS NOT NULL AND safety_score < 0.5 THEN 1 ELSE 0 END) AS unsafe_count
        FROM ai_usage_logs WHERE created_at >= ? AND task = 'safety'`,
-  ).bind(since).first<{ evaluated: number; safe_count: number; unsafe_count: number }>()
+  ).bind(since).first<{ evaluated: number; safe_count: number; unsafe_count: number; no_verdict_count: number }>()
     .catch(() => undefined);
 
   // `blocked` keys on the documented refusal value, not on `safety_score < 0.5`:
@@ -3239,6 +3248,7 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
       : {
         available: true,
         evaluated,
+        no_verdict_count: Number(safety?.no_verdict_count || 0),
         safe_count: Number(safety?.safe_count || 0),
         unsafe_count: Number(safety?.unsafe_count || 0),
         safe_rate: evaluated > 0 ? Number(safety?.safe_count || 0) / evaluated : null,

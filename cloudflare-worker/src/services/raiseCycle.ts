@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 import { posthogFigure } from './posthog/raise';
 import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue, selectedCheckSources } from './raiseEvidence';
 /**
@@ -1646,7 +1647,7 @@ export async function receivedCredits(env: Env, projectId: number, founderUserId
 export async function receivedCommitment(
   env: Pick<Env, 'DB'>, actor: { id: number; role: string }, companyId: number | null, commitmentId: number,
 ): Promise<{ id: number; at: string } | null> {
-  if (actor.role !== 'investor') return null;
+  if (!holdsLicence(actor, 'investor')) return null;
   return env.DB.prepare(`SELECT m.id, m.confirmed_at AS at FROM mercury_personal_matches m
     JOIN commitments c ON c.id = m.target_id WHERE m.target_kind = 'deal_commitment'
     AND m.state = 'confirmed' AND c.id = ? AND c.investor_user_id = ?

@@ -103,6 +103,7 @@ test('the verdict rollup counts safety calls, and only safety calls', async () =
   // 3, not 5: the null-score row has no verdict and the `chat` row is not a
   // guard call. Both exclusions are the denominator being honest.
   assert.equal(c.verdicts.evaluated, 3);
+  assert.equal(c.verdicts.no_verdict_count, 1);
   assert.equal(c.verdicts.safe_count, 2);
   assert.equal(c.verdicts.unsafe_count, 1);
   assert.ok(c.verdicts.safe_rate !== null);

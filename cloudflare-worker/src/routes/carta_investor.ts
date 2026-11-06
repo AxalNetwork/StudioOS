@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * /api/carta/investor — the investor's own Carta, on HQ or a branch (#2634).
  * Live read-only pages; no founder cap-table writes and no admin/support bypass.
@@ -26,7 +27,7 @@ for (const resource of resources) app.get(resource.path, async c => {
   c.header('Cache-Control', 'private, no-store');
   const user = await requireAuth(c);
   if ((await selectJwt(c))?.payload.impersonated_by) return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot read a member’s Carta account.' });
-  if (user.role !== 'investor') return refuse(c, 403, { code: 'purpose_not_allowed', message: 'Only an investor can read their own Carta firm here.' });
+  if (!holdsLicence(user, 'investor')) return refuse(c, 403, { code: 'purpose_not_allowed', message: 'Only an investor can read their own Carta firm here.' });
   const pageToken = c.req.query('page_token');
   if ((pageToken !== undefined && !cartaPageValid(pageToken)) || resource.ids.some(key => !cartaIdValid(c.req.param(key) || ''))) {
     return c.json({ error: 'invalid_carta_request' }, 400);

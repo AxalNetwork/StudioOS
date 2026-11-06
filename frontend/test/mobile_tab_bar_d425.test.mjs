@@ -26,7 +26,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
-import { Briefcase, Check, DollarSign, TrendingUp } from 'lucide-react';
+import { Cog, Coins, ShieldCheck, Sprout } from 'lucide-react';
 import { FOUNDER_BAND_PATHS, FOUNDER_MORE_DOORS, FOUNDER_TAB_PATHS, mobilePlan, rowActive } from '../src/lib/mobileTabs.js';
 import * as TabBarModule from '../src/components/MobileTabBar.jsx';
 
@@ -48,15 +48,15 @@ test('the founder tabs are the canvas\'s four, in its order, under their sidebar
   const plan = mobilePlan('founder');
   // D699 (CO:219): Validate, Build, Raise, Grow. Studio moved to the band's
   // glyph. Each tab says what its sidebar row says and lights where it lights;
-  // only the icon is the canvas's own.
+  // the icons use the current cycle navigation set.
   assert.deepEqual(plan.tabs.map((r) => r.to), ['/validate', '/build', '/raise', '/grow']);
   assert.deepEqual(plan.tabs.map((r) => r.to), FOUNDER_TAB_PATHS);
-  const icons = { '/validate': Check, '/build': Briefcase, '/raise': DollarSign, '/grow': TrendingUp };
+  const icons = { '/validate': ShieldCheck, '/build': Cog, '/raise': Coins, '/grow': Sprout };
   for (const tab of plan.tabs) {
     const row = founderRows().find((r) => r.to === tab.to);
     assert.equal(tab.label, row.label, `${tab.to} renames its sidebar row`);
     assert.equal(tab.match, row.match, `${tab.to} lights for other pages than its sidebar row`);
-    assert.equal(tab.icon, icons[tab.to], `${tab.to} does not draw the canvas's icon`);
+    assert.equal(tab.icon, icons[tab.to], `${tab.to} does not draw the cycle icon`);
   }
 });
 

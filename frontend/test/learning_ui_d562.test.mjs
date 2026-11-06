@@ -37,7 +37,7 @@ import {
 } from '../src/pages/learning/learningModel.js';
 import { webinarRow } from '../src/pages/learning/webinarModel.js';
 import { readArticles, readEvents, readPublications } from '../src/pages/learning/learningReads.js';
-import LearningPage, { adminLinks } from '../src/pages/learning/LearningPage.jsx';
+import LearningPage, { adminLinks, LearningSubPage } from '../src/pages/learning/LearningPage.jsx';
 import { ArticleList, EventList, LearningHomeView, PublicationList, homeCoverage } from '../src/pages/learning/LearningHome.jsx';
 import CourseOutline from '../src/pages/learning/CourseOutline.jsx';
 import LessonPlayer from '../src/pages/learning/LessonPlayer.jsx';
@@ -141,7 +141,7 @@ test('the article routes still resolve to the article pages, and Learning takes 
     assert.ok(routeBlock(src, pattern).includes(`<${component} />`), `${pattern} no longer renders ${component}`);
   }
   // The legacy redirects still land on the editor.
-  assert.match(routeBlock(src, '/articles/mine'), /<Navigate to="\/articles\/draft" replace \/>/);
+  assert.equal(routeBlock(src, '/articles/mine'), null, 'D2319 retires the alias');
 });
 
 const MEMBERS = "guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <LearningPage";
@@ -414,7 +414,7 @@ test('an admin: every tab reads, Exercises and Exams included (#4180); Webinars 
   const withRows = html(homeView({ gated: false, tab: 'webinars', upcoming, past: ready([], { when: 'past' }), now: BEFORE_IT }));
   const section = withRows.slice(withRows.indexOf('data-testid="section-webinars"'));
   assert.match(section, /data-testid="list-upcoming-webinars"/);
-  assert.match(tagOf(section, 'link-upcoming-register'), /href="\/learning\/webinars\/w1"/);
+  assert.match(tagOf(section, 'home-webinar-register-w1'), /<button/);
   // In the tab, the upcoming read is drawn under "Upcoming and live", and the past one under "Past".
   const upcomingPart = withRows.slice(withRows.indexOf('id="webinars-upcoming-title"'), withRows.indexOf('id="webinars-past-title"'));
   assert.ok(flat(upcomingPart).includes('Pricing a seed round, live'), 'the Webinars tab does not draw the upcoming read under Upcoming and live');
@@ -519,33 +519,23 @@ test('an admin and the Super Admin see the full page: no card, All first, the st
   assert.match(page('/learning/programs', '/learning/programs', { view: 'programs', user: ADMIN, activeRole: 'admin' }), /data-testid="programs-assigned"/);
   const program = page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' });
   assert.match(program, /data-testid="program-learners"/);
-  assert.match(flat(program), /Read-only Assigned to you by a Super Admin\. Content and enrolment are managed at HQ\./);
+  assert.match(flat(program), /Read only · Assigned admin · Program not recorded/);
 });
 
-test('Learning home and the member program have no AI rail; other existing subpage rails keep their accent and voice', () => {
+test('Learning home, member, studio and gated subpages have no AI rail', () => {
   const home = flat(page('/learning', '/learning', { view: 'home', user: FOUNDER, activeRole: 'founder' }));
   assert.doesNotMatch(home, /Eadwyn AI/);
   const member = flat(page('/learning/my-programs/p1', '/learning/my-programs/:program', { view: 'myProgram', user: FOUNDER, activeRole: 'founder' }));
   assert.doesNotMatch(member, /Eadwyn AI/);
-  assert.match(flat(page('/learning/studio', '/learning/studio', { view: 'studio', user: SUPER, activeRole: 'admin' })), /Eadwyn AI .{0,24}?Learning studio/);
-  assert.match(flat(page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' })), /Eadwyn AI .{0,24}?Learning programs/);
+  assert.doesNotMatch(flat(page('/learning/studio', '/learning/studio', { view: 'studio', user: SUPER, activeRole: 'admin' })), /Eadwyn AI/);
+  assert.doesNotMatch(flat(page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' })), /Eadwyn AI/);
   const dir = resolve(ROOT, 'frontend/src/pages/learning');
   const rails = readdirSync(dir).filter((f) => f.endsWith('.jsx')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
-  // The three tiers of a page that waits on its store, the learner pages that read, the studio,
-  // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558),
-  // the exercise and exam pages (D559), the webinar page (D560),
-  // and the learning plan (D3959).
-  // D4476/D4479 removed both assessment rails; their dead shared component is gone too.
-  // D4480 also removes the member program's AI panel.
-  assert.equal(mounts.length, 9);
-  for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
-  for (const mount of mounts) {
-    assert.match(mount, /workspace="Learning[^"]*"/);
-    assert.match(mount, /role="(founder|admin|super_admin)"/);
-    const note = /note="([^"]*)"/.exec(mount)?.[1] || '';
-    assert.match(note, /^Eadwyn /);
-    assert.doesNotMatch(note, /advis|recommend|fiduciar/i, 'the rail speaks in regulated terms');
+  // D4478 applies the owner's rule to every Learning tier, including dormant gates.
+  assert.equal(mounts.length, 0);
+  for (const view of ['lesson', 'item', 'studio']) {
+    assert.doesNotMatch(flat(html(h(LearningSubPage, { view, gated: true }))), /Eadwyn AI/);
   }
   // Coverage counts only what was read: a failed source drops its line.
   assert.deepEqual(homeCoverage({ gated: false, q: '', articles: ARTICLES_READY, publications: { status: 'unreadable', rows: [] }, events: EVENTS_READY }),
@@ -818,10 +808,8 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
   assert.ok(files.length >= 15, `only ${files.length} files read`);
   for (const f of files) {
     const src = codeOnly(readFileSync(resolve(dir, f), 'utf8'));
-    // D4480: the member's semantic date uses the existing app mono token,
-    // exactly here; arbitrary fonts elsewhere remain forbidden.
-    const styled = f === 'MemberProgram.jsx' ? src.replace('<time dateTime={copy.dateTime} className="font-mono tabular-nums">', '<time>') : src;
-    assert.doesNotMatch(styled, /fontFamily|font-family|Space Grotesk|Roboto Mono|font-mono/, `${f} sets a font`);
+    // D4480/D4481 use the existing app mono token for recorded dates.
+    assert.doesNotMatch(src, /fontFamily|font-family|Space Grotesk|Roboto Mono/, `${f} sets a font`);
     assert.doesNotMatch(src, /#[0-9a-fA-F]{6}\b/, `${f} carries a canvas colour`);
     for (const m of src.matchAll(/style=\{\{([^}]*)\}\}/g)) assert.match(m[1], /^\s*width:/, `${f} styles something inline other than a bar's width`);
     // Five files call the client: the member reads, the studio's reads and writes, and, in stage 3,

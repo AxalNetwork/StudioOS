@@ -1,0 +1,51 @@
+{
+  "skill": "ux-research-interview-synthesis",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "interviews": [
+          {
+            "id": "I1",
+            "participant": "P1",
+            "finding": "Cannot find export"
+          },
+          {
+            "id": "I2",
+            "participant": "P2",
+            "finding": "Cannot find export"
+          },
+          {
+            "id": "I3",
+            "participant": "P1",
+            "finding": "Export is slow"
+          }
+        ],
+        "recruitment_method": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "I1",
+      "I2",
+      "2 distinct participants"
+    ],
+    "must_say_not_recorded": [
+      "recruitment method"
+    ],
+    "must_not_include": [
+      "all users struggle"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why recruitment method is missing rather than inventing it.",
+    "Do not assert: all users struggle.",
+    "Return a proposal only; do not perform any external action.",
+    "Count P1 once despite two records; two distinct participants mention discovery difficulty."
+  ],
+  "predicate_witness": "I1; I2; 2 distinct participants. recruitment method: Not recorded. Human review required."
+}

@@ -1,0 +1,34 @@
+{
+  "skill": "entity-structure-governance-review",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "synthetic_fixture": true,
+        "skill_name": "Corporate Structure and Entity Governance Review",
+        "task_scope": "Reviews entity chart, ownership, jurisdiction and governance allocation, extending beyond document-presence checks.",
+        "evidence": [
+          "entity ownership and authority map"
+        ],
+        "omitted_field": "governing law"
+      },
+      "compliance.calendar": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for entity ownership and authority map."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "entity ownership and authority map"
+    ],
+    "must_say_not_recorded": [
+      "governing law"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

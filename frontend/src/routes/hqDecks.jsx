@@ -1,5 +1,5 @@
 import React, { lazy } from 'react';
-import { Navigate, Route } from 'react-router-dom';
+import { Route } from 'react-router-dom';
 
 const HqDecksPage = lazy(() => import('../pages/hq/decks/HqDecksPage'));
 
@@ -20,7 +20,6 @@ export default function hqDecksRoutes({ guard, hqOnly }) {
       <Route path="/admin/platform/decks/grid" element={guard(['admin'], hqOnly(<HqDecksPage />))} />
       <Route path="/admin/platform/decks/funnel" element={guard(['admin'], hqOnly(<HqDecksPage />))} />
       {/* D1537: the plan's address for the Grid's dashboard (§5.9.6) opens its tab. */}
-      <Route path="/admin/ai/deck-grid" element={<Navigate to="/admin/platform/decks/grid" replace />} />
     </>
   );
 }

@@ -10,6 +10,8 @@ the owner's canvas (`design/incoming/HQ AI Agents Page.dc.html`, boards SA0–SA
 
 | `CohortCard.jsx` | D4423: Super Admin cohort membership, add by founder email and remove; no feature switch changes. |
 
+| `Operations.jsx` | D4522: live Super Admin Overview, Runs, Spend, Audit and policy reads, with reason-gated pause/resume and retryable reads. Independent of team-agent rollout. |
+
 ## Rules
 
 - **Every request needs a Worker route.** D1612's library and H1's roster are

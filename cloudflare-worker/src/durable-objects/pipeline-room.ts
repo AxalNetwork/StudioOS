@@ -1,3 +1,4 @@
+import { heldLicences } from '../services/accountLicences';
 /**
  * PipelineRoom — one Durable Object instance per pipeline `deal_id`.
  *
@@ -36,7 +37,7 @@ export class PipelineRoom implements DurableObject {
     // directly); only the worker calls .fetch() on it via the binding.
     if (request.method === 'POST' && url.pathname === '/broadcast') {
       const event = await request.json();
-      this.broadcast(event);
+      await this.broadcast(event);
       return new Response(JSON.stringify({ ok: true, fanout: this.state.getWebSockets().length }), {
         headers: { 'content-type': 'application/json' },
       });
@@ -97,7 +98,7 @@ export class PipelineRoom implements DurableObject {
     return new Response('Not found', { status: 404 });
   }
 
-  private broadcast(event: unknown) {
+  private async broadcast(event: unknown) {
     // Server-side authorization for two distinct event classes:
     //   1. Personal `{type:"notification", user_id, ...}` frames published
     //      by services/notify.ts go ONLY to the recipient's sockets.
@@ -122,7 +123,14 @@ export class PipelineRoom implements DurableObject {
       if (isNotification) {
         if (!att || String(att.userId) !== targetUserId) continue;
       } else {
-        if (!att || !PRIVILEGED.has(String(att.role || ''))) continue;
+        if (!att) continue;
+        if (!PRIVILEGED.has(String(att.role || ''))) {
+          try {
+            const user = await this._env.DB.prepare('SELECT id, role, is_active FROM users WHERE id = ?')
+              .bind(Number(att.userId)).first<{ id: number; role: string; is_active: number }>();
+            if (!user || !user.is_active || !(await heldLicences(this._env.DB, user)).some(licence => licence === 'partner' || licence === 'investor')) continue;
+          } catch (error) { console.warn('[pipeline-room] licences unreadable', error); continue; }
+        }
       }
       try {
         ws.send(payload);

@@ -1,35 +1,37 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import { AgentPill } from './AgentMark.jsx';
-import { AREA_LABEL, NOT_RECORDED, RISK_WORDS, avatarAlt, initialsOf, pronouns, topValueChips } from './personaModel.js';
+import { AREA_LABEL, NOT_RECORDED, RISK_WORDS, avatarAlt, initialsOf, personaArchetypeLabel, pronouns, topValueChips } from './personaModel.js';
 
 /**
  * D4119 (#4119, AG1) — the agent card, in three sizes, used everywhere an
  * agent appears (Team, pickers, timelines, the Calendar and Work):
  *
- *   full     the gallery and the profile header: portrait, name, the AI agent
- *            pill, tagline, the top 3 values as chips, the risk scale and the
+ *   full     the gallery and the profile header: portrait, name, Studio archetype,
+ *            tagline, the top 3 values as chips, the risk scale and the
  *            natural fit; "On your team" when the persona already works here.
- *   compact  a row in a list: portrait, name, pill, tagline, the top 3 chips.
+ *   compact  a row in a list: portrait, name, archetype, tagline, the top 3 chips.
  *   chip     inline: a small portrait and the name, with the spark.
  *
- * THE PORTRAIT (R2, #4118). The 16 pixel-art portraits are not attached yet,
- * so the card draws the agent mark (a rounded square, never a circle: an
- * agent is never drawn as a person, D1497) with the persona's initials, and
- * its alt text says the portrait is not added yet ("[Name], [tagline]").
+ * Portraits use the persona's configured asset. If it cannot load, the
+ * rounded square falls back to the persona's initials.
  *
  * No job title, philosophy or Schwartz value is drawn (D4117).
  */
 
 const SQ = 'relative inline-flex shrink-0 items-center justify-center border border-axal-lavender-edge bg-axal-lavender font-mono font-bold text-axal-violet-deep dark:border-violet-700/60 dark:bg-violet-900/30 dark:text-violet-300';
 
-/** The persona's portrait; until R2, the agent mark with initials. */
+/** The persona's portrait, with initials as a fallback. */
 export function AgentAvatar({ persona, size = 40 }) {
+  const [failedAvatar, setFailedAvatar] = useState(null);
+  const avatar = persona?.avatar;
+  const hasPortrait = Boolean(avatar && avatar !== failedAvatar);
   const r = Math.max(6, Math.round(size * 0.28));
   return (
     <span className={SQ} style={{ width: size, height: size, borderRadius: r, fontSize: Math.max(9, Math.round(size * 0.32)) }}
-      role="img" aria-label={avatarAlt(persona)} data-testid="agent-avatar" data-shape="square">
-      <span aria-hidden="true">{initialsOf(persona?.name)}</span>
+      role="img" aria-label={avatarAlt(persona, { portrait: hasPortrait })} data-testid="agent-avatar" data-shape="square">
+      {hasPortrait ? (
+        <img src={avatar} alt="" width={size} height={size} style={{ borderRadius: r }} className="size-full object-cover" onError={() => setFailedAvatar(avatar)} />
+      ) : <span aria-hidden="true">{initialsOf(persona?.name)}</span>}
       {size >= 28 ? (
         <span aria-hidden="true" className="absolute -bottom-1 -right-1 inline-flex items-center justify-center rounded-full border border-white bg-axal-violet text-white dark:border-gray-900"
           style={{ width: Math.round(size * 0.38), height: Math.round(size * 0.38) }}>
@@ -38,6 +40,14 @@ export function AgentAvatar({ persona, size = 40 }) {
       ) : null}
     </span>
   );
+}
+
+/** The Studio archetype shared by the roster and picker cards. */
+export function AgentArchetypeBadge({ persona }) {
+  const label = personaArchetypeLabel(persona);
+  return label ? (
+    <span className="inline-block max-w-full rounded-axal-pill border border-axal-lavender-edge bg-axal-lavender px-2 py-0.5 text-[11px] font-semibold text-axal-violet-deep dark:border-violet-700/60 dark:bg-violet-900/30 dark:text-violet-300" data-testid="agent-archetype">{label}</span>
+  ) : null;
 }
 
 /** The risk scale on one line: Cautious ··· Bold, the persona's point marked. */
@@ -93,7 +103,7 @@ export default function AgentCard({ persona, legend, size = 'full', onTeam = fal
       <span className="flex min-w-0 items-center gap-2.5" data-testid={testId || 'agent-card-compact'}>
         <AgentAvatar persona={persona} size={36} />
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-1.5"><b className="truncate text-[13.5px] font-extrabold text-axal-ink dark:text-gray-100">{name}</b><AgentPill /></span>
+          <span className="flex flex-wrap items-center gap-1.5"><b className="truncate text-[13.5px] font-extrabold text-axal-ink dark:text-gray-100">{name}</b><AgentArchetypeBadge persona={persona} /></span>
           {sub || tagline ? <span className="block truncate text-[12px] text-axal-muted dark:text-gray-400">{sub || tagline}</span> : null}
         </span>
         {onTeam ? <span className="shrink-0 rounded-axal-pill bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{`\u2713 ${ON_TEAM}`}</span> : null}
@@ -108,7 +118,7 @@ export default function AgentCard({ persona, legend, size = 'full', onTeam = fal
       <div className="flex items-start gap-3">
         <AgentAvatar persona={persona} size={56} />
         <div className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-1.5"><b className="text-[15.5px] font-extrabold text-axal-ink dark:text-gray-100">{name}</b><AgentPill /></span>
+          <span className="flex flex-wrap items-center gap-1.5"><b className="text-[15.5px] font-extrabold text-axal-ink dark:text-gray-100">{name}</b><AgentArchetypeBadge persona={persona} /></span>
           {pronouns(persona) ? <span className="block text-[11.5px] text-axal-muted dark:text-gray-400">{pronouns(persona)}</span> : null}
           <span className="block text-[12.5px] italic text-axal-ink dark:text-gray-200">{tagline ? `\u201c${tagline}\u201d` : NOT_RECORDED}</span>
           <span className="mt-1 flex flex-wrap gap-1">

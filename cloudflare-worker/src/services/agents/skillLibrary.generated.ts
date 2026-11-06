@@ -94,6 +94,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "ai-regulatory-risk-screen",
+    "skill_md": "---\nname: ai-regulatory-risk-screen\ndescription: Screens AI intended use, deployment context, data and user impact for potentially applicable regulatory obligations.\nroles: [general_counsel, cto]\ntools: [company.read, compliance.read]\noutput: brief\ntaxonomy: {legal_regulatory: advanced, legal_data_governance: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for AI Regulatory Risk Screening; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied company.read and compliance.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Screens AI intended use, deployment context, data and user impact for potentially applicable regulatory obligations. Focus on AI use-case risk indicators.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for AI use-case risk indicators.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for deployment jurisdiction when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "ai-regulatory-risk-screen",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "company.profile": {
+              "synthetic_fixture": true,
+              "skill_name": "AI Regulatory Risk Screening",
+              "task_scope": "Screens AI intended use, deployment context, data and user impact for potentially applicable regulatory obligations.",
+              "evidence": [
+                "AI use-case risk indicators"
+              ],
+              "omitted_field": "deployment jurisdiction"
+            },
+            "compliance.calendar": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for AI use-case risk indicators."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "AI use-case risk indicators"
+          ],
+          "must_say_not_recorded": [
+            "deployment jurisdiction"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "api-change-note",
     "skill_md": "---\nname: api-change-note\ndescription: Drafts a note for API consumers about a breaking or deprecating change found in the merged pull requests.\nroles: [cto, cpo]\ntools: [github.read]\noutput: draft\ntaxonomy: {eng_api_design: proficient, product_platform: working}\nversion: 1\n---\n1. Read the merged pull requests labelled api or breaking (`github.read`).\n2. For each change, say what changes, who it affects and what a consumer must do.\n3. Give the removal date only when the pull request records one; otherwise write \"Not recorded\".\n4. Keep the note in plain language, with one example request per change.\n5. Propose the draft to the engineering lead. A person sends it.\n",
     "cases": [
@@ -338,6 +378,126 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "brand-identity-system-spec",
+    "skill_md": "---\nname: brand-identity-system-spec\ndescription: Specifies a coherent identity system across visual principles, components, variants, usage and asset governance.\nroles: [cmo, ceo]\ntools: [research.read, grow.read]\noutput: brief\ntaxonomy: {design_brand_identity: advanced, mkt_brand_strategy: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Brand Identity System Specification; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied research.read and grow.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Specifies a coherent identity system across visual principles, components, variants, usage and asset governance. Focus on identity usage system.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for identity usage system.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for approved brand asset when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "brand-identity-system-spec",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "research.library": {
+              "synthetic_fixture": true,
+              "skill_name": "Brand Identity System Specification",
+              "task_scope": "Specifies a coherent identity system across visual principles, components, variants, usage and asset governance.",
+              "evidence": [
+                "identity usage system"
+              ],
+              "omitted_field": "approved brand asset"
+            },
+            "grow.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for identity usage system."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "identity usage system"
+          ],
+          "must_say_not_recorded": [
+            "approved brand asset"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "brand-positioning-messaging",
+    "skill_md": "---\nname: brand-positioning-messaging\ndescription: Builds a messaging architecture across audiences, category, differentiated value, proof and narrative hierarchy.\nroles: [cmo, ceo]\ntools: [project.read, research.read]\noutput: brief\ntaxonomy: {mkt_brand_strategy: advanced, mkt_product_marketing: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Brand Positioning and Messaging Architecture; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied project.read and research.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Builds a messaging architecture across audiences, category, differentiated value, proof and narrative hierarchy. Focus on message pillar and proof hierarchy.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for message pillar and proof hierarchy.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for verified customer proof when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "brand-positioning-messaging",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "project.summary": {
+              "synthetic_fixture": true,
+              "skill_name": "Brand Positioning and Messaging Architecture",
+              "task_scope": "Builds a messaging architecture across audiences, category, differentiated value, proof and narrative hierarchy.",
+              "evidence": [
+                "message pillar and proof hierarchy"
+              ],
+              "omitted_field": "verified customer proof"
+            },
+            "research.library": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for message pillar and proof hierarchy."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "message pillar and proof hierarchy"
+          ],
+          "must_say_not_recorded": [
+            "verified customer proof"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "brand-voice-governance",
+    "skill_md": "---\nname: brand-voice-governance\ndescription: Defines operational voice standards, tone dimensions, vocabulary, prohibited patterns and review rules across channels.\nroles: [cmo, cmo]\ntools: [research.read, grow.read]\noutput: brief\ntaxonomy: {mkt_brand_strategy: advanced, mkt_copywriting: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Brand Voice Governance; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied research.read and grow.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Defines operational voice standards, tone dimensions, vocabulary, prohibited patterns and review rules across channels. Focus on tone dimensions and review rules.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for tone dimensions and review rules.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for approved terminology when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "brand-voice-governance",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "research.library": {
+              "synthetic_fixture": true,
+              "skill_name": "Brand Voice Governance",
+              "task_scope": "Defines operational voice standards, tone dimensions, vocabulary, prohibited patterns and review rules across channels.",
+              "evidence": [
+                "tone dimensions and review rules"
+              ],
+              "omitted_field": "approved terminology"
+            },
+            "grow.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for tone dimensions and review rules."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "tone dimensions and review rules"
+          ],
+          "must_say_not_recorded": [
+            "approved terminology"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "budget-vs-actual",
     "skill_md": "---\nname: budget-vs-actual\ndescription: Compares the month's recorded spending against the budget, line by line, and flags lines over by more than 10%.\nroles: [cfo]\ntools: [grow.read, mercury.read]\noutput: brief\ntaxonomy: {finops_fpna: proficient, finops_accounting: working}\nversion: 1\n---\n1. Read the month's budget lines (`grow.read`) and the recorded spending by category (`mercury.read`).\n2. Give each line's budget, actual and difference, in dollars and percent.\n3. Flag lines over budget by more than 10%.\n4. Write \"Not recorded\" for a line with a budget but no recorded spending.\n5. Propose the comparison to the finance lead.\n",
     "cases": [
@@ -380,6 +540,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "on budget"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "campaign-attribution-diagnostics",
+    "skill_md": "---\nname: campaign-attribution-diagnostics\ndescription: Diagnoses attribution quality, source tagging, conversion paths, attribution windows and double-counted credit.\nroles: [cmo, cfo]\ntools: [grow.read, validate.read]\noutput: brief\ntaxonomy: {mkt_analytics: advanced, mkt_demand_gen: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Campaign Attribution Diagnostics; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Diagnoses attribution quality, source tagging, conversion paths, attribution windows and double-counted credit. Focus on attribution window and event integrity.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for attribution window and event integrity.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for conversion event coverage when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "campaign-attribution-diagnostics",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Campaign Attribution Diagnostics",
+              "task_scope": "Diagnoses attribution quality, source tagging, conversion paths, attribution windows and double-counted credit.",
+              "evidence": [
+                "attribution window and event integrity"
+              ],
+              "omitted_field": "conversion event coverage"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for attribution window and event integrity."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "attribution window and event integrity"
+          ],
+          "must_say_not_recorded": [
+            "conversion event coverage"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -550,6 +750,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "channel-partner-strategy",
+    "skill_md": "---\nname: channel-partner-strategy\ndescription: Assesses channel partners and designs partner motions, incentives, economics, enablement and governance.\nroles: [sales, ceo]\ntools: [network.read, grow.read]\noutput: brief\ntaxonomy: {gtm_partnerships: advanced, cap_bd_partnerships: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Channel and Partnership Strategy; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied network.read and grow.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Assesses channel partners and designs partner motions, incentives, economics, enablement and governance. Focus on mutual value and partner incentive model.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for mutual value and partner incentive model.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for partner-sourced pipeline when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "channel-partner-strategy",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "network.relationships": {
+              "synthetic_fixture": true,
+              "skill_name": "Channel and Partnership Strategy",
+              "task_scope": "Assesses channel partners and designs partner motions, incentives, economics, enablement and governance.",
+              "evidence": [
+                "mutual value and partner incentive model"
+              ],
+              "omitted_field": "partner-sourced pipeline"
+            },
+            "grow.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for mutual value and partner incentive model."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "mutual value and partner incentive model"
+          ],
+          "must_say_not_recorded": [
+            "partner-sourced pipeline"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "churn-risk-review",
     "skill_md": "---\nname: churn-risk-review\ndescription: Lists accounts showing churn signals in the recorded usage and support data, with the signal for each.\nroles: [sales, coo]\ntools: [grow.read]\noutput: brief\ntaxonomy: {gtm_customer_success: proficient, product_analytics: working}\nversion: 1\n---\n1. Read each account's usage trend, support tickets and renewal date (`grow.read`).\n2. Flag accounts whose usage fell more than 30% over the last 60 days, or with a renewal in 60 days and open tickets.\n3. Give the signal and its figures for each flagged account.\n4. Write \"Not recorded\" for an account with no renewal date.\n5. Propose the review to the customer success lead. It contacts no one.\n",
     "cases": [
@@ -627,6 +867,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "viral"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "community-growth-program",
+    "skill_md": "---\nname: community-growth-program\ndescription: Designs community growth and participation with member journeys, rituals, moderation, contribution loops and measures.\nroles: [cmo, ceo]\ntools: [grow.read, network.read]\noutput: brief\ntaxonomy: {mkt_community: advanced, mkt_social_media: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Community Growth Program Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and network.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs community growth and participation with member journeys, rituals, moderation, contribution loops and measures. Focus on member contribution loop.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for member contribution loop.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for moderation owner when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "community-growth-program",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Community Growth Program Design",
+              "task_scope": "Designs community growth and participation with member journeys, rituals, moderation, contribution loops and measures.",
+              "evidence": [
+                "member contribution loop"
+              ],
+              "omitted_field": "moderation owner"
+            },
+            "network.relationships": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for member contribution loop."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "member contribution loop"
+          ],
+          "must_say_not_recorded": [
+            "moderation owner"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -718,6 +998,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "component-library-specification",
+    "skill_md": "---\nname: component-library-specification\ndescription: Specifies reusable UI component APIs, variants, slots, composition, accessibility and implementation acceptance criteria.\nroles: [cto, cpo]\ntools: [github.read, build.read]\noutput: brief\ntaxonomy: {design_design_systems: advanced, eng_frontend: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Component Library Specification; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied github.read and build.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Specifies reusable UI component APIs, variants, slots, composition, accessibility and implementation acceptance criteria. Focus on component API contract.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for component API contract.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for keyboard interaction when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "component-library-specification",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "github.repos": {
+              "synthetic_fixture": true,
+              "skill_name": "Component Library Specification",
+              "task_scope": "Specifies reusable UI component APIs, variants, slots, composition, accessibility and implementation acceptance criteria.",
+              "evidence": [
+                "component API contract"
+              ],
+              "omitted_field": "keyboard interaction"
+            },
+            "build.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for component API contract."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "component API contract"
+          ],
+          "must_say_not_recorded": [
+            "keyboard interaction"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "content-editorial-strategy",
+    "skill_md": "---\nname: content-editorial-strategy\ndescription: Plans editorial themes, audience journeys, content formats, publishing cadence, review and repurposing.\nroles: [cmo, research_analyst]\ntools: [research.read, grow.read]\noutput: brief\ntaxonomy: {mkt_content: advanced, mkt_copywriting: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Content Strategy and Editorial Planning; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied research.read and grow.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Plans editorial themes, audience journeys, content formats, publishing cadence, review and repurposing. Focus on editorial pillars and cadence.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for editorial pillars and cadence.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for content owner when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "content-editorial-strategy",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "research.library": {
+              "synthetic_fixture": true,
+              "skill_name": "Content Strategy and Editorial Planning",
+              "task_scope": "Plans editorial themes, audience journeys, content formats, publishing cadence, review and repurposing.",
+              "evidence": [
+                "editorial pillars and cadence"
+              ],
+              "omitted_field": "content owner"
+            },
+            "grow.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for editorial pillars and cadence."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "editorial pillars and cadence"
+          ],
+          "must_say_not_recorded": [
+            "content owner"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "content-style-guide-draft",
     "skill_md": "---\nname: content-style-guide-draft\ndescription: Drafts the product's voice and content style guide from its recorded copy and positioning.\nroles: [cmo, cpo]\ntools: [company.read, build.read]\noutput: draft\ntaxonomy: {design_content: proficient, mkt_copywriting: working}\nversion: 1\n---\n1. Read the company profile and positioning (`company.read`) and the product copy recorded in Build (`build.read`).\n2. Write the voice in three principles, each with a do and a don't taken from the recorded copy.\n3. List the product's terms and the words to avoid.\n4. Write \"Not recorded\" for a term the copy uses two ways.\n5. Propose the guide to the marketing and product leads.\n",
     "cases": [
@@ -747,6 +1107,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           "must_say_not_recorded": [],
           "must_not_include": [
             "synergy"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "contract-clause-extraction",
+    "skill_md": "---\nname: contract-clause-extraction\ndescription: Extracts and indexes clauses across a contract set with source references, version identity and classification.\nroles: [general_counsel, coo]\ntools: [data_room.read, company.read]\noutput: brief\ntaxonomy: {legal_contracts: advanced, legal_data_governance: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Contract Clause Extraction and Indexing; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied data_room.read and company.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Extracts and indexes clauses across a contract set with source references, version identity and classification. Focus on clause register with source references.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for clause register with source references.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for document version when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "contract-clause-extraction",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "skill_name": "Contract Clause Extraction and Indexing",
+              "task_scope": "Extracts and indexes clauses across a contract set with source references, version identity and classification.",
+              "evidence": [
+                "clause register with source references"
+              ],
+              "omitted_field": "document version"
+            },
+            "company.profile": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for clause register with source references."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "clause register with source references"
+          ],
+          "must_say_not_recorded": [
+            "document version"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "contract-risk-issue-spotting",
+    "skill_md": "---\nname: contract-risk-issue-spotting\ndescription: Flags contractual obligations, asymmetries, liability exposure and operational dependencies for counsel review.\nroles: [general_counsel, coo]\ntools: [data_room.read, company.read]\noutput: brief\ntaxonomy: {legal_contracts: advanced, legal_compliance_program: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Contract Risk Issue Spotting; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied data_room.read and company.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Flags contractual obligations, asymmetries, liability exposure and operational dependencies for counsel review. Focus on liability and termination risk.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for liability and termination risk.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for liability cap when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "contract-risk-issue-spotting",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "skill_name": "Contract Risk Issue Spotting",
+              "task_scope": "Flags contractual obligations, asymmetries, liability exposure and operational dependencies for counsel review.",
+              "evidence": [
+                "liability and termination risk"
+              ],
+              "omitted_field": "liability cap"
+            },
+            "company.profile": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for liability and termination risk."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "liability and termination risk"
+          ],
+          "must_say_not_recorded": [
+            "liability cap"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -791,6 +1231,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "conversion-landing-page-wireframing",
+    "skill_md": "---\nname: conversion-landing-page-wireframing\ndescription: Structures conversion landing pages around audience intent, proof, objections, trust and a clear action.\nroles: [cmo, cpo]\ntools: [grow.read, build.read]\noutput: brief\ntaxonomy: {design_ui: advanced, mkt_demand_gen: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Conversion Landing Page Wireframing; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and build.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Structures conversion landing pages around audience intent, proof, objections, trust and a clear action. Focus on message-to-proof landing hierarchy.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for message-to-proof landing hierarchy.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for conversion baseline when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "conversion-landing-page-wireframing",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Conversion Landing Page Wireframing",
+              "task_scope": "Structures conversion landing pages around audience intent, proof, objections, trust and a clear action.",
+              "evidence": [
+                "message-to-proof landing hierarchy"
+              ],
+              "omitted_field": "conversion baseline"
+            },
+            "build.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for message-to-proof landing hierarchy."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "message-to-proof landing hierarchy"
+          ],
+          "must_say_not_recorded": [
+            "conversion baseline"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "conversion-rate-experiment-design",
+    "skill_md": "---\nname: conversion-rate-experiment-design\ndescription: Designs controlled conversion experiments with falsifiable hypotheses, control, variant, primary metric and guardrails.\nroles: [cmo, cpo]\ntools: [grow.read, validate.read]\noutput: brief\ntaxonomy: {mkt_growth_marketing: advanced, mkt_analytics: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Conversion Rate Optimization Experiment Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs controlled conversion experiments with falsifiable hypotheses, control, variant, primary metric and guardrails. Focus on control and variant definition.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for control and variant definition.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for baseline conversion rate when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "conversion-rate-experiment-design",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Conversion Rate Optimization Experiment Design",
+              "task_scope": "Designs controlled conversion experiments with falsifiable hypotheses, control, variant, primary metric and guardrails.",
+              "evidence": [
+                "control and variant definition"
+              ],
+              "omitted_field": "baseline conversion rate"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for control and variant definition."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "control and variant definition"
+          ],
+          "must_say_not_recorded": [
+            "baseline conversion rate"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "corporate-records-checklist",
     "skill_md": "---\nname: corporate-records-checklist\ndescription: Lists the corporate records a diligence review expects and marks which are in the data room and which are missing.\nroles: [general_counsel, cfo]\ntools: [data_room.read, cap_table.read]\noutput: brief\ntaxonomy: {legal_corporate: proficient, cap_cap_table: working}\nversion: 1\n---\n1. Read the data room index (`data_room.read`) and the cap table's issuances (`cap_table.read`).\n2. Check for the charter, bylaws, board consents for each issuance, stock purchase agreements and the 83(b) elections recorded.\n3. Mark each as in the data room, missing, or \"Not recorded\" when the cap table does not say whether it applies.\n4. Group the missing items by the issuance they belong to.\n5. Propose the checklist to the general counsel.\n",
     "cases": [
@@ -828,6 +1348,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           "must_say_not_recorded": [],
           "must_not_include": [
             "diligence ready"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "crm-pipeline-hygiene-audit",
+    "skill_md": "---\nname: crm-pipeline-hygiene-audit\ndescription: Audits opportunity records for missing fields, inconsistent stages, stale next steps, duplicates and ownership defects.\nroles: [sales, coo]\ntools: [grow.read, company.read]\noutput: brief\ntaxonomy: {gtm_sales_ops: advanced, gtm_pipeline_mgmt: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for CRM Pipeline Hygiene Audit; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and company.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Audits opportunity records for missing fields, inconsistent stages, stale next steps, duplicates and ownership defects. Focus on CRM field completeness and stale next step.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for CRM field completeness and stale next step.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for last verified date when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "crm-pipeline-hygiene-audit",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "CRM Pipeline Hygiene Audit",
+              "task_scope": "Audits opportunity records for missing fields, inconsistent stages, stale next steps, duplicates and ownership defects.",
+              "evidence": [
+                "CRM field completeness and stale next step"
+              ],
+              "omitted_field": "last verified date"
+            },
+            "company.profile": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for CRM field completeness and stale next step."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "CRM field completeness and stale next step"
+          ],
+          "must_say_not_recorded": [
+            "last verified date"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "customer-expansion-opportunity",
+    "skill_md": "---\nname: customer-expansion-opportunity\ndescription: Identifies account expansion opportunities from footprint, adoption gaps, renewal context and stakeholder signals.\nroles: [sales, cmo]\ntools: [grow.read, network.read]\noutput: brief\ntaxonomy: {gtm_account_management: advanced, gtm_customer_success: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Customer Expansion Opportunity Analysis; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and network.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Identifies account expansion opportunities from footprint, adoption gaps, renewal context and stakeholder signals. Focus on account whitespace and expansion hypothesis.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for account whitespace and expansion hypothesis.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for renewal date when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "customer-expansion-opportunity",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Customer Expansion Opportunity Analysis",
+              "task_scope": "Identifies account expansion opportunities from footprint, adoption gaps, renewal context and stakeholder signals.",
+              "evidence": [
+                "account whitespace and expansion hypothesis"
+              ],
+              "omitted_field": "renewal date"
+            },
+            "network.relationships": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for account whitespace and expansion hypothesis."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "account whitespace and expansion hypothesis"
+          ],
+          "must_say_not_recorded": [
+            "renewal date"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -912,6 +1512,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "dashboard-information-hierarchy",
+    "skill_md": "---\nname: dashboard-information-hierarchy\ndescription: Organizes dashboard metrics and actions by decision priority, role, urgency and drill-down path.\nroles: [cpo, cfo]\ntools: [build.read, validate.read]\noutput: brief\ntaxonomy: {design_information_arch: advanced, design_visual: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Dashboard Information Hierarchy; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Organizes dashboard metrics and actions by decision priority, role, urgency and drill-down path. Focus on decision-priority metric hierarchy.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for decision-priority metric hierarchy.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for metric owner when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "dashboard-information-hierarchy",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Dashboard Information Hierarchy",
+              "task_scope": "Organizes dashboard metrics and actions by decision priority, role, urgency and drill-down path.",
+              "evidence": [
+                "decision-priority metric hierarchy"
+              ],
+              "omitted_field": "metric owner"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for decision-priority metric hierarchy."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "decision-priority metric hierarchy"
+          ],
+          "must_say_not_recorded": [
+            "metric owner"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "data-pipeline-check",
     "skill_md": "---\nname: data-pipeline-check\ndescription: Checks the recorded data pipeline runs for failures, late runs and tables that stopped updating.\nroles: [cto, research_analyst]\ntools: [build.read]\noutput: brief\ntaxonomy: {eng_data_engineering: proficient, eng_databases: working}\nversion: 1\n---\n1. Read the pipeline runs and table freshness recorded in Build (`build.read`).\n2. List failed runs, late runs and tables not updated within their recorded schedule.\n3. Give the last successful run for each.\n4. Write \"Not recorded\" for a table with no schedule.\n5. Propose the check to the engineering lead.\n",
     "cases": [
@@ -984,6 +1624,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "we advise"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "data-visualization-encoding-review",
+    "skill_md": "---\nname: data-visualization-encoding-review\ndescription: Reviews chart encodings, scales, baselines, units, uncertainty and accessibility against supplied metric definitions.\nroles: [cpo, cfo]\ntools: [build.read, validate.read]\noutput: brief\ntaxonomy: {design_visual: advanced, product_analytics: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Data Visualization Encoding Review; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Reviews chart encodings, scales, baselines, units, uncertainty and accessibility against supplied metric definitions. Focus on axis and visual encoding integrity.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for axis and visual encoding integrity.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for measurement unit when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "data-visualization-encoding-review",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Data Visualization Encoding Review",
+              "task_scope": "Reviews chart encodings, scales, baselines, units, uncertainty and accessibility against supplied metric definitions.",
+              "evidence": [
+                "axis and visual encoding integrity"
+              ],
+              "omitted_field": "measurement unit"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for axis and visual encoding integrity."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "axis and visual encoding integrity"
+          ],
+          "must_say_not_recorded": [
+            "measurement unit"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -1106,6 +1786,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "design-development-handoff",
+    "skill_md": "---\nname: design-development-handoff\ndescription: Produces a build-ready handoff contract linking decisions, component states, assets, responsive rules and acceptance tests.\nroles: [cto, cpo]\ntools: [build.read, github.read]\noutput: brief\ntaxonomy: {design_service: advanced, eng_frontend: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Design-to-Development Handoff Specification; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and github.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Produces a build-ready handoff contract linking decisions, component states, assets, responsive rules and acceptance tests. Focus on acceptance criteria traceability.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for acceptance criteria traceability.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for asset ownership when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "design-development-handoff",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Design-to-Development Handoff Specification",
+              "task_scope": "Produces a build-ready handoff contract linking decisions, component states, assets, responsive rules and acceptance tests.",
+              "evidence": [
+                "acceptance criteria traceability"
+              ],
+              "omitted_field": "asset ownership"
+            },
+            "github.repos": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for acceptance criteria traceability."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "acceptance criteria traceability"
+          ],
+          "must_say_not_recorded": [
+            "asset ownership"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "design-implementation-qa",
+    "skill_md": "---\nname: design-implementation-qa\ndescription: Compares implemented interfaces with approved specifications and records reproducible visual and interaction defects.\nroles: [cto, cpo]\ntools: [build.read, github.read]\noutput: brief\ntaxonomy: {design_product: advanced, eng_qa_automation: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Design Implementation QA; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and github.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Compares implemented interfaces with approved specifications and records reproducible visual and interaction defects. Focus on implementation deviation evidence.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for implementation deviation evidence.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for viewport evidence when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "design-implementation-qa",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Design Implementation QA",
+              "task_scope": "Compares implemented interfaces with approved specifications and records reproducible visual and interaction defects.",
+              "evidence": [
+                "implementation deviation evidence"
+              ],
+              "omitted_field": "viewport evidence"
+            },
+            "github.repos": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for implementation deviation evidence."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "implementation deviation evidence"
+          ],
+          "must_say_not_recorded": [
+            "viewport evidence"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "design-system-audit",
     "skill_md": "---\nname: design-system-audit\ndescription: Lists where the product's screens drift from the recorded design system: colours, type and components.\nroles: [cpo, cto]\ntools: [build.read, github.read]\noutput: brief\ntaxonomy: {design_design_systems: proficient, design_ui: working}\nversion: 1\n---\n1. Read the design system tokens and components recorded in Build (`build.read`) and the front-end repository (`github.read`).\n2. List hard-coded colours, font sizes and one-off components that duplicate a system component.\n3. Group them by screen, with the file each lives in.\n4. Write \"Not recorded\" for a token the system does not define.\n5. Propose the audit to the product lead.\n",
     "cases": [
@@ -1149,6 +1909,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "design-system-token-architecture",
+    "skill_md": "---\nname: design-system-token-architecture\ndescription: Defines a scalable token hierarchy spanning primitive, semantic and component tokens, themes and deprecation.\nroles: [cto, cpo]\ntools: [build.read, github.read]\noutput: brief\ntaxonomy: {design_design_systems: advanced, design_ui: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Design System Token Architecture; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and github.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Defines a scalable token hierarchy spanning primitive, semantic and component tokens, themes and deprecation. Focus on primitive-to-semantic token hierarchy.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for primitive-to-semantic token hierarchy.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for dark mode token when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "design-system-token-architecture",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Design System Token Architecture",
+              "task_scope": "Defines a scalable token hierarchy spanning primitive, semantic and component tokens, themes and deprecation.",
+              "evidence": [
+                "primitive-to-semantic token hierarchy"
+              ],
+              "omitted_field": "dark mode token"
+            },
+            "github.repos": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for primitive-to-semantic token hierarchy."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "primitive-to-semantic token hierarchy"
+          ],
+          "must_say_not_recorded": [
+            "dark mode token"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "discovery-call-preparation",
+    "skill_md": "---\nname: discovery-call-preparation\ndescription: Builds an evidence-led discovery question tree with hypotheses, qualification branches, impact probes and exit signals.\nroles: [sales, ceo]\ntools: [grow.read, network.read]\noutput: brief\ntaxonomy: {gtm_sales_enablement: advanced, gtm_enterprise_sales: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Discovery Call Preparation; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and network.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Builds an evidence-led discovery question tree with hypotheses, qualification branches, impact probes and exit signals. Focus on discovery question tree and qualification branch.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for discovery question tree and qualification branch.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for decision criteria when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "discovery-call-preparation",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Discovery Call Preparation",
+              "task_scope": "Builds an evidence-led discovery question tree with hypotheses, qualification branches, impact probes and exit signals.",
+              "evidence": [
+                "discovery question tree and qualification branch"
+              ],
+              "omitted_field": "decision criteria"
+            },
+            "network.relationships": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for discovery question tree and qualification branch."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "discovery question tree and qualification branch"
+          ],
+          "must_say_not_recorded": [
+            "decision criteria"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "due-diligence-request-list",
     "skill_md": "---\nname: due-diligence-request-list\ndescription: Prepares the due-diligence request list for a round from what the data room already holds.\nroles: [cfo, general_counsel, investor_relations]\ntools: [data_room.read, cap_table.read, compliance.read]\noutput: draft\ntaxonomy: {cap_fundraising: proficient, legal_corporate: working}\nversion: 1\n---\n1. Read the data room index (`data_room.read`), the cap table summary (`cap_table.read`) and the compliance calendar (`compliance.read`).\n2. Start from the standard list: corporate documents, cap table, financials, material contracts, IP, employees, compliance.\n3. Mark each item as \"In the data room\" (naming the file) or \"Not recorded: missing\".\n4. Never draft or alter a legal document. Point to the record that would answer each missing item.\n5. Propose the list for the founder to work through. Nothing is shared with an investor.\n",
     "cases": [
@@ -1179,6 +2019,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "shared with"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "email-lifecycle-automation",
+    "skill_md": "---\nname: email-lifecycle-automation\ndescription: Designs trigger-based lifecycle journeys with entry rules, suppression, branching, timing, frequency caps and exit conditions.\nroles: [cmo, coo]\ntools: [grow.read, company.read]\noutput: brief\ntaxonomy: {mkt_lifecycle: advanced, mkt_analytics: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Email Lifecycle Automation Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and company.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs trigger-based lifecycle journeys with entry rules, suppression, branching, timing, frequency caps and exit conditions. Focus on trigger and suppression logic.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for trigger and suppression logic.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for consent status when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "email-lifecycle-automation",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Email Lifecycle Automation Design",
+              "task_scope": "Designs trigger-based lifecycle journeys with entry rules, suppression, branching, timing, frequency caps and exit conditions.",
+              "evidence": [
+                "trigger and suppression logic"
+              ],
+              "omitted_field": "consent status"
+            },
+            "company.profile": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for trigger and suppression logic."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "trigger and suppression logic"
+          ],
+          "must_say_not_recorded": [
+            "consent status"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -1221,6 +2101,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "signing bonus"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "enterprise-account-plan",
+    "skill_md": "---\nname: enterprise-account-plan\ndescription: Maps strategic enterprise accounts, buying committees, whitespace, objectives, procurement and engagement risks.\nroles: [sales, ceo]\ntools: [grow.read, network.read]\noutput: brief\ntaxonomy: {gtm_enterprise_sales: advanced, gtm_account_management: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Enterprise Account Planning; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and network.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Maps strategic enterprise accounts, buying committees, whitespace, objectives, procurement and engagement risks. Focus on multi-threaded stakeholder map.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for multi-threaded stakeholder map.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for budget owner when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "enterprise-account-plan",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Enterprise Account Planning",
+              "task_scope": "Maps strategic enterprise accounts, buying committees, whitespace, objectives, procurement and engagement risks.",
+              "evidence": [
+                "multi-threaded stakeholder map"
+              ],
+              "omitted_field": "budget owner"
+            },
+            "network.relationships": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for multi-threaded stakeholder map."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "multi-threaded stakeholder map"
+          ],
+          "must_say_not_recorded": [
+            "budget owner"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "entity-structure-governance-review",
+    "skill_md": "---\nname: entity-structure-governance-review\ndescription: Reviews entity chart, ownership, jurisdiction and governance allocation, extending beyond document-presence checks.\nroles: [general_counsel, coo]\ntools: [company.read, compliance.read]\noutput: brief\ntaxonomy: {legal_corporate: advanced, legal_compliance_program: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Corporate Structure and Entity Governance Review; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied company.read and compliance.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Reviews entity chart, ownership, jurisdiction and governance allocation, extending beyond document-presence checks. Focus on entity ownership and authority map.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for entity ownership and authority map.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for governing law when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "entity-structure-governance-review",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "company.profile": {
+              "synthetic_fixture": true,
+              "skill_name": "Corporate Structure and Entity Governance Review",
+              "task_scope": "Reviews entity chart, ownership, jurisdiction and governance allocation, extending beyond document-presence checks.",
+              "evidence": [
+                "entity ownership and authority map"
+              ],
+              "omitted_field": "governing law"
+            },
+            "compliance.calendar": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for entity ownership and authority map."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "entity ownership and authority map"
+          ],
+          "must_say_not_recorded": [
+            "governing law"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -1362,6 +2322,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "fund-formation-document-checklist",
+    "skill_md": "---\nname: fund-formation-document-checklist\ndescription: Builds a fund-formation document and dependency checklist across governing, offering, service-provider and regulatory materials.\nroles: [general_counsel, coo]\ntools: [company.read, compliance.read]\noutput: brief\ntaxonomy: {legal_corporate: advanced, legal_securities: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Fund Formation Documentation Checklist; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied company.read and compliance.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Builds a fund-formation document and dependency checklist across governing, offering, service-provider and regulatory materials. Focus on fund formation dependency.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for fund formation dependency.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for jurisdiction-specific filing when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "fund-formation-document-checklist",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "company.profile": {
+              "synthetic_fixture": true,
+              "skill_name": "Fund Formation Documentation Checklist",
+              "task_scope": "Builds a fund-formation document and dependency checklist across governing, offering, service-provider and regulatory materials.",
+              "evidence": [
+                "fund formation dependency"
+              ],
+              "omitted_field": "jurisdiction-specific filing"
+            },
+            "compliance.calendar": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for fund formation dependency."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "fund formation dependency"
+          ],
+          "must_say_not_recorded": [
+            "jurisdiction-specific filing"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "gp-lp-agreement-provision-analysis",
+    "skill_md": "---\nname: gp-lp-agreement-provision-analysis\ndescription: Structures key GP/LP provisions for review including authority, economics, duties, conflicts, transfers and reporting.\nroles: [general_counsel, cfo]\ntools: [raise.read, data_room.read]\noutput: brief\ntaxonomy: {legal_contracts: advanced, legal_securities: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for GP and LP Agreement Provision Analysis; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied raise.read and data_room.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Structures key GP/LP provisions for review including authority, economics, duties, conflicts, transfers and reporting. Focus on GP authority and LP rights.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for GP authority and LP rights.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for distribution waterfall definition when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "gp-lp-agreement-provision-analysis",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "raise.records": {
+              "synthetic_fixture": true,
+              "skill_name": "GP and LP Agreement Provision Analysis",
+              "task_scope": "Structures key GP/LP provisions for review including authority, economics, duties, conflicts, transfers and reporting.",
+              "evidence": [
+                "GP authority and LP rights"
+              ],
+              "omitted_field": "distribution waterfall definition"
+            },
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for GP authority and LP rights."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "GP authority and LP rights"
+          ],
+          "must_say_not_recorded": [
+            "distribution waterfall definition"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "grant-application-draft",
     "skill_md": "---\nname: grant-application-draft\ndescription: Drafts answers for a non-dilutive grant application from the venture's recorded summary, milestones and budget.\nroles: [ceo, cfo]\ntools: [project.read, build.read, grow.read]\noutput: draft\ntaxonomy: {cap_grants_nondilutive: proficient, finops_fpna: working}\nversion: 1\n---\n1. Read the venture summary (`project.read`), the milestones and plan (`build.read`) and the budget recorded in Grow (`grow.read`).\n2. Draft each answer: the problem, the innovation, the milestones with dates, the team and the budget use.\n3. Use only recorded figures and dates; write \"Not recorded\" where the application asks for one the records lack.\n4. Keep each answer within the word limit the application records.\n5. Propose the draft to the CEO. A person submits it.\n",
     "cases": [
@@ -1400,6 +2440,126 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "guaranteed jobs"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "gtm-motion-architecture",
+    "skill_md": "---\nname: gtm-motion-architecture\ndescription: Selects primary and supporting sales-led, product-led and partner-led motions against buyer and delivery constraints.\nroles: [ceo, cmo]\ntools: [project.read, grow.read]\noutput: brief\ntaxonomy: {gtm_market_entry: advanced, gtm_sales_strategy: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for GTM Motion Architecture; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied project.read and grow.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Selects primary and supporting sales-led, product-led and partner-led motions against buyer and delivery constraints. Focus on primary acquisition and sales motion.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for primary acquisition and sales motion.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for sales capacity when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "gtm-motion-architecture",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "project.summary": {
+              "synthetic_fixture": true,
+              "skill_name": "GTM Motion Architecture",
+              "task_scope": "Selects primary and supporting sales-led, product-led and partner-led motions against buyer and delivery constraints.",
+              "evidence": [
+                "primary acquisition and sales motion"
+              ],
+              "omitted_field": "sales capacity"
+            },
+            "grow.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for primary acquisition and sales motion."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "primary acquisition and sales motion"
+          ],
+          "must_say_not_recorded": [
+            "sales capacity"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "high-fidelity-prototype-validation",
+    "skill_md": "---\nname: high-fidelity-prototype-validation\ndescription: Validates high-fidelity prototypes against target tasks and acceptance criteria before implementation.\nroles: [cpo, cto]\ntools: [build.read, validate.read]\noutput: brief\ntaxonomy: {design_prototyping: advanced, design_product: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for High-Fidelity Prototype Validation; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Validates high-fidelity prototypes against target tasks and acceptance criteria before implementation. Focus on prototype task coverage.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for prototype task coverage.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for prototype completion rate when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "high-fidelity-prototype-validation",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "High-Fidelity Prototype Validation",
+              "task_scope": "Validates high-fidelity prototypes against target tasks and acceptance criteria before implementation.",
+              "evidence": [
+                "prototype task coverage"
+              ],
+              "omitted_field": "prototype completion rate"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for prototype task coverage."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "prototype task coverage"
+          ],
+          "must_say_not_recorded": [
+            "prototype completion rate"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "icp-buyer-persona-definition",
+    "skill_md": "---\nname: icp-buyer-persona-definition\ndescription: Defines buying-committee personas and decision roles from evidence, distinct from quantitative ICP segment scoring.\nroles: [cpo, sales]\ntools: [grow.read, validate.read]\noutput: brief\ntaxonomy: {gtm_market_entry: advanced, gtm_sales_strategy: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for ICP and Buyer Persona Definition; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Defines buying-committee personas and decision roles from evidence, distinct from quantitative ICP segment scoring. Focus on economic buyer champion and evaluator roles.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for economic buyer champion and evaluator roles.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for procurement authority when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "icp-buyer-persona-definition",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "ICP and Buyer Persona Definition",
+              "task_scope": "Defines buying-committee personas and decision roles from evidence, distinct from quantitative ICP segment scoring.",
+              "evidence": [
+                "economic buyer champion and evaluator roles"
+              ],
+              "omitted_field": "procurement authority"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for economic buyer champion and evaluator roles."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "economic buyer champion and evaluator roles"
+          ],
+          "must_say_not_recorded": [
+            "procurement authority"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -1452,6 +2612,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "influencer-partner-evaluation",
+    "skill_md": "---\nname: influencer-partner-evaluation\ndescription: Evaluates influencer partners for audience fit, authenticity, content quality, disclosure risk and commercial contribution.\nroles: [cmo, sales]\ntools: [research.read, grow.read]\noutput: brief\ntaxonomy: {mkt_influencer: advanced, mkt_pr_comms: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Influencer Partnership Evaluation; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied research.read and grow.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Evaluates influencer partners for audience fit, authenticity, content quality, disclosure risk and commercial contribution. Focus on audience fit and authenticity.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for audience fit and authenticity.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for verified audience demographics when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "influencer-partner-evaluation",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "research.library": {
+              "synthetic_fixture": true,
+              "skill_name": "Influencer Partnership Evaluation",
+              "task_scope": "Evaluates influencer partners for audience fit, authenticity, content quality, disclosure risk and commercial contribution.",
+              "evidence": [
+                "audience fit and authenticity"
+              ],
+              "omitted_field": "verified audience demographics"
+            },
+            "grow.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for audience fit and authenticity."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "audience fit and authenticity"
+          ],
+          "must_say_not_recorded": [
+            "verified audience demographics"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "information-architecture-map",
     "skill_md": "---\nname: information-architecture-map\ndescription: Maps the product's recorded screens and navigation into a site map, with orphaned and duplicated pages flagged.\nroles: [cpo]\ntools: [build.read]\noutput: brief\ntaxonomy: {design_information_arch: working, design_ux_research: aware}\nversion: 1\n---\n1. Read the screens and navigation recorded in Build (`build.read`).\n2. Draw the map as nested lists, from the top navigation down.\n3. Flag screens no navigation reaches and screens reached under two names.\n4. Write \"Not recorded\" for a screen with no recorded parent.\n5. Propose the map to the product lead.\n",
     "cases": [
@@ -1488,6 +2688,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           "must_say_not_recorded": [],
           "must_not_include": [
             "perfectly organised"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "interaction-state-specification",
+    "skill_md": "---\nname: interaction-state-specification\ndescription: Defines interaction state machines including loading, empty, error, success, disabled, retry and recovery behaviour.\nroles: [cpo, cto]\ntools: [build.read, github.read]\noutput: brief\ntaxonomy: {design_interaction: advanced, design_ui: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Interaction State Specification; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and github.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Defines interaction state machines including loading, empty, error, success, disabled, retry and recovery behaviour. Focus on state transition and retry behaviour.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for state transition and retry behaviour.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for interruption recovery when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "interaction-state-specification",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Interaction State Specification",
+              "task_scope": "Defines interaction state machines including loading, empty, error, success, disabled, retry and recovery behaviour.",
+              "evidence": [
+                "state transition and retry behaviour"
+              ],
+              "omitted_field": "interruption recovery"
+            },
+            "github.repos": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for state transition and retry behaviour."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "state transition and retry behaviour"
+          ],
+          "must_say_not_recorded": [
+            "interruption recovery"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -1533,6 +2773,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "investment-agreement-clause-review",
+    "skill_md": "---\nname: investment-agreement-clause-review\ndescription: Reviews investment-agreement provisions for economic and control implications, cross-reference issues and counsel questions.\nroles: [general_counsel, cfo]\ntools: [raise.read, data_room.read]\noutput: brief\ntaxonomy: {legal_contracts: advanced, legal_securities: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Investment Agreement Clause Review; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied raise.read and data_room.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Reviews investment-agreement provisions for economic and control implications, cross-reference issues and counsel questions. Focus on economic and control provision.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for economic and control provision.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for side letter reference when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "investment-agreement-clause-review",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "raise.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Investment Agreement Clause Review",
+              "task_scope": "Reviews investment-agreement provisions for economic and control implications, cross-reference issues and counsel questions.",
+              "evidence": [
+                "economic and control provision"
+              ],
+              "omitted_field": "side letter reference"
+            },
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for economic and control provision."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "economic and control provision"
+          ],
+          "must_say_not_recorded": [
+            "side letter reference"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "investor-target-list",
     "skill_md": "---\nname: investor-target-list\ndescription: Builds a list of investors to approach from the network's recorded relationships, their stage and sector fit and who can introduce.\nroles: [investor_relations, ceo]\ntools: [network.read, raise.read]\noutput: brief\ntaxonomy: {cap_venture_capital: proficient, cap_fundraising: working}\nversion: 1\n---\n1. Read the investors in the network, their recorded stages and sectors, and who on the team knows them (`network.read`), and the round being raised (`raise.read`).\n2. List the investors whose recorded stage and sector match the round, with the warmest path to each, by name.\n3. Order the list by path strength, then by sector fit.\n4. Write \"Not recorded\" for an investor with no recorded check size.\n5. Propose the list to the CEO. It contacts no one.\n",
     "cases": [
@@ -1567,6 +2847,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "will invest"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "ip-assignment-chain-of-title",
+    "skill_md": "---\nname: ip-assignment-chain-of-title\ndescription: Traces IP title across founders, employees, contractors and entity transfers to detect chain-of-title gaps.\nroles: [general_counsel, cto]\ntools: [company.read, data_room.read]\noutput: brief\ntaxonomy: {legal_ip: advanced, legal_corporate: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for IP Ownership and Assignment Chain Review; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied company.read and data_room.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Traces IP title across founders, employees, contractors and entity transfers to detect chain-of-title gaps. Focus on continuous IP chain of title.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for continuous IP chain of title.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for contractor assignment when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "ip-assignment-chain-of-title",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "company.profile": {
+              "synthetic_fixture": true,
+              "skill_name": "IP Ownership and Assignment Chain Review",
+              "task_scope": "Traces IP title across founders, employees, contractors and entity transfers to detect chain-of-title gaps.",
+              "evidence": [
+                "continuous IP chain of title"
+              ],
+              "omitted_field": "contractor assignment"
+            },
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for continuous IP chain of title."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "continuous IP chain of title"
+          ],
+          "must_say_not_recorded": [
+            "contractor assignment"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -1649,6 +2969,206 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           "must_not_include": [
             "€",
             "$"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "kyc-aml-evidence-completeness",
+    "skill_md": "---\nname: kyc-aml-evidence-completeness\ndescription: Checks KYC/AML evidence coverage and exception status against a defined onboarding policy without final compliance determination.\nroles: [general_counsel, cfo]\ntools: [compliance.read, data_room.read]\noutput: brief\ntaxonomy: {legal_aml_kyc: advanced, legal_compliance_program: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for KYC and AML Evidence Completeness Check; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied compliance.read and data_room.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Checks KYC/AML evidence coverage and exception status against a defined onboarding policy without final compliance determination. Focus on beneficial ownership evidence.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for beneficial ownership evidence.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for screening timestamp when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "kyc-aml-evidence-completeness",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "compliance.calendar": {
+              "synthetic_fixture": true,
+              "skill_name": "KYC and AML Evidence Completeness Check",
+              "task_scope": "Checks KYC/AML evidence coverage and exception status against a defined onboarding policy without final compliance determination.",
+              "evidence": [
+                "beneficial ownership evidence"
+              ],
+              "omitted_field": "screening timestamp"
+            },
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for beneficial ownership evidence."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "beneficial ownership evidence"
+          ],
+          "must_say_not_recorded": [
+            "screening timestamp"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "lead-qualification-scoring",
+    "skill_md": "---\nname: lead-qualification-scoring\ndescription: Scores individual leads on fit, need, authority, urgency and access with explicit evidence and unknowns.\nroles: [sales, ceo]\ntools: [grow.read, validate.read]\noutput: brief\ntaxonomy: {gtm_pipeline_mgmt: advanced, gtm_outbound: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Lead Qualification and Scoring; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Scores individual leads on fit, need, authority, urgency and access with explicit evidence and unknowns. Focus on lead qualification evidence and disposition.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for lead qualification evidence and disposition.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for decision timeline when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "lead-qualification-scoring",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Lead Qualification and Scoring",
+              "task_scope": "Scores individual leads on fit, need, authority, urgency and access with explicit evidence and unknowns.",
+              "evidence": [
+                "lead qualification evidence and disposition"
+              ],
+              "omitted_field": "decision timeline"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for lead qualification evidence and disposition."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "lead qualification evidence and disposition"
+          ],
+          "must_say_not_recorded": [
+            "decision timeline"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "legal-due-diligence-coordination",
+    "skill_md": "---\nname: legal-due-diligence-coordination\ndescription: Coordinates legal diligence workstreams, evidence owners, gaps, deadlines and counsel questions, rather than a static document list.\nroles: [general_counsel, ceo]\ntools: [data_room.read, raise.read]\noutput: brief\ntaxonomy: {legal_compliance_program: advanced, legal_contracts: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Legal Due Diligence Coordination; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied data_room.read and raise.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Coordinates legal diligence workstreams, evidence owners, gaps, deadlines and counsel questions, rather than a static document list. Focus on legal diligence workstream ownership.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for legal diligence workstream ownership.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for counsel response deadline when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "legal-due-diligence-coordination",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "skill_name": "Legal Due Diligence Coordination",
+              "task_scope": "Coordinates legal diligence workstreams, evidence owners, gaps, deadlines and counsel questions, rather than a static document list.",
+              "evidence": [
+                "legal diligence workstream ownership"
+              ],
+              "omitted_field": "counsel response deadline"
+            },
+            "raise.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for legal diligence workstream ownership."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "legal diligence workstream ownership"
+          ],
+          "must_say_not_recorded": [
+            "counsel response deadline"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "linkedin-company-growth",
+    "skill_md": "---\nname: linkedin-company-growth\ndescription: Designs a company-page growth system covering audience, content pillars, employee participation and distribution.\nroles: [cmo, ceo]\ntools: [grow.read, research.read]\noutput: brief\ntaxonomy: {mkt_social_media: advanced, mkt_brand_strategy: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for LinkedIn Company Page Growth Strategy; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and research.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs a company-page growth system covering audience, content pillars, employee participation and distribution. Focus on employee advocacy and audience distribution.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for employee advocacy and audience distribution.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for baseline follower count when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "linkedin-company-growth",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "LinkedIn Company Page Growth Strategy",
+              "task_scope": "Designs a company-page growth system covering audience, content pillars, employee participation and distribution.",
+              "evidence": [
+                "employee advocacy and audience distribution"
+              ],
+              "omitted_field": "baseline follower count"
+            },
+            "research.library": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for employee advocacy and audience distribution."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "employee advocacy and audience distribution"
+          ],
+          "must_say_not_recorded": [
+            "baseline follower count"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "logo-identity-critique",
+    "skill_md": "---\nname: logo-identity-critique\ndescription: Critiques logo and identity options against brand objectives, reproduction constraints and real use contexts.\nroles: [cmo, cpo]\ntools: [build.read, research.read]\noutput: brief\ntaxonomy: {design_graphic: advanced, design_brand_identity: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Logo and Identity Critique; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and research.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Critiques logo and identity options against brand objectives, reproduction constraints and real use contexts. Focus on small-size and monochrome legibility.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for small-size and monochrome legibility.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for monochrome version when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "logo-identity-critique",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Logo and Identity Critique",
+              "task_scope": "Critiques logo and identity options against brand objectives, reproduction constraints and real use contexts.",
+              "evidence": [
+                "small-size and monochrome legibility"
+              ],
+              "omitted_field": "monochrome version"
+            },
+            "research.library": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for small-size and monochrome legibility."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "small-size and monochrome legibility"
+          ],
+          "must_say_not_recorded": [
+            "monochrome version"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -1744,6 +3264,166 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "huge opportunity"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "marketing-competitive-intelligence",
+    "skill_md": "---\nname: marketing-competitive-intelligence\ndescription: Tracks competitors' positioning, campaign themes, audience claims and messaging shifts using dated evidence.\nroles: [cmo, research_analyst]\ntools: [research.read, grow.read]\noutput: brief\ntaxonomy: {mkt_brand_strategy: advanced, mkt_analytics: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Marketing Competitive Intelligence; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied research.read and grow.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Tracks competitors' positioning, campaign themes, audience claims and messaging shifts using dated evidence. Focus on competitor messaging shift.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for competitor messaging shift.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for observation date when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "marketing-competitive-intelligence",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "research.library": {
+              "synthetic_fixture": true,
+              "skill_name": "Marketing Competitive Intelligence",
+              "task_scope": "Tracks competitors' positioning, campaign themes, audience claims and messaging shifts using dated evidence.",
+              "evidence": [
+                "competitor messaging shift"
+              ],
+              "omitted_field": "observation date"
+            },
+            "grow.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for competitor messaging shift."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "competitor messaging shift"
+          ],
+          "must_say_not_recorded": [
+            "observation date"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "marketing-funnel-cohort-analysis",
+    "skill_md": "---\nname: marketing-funnel-cohort-analysis\ndescription: Analyzes acquisition cohorts through lead and purchase conversion, distinct from general customer-retention cohorts.\nroles: [cmo, cfo]\ntools: [grow.read, validate.read]\noutput: brief\ntaxonomy: {mkt_analytics: advanced, mkt_growth_marketing: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Marketing Funnel and Cohort Analysis; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Analyzes acquisition cohorts through lead and purchase conversion, distinct from general customer-retention cohorts. Focus on acquisition cohort conversion.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for acquisition cohort conversion.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for cohort acquisition period when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "marketing-funnel-cohort-analysis",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Marketing Funnel and Cohort Analysis",
+              "task_scope": "Analyzes acquisition cohorts through lead and purchase conversion, distinct from general customer-retention cohorts.",
+              "evidence": [
+                "acquisition cohort conversion"
+              ],
+              "omitted_field": "cohort acquisition period"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for acquisition cohort conversion."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "acquisition cohort conversion"
+          ],
+          "must_say_not_recorded": [
+            "cohort acquisition period"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "marketing-performance-reporting",
+    "skill_md": "---\nname: marketing-performance-reporting\ndescription: Produces a decision-oriented report connecting objectives, spend, funnel outcomes, variance and next actions.\nroles: [cmo, cfo]\ntools: [grow.read, validate.read]\noutput: brief\ntaxonomy: {mkt_analytics: advanced, mkt_growth_marketing: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Marketing Performance Reporting; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Produces a decision-oriented report connecting objectives, spend, funnel outcomes, variance and next actions. Focus on objective-to-outcome variance.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for objective-to-outcome variance.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for reporting period when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "marketing-performance-reporting",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Marketing Performance Reporting",
+              "task_scope": "Produces a decision-oriented report connecting objectives, spend, funnel outcomes, variance and next actions.",
+              "evidence": [
+                "objective-to-outcome variance"
+              ],
+              "omitted_field": "reporting period"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for objective-to-outcome variance."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "objective-to-outcome variance"
+          ],
+          "must_say_not_recorded": [
+            "reporting period"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "mobile-product-experience-review",
+    "skill_md": "---\nname: mobile-product-experience-review\ndescription: Reviews mobile task completion, navigation, touch interaction, accessibility and device-specific constraints.\nroles: [cpo, cto]\ntools: [build.read, validate.read]\noutput: brief\ntaxonomy: {design_product: advanced, eng_mobile: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Mobile Product Experience Review; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Reviews mobile task completion, navigation, touch interaction, accessibility and device-specific constraints. Focus on mobile task completion and recovery.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for mobile task completion and recovery.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for offline state when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "mobile-product-experience-review",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Mobile Product Experience Review",
+              "task_scope": "Reviews mobile task completion, navigation, touch interaction, accessibility and device-specific constraints.",
+              "evidence": [
+                "mobile task completion and recovery"
+              ],
+              "omitted_field": "offline state"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for mobile task completion and recovery."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "mobile task completion and recovery"
+          ],
+          "must_say_not_recorded": [
+            "offline state"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -1885,6 +3565,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "nda-confidentiality-review",
+    "skill_md": "---\nname: nda-confidentiality-review\ndescription: Reviews existing NDA scope, exceptions, permitted disclosure, duration, survival and return/destruction mechanics.\nroles: [general_counsel, cto]\ntools: [data_room.read, company.read]\noutput: brief\ntaxonomy: {legal_contracts: advanced, legal_ip: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for NDA Confidentiality Review; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied data_room.read and company.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Reviews existing NDA scope, exceptions, permitted disclosure, duration, survival and return/destruction mechanics. Focus on confidential information scope.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for confidential information scope.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for survival period when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "nda-confidentiality-review",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "skill_name": "NDA Confidentiality Review",
+              "task_scope": "Reviews existing NDA scope, exceptions, permitted disclosure, duration, survival and return/destruction mechanics.",
+              "evidence": [
+                "confidential information scope"
+              ],
+              "omitted_field": "survival period"
+            },
+            "company.profile": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for confidential information scope."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "confidential information scope"
+          ],
+          "must_say_not_recorded": [
+            "survival period"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "nda-first-draft",
     "skill_md": "---\nname: nda-first-draft\ndescription: Drafts a mutual NDA from the company profile and the counterparty's recorded details, for counsel to review.\nroles: [general_counsel]\ntools: [company.read, network.read]\noutput: draft\ntaxonomy: {legal_contracts: working, legal_corporate: aware}\nversion: 1\n---\n1. Read the company's legal name and jurisdiction (`company.read`) and the counterparty's recorded name and purpose (`network.read`).\n2. Draft a mutual NDA: the parties, the purpose, what counts as confidential, the exclusions, the term and the return of materials.\n3. Mark every bracketed blank the records do not fill as \"Not recorded\".\n4. Add a note at the top that counsel must review the draft before anyone signs.\n5. Propose the draft to the general counsel.\n",
     "cases": [
@@ -1964,6 +3684,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "record-breaking"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "newsletter-program-design",
+    "skill_md": "---\nname: newsletter-program-design\ndescription: Designs newsletter purpose, audience segments, editorial format, cadence, governance and performance model.\nroles: [cmo, cmo]\ntools: [grow.read, project.read]\noutput: brief\ntaxonomy: {mkt_lifecycle: advanced, mkt_content: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Newsletter Program Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and project.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs newsletter purpose, audience segments, editorial format, cadence, governance and performance model. Focus on subscriber promise and audience segment.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for subscriber promise and audience segment.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for consent basis when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "newsletter-program-design",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Newsletter Program Design",
+              "task_scope": "Designs newsletter purpose, audience segments, editorial format, cadence, governance and performance model.",
+              "evidence": [
+                "subscriber promise and audience segment"
+              ],
+              "omitted_field": "consent basis"
+            },
+            "project.summary": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for subscriber promise and audience segment."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "subscriber promise and audience segment"
+          ],
+          "must_say_not_recorded": [
+            "consent basis"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -2105,6 +3865,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "outbound-prospecting-design",
+    "skill_md": "---\nname: outbound-prospecting-design\ndescription: Designs account and contact prospecting by segment, observable trigger event, relevant buyer role and relationship route.\nroles: [sales, research_analyst]\ntools: [grow.read, network.read]\noutput: brief\ntaxonomy: {gtm_outbound: advanced, gtm_sales_strategy: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Outbound Prospecting Strategy; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and network.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs account and contact prospecting by segment, observable trigger event, relevant buyer role and relationship route. Focus on trigger-based account prioritization.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for trigger-based account prioritization.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for contact role when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "outbound-prospecting-design",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Outbound Prospecting Strategy",
+              "task_scope": "Designs account and contact prospecting by segment, observable trigger event, relevant buyer role and relationship route.",
+              "evidence": [
+                "trigger-based account prioritization"
+              ],
+              "omitted_field": "contact role"
+            },
+            "network.relationships": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for trigger-based account prioritization."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "trigger-based account prioritization"
+          ],
+          "must_say_not_recorded": [
+            "contact role"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "outbound-sequence-draft",
     "skill_md": "---\nname: outbound-sequence-draft\ndescription: Drafts a three-touch outbound sequence for one segment from recorded problems and wins, for a person to review and send.\nroles: [sales]\ntools: [validate.read, grow.read]\noutput: draft\ntaxonomy: {gtm_outbound: working, mkt_copywriting: working}\nversion: 1\n---\n1. Read the segment's recorded problems (`validate.read`) and the customer wins recorded in Grow (`grow.read`).\n2. Draft three short touches: the problem, a recorded proof point, and a plain ask for a call.\n3. Use only proof points that are recorded; name a customer only when the record says they agreed to be named.\n4. Write \"Not recorded\" in place of any figure no record gives.\n5. Propose the sequence to the sales lead. A person sends every message.\n",
     "cases": [
@@ -2143,6 +3943,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           "must_say_not_recorded": [],
           "must_not_include": [
             "guaranteed results"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "paid-acquisition-experiment",
+    "skill_md": "---\nname: paid-acquisition-experiment\ndescription: Designs controlled paid-acquisition tests with hypothesis, audience, creative variable, budget guardrails and stopping rules.\nroles: [cmo, cmo]\ntools: [grow.read, validate.read]\noutput: brief\ntaxonomy: {mkt_paid_social: advanced, mkt_demand_gen: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Paid Acquisition Experiment Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs controlled paid-acquisition tests with hypothesis, audience, creative variable, budget guardrails and stopping rules. Focus on controlled acquisition experiment.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for controlled acquisition experiment.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for experiment budget when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "paid-acquisition-experiment",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Paid Acquisition Experiment Design",
+              "task_scope": "Designs controlled paid-acquisition tests with hypothesis, audience, creative variable, budget guardrails and stopping rules.",
+              "evidence": [
+                "controlled acquisition experiment"
+              ],
+              "omitted_field": "experiment budget"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for controlled acquisition experiment."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "controlled acquisition experiment"
+          ],
+          "must_say_not_recorded": [
+            "experiment budget"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -2234,6 +4074,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "pipeline-health-diagnostics",
+    "skill_md": "---\nname: pipeline-health-diagnostics\ndescription: Diagnoses pipeline stage aging, coverage, concentration and progression fragility rather than producing a weekly deal review.\nroles: [sales, ceo]\ntools: [grow.read, raise.read]\noutput: brief\ntaxonomy: {gtm_pipeline_mgmt: advanced, gtm_sales_ops: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Pipeline Health Diagnostics; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and raise.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Diagnoses pipeline stage aging, coverage, concentration and progression fragility rather than producing a weekly deal review. Focus on stage aging and pipeline coverage.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for stage aging and pipeline coverage.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for quarterly target when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "pipeline-health-diagnostics",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Pipeline Health Diagnostics",
+              "task_scope": "Diagnoses pipeline stage aging, coverage, concentration and progression fragility rather than producing a weekly deal review.",
+              "evidence": [
+                "stage aging and pipeline coverage"
+              ],
+              "omitted_field": "quarterly target"
+            },
+            "raise.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for stage aging and pipeline coverage."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "stage aging and pipeline coverage"
+          ],
+          "must_say_not_recorded": [
+            "quarterly target"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "pipeline-review-brief",
     "skill_md": "---\nname: pipeline-review-brief\ndescription: Prepares the weekly pipeline review: deals by stage, what moved, what stalled and what has no next step.\nroles: [sales, ceo]\ntools: [grow.read]\noutput: brief\ntaxonomy: {gtm_pipeline_mgmt: proficient, gtm_sales_ops: working}\nversion: 1\n---\n1. Read the open deals, their stages, values and last activity (`grow.read`).\n2. List the deals that moved stage this week and those with no activity in 14 days.\n3. Total the pipeline by stage; a deal with no recorded value counts in the number of deals, not in the total.\n4. Write \"Not recorded\" for a deal with no next step.\n5. Propose the brief to the sales lead.\n",
     "cases": [
@@ -2271,6 +4151,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "will close this week"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "pitch-deck-visual-storytelling",
+    "skill_md": "---\nname: pitch-deck-visual-storytelling\ndescription: Designs investor-deck narrative pacing and visual hierarchy, complementing rather than replacing financial analysis.\nroles: [ceo, investor_relations]\ntools: [raise.read, build.read]\noutput: brief\ntaxonomy: {design_graphic: advanced, cap_fundraising: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Pitch Deck Visual Storytelling; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied raise.read and build.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs investor-deck narrative pacing and visual hierarchy, complementing rather than replacing financial analysis. Focus on one decision message per slide.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for one decision message per slide.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for traction period when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "pitch-deck-visual-storytelling",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "raise.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Pitch Deck Visual Storytelling",
+              "task_scope": "Designs investor-deck narrative pacing and visual hierarchy, complementing rather than replacing financial analysis.",
+              "evidence": [
+                "one decision message per slide"
+              ],
+              "omitted_field": "traction period"
+            },
+            "build.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for one decision message per slide."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "one decision message per slide"
+          ],
+          "must_say_not_recorded": [
+            "traction period"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -2315,6 +4235,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "best in the world"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "pr-media-outreach-planning",
+    "skill_md": "---\nname: pr-media-outreach-planning\ndescription: Plans media outreach around newsworthiness, target outlets, spokesperson readiness and evidence-backed story angles.\nroles: [cmo, ceo]\ntools: [research.read, network.read]\noutput: brief\ntaxonomy: {mkt_pr_comms: advanced, mkt_brand_strategy: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for PR and Media Outreach Planning; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied research.read and network.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Plans media outreach around newsworthiness, target outlets, spokesperson readiness and evidence-backed story angles. Focus on news angle and outlet fit.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for news angle and outlet fit.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for spokesperson approval when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "pr-media-outreach-planning",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "research.library": {
+              "synthetic_fixture": true,
+              "skill_name": "PR and Media Outreach Planning",
+              "task_scope": "Plans media outreach around newsworthiness, target outlets, spokesperson readiness and evidence-backed story angles.",
+              "evidence": [
+                "news angle and outlet fit"
+              ],
+              "omitted_field": "spokesperson approval"
+            },
+            "network.relationships": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for news angle and outlet fit."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "news angle and outlet fit"
+          ],
+          "must_say_not_recorded": [
+            "spokesperson approval"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -2494,6 +4454,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "privacy-data-protection-assessment",
+    "skill_md": "---\nname: privacy-data-protection-assessment\ndescription: Maps privacy obligations and control evidence for defined processing activities, beyond a technical data inventory.\nroles: [general_counsel, cto]\ntools: [company.read, compliance.read]\noutput: brief\ntaxonomy: {legal_privacy: advanced, legal_data_governance: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Data Protection and Privacy Assessment; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied company.read and compliance.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Maps privacy obligations and control evidence for defined processing activities, beyond a technical data inventory. Focus on processing purpose and lawful basis.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for processing purpose and lawful basis.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for international transfer mechanism when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "privacy-data-protection-assessment",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "company.profile": {
+              "synthetic_fixture": true,
+              "skill_name": "Data Protection and Privacy Assessment",
+              "task_scope": "Maps privacy obligations and control evidence for defined processing activities, beyond a technical data inventory.",
+              "evidence": [
+                "processing purpose and lawful basis"
+              ],
+              "omitted_field": "international transfer mechanism"
+            },
+            "compliance.calendar": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for processing purpose and lawful basis."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "processing purpose and lawful basis"
+          ],
+          "must_say_not_recorded": [
+            "international transfer mechanism"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "problem-statement-draft",
     "skill_md": "---\nname: problem-statement-draft\ndescription: Drafts a one-page problem statement from recorded interviews and validation evidence.\nroles: [cpo, ceo]\ntools: [validate.read, project.read]\noutput: draft\ntaxonomy: {product_discovery: working, product_user_research: aware}\nversion: 1\n---\n1. Read the venture summary (`project.read`) and the validation records: interviews, problems heard and their counts (`validate.read`).\n2. Write the problem in the customer's words, quoting the problems that came up most often, with how many interviews raised each.\n3. Name who has the problem and when, from the recorded segments only.\n4. Mark any count, segment or quote that was not read as \"Not recorded\".\n5. Propose the draft to the product lead. It changes no record.\n",
     "cases": [
@@ -2527,6 +4527,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "10x faster"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "product-launch-campaign",
+    "skill_md": "---\nname: product-launch-campaign\ndescription: Coordinates launch positioning, audience, channel sequence, readiness dependencies and success measures.\nroles: [cmo, cpo]\ntools: [build.read, grow.read]\noutput: brief\ntaxonomy: {mkt_product_marketing: advanced, mkt_demand_gen: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Product Launch Campaign Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and grow.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Coordinates launch positioning, audience, channel sequence, readiness dependencies and success measures. Focus on launch readiness and channel dependency.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for launch readiness and channel dependency.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for launch date when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "product-launch-campaign",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Product Launch Campaign Design",
+              "task_scope": "Coordinates launch positioning, audience, channel sequence, readiness dependencies and success measures.",
+              "evidence": [
+                "launch readiness and channel dependency"
+              ],
+              "omitted_field": "launch date"
+            },
+            "grow.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for launch readiness and channel dependency."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "launch readiness and channel dependency"
+          ],
+          "must_say_not_recorded": [
+            "launch date"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -2602,6 +4642,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           "must_say_not_recorded": [],
           "must_not_include": [
             "approved"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "regulatory-jurisdiction-research",
+    "skill_md": "---\nname: regulatory-jurisdiction-research\ndescription: Produces a comparative regulatory research brief with dated primary sources, effective dates and explicit uncertainty.\nroles: [general_counsel, research_analyst]\ntools: [research.read, compliance.read]\noutput: brief\ntaxonomy: {legal_regulatory: advanced, legal_corporate: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Regulatory Jurisdiction Research Brief; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied research.read and compliance.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Produces a comparative regulatory research brief with dated primary sources, effective dates and explicit uncertainty. Focus on jurisdiction comparison with effective dates.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for jurisdiction comparison with effective dates.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for regulatory effective date when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "regulatory-jurisdiction-research",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "research.library": {
+              "synthetic_fixture": true,
+              "skill_name": "Regulatory Jurisdiction Research Brief",
+              "task_scope": "Produces a comparative regulatory research brief with dated primary sources, effective dates and explicit uncertainty.",
+              "evidence": [
+                "jurisdiction comparison with effective dates"
+              ],
+              "omitted_field": "regulatory effective date"
+            },
+            "compliance.calendar": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for jurisdiction comparison with effective dates."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "jurisdiction comparison with effective dates"
+          ],
+          "must_say_not_recorded": [
+            "regulatory effective date"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -2700,6 +4780,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "responsive-breakpoint-specification",
+    "skill_md": "---\nname: responsive-breakpoint-specification\ndescription: Specifies responsive layouts and breakpoint behaviour from content, device constraints and component requirements.\nroles: [cto, cpo]\ntools: [build.read, github.read]\noutput: brief\ntaxonomy: {design_ui: advanced, design_product: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Responsive Breakpoint Specification; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and github.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Specifies responsive layouts and breakpoint behaviour from content, device constraints and component requirements. Focus on content-driven breakpoint rules.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for content-driven breakpoint rules.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for minimum viewport when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "responsive-breakpoint-specification",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Responsive Breakpoint Specification",
+              "task_scope": "Specifies responsive layouts and breakpoint behaviour from content, device constraints and component requirements.",
+              "evidence": [
+                "content-driven breakpoint rules"
+              ],
+              "omitted_field": "minimum viewport"
+            },
+            "github.repos": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for content-driven breakpoint rules."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "content-driven breakpoint rules"
+          ],
+          "must_say_not_recorded": [
+            "minimum viewport"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "revenue-operations-design",
+    "skill_md": "---\nname: revenue-operations-design\ndescription: Designs the operating model connecting marketing, sales and customer-success processes, systems, definitions and handoffs.\nroles: [coo, cfo]\ntools: [grow.read, company.read]\noutput: brief\ntaxonomy: {gtm_revenue_ops: advanced, gtm_sales_ops: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Revenue Operations Process Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and company.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs the operating model connecting marketing, sales and customer-success processes, systems, definitions and handoffs. Focus on lifecycle handoff and metric ownership.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for lifecycle handoff and metric ownership.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for system owner when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "revenue-operations-design",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Revenue Operations Process Design",
+              "task_scope": "Designs the operating model connecting marketing, sales and customer-success processes, systems, definitions and handoffs.",
+              "evidence": [
+                "lifecycle handoff and metric ownership"
+              ],
+              "omitted_field": "system owner"
+            },
+            "company.profile": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for lifecycle handoff and metric ownership."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "lifecycle handoff and metric ownership"
+          ],
+          "must_say_not_recorded": [
+            "system owner"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "roadmap-review-brief",
     "skill_md": "---\nname: roadmap-review-brief\ndescription: Prepares a review of the current roadmap against what was shipped and what was promised to customers.\nroles: [cpo, cto, ceo]\ntools: [build.read, project.read]\noutput: brief\ntaxonomy: {product_roadmapping: advanced, product_ops: working}\nversion: 1\n---\n1. Read the roadmap items, their target dates and their status (`build.read`), and the venture summary (`project.read`).\n2. List what shipped since the last review, what slipped and by how long, and what is next.\n3. Flag each item promised to a named customer whose date has passed.\n4. Write \"Not recorded\" for an item with no target date.\n5. Propose the brief to the product lead for the review meeting.\n",
     "cases": [
@@ -2736,6 +4896,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "on track"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "saas-onboarding-journey-design",
+    "skill_md": "---\nname: saas-onboarding-journey-design\ndescription: Designs the activation journey from signup to first meaningful value with progressive guidance and recovery.\nroles: [cpo, cmo]\ntools: [grow.read, validate.read]\noutput: brief\ntaxonomy: {design_service: advanced, product_growth: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for SaaS Onboarding Journey Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs the activation journey from signup to first meaningful value with progressive guidance and recovery. Focus on first-value onboarding milestone.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for first-value onboarding milestone.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for activation event when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "saas-onboarding-journey-design",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "SaaS Onboarding Journey Design",
+              "task_scope": "Designs the activation journey from signup to first meaningful value with progressive guidance and recovery.",
+              "evidence": [
+                "first-value onboarding milestone"
+              ],
+              "omitted_field": "activation event"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for first-value onboarding milestone."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "first-value onboarding milestone"
+          ],
+          "must_say_not_recorded": [
+            "activation event"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "safe-convertible-instrument-review",
+    "skill_md": "---\nname: safe-convertible-instrument-review\ndescription: Reviews SAFE and convertible terms for valuation cap, discount, triggers, maturity, interest and dilution implications.\nroles: [general_counsel, cfo]\ntools: [raise.read, cap_table.read]\noutput: brief\ntaxonomy: {legal_securities: advanced, cap_cap_table: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for SAFE and Convertible Instrument Review; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied raise.read and cap_table.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Reviews SAFE and convertible terms for valuation cap, discount, triggers, maturity, interest and dilution implications. Focus on conversion trigger and valuation cap.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for conversion trigger and valuation cap.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for discount rate when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "safe-convertible-instrument-review",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "raise.records": {
+              "synthetic_fixture": true,
+              "skill_name": "SAFE and Convertible Instrument Review",
+              "task_scope": "Reviews SAFE and convertible terms for valuation cap, discount, triggers, maturity, interest and dilution implications.",
+              "evidence": [
+                "conversion trigger and valuation cap"
+              ],
+              "omitted_field": "discount rate"
+            },
+            "cap_table.read": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for conversion trigger and valuation cap."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "conversion trigger and valuation cap"
+          ],
+          "must_say_not_recorded": [
+            "discount rate"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -2821,6 +5061,166 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           "must_say_not_recorded": [],
           "must_not_include": [
             "every integration"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "sales-forecast-scenario-review",
+    "skill_md": "---\nname: sales-forecast-scenario-review\ndescription: Builds pipeline-driven bookings scenarios using stage probabilities, slippage, capacity and close-period assumptions.\nroles: [sales, cfo]\ntools: [grow.read, raise.read]\noutput: brief\ntaxonomy: {gtm_sales_ops: advanced, gtm_pipeline_mgmt: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Sales Forecast Scenario Review; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and raise.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Builds pipeline-driven bookings scenarios using stage probabilities, slippage, capacity and close-period assumptions. Focus on stage-weighted bookings scenarios.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for stage-weighted bookings scenarios.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for historical win rate when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "sales-forecast-scenario-review",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Sales Forecast Scenario Review",
+              "task_scope": "Builds pipeline-driven bookings scenarios using stage probabilities, slippage, capacity and close-period assumptions.",
+              "evidence": [
+                "stage-weighted bookings scenarios"
+              ],
+              "omitted_field": "historical win rate"
+            },
+            "raise.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for stage-weighted bookings scenarios."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "stage-weighted bookings scenarios"
+          ],
+          "must_say_not_recorded": [
+            "historical win rate"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "sales-objection-response-design",
+    "skill_md": "---\nname: sales-objection-response-design\ndescription: Designs evidence-backed objection response frameworks with diagnosis, proof, follow-up questions and escalation boundaries.\nroles: [sales, cmo]\ntools: [grow.read, research.read]\noutput: brief\ntaxonomy: {gtm_negotiation: advanced, gtm_sales_enablement: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Sales Objection Response Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and research.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs evidence-backed objection response frameworks with diagnosis, proof, follow-up questions and escalation boundaries. Focus on objection diagnosis and proof point.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for objection diagnosis and proof point.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for approved commercial term when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "sales-objection-response-design",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Sales Objection Response Design",
+              "task_scope": "Designs evidence-backed objection response frameworks with diagnosis, proof, follow-up questions and escalation boundaries.",
+              "evidence": [
+                "objection diagnosis and proof point"
+              ],
+              "omitted_field": "approved commercial term"
+            },
+            "research.library": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for objection diagnosis and proof point."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "objection diagnosis and proof point"
+          ],
+          "must_say_not_recorded": [
+            "approved commercial term"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "sales-playbook-generation",
+    "skill_md": "---\nname: sales-playbook-generation\ndescription: Builds an operating playbook with stage gates, qualification, discovery standards, objection paths and coaching.\nroles: [sales, cmo]\ntools: [grow.read, validate.read]\noutput: brief\ntaxonomy: {gtm_sales_enablement: advanced, gtm_sales_strategy: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Sales Playbook Generation; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Builds an operating playbook with stage gates, qualification, discovery standards, objection paths and coaching. Focus on stage exit criteria and coaching.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for stage exit criteria and coaching.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for approved qualification threshold when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "sales-playbook-generation",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Sales Playbook Generation",
+              "task_scope": "Builds an operating playbook with stage gates, qualification, discovery standards, objection paths and coaching.",
+              "evidence": [
+                "stage exit criteria and coaching"
+              ],
+              "omitted_field": "approved qualification threshold"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for stage exit criteria and coaching."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "stage exit criteria and coaching"
+          ],
+          "must_say_not_recorded": [
+            "approved qualification threshold"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "sales-sequence-optimization",
+    "skill_md": "---\nname: sales-sequence-optimization\ndescription: Evaluates sequence timing, channel mix and message progression using recorded response data and controlled tests.\nroles: [sales, cmo]\ntools: [grow.read, research.read]\noutput: brief\ntaxonomy: {gtm_outbound: advanced, gtm_sales_enablement: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Sales Sequence Optimization; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and research.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Evaluates sequence timing, channel mix and message progression using recorded response data and controlled tests. Focus on touch-level response comparison.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for touch-level response comparison.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for sequence cohort size when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "sales-sequence-optimization",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Sales Sequence Optimization",
+              "task_scope": "Evaluates sequence timing, channel mix and message progression using recorded response data and controlled tests.",
+              "evidence": [
+                "touch-level response comparison"
+              ],
+              "omitted_field": "sequence cohort size"
+            },
+            "research.library": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for touch-level response comparison."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "touch-level response comparison"
+          ],
+          "must_say_not_recorded": [
+            "sequence cohort size"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -2913,6 +5313,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "seo-search-intent-mapping",
+    "skill_md": "---\nname: seo-search-intent-mapping\ndescription: Clusters search queries by intent and journey stage, mapping them to pages and content gaps rather than keyword lists.\nroles: [cmo, research_analyst]\ntools: [grow.read, research.read]\noutput: brief\ntaxonomy: {mkt_seo: advanced, mkt_content: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for SEO Search Intent Mapping; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and research.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Clusters search queries by intent and journey stage, mapping them to pages and content gaps rather than keyword lists. Focus on intent cluster to target page.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for intent cluster to target page.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for search volume when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "seo-search-intent-mapping",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "SEO Search Intent Mapping",
+              "task_scope": "Clusters search queries by intent and journey stage, mapping them to pages and content gaps rather than keyword lists.",
+              "evidence": [
+                "intent cluster to target page"
+              ],
+              "omitted_field": "search volume"
+            },
+            "research.library": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for intent cluster to target page."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "intent cluster to target page"
+          ],
+          "must_say_not_recorded": [
+            "search volume"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "service-blueprint-outline",
     "skill_md": "---\nname: service-blueprint-outline\ndescription: Outlines a service blueprint for one customer journey: what the customer does, what staff do and what systems do.\nroles: [coo, cpo]\ntools: [validate.read, build.read]\noutput: brief\ntaxonomy: {design_service: expert, finops_business_ops: working}\nversion: 1\n---\n1. Read the journey's interviews and problems (`validate.read`) and the internal steps recorded in Build (`build.read`).\n2. Lay out the journey in lanes: customer actions, front-stage staff, back-stage staff and systems.\n3. Mark each recorded pain point on the step where it happens.\n4. Write \"Not recorded\" for a lane with no recorded step.\n5. Propose the outline to the operations lead.\n",
     "cases": [
@@ -2955,6 +5395,86 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "shareholder-agreement-issue-analysis",
+    "skill_md": "---\nname: shareholder-agreement-issue-analysis\ndescription: Identifies material shareholder-agreement issues around rights, transfer restrictions, governance and exit mechanics for counsel review.\nroles: [general_counsel, ceo]\ntools: [data_room.read, cap_table.read]\noutput: brief\ntaxonomy: {legal_contracts: advanced, legal_corporate: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Shareholder Agreement Issue Analysis; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied data_room.read and cap_table.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Identifies material shareholder-agreement issues around rights, transfer restrictions, governance and exit mechanics for counsel review. Focus on reserved matters and transfer rights.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for reserved matters and transfer rights.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for consent threshold when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "shareholder-agreement-issue-analysis",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "skill_name": "Shareholder Agreement Issue Analysis",
+              "task_scope": "Identifies material shareholder-agreement issues around rights, transfer restrictions, governance and exit mechanics for counsel review.",
+              "evidence": [
+                "reserved matters and transfer rights"
+              ],
+              "omitted_field": "consent threshold"
+            },
+            "cap_table.read": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for reserved matters and transfer rights."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "reserved matters and transfer rights"
+          ],
+          "must_say_not_recorded": [
+            "consent threshold"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "social-content-channel-adaptation",
+    "skill_md": "---\nname: social-content-channel-adaptation\ndescription: Adapts approved source assets into channel-native formats while preserving core claims, evidence and brand voice.\nroles: [cmo, cmo]\ntools: [grow.read, research.read]\noutput: brief\ntaxonomy: {mkt_social_media: advanced, mkt_copywriting: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Social Content Channel Adaptation; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied grow.read and research.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Adapts approved source assets into channel-native formats while preserving core claims, evidence and brand voice. Focus on channel-native content adaptation.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for channel-native content adaptation.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for approved source asset when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "social-content-channel-adaptation",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "grow.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Social Content Channel Adaptation",
+              "task_scope": "Adapts approved source assets into channel-native formats while preserving core claims, evidence and brand voice.",
+              "evidence": [
+                "channel-native content adaptation"
+              ],
+              "omitted_field": "approved source asset"
+            },
+            "research.library": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for channel-native content adaptation."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "channel-native content adaptation"
+          ],
+          "must_say_not_recorded": [
+            "approved source asset"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "social-post-drafts",
     "skill_md": "---\nname: social-post-drafts\ndescription: Drafts a week of social posts from recorded launches, stories and articles, for a person to review and schedule.\nroles: [cmo]\ntools: [build.read, research.read]\noutput: draft\ntaxonomy: {mkt_social_media: working, mkt_copywriting: aware}\nversion: 1\n---\n1. Read the launches recorded in Build (`build.read`) and articles in the research library (`research.read`).\n2. Draft five posts, each with one idea, a plain call to action and a source.\n3. Keep each under 280 characters and use no figure the records do not give; write \"Not recorded\" in its place.\n4. Suggest an order for the week.\n5. Propose the drafts to the marketing lead. A person schedules and posts them.\n",
     "cases": [
@@ -2985,6 +5505,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           "must_say_not_recorded": [],
           "must_not_include": [
             "#1 app"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "software-license-obligation-audit",
+    "skill_md": "---\nname: software-license-obligation-audit\ndescription: Audits commercial, hosted and open-source software licence obligations including use, disclosure, renewal and audit rights.\nroles: [general_counsel, cto]\ntools: [github.read, data_room.read]\noutput: brief\ntaxonomy: {legal_open_source: advanced, legal_ip: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Software Licensing Obligation Audit; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied github.read and data_room.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Audits commercial, hosted and open-source software licence obligations including use, disclosure, renewal and audit rights. Focus on software licence obligation register.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for software licence obligation register.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for redistribution trigger when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "software-license-obligation-audit",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "github.repos": {
+              "synthetic_fixture": true,
+              "skill_name": "Software Licensing Obligation Audit",
+              "task_scope": "Audits commercial, hosted and open-source software licence obligations including use, disclosure, renewal and audit rights.",
+              "evidence": [
+                "software licence obligation register"
+              ],
+              "omitted_field": "redistribution trigger"
+            },
+            "data_room.index": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for software licence obligation register."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "software licence obligation register"
+          ],
+          "must_say_not_recorded": [
+            "redistribution trigger"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -3083,6 +5643,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "technical-seo-crawl-audit",
+    "skill_md": "---\nname: technical-seo-crawl-audit\ndescription: Audits crawl and indexability evidence across site structure, metadata, canonicalization, redirects and performance.\nroles: [cmo, cto]\ntools: [github.read, vercel.read]\noutput: brief\ntaxonomy: {mkt_seo: advanced, eng_qa_automation: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Technical SEO Crawl Audit; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied github.read and vercel.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Audits crawl and indexability evidence across site structure, metadata, canonicalization, redirects and performance. Focus on canonicalization and indexability issue.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for canonicalization and indexability issue.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for crawl coverage when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "technical-seo-crawl-audit",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "github.repos": {
+              "synthetic_fixture": true,
+              "skill_name": "Technical SEO Crawl Audit",
+              "task_scope": "Audits crawl and indexability evidence across site structure, metadata, canonicalization, redirects and performance.",
+              "evidence": [
+                "canonicalization and indexability issue"
+              ],
+              "omitted_field": "crawl coverage"
+            },
+            "vercel.deployments": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for canonicalization and indexability issue."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "canonicalization and indexability issue"
+          ],
+          "must_say_not_recorded": [
+            "crawl coverage"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "terms-of-service-review-notes",
     "skill_md": "---\nname: terms-of-service-review-notes\ndescription: Notes where the product's recorded terms of service and privacy policy no longer match what the product does.\nroles: [general_counsel, cpo]\ntools: [data_room.read, build.read]\noutput: brief\ntaxonomy: {legal_terms_policy: proficient, legal_privacy: working}\nversion: 1\n---\n1. Read the current terms and privacy policy from the data room (`data_room.read`) and the features shipped since they were dated (`build.read`).\n2. List each shipped feature that the terms or policy do not describe, such as a new kind of data or a new message sent.\n3. Quote the clause each gap relates to.\n4. Write \"Not recorded\" for a policy with no effective date.\n5. Propose the notes to the general counsel, who decides what changes.\n",
     "cases": [
@@ -3118,6 +5718,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           "must_say_not_recorded": [],
           "must_not_include": [
             "the policy is compliant"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "typography-color-system-review",
+    "skill_md": "---\nname: typography-color-system-review\ndescription: Reviews typography and colour choices for hierarchy, readability, accessibility and cross-surface consistency.\nroles: [cmo, cpo]\ntools: [build.read, research.read]\noutput: brief\ntaxonomy: {design_visual: advanced, design_brand_identity: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Typography and Color System Review; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and research.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Reviews typography and colour choices for hierarchy, readability, accessibility and cross-surface consistency. Focus on type hierarchy and semantic colour roles.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for type hierarchy and semantic colour roles.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for contrast evidence when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "typography-color-system-review",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Typography and Color System Review",
+              "task_scope": "Reviews typography and colour choices for hierarchy, readability, accessibility and cross-surface consistency.",
+              "evidence": [
+                "type hierarchy and semantic colour roles"
+              ],
+              "omitted_field": "contrast evidence"
+            },
+            "research.library": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for type hierarchy and semantic colour roles."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "type hierarchy and semantic colour roles"
+          ],
+          "must_say_not_recorded": [
+            "contrast evidence"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }
@@ -3235,6 +5875,126 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
     ]
   },
   {
+    "slug": "usability-test-protocol-design",
+    "skill_md": "---\nname: usability-test-protocol-design\ndescription: Designs a rigorous usability study protocol with neutral moderation, screening, consent, task order and observation rubric.\nroles: [cpo, research_analyst]\ntools: [validate.read, build.read]\noutput: brief\ntaxonomy: {design_ux_research: advanced, design_prototyping: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for Usability Test Protocol Design; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied validate.read and build.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Designs a rigorous usability study protocol with neutral moderation, screening, consent, task order and observation rubric. Focus on neutral moderator protocol.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for neutral moderator protocol.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for participant consent when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "usability-test-protocol-design",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "validate.records": {
+              "synthetic_fixture": true,
+              "skill_name": "Usability Test Protocol Design",
+              "task_scope": "Designs a rigorous usability study protocol with neutral moderation, screening, consent, task order and observation rubric.",
+              "evidence": [
+                "neutral moderator protocol"
+              ],
+              "omitted_field": "participant consent"
+            },
+            "build.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for neutral moderator protocol."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "neutral moderator protocol"
+          ],
+          "must_say_not_recorded": [
+            "participant consent"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "ux-flow-architecture",
+    "skill_md": "---\nname: ux-flow-architecture\ndescription: Architects task-oriented product flows including branching, system states, errors and recovery paths.\nroles: [cpo, cto]\ntools: [build.read, validate.read]\noutput: brief\ntaxonomy: {design_information_arch: advanced, design_interaction: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for UX Flow Architecture; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied build.read and validate.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Architects task-oriented product flows including branching, system states, errors and recovery paths. Focus on branching task flow and recovery.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for branching task flow and recovery.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for completion state when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "ux-flow-architecture",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "build.records": {
+              "synthetic_fixture": true,
+              "skill_name": "UX Flow Architecture",
+              "task_scope": "Architects task-oriented product flows including branching, system states, errors and recovery paths.",
+              "evidence": [
+                "branching task flow and recovery"
+              ],
+              "omitted_field": "completion state"
+            },
+            "validate.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for branching task flow and recovery."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "branching task flow and recovery"
+          ],
+          "must_say_not_recorded": [
+            "completion state"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "ux-research-interview-synthesis",
+    "skill_md": "---\nname: ux-research-interview-synthesis\ndescription: Synthesizes multiple consented interviews into cross-interview themes, unmet needs, workarounds and contradictory evidence.\nroles: [cpo, research_analyst]\ntools: [validate.read, research.read]\noutput: brief\ntaxonomy: {design_ux_research: advanced, product_user_research: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for UX Research Interview Synthesis; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied validate.read and research.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Synthesizes multiple consented interviews into cross-interview themes, unmet needs, workarounds and contradictory evidence. Focus on cross-interview theme synthesis.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for cross-interview theme synthesis.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for interview sample size when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "ux-research-interview-synthesis",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "validate.records": {
+              "synthetic_fixture": true,
+              "skill_name": "UX Research Interview Synthesis",
+              "task_scope": "Synthesizes multiple consented interviews into cross-interview themes, unmet needs, workarounds and contradictory evidence.",
+              "evidence": [
+                "cross-interview theme synthesis"
+              ],
+              "omitted_field": "interview sample size"
+            },
+            "research.library": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for cross-interview theme synthesis."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "cross-interview theme synthesis"
+          ],
+          "must_say_not_recorded": [
+            "interview sample size"
+          ],
+          "must_not_include": [
+            "guaranteed"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "slug": "vendor-spend-review",
     "skill_md": "---\nname: vendor-spend-review\ndescription: Reviews recorded vendor spending: the largest vendors, recurring charges and subscriptions with no recent use.\nroles: [cfo, coo]\ntools: [mercury.read, build.read]\noutput: brief\ntaxonomy: {finops_procurement: proficient, finops_business_ops: working}\nversion: 1\n---\n1. Read the last three months of card and bank payments by vendor (`mercury.read`) and the tools the team records as in use (`build.read`).\n2. List the ten largest vendors and the recurring charges.\n3. Flag subscriptions with no recorded use.\n4. Write \"Not recorded\" for a vendor with no recorded owner.\n5. Propose the review to the finance lead. It cancels nothing.\n",
     "cases": [
@@ -3276,6 +6036,46 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
           ],
           "must_not_include": [
             "cancelled"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "slug": "wcag-interface-audit",
+    "skill_md": "---\nname: wcag-interface-audit\ndescription: Reviews supplied UI artefacts and code against relevant WCAG criteria without claiming formal certification.\nroles: [cto, cpo]\ntools: [github.read, build.read]\noutput: brief\ntaxonomy: {design_accessibility: advanced, eng_frontend: proficient}\nversion: 1\n---\n1. Establish the decision, intended user and boundaries for WCAG Interface Audit; do not perform adjacent work outside this specialist scope.\n2. Read only the supplied github.read and build.read records; preserve identifiers, dates, periods and source references.\n3. Perform the specialist analysis: Reviews supplied UI artefacts and code against relevant WCAG criteria without claiming formal certification. Focus on keyboard focus and semantic controls.\n4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.\n5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for keyboard focus and semantic controls.\n6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.\n7. Write \"Not recorded\" for contrast ratio when the records do not supply it; never invent a value, source, commitment or legal conclusion.\n8. Propose next steps for human review, with findings, evidence, limitations, confidence and open questions. Do not send, publish, approve, sign, pay, file or modify records.\n",
+    "cases": [
+      {
+        "skill": "wcag-interface-audit",
+        "version": 1,
+        "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+        "input": {
+          "records": {
+            "github.repos": {
+              "synthetic_fixture": true,
+              "skill_name": "WCAG Interface Audit",
+              "task_scope": "Reviews supplied UI artefacts and code against relevant WCAG criteria without claiming formal certification.",
+              "evidence": [
+                "keyboard focus and semantic controls"
+              ],
+              "omitted_field": "contrast ratio"
+            },
+            "build.records": {
+              "synthetic_fixture": true,
+              "corroborating_context": "Synthetic context for keyboard focus and semantic controls."
+            }
+          }
+        },
+        "expect": {
+          "output": "brief",
+          "must_include": [
+            "keyboard focus and semantic controls"
+          ],
+          "must_say_not_recorded": [
+            "contrast ratio"
+          ],
+          "must_not_include": [
+            "guaranteed"
           ]
         }
       }

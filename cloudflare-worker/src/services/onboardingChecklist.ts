@@ -70,15 +70,15 @@ export interface ChecklistItem {
 export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
   newFounder: [
     { key: 'nf.persona',    label: 'Complete persona chatbot',           route: '/onboarding/persona',         autoDetect: true },
-    { key: 'nf.project',    label: 'Add your project',                   route: '/projects',                   autoDetect: true },
-    { key: 'nf.discovery',  label: 'Log 3 customer-discovery interviews',route: '/customer-discovery',         autoDetect: true },
+    { key: 'nf.project',    label: 'Add your project',                   route: '/build',                   autoDetect: true },
+    { key: 'nf.discovery',  label: 'Log 3 customer-discovery interviews',route: '/validate/customer-research',         autoDetect: true },
     { key: 'nf.okrs',       label: 'Add 3 quarterly OKRs',               route: '/build/roadmap',              autoDetect: true },
     { key: 'nf.calendar',   label: 'Connect Google or Outlook Calendar', route: '/calendar',                   autoDetect: true },
     { key: 'nf.brand',      label: 'Upload or generate brand basics',    route: '/build/brand',                autoDetect: true },
-    { key: 'nf.deck',       label: 'Draft pitch deck (5+ slides)',       route: '/build/deck',                 autoDetect: true },
+    { key: 'nf.deck',       label: 'Draft pitch deck (5+ slides)',       route: '/raise/pitch',                 autoDetect: true },
     // /scoring is gated to admin/partner/investor — founders run scoring
     // from the project detail page, so the row links to the project list.
-    { key: 'nf.scoring',    label: 'Run your first scoring',             route: '/projects',                   autoDetect: true },
+    { key: 'nf.scoring',    label: 'Run your first scoring',             route: '/build',                   autoDetect: true },
     { key: 'nf.advisor',     label: 'Book an advisor session',              route: '/advisors',                    autoDetect: true },
     { key: 'nf.team',       label: 'Invite a team member',               route: '/account/account',           autoDetect: true },
   ],
@@ -99,7 +99,7 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // whose only possible answer is 'no' is worse than one you confirm yourself.
     { key: 'ef.ip',         label: 'Confirm IP assignments signed',      route: '/calendar?layer=compliance',  autoDetect: false },
     { key: 'ef.okrs',       label: 'Add 3 quarterly OKRs',               route: '/build/roadmap',              autoDetect: true },
-    { key: 'ef.scoring',    label: 'Run scoring with verified evidence', route: '/projects',                   autoDetect: true },
+    { key: 'ef.scoring',    label: 'Run scoring with verified evidence', route: '/build',                   autoDetect: true },
     { key: 'ef.nda',        label: 'Send first NDA to an investor',      route: '/trust',                      autoDetect: true },
   ],
   investor: [
@@ -129,7 +129,7 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // built schema. migrations/042 declares conflicts_text and 042 is below
     // BASELINE_CUTOFF, so the baseline had to carry it and does not — that is
     // baseline drift, filed for check-baseline-drift rather than papered over.
-    { key: 'op.conflicts',  label: 'Disclose conflicts',                 route: '/partner/operations/overview', autoDetect: false },
+    { key: 'op.conflicts',  label: 'Disclose conflicts',                 route: '/account/portfolio/settings', autoDetect: false },
     { key: 'op.deal_type',  label: 'Pick deal-type proposal + sign',     route: '/referrals',                  autoDetect: true },
     // Task #2 — KYC is investor-only, so the partner KYB step no longer
     // deep-links to /kyc (which now renders a "not required" state for

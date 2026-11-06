@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Task #6 (W-1) — Investor introduction requests with quarterly quota.
  *
@@ -53,7 +54,7 @@ introductions.use('*', async (c, next) => {
 
 introductions.get('/quota', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  if (user.role !== 'investor' && user.role !== 'admin') {
+  if (!holdsLicence(user, 'investor') && user.role !== 'admin') {
     return c.json({ error: 'investor_only' }, 403);
   }
   const state = await getIntroQuotaState(c.env, user.id);
@@ -68,7 +69,7 @@ introductions.get('/quota', async (c) => {
 
 introductions.get('/', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  if (user.role !== 'investor' && user.role !== 'admin') {
+  if (!holdsLicence(user, 'investor') && user.role !== 'admin') {
     return c.json({ error: 'investor_only' }, 403);
   }
   const rows = await c.env.DB.prepare(
@@ -83,7 +84,7 @@ introductions.get('/', async (c) => {
 
 introductions.post('/request', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  if (user.role !== 'investor') {
+  if (!holdsLicence(user, 'investor')) {
     return c.json({ error: 'investor_only' }, 403);
   }
 

@@ -45,7 +45,8 @@ export const HELP_SURFACES = {
   "/kyc": {"label": "Identity verification", "roles": ["admin", "founder", "partner", "investor"], "lab": false},
   "/legal": {"label": "Legal templates", "roles": ["admin", "founder"], "lab": false},
   "/deals": {"label": "Deals", "roles": ["admin", "partner", "investor"], "lab": false},
-  "/comarketing": {"label": "Co-marketing", "roles": ["admin", "partner", "founder", "investor"], "lab": false},
+  "/comarketing": {"label": "Co-marketing", "roles": ["admin", "partner", "founder"], "lab": false, "rolePaths": {"founder": "/grow/partner-network/co-marketing"}},
+  "/grow/partner-network/co-marketing": {"label": "Co-marketing", "roles": ["admin", "founder"], "lab": false},
   "/build/marketplace": {"label": "Marketplace", "roles": ["admin", "founder"], "lab": false},
   "/directory": {"label": "Public Directory", "roles": null, "lab": false},
   "/articles/draft": {"label": "Write an article", "roles": null, "lab": false, "authenticated": true},
@@ -162,10 +163,13 @@ export const GUIDE_PLACEMENT = {
   "admin/assessment-ops": {"area": "admin", "surface": null, "appliesTo": null}
 };
 
-export function guidePlacement(anchor) {
+export function guidePlacement(anchor, user = null, session = null) {
   const placement = GUIDE_PLACEMENT[anchor];
   if (!placement) return null;
-  return { ...placement, areaTitle: HELP_AREAS.find((area) => area.id === placement.area)?.title, surfaceInfo: HELP_SURFACES[placement.surface] || null };
+  // D4439: role-dependent pages must link directly, without producing a legacy redirect hit.
+  const role = session?.viewMode || user?.role;
+  const surface = HELP_SURFACES[placement.surface]?.rolePaths?.[role] || placement.surface;
+  return { ...placement, surface, areaTitle: HELP_AREAS.find((area) => area.id === placement.area)?.title, surfaceInfo: HELP_SURFACES[surface] || null };
 }
 
 // Call after the manifest's roles filter: appliesTo is never a visibility gate.

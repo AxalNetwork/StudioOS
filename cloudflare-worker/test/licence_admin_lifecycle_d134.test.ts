@@ -151,6 +151,8 @@ function freshDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  // D4472: the real appointment now retains the old primary in this store.
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611041822_account_licences.sql'), 'utf8'));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(SUPER, 'admin', 'Sue', 'sue@axal.example');
   u.run(SPARE_ADMIN, 'admin', 'Pat', 'pat@axal.example');

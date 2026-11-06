@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
@@ -202,7 +203,7 @@ legal.post('/incorporate/wizard', async (c) => {
   // Bypass `canAccessFounderResource` here — its phase 0.1 semantics still
   // treat investors as privileged for read-path back-compat, which would be a
   // cross-project IDOR on this write path. Require explicit founder ownership.
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     const ownsProject =
       project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) {
@@ -417,7 +418,7 @@ legal.post('/incorporate/checkout', async (c) => {
   const project = projRows[0] as any;
 
   // Ownership: admin/partner OR founder-owns-project. Investors blocked.
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
        // Company scoping. Only this branch narrows: admin and partner are
@@ -622,7 +623,7 @@ legal.post('/incorporation/order', async (c) => {
   if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = projRows[0] as any;
   // Ownership: admin/partner OR founder-owns-project. Investors blocked.
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
        // Company scoping. Only this branch narrows: admin and partner are
@@ -1058,7 +1059,7 @@ legal.post('/cofounder-agreement', async (c) => {
   // are NOT privileged on this write path — a co-founder agreement records who
   // owns the company, so writing one against a project you do not own is a
   // cross-project IDOR, not a read-path convenience.
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) {
       await sql.end();

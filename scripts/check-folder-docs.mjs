@@ -110,6 +110,8 @@ const DOCUMENTED = new Map([
   ['documentation/architecture/route-map/canvases/part-5', 'one route-map canvas row per file (D4102)'],
   ['documentation/audits',            'dated snapshots — true on their date only'],
   ['documentation/operations',        'runbooks — the steps to ship, check and recover production'],
+  ['documentation/skill-drafts/D4526', 'newly authored HQ skill package staged outside deployment'],
+  ['documentation/skill-drafts/D4526/cases', 'synthetic evaluation cases for the staged HQ package'],
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
   ['frontend/src/components/checkout',        'the checkout sheet, its entry and the renewal banner (D1048, D1054)'],
@@ -151,6 +153,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/team',                 'Team (D1497): people and AI agents by scope, the agents seam, and Project settings › General'],
   ['frontend/src/pages/studio',               'Studio modularity (D1419): the module grid every /studio draws, Customise, the module map, and the layout-proposals seam'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
+  ['frontend/src/pages/cycles/distribution',  'Grow Distribution tabs (D4484): the shell, Channels (D4486), campaign plans (D4487), Ask drafts (D4488), Ads (D4490) and Inbox (D4494)'],
   ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],
   ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],
   ['frontend/src/pages/email',                'the Email page and its composer (D1344), and a record\'s Email in the right Sheet (#4017)'],

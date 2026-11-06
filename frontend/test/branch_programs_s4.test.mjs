@@ -237,8 +237,7 @@ test('every community card points at a route App.jsx registers', () => {
     // the same way `admin_route_reachability.test.mjs`'s `toRoute` does before
     // checking App.jsx registers the path.
     const route = con.to.split('?')[0];
-    assert.ok(APP.includes(`path="${route}"`),
-      `${con.label} links to ${con.to}, which is not a registered route`);
+    assert.ok(APP.includes(`path="${route}"`), `${con.label} links to ${con.to}, which is not a registered route`);
     assert.ok(con.key && con.label && con.scope && con.what,
       `${con.label} is missing one of the four fields a card renders`);
   }

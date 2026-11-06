@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 // D653: pure policies shared by the Worker and mutation tests.
 export type RoundCallTerms = {
   name: string; amount_cents: number; instrument: string; terms: string;
@@ -10,7 +11,7 @@ export function roundCallsEnabled(env: { ROUND_CALLS_ENABLED?: string }): boolea
   return env.ROUND_CALLS_ENABLED === 'true';
 }
 export function verifiedInvestor(user: { role: string; is_active: number | boolean; kyc_status?: string | null }): boolean {
-  return user.role === 'investor' && Number(user.is_active) === 1 && user.kyc_status === 'approved';
+  return holdsLicence(user, 'investor') && Number(user.is_active) === 1 && user.kyc_status === 'approved';
 }
 export function positiveCents(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
