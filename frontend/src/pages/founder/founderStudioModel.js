@@ -186,19 +186,19 @@ export function summaryOf({ lab, advisor, lifecycle, scores, project }) {
     }
   }
 
-  // Modules active and tasks done: the Lab's unlocked features and milestones.
+  // Artifacts active and tasks done: the Lab's unlocked features and milestones.
   {
     const s = joint(lab);
     if (s.state !== READY) {
-      out.push(tile('Modules active', s.state, { reason: s.reason }));
+      out.push(tile('Artifacts active', s.state, { reason: s.reason }));
       out.push(tile('Tasks done', s.state, { reason: s.reason }));
     } else if (!inCohort(lab)) {
-      out.push(tile('Modules active', NOT_RECORDED, { reason: 'Modules open week by week inside a Lab cohort, and you are not in one.' }));
+      out.push(tile('Artifacts active', NOT_RECORDED, { reason: 'Lab artifacts unlock week by week for cohort members.' }));
       out.push(tile('Tasks done', NOT_RECORDED, { reason: 'Tasks are the Lab’s milestones, recorded inside a cohort.' }));
     } else {
       const all = allFeatures();
       const open = new Set(lab.unlocked_features || []);
-      out.push(tile('Modules active', READY, { v: String(all.filter((f) => open.has(f)).length), sub: `of ${all.length}` }));
+      out.push(tile('Artifacts active', READY, { v: String(all.filter((f) => open.has(f)).length), sub: `of ${all.length}` }));
       out.push(tile('Tasks done', READY, { v: String((lab.milestones || []).length), sub: 'cumulative' }));
     }
   }
