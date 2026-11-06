@@ -1,0 +1,34 @@
+{
+  "skill": "logo-identity-critique",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Logo and Identity Critique",
+        "task_scope": "Critiques logo and identity options against brand objectives, reproduction constraints and real use contexts.",
+        "evidence": [
+          "small-size and monochrome legibility"
+        ],
+        "omitted_field": "monochrome version"
+      },
+      "research.library": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for small-size and monochrome legibility."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "small-size and monochrome legibility"
+    ],
+    "must_say_not_recorded": [
+      "monochrome version"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

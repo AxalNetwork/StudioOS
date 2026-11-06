@@ -1,0 +1,34 @@
+{
+  "skill": "nda-confidentiality-review",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "skill_name": "NDA Confidentiality Review",
+        "task_scope": "Reviews existing NDA scope, exceptions, permitted disclosure, duration, survival and return/destruction mechanics.",
+        "evidence": [
+          "confidential information scope"
+        ],
+        "omitted_field": "survival period"
+      },
+      "company.profile": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for confidential information scope."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "confidential information scope"
+    ],
+    "must_say_not_recorded": [
+      "survival period"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

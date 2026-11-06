@@ -37,15 +37,6 @@ const AUTH = read('../../cloudflare-worker/src/routes/auth.ts');
 
 /* ───────────────────────── /studio entry point ────────────────────────── */
 
-test('the founder Studio leads with what to do next: Continue links the checklist\'s first open item', () => {
-  // D1419 (#3698): "Do these next" left the page; its intent is the header's
-  // Continue, which reads actionsOf's first open item (owner question B, A).
-  const body = code(BODY);
-  assert.match(body, /const actions = actionsOf\(reads\);/);
-  assert.match(body, /actions\.state === READY && actions\.items\[0\]\?\.href && \(\s*<Link to=\{actions\.items\[0\]\.href\}[^>]*>Continue where you left off<\/Link>/);
-  assert.doesNotMatch(body, /Do these next/);
-});
-
 test('the founder Studio does not link at the Operations console or a dead Command Center tab', () => {
   const src = code(HOME) + code(BODY) + code(MODEL);
   assert.doesNotMatch(src, /tab=studio-ops/);
@@ -53,20 +44,9 @@ test('the founder Studio does not link at the Operations console or a dead Comma
   assert.doesNotMatch(src, /command-center/, 'the removed page must not be linked');
 });
 
-test('the next action comes from the same endpoint LifecycleModule uses', () => {
-  // Two sources would let the Studio and the lifecycle rail tell a founder two
-  // different next steps.
+test('the Venture progress strip uses the lifecycle checklist', () => {
   assert.match(code(HOME), /api\.getLifecycle\(/);
-  assert.match(code(MODEL), /lifecycle\.checklist : \[\]\)\.filter\(\(i\) => !i\.done\)/);
-});
-
-test('with no venture the Studio says so, and a failed read says it failed', async () => {
-  // The retired strip rendered nothing in both cases. D321 made the home say
-  // which, and the D564 Studio keeps it: an absent project prompts for one,
-  // and a failed read is Unreadable.
-  const { actionsOf, failedRead } = await import('../src/pages/founder/founderStudioModel.js');
-  assert.deepEqual(actionsOf({ project: null, lifecycle: null }).items.map((a) => a.title), ['Create your startup record']);
-  assert.equal(actionsOf({ project: { id: 1 }, lifecycle: failedRead('down') }).state, 'unreadable');
+  assert.match(code(MODEL), /const items = Array\.isArray\(lifecycle\?\.checklist\) \? lifecycle\.checklist/);
 });
 
 /* ──────────────────── admission-funnel lane parity ────────────────────── */

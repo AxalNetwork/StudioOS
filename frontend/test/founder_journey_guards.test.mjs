@@ -82,10 +82,8 @@ test('the exploring holding screen offers the founder lane its real next step', 
   assert.ok(src.includes('exploring-lane-cta'), 'lane CTA testid missing');
 });
 
-test('/studio (founder Studio, D564, D1419) leads with Continue where you left off', () => {
-  // D1419 (#3698): "Do these next" left the page; Continue reads its first open item.
+test('/studio keeps the retired checklist shortcuts off the page', () => {
   const src = fe('src/pages/founder/FounderStudioBody.jsx');
-  assert.match(src, /<Link to=\{actions\.items\[0\]\.href\}[^>]*data-testid="link-founder-continue">Continue where you left off<\/Link>/,
-    'the founder Studio no longer leads with what to do next');
+  assert.doesNotMatch(src, /link-founder-continue|Continue where you left off/);
   assert.ok(!fe('src/pages/Dashboard.jsx').includes('VentureNextStep'), 'the retired strip is mounted again');
 });

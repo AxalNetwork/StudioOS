@@ -1,0 +1,34 @@
+{
+  "skill": "regulatory-jurisdiction-research",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "research.library": {
+        "synthetic_fixture": true,
+        "skill_name": "Regulatory Jurisdiction Research Brief",
+        "task_scope": "Produces a comparative regulatory research brief with dated primary sources, effective dates and explicit uncertainty.",
+        "evidence": [
+          "jurisdiction comparison with effective dates"
+        ],
+        "omitted_field": "regulatory effective date"
+      },
+      "compliance.calendar": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for jurisdiction comparison with effective dates."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "jurisdiction comparison with effective dates"
+    ],
+    "must_say_not_recorded": [
+      "regulatory effective date"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

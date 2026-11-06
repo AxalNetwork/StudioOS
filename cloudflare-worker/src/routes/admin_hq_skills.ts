@@ -117,7 +117,13 @@ async function versionTokens(env: Env, skillId: number, version: number): Promis
 
 adminHqSkills.get('/', async (c) => {
   await requireSuperAdmin(c);
-  const rows = (await c.env.DB.prepare("SELECT * FROM agent_skills WHERE scope = 'hq' ORDER BY name, id").all<SkillRow>()).results ?? [];
+  const pageRaw = c.req.query('page');
+  const page = pageRaw == null ? null : Number(pageRaw);
+  if (page != null && (!Number.isSafeInteger(page) || page < 1)) return c.json({ detail: 'Invalid page' }, 400);
+  const rows = (await (page == null
+    ? c.env.DB.prepare("SELECT * FROM agent_skills WHERE scope = 'hq' ORDER BY name, id")
+    : c.env.DB.prepare("SELECT * FROM agent_skills WHERE scope = 'hq' ORDER BY name, id LIMIT 10 OFFSET ?").bind((page - 1) * 10)
+  ).all<SkillRow>()).results ?? [];
   const tax = await taxonomyMaps(c.env);
   const skills = [];
   for (const s of rows) {
@@ -135,7 +141,7 @@ adminHqSkills.get('/', async (c) => {
       last_eval: evals.last_run,
     });
   }
-  return c.json({ skills, pass_bar: PASS_BAR });
+  return c.json({ skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null });
 });
 
 // D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.

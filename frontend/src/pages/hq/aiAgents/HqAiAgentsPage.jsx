@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Overview, Runs, Spend, Audit, Policies } from './Operations.jsx';
+import { adminCompanySkillsApi } from '../../../lib/api/adminCompanySkills';
 import { adminHqSkillsApi } from '../../../lib/api/adminHqSkills';
 import { RefreshCw } from 'lucide-react';
 import { Card } from '../../../ui';
@@ -8,7 +9,7 @@ import AdminPageHeader, { HeaderTab } from '../../../ui/AdminPageHeader';
 import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
 import {
-  BUILD, COMPANY_COLUMNS, NOT_RECORDED, REASON_MIN,
+  COMPANY_COLUMNS, NOT_RECORDED, REASON_MIN,
   ROSTER_COLUMNS, SUBTITLE, areaTiles, notYet, skillRow, viewFor,
   PERSONA_STATUS, VALUE_KEYS, actionWord, defaultsArmed, filterRoster, fitLabel, historyLine, identityChanges, retireLines,
   rosterCounts, rosterRefusal, rosterRow, saveArmed, statusArmed, teamLine, usd, valueLabel,
@@ -41,32 +42,6 @@ const TONE = {
 
 function Chip({ tone = 'muted', children }) {
   return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11.5px] font-semibold ${TONE[tone] ?? TONE.muted}`}>{children}</span>;
-}
-
-/** A board whose build task has not landed: what it will hold, and the issue. */
-function NotYet({ build, children, testId }) {
-  const b = BUILD[build];
-  return (
-    <Card className="space-y-2 px-4 py-4" data-testid={testId ?? `ai-agents-not-yet-${build}`}>
-      <p role="status" className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">
-        {notYet(build)}{' '}
-        <a className="text-axal-violet underline dark:text-violet-300" href={`https://github.com/AxalNetwork/StudioOS/issues/${b.issue}`} target="_blank" rel="noreferrer">#{b.issue}</a>
-      </p>
-      {children}
-    </Card>
-  );
-}
-
-/** A table head and one row saying why it is empty — never a row of zeros. */
-function EmptyTable({ columns, line, testId }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-[12.5px]" data-testid={testId}>
-        <thead className={EYEBROW}><tr className="text-left">{columns.map((c) => <th key={c} className="py-1.5 pr-3">{c}</th>)}</tr></thead>
-        <tbody><tr><td colSpan={columns.length} className="py-6 text-center text-axal-muted dark:text-gray-400">{line}</td></tr></tbody>
-      </table>
-    </div>
-  );
 }
 
 // ─── SA0 · Overview ─────────────────────────────────────────────────────────
@@ -497,14 +472,63 @@ export function Editor({ view }) {
 }
 
 function CompanySkills() {
-  return (
-    <div className="space-y-3" data-testid="ai-agents-company-skills">
-      <NotYet build="H3">
-        <p className={MUTED}>Skills companies wrote or imported. HQ reads, flags or suspends with a reason, and the company is told. HQ never edits a company’s skill.</p>
-        <EmptyTable columns={COMPANY_COLUMNS} line="The queue is read when #4161 lands." testId="ai-agents-company-table" />
-      </NotYet>
-    </div>
-  );
+  const [page, setPage] = useState(1);
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState('');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [action, setAction] = useState(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setData(null); setError(false);
+    adminCompanySkillsApi.list({ page, q, status }).then(r => {
+      if (!Array.isArray(r?.skills)) throw new Error('Invalid response');
+      if (alive) setData(r);
+    }).catch(() => { if (alive) setError(true); });
+    return () => { alive = false; };
+  }, [page, q, status, revision]);
+  const open = async uid => {
+    setBusy(true); setActionError('');
+    try { setDetail(await adminCompanySkillsApi.get(uid)); }
+    catch { setActionError('The skill could not be read. Try again.'); }
+    finally { setBusy(false); }
+  };
+  const moderate = async () => {
+    setBusy(true); setActionError('');
+    try {
+      await adminCompanySkillsApi[action](detail.skill.uid, reason.trim());
+      setAction(null); setReason(''); setDetail(null); setRevision(v => v + 1);
+    } catch { setActionError('The action could not be completed. Refresh the skill and try again.'); }
+    finally { setBusy(false); }
+  };
+  return <div className="space-y-3" data-testid="ai-agents-company-skills">
+    <p className={MUTED}>Skills companies wrote or imported. HQ reads, flags or suspends with a reason, and the company is told. HQ never edits a company’s skill.</p>
+    <label className={LABEL}>Search skills or companies<input className={FIELD} value={q} onChange={e => { setQ(e.target.value); setPage(1); }} /></label>
+    <label className={LABEL}>Status<select className={FIELD} value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">All statuses</option>{['published', 'in_review', 'flagged', 'suspended'].map(v => <option key={v} value={v}>{v.replace('_', ' ')}</option>)}</select></label>
+    {error ? <Unreadable what="Company skills" onRetry={() => setRevision(v => v + 1)} /> : !data ? <p role="status">Reading company skills…</p> : <Card className="p-4">
+      <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-sm" data-testid="ai-agents-company-table">
+        <thead><tr>{COMPANY_COLUMNS.map(c => <th key={c} className="text-left p-2">{c}</th>)}</tr></thead>
+        <tbody>{data.skills.map(s => <tr key={s.uid}>
+          <td className="p-2"><button className="text-violet-700 underline" disabled={busy} onClick={() => open(s.uid)}>{s.name}</button></td>
+          <td>{s.company?.name || NOT_RECORDED}</td><td>{s.author?.name || NOT_RECORDED}</td><td>{s.area?.label || NOT_RECORDED}</td><td>{s.tools?.join(', ') || 'No tools'}</td><td>{s.status}</td>
+        </tr>)}{!data.skills.length && <tr><td colSpan={COMPANY_COLUMNS.length} className="p-6 text-center">No company skills match these filters.</td></tr>}</tbody>
+      </table></div>
+      <div className="flex items-center gap-3 mt-4"><button className={BTN} disabled={page === 1} onClick={() => setPage(v => v - 1)}>Previous</button><span>Page {page}</span><button className={BTN} disabled={page * data.per_page >= data.total} onClick={() => setPage(v => v + 1)}>Next</button></div>
+    </Card>}
+    {actionError && <p role="alert" className="text-red-700">{actionError}</p>}
+    {detail && <Card className="space-y-3 p-4">
+      <h2 className={H2}>{detail.skill.name} · {detail.skill.status}</h2>
+      <pre className="whitespace-pre-wrap break-words text-sm">{detail.skill.skill_md}</pre>
+      {detail.moderation && <p>{detail.moderation.action} · {detail.moderation.by?.name || NOT_RECORDED} · {detail.moderation.at}: {detail.moderation.reason}</p>}
+      <div className="flex gap-2">{['flag', 'suspend', ...(detail.moderation ? ['clear'] : [])].map(v => <button key={v} className={BTN} disabled={busy} onClick={() => { setAction(v); setReason(''); }}>{v === 'clear' ? 'Clear moderation' : v === 'flag' ? 'Flag' : 'Suspend'}</button>)}<button className={BTN} disabled={busy} onClick={() => setDetail(null)}>Close</button></div>
+      {action && <Dialog title={`${action} company skill`} lines={[action === 'suspend' ? 'Agents will stop using this skill. The company will be notified.' : action === 'flag' ? 'The company will be notified. The skill keeps running.' : 'This lifts the current flag or suspension.']} confirm="Confirm" busy={busy} error={actionError} armed={reason.trim().length >= 10 && reason.trim().length <= 500} onCancel={() => setAction(null)} onConfirm={moderate}><Reason value={reason} onChange={setReason} /></Dialog>}
+    </Card>}
+  </div>;
 }
 
 // ─── SA6 / SA7 / SA8 · Operations ───────────────────────────────────────────
@@ -518,7 +542,7 @@ export default function HqAiAgentsPage() {
 
   const load = useCallback(() => {
     setSkills({ status: 'loading', hq: null });
-    adminHqSkillsApi.list()
+    adminHqSkillsApi.listAll()
       .then((r) => { if (!Array.isArray(r?.skills)) throw new Error('unreadable'); setSkills({ status: 'ready', hq: r.skills }); })
       .catch(() => setSkills({ status: 'unreadable', hq: null }));
   }, []);

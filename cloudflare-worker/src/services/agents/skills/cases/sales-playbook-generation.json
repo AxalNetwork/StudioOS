@@ -1,0 +1,34 @@
+{
+  "skill": "sales-playbook-generation",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Sales Playbook Generation",
+        "task_scope": "Builds an operating playbook with stage gates, qualification, discovery standards, objection paths and coaching.",
+        "evidence": [
+          "stage exit criteria and coaching"
+        ],
+        "omitted_field": "approved qualification threshold"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for stage exit criteria and coaching."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "stage exit criteria and coaching"
+    ],
+    "must_say_not_recorded": [
+      "approved qualification threshold"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

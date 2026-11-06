@@ -8,9 +8,8 @@
  * its lock) and the founder profile card (with its lock). Below them is the
  * member's module grid (`pages/studio/StudioModules.jsx`), in their saved
  * layout or the founder default. "Do these next" and "Activity across the
- * platform" are gone; "Continue where you left off" still links the
- * checklist's first open item. The header drops "Company profile" and
- * "Refresh": each tile has its own Try again.
+ * platform" are gone. The header carries Customise, and each tile has
+ * its own Try again.
  *
  * Below 1024px (owner, #3698 A, superseding D701's chat-only phone page) the
  * home draws this body under the phone chat with `phone`: no header and no
@@ -18,10 +17,9 @@
  * bar with Customise.
  */
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { Unrecorded } from '../../ui';
-import { LOADING, UNREADABLE, READY, headerOf, summaryOf, actionsOf, profileOf } from './founderStudioModel';
+import { LOADING, UNREADABLE, READY, headerOf, summaryOf, profileOf } from './founderStudioModel';
 import StudioModules from '../studio/StudioModules';
 import { CustomiseButton, StudioFixedLock } from '../studio/StudioParts';
 import { founderNoStoreTiles, founderTiles } from '../studio/tiles/founderTiles';
@@ -33,7 +31,6 @@ export default function FounderStudioBody({
 }) {
   const header = useMemo(() => headerOf({ user, project: reads.project, lab: reads.lab }), [user, reads.project, reads.lab]);
   const summary = summaryOf(reads);
-  const actions = actionsOf(reads);
   const profile = profileOf(reads);
   const tiles = founderTiles({ reads, cycles, onRetry, onRetryCycle, search });
   const dim = studio.editing ? 'sm-dim' : '';
@@ -53,12 +50,7 @@ export default function FounderStudioBody({
               {' · '}{header.founderLine}: everything you have built across the platform, what it unlocked, and what to do next.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <CustomiseButton studio={studio} />
-            {actions.state === READY && actions.items[0]?.href && (
-              <Link to={actions.items[0].href} className="sm-btn sm-btn-p" data-testid="link-founder-continue">Continue where you left off</Link>
-            )}
-          </div>
+          <CustomiseButton studio={studio} />
         </header>
       )}
 
