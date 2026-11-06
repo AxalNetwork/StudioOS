@@ -43,7 +43,7 @@ export default function ValidateNextAction({ raw, search = '', openAction }) {
         {focus.then && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="validate-next-then">Then: {focus.then.replace(/^then\s*:?\s+/i, '')}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        {focus.secondary.map((s) => (
+        {(focus.secondary || []).map((s) => (
           <Link key={s.href} to={s.href} className={LINK} onClick={opens(s.href)} data-testid="validate-next-secondary">{s.label}</Link>
         ))}
         {focus.href && (
