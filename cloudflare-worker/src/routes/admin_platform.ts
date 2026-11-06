@@ -97,9 +97,9 @@ import {
   PLATFORM_SWITCH_KEYS, readOperatorSwitchEntries, readPlatformSwitches,
 } from '../services/platformSwitches';
 import {
-  OPERATOR_SWITCH_REACH, OPERATOR_SWITCH_TTL_MS, SWITCH_REASON_MIN, isOperatorSwitchKey, setOperatorSwitch,
+  OPERATOR_SWITCH_REACH, OPERATOR_SWITCH_TTL_MS, SWITCH_REASON_MIN, isOperatorSwitchKey, readOperatorSwitches, setOperatorSwitch,
 } from '../services/operatorSwitches';
-import { logAdminAction } from '../services/adminAudit';
+import { adminAuditStatement, logAdminAction } from '../services/adminAudit';
 import { telegramTokenConfigured } from '../services/telegramClient';
 import { xClientConfigured } from '../services/xClient';
 import { describeTopology } from '../services/topology';
@@ -593,7 +593,7 @@ r.post('/switches/:key', async (c) => {
     return c.json({ error: 'No switch has that name.', code: 'unknown_switch' }, 404);
   }
 
-  let body: { action?: unknown; reason?: unknown } = {};
+  let body: { action?: unknown; reason?: unknown; revision?: unknown } = {};
   try { body = (await c.req.json()) ?? {}; } catch { body = {}; }
   const action = String(body.action ?? '');
   if (action !== 'throw' && action !== 'release') {
@@ -608,9 +608,24 @@ r.post('/switches/:key', async (c) => {
   }
 
   const thrown = action === 'throw';
+  // D4703 (#4703): a release names the activation it ends. Without it an old
+  // tab could clear a newer throw; a release that does not say which is refused.
+  const revision = body.revision;
+  if (!thrown && !(typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0)) {
+    return c.json({
+      error: 'A release must name the revision of the throw it ends. Reload the switch and try again.',
+      code: 'revision_required',
+    }, 400);
+  }
+  const auditAction = thrown ? 'platform_switch_thrown' : 'platform_switch_released';
   let changed: boolean;
   try {
-    ({ changed } = await setOperatorSwitch(c.env, key, thrown, reason, actor.id));
+    // The change and its audit row in one batch: both or neither (D4703).
+    await ensureAdminAuditLogTable(c.env);
+    ({ changed } = await setOperatorSwitch(c.env, key, thrown, reason, actor.id, {
+      revision: thrown ? undefined : (revision as number),
+      audit: adminAuditStatement(c.env, actor.id, auditAction, { reason, switch_key: key, ...(thrown ? {} : { revision }) }, { onlyIfChanged: true }),
+    }));
   } catch {
     return c.json({
       error: 'The operator switch store could not be written, so nothing was changed.',
@@ -618,16 +633,26 @@ r.post('/switches/:key', async (c) => {
     }, 503);
   }
   if (!changed) {
+    if (!thrown) {
+      const now = await readOperatorSwitches(c.env, { fresh: true }).catch(() => null);
+      const row = now && now.readable ? now.rows.get(key) : null;
+      if (row?.thrown && row.revision !== revision) {
+        return c.json({
+          error: 'This switch was thrown again after this page read it. Nothing was released. Reload to see the current throw.',
+          code: 'stale_revision',
+          current_revision: row.revision,
+        }, 409);
+      }
+    }
     return c.json({
       error: thrown ? 'That switch is already thrown.' : 'That switch is not thrown, so there is nothing to release.',
       code: 'no_change',
     }, 409);
   }
 
-  await logAdminAction(c.env, actor.id, actor.email, thrown ? 'platform_switch_thrown' : 'platform_switch_released', {
-    reason,
-    switch_key: key,
-  });
+  // The hashed-actor activity row stays best-effort: the governance row above
+  // is the record, and it landed with the change.
+  await logAdminActivityOnly(c.env, actor, auditAction, { reason, switch_key: key });
 
   // The switch as it now stands, read back from the store — including whether
   // the deploy half still holds it on after a release, which a release cannot
@@ -663,6 +688,31 @@ r.post('/switches/:key', async (c) => {
 // future charge WOULD use and that today's ledger projects with. The response
 // says so rather than leaving a percentage to imply otherwise. D75.
 // ---------------------------------------------------------------------------
+/**
+ * D4703 (#4703): a take rate in basis points, or null. A JSON integer, or a
+ * string of digits only. Missing, null, blank, `'0x10'`, `'1e3'`, `12.5` and
+ * `true` are all refused: `Number('')` is 0, and the old parse wrote 0% for a
+ * request that sent nothing.
+ */
+export function parseTakeRateBps(raw: unknown): number | null {
+  let n: number;
+  if (typeof raw === 'number') n = raw;
+  else if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) n = Number(raw.trim());
+  else return null;
+  return Number.isSafeInteger(n) && n >= 0 && n <= MAX_TAKE_RATE_BPS ? n : null;
+}
+
+/** The hashed-actor `activity_logs` row only; the governance row was batched with the change. */
+async function logAdminActivityOnly(env: Env, actor: { id: number; email?: string | null }, action: string, details: Record<string, unknown>) {
+  try {
+    const { hashEmail } = await import('../util/hashEmail');
+    await env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)')
+      .bind(action, JSON.stringify(details), await hashEmail(actor.email || ''), actor.id).run();
+  } catch (e) {
+    console.warn('[admin_platform] activity_logs write failed', action, (e as Error).message);
+  }
+}
+
 r.get('/take-rate', async (c) => {
   const admin = await requireSuperAdmin(c);
   void admin;
@@ -684,15 +734,17 @@ r.get('/take-rate', async (c) => {
 });
 
 r.put('/take-rate', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  // D4703 (#4703): the write bar, as the switch write has — a TOTP session and
+  // a recent step-up. A rate that decides what the platform charges is as
+  // sensitive as a switch.
+  const admin = await requireSuperAdminWriteBar(c);
   const body = await c.req.json().catch(() => ({} as any));
 
   // BASIS POINTS ONLY, and no coercion from a percentage. Accepting both would
   // make `15` ambiguous — 15 bps is 0.15% and 15% is 1500 — and the form that
   // guessed wrong would undercharge by a factor of a hundred without erroring.
-  const raw = body.bps;
-  const bps = typeof raw === 'number' ? raw : Number(String(raw ?? '').trim());
-  if (!Number.isInteger(bps) || bps < 0 || bps > MAX_TAKE_RATE_BPS) {
+  const bps = parseTakeRateBps(body.bps);
+  if (bps == null) {
     return c.json({
       detail: `bps must be a whole number of basis points between 0 and ${MAX_TAKE_RATE_BPS} `
         + `(1500 = 15%). A percentage is not accepted here: 15 would be 0.15%.`,
@@ -701,29 +753,30 @@ r.put('/take-rate', async (c) => {
 
   const before = await takeRate(c.env);
   const actor = String((admin as any)?.email || (admin as any)?.id || 'super_admin');
-  await c.env.DB.prepare(
-    `INSERT INTO platform_settings (key, value, updated_at, updated_by)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
-  ).bind(TAKE_RATE_KEY, String(bps), new Date().toISOString(), actor).run();
 
   // AUDITED, and the BEFORE value is in the row. "Someone set it to 12%" does
   // not answer "what was it before, and for how long" — which is the question
-  // asked when an advisor disputes a quarter. Best-effort, matching the
-  // convention elsewhere: the setting has already changed, so a logging hiccup
-  // must not imply it has not.
+  // asked when an advisor disputes a quarter.
+  //
+  // D4703 (#4703): THE SETTING AND ITS RECORD IN ONE BATCH. The audit used to
+  // run after the write, inside a try/catch that swallowed a failure, so the
+  // rate could change with no row saying who changed it or from what. Now a
+  // failed audit fails the write too, and nothing changes.
   try {
     await ensureAdminAuditLogTable(c.env);
-    await c.env.DB.prepare(
-      `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json)
-       VALUES (?, ?, ?, ?)`,
-    ).bind(
-      (admin as any).id, 'advisor_take_rate_update', 'platform',
-      JSON.stringify({ from_bps: before.bps, from_source: before.source, to_bps: bps }),
-    ).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO platform_settings (key, value, updated_at, updated_by)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET
+           value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+      ).bind(TAKE_RATE_KEY, String(bps), new Date().toISOString(), actor),
+      adminAuditStatement(c.env, (admin as any).id, 'advisor_take_rate_update',
+        { from_bps: before.bps, from_source: before.source, to_bps: bps }),
+    ]);
   } catch (e: any) {
-    console.warn('[admin_platform] take-rate audit failed:', String(e?.message || e));
+    console.warn('[admin_platform] take-rate write failed:', String(e?.message || e));
+    return c.json({ detail: 'The take rate could not be saved with its audit record, so nothing was changed.', code: 'store_unavailable' }, 503);
   }
 
   const after = await takeRate(c.env);

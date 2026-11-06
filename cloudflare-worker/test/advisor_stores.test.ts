@@ -900,3 +900,131 @@ test('the cohort read writes nothing to the Spin-Out Lab', async () => {
   assert.deepEqual(db.prepare('SELECT * FROM company_week_status ORDER BY id').all(), before.weeks);
   assert.deepEqual(db.prepare('SELECT * FROM week_windows ORDER BY id').all(), before.windows);
 });
+
+// ---------------------------------------------------------------------------
+// D4703 (#4703) — practice integrations converge on one state
+// ---------------------------------------------------------------------------
+
+/** A request whose deferred work is collected, so a test can await it. */
+async function callCollecting(
+  e: any, method: string, path: string, who: { user: number; role: string }, body?: any,
+) {
+  const deferred: Promise<unknown>[] = [];
+  const headers: Record<string, string> = { Authorization: `Bearer ${await token(who.user, who.role)}` };
+  const init: RequestInit = { method, headers };
+  if (body !== undefined) { headers['Content-Type'] = 'application/json'; (init as any).body = JSON.stringify(body); }
+  const res = await advisors.request(path, init, e, { waitUntil(p: Promise<unknown>) { deferred.push(p); }, passThroughOnException() {} } as any);
+  await Promise.allSettled(deferred);
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+test('D4703: a cancelled or missed session is not payable, whatever price it carries', async () => {
+  // Mutation checked: the BOOKING_PAYABLE_STATUSES check removed → a cancelled booking falls through to 503 "charging is not on".
+  const db = freshDb();
+  seedBooking(db, 5, 1, 'cancelled');
+  seedBooking(db, 6, 1, 'no_show');
+  seedBooking(db, 7, 1, 'completed');
+  db.exec("UPDATE advisor_bookings SET billing_state = 'billed', amount_cents = 30000");
+  const e = env(db);
+  const cancelled = await call(e, 'POST', '/bookings/5/pay', fran);
+  assert.equal(cancelled.status, 409, JSON.stringify(cancelled.body));
+  assert.match(cancelled.body.detail, /cancelled, so there is nothing to pay\. No cancellation fee applies\./);
+  const missed = await call(e, 'POST', '/bookings/6/pay', fran);
+  assert.equal(missed.status, 409);
+  assert.match(missed.body.detail, /did not take place/);
+  // A session that happened is still payable in principle: it reaches the
+  // charging switch, which is off here.
+  assert.equal((await call(e, 'POST', '/bookings/7/pay', fran)).status, 503);
+});
+
+test('D4703: a cancel or confirm writes only from the status it read', async () => {
+  // Mutation checked: the UPDATE's `AND status = ?` removed → the confirm overwrites the cancel and answers 200.
+  const db = freshDb();
+  seedBooking(db, 9, 1, 'pending');
+  const base = env(db);
+  // The founder cancels between the advisor's read and the advisor's write.
+  const racing = { ...base, DB: { ...base.DB, prepare(sql: string) {
+    if (sql.startsWith('UPDATE advisor_bookings SET status = ?')) db.exec("UPDATE advisor_bookings SET status = 'cancelled' WHERE id = 9");
+    return base.DB.prepare(sql);
+  } } };
+  const r = await call(racing, 'POST', '/bookings/9/confirm', ada);
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.match(r.body.detail, /changed while you were looking at it/);
+  assert.equal((db.prepare('SELECT status FROM advisor_bookings WHERE id = 9').get() as any).status, 'cancelled', 'the cancel stands');
+  // Without a race, the same press works.
+  seedBooking(db, 10, 1, 'pending');
+  assert.equal((await call(base, 'POST', '/bookings/10/confirm', ada)).status, 200);
+});
+
+test('D4703: cancelling a slot cleans up every booking’s calendar copy, as one cancel does', async () => {
+  // Mutation checked: the slot delete's deferCalendarCancel removed → no calendar lookup for either booking.
+  const db = freshDb();
+  seedBooking(db, 11, 1, 'confirmed');
+  db.prepare('INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status) VALUES (?,?,?,?,?,?)')
+    .run(12, 'bk-12', 11, 1, OUTSIDER_USER, 'pending');
+  db.prepare('INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status) VALUES (?,?,?,?,?,?)')
+    .run(13, 'bk-13', 11, 1, ADMIN_USER, 'cancelled');
+  const base = env(db);
+  const looked: number[] = [];
+  const watching = { ...base, DB: { ...base.DB, prepare(sql: string) {
+    const st = base.DB.prepare(sql);
+    if (!/FROM calendar_sync_records/.test(sql)) return st;
+    return { ...st, bind: (...b: any[]) => { looked.push(Number(b[1])); return st.bind(...b); } };
+  } } };
+  const r = await callCollecting(watching, 'DELETE', '/me/slots/11', ada);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.bookings_cancelled, 2, 'the two open bookings, not the one already cancelled');
+  assert.deepEqual(looked.sort(), [11, 12], 'each cancelled booking got the calendar cleanup a single cancel gets');
+  const statuses = db.prepare('SELECT id, status FROM advisor_bookings WHERE slot_id = 11 ORDER BY id').all() as any[];
+  assert.deepEqual(statuses.map((s) => s.status), ['cancelled', 'cancelled', 'cancelled']);
+});
+
+test('D4703: two payout onboarding starts make one provider account, and a stored one wins', async () => {
+  // Mutation checked: no idempotency key → two accounts created at the provider;
+  // the attach made unconditional → the later start overwrites the stored account.
+  const db = freshDb();
+  const e = { ...env(db), STRIPE_SECRET_KEY: 'sk_test_synthetic' };
+  const created = new Map<string, string>();
+  const linkedFor: string[] = [];
+  let raceAttach: string | null = null;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init: any) => {
+    const u = String(url);
+    if (u.endsWith('/v1/accounts')) {
+      const key = String(init.headers['Idempotency-Key'] || `none-${created.size}`);
+      if (!created.has(key)) created.set(key, `acct_synthetic_${created.size + 1}`);
+      if (raceAttach) db.prepare('UPDATE advisor_payout_accounts SET provider_account_id = ? WHERE advisor_id = 1').run(raceAttach);
+      return new Response(JSON.stringify({ id: created.get(key) }), { status: 200 });
+    }
+    if (u.endsWith('/v1/account_links')) {
+      linkedFor.push(new URLSearchParams(init.body).get('account') || '');
+      return new Response(JSON.stringify({ url: 'https://connect.example.test/onboard' }), { status: 200 });
+    }
+    throw new Error(`unexpected fetch ${u}`);
+  }) as any;
+  try {
+    const [a, b] = await Promise.all([
+      call(e, 'POST', '/me/payout-account/connect', ada),
+      call(e, 'POST', '/me/payout-account/connect', ada),
+    ]);
+    assert.equal(a.status, 200, JSON.stringify(a.body));
+    assert.equal(b.status, 200, JSON.stringify(b.body));
+    assert.equal(new Set(created.values()).size, 1, 'one account at the provider, not one per start');
+    assert.ok([...created.keys()][0].startsWith('connect:advisory:'));
+    const stored = (db.prepare('SELECT provider_account_id FROM advisor_payout_accounts WHERE advisor_id = 1').get() as any).provider_account_id;
+    assert.equal(stored, 'acct_synthetic_1');
+    assert.deepEqual(linkedFor, ['acct_synthetic_1', 'acct_synthetic_1']);
+
+    // Another start attached its account while this one was at the provider:
+    // the stored one stands, and this start onboards into it.
+    db.exec('UPDATE advisor_payout_accounts SET provider_account_id = NULL');
+    created.clear(); linkedFor.length = 0;
+    created.set('placeholder', 'acct_unused');
+    raceAttach = 'acct_synthetic_winner';
+    const c = await call(e, 'POST', '/me/payout-account/connect', ada);
+    assert.equal(c.status, 200, JSON.stringify(c.body));
+    assert.equal((db.prepare('SELECT provider_account_id FROM advisor_payout_accounts WHERE advisor_id = 1').get() as any).provider_account_id,
+      'acct_synthetic_winner', 'the account attached first is not overwritten');
+    assert.deepEqual(linkedFor, ['acct_synthetic_winner']);
+  } finally { globalThis.fetch = realFetch; }
+});
