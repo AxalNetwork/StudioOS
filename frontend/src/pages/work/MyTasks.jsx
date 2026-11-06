@@ -33,8 +33,8 @@ export default function MyTasks({ licence = 'founder', project = null, title = '
 
   const view = read.status === 'ready' ? myTaskSections(read.data) : null;
   return (
-    <section className="rounded-[12px] border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" aria-label={title} data-testid={testId}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section className="flex flex-col gap-3 rounded-[12px] border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" aria-label={title} data-testid={testId}>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <h2 className="flex items-center gap-2 text-[14px] font-bold text-axal-ink dark:text-gray-100">
           {title}
           <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${licenceBadge(licence)}`} data-testid={`${testId}-licence`}>{MY_TASKS_LICENCE[licence] || MY_TASKS_LICENCE.admin}</span>
@@ -60,9 +60,9 @@ export default function MyTasks({ licence = 'founder', project = null, title = '
       {read.status === 'error' ? (
         <HonestBlock role="alert" testId={`${testId}-error`} action={<button type="button" className={BTN_SECONDARY} onClick={load}>Try again</button>}>{read.message}</HonestBlock>
       ) : null}
-      {view && !view.sections.length ? <p className={`mt-2 ${MUTED}`} data-testid={`${testId}-empty`}>{MY_TASKS_EMPTY}</p> : null}
+      {view && !view.sections.length ? <p className={MUTED} data-testid={`${testId}-empty`}>{MY_TASKS_EMPTY}</p> : null}
       {view?.sections.map((s) => (
-        <div key={s.key} className="mt-3" data-testid={`${testId}-section`}>
+        <div key={s.key} data-testid={`${testId}-section`}>
           <h3 className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">{s.title}</h3>
           <ul className="mt-1 divide-y divide-axal-hairline dark:divide-gray-800">
             {s.rows.map((r) => (
@@ -78,7 +78,7 @@ export default function MyTasks({ licence = 'founder', project = null, title = '
           </ul>
         </div>
       ))}
-      {view?.more ? <p className={`mt-2 ${MUTED}`} data-testid={`${testId}-more`}>More tasks are given to you than this list shows; narrow it by date.</p> : null}
+      {view?.more ? <p className={MUTED} data-testid={`${testId}-more`}>More tasks are given to you than this list shows; narrow it by date.</p> : null}
     </section>
   );
 }
