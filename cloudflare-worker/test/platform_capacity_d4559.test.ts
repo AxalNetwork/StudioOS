@@ -84,8 +84,20 @@ test('d1Policy: defaults are 10 / 5 / 7.5 decimal GB, overrides must be whole by
     const b = d1Policy(bad as any);
     assert.deepEqual([b.limit, b.warning, b.critical], [D1_LIMIT_BYTES_DEFAULT, D1_WARN_BYTES_DEFAULT, D1_CRIT_BYTES_DEFAULT], JSON.stringify(bad));
   }
-  // A non-numeric override is not a number of bytes and is not used.
-  assert.equal(d1Policy({ PLATFORM_D1_LIMIT_BYTES: '10GB' } as any).limit, D1_LIMIT_BYTES_DEFAULT);
+  // A non-numeric override is not a number of bytes and is not used, and the
+  // response says it was ignored rather than staying silent.
+  const garbled = d1Policy({ PLATFORM_D1_LIMIT_BYTES: '10GB' } as any);
+  assert.equal(garbled.limit, D1_LIMIT_BYTES_DEFAULT);
+  assert.match(String(garbled.note), /ignored/);
+  // One malformed variable voids the set: a valid sibling is not half-applied.
+  const half = d1Policy({ PLATFORM_D1_LIMIT_BYTES: 'abc', PLATFORM_D1_WARN_BYTES: '2000000000' } as any);
+  assert.deepEqual([half.limit, half.warning, half.critical], [D1_LIMIT_BYTES_DEFAULT, D1_WARN_BYTES_DEFAULT, D1_CRIT_BYTES_DEFAULT]);
+  assert.match(String(half.note), /ignored/);
+  // Overriding only the review sizes leaves the plan limit unconfirmed, and says so.
+  const sizesOnly = d1Policy({ PLATFORM_D1_WARN_BYTES: '4000000000' } as any);
+  assert.equal(sizesOnly.warning, 4 * GB);
+  assert.equal(sizesOnly.limit_basis, 'default');
+  assert.match(String(sizesOnly.note), /unconfirmed/);
 });
 
 test('D1 size: bytes from size_after, ratio is bytes over bytes, levels at the policy sizes', async () => {
@@ -139,7 +151,12 @@ test('queue: an empty queue is none waiting; skew, outage and absence are unavai
   assert.equal(empty[2].value, null);
   assert.equal(empty[2].level, 'ok');
 
-  const backlogNoTime = await readQueue({ AGENT_QUEUE: queue({ backlogCount: 3, backlogBytes: 10 }) } as any, 'AGENT_QUEUE', NOW);
+  // A zero backlog beside a stale or epoch timestamp is still none waiting, never a critical age.
+  const emptyStale = await readQueue({ AGENT_QUEUE: queue({ backlogCount: 0, backlogBytes: 0, oldestMessageTimestamp: new Date(0) }) } as any, 'AGENT_QUEUE', NOW);
+  assert.equal(emptyStale[2].availability, 'none_waiting');
+  assert.equal(emptyStale[2].level, 'ok');
+
+  const backlogNoTime =await readQueue({ AGENT_QUEUE: queue({ backlogCount: 3, backlogBytes: 10 }) } as any, 'AGENT_QUEUE', NOW);
   assert.equal(backlogNoTime[2].availability, 'unavailable');
 
   const skew = await readQueue({ JOB_QUEUE: queue({ backlogCount: 1, backlogBytes: 1, oldestMessageTimestamp: new Date(NOW.getTime() + 60_000) }) } as any, 'JOB_QUEUE', NOW);
@@ -188,4 +205,54 @@ test('the route is Super Admin only, no-store, and the service calls no network'
   assert.match(block, /private, no-store/);
   const svc = readFileSync(join(ROOT, 'cloudflare-worker/src/services/platformCapacity.ts'), 'utf8');
   assert.doesNotMatch(svc, /fetch\(|api\.cloudflare\.com|CLOUDFLARE_[A-Z_]*TOKEN/);
+});
+
+test('the mounted route: anonymous and plain Admin are refused, Super Admin reads it, and a D1 without a size is unavailable, not zero', async () => {
+  const { Hono } = await import('hono');
+  const { SignJWT } = await import('jose');
+  const { migratedDatabase, removeMigratedDatabases } = await import('./_storage_schema.ts');
+  const { d1Over } = await import('./_d1_sqlite.mjs');
+  const { AUTH_ERROR_STATUSES } = await import('../src/util/authErrors.ts');
+  const { withThrownResponses } = await import('../src/util/thrownResponse.ts');
+  const { default: adminPlatform } = await import('../src/routes/admin_platform.ts');
+  const SECRET = 'synthetic-platform-capacity-signing-'.repeat(2);
+  try {
+    const db = migratedDatabase();
+    db.exec(`
+      INSERT INTO users(id,name,email,role,is_active) VALUES (44,'Staff','staff@example.test','admin',1),(66,'Hq','hq@example.test','admin',1);
+      INSERT INTO super_admins(user_id) VALUES (66);
+    `);
+    const env: any = {
+      JWT_SECRET: SECRET, ENVIRONMENT: 'development', DB: d1Over(db),
+      JOB_QUEUE: queue({ backlogCount: 2, backlogBytes: 64, oldestMessageTimestamp: new Date(Date.now() - 10_000) }),
+    };
+    const app = new Hono<any>();
+    app.route('/api/admin/platform', adminPlatform);
+    app.onError((err, c) => c.json({ error: err.message }, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
+    const call = async (who: number | null) => {
+      const headers: Record<string, string> = {};
+      if (who !== null) {
+        const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('5m').sign(new TextEncoder().encode(SECRET));
+        headers.Authorization = `Bearer ${jwt}`;
+      }
+      return withThrownResponses(() => app.request('https://unit.test/api/admin/platform/capacity', { headers }, env));
+    };
+    assert.equal((await call(null)).status, 401, 'no session is refused');
+    assert.equal((await call(44)).status, 403, 'a plain Admin is refused');
+    const res = await call(66);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('cache-control'), 'private, no-store');
+    const body: any = await res.json();
+    const byKey = Object.fromEntries(body.metrics.map((m: any) => [m.key, m]));
+    // The local SQLite shim returns no size_after: that is unavailable, never 0 bytes.
+    assert.equal(byKey['d1.size_bytes'].availability, 'unavailable');
+    assert.equal(byKey['d1.size_bytes'].value, null);
+    assert.equal(byKey['queue.job.backlog_messages'].value, 2);
+    // AGENT_QUEUE is not bound here: unavailable, and the whole is not ok.
+    assert.equal(byKey['queue.agent.backlog_messages'].availability, 'unavailable');
+    assert.equal(body.level, 'unknown');
+    assert.doesNotMatch(JSON.stringify(body), /hq@example\.test|staff@example\.test/);
+  } finally {
+    removeMigratedDatabases();
+  }
 });

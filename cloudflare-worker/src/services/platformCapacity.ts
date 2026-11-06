@@ -102,22 +102,27 @@ function bytesVar(raw: unknown): number | null {
  */
 export function d1Policy(env: Partial<Env>) {
   const bag = env as Record<string, unknown>;
+  const keys = ['PLATFORM_D1_LIMIT_BYTES', 'PLATFORM_D1_WARN_BYTES', 'PLATFORM_D1_CRIT_BYTES'] as const;
+  const isSet = (k: string) => bag[k] !== undefined && bag[k] !== null && bag[k] !== '';
+  // A variable that is set but is not a whole byte count voids the whole set:
+  // half-applying overrides would mix the owner's numbers with the defaults.
+  const malformed = keys.some((k) => isSet(k) && bytesVar(bag[k]) === null);
   const limit = bytesVar(bag.PLATFORM_D1_LIMIT_BYTES) ?? D1_LIMIT_BYTES_DEFAULT;
   const warning = bytesVar(bag.PLATFORM_D1_WARN_BYTES) ?? D1_WARN_BYTES_DEFAULT;
   const critical = bytesVar(bag.PLATFORM_D1_CRIT_BYTES) ?? D1_CRIT_BYTES_DEFAULT;
-  const overridden = ['PLATFORM_D1_LIMIT_BYTES', 'PLATFORM_D1_WARN_BYTES', 'PLATFORM_D1_CRIT_BYTES']
-    .some((k) => bag[k] !== undefined && bag[k] !== '');
-  if (!(warning < critical && critical <= limit)) {
+  if (malformed || !(warning < critical && critical <= limit)) {
     return {
       limit: D1_LIMIT_BYTES_DEFAULT, warning: D1_WARN_BYTES_DEFAULT, critical: D1_CRIT_BYTES_DEFAULT,
       limit_basis: 'default',
       note: 'The D1 overrides were ignored: they must be whole byte counts with warning < critical <= limit.',
     };
   }
+  const limitOverridden = bytesVar(bag.PLATFORM_D1_LIMIT_BYTES) !== null;
   return {
     limit, warning, critical,
-    limit_basis: bytesVar(bag.PLATFORM_D1_LIMIT_BYTES) ? 'override' : 'default',
-    note: overridden ? null : 'The 10 GB limit is the documented Workers Paid maximum; the account plan is not readable here and is unconfirmed.',
+    limit_basis: limitOverridden ? 'override' : 'default',
+    // The plan limit is unconfirmed unless the owner set it, whatever the review sizes say.
+    note: limitOverridden ? null : 'The 10 GB limit is the documented Workers Paid maximum; the account plan is not readable here and is unconfirmed.',
   };
 }
 
@@ -212,12 +217,13 @@ export async function readQueue(env: Partial<Env>, binding: 'JOB_QUEUE' | 'AGENT
 
   const oldest = m?.oldestMessageTimestamp;
   const oldestMs = oldest instanceof Date ? oldest.getTime() : typeof oldest === 'number' || typeof oldest === 'string' ? new Date(oldest).getTime() : NaN;
-  if (oldest === undefined || oldest === null) {
-    if (isCount(count) && count === 0) {
-      out.push({ ...ageBase, value: null, availability: 'none_waiting', reason: 'No message is waiting.', level: 'ok' });
-    } else {
-      out.push(unavailable(ageBase, 'The queue reported a backlog without its oldest message time.'));
-    }
+  if (isCount(count) && count === 0) {
+    // An empty queue has no oldest message, whatever timestamp the binding
+    // leaves beside a zero backlog (a stale or epoch value is not an age).
+    out.push({ ...ageBase, value: null, availability: 'none_waiting', reason: 'No message is waiting.', level: 'ok' });
+  } else if (oldest === undefined || oldest === null) {
+    // A backlog, or an unreadable count, without a timestamp: no age to state.
+    out.push(unavailable(ageBase, 'The queue reported a backlog without its oldest message time.'));
   } else if (!Number.isFinite(oldestMs)) {
     out.push(unavailable(ageBase, 'The oldest message time could not be read.'));
   } else {
