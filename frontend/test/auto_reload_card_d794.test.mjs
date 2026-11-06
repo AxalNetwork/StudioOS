@@ -60,20 +60,25 @@ test('the form draws the switch, the packs, the threshold and the saved card; Sa
   assert.match(renderToStaticMarkup(h(AutoReloadForm, { settings: { ...OFF, disabled_reason: 'card_declined' }, packs: PACKS })), /Auto-reload is off: your card was declined\./);
 });
 
-async function mount(settings, api) {
+async function mount(settings, api, options = {}) {
   const restore = installDocument();
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   let saved = 0;
-  await act(async () => { root.render(h(AutoReloadForm, { settings, packs: PACKS, api, onSaved: () => { saved += 1; } })); });
+  let current = { settings, packs: options.packs ?? PACKS, packsRead: options.packsRead ?? null, api, onSaved: () => { saved += 1; }, onRetryCard: options.onRetryCard };
+  await act(async () => { root.render(h(AutoReloadForm, current)); });
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const by = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
   const change = (id, value, key = 'value') => act(async () => { props(by(id)).onChange({ target: { [key]: value } }); });
   const submit = () => act(async () => { props(by('auto-reload-form')).onSubmit({ preventDefault() {} }); await new Promise((r) => setTimeout(r, 0)); });
   const text = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '');
-  return { by, change, submit, text, saved: () => saved, async unmount() { await act(async () => root.unmount()); restore(); } };
+  return {
+    by, props, change, submit, text, saved: () => saved,
+    async rerender(next) { current = { ...current, ...next }; await act(async () => { root.render(h(AutoReloadForm, current)); await new Promise((r) => setTimeout(r, 0)); }); },
+    async unmount() { await act(async () => root.unmount()); restore(); },
+  };
 }
 
 // 3 ───────────────────────────────────────────────────────────────────────────
@@ -103,6 +108,37 @@ test('Save sends the switch, the pack and the typed threshold; a refusal is said
     assert.equal(failing.saved(), 0);
     assert.match(failing.text(failing.by('account-outcome-error')), /Add a card before turning auto-reload on\./);
   } finally { await failing.unmount(); }
+});
+
+test('packs may arrive before or after settings; failures retry, and later responses preserve unsaved selection', async () => {
+  const later = await mount(ON, {}, { packs: [], packsRead: { status: 'loading', reload() {} } });
+  try {
+    assert.ok(later.by('auto-reload-packs-loading'));
+    await later.rerender({ packs: PACKS, packsRead: { status: 'ready', data: {}, reload() {} } });
+    assert.equal(later.props(later.by('auto-reload-pack')).value, 'pack25', 'the saved pack wins when packs arrive second');
+    await later.change('auto-reload-pack', 'pack50');
+    await later.rerender({ packs: [...PACKS], packsRead: { status: 'ready', data: {}, reload() {} } });
+    assert.equal(later.props(later.by('auto-reload-pack')).value, 'pack50', 'a refresh does not overwrite an unsaved edit');
+    await later.rerender({ packs: [], packsRead: { status: 'unreadable', reload() {} } });
+    assert.match(later.text(later.by('auto-reload-packs-unreadable')), /not a claim that none is available/i);
+  } finally { await later.unmount(); }
+
+  const first = await mount(ON, {}, { packs: PACKS, packsRead: { status: 'ready', data: {}, reload() {} } });
+  try { assert.equal(first.props(first.by('auto-reload-pack')).value, 'pack25', 'the saved pack wins when packs arrived first'); } finally { await first.unmount(); }
+
+  const retired = renderToStaticMarkup(h(AutoReloadForm, { settings: { ...ON, pack_uid: 'retired-pack' }, packs: PACKS }));
+  assert.match(retired, /Saved pack unavailable/);
+  assert.match(retired, /disabled=""[^>]*data-testid="auto-reload-save"|data-testid="auto-reload-save"[^>]*disabled=""/, 'a retired saved pack cannot be submitted as though it were on sale');
+});
+
+test('an unreadable auto-reload card is not presented as no saved card', async () => {
+  const m = await mount({ ...ON, card: null, card_unreadable: true }, {}, { onRetryCard() {} });
+  try {
+    const words = m.text(m.by('auto-reload-card'));
+    assert.match(words, /not a claim that no card is saved/i);
+    assert.doesNotMatch(words, /No card saved for auto-reload/);
+    assert.equal(m.by('auto-reload-add-card'), undefined, 'card-changing waits until the saved-card state is known');
+  } finally { await m.unmount(); }
 });
 
 // 4 ───────────────────────────────────────────────────────────────────────────
