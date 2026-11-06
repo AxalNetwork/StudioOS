@@ -734,10 +734,10 @@ r.get('/take-rate', async (c) => {
 });
 
 r.put('/take-rate', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
   // D4703 (#4703): the write bar, as the switch write has — a TOTP session and
   // a recent step-up. A rate that decides what the platform charges is as
   // sensitive as a switch.
-  const admin = await requireSuperAdminWriteBar(c);
   const body = await c.req.json().catch(() => ({} as any));
 
   // BASIS POINTS ONLY, and no coercion from a percentage. Accepting both would
