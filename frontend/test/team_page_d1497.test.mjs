@@ -71,7 +71,7 @@ const MEMBERS = {
 };
 /** #3840's Agent DTO, as the canvas draws TM1a's rows. */
 const AGENTS = [
-  { uid: 'a1', role_key: 'cfo', persona: { key: 'orrin', tagline: '[Every road ends at a market.]' }, first_name: '[Nora]', last_name: '[Vale]', model_id: 'm-a', model_label: '[Model A]', tools: [{ tool: 'get_balance', server_name: '[Finance MCP]' }, { tool: 'list_transactions', server_name: '[Finance MCP]' }], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 25_000_000, month_spend: { available: true, value_microusd: 3_840_000 }, last_activity_at: '2026-10-31T10:00:00Z', project: null },
+  { uid: 'a1', role_key: 'cfo', persona: { key: 'orrin', avatar: '/agents/orrin.webp', tagline: '[Every road ends at a market.]' }, first_name: '[Nora]', last_name: '[Vale]', model_id: 'm-a', model_label: '[Model A]', tools: [{ tool: 'get_balance', server_name: '[Finance MCP]' }, { tool: 'list_transactions', server_name: '[Finance MCP]' }], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 25_000_000, month_spend: { available: true, value_microusd: 3_840_000 }, last_activity_at: '2026-10-31T10:00:00Z', project: null },
   { uid: 'a2', role_key: 'cmo', persona: { key: 'kade', tagline: '[Light ten lanterns.]' }, first_name: '[Iris]', last_name: '[Cole]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'paused', paused_reason: 'cap', monthly_cap_microusd: 10_000_000, month_spend: { available: true, value_microusd: 10_000_000 }, last_activity_at: '2026-10-28T12:00:00Z', project: null },
   { uid: 'a3', role_key: 'research', persona: { key: 'ryssa', tagline: '[If the plan survives me.]' }, first_name: '[Milo]', last_name: '[Hart]', model_id: 'm-c', model_label: '[Model C]', tools: [], sponsor: { uid: 'u3', name: '[Sam Okafor]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 10_000_000, month_spend: { available: false }, last_activity_at: null, project: null },
   { uid: 'a4', role_key: 'cto', persona: { key: 'corvane', tagline: '[Ask the right question.]' }, first_name: '[Ada]', last_name: '[Quinn]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 20_000_000, month_spend: { available: true, value_microusd: 2_100_000 }, last_activity_at: '2026-10-31T08:00:00Z', project: { id: 7, name: '[Atlas Pilot]' } },
@@ -104,15 +104,18 @@ test('an agent is a rounded square with the spark and the "AI agent" pill; a per
   assert.doesNotMatch(person, /agent-tile|AI agent/);
 });
 
-test('no people row draws the agent marker, and every agent row draws it with no circle', () => {
+test('agent rows show Studio archetypes and use the persona portrait when present', () => {
   const people = render(h(PeopleCard, { kind: 'company', people: peopleFromCompany(COMPANY, 1, VOCAB), canEdit: true }));
   assert.doesNotMatch(people, /agent-tile|agent-pill/);
   assert.equal((people.match(/data-shape="circle"/g) || []).length, 3);
   const card = render(h(AgentsCard, { block: { available: true, value: { can_manage: true, agents: AGENTS.slice(0, 3) } }, kind: 'project', companyName: '[Lantern]', now: NOW }));
-  for (const uid of ['a1', 'a2', 'a3']) {
+  for (const [uid, archetype] of [['a1', 'Disciplined Allocator'], ['a2', 'Growth Catalyst'], ['a3', 'Thesis-Driven Backer']]) {
     const row = card.slice(card.indexOf(`data-testid="agent-${uid}"`)).split('role="row"')[0];
     assert.match(row, /data-shape="square"/, uid);
-    assert.match(row, /AI agent/, uid);
+    assert.match(row, new RegExp(`data-testid="agent-archetype">${archetype}<`), uid);
+    assert.doesNotMatch(row, /data-testid="agent-pill"/, uid);
+    if (uid === 'a1') assert.match(row, /<img src="\/agents\/orrin\.webp"/, uid);
+    else assert.doesNotMatch(row, /<img /, uid);
     assert.doesNotMatch(row, /data-shape="circle"/, uid);
   }
 });
@@ -794,13 +797,13 @@ const agentsOn = (over = {}) => worker({
   ...over,
 });
 
-test('#3840 switched on: the agents card draws the list with the AI agent pill, Not recorded for unread spend, and no Add without the plan', async () => {
+test('#3840 switched on: the agents card draws the list with Studio archetypes, Not recorded for unread spend, and no Add without the plan', async () => {
   const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), { handle: agentsOn() });
   try {
     assert.ok(v.keys().includes('GET /api/teams/company/nw1/agents'));
     const text = v.text();
-    assert.match(text, /\[Nora\] \[Vale\]AI agent/);
-    assert.match(text, /\[Milo\] \[Hart\]AI agent/);
+    assert.match(text, /\[Nora\] \[Vale\]Disciplined Allocator/);
+    assert.match(text, /\[Milo\] \[Hart\]Thesis-Driven Backer/);
     assert.match(text, /Platform model · m-a/, 'the model the Worker names, with no invented label');
     assert.match(text, /\[If the plan survives me\.\] · this month Not recorded/, 'unread spend is Not recorded');
     assert.doesNotMatch(text, /\$0\.00|aren’t switched on/);

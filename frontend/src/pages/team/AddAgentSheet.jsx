@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Lightbox, Sheet, Unrecorded } from '../../ui';
 import { PersonAvatar } from './AgentMark.jsx';
-import AgentCard, { AgentAvatar, RiskScale } from './AgentCard.jsx';
+import AgentCard, { AgentArchetypeBadge, AgentAvatar, RiskScale } from './AgentCard.jsx';
 import AxalValuesBars from '../../components/profile/AxalValuesBars.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MUTED } from './teamUi.jsx';
@@ -91,7 +91,8 @@ export function CompareDialog({ personas, legend, chosen, onTeam, onChoose, onCl
                 <AgentAvatar persona={p} size={64} />
                 <div className="min-w-0">
                   <b className="block text-[17px] font-extrabold text-axal-ink dark:text-gray-100">{p.name}</b>
-                  {pronouns(p) ? <span className={MUTED}>{pronouns(p)}</span> : null}
+                  <AgentArchetypeBadge persona={p} />
+                  {pronouns(p) ? <span className={`block ${MUTED}`}>{pronouns(p)}</span> : null}
                   <span className="block text-[12.5px] italic text-axal-ink dark:text-gray-200">{p.tagline ? `“${p.tagline}”` : NOT_RECORDED}</span>
                 </div>
               </div>
