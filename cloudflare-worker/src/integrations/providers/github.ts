@@ -446,8 +446,8 @@ function pullStatements(env: Env, row: IntegrationRow, projectId: number, repo: 
       stmts: [
         // The title is GitHub's. The state follows the pull request in `github/mvp.ts`, written only
         // when GitHub's state moves, so a founder's own edit stands (D782, #2112).
-        env.DB.prepare('UPDATE mvp_features SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
-          .bind(title, localId, projectId),
+        env.DB.prepare('UPDATE mvp_features SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND title IS NOT ?')
+          .bind(title, localId, projectId, title),
         touch.bind(row.id, projectId, 'prototype_mvp', 'pull_request', externalId, 'mvp_features', localId),
         env.DB.prepare(UNLINK_DELETED_PULL).bind(row.id, externalId, localId, projectId),
       ],
