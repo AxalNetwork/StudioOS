@@ -177,6 +177,6 @@ test('the desk: Corporate Governance sits after Templates at its own path, HQ on
 
 test('the route: its own path (tabs are paths), behind admin and HQ only', () => {
   const src = readFileSync(new URL('../src/routes/adminGovernance.jsx', import.meta.url), 'utf8');
-  assert.match(src, /<Route path="\/admin\/contracts\/governance" element=\{guard\(\['admin'\], hqOnly\(<ContractsDesk section="governance" \/>\)\)\} \/>/);
+  assert.match(src, /<Route path="\/admin\/contracts\/governance" element=\{guard\(\['admin'\], hqOnly\(<HqContractsPage section="governance" \/>\)\)\} \/>/);
   assert.doesNotMatch(readFileSync(new URL('../src/pages/admin/contracts/GovernanceTab.jsx', import.meta.url), 'utf8'), /window\.(confirm|alert|prompt)\(/, 'every change opens an in-page dialog');
 });

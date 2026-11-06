@@ -1,7 +1,8 @@
 import React, { lazy } from 'react';
 import { Route } from 'react-router-dom';
 
-const ContractsDesk = lazy(() => import('../pages/admin/contracts/ContractsDesk'));
+// The same page module as `/admin/contracts` (App.jsx's HqContractsPage), so the desk is one routed component.
+const HqContractsPage = lazy(() => import('../pages/hq/ContractsPage'));
 
 /**
  * `/admin/contracts/governance` — D4563 (#4563), HQ › Contracts › Corporate
@@ -12,7 +13,7 @@ const ContractsDesk = lazy(() => import('../pages/admin/contracts/ContractsDesk'
 export default function adminGovernanceRoutes({ guard, hqOnly }) {
   return (
     <>
-      <Route path="/admin/contracts/governance" element={guard(['admin'], hqOnly(<ContractsDesk section="governance" />))} />
+      <Route path="/admin/contracts/governance" element={guard(['admin'], hqOnly(<HqContractsPage section="governance" />))} />
     </>
   );
 }
