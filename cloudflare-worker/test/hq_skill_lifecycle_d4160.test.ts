@@ -136,6 +136,20 @@ test('D4160: Super Admin only', async () => {
   }
 });
 
+test('D4160: an HQ skill detail carries its eight-axis taxonomy graph', async () => {
+  const w = world();
+  const uid = await newSkill(w);
+  const detail = await call(w, SUPER, 'GET', `${HQ}/${uid}`);
+  assert.equal(detail.status, 200, detail.text);
+  assert.equal(detail.body.skill.radar.axes.length, 8);
+  assert.deepEqual(detail.body.skill.radar.axes.find((axis: any) => axis.slug === 'finance_ops'), {
+    slug: 'finance_ops', label: 'Finance / Ops', level: 3,
+  });
+  assert.ok(detail.body.skill.radar.axes
+    .filter((axis: any) => axis.slug !== 'finance_ops')
+    .every((axis: any) => axis.level === null));
+});
+
 test('D4160: no self-approval — the author never reviews or approves their own draft', async () => {
   const w = world();
   const uid = await newSkill(w);
