@@ -194,7 +194,7 @@ test('wizard on a 390px phone: full screen, a Back link to Campaigns, and the 48
  try{assert.equal(desk.props(desk.by('new-campaign-page'))['data-layout'],undefined);assert.ok(!desk.by('new-campaign-back'));}finally{await desk.close();}
  const css=readFileSync('frontend/src/pages/cycles/distribution/campaigns.css','utf8');
  assert.match(css,/\.cm-editor\[data-layout=phone\] \.cm-footer \.cm-button,\.cm-editor\[data-layout=phone\] \.cm-footer \.cm-primary\{min-height:48px\}/);
- assert.match(css,/\.cm-editor\[data-layout=phone\]\{min-height:100dvh/);
+ assert.match(css,/\.cm-editor\[data-layout=phone\]\{min-height:100%/,"fills its container, never the viewport");
  assert.match(css,/\.dark \.cm-editor\[data-layout=phone\] \.cm-footer\{background:#111827/,'dark footer');
 });
 
