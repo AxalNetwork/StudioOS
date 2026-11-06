@@ -63,7 +63,7 @@ export function viewFor(pathname = '') {
 export const BUILD = {
   H1: { issue: 4158, live: true, what: 'The roster admin API', boards: 'SA1, SA2' },
   H2: { issue: 4160, live: false, what: 'Review, golden cases and retire for From Axal skills', boards: 'SA3 actions, SA4' },
-  H3: { issue: 4161, live: false, what: 'Company skills moderation', boards: 'SA5' },
+  H3: { issue: 4161, live: true, what: 'Company skills moderation', boards: 'SA5' },
   H4: { issue: 4162, live: true, what: 'Platform AI policy and the kill switch', boards: 'SA6' },
   H5: { issue: 4163, live: true, what: 'Runs, spend and the admin audit', boards: 'SA0 tiles, SA7, SA8' },
 };

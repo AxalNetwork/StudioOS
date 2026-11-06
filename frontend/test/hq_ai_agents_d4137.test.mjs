@@ -41,8 +41,8 @@ test('viewFor maps each address to its board, and an unknown sub-path to its tab
 
 test('each build task names its issue, and none is live before its routes land', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['H1', 4158], ['H2', 4160], ['H3', 4161], ['H4', 4162], ['H5', 4163]]);
-  // D4158: H1's roster routes are mounted (routes/admin_ai_agents_roster.ts), so it is live; the rest wait.
-  assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.live]), [['H1', true], ['H2', false], ['H3', false], ['H4', true], ['H5', true]]);
+  // Roster, company moderation, policies and operations are wired; the HQ editor still waits.
+  assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.live]), [['H1', true], ['H2', false], ['H3', true], ['H4', true], ['H5', true]]);
   assert.equal(notYet('H4'), 'Not switched on yet. Platform AI policy and the kill switch arrives with #4162.');
 });
 
