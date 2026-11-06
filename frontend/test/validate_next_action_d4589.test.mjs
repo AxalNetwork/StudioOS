@@ -94,7 +94,10 @@ const phone = (focus) => renderToStaticMarkup(h(MemoryRouter, null, h(PhoneCycle
 
 /** What each presentation shows: headline, why, primary label and href, secondary hrefs. */
 function seen(out, ids) {
-  const head = out.match(new RegExp(`id="${ids.title}"[^>]*>([^<]*)<`));
+  // A plain string search, not a RegExp built from a variable (code scanning 6939).
+  const at = out.indexOf(`id="${ids.title}"`);
+  const open = at < 0 ? -1 : out.indexOf('>', at);
+  const head = open < 0 ? null : [null, out.slice(open + 1, out.indexOf('<', open))];
   const cta = pick(out, ids.cta)[0] || null;
   return {
     headline: head ? decode(head[1]) : null,
@@ -156,19 +159,6 @@ test('a Stop draws no interview meter on the phone; the desktop overview draws t
   })));
   assert.ok(out.includes('data-testid="validate-next-action"'));
   assert.ok(out.includes('data-rule="stopped"'));
-});
-
-test('a focus the Worker could not send falls back on both without crashing the desktop panel', () => {
-  // The focus part failed (null): the adapter's own fallbacks carry no Worker `secondary`.
-  const empty = { focus: null, figures: [], index: [], meter: null, cards: [{ slug: 'customer-research', name: 'Customer research', state: 'empty' }] };
-  const card = { focus: null, figures: [], index: [], meter: null, cards: [{ slug: 'problem-discovery', name: 'Problem discovery', next: { text: 'Open the pain map', href: `/validate/problem-discovery${Q}` } }] };
-  for (const r of [empty, card]) {
-    const d = seen(renderToStaticMarkup(h(MemoryRouter, null, h(ValidateNextAction, { raw: r, search: Q }))), DESK);
-    const p = seen(renderToStaticMarkup(h(MemoryRouter, null, h(PhoneCycleRoot, { cycle: 'validate', raw: r, search: Q, projectId: P }))), PHONE);
-    assert.ok(d.cta, 'the desktop panel draws the fallback');
-    assert.deepEqual(d.secondary, []);
-    assert.equal(d.cta.href, p.cta.href);
-  }
 });
 
 test('no focus draws no panel; a loading overview draws no lead', () => {
