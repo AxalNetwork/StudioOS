@@ -2,6 +2,7 @@
  * D1356 (#3571, part 7 of #3564) — the team relationship layer, mounted at
  * `/api/relationships`.
  *
+ *   GET  /summary                          caller-scoped sharing and request counts (D4464)
  *   GET  /sharing                          my teams, and whether my relationships are shared with each
  *   PUT  /sharing                          { share } — the one opt-in, for every team I belong to
  *   PUT  /sharing/teams/:key               { share } — on or off for one of my teams
@@ -19,6 +20,12 @@
  * Made is recorded when the teammate sends the intro from the Email composer
  * (`POST /api/mail/send` with `intro_uid`, D4329), never by a press here.
  *
+ * D4330 (#4330): Eadwyn's three drafts, each a quoted proposal (`estimate: true` quotes it and runs
+ * nothing); a run is metered like every Eadwyn run, and nothing is stored or sent:
+ *   POST /drafts/ask-reason                 { teammate, ref, record?, estimate? } — RI3, for the asker
+ *   POST /intro-requests/:uid/drafts/intro  { estimate? } — RI4, for the teammate who accepted
+ *   POST /intro-requests/:uid/drafts/follow-up { estimate? } — RI6, either person on a made introduction
+ *
  * Private by default: the access rule is in each statement (`services/relationships.ts`).
  * A support session is refused: what a member shares is theirs to choose.
  */
@@ -27,10 +34,11 @@ import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import {
   decideIntro, followUpDone, introRequests, myTeams, recordOutcome, RelationshipRefusal, requestIntro, setFollowUp, setShare, snoozeFollowUp,
-  whoKnows, whoKnowsQuery, withdrawIntro,
+  relationshipSummary, whoKnows, whoKnowsQuery, withdrawIntro,
 } from '../services/relationships';
 import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
+import { askReasonInput, followUpInput, introInput, pressDraft, type DraftInput } from '../services/relationshipDrafts';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 
@@ -59,6 +67,18 @@ const share = (b: Record<string, unknown>) => {
   if (typeof b.share !== 'boolean') throw new RelationshipRefusal(400, 'share_required', 'Say whether to share: true or false.');
   return b.share;
 };
+
+// D4464: partial reads retain nulls and reasons, with the same unreadable status as other reads.
+relationships.get('/summary', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try {
+    const summary = await relationshipSummary(c.env, user);
+    const unreadable = Object.values(summary.recording).some((r) => !r.recorded);
+    if (unreadable) return refuse(c, 503, { code: 'relationships_unreadable', message: 'Relationships could not be read. Try again.', extra: summary });
+    return c.json(summary);
+  } catch (e) { return failure(c, e); }
+});
 
 relationships.get('/sharing', async (c) => {
   const user = await member(c);
@@ -170,5 +190,24 @@ relationships.post('/intro-requests/:uid/follow-up/snooze', async (c) => {
   if (user instanceof Response) return user;
   try { return c.json({ request: await snoozeFollowUp(c.env, user, c.req.param('uid'), await body(c)) }); } catch (e) { return failure(c, e); }
 });
+
+// D4330: one press of a draft button. The input is read under the access rule first, so a request or a
+// relationship the caller cannot see is 404 before anything is quoted or run.
+const DRAFT_PAGE = 'Founder · Network · Introductions';
+async function draftPress(c: Context<{ Bindings: Env }>, read: (user: User, b: Record<string, unknown>) => Promise<DraftInput>) {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  let input: DraftInput;
+  const b = await body(c);
+  try { input = await read(user, b); } catch (e) { return failure(c, e); }
+  const out = await pressDraft(c.env, user, input, railFor(c, { page: DRAFT_PAGE, option: null }), b.estimate === true);
+  if (out.ok) return c.json('estimate' in out ? { estimate: out.estimate } : { draft: out.draft });
+  if (out.refusal !== null) return refuseRun(c, { refusal: out.refusal, error: out.error }) ?? refuse(c, 503, { code: 'draft_unreadable', message: 'Eadwyn could not draft this. Try again.' });
+  return refuse(c, 503, { code: out.code, message: out.message });
+}
+
+relationships.post('/drafts/ask-reason', (c) => draftPress(c, (user, b) => askReasonInput(c.env, user, b)));
+relationships.post('/intro-requests/:uid/drafts/intro', (c) => draftPress(c, (user) => introInput(c.env, user, c.req.param('uid'))));
+relationships.post('/intro-requests/:uid/drafts/follow-up', (c) => draftPress(c, (user) => followUpInput(c.env, user, c.req.param('uid'))));
 
 export default relationships;

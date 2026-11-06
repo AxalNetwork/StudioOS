@@ -11,6 +11,7 @@ import { Tag } from './CapTableTag';
 import { HOME_PATH, PHONE_HOLDERS, harbour, tabSearch } from './capTableModel';
 import HolderDrawer from './HolderDrawer';
 import ProposalDrawer from './ProposalDrawer';
+import { AskForAccess } from './InvestorCapTablePanel';
 import { CorrectDialog, RecordDialog, VoidDialog } from './IssuanceDialogs';
 import { proposalHref } from './historyModel';
 import {
@@ -513,6 +514,7 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
     body = (
       <Center mark="⊘" title={OTHER_TITLE} line={OTHER_LINE} testId="captable-other-company">
         <Link className={GHOST} to={HOME_PATH}>Switch company</Link>
+        <AskForAccess projectId={projectId} testId="captable-other-company" />
       </Center>
     );
   } else if (record.status === 'error') {

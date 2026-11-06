@@ -27,6 +27,12 @@ import ApprovalsTab from './ApprovalsTab.jsx';
 import ActivityFeed from '../work/ActivityFeed.jsx';
 import TeamSettingsTab from './TeamSettingsTab.jsx';
 import PlatformPausedBanner from './PlatformPausedBanner.jsx';
+// D1531 (#3742 E8): goals (TM10), handoffs (TM13), evaluation (TM14), suggestions (TM15), moves (TM18), the engine (TM19).
+import GoalsView from './GoalsView.jsx';
+import HandoffTrail from './HandoffTrail.jsx';
+import AgentEvaluation from './AgentEvaluation.jsx';
+import SuggestAgentsSheet from './SuggestAgentsSheet.jsx';
+import MoveNotices from './MoveNotices.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_TEXT, EYEBROW, FIELD, MUTED, useMenu } from './teamUi.jsx';
 import {
@@ -120,6 +126,22 @@ function Tabs({ tab, badges, project = false }) {
         ))}
       </span>
     </nav>
+  );
+}
+
+/** WK6 with TM13 beside it: People, AI agents and Both are the feed's own filter; Handoffs is the trail (D1531). */
+function ActivityTab({ projectId, team }) {
+  const [view, setView] = useState('feed');
+  return (
+    <div className="flex flex-col gap-3">
+      <div role="tablist" aria-label="Activity views" className="flex gap-1">
+        {[['feed', 'Activity'], ['handoffs', 'Handoffs']].map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} data-testid={`team-activity-${k}`}
+            className={`h-8 rounded-full px-3 text-[12.5px] font-semibold ${view === k ? 'bg-axal-ink text-white dark:bg-gray-100 dark:text-gray-900' : 'border border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>{l}</button>
+        ))}
+      </div>
+      {view === 'feed' ? <ActivityFeed projectId={projectId} /> : <HandoffTrail scope="project" id={projectId} team={team} />}
+    </div>
   );
 }
 
@@ -280,6 +302,12 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
   const [agentsBlock, setAgentsBlock] = useState(null);
   const [rolesBlock, setRolesBlock] = useState(null);
   const [queueBlock, setQueueBlock] = useState(null);
+  const queueRead = useRef(0);
+  const refreshQueue = useCallback(() => {
+    const request = ++queueRead.current;
+    setQueueBlock(null);
+    return agents.queue(kind, id, {}).then((out) => { if (request === queueRead.current) setQueueBlock(out); });
+  }, [kind, id]);
   const [sheet, setSheet] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -293,7 +321,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
   }, [kind, id, canEdit]);
   // The agents are their own read: a failed people read still draws the agents card's own state (TM9c1).
   useEffect(() => { if (state.status !== 'loading') loadAgents(); }, [state.status, loadAgents]);
-  useEffect(() => { agents.roles().then(setRolesBlock); agents.queue(kind, id, {}).then(setQueueBlock); }, [kind, id]);
+  useEffect(() => { agents.roles().then(setRolesBlock); refreshQueue(); return () => { queueRead.current += 1; }; }, [refreshQueue]);
 
   // The sidebar's bottom block draws the scope this page is about (TM1e–TM1g), once it is read.
   usePublishScope(state.status === 'ready' ? scope : null);
@@ -353,6 +381,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           ) : null}
         </div>
       </header>
+      {!reading ? <MoveNotices scope={kind} id={id} onSuggest={rolesBlock?.available ? () => setSheet({ kind: 'suggest' }) : null} /> : null}
       <Tabs tab={tab} badges={badges} project={kind === 'project'} />
       <Toast notice={notice} onClose={() => setNotice(null)} />
       {actionError ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{actionError}</p> : null}
@@ -369,17 +398,28 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
                 onRevoke={(i) => act(kind === 'company' ? i.uid : i.key, () => onRevoke(i))} />
             ) : null}
           </PeopleCard>
-          <AgentsCard block={agentsBlock} loading={!agentsBlock} kind={kind} companyName={name}
+          <AgentsCard block={agentsBlock} loading={!agentsBlock} kind={kind} scope={scope} companyName={name}
             canAdd={!!agentsBlock?.value?.can_manage && !planLocked} planLocked={planLocked} onAdd={() => setSheet({ kind: 'agent' })}
-            onOpen={(row) => setSheet({ kind: 'profile', uid: row.uid })} onRetry={loadAgents} />
+            onOpen={(row, action) => setSheet({ kind: 'profile', uid: row.uid, edit: action || null })} onRetry={loadAgents} />
           <TeamCoverageCard kind={kind} id={id} />
+          {!reading && agentsBlock?.available ? <AgentEvaluation scope={kind} id={id} team={agentList} /> : null}
+          {!reading && kind === 'company' && agentsBlock?.available ? (
+            <>
+              <GoalsView scope="company" id={id} canManage={!!agentsBlock?.value?.can_manage} compact models={rolesBlock?.value?.models} roles={rolesBlock?.value?.roles} team={agentList} />
+              <section className="flex flex-col gap-2" aria-label="Handoffs">
+                <h2 className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">Handoffs</h2>
+                <p className={`m-0 ${MUTED}`}>The work agents handed to each other.</p>
+                <HandoffTrail scope="company" id={id} team={agentList} />
+              </section>
+            </>
+          ) : null}
           {kind === 'company' && ['founder', 'admin'].includes(me().role) ? <p className={`m-0 ${MUTED}`}>{ROSTER_LINE} <Link to="/build/team" className={BTN_TEXT}>Open Build › Team</Link></p> : null}
         </>
       ) : null}
       {tab === 'skills' ? <SkillsTab scope={scope} agentsBlock={agentsBlock} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
-      {tab === 'approvals' ? <ApprovalsTab scope={scope} /> : null}
-      {tab === 'activity' && kind === 'project' ? <ActivityFeed projectId={id} /> : null}
+      {tab === 'approvals' ? <ApprovalsTab scope={scope} roles={rolesBlock?.value?.roles} onChanged={refreshQueue} /> : null}
+      {tab === 'activity' && kind === 'project' ? <ActivityTab projectId={id} team={agentList} /> : null}
       {tab === 'settings' ? (
         <TeamSettingsTab scope={scope} agentsBlock={agentsBlock} canManage={canEdit}
           onEditCap={(a) => setSheet({ kind: 'profile', uid: a.uid, edit: 'cap' })}
@@ -392,7 +432,11 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           me={{ name: me().name }} onClose={() => setSheet(null)} onAdded={() => { setSheet(null); loadAgents(); }}
           onEditRulebook={(key) => { setSheet(null); navigate(`${pathname}?tab=roles&role=${encodeURIComponent(key)}`); }} />
       ) : null}
-      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} editCap={sheet.edit === 'cap'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
+      {sheet?.kind === 'suggest' ? (
+        <SuggestAgentsSheet scope={kind} id={id} canManage={!!agentsBlock?.value?.can_manage} models={rolesBlock?.value?.models} roles={rolesBlock?.value?.roles} team={agentList}
+          onClose={() => setSheet(null)} onAdded={loadAgents} />
+      ) : null}
+      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} scope={scope} editCap={sheet.edit === 'cap'} editSponsor={sheet.edit === 'sponsor'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
       {dialog && dialogs[dialog.kind] ? dialogs[dialog.kind](dialog.p, () => setDialog(null), () => { setDialog(null); reload(); }) : null}
     </div>
   );

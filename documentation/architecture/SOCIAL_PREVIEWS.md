@@ -47,9 +47,14 @@ disagree with what the server served.
 
 **The card art (#3705).** Since 2026-11-01 the generator draws the
 owner's social-cards canvas (`design/incoming/Share Cards Page.dc.html`): one
-light 1200×630 image per URL, a lavender art band left of x 268 and the text
-block from x 300, so the mark, the eyebrow and the title survive the centred
-square crop WhatsApp and iMessage take. Trust and legal pages use the document
+light 1200×630 image per URL. Since the canvas's revision of 2026-11-04 the
+card is centred: the mark and "AXAL VC" at the top, the eyebrow chip, title and
+description in the middle, "axal.vc" at the foot, inside the safe area (x 72–1128,
+y 62–568), with violet arcs in the top-right and bottom-left corners. The
+centred block keeps the mark, the eyebrow and the title inside the square crop
+(x 285–915) WhatsApp and iMessage take; the drawn description is cut at 118
+characters, as the canvas cuts it. (Until 2026-11-04 the card had a lavender
+band left of x 268 and the text block from x 300.) Trust and legal pages use the document
 card; `/pricing` shows the plan names (never a price). `FAMILY_OG_KEYS`
 (`event`, `profile`, `private`) are drawn for the record and private-link cards
 that §6's Worker injector (D1439) serves. The generator measures Chromium's

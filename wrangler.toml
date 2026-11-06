@@ -166,10 +166,12 @@ fallthrough = true
 
 # ---------- Public (non-secret) variables ----------
 [vars]
-# D1496 (#3840): team agents (/api/teams). Off until the owner turns them on.
-TEAM_AGENTS_ENABLED = "false"
+# D1496 (#3840): team agents (/api/teams). Enabled by owner request in D4522.
+TEAM_AGENTS_ENABLED = "true"
 # D1529 (#3845, #3742 E1): the agent engine's goals and tasks (/api/teams). "off" until the owner turns it on; needs TEAM_AGENTS_ENABLED too.
 AGENT_ENGINE = "off"
+# D4423: owner-approved monthly gateway limit ($100); does not enable agents.
+AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
 # D1528 (#3847, #3742 E3): "manual" admits nothing on its own; "self_start" only after E3 and E5 merge (owner Q1 B).
 AGENT_AUTONOMY = "manual"
 # D1528: the runtime behind the seam (src/agents/runtime.ts). "do" is the only one built.
@@ -710,10 +712,12 @@ pattern        = "app.axal.vc"
 custom_domain  = true
 
 [env.production.vars]
-# D1496 (#3840): team agents (/api/teams). Mirrored from [vars]; off until the owner turns them on.
-TEAM_AGENTS_ENABLED = "false"
+# D1496 (#3840): team agents (/api/teams). Mirrored from [vars]; enabled by owner request in D4522.
+TEAM_AGENTS_ENABLED = "true"
 # D1529 (#3845): the agent engine. Mirrored from [vars]; "off" until the owner turns it on.
 AGENT_ENGINE = "off"
+# D4423: owner-approved monthly gateway limit ($100); does not enable agents.
+AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
 # D1528 (#3847): mirrored from [vars].
 AGENT_AUTONOMY = "manual"
 AGENT_RUNTIME = "do"
@@ -1052,6 +1056,8 @@ workers_dev = true
 MEETING_BOT = "off"
 # D1528 (#3847): the agent engine stays off in preview until the owner's account steps are done.
 AGENT_ENGINE = "off"
+# D4423: owner-approved monthly gateway limit ($100); does not enable agents.
+AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
 AGENT_AUTONOMY = "manual"
 AGENT_RUNTIME = "do"
 # D1536 (#3785): the deck generation runtime. "do" (the default): each deck's DeckGenRoom drives its runs and the Queue fallback takes a run of more than 18 variant steps; "queue": JOB_QUEUE drives every run.

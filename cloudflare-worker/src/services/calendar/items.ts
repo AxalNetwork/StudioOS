@@ -160,7 +160,7 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'round_close': return '/raise/capital-relationships';
     // #3983: a workflow task has no page of its own; the others open their board.
     case 'mvp_task': return '/build/board';
-    case 'contact_task': return '/contacts';
+    case 'contact_task': return '/network?tab=contacts';
     case 'engagement_milestone': return '/delivery/health';
     // D1614 W4: the project's Work board.
     case 'work_item': return ev.project_id ? `/projects/${ev.project_id}/work` : null;

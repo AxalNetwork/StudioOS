@@ -1,0 +1,34 @@
+{
+  "skill": "interaction-state-specification",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Interaction State Specification",
+        "task_scope": "Defines interaction state machines including loading, empty, error, success, disabled, retry and recovery behaviour.",
+        "evidence": [
+          "state transition and retry behaviour"
+        ],
+        "omitted_field": "interruption recovery"
+      },
+      "github.repos": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for state transition and retry behaviour."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "state transition and retry behaviour"
+    ],
+    "must_say_not_recorded": [
+      "interruption recovery"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

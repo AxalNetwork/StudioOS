@@ -113,6 +113,7 @@ export function isUploadWav(bytes: Uint8Array): boolean {
 }
 
 export interface SessionRow {
+  outputs?: string | null;
   id: number; uid: string; interview_id: number; project_id: number; created_by_user_id: number;
   channel: Channel; status: string; consent_status: string; consent_method: string | null; consent_at: string | null;
   language: string | null; live_model: string | null; final_model: string | null;
@@ -341,6 +342,10 @@ export async function replaceWithFinal(
     ).bind(text, model, session.interview_id),
   ];
   await env.DB.batch(stmts);
+  if (session.outputs != null && !['recording', 'paused'].includes(session.status)) {
+    const { enqueueOutputs } = await import('./callOutputs');
+    await enqueueOutputs(env, session.id);
+  }
   return text;
 }
 

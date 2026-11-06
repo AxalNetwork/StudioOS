@@ -162,6 +162,15 @@ const ROUTES = [
     section: 'company',
   },
   {
+    // D4297 (#4297): the Influencer program; the company section's card, so no new image.
+    path: '/influencers',
+    title: 'Influencers',
+    description:
+      'Earn recurring revenue by bringing people to Axal VC. Share your own handle; when someone subscribes through it, you earn part of every invoice.',
+    type: 'website',
+    section: 'company',
+  },
+  {
     path: '/demo',
     title: 'Book a demo',
     description:
@@ -347,15 +356,6 @@ const ROUTES = [
     description:
       'Investing in private, early-stage companies carries a high degree of risk and suits only sophisticated investors who can afford to lose their entire investment.',
     key: 'risk-disclosures',
-    type: 'website',
-    section: 'company',
-  },
-  {
-    path: '/pricing/investor',
-    title: 'Investor plans',
-    description:
-      'Plans for investors and LPs, and what each tier includes. The investor-side counterpart to the main pricing page.',
-    key: 'pricing-investor',
     type: 'website',
     section: 'company',
   },

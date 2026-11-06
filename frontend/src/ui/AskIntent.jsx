@@ -22,7 +22,7 @@ import { endAskIntent, openAskIntent, useAskPanel } from './eadwynPanel.js';
  * Focus is D1317's contract, kept: it moves into the region when it opens and
  * returns to whatever opened it when it closes.
  */
-export default function AskIntent({ label, eyebrow = 'Ask Eadwyn', title, footer = null, onClose, testId, children }) {
+export default function AskIntent({ label, eyebrow = 'Ask Eadwyn', title, footer = null, onClose, testId, children, exclusive = false }) {
   const titleId = useId();
   const ask = useAskPanel();
   const id = useRef(null);
@@ -39,7 +39,7 @@ export default function AskIntent({ label, eyebrow = 'Ask Eadwyn', title, footer
   }, []);
 
   useEffect(() => {
-    id.current = openAskIntent({ label: label || title, onClose: () => { id.current = null; closer.current?.(); } });
+    id.current = openAskIntent({ exclusive, label: label || title, onClose: () => { id.current = null; closer.current?.(); } });
     return () => { if (id.current != null) endAskIntent(id.current); };
     // The intent is opened once per mount; its label is fixed for its life.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -52,7 +52,7 @@ export default function AskIntent({ label, eyebrow = 'Ask Eadwyn', title, footer
           <span className="ead-ask-eyebrow">{eyebrow}</span>
           <b id={titleId} className="text-[14px] text-axal-ink dark:text-gray-100">{title}</b>
         </span>
-        <button type="button" className="ead-ask-btn is-ghost" aria-label={`Close ${title}`} onClick={() => { const live = id.current; id.current = null; if (live != null) endAskIntent(live); closer.current?.(); }} data-testid={`${testId}-close`}>Close</button>
+        <button type="button" className="ead-ask-btn is-ghost min-h-[44px] min-w-[44px]" style={{minHeight:44,minWidth:44}} aria-label={`Close ${title}`} onClick={() => { const live = id.current; id.current = null; if (live != null) endAskIntent(live); closer.current?.(); }} data-testid={`${testId}-close`}>Close</button>
       </span>
       {children}
       {footer ? <span className="ead-ask-intent-foot flex flex-col gap-2">{footer}</span> : null}

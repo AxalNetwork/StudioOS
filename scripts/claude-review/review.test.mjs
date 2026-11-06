@@ -17,8 +17,12 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import { GoogleGenAI, ApiError } from '@google/genai';
+import { runReview } from '../lib/claudeReviewRun.mjs';
+import { parseRates } from '../lib/claudeReview.mjs';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, githubClient, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
+import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, geminiClient, geminiFetch, openaiClient, openaiFetch, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -41,8 +45,8 @@ test('the client is built on first use, so a run that never calls the API never 
   class CountingSdk {
     constructor() {
       built += 1;
-      this.messages = { create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
-      this.beta = { messages: { create: async () => ({}) } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
+      this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => ({}) } };
     }
   }
   Object.assign(CountingSdk, Anthropic);
@@ -57,8 +61,8 @@ test('a request carrying betas goes to the beta endpoint, any other to the stand
   const seen = [];
   class FakeSdk {
     constructor() {
-      this.messages = { create: async () => { seen.push('messages'); return {}; }, countTokens: async (p) => { seen.push(Object.keys(p).sort().join(',')); return { input_tokens: 1 }; } };
-      this.beta = { messages: { create: async () => { seen.push('beta'); return {}; } } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => { seen.push('messages'); return {}; }, countTokens: async (p) => { seen.push(Object.keys(p).sort().join(',')); return { input_tokens: 1 }; } };
+      this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => { seen.push('beta'); return {}; } } };
     }
   }
   Object.assign(FakeSdk, Anthropic);
@@ -97,10 +101,10 @@ test('main: a disabled review writes its summary and outputs and exits 0', async
   assert.match(output, /^outcome=disabled\nrecord_name=\n$/);
 });
 
-test('main: an enabled review with no key is a configuration error, never a crash, and never prints a key', async () => {
+test('main: absent keys skip cleanly, malformed enabled configuration refuses, and keys stay private', async () => {
   const s = sandbox({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: '' });
   assert.equal(await main(s.env), 0);
-  assert.match(s.read().summary, /configuration\\_error/);
+  assert.match(s.read().summary, /No configured review account/);
   const k = sandbox({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_API_KEY: 'sk-ant-should-not-appear', CLAUDE_REVIEW_FAIL_ON_ERROR: 'true' });
   assert.equal(await main(k.env), 1, 'with fail-on-error a configuration error fails the step');
   assert.doesNotMatch(k.read().summary, /sk-ant-should-not-appear/);
@@ -211,8 +215,8 @@ test('under federation the client gets the exchange as its credentials and no AP
   class RecordingSdk {
     constructor(opts) {
       made.push(opts);
-      this.messages = { create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
-      this.beta = { messages: { create: async () => ({}) } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
+      this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => ({}) } };
     }
   }
   Object.assign(RecordingSdk, Anthropic);
@@ -265,7 +269,7 @@ test('the real SDK exchange sends the request the Console documents, with the Gi
 test('the run\'s client follows the repository variables: federation when its rule is set, else the key', async () => {
   const made = [];
   class RecordingSdk {
-    constructor(opts) { made.push(opts); this.messages = { create: async () => ({}) }; this.beta = { messages: { create: async () => ({}) } }; }
+    constructor(opts) { made.push(opts); this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => ({}) }; this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => ({}) } }; }
   }
   Object.assign(RecordingSdk, Anthropic);
   const makeProvider = (cfg) => Object.assign(async () => ({ token: 't' }), { cfg });
@@ -273,7 +277,7 @@ test('the run\'s client follows the repository variables: federation when its ru
   await clientFor(fed, { sdk: RecordingSdk, makeProvider }).create({ model: 'm' });
   assert.equal(made[0].apiKey, null);
   assert.equal(made[0].credentials.cfg.federationRuleId, 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp');
-  assert.equal(made[0].maxRetries, 1);
+  assert.equal(made[0].maxRetries, 0);
   await clientFor({ ANTHROPIC_API_KEY: 'k' }, { sdk: RecordingSdk, makeProvider }).create({ model: 'm' });
   assert.equal(made[1].apiKey, 'k');
   assert.equal(made[1].credentials, undefined);
@@ -371,4 +375,523 @@ test('main: an outcome whose reason can quote the pull request or the model keep
   }
   assert.equal(out.join(''), 'claude-review: diff_error\n');
   assert.match(s.read().summary, /diff could not be computed/);
+});
+
+test('the fallback chain: one client per configured step, built only when used, on its own key and endpoint', async () => {
+  const built = [];
+  class FakeSdk {
+    constructor(opts) {
+      built.push(opts);
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async (p) => { if (p.model === 'gone') throw new Anthropic.NotFoundError(404, { error: { message: 'model gone' } }, 'model gone', new Headers()); return { ok: true }; } };
+    }
+  }
+  for (const k of ['APIError', 'AuthenticationError', 'PermissionDeniedError', 'NotFoundError', 'RateLimitError', 'BadRequestError', 'APIConnectionTimeoutError', 'APIConnectionError', 'InternalServerError']) FakeSdk[k] = Anthropic[k];
+  const env = { CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'a', CLAUDE_REVIEW_MAX_RETRIES: '1' };
+  assert.deepEqual(fallbacksFor(env), {}, 'no fallback key, no chain');
+  assert.deepEqual(fallbacksFor({ ...env, KIMI_API_KEY: 'k', ANTHROPIC_API_KEY_2: 'b', CLAUDE_REVIEW_CREDIT_FALLBACK: 'off' }), {});
+  const chain = fallbacksFor({ ...env, ANTHROPIC_API_KEY_2: 'sk-ant-second', KIMI_API_KEY: 'sk-kimi-key' }, { anthropic: { sdk: FakeSdk }, kimi: { sdk: FakeSdk } });
+  assert.deepEqual(Object.keys(chain), ['claude2', 'kimi']);
+  assert.equal(built.length, 0, 'nothing built until a review needs it');
+  await chain.claude2.create({ model: 'claude-sonnet-5-5' });
+  assert.equal(built[0].apiKey, 'sk-ant-second');
+  assert.equal(built[0].baseURL, undefined, 'a Claude account goes to Anthropic');
+  await chain.kimi.create({ model: 'kimi-k2-turbo-preview' });
+  await chain.kimi.create({ model: 'kimi-k2-turbo-preview' });
+  assert.equal(built.length, 2, 'each client built once');
+  assert.deepEqual([built[1].apiKey, built[1].baseURL, built[1].maxRetries], ['sk-kimi-key', 'https://api.moonshot.ai/anthropic', 0]);
+  await assert.rejects(chain.kimi.create({ model: 'gone' }), (e) => e.kind === 'not_found' && e.status === 404);
+  assert.equal(built[1].authToken, null, 'no ANTHROPIC_AUTH_TOKEN reaches Moonshot');
+  assert.equal(typeof built[1].fetch, 'function');
+});
+
+test('the Kimi fetch forwards only the request\'s own headers', async () => {
+  let seen;
+  const f = kimiFetch(async (url, init) => { seen = init.headers; return new Response('{}'); });
+  await f('https://api.moonshot.ai/anthropic/v1/messages', { method: 'POST', headers: { 'x-api-key': 'k', 'content-type': 'application/json', 'anthropic-version': '2023-06-01', authorization: 'Bearer anthropic-token', 'x-custom': 'secret', 'x-stainless-retry-count': '0' } });
+  assert.deepEqual([...seen.keys()].sort(), ['anthropic-version', 'content-type', 'x-api-key', 'x-stainless-retry-count']);
+});
+
+test('an error detail never carries a Kimi-style key', () => {
+  assert.equal(errorDetail(new Error('bad key sk-AbCdEfGhIjKlMnOpQrStUv rejected'), null), 'bad key [redacted] rejected');
+});
+
+
+test('D4433: streaming returns final usage, forwards attempt options and classifies a mid-stream failure', async () => {
+  const seen = [];
+  const message = { content: [{ type: 'text', text: '{}' }], usage: { input_tokens: 12, output_tokens: 8 } };
+  class StreamSdk {
+    constructor(options) {
+      assert.equal(options.maxRetries, 0, 'runner owns retries');
+      this.messages = { stream: (p, opts) => {
+        seen.push({ p, opts });
+        return { finalMessage: async () => { if (p.model === 'timeout') throw new Anthropic.APIConnectionTimeoutError(); return message; } };
+      } };
+      this.beta = { messages: this.messages };
+    }
+  }
+  Object.setPrototypeOf(StreamSdk, Anthropic);
+  const options = { timeout: 1234, signal: AbortSignal.timeout(2000), maxRetries: 0 };
+  for (const client of [kimiClient({ apiKey: 'test', baseURL: 'https://example.test', maxRetries: 2, timeoutSeconds: 30, sdk: StreamSdk }), anthropicClient({ apiKey: 'test', maxRetries: 2, timeoutSeconds: 30, sdk: StreamSdk })]) {
+    assert.equal(await client.create({ model: 'ok' }, options), message);
+    assert.equal(seen.at(-1).opts, options);
+    await assert.rejects(client.create({ model: 'timeout' }, options), e => e.kind === 'timeout');
+  }
+});
+
+
+test('D4433 item 8: each fallback client receives only its own optional workspace header', async () => {
+  const built = [];
+  class WorkspaceSdk {
+    constructor(opts) { built.push(opts); this.messages = { stream: () => ({ finalMessage: async () => ({}) }) }; }
+  }
+  const env = { ANTHROPIC_API_KEY_2: 'second', ANTHROPIC_API_KEY_3: 'third', ANTHROPIC_WORKSPACE_ID: 'wrkspc_MAIN0000', ANTHROPIC_WORKSPACE_ID_2: 'wrkspc_22222222', ANTHROPIC_WORKSPACE_ID_3: 'wrkspc_33333333', KIMI_API_KEY: 'kimi' };
+  const clients = fallbacksFor(env, { anthropic: { sdk: WorkspaceSdk }, kimi: { sdk: WorkspaceSdk } });
+  for (const id of ['claude2', 'claude3', 'kimi']) await clients[id].create({ model: 'test' });
+  assert.equal(built[0].defaultHeaders['anthropic-workspace-id'], 'wrkspc_22222222');
+  assert.equal(built[1].defaultHeaders['anthropic-workspace-id'], 'wrkspc_33333333');
+  assert.equal(built[2].defaultHeaders, undefined, 'Kimi receives no Claude workspace header');
+  assert.ok(!JSON.stringify(built).includes('MAIN0000'), 'main federation workspace is never reused');
+  const unset = fallbacksFor({ ...env, ANTHROPIC_WORKSPACE_ID_2: '' }, { anthropic: { sdk: WorkspaceSdk } });
+  await unset.claude2.create({ model: 'test' });
+  assert.equal(built.at(-1).defaultHeaders['anthropic-workspace-id'], null, 'unset suppresses ambient workspace headers');
+});
+
+test('D4433 item 8: real SDK requests cannot inherit an ambient workspace from another account', async () => {
+  const savedFetch = globalThis.fetch;
+  const savedHeaders = process.env.ANTHROPIC_CUSTOM_HEADERS;
+  const seen = [];
+  process.env.ANTHROPIC_CUSTOM_HEADERS = 'Anthropic-Workspace-Id: wrkspc_AMBIENT0';
+  globalThis.fetch = async (url, init) => {
+    seen.push(new Headers(init.headers).get('anthropic-workspace-id'));
+    return new Response(JSON.stringify({ input_tokens: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const clients = fallbacksFor({ ANTHROPIC_API_KEY_2: 'test-second', ANTHROPIC_API_KEY_3: 'test-third', ANTHROPIC_WORKSPACE_ID_2: 'wrkspc_22222222', ANTHROPIC_WORKSPACE_ID_3: 'wrkspc_33333333' });
+    const p = { model: 'test-model', system: 's', messages: [] };
+    await clients.claude2.countTokens(p);
+    await clients.claude3.countTokens(p);
+    const unset = fallbacksFor({ ANTHROPIC_API_KEY_2: 'test-second' });
+    await unset.claude2.countTokens(p);
+    assert.deepEqual(seen, ['wrkspc_22222222', 'wrkspc_33333333', null]);
+  } finally {
+    globalThis.fetch = savedFetch;
+    if (savedHeaders === undefined) delete process.env.ANTHROPIC_CUSTOM_HEADERS;
+    else process.env.ANTHROPIC_CUSTOM_HEADERS = savedHeaders;
+  }
+});
+
+test('D4443: fake SDK streams strict Responses output and maps cached usage once', async () => {
+  const built = [], sent = [];
+  class FakeOpenAI {
+    constructor(options) {
+      built.push(options);
+      this.responses = { create: async function* (p, opts) {
+        sent.push({ p, opts });
+        yield { type: 'response.output_text.delta', delta: 'partial' };
+        if (p.model === 'quota') throw new OpenAI.RateLimitError(429, { code: 'insufficient_quota', message: 'quota' }, 'quota', new Headers());
+        if (p.model === 'timeout') throw new OpenAI.APIConnectionTimeoutError();
+        if (p.model === 'failed') { yield { type: 'response.failed', response: { error: { code: 'insufficient_quota', message: 'no quota' } } }; return; }
+        if (p.model === 'disconnected') return;
+        yield { type: p.model === 'cut' ? 'response.incomplete' : 'response.completed', response: {
+          status: p.model === 'cut' ? 'incomplete' : 'completed',
+          output: [{ type: 'reasoning', summary: [] }, { type: 'message', content: p.model === 'refuse' ? [{ type: 'refusal', refusal: 'no' }] : [{ type: 'output_text', text: '{"ok":true}' }] }],
+          usage: { input_tokens: 100, output_tokens: 40, input_tokens_details: { cached_tokens: 60 } },
+        } };
+      } };
+    }
+  }
+  Object.setPrototypeOf(FakeOpenAI, OpenAI);
+  const client = openaiClient({ apiKey: 'unit-key', baseURL: 'https://api.example/v1', timeoutSeconds: 30, sdk: FakeOpenAI });
+  assert.equal(built.length, 0);
+  const opts = { timeout: 2000, maxRetries: 0 };
+  const message = await client.create({ model: 'gpt-5.3-codex', system: 'system', messages: [{ role: 'user', content: 'diff' }], max_tokens: 1024 }, opts);
+  assert.deepEqual(message.usage, { input_tokens: 40, output_tokens: 40, cache_read_input_tokens: 60, cache_creation_input_tokens: 0 });
+  assert.deepEqual(message.content, [{ type: 'text', text: '{"ok":true}' }]);
+  assert.equal(sent[0].p.stream, true);
+  assert.equal(sent[0].p.store, false);
+  assert.equal(sent[0].p.text.format.strict, true);
+  assert.equal(sent[0].p.max_output_tokens, 1024);
+  assert.equal(sent[0].p.instructions, 'system');
+  assert.equal(sent[0].opts, opts);
+  assert.equal(built[0].maxRetries, 0);
+  assert.equal(built[0].organization, null);
+  assert.equal(built[0].project, null);
+  for (const [model, kind] of [['quota', 'billing'], ['failed', 'billing'], ['timeout', 'timeout'], ['disconnected', 'timeout']]) await assert.rejects(client.create({ model }), e => e.kind === kind);
+  assert.equal((await client.create({ model: 'refuse' })).stop_reason, 'refusal');
+  assert.equal((await client.create({ model: 'cut' })).stop_reason, 'max_tokens');
+});
+
+test('D4443: OpenAI fetch sends only allowlisted headers and its own key', async () => {
+  let seen;
+  const f = openaiFetch(async (url, init) => { seen = init.headers; return new Response('{}'); }, 'own-key');
+  await f('https://api.example/v1/responses', { headers: { authorization: 'Bearer another-provider', 'x-api-key': 'another-key', 'openai-organization': 'ambient-org', 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'x-custom': 'hidden', 'x-stainless-retry-count': '0' } });
+  assert.deepEqual([...seen.keys()].sort(), ['authorization', 'content-type', 'x-stainless-retry-count']);
+  assert.equal(seen.get('authorization'), 'Bearer own-key');
+});
+
+test('D4443: OpenAI keys are redacted from classified errors', () => {
+  const key = 'sk-' + 'proj-abcdefghijklmnopqrstuvwx';
+  const error = new OpenAI.AuthenticationError(401, { message: `Incorrect API key ${key}` }, `Incorrect API key ${key}`, new Headers());
+  const result = classifyError(error, OpenAI);
+  assert.equal(result.kind, 'authentication');
+  assert.match(result.detail, /redacted/);
+  assert.ok(!result.detail.includes(key));
+});
+
+test('D4443: the OpenAI fallback uses a lazy separate official client', async () => {
+  const built = [];
+  class FakeOpenAI {
+    constructor(opts) { built.push(opts); this.responses = { create: async function* () { yield { type: 'response.completed', response: { status: 'completed', output: [], usage: { input_tokens: 1, output_tokens: 1 } } }; } }; }
+  }
+  const chain = fallbacksFor({ OPENAI_API_KEY: 'unit', OPENAI_MODEL: 'gpt-5.3-codex' }, { openai: { sdk: FakeOpenAI } });
+  assert.deepEqual(Object.keys(chain), ['openai']);
+  assert.equal(built.length, 0);
+  await chain.openai.create({ model: 'gpt-5.3-codex' });
+  assert.equal(built.length, 1);
+  assert.equal(built[0].baseURL, 'https://api.openai.com/v1');
+  assert.equal(built[0].apiKey, 'unit');
+});
+
+
+test('review #4448 R1: real SDK user-abort errors have no distinctive name but must classify as timeout', () => {
+  assert.equal(new Anthropic.APIUserAbortError().name, 'Error');
+  assert.equal(classifyError(new Anthropic.APIUserAbortError()).kind, 'timeout');
+  assert.equal(classifyError(new OpenAI.APIUserAbortError(), OpenAI).kind, 'timeout');
+});
+
+test('review #4448 R1/R2: abort and plain SDK errors after a stream connects retain uncertainty', async () => {
+  for (const thrown of [new Anthropic.APIUserAbortError(), new Anthropic.AnthropicError('socket closed')]) {
+    class BrokenSdk {
+      constructor() { this.messages = { stream: () => ({ on(event, listener) { if (event === 'connect') listener(); return this; }, finalMessage: async () => { throw thrown; } }) }; this.beta = { messages: this.messages }; }
+    }
+    Object.setPrototypeOf(BrokenSdk, Anthropic);
+    const client = anthropicClient({ apiKey: 'test', maxRetries: 0, timeoutSeconds: 30, sdk: BrokenSdk });
+    await assert.rejects(client.create({ model: 'test' }), e => e.streamStarted === true && (thrown instanceof Anthropic.APIUserAbortError ? e.kind === 'timeout' : e.kind === 'unknown'));
+  }
+});
+
+test('review #4452 R2: OpenAI terminal stream errors are marked as possibly billed', async () => {
+  class BrokenOpenAI {
+    constructor() { this.responses = { create: async function* () {
+      yield { type: 'response.created', response: { status: 'in_progress' } };
+      yield { type: 'response.failed', response: { error: { code: 'server_error', message: 'reasoning interrupted' } } };
+    } }; }
+  }
+  Object.setPrototypeOf(BrokenOpenAI, OpenAI);
+  const client = openaiClient({ apiKey: 'test', baseURL: 'https://api.example', timeoutSeconds: 30, sdk: BrokenOpenAI });
+  await assert.rejects(client.create({ model: 'gpt-5.3-codex' }), e => e.streamStarted === true);
+});
+
+// #4467: retry only the failed page; do not discard earlier records or hide a refusal.
+test('D4467: transient artifact page errors recover with a complete ledger', async () => {
+  const seen = [], delays = [];
+  const record = { id: 1000, name: `claude-review_v1_2026-11_pr1_${'a'.repeat(16)}_ok_1000`, created_at: '2026-11-02T00:00:00Z' };
+  const listing = await listMonthRecords(async page => {
+    seen.push(page);
+    if (page === 1) return { artifacts: Array.from({ length: 100 }, (_, i) => ({ ...record, id: 1000 - i })) };
+    if (seen.length < 4) throw Object.assign(new Error('unavailable'), { status: 503 });
+    return { artifacts: [] };
+  }, '2026-11-01T00:00:00Z', 50, async ms => { delays.push(ms); });
+  assert.deepEqual([seen, delays, listing.complete, listing.artifacts.length], [[1, 2, 2, 2], [1000, 2000], true, 100]);
+});
+
+test('D4467: artifact HTTP and transport failures have bounded retries and safe page causes', async () => {
+  const saved = globalThis.fetch;
+  try {
+    for (const [status, headers, body, attempts, cause] of [
+      [503, {}, '', 4, 'HTTP 503'], [429, {}, '', 4, 'HTTP 429'],
+      [403, { 'x-ratelimit-remaining': '0' }, '', 4, 'HTTP 403'],
+      [403, {}, 'secondary rate limit', 4, 'HTTP 403'],
+      [403, {}, 'forbidden', 1, 'HTTP 403'], [401, {}, '', 1, 'HTTP 401'], [404, {}, '', 1, 'HTTP 404'],
+      [0, {}, 'network', 4, 'network error'], [0, {}, 'timeout', 4, 'timeout'],
+    ]) {
+      let calls = 0;
+      const delays = [];
+      globalThis.fetch = async () => {
+        calls++;
+        if (!status) throw body === 'timeout' ? new DOMException('secret', 'TimeoutError') : new TypeError('secret');
+        return new Response(JSON.stringify({ message: body + ' secret' }), { status, headers });
+      };
+      const gh = githubClient({ apiUrl: 'https://api.example', token: 'secret', repository: 'o/r', sleep: async ms => { delays.push(ms); } });
+      await assert.rejects(gh.listArtifacts('2026-11-01T00:00:00Z'), e => {
+        assert.equal(e.ledgerReadFailure, `artifact listing page 1: ${cause}`);
+        assert.doesNotMatch(e.message, /secret/);
+        return true;
+      });
+      assert.deepEqual([calls, delays], [attempts, attempts === 4 ? [1000, 2000, 4000] : []]);
+    }
+  } finally { globalThis.fetch = saved; }
+});
+
+test('#4466: Gemini streams structured JSON, excludes thought text and accounts for cached/thought tokens', async () => {
+  const built = [], sent = [];
+  class FakeGemini {
+    constructor(options) {
+      built.push(options);
+      this.models = { generateContentStream: async function* (params) {
+        sent.push(params);
+        yield { candidates: [{ content: { parts: [{ text: 'private thought', thought: true }, { text: '{"status":' }] } }] };
+        yield { candidates: [{ content: { parts: [{ text: '"no_issues"}' }] }, finishReason: 'STOP' }], responseId: 'gemini-request',
+          usageMetadata: { promptTokenCount: 100, cachedContentTokenCount: 60, candidatesTokenCount: 40, thoughtsTokenCount: 20 } };
+      } };
+    }
+  }
+  const client = geminiClient({ apiKey: 'test-google', baseURL: 'https://gemini.example', timeoutSeconds: 600, sdk: FakeGemini });
+  assert.equal(built.length, 0);
+  const signal = new AbortController().signal;
+  const message = await client.create({ model: 'owner-model', system: 'system', messages: [{ role: 'user', content: 'diff' }], max_tokens: 1024 }, { timeout: 2345, signal });
+  assert.equal(built[0].vertexai, false);
+  assert.equal(built[0].httpOptions.retryOptions.attempts, 1);
+  assert.equal(built[0].httpOptions.timeout, 2345);
+  assert.equal(sent[0].model, 'owner-model');
+  assert.equal(sent[0].config.abortSignal, signal);
+  assert.equal(sent[0].config.systemInstruction, 'system');
+  assert.equal(sent[0].config.maxOutputTokens, 1024);
+  assert.equal(sent[0].config.responseMimeType, 'application/json');
+  assert.deepEqual(sent[0].config.responseSchema.required, ['schema_version', 'status', 'summary', 'findings', 'limitations']);
+  assert.deepEqual(sent[0].contents, [{ role: 'user', parts: [{ text: 'diff' }] }]);
+  assert.deepEqual(message.content, [{ type: 'text', text: '{"status":"no_issues"}' }]);
+  assert.deepEqual(message.usage, { input_tokens: 40, cache_read_input_tokens: 60, cache_creation_input_tokens: 0, output_tokens: 60 });
+  assert.equal(message.stop_reason, 'end_turn');
+  assert.equal(message._request_id, 'gemini-request');
+});
+
+test('#4466: Gemini fetch strips credential URLs and foreign headers and forbids redirects', async () => {
+  let seen;
+  const fetch = geminiFetch(async (url, options) => { seen = { url, options }; return new Response('{}'); }, 'own-google-key');
+  await fetch('https://gemini.example/stream?key=secret&alt=sse&api_key=other', { headers: {
+    authorization: 'Bearer foreign', 'x-api-key': 'foreign', 'x-goog-api-key': 'foreign', 'anthropic-workspace-id': 'foreign',
+    'content-type': 'application/json', 'x-goog-api-client': 'sdk',
+  } });
+  assert.equal(seen.url, 'https://gemini.example/stream?alt=sse');
+  assert.deepEqual([...seen.options.headers.keys()].sort(), ['content-type', 'x-goog-api-client', 'x-goog-api-key']);
+  assert.equal(seen.options.headers.get('x-goog-api-key'), 'own-google-key');
+  assert.equal(seen.options.redirect, 'error');
+});
+
+const geminiParams = { model: 'owner-model', system: 'system', messages: [{ role: 'user', content: 'diff' }], max_tokens: 1024 };
+const sse = value => `data: ${JSON.stringify(value)}\n\n`;
+
+test('#4466: real Google SDK uses header auth, structured streaming and no SDK quota retry', async () => {
+  const calls = [];
+  let status = 200;
+  const key = 'AIza' + 'test_google_key_never_real_01234567890';
+  const client = geminiClient({ apiKey: key, baseURL: 'https://gemini.example', timeoutSeconds: 30,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init, body: JSON.parse(init.body) });
+      return status === 200 ? new Response(sse({ candidates: [{ content: { parts: [{ text: '{}' }] }, finishReason: 'STOP' }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 4 } }), { headers: { 'content-type': 'text/event-stream' } })
+        : new Response(JSON.stringify({ error: { code: status, status: 'RESOURCE_EXHAUSTED', message: `quota ${key}` } }), { status });
+    },
+  });
+  const result = await client.create(geminiParams);
+  assert.equal(result.stop_reason, 'end_turn');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://gemini.example/v1beta/models/owner-model:streamGenerateContent?alt=sse');
+  assert.equal(new Headers(calls[0].init.headers).get('x-goog-api-key'), key);
+  assert.ok(!calls[0].url.includes(key));
+  assert.ok(!calls[0].init.body.includes(key));
+  assert.equal(calls[0].body.generationConfig.responseMimeType, 'application/json');
+  assert.ok(calls[0].body.generationConfig.responseSchema.properties.findings);
+  status = 429;
+  let error;
+  try { await client.create(geminiParams); } catch (e) { error = e; }
+  assert.equal(calls.length, 2, 'SDK does not retry the quota error');
+  assert.equal(error.kind, 'rate_limit');
+  assert.equal(error.streamStarted, false);
+  assert.match(error.detail, /redacted/);
+  assert.ok(!error.detail.includes(key));
+});
+
+test('#4466: Google SDK first-event errors and mid-stream aborts preserve uncertainty', async () => {
+  for (const mode of ['first-error', 'abort', 'sse-quota', 'unfinished']) {
+    const controller = new AbortController();
+    const client = geminiClient({ apiKey: 'test-google', baseURL: 'https://gemini.example', timeoutSeconds: 30,
+      fetchImpl: async () => new Response(new ReadableStream({
+        start(stream) {
+          if (mode === 'first-error') { stream.enqueue(new TextEncoder().encode('{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"limit"}}')); stream.close(); }
+          else if (mode === 'sse-quota') { stream.enqueue(new TextEncoder().encode(sse({ error: { code: 429, message: 'limit' } }))); stream.close(); }
+          else { stream.enqueue(new TextEncoder().encode(sse({ candidates: [{ content: { parts: [{ text: 'partial' }] } }] }))); if (mode === 'unfinished') stream.close(); }
+        },
+        pull(stream) { controller.abort(); stream.error(new DOMException('aborted', 'AbortError')); },
+      }), { headers: { 'content-type': 'text/event-stream' } }),
+    });
+    let error;
+    try { await client.create(geminiParams, { signal: controller.signal }); } catch (e) { error = e; }
+    assert.equal(error.streamStarted, true, mode);
+    assert.equal(error.kind, ['first-error', 'sse-quota'].includes(mode) ? 'rate_limit' : mode === 'abort' ? 'timeout' : 'unknown');
+  }
+});
+
+test('#4466: Gemini refusals and incomplete streams never masquerade as completed reviews', async () => {
+  for (const [chunk, stop] of [
+    [{ promptFeedback: { blockReason: 'SAFETY' } }, 'refusal'],
+    [{ candidates: [{ finishReason: 'SAFETY' }] }, 'refusal'],
+    [{ candidates: [{ finishReason: 'MAX_TOKENS' }] }, 'max_tokens'],
+  ]) {
+    class FakeGemini { constructor() { this.models = { generateContentStream: async function* () { yield chunk; } }; } }
+    const message = await geminiClient({ apiKey: 'test', timeoutSeconds: 30, sdk: FakeGemini }).create(geminiParams);
+    assert.equal(message.stop_reason, stop);
+    assert.equal(message.usage, undefined, 'missing counts must retain worst-case cost in the runner');
+  }
+  for (const [status, kind] of [[400, 'bad_request'], [401, 'authentication'], [402, 'billing'], [403, 'permission'], [404, 'not_found'], [429, 'rate_limit'], [500, 'server']]) {
+    assert.equal(classifyError(new ApiError({ status, message: 'test' }), GoogleGenAI).kind, kind);
+  }
+});
+
+test('#4466: the Gemini fallback builds the configured official client lazily', async () => {
+  const built = [];
+  class FakeGemini { constructor(options) { built.push(options); this.models = { generateContentStream: async function* () { yield { candidates: [{ finishReason: 'STOP' }] }; } }; } }
+  const clients = fallbacksFor({ GEMINI_API_KEY: 'google-own', GEMINI_MODEL: 'owner-model', GEMINI_BASE_URL: 'https://gemini.example' }, { gemini: { sdk: FakeGemini } });
+  assert.deepEqual(Object.keys(clients), ['gemini']);
+  assert.equal(built.length, 0);
+  await clients.gemini.create(geminiParams);
+  assert.equal(built[0].apiKey, 'google-own');
+  assert.equal(built[0].httpOptions.baseUrl, 'https://gemini.example');
+});
+
+
+test('#4466: fragmented multi-line SSE errors preserve their code before SDK normalization', async () => {
+  const key = 'AIza' + 'synthetic_error_key_012345678901234567';
+  const client = geminiClient({ apiKey: key, baseURL: 'https://gemini.example', timeoutSeconds: 30,
+    fetchImpl: async () => new Response(new ReadableStream({ start(stream) {
+      const frame = 'event: error\r\ndata: {"error":\r\ndata: {"code":403,"message":"refused ' + key + '"}}\r\n\r\n';
+      const bytes = new TextEncoder().encode(frame);
+      for (let i = 0; i < bytes.length; i += 7) stream.enqueue(bytes.slice(i, i + 7));
+      stream.close();
+    } }), { headers: { 'content-type': 'text/event-stream' } }),
+  });
+  let error;
+  try { await client.create(geminiParams); } catch (e) { error = e; }
+  assert.equal(error.kind, 'permission');
+  assert.equal(error.streamStarted, true);
+  assert.ok(!error.detail.includes(key));
+});
+
+// Exercise real SDK stream parsing and the durable ledger together, without a network.
+async function failedStreamRun(provider, makeClient, expectedStreamStarted = true) {
+  const records = [];
+  const requests = [];
+  const client = makeClient(() => requests.push(structuredClone(records)));
+  let error;
+  const observed = { create: async (...args) => {
+    try { return await client.create(...args); }
+    catch (failure) { error = failure; throw failure; }
+  } };
+  const openai = provider === 'openai';
+  const repo = 'AxalNetwork/StudioOS';
+  const model = openai ? 'gpt-5.3-codex' : 'claude-sonnet-5-5';
+  const result = await runReview({
+    env: { CLAUDE_REVIEW_ENABLED: 'true', CLAUDE_REVIEW_MAX_RETRIES: '0',
+      ...(openai ? { OPENAI_API_KEY: 'test-openai', OPENAI_MODEL: model } : { ANTHROPIC_API_KEY: 'test-claude', ANTHROPIC_MODEL: model }),
+    },
+    repository: repo,
+    event: { pull_request: { number: 42, state: 'open', title: 'Test', body: '', user: { login: 'test' },
+      base: { sha: 'b'.repeat(40), ref: 'main' }, head: { sha: 'a'.repeat(40), repo: { full_name: repo } } } },
+    rates: parseRates({ date: '2026-11-04', models: { [model]: { input: 1, output: 1, cache_read: 1, cache_write: 1 } } }),
+    now: () => new Date('2026-11-04T10:00:00Z'), nonce: () => 'test',
+    github: { mergeBase: async () => 'b'.repeat(40), listArtifacts: async () => ({ artifacts: [], complete: true }) },
+    git: { fetch: async () => {}, diff: async () => 'diff --git a/a.js b/a.js\n--- a/a.js\n+++ b/a.js\n@@ -1 +1 @@\n-old\n+new\n' },
+    readLines: () => ['new'],
+    anthropic: openai ? {} : { countTokens: async () => ({ input_tokens: 100 }), create: observed.create },
+    fallbacks: openai ? { openai: observed } : {},
+    persistRecord: record => records.push(JSON.parse(record.body)),
+  });
+  assert.ok(requests.length > 0, 'the real SDK sent a request');
+  for (const reserved of requests) {
+    assert.ok(reserved.length > 0, 'reserve the attempt before sending the request');
+    assert.ok(reserved.at(-1).usd > 0);
+    assert.equal(reserved.at(-1).cost_known, false);
+  }
+  assert.equal(error.streamStarted, expectedStreamStarted);
+  assert.notEqual(result.outcome, 'reviewed');
+  assert.ok(records.length >= 2, 'persist reservation and failure settlement');
+  return records;
+}
+
+for (const code of ['insufficient_quota', 'billing_hard_limit_reached', 'billing_not_active']) {
+  test(`#4463: real OpenAI first-event SSE ${code} keeps its worst-case reservation`, async () => {
+    const records = await failedStreamRun('openai', beforeRequest => openaiClient({
+      apiKey: 'test-key', baseURL: 'https://openai.example/v1', timeoutSeconds: 30,
+      fetchImpl: async () => {
+        beforeRequest();
+        return new Response(`event: error\ndata: ${JSON.stringify({ type: 'error', code, message: 'Stream refused' })}\n\n`,
+          { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      },
+    }));
+    const final = records.at(-1);
+    assert.equal(final.error_kind, 'billing');
+    assert.equal(final.account_id, 'openai');
+    assert.equal(final.usd, records[0].usd);
+    assert.equal(final.cost_known, false);
+  });
+}
+
+test('#4463: real OpenAI HTTP quota refusal before a stream still costs zero', async () => {
+  const records = await failedStreamRun('openai', beforeRequest => openaiClient({
+    apiKey: 'test-key', baseURL: 'https://openai.example/v1', timeoutSeconds: 30,
+    fetchImpl: async () => {
+      beforeRequest();
+      return new Response(JSON.stringify({ error: { code: 'insufficient_quota', message: 'Quota refused' } }),
+        { status: 429, headers: { 'content-type': 'application/json' } });
+    },
+  }), false);
+  assert.equal(records.at(-1).error_kind, 'billing');
+  assert.equal(records.at(-1).usd, 0);
+  assert.equal(records.at(-1).cost_known, true);
+});
+
+test('#4463: real OpenAI abort before headers keeps its worst-case reservation', async () => {
+  const records = await failedStreamRun('openai', beforeRequest => {
+    const client = openaiClient({ apiKey: 'test-key', baseURL: 'https://openai.example/v1', timeoutSeconds: 30,
+      fetchImpl: async () => {
+        beforeRequest();
+        controller.abort();
+        throw new DOMException('Aborted before headers', 'AbortError');
+      },
+    });
+    const controller = new AbortController();
+    return { create: (params, options) => client.create(params, { ...options, signal: controller.signal }) };
+  }, false);
+  assert.equal(records.at(-1).error_kind, 'timeout');
+  assert.equal(records.at(-1).usd, records[0].usd);
+  assert.equal(records.at(-1).cost_known, false);
+});
+
+test('#4463: real Anthropic first-event SSE APIError keeps its worst-case reservation', async () => {
+  const records = await failedStreamRun('anthropic', beforeRequest => {
+    class InterceptedAnthropic extends Anthropic {
+      constructor(options) { super({ ...options, fetch: async () => {
+        beforeRequest();
+        return new Response('event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"Stream failed"}}\n\n',
+          { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      } }); }
+    }
+    return anthropicClient({ apiKey: 'test-key', timeoutSeconds: 30, sdk: InterceptedAnthropic });
+  });
+  assert.equal(records.at(-1).error_kind, 'unknown');
+  assert.equal(records.at(-1).usd, records[0].usd);
+  assert.equal(records.at(-1).cost_known, false);
+});
+
+test('#4463: main key and federation clients never receive fallback workspace headers', async () => {
+  const built = [];
+  class RecordingSdk {
+    constructor(options) { built.push(options); this.messages = { countTokens: async () => ({ input_tokens: 1 }) }; }
+  }
+  const env = { ANTHROPIC_API_KEY: 'main', ANTHROPIC_API_KEY_2: 'second', ANTHROPIC_API_KEY_3: 'third',
+    ANTHROPIC_WORKSPACE_ID_2: 'wrkspc_22222222', ANTHROPIC_WORKSPACE_ID_3: 'wrkspc_33333333' };
+  const p = { model: 'test', system: 's', messages: [] };
+  await clientFor(env, { sdk: RecordingSdk }).countTokens(p);
+  await clientFor({ ...env, ANTHROPIC_FEDERATION_RULE_ID: 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp',
+    ANTHROPIC_ORGANIZATION_ID: 'a984f1f6-6fd8-48ed-80d0-5d6d62f99ae4', ANTHROPIC_WORKSPACE_ID: 'wrkspc_MAIN0000',
+  }, { sdk: RecordingSdk, makeProvider: cfg => ({ cfg }) }).countTokens(p);
+  assert.equal(built.length, 2);
+  assert.equal(built[0].apiKey, 'main');
+  assert.equal(built[1].apiKey, null);
+  assert.equal(built[1].credentials.cfg.workspaceId, 'wrkspc_MAIN0000');
+  for (const options of built) {
+    assert.equal(new Headers(options.defaultHeaders).get('anthropic-workspace-id'), null);
+    assert.doesNotMatch(JSON.stringify(options), /wrkspc_22222222|wrkspc_33333333/);
+  }
 });

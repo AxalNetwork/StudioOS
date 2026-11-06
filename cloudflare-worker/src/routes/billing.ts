@@ -1659,6 +1659,12 @@ async function handleStripeEvent(
     const { syncSubscriptionAlerts } = await import('../services/billingAlerts');
     await syncSubscriptionAlerts(env, event.type, obj);
   }
+  // D4292: an ended subscription's member no longer counts toward the
+  // influencer's milestone bonuses. Idempotent.
+  if (event.type === 'customer.subscription.deleted') {
+    const { onSubscriptionEnded } = await import('../services/influencerCommission');
+    await onSubscriptionEnded(env, obj);
+  }
 
   switch (event.type) {
     case 'checkout.session.completed': {
@@ -2077,7 +2083,10 @@ async function handleStripeEvent(
         const refPriceId = (meta.price_id || '').trim();
         const buyerUserId = Number(meta.user_id);
         const refPiId = (obj.id as string | null) ?? null;
-        if (refCode && referrerUserId && refPriceId && buyerUserId && refPiId) {
+        // D4292: no stacking. A payment whose subscription invoice already
+        // earned an influencer commission earns no purchase commission.
+        const { paymentEarnedInfluencerCommission } = await import('../services/influencerCommission');
+        if (refCode && referrerUserId && refPriceId && buyerUserId && refPiId && !(await paymentEarnedInfluencerCommission(env, refPiId))) {
           const { findCatalogProductByPriceId } = await import('../services/catalog');
           const found = await findCatalogProductByPriceId(env, refPriceId);
           const pct = Number(found?.product.metadata?.commission_pct);
@@ -2203,6 +2212,11 @@ async function handleStripeEvent(
         // D1274: a subscription's promo redemption, from its first paid invoice.
         const { recordInvoiceRedemption } = await import('../services/promoUsage');
         await recordInvoiceRedemption(env, obj);
+        // D4292: an attributed member's paid software invoice earns the
+        // influencer a pending commission, once per invoice id. A database
+        // failure throws so Stripe retries; every step above is idempotent.
+        const { onInvoicePaid } = await import('../services/influencerCommission');
+        await onInvoicePaid(env, obj);
       }
       const { handleInvoiceEvent } = await import('../services/invoiceEmails');
       await handleInvoiceEvent(env, obj);
@@ -2236,7 +2250,12 @@ async function handleStripeEvent(
     // untouched. A case that cannot act throws, so Stripe retries.
     // D1052 (#2903): a charge that is no token pack's may be a plan payment's:
     // it is recorded and the member is told (owner question 9).
+    // D4292: first, an influencer commission on the charge's invoice is
+    // cancelled inside its hold or clawed back after it. It acts only on a
+    // charge that paid such an invoice, and throws so Stripe retries.
     case 'charge.refunded': {
+      const { onChargeRefunded } = await import('../services/influencerCommission');
+      await onChargeRefunded(env, obj);
       const { reverseRefund } = await import('../services/aiCreditReversals');
       if (await reverseRefund(env, obj)) return;
       const { recordPlanRefund } = await import('../services/billingAlerts');
@@ -2244,6 +2263,8 @@ async function handleStripeEvent(
       return;
     }
     case 'charge.dispute.created': {
+      const { onDispute } = await import('../services/influencerCommission');
+      await onDispute(env, event.type, obj);
       const { reverseDispute } = await import('../services/aiCreditReversals');
       if (await reverseDispute(env, obj)) return;
       const { recordPlanDispute } = await import('../services/billingAlerts');
@@ -2251,6 +2272,8 @@ async function handleStripeEvent(
       return;
     }
     case 'charge.dispute.closed': {
+      const { onDispute } = await import('../services/influencerCommission');
+      await onDispute(env, event.type, obj);
       const { closeDispute } = await import('../services/aiCreditReversals');
       if (await closeDispute(env, obj)) return;
       const { closePlanDispute } = await import('../services/billingAlerts');

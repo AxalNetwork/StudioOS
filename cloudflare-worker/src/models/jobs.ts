@@ -42,6 +42,7 @@ export type JobType =
   | 'meeting_import'
   // D684 — a session's transcript structured by the Worker AI as soon as it
   // arrives (services/sessionAutoStructure.ts); proposals still await review.
+  | 'interview_output' // D4412: one selected output after the call
   | 'session_structure'
   // D685 §5.9 — a stopped recording's upload → transcribe → summarise → place
   // findings, as one resumable job (services/interviewProcessing.ts).
@@ -178,6 +179,29 @@ export const Jobs = {
       await sweepDeckImages(env);
     } catch {
       console.error('[cron] deck image sweep unreadable');
+    }
+    // D1590 (#3837): a walkthrough take whose row left by a cascade (deck, venture or account) leaves R2.
+    try {
+      const { sweepOrphanRecordings } = await import('../services/decks/recordings');
+      await sweepOrphanRecordings(env);
+    } catch {
+      console.error('[cron] deck recording sweep unreadable');
+    }
+    // D1569 (#3816): an AI voice-over nobody accepted or discarded leaves R2 after seven days.
+    try {
+      const { sweepOrphanAudio, sweepPendingVoice } = await import('../services/decks/cardAudio');
+      await sweepPendingVoice(env);
+      // A clip no version or proposal names any more (its deck, venture or account went) leaves R2 too.
+      await sweepOrphanAudio(env);
+    } catch {
+      console.error('[cron] deck voice sweep unreadable');
+    }
+    // D4374 (#4374): a deck generation run whose driver died is stopped (timed out) and its hold settled at what it placed.
+    try {
+      const { sweepStuckBatches } = await import('../services/decks/batchSweep');
+      await sweepStuckBatches(env);
+    } catch {
+      console.error('[cron] deck batch sweep unreadable');
     }
     // D1512 (#3764): an area proposal nobody decided expires after 14 days, with the image proposals it holds.
     try {

@@ -475,6 +475,7 @@ D1501 (#3751): `deckDraft.js` holds a deck version's working copy: `deckDraftApi
 
 D1512 (#3764): `deckAreas.js` holds Generate into areas: `deckAreasApi.quote(deckId, body)`, `start(deckId, body, key)` (with an Idempotency-Key, so a retried press is the same run), `proposals(deckId, batchUid)`, `accept(deckId, cardUid, areaId, proposalUid, variant)`, `discard(deckId, proposalUid)`, and `generate(deckId, body, { onProgress })`, which starts the run and reads its proposals until every area has settled. The client never sends a model. `deckV2Adapter.js` reads it through `areasQuote` and `areasGenerate`.
 
+D1521 (#3773): `deckInstruct.js` holds an instruction on the grid selection: `deckInstructApi.quote(deckId, body)` and `run(deckId, body, key)` (with an Idempotency-Key, so a retried press is the same run). The proposals it makes are read, accepted and discarded through `deckAreasApi`. `deckV2Adapter.js` reads it through `instruct`.
 D1516 (#3768): `deckNarrative.js` holds New deck from the narrative: `deckNarrativeApi.outline(body)` and `build(body, key)`, with an Idempotency-Key so a retried press is the same build. The build's run is followed through `deckBatchesApi`, and its proposals through `deckAreasApi` with the build's `deck_id`. `deckV2Adapter.js` reads it through `narrativeOutline`.
 
 D1502 part 2 (#3753): `deckBatches.js` holds a deck generation run: `deckBatchesApi.batch(uid)` (`GET /decks/areas/batches/:uid`), `cancel(uid)` (`POST …/cancel`) and `events(uid, onEvent, { signal })`, which reads the run's Server-Sent Events with `fetch` (EventSource cannot send the Authorization header); `parseSse` splits the stream. `deckV2Adapter.js` reads it through `batch` and `cancelBatch`.
@@ -501,6 +502,7 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `deckCardStatus.js` | D1579: a deck version's card status and assignees, filtered by status and assignee, with the cards not Done and who can be assigned, under `/api/decks/:id/card-status`. Reads only: status and assignee are saved with the version. |
 | `deckRehearsals.js` | D1580 F1: rehearse a deck version — quote, run (the recording as a form), list, read and keep-audio under `/api/decks/:id/rehearsals`. |
 | `deckReports.js` | D1540: a founder's report of a bad deck result (`POST /api/decks/proposals/:uid/report`), and HQ's queue and resolve under `/api/admin/deck-reports`. A report refunds nothing. |
+| `adminFeatureFlags.js` | D4155 K2 (#4189): D1509's feature flags under `/api/admin/feature-flags`: `list`, and `set` (`PUT`), which takes a reason of 10 to 500 characters and refuses a missing one before anything is sent. |
 | `hqDeckStageNorms.js` | D4155 K5 (#4192): HQ's stage norms under `/api/admin/deck-stage-norms` (list, add, edit, retire, each write with a reason) and a venture's own norms read-only (`projectNorms`). |
 | `deckComments.js` | D1570: a deck's comments (list, post, assign, resolve) and its approval (read, set approvers, approve) under `/api/decks/:id/comments…`, `/approval`, `/approvers` and `/approve`. |
 | `deckBrandKit.js` | D1562 (#3809): the deck brand kit's writer — `save` (`PUT /api/decks/brand-kit`, the whole kit: fonts `{ display, body }`, palette roles, image style, reference uids and a logo uid) and `applyBrand` (`POST /api/decks/:id/apply-brand`, one new version). The read stays `deckEditorApi.brandKit`. |
@@ -510,3 +512,5 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `deckVentureElements.js` | D1543: the venture-record elements (team grid and bios, use of funds, round terms, cap-table totals, logo wall, interview quote) under `/api/decks/:id/venture-elements[/:element]`, each from records with its gate refusal, and the logos store with its permission flag under `/api/decks/:id/logos`. |
 | `deckModelPresets.js` | D1549: a deck's preset (Fast, Balanced, Best or Custom) per element group, and the groups HQ locked, under `/api/decks/:id/model-presets`. |
 | `adminDeckModels.js` | D1549: HQ's org default and lock per deck element group, under `/api/admin/ai/deck-models` (Super Admin, step-up). |
+
+`growAds.js` (D4490) reads the mounted Ads endpoint; campaign budget and creative writes remain in `cycleWrites.js`.

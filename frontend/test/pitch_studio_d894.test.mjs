@@ -656,19 +656,19 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   const route = (path) => `<Route path="${path}" element={guard(labRoles(['admin', 'founder'])`;
   for (const p of ['/raise/pitch/edit', '/raise/pitch/decks', '/raise/pitch/script', '/raise/pitch/share', '/raise/pitch/review', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
   // D4254: the old Share & analytics address redirects, venture kept.
-  assert.ok(app.includes('<Route path="/raise/pitch/analytics" element={<KeepQueryRedirect to="/raise/pitch/share" />} />'));
+  assert.equal(app.includes('<Route path="/raise/pitch/analytics" element={<KeepQueryRedirect to="/raise/pitch/share" />} />'), false);
   // D905 (#2684), PD22: the studio's home also admits the roles it is not for, to tell them so.
   // D911 (#2695): positioning moved into Investor narrative › Positioning; its old address redirects.
-  assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
+  assert.equal(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'), false);
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
-  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*<PitchStudio tab="overview" \/>/);
+  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*studioGate\(<PitchWorkspaceMoved \/>\)\s*:\s*studioGate\(<PitchStudio tab="overview" \/>\)/);
   // D898 (#2676): the canvas's editor at /raise/pitch/edit; the template builder retired (group E) and its address opens the studio.
-  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchEditor \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchEditor \/>\)\)\} \/>/);
   assert.ok(app.includes('<Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />'), 'the builder\'s address opens the studio');
   assert.doesNotMatch(app, /PitchWorkspacePage|[^b]PitchDeckPage\b/);
   for (const f of ['frontend/src/pages/PitchWorkspacePage.jsx', 'frontend/src/pages/PitchDeckPage.jsx']) assert.ok(!existsSync(resolve(root, f)), `${f} is back`);
-  assert.match(app, /<Route path="\/raise\/pitch\/share" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="analytics" \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="review" \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/share" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchStudio tab="analytics" \/>\)\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchStudio tab="review" \/>\)\)\} \/>/);
   assert.ok(!existsSync(resolve(root, 'frontend/src/pages/founder/FounderRaisePitch.jsx')), 'the read-only Pitch page is still on disk');
   assert.doesNotMatch(app, /FounderRaisePitch/);
   const moved = read('frontend/src/pages/raise/pitch/PitchWorkspaceMoved.jsx');
@@ -821,7 +821,7 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
     assert.match(html, new RegExp(`data-testid="${id}"`), id);
   }
   assert.doesNotMatch(html, /data-testid="pitch-studio-versions"/, 'no versions table on the home');
-  assert.deepEqual(START_ITEMS.map((i) => i.label), ['Standard outline', 'Build a standard deck now', 'Browse templates ›', 'Import a .pptx template ›']);
+  assert.deepEqual(START_ITEMS.map((i) => i.label), ['Standard outline', 'Build a standard deck now', 'Browse templates ›', 'Import a .pptx template ›', 'Import a document ›']);
   assert.deepEqual(DECK_CARD_MENU.map((i) => i.label), ['Versions…', 'Export…', 'Brand kit']);
   // The deck card's facts, each from a read; nothing recorded is "Not recorded".
   assert.match(renderedText(between(html, 'pitch-studio-deck-facts', 'pitch-studio-coverage')), /Audience\s*Not recorded\s*Round\s*Not recorded\s*Saved\s*20 Oct · 2 cards\s*Views\s*5/);
@@ -830,6 +830,8 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
   assert.match(start, /data-testid="pitch-studio-fast"/);
   assert.match(start, /data-testid="pitch-studio-start-pptx-open"/);
   assert.doesNotMatch(renderedText(between(start, 'pitch-studio-start-pptx')), /Coming later/);
+  // D1563 (#3810): Import a document is live beside it and opens its own sheet.
+  assert.match(start, /data-testid="pitch-studio-start-document-open"/);
   // Each item's way in: Standard outline opens New deck; Browse templates opens the gallery (D1604 step 15),
   // never a second link to the same New deck page.
   assert.match(start, /data-testid="pitch-studio-start-outline-link" href="\/raise\/pitch\/new\?project_id=7"/);

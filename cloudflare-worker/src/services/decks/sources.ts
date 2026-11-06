@@ -289,7 +289,7 @@ const github: Adapter = {
 // ─────────────────────────────────────────────────────────────── Raise
 
 const round: Adapter = {
-  id: 'round', area: 'raise', module: 'Raise › Round planner', href: q('/raise/calls'),
+  id: 'round', area: 'raise', module: 'Raise › Round planner', href: q('/raise/capital-relationships/calls'),
   slots: [
     { key: 'raise.round_target', label: 'Round', unit: 'usd' },
     { key: 'raise.round_close', label: 'Close', unit: 'date' },
@@ -410,7 +410,7 @@ const mercury: Adapter = {
 };
 
 const updates: Adapter = {
-  id: 'updates', area: 'grow', module: 'Grow › Investor updates', href: q('/grow/updates'),
+  id: 'updates', area: 'grow', module: 'Grow › Investor updates', href: q('/grow/reporting'),
   slots: [{ key: 'grow.investor_updates', label: 'Investor updates sent', unit: 'count' }],
   async read({ env, projectId }) {
     const r = await first<{ n: number; at: string | null }>(env,
@@ -687,12 +687,39 @@ export const dataroom: Adapter = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────── AI-native
+
+/**
+ * #3876 (S1, 2026-11-04): the slots the AI-native templates' tiles bind to
+ * (TPL-01 to 12, `templateLibrary.ts` AI_TILES) that no store holds yet. Each
+ * reads Not recorded, never 0 and never a model's guess, until a record holds
+ * it; the stores they need are filed by S1 (D3876). No read runs.
+ */
+const aiNative: Adapter = {
+  id: 'ai_native', area: 'grow', module: 'Grow › Revenue and traction', href: q('/grow/revenue-and-traction'),
+  slots: [
+    { key: 'validate.pilots', label: 'Pilots', unit: 'count', area: 'validate', module: 'Validate › Demand signals', href: q('/validate/demand-signals') },
+    { key: 'validate.tasks_without_correction', label: 'Tasks completed without a correction', unit: 'percent', area: 'validate', module: 'Validate › Demand signals', href: q('/validate/demand-signals') },
+    { key: 'grow.active_accounts', label: 'Active accounts', unit: 'count' },
+    { key: 'grow.runs_per_week', label: 'Runs a week', unit: 'count' },
+    { key: 'grow.accepted_without_edits', label: 'Accepted without edits', unit: 'percent' },
+    { key: 'grow.cac', label: 'CAC', unit: 'usd' },
+    { key: 'grow.ltv', label: 'LTV', unit: 'usd' },
+    { key: 'grow.compute_per_customer', label: 'Compute per customer', unit: 'usd' },
+    { key: 'grow.gross_margin', label: 'Gross margin', unit: 'percent' },
+    { key: 'grow.gross_margin_after_compute', label: 'Gross margin after compute', unit: 'percent' },
+  ],
+  async read() { return {}; },
+};
+
 export const DECK_SOURCES: Adapter[] = [
   interviews, painThemes, claims, demand, competitors,
   mustHaves, roadmap, github, shipping,
   round, capTable, useOfFunds, narrative,
   revenue, mercury, updates, product, pipeline,
   team, notionSource, googleSource, scoring, dataroom,
+  // #3876: the AI-native templates' tiles, Not recorded until a store holds them.
+  aiNative,
   // D1520 (#3772): market size, the competition table, round terms, use of funds by section, the projection, the narrative's words.
   ...RECORD_SOURCES,
 ];

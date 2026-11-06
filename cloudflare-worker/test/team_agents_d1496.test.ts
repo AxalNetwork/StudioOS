@@ -520,7 +520,15 @@ test('roles lists the models an agent may run on, and plan_locked agrees with th
     const paid = (await call(w, EDITOR, 'GET', '/roles')).body.models as any[];
     assert.ok(paid.length > 3);
     const llama = paid.find((m) => m.id === MODEL);
-    assert.deepEqual(llama, { id: MODEL, label: 'llama-3.3-70b-instruct-fp8-fast', kind: 'Text Generation', beta: false, plan_locked: false });
+    assert.deepEqual(llama, {
+      id: MODEL,
+      label: 'llama-3.3-70b-instruct-fp8-fast',
+      kind: 'Text Generation',
+      beta: false,
+      plan_locked: false,
+      input_usd_per_million: 0.366685,
+      output_usd_per_million: 2.81606875,
+    });
     assert.ok(!paid.some((m) => m.id === '@cf/black-forest-labs/flux-1-schnell'), 'only text models');
     for (const m of paid) {
       const r = await call(w, EDITOR, 'POST', `${CO}/agents`, { ...cfo({ model_id: m.id }), role_key: 'cto' });
@@ -970,5 +978,49 @@ test('D4162: the kill switch, a locked model and the per-run ceiling each refuse
     const raise = await call(w, EDITOR, 'PATCH', `/agents/${uid}`, { monthly_cap_microusd: 3_000_000 });
     assert.deepEqual([raise.status, raise.body.error], [422, 'cap_over_platform_max'], raise.text);
     assert.equal((await call(w, EDITOR, 'PATCH', `/agents/${uid}`, { monthly_cap_microusd: 900_000 })).status, 200, 'a cap within the maximum is set');
+  } finally { w.db.close(); }
+});
+
+// #3727 integration: the session DTO does not expose the sponsor's UID.
+// Decision controls use a live server permission for this proposal instead.
+test('queue decision metadata follows the manager and sponsor gates, including a sponsor who is only a member', async () => {
+  const w = world();
+  try {
+    const editorAgent = (await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.agent.uid;
+    proposed(w, editorAgent, 'q-editor-permission');
+    const memberAgent = memberSponsored(w);
+    proposed(w, memberAgent, 'q-member-permission');
+    const readerList = await call(w, MEMBER, 'GET', `${CO}/queue`);
+    const byUid = new Map(readerList.body.items.map((item: any) => [item.uid, item]));
+    assert.equal((byUid.get('q-editor-permission') as any).can_decide, false);
+    assert.equal((byUid.get('q-member-permission') as any).can_decide, true);
+    const managerList = await call(w, EDITOR, 'GET', `${CO}/queue`);
+    assert.ok(managerList.body.items.every((item: any) => item.can_decide === true));
+    assert.equal((await call(w, MEMBER, 'GET', '/queue/q-editor-permission')).body.item.can_decide, false);
+    assert.equal((await call(w, MEMBER, 'GET', '/queue/q-member-permission')).body.item.can_decide, true);
+    const decided = await call(w, MEMBER, 'POST', '/queue/q-member-permission/decide', { decision: 'accept' });
+    assert.equal(decided.status, 200, decided.text);
+    assert.equal(decided.body.item.can_decide, false);
+    assert.equal((await call(w, MEMBER, 'GET', '/queue/q-member-permission')).body.item.can_decide, false);
+    noPrivateKeys(managerList.text); noPrivateKeys(readerList.text);
+  } finally { w.db.close(); }
+});
+
+test('a company-wide list does not grant decision controls for a project the caller cannot read or manage', async () => {
+  const w = world();
+  try {
+    const uid = (await call(w, PROJECT_OWNER, 'POST', `/project/${IN_CO}/agents`, cfo())).body.agent.uid;
+    proposed(w, uid, 'q-project-permission');
+    const companyAgent = (await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.agent.uid;
+    proposed(w, companyAgent, 'q-company-permission');
+    const list = await call(w, EDITOR, 'GET', `${CO}/queue?include=projects`);
+    assert.equal(list.status, 200, list.text);
+    assert.equal(list.body.items.length, 2);
+    const permissions = new Map(list.body.items.map((item: any) => [item.uid, item.can_decide]));
+    assert.equal(permissions.get('q-project-permission'), false);
+    assert.equal(permissions.get('q-company-permission'), true);
+    assert.equal((await call(w, EDITOR, 'GET', '/queue/q-project-permission')).status, 403);
+    assert.equal((await call(w, EDITOR, 'POST', '/queue/q-project-permission/decide', { decision: 'accept' })).status, 403);
+    assert.equal((await call(w, PROJECT_OWNER, 'GET', '/queue/q-project-permission')).body.item.can_decide, true);
   } finally { w.db.close(); }
 });

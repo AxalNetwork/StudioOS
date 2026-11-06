@@ -76,6 +76,20 @@ export function makeCycleWrites(request) {
       deleteGoogleCopy: (projectId, id) => request(`/cycles/raise/google/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
     },
     grow: {
+      // D4447 (#4447): campaign plans; these routes never send, post or spend.
+      campaign: (projectId, body) => request('/cycles/grow/campaigns', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      campaignDetail: (projectId, uid) => request(`/cycles/grow/campaigns/${seg(uid)}?${q(projectId)}`),
+      campaignCreatives: (projectId, uid) => request(`/cycles/grow/campaigns/${seg(uid)}/creatives?${q(projectId)}`),
+      campaignCreative: (projectId, uid, placement, field, text) => request(`/cycles/grow/campaigns/${seg(uid)}/creatives/${seg(placement)}/${seg(field)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, text }) }),
+      campaignArchive: (projectId, uid) => request(`/cycles/grow/campaigns/${seg(uid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
+      campaignChannel: (projectId, uid, channelUid, body) => request(`/cycles/grow/campaigns/${seg(uid)}/channels/${seg(channelUid)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),
+      campaignChannelRemove: (projectId, uid, channelUid) => request(`/cycles/grow/campaigns/${seg(uid)}/channels/${seg(channelUid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
+      campaignItem: (projectId, uid, body) => request(`/cycles/grow/campaigns/${seg(uid)}/items`, { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      campaignItemRemove: (projectId, uid, kind, itemUid) => request(`/cycles/grow/campaigns/${seg(uid)}/items/${seg(kind)}/${seg(itemUid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
+      campaigns: (projectId, filters = {}) => request(`/cycles/grow/campaigns?${new URLSearchParams({ ...filters, project: String(projectId) })}`),
+      // D4485: monthly overview and an optional real ISO-week plan; mounted Worker read.
+      distributionOverview: (projectId, { week } = {}) => request(`/cycles/grow/distribution/overview?${new URLSearchParams({ project: String(projectId), ...(week !== undefined ? { week } : {}) })}`),
+      campaignUpdate: (projectId, uid, body) => request(`/cycles/grow/campaigns/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channel: (projectId, body) => request('/cycles/grow/channels', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channelSpend: (projectId, uid, month, body) => request(`/cycles/grow/channels/${seg(uid)}/spend/${seg(month)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),

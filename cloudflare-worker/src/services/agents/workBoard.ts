@@ -351,9 +351,9 @@ export function boardFilter(raw: string): Filter {
 }
 
 /** Board DTOs have named assignees and uid references, never numeric user ids or emails. */
-export type WorkRun = {task_id:number;uid:string;status:string;started_at:string|null;ended_at:string|null;charged_microusd:number|null;total_cost:number|null;missing_cost:number};
-/** E3 supplies this reader with its run-table migration. Until then no run
- * exists in the canonical schema, so status and charge are not recorded. */
+export type WorkRun = {task_id:number;uid:string;status:string;display_status?:string;started_at:string|null;ended_at:string|null;charged_microusd:number|null;total_cost:number|null;missing_cost:number};
+/** Reader seam: routes use recordedWorkRuns over E3. Internal board-only
+ * reads may omit runs, and tests may inject their own recorded run reader. */
 export type WorkRunReader = (env: Env, taskIds: number[]) => Promise<Map<number,WorkRun>>;
 export const NO_WORK_RUNS_RECORDED: WorkRunReader = async () => new Map();
 export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunReader = NO_WORK_RUNS_RECORDED) {
@@ -387,6 +387,14 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
     WHERE d.task_id IN (SELECT value FROM json_each(?)) ORDER BY b.id`).bind(ids)
     .all<Blocker & {task_id:number;status:string;close_reason:string|null}>();
   const runByTask = await readRuns(env,tasks.map(t=>t.id));
+  // #4394 (TM19c): a task blocked `decision_expired` names the open proposal its run is waiting on, so "Decide now" opens it.
+  const expired = tasks.filter(t=>t.status==='blocked'&&t.blocked_reason==='decision_expired').map(t=>t.id);
+  const openProposal = new Map<number,string>();
+  if (expired.length) {
+    const rows = await env.DB.prepare(`SELECT task_id, uid FROM ai_rail_proposals
+      WHERE task_id IN (SELECT value FROM json_each(?)) AND status = 'proposed' ORDER BY id DESC`).bind(JSON.stringify(expired)).all<{task_id:number;uid:string}>();
+    for (const r of rows.results??[]) if (!openProposal.has(r.task_id)) openProposal.set(r.task_id,r.uid);
+  }
   for (const t of tasks) {
     const r = refsById.get(t.id);
     if (!r) throw new Error('Missing recorded work task');
@@ -417,9 +425,9 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
         :{kind:'none' as const},
       priority:t.priority,due:t.due_at,due_at:t.due_at,
       scheduled:t.scheduled_start&&t.scheduled_end?{start:t.scheduled_start,end:t.scheduled_end}:null,module:t.module,option:t.option,kind:t.kind,
-      source:t.source_kind,goal:r.goal_title,goal_uid:r.goal_uid,depends_on:ownDeps.map(({uid,task_number,title})=>({uid,task_number,title})),blocked:blockers.length>0||t.status==='blocked',blocked_reason:t.blocked_reason,blockers,
+      source:t.source_kind,goal:r.goal_title,goal_uid:r.goal_uid,depends_on:ownDeps.map(({uid,task_number,title})=>({uid,task_number,title})),blocked:blockers.length>0||t.status==='blocked',blocked_reason:t.blocked_reason,proposal_uid:t.blocked_reason==='decision_expired'?openProposal.get(t.id)??null:null,blockers,
       ready:t.status==='open'&&columnOf(t)==='ready'&&!blockers.length,
-      run:run?{uid:run.uid,status:({done:'completed',waiting_decision:'waiting',admitted:'running'} as Record<string,string>)[run.status]??run.status,
+      run:run?{uid:run.uid,status:run.display_status??({done:'completed',waiting_decision:'waiting',admitted:'running'} as Record<string,string>)[run.status]??run.status,
         recorded_status:run.status,charged_microusd:cost.available?cost.value_microusd:null,cost,started_at:run.started_at,ended_at:run.ended_at}:null,
       cost:run&&!run.missing_cost&&run.total_cost!=null?{available:true,value_microusd:run.total_cost}:{available:false},created_at:t.created_at,updated_at:t.updated_at,version:t.work_version,
       needs_reassignment:Number(t.needs_reassignment??0)===1,
@@ -443,6 +451,23 @@ function sortCards<T extends SortableCard>(cards: T[], sort: string): T[] {
     if (y === null) return -1;
     return (x < y ? -1 : 1) * sign;
   });
+}
+
+/** #4420: one aggregate read, with the same legacy-column derivation as the board. */
+export async function projectWorkSummary(env: Env, scope: Project) {
+  const rows = await env.DB.prepare(`SELECT COALESCE(board_column, CASE status
+    WHEN 'in_progress' THEN 'in_progress' WHEN 'waiting_decision' THEN 'in_review'
+    WHEN 'done' THEN 'done' WHEN 'cancelled' THEN 'done' ELSE 'backlog' END) AS board_column,
+    COUNT(*) AS count, SUM(CASE WHEN status IN ('done','cancelled') THEN 1 ELSE 0 END) AS closed
+    FROM scope_tasks WHERE scope_kind = 'project' AND project_id = ? GROUP BY 1`)
+    .bind(scope.id).all<{ board_column: Column; count: number; closed: number }>();
+  const columns = Object.fromEntries(BOARD_COLUMNS.map((key) => [key, 0])) as Record<Column, number>;
+  let open = 0, closed = 0;
+  for (const row of rows.results ?? []) {
+    columns[row.board_column] = Number(row.count);
+    closed += Number(row.closed); open += Number(row.count) - Number(row.closed);
+  }
+  return { open, closed, columns };
 }
 
 export async function projectBoard(env: Env, scope: Project, filter = '', readRuns: WorkRunReader = NO_WORK_RUNS_RECORDED, sort = '') {

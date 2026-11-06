@@ -114,7 +114,7 @@ test('a task\'s job yields to a rail press\'s page row; a job the caller names a
 test('the scope: what is routed through textChoice, and the rest pinned (rail presses and agents keep their own rows)', () => {
   const routed = new Set([...Object.values(TASK_TEXT_JOBS), ...Object.values(FORM_TEXT_JOBS)]);
   assert.deepEqual(SCOPE.filter((j) => routed.has(j)),
-    ['ST2', 'ST3', 'ST4', 'ON1', 'VA5', 'VA11', 'VA12', 'VA13', 'VA15', 'BU4', 'DK8', 'IN1', 'IN5', 'IN6', 'IN11', 'GR1', 'GR2', 'EV1', 'EM1', 'AD1', 'MI1']);
+    ['ST2', 'ST3', 'ST4', 'ON1', 'VA5', 'VA11', 'VA12', 'VA13', 'VA15', 'BU4', 'DK8', 'IN1', 'IN5', 'IN6', 'IN11', 'GR1', 'GR2', 'GR5', 'EV1', 'EM1', 'AD1', 'MI1']);
   // The scope's jobs that read images write no text first: they are the vision task's, not textChoice's.
   assert.deepEqual(SCOPE.filter((j) => !textJob(j)), ['BU6', 'DK7', 'DK9', 'IN8', 'RE5']);
 });

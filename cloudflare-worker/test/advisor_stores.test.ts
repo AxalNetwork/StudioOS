@@ -23,7 +23,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -147,6 +147,9 @@ function freshDb() {
   // behaviour and still do.
   db.exec(migration('241_advisor_money_model'));
   db.exec(migration('369_advisor_client_notes'));
+  // D4472: the assignable picker includes active additional Advisor grants.
+  const licenceMigration=readdirSync(`${SQL}/migrations`).find(name=>name.endsWith('_account_licences.sql'))!;
+  db.exec(readFileSync(`${SQL}/migrations/${licenceMigration}`,'utf8'));
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');

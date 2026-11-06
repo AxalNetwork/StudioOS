@@ -23,6 +23,8 @@ test('six tabs at their own addresses, each an HQ-only route', () => {
     ['Default templates', '/admin/platform/decks/templates'], ['Stage norms', '/admin/platform/decks/norms'],
     // D4251 (#4251): the elements × models grid and the kill switch.
     ['AI models', '/admin/platform/decks/models'],
+    // D1537 (#3786): the Grid's health and the adoption funnel.
+    ['Grid health', '/admin/platform/decks/grid'], ['Funnel', '/admin/platform/decks/funnel'],
   ]);
   for (const { to } of TABS) assert.ok(ROUTES.includes(`<Route path="${to}" element={guard(['admin'], hqOnly(<HqDecksPage />))} />`), to);
   assert.equal(viewFor('/admin/platform/decks'), 'reports');
@@ -39,7 +41,7 @@ test('Decks joins the Platform strip after Promo codes, in the list and in the c
 
 test('each build task names its issue, and only a landed one is live', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['K1', 4188], ['K2', 4189], ['K3', 4190], ['K4', 4191], ['K5', 4192]]);
-  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K1', 'K3', 'K4', 'K5'], 'K1 (#4188), K3 (#4190), K4 (#4191) and K5 (#4192) landed');
+  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K1', 'K2', 'K3', 'K4', 'K5'], 'every build task landed: K2 (#4189) last, its write wired by #4155');
   assert.equal(notYet('K3'), 'Not switched on yet. The beta cohort arrives with #4190.');
 });
 
@@ -82,7 +84,7 @@ test('HD1: Resolve arms on an outcome and a note of at least 10 characters, and 
   assert.match(PAGE, /disabled=\{!armed \|\| busy\}/);
 });
 
-test('HD2: flags in plain words and scopes; every toggle stays off until K2 records a reason', () => {
+test('HD2: flags in plain words and scopes; the toggles follow K2 and write through the client that sends the reason', () => {
   assert.equal(flagLabel('grid_generate').name, 'Generate with The Grid');
   assert.equal(flagLabel('element:chart').name, 'Element · chart');
   assert.equal(flagLabel('model:m1').name, 'Model · m1');
@@ -94,10 +96,9 @@ test('HD2: flags in plain words and scopes; every toggle stays off until K2 reco
   assert.equal(row.on, false);
   assert.equal(row.by, NOT_RECORDED, 'a bare user id is not a name');
   assert.deepEqual(defaultOnKeys(reply), ['element:chart']);
-  const toggles = [...PAGE.matchAll(/<button type="button" className=\{BTN\} disabled title=\{notYet\('K2'\)\}/g)];
-  assert.equal(toggles.length, 2);
-  assert.equal((read('lib/api/adminFeatureFlags.js').match(/: \(\) => request\(/g) || []).length, 1, 'read-only: no write method before K2');
-  assert.doesNotMatch(read('lib/api/adminFeatureFlags.js'), /method: 'PUT'/);
+  assert.equal((PAGE.match(/<FlagToggle row=\{r\} onOpen=\{setOpen\} \/>/g) || []).length, 2, 'rows with a flag and the default-on keys');
+  assert.match(PAGE, /disabled=\{!BUILD\.K2\.live\} title=\{BUILD\.K2\.live \? undefined : notYet\('K2'\)\}/);
+  assert.match(read('lib/api/adminFeatureFlags.js'), /method: 'PUT'/);
 });
 
 test('HD4: the sector × stage grid from the overrides; a default is never a guessed template', () => {
@@ -158,10 +159,10 @@ test('the reset client sends its reason in the body, never the URL', async () =>
   assert.doesNotMatch(url, /reason/, 'the URL carries sector and stage only');
 });
 
-test('the page writes only Resolve, the default templates and the stage norms, reads only mounted routes, and never shows an email', () => {
+test('the page writes only Resolve, an image takedown (#4375), the feature flags, the default templates and the stage norms, reads only mounted routes, and never shows an email', () => {
   const calls = [...PAGE.matchAll(/\b(deckReportsApi|adminFeatureFlagsApi|hqDeckStageNormsApi|api)\.(\w+)\(/g)].map((m) => `${m[1]}.${m[2]}`);
-  assert.deepEqual([...new Set(calls)].sort(), ['adminFeatureFlagsApi.list', 'api.deckMethods', 'api.deckRecommendOverrides', 'api.deckResetRecommendOverride', 'api.deckSetRecommendOverride',
-    'deckReportsApi.queue', 'deckReportsApi.resolve',
+  assert.deepEqual([...new Set(calls)].sort(), ['adminFeatureFlagsApi.list', 'adminFeatureFlagsApi.set', 'api.deckMethods', 'api.deckRecommendOverrides', 'api.deckResetRecommendOverride', 'api.deckSetRecommendOverride',
+    'deckReportsApi.queue', 'deckReportsApi.resolve', 'deckReportsApi.takedownImage',
     'hqDeckStageNormsApi.add', 'hqDeckStageNormsApi.edit', 'hqDeckStageNormsApi.list', 'hqDeckStageNormsApi.projectNorms', 'hqDeckStageNormsApi.retire']);
   assert.doesNotMatch(PAGE, /\.email\b/);
   assert.doesNotMatch(PAGE.replace(/NORM_RULE/g, ''), /\badvis(or|e)\b/i);

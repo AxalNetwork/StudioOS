@@ -55,6 +55,8 @@ import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckImagesApi } from '../../../lib/api/deckImages.js';
+import { deckImportsApi } from '../../../lib/api/deckImports.js';
+import { deckInstructApi } from '../../../lib/api/deckInstruct.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckJudgeApi } from '../../../lib/api/deckJudge.js';
 import { deckLayoutsApi } from '../../../lib/api/deckLayouts.js';
@@ -102,7 +104,8 @@ export const SURFACES = Object.freeze({
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
   imageEdit: { issue: 3778, what: 'Crop, focus and filters' },
-  // D1534 (#3778 phase 2): background removal through AI Gateway (Bria, M = B), off until the owner's steps; upscale has no model yet.
+  // D1534 (#3778 phase 2): background removal through AI Gateway (Bria, M = B); D4316 (#4316): upscale (Pruna).
+  // Each behind its own provider switch, off until the owner's steps on #1008.
   imageEditAi: { issue: 3778, what: 'Upscale and background removal' },
   imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
@@ -125,6 +128,7 @@ export const SURFACES = Object.freeze({
   outlineReorder: { issue: 3808, what: 'Reorder the New deck outline for a stage' },
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
   pptxImport: { issue: 3819, what: 'Start from a .pptx template' },
+  importDocument: { issue: 3810, what: 'Start from a document: paste, DOCX, PDF or a .pptx deck' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
   withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },
@@ -214,7 +218,16 @@ const narrativeBody = ({ projectId, audience, stage, sector, run, quoteUid } = {
   project_id: projectId, ...(audience ? { audience } : {}), ...(stage ? { stage } : {}), ...(sector ? { sector } : {}), ...(run && quoteUid ? { quote_uid: quoteUid } : {}),
 });
 export const narrativeOutline = (o = {}) => through(() => (o.run ? deckNarrativeApi.build(narrativeBody(o), o.idempotencyKey) : deckNarrativeApi.outline(narrativeBody(o))), SURFACES.narrativeOutline.issue);
-export const instruct = off('instruct');
+/**
+ * D1521 (#3773): an instruction on the selected areas of one card. Without `run`, the quote (#3764's areas quote);
+ * with `run` (and the quote's `quoteUid`), the one run under one hold, answered as one proposal per area. `areas`
+ * are the selection's area ids; the Worker refuses one that is not words, and a figure in the words, before any quote.
+ */
+const instructBody = ({ card, areas = [], instruction, action, variants, run, quoteUid } = {}) => ({
+  card, selection: areas.map((id) => ({ area_id: String(id) })), ...(instruction ? { instruction } : {}), ...(action ? { action } : {}),
+  ...(variants ? { variants } : {}), ...(run && quoteUid ? { quote_uid: quoteUid } : {}),
+});
+export const instruct = (o = {}) => through(() => (o.run ? deckInstructApi.run(o.deckId, instructBody(o), o.idempotencyKey) : deckInstructApi.quote(o.deckId, instructBody(o))), SURFACES.instruct.issue);
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 /** D1523 (#3775): every figure on the version, Linked, Stated, Uncited or Not recorded, and the counts Check claims shows. Editor-only. */
@@ -304,6 +317,8 @@ export const outlineReorder = off('outlineReorder');
 // The lock switches and Save as your layouts write through `deckBrandLocksApi` and `deckLayoutsApi`.
 export const brandLocks = (projectId) => through(() => deckBrandLocksApi.locks(projectId), SURFACES.brandLocks.issue);
 export const pptxImport = (projectId, file) => through(() => deckLayoutsApi.importTemplate(projectId, file), SURFACES.pptxImport.issue);
+// D1563 (#3810): Start from › Import a document — paste, DOCX and PDF to an outline, a .pptx to editable cards.
+export const importDocument = (projectId, input) => through(() => deckImportsApi.importDocument(projectId, input), SURFACES.importDocument.issue);
 // D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.
 export const investorLinks = (deckId) => through(() => deckInvestorLinksApi.investorLinks(deckId), SURFACES.investorLinks.issue);
 export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInvestorLinksApi.withdrawInvestorLink(deckId, shareId), SURFACES.withdrawInvestorLink.issue);

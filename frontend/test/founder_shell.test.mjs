@@ -102,7 +102,8 @@ test('A4 owns the founder Raise landing while workspace mode retains its detaile
   // D661 (#1474): the landing a founder gets is the Raise cycle overview now.
   assert.match(zone, /founderRaiseLanding\s*\?\s*guard\([^)]*\), <CycleRoute cycle="raise" \/>\)/);
   // D898 group E: the template builder retired; the editor is the studio's, at /raise/pitch/edit.
-  assert.match(app, /guard\(labRoles\(\['admin', 'founder'\]\), <PitchEditor \/>\)/);
+  // D4359: inside the studio's plan gate.
+  assert.match(app, /guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchEditor \/>\)\)/);
   assert.doesNotMatch(app, /PitchWorkspacePage/);
   // The desk is an overview OVER the sections, not instead of them. D894:
   // the Pitch section page is the Pitch deck studio's home now. D4254: its Overview.
@@ -116,17 +117,20 @@ test('A7 owns the founder Research landing, and /signals only redirects to it', 
   // D422: the landing is `/research`'s; bare `/signals` redirects there. D670
   // retired the Signals feed, so the redirect is everyone's and no route
   // mounts a Research tab bar any more.
-  assert.match(line, /<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>/);
+  assert.equal(line, undefined);
   assert.match(app, /founderResearchLanding\s*\?\s*guard\([^)]*\), <FounderResearchDesk \/>\)/);
   assert.doesNotMatch(app, /<SignalsPage\b|FounderWorkspaceTabs set="research"/);
 });
 
 test('a founder never gets two tab bars on one page', () => {
-  // /comarketing already carried the Partner Offers bar. The fix is a branch,
-  // not a second bar stacked on the first.
+  // D4439: the founder's old address forwards; the canonical page owns one Grow frame.
+  // Partners retain their Offers bar at the original address.
   const comarketing = app.split('\n').find((l) => l.includes('path="/comarketing"'));
-  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', founderEditor\(/,
-    '/comarketing must serve founders the Grow bar INSTEAD of the Partner bar');
+  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*<CoMarketingFounderRedirect \/>/,
+    '/comarketing must forward founders to Partner network');
+  const founderPage = readFileSync('frontend/src/pages/founder/FounderCoMarketingPage.jsx', 'utf8');
+  assert.match(founderPage, /<FounderWorkspacePage page="grow" hideHeader>/);
+  assert.doesNotMatch(founderPage, /PartnerWorkspaceTabs|FounderWorkspaceTabs/, 'the founder feed must not stack tab bars');
   assert.ok(comarketing.includes('<PartnerWorkspaceTabs set="offers"'),
     '/comarketing must still serve everyone else the Partner bar');
 
@@ -153,7 +157,7 @@ test('Home is /studio, no role root invented', () => {
 });
 
 test('Spin-Out Lab keeps its row; its match adds only the 83(b) tracker (D563)', () => {
-  assert.match(founder, /\{ to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES \}/);
+  assert.match(founder, /\{ to: '\/spinout-lab', icon: \w+, label: 'Spin-Out Lab', match: SPINOUT_LAB_PAGES \}/);
   assert.match(src, /const SPINOUT_LAB_PAGES = \['\/spinout-lab\/83b'\];/);
 });
 
@@ -183,19 +187,14 @@ test('Trust stays out of the sidebar', () => {
   assert.ok(!targets.includes('/trust'), 'Trust Center belongs to the user dropdown');
 });
 
-test('Company Settings is the pinned footer only, never a nav row', () => {
-  // It used to be both: a row at the end of the group AND the pinned footer,
-  // so every role rendered it twice. The footer is the single entry point now.
-  assert.ok(
-    !targets.includes('/company-settings'),
-    'a /company-settings row is back in the nav config; it duplicates the pinned footer',
-  );
-
-  // The guard that moved here with it. SidebarNav's footer is unconditional —
-  // no role gate — so removing the row cannot strand a role without a door.
+test('scope Settings stays in the footer; account Portfolio lives in the Account menu', () => {
+  assert.ok(!targets.includes('/company-settings'), 'no retired Company Settings nav row');
   const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
-  // D1140 (#3020): the footer is Companies and projects now.
-  assert.ok(/to="\/account\/portfolio"/.test(nav), 'the pinned footer lost its link');
+  // D4416 amends D4152: companies and projects moved from the rail to Account.
+  assert.doesNotMatch(nav, /to="\/account\/portfolio"/, 'no account Portfolio footer');
+  const app = readRoutesSource();
+  const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/, 'Portfolio remains reachable from Account');
   assert.ok(!/to="\/company-settings"/.test(nav), 'the footer points at the retired address');
   assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
 });

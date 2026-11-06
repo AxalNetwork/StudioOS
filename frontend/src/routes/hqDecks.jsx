@@ -17,6 +17,9 @@ export default function hqDecksRoutes({ guard, hqOnly }) {
       <Route path="/admin/platform/decks/templates" element={guard(['admin'], hqOnly(<HqDecksPage />))} />
       <Route path="/admin/platform/decks/norms" element={guard(['admin'], hqOnly(<HqDecksPage />))} />
       <Route path="/admin/platform/decks/models" element={guard(['admin'], hqOnly(<HqDecksPage />))} />
+      <Route path="/admin/platform/decks/grid" element={guard(['admin'], hqOnly(<HqDecksPage />))} />
+      <Route path="/admin/platform/decks/funnel" element={guard(['admin'], hqOnly(<HqDecksPage />))} />
+      {/* D1537: the plan's address for the Grid's dashboard (§5.9.6) opens its tab. */}
     </>
   );
 }

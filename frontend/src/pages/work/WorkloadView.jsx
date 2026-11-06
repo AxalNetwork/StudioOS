@@ -3,11 +3,12 @@
 // due. A week over a person's recorded capacity is amber; a person with no
 // capacity recorded is never "over". Drag a bar to another row to reassign it
 // (W1's PATCH); "Schedule work" gives a person's item a time block (W4's
-// PATCH). Agents' scheduled sessions join when #3957 merges (`workAdapter.agentSessions`).
+// PATCH). An agent's scheduled sessions (#3957) come in the same read (#3972): each slot is a
+// teal bar in its week, never dragged and never opened as a task, and counts as not estimated.
 import React, { useCallback, useEffect, useState } from 'react';
 import { BTN_PRIMARY, BTN_SECONDARY, MUTED, HonestBlock } from '../team/teamUi.jsx';
 import { workAdapter } from './workAdapter.js';
-import { scheduleBody, weekLabel, workloadRows } from './workModel.js';
+import { isSession, scheduleBody, weekLabel, workloadByRole, workloadRows } from './workModel.js';
 
 export const WORKLOAD_LINE = 'Bars sit in the week they are scheduled or due; their label is the estimate. Drag a bar to another row to reassign it.';
 
@@ -19,7 +20,10 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
     setState({ status: 'loading' });
     try {
       const r = await workAdapter.workload(projectId, { weeks: 4 });
-      setState(r.available ? { status: 'ready', data: r.data } : { status: 'off', reason: r.reason });
+      // D1614 W8 (#3994): rows grouped by role, from the Team's own read. Without it the rows stay ungrouped.
+      let team = null;
+      if (r.available) { try { const t = await workAdapter.assignable(projectId); team = t.available ? t.data?.team || [] : null; } catch { team = null; } }
+      setState(r.available ? { status: 'ready', data: r.data, team } : { status: 'off', reason: r.reason });
     } catch { setState({ status: 'error' }); }
   }, [projectId]);
   useEffect(() => { load(); }, [load]);
@@ -39,6 +43,7 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
   if (state.status === 'error') return <HonestBlock>Workload could not be read. That is not the same as nobody having work. <button type="button" className={BTN_SECONDARY} onClick={load}>Try again</button></HonestBlock>;
   const weeks = state.data?.weeks || [];
   const rows = workloadRows(state.data);
+  const groups = state.team ? workloadByRole(rows, state.team) : [{ key: 'all', label: null, rows }];
   return (
     <section className="wk-workload" data-testid="work-workload">
       <p className={MUTED}>{WORKLOAD_LINE}</p>
@@ -47,7 +52,9 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
           <span role="columnheader">Person or agent</span>
           {weeks.map((w) => <span key={w} role="columnheader" data-testid="work-workload-week">{weekLabel(w)}</span>)}
         </div>
-        {rows.map((r) => (
+        {groups.map((g) => (<React.Fragment key={g.key}>
+        {g.label ? <div role="row" className="wk-wl-group" data-testid="work-workload-group"><span role="rowheader" style={{ gridColumn: '1 / -1' }}><b>{g.label}</b></span></div> : null}
+        {g.rows.map((r) => (
           <div role="row" key={r.key} className="wk-wl-row" data-testid="work-workload-row">
             <span role="rowheader" className="wk-wl-who">
               <b>{r.who?.name || 'Not recorded'}</b>
@@ -57,16 +64,21 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
               <span key={c.week} role="cell" className="wk-wl-cell" data-over={c.over ? 'true' : undefined} data-testid="work-workload-cell"
                 onDragOver={(e) => { e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); reassign(drag, r); setDrag(null); }}>
                 <span className={MUTED}>{c.load}{c.over ? ' · over capacity' : ''}</span>
-                {c.items.map((it) => (
+                {c.items.map((it) => (isSession(it) ? (
+                  <span key={`${it.uid}:${it.when?.at ?? ''}`} className="wk-wl-bar wk-wl-session" data-testid="work-workload-session">
+                    {it.title} · agent session
+                  </span>
+                ) : (
                   <button key={it.uid} type="button" draggable className="wk-wl-bar" onDragStart={() => setDrag({ ...it, from: r.key })}
                     onClick={() => onOpenItem?.(it.uid)} data-testid="work-workload-bar">
                     {it.title}{it.estimate_points == null ? '' : ` · ${it.estimate_points} pts`}
                   </button>
-                ))}
+                )))}
               </span>
             ))}
           </div>
         ))}
+        </React.Fragment>))}
       </div>
       {rows.some((r) => r.unscheduled.length) ? (
         <div className="wk-wl-unscheduled" data-testid="work-workload-unscheduled">
@@ -89,7 +101,7 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
   );
 }
 
-function ScheduleBox({ s, onChange, onDone }) {
+export function ScheduleBox({ s, onChange, onDone }) {
   const [error, setError] = useState(null);
   const save = async () => {
     const b = scheduleBody(s.day, s.from, s.to);

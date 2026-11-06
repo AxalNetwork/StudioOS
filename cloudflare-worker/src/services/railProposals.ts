@@ -25,6 +25,7 @@
  *   · A second decision: a row is decided once, atomically
  *     (`WHERE status = 'proposed'`), so two presses cannot both keep it.
  */
+import { disclaimerKeyForRole } from './agents/disclaimers';
 import type { Env } from '../types';
 import { railOptionKey, railPageKey, railRecordKey } from './aiRouter';
 import { neverFillMessage, neverFillReason } from './fills/neverFill';
@@ -54,6 +55,7 @@ export const MAX_PAYLOAD_CHARS = 16000;
 
 export interface RailProposal {
   uid: string;
+  disclaimer_key?: string;
   rail_page: string;
   rail_option: string;
   record_ref: string | null;
@@ -68,6 +70,7 @@ export interface RailProposal {
 }
 
 type Row = {
+  agent_id?: number | null;
   uid: string; rail_page: string; rail_option: string; record_ref: string | null;
   kind: RailProposalKind; payload_json: string; model: string | null; usage_log_id: number | null;
   status: RailProposalStatus; decided_payload_json: string | null; decided_at: string | null; created_at: string;
@@ -84,6 +87,21 @@ function toProposal(r: Row): RailProposal {
     kind: r.kind, payload: parse(r.payload_json) || {}, model: r.model, usage_log_id: r.usage_log_id,
     status: r.status, decided_payload: parse(r.decided_payload_json), decided_at: r.decided_at, created_at: r.created_at,
   };
+}
+
+/** Enrich only the already owner-gated rows; role metadata never comes from model output. */
+async function withAgentDisclaimers(env: Env, rows: Row[]): Promise<RailProposal[]> {
+  const ids = [...new Set(rows.flatMap((r) => r.agent_id == null ? [] : [r.agent_id]))];
+  const keys = new Map<number, string>();
+  if (ids.length) {
+    const agents = await env.DB.prepare('SELECT id, role_key FROM team_agents WHERE id IN (SELECT value FROM json_each(?))')
+      .bind(JSON.stringify(ids)).all<{ id: number; role_key: string }>();
+    for (const agent of agents.results ?? []) {
+      const key = disclaimerKeyForRole(agent.role_key);
+      if (key) keys.set(agent.id, key);
+    }
+  }
+  return rows.map((r) => ({ ...toProposal(r), ...(r.agent_id != null && keys.has(r.agent_id) ? { disclaimer_key: keys.get(r.agent_id)! } : {}) }));
 }
 
 export interface ProposeInput {
@@ -178,22 +196,20 @@ export async function proposeRail(env: Env, input: ProposeInput): Promise<RailPr
 export async function railByRunKey(env: Env, userId: number, runKey: string): Promise<RailProposal | null> {
   if (!RUN_KEY_RE.test(runKey)) return null;
   const row = await env.DB.prepare(
-    `SELECT uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
-            status, decided_payload_json, decided_at, created_at
+    `SELECT *
        FROM ai_rail_proposals WHERE run_key = ? AND user_id = ?`,
   ).bind(runKey, userId).first<Row>();
-  return row ? toProposal(row) : null;
+  return row ? (await withAgentDisclaimers(env, [row]))[0] : null;
 }
 
 /** One of the member's own proposals, by uid, or null. */
 export async function getRail(env: Env, userId: number, uid: string): Promise<RailProposal | null> {
   // Literal SQL throughout this file, so the schema guards can read every statement.
   const row = await env.DB.prepare(
-    `SELECT uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
-            status, decided_payload_json, decided_at, created_at
+    `SELECT *
        FROM ai_rail_proposals WHERE uid = ? AND user_id = ?`,
   ).bind(uid, userId).first<Row>();
-  return row ? toProposal(row) : null;
+  return row ? (await withAgentDisclaimers(env, [row]))[0] : null;
 }
 
 /** The member's own proposals for one option, newest first; `record` and `status` narrow them. */
@@ -216,8 +232,7 @@ export async function listRail(env: Env, userId: number, q: { option?: string | 
   if (q.run != null && run == null) return [];
   // A null filter matches every row: `? IS NULL OR column = ?`, bound twice.
   const r = await env.DB.prepare(
-    `SELECT uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
-            status, decided_payload_json, decided_at, created_at
+    `SELECT *
        FROM ai_rail_proposals
       WHERE user_id = ?
         AND (? IS NULL OR rail_option = ?)
@@ -227,7 +242,7 @@ export async function listRail(env: Env, userId: number, q: { option?: string | 
         AND (? IS NULL OR usage_log_id = ?)
       ORDER BY id DESC LIMIT 50`,
   ).bind(userId, option, option, page, page, record, record, q.status || null, q.status || null, run, run).all<Row>();
-  return (r.results || []).map(toProposal);
+  return withAgentDisclaimers(env, r.results || []);
 }
 
 /**
@@ -261,6 +276,8 @@ export async function decideRailAs(env: Env, who: { ownerId: number; deciderId: 
   if (routed && routed.rail_option.startsWith('derive:') && status !== 'discarded') return null;
   // D4170 (#4170): a data room proposal's one file change is written only by the room's own accept, behind the
   // room's gate (`routes/data_room_proposals.ts`); here it can only be discarded.
+  // D4488: Distribution acceptance requires fresh venture access and the creative transaction.
+  if (routed?.rail_option === 'draft:distribution' && status !== 'discarded') return null;
   if (routed && routed.rail_option.startsWith('dataroom:') && status !== 'discarded') return null;
   if (status === 'edited' && (!edited || typeof edited !== 'object' || JSON.stringify(edited).length > MAX_PAYLOAD_CHARS)) return null;
   // D777 part 3: keeping a value re-checks the never-fill registry. The stored

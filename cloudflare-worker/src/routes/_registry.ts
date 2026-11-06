@@ -5,6 +5,7 @@
 // file and running `node scripts/build-route-registry.mjs`;
 // cloudflare-worker/test/route_registry_4105.test.ts fails while stale.
 import type { RegisteredModule } from '../util/routeRegistry';
+import { mount as account_licencesMount } from './account_licences';
 import { mount as admin_agentsMount } from './admin_agents';
 import { mount as admin_ai_agentsMount } from './admin_ai_agents';
 import { mount as admin_ai_agents_policyMount } from './admin_ai_agents_policy';
@@ -13,38 +14,54 @@ import { mount as admin_ai_element_modelsMount } from './admin_ai_element_models
 import { mount as admin_company_skillsMount } from './admin_company_skills';
 import { mount as admin_deck_betaMount } from './admin_deck_beta';
 import { mount as admin_deck_generationMount } from './admin_deck_generation';
+import { mount as admin_deck_gridMount } from './admin_deck_grid';
+import { mount as admin_deck_imagesMount } from './admin_deck_images';
 import { mount as admin_deck_stage_normsMount } from './admin_deck_stage_norms';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as admin_influencersMount } from './admin_influencers';
+import { mount as admin_persona_segment_scopesMount } from './admin_persona_segment_scopes';
 import { mount as company_complianceMount } from './company_compliance';
 import { mount as data_room_proposalsMount } from './data_room_proposals';
+import { mount as deck_accessMount } from './deck_access';
 import { mount as deck_actionsMount } from './deck_actions';
 import { mount as deck_brand_kitMount } from './deck_brand_kit';
 import { mount as deck_card_statusMount } from './deck_card_status';
 import { mount as deck_diagramsMount } from './deck_diagrams';
+import { mount as deck_importsMount } from './deck_imports';
 import { mount as deck_judgeMount } from './deck_judge';
 import { mount as deck_layoutsMount } from './deck_layouts';
 import { mount as deck_mediaMount } from './deck_media';
 import { mount as deck_preflightMount } from './deck_preflight';
 import { mount as deck_proofMount } from './deck_proof';
 import { mount as deck_quotesMount } from './deck_quotes';
+import { mount as deck_recordingsMount } from './deck_recordings';
 import { mount as deck_remoteMount } from './deck_remote';
 import { mount as deck_reportsMount } from './deck_reports';
 import { mount as deck_scriptMount } from './deck_script';
 import { mount as deck_slide_analyticsMount } from './deck_slide_analytics';
 import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
+import { mount as deck_voiceMount } from './deck_voice';
+import { mount as event_recommendationsMount } from './event_recommendations';
+import { mount as grow_adsMount } from './grow_ads';
+import { mount as grow_calendarMount } from './grow_calendar';
+import { mount as grow_channelsMount } from './grow_channels';
+import { mount as grow_distribution_askMount } from './grow_distribution_ask';
+import { mount as grow_inboxMount } from './grow_inbox';
+import { mount as grow_prospectsMount } from './grow_prospects';
 import { mount as influencerMount } from './influencer';
 import { mount as influencer_analyticsMount } from './influencer_analytics';
 import { mount as influencer_offersMount } from './influencer_offers';
 import { mount as influencer_payoutsMount } from './influencer_payouts';
 import { mount as learning_listsMount } from './learning_lists';
 import { mount as learning_streamMount } from './learning_stream';
+import { mount as legal_incorporation_quoteMount } from './legal_incorporation_quote';
 import { mount as public_handleMount } from './public_handle';
 import { mount as team_platform_statusMount } from './team_platform_status';
 import { mount as votesMount } from './votes';
 
 export const ROUTE_MODULES: readonly RegisteredModule[] = [
+  { file: 'account_licences', mount: account_licencesMount },
   { file: 'admin_agents', mount: admin_agentsMount },
   { file: 'admin_ai_agents', mount: admin_ai_agentsMount },
   { file: 'admin_ai_agents_policy', mount: admin_ai_agents_policyMount },
@@ -53,33 +70,48 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_company_skills', mount: admin_company_skillsMount },
   { file: 'admin_deck_beta', mount: admin_deck_betaMount },
   { file: 'admin_deck_generation', mount: admin_deck_generationMount },
+  { file: 'admin_deck_grid', mount: admin_deck_gridMount },
+  { file: 'admin_deck_images', mount: admin_deck_imagesMount },
   { file: 'admin_deck_stage_norms', mount: admin_deck_stage_normsMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'admin_influencers', mount: admin_influencersMount },
+  { file: 'admin_persona_segment_scopes', mount: admin_persona_segment_scopesMount },
   { file: 'company_compliance', mount: company_complianceMount },
   { file: 'data_room_proposals', mount: data_room_proposalsMount },
+  { file: 'deck_access', mount: deck_accessMount },
   { file: 'deck_actions', mount: deck_actionsMount },
   { file: 'deck_brand_kit', mount: deck_brand_kitMount },
   { file: 'deck_card_status', mount: deck_card_statusMount },
   { file: 'deck_diagrams', mount: deck_diagramsMount },
+  { file: 'deck_imports', mount: deck_importsMount },
   { file: 'deck_judge', mount: deck_judgeMount },
   { file: 'deck_layouts', mount: deck_layoutsMount },
   { file: 'deck_media', mount: deck_mediaMount },
   { file: 'deck_preflight', mount: deck_preflightMount },
   { file: 'deck_proof', mount: deck_proofMount },
   { file: 'deck_quotes', mount: deck_quotesMount },
+  { file: 'deck_recordings', mount: deck_recordingsMount },
   { file: 'deck_remote', mount: deck_remoteMount },
   { file: 'deck_reports', mount: deck_reportsMount },
   { file: 'deck_script', mount: deck_scriptMount },
   { file: 'deck_slide_analytics', mount: deck_slide_analyticsMount },
   { file: 'deck_stage_norms', mount: deck_stage_normsMount },
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
+  { file: 'deck_voice', mount: deck_voiceMount },
+  { file: 'event_recommendations', mount: event_recommendationsMount },
+  { file: 'grow_ads', mount: grow_adsMount },
+  { file: 'grow_calendar', mount: grow_calendarMount },
+  { file: 'grow_channels', mount: grow_channelsMount },
+  { file: 'grow_distribution_ask', mount: grow_distribution_askMount },
+  { file: 'grow_inbox', mount: grow_inboxMount },
+  { file: 'grow_prospects', mount: grow_prospectsMount },
   { file: 'influencer', mount: influencerMount },
   { file: 'influencer_analytics', mount: influencer_analyticsMount },
   { file: 'influencer_offers', mount: influencer_offersMount },
   { file: 'influencer_payouts', mount: influencer_payoutsMount },
   { file: 'learning_lists', mount: learning_listsMount },
   { file: 'learning_stream', mount: learning_streamMount },
+  { file: 'legal_incorporation_quote', mount: legal_incorporation_quoteMount },
   { file: 'public_handle', mount: public_handleMount },
   { file: 'team_platform_status', mount: team_platform_statusMount },
   { file: 'votes', mount: votesMount },

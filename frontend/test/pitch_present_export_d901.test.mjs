@@ -134,7 +134,8 @@ test('the ledger line: the newest export, or none recorded', () => {
 test('the routes and the buttons: Present for everyone, Export only for a founder, present writes nothing', () => {
   // Mutation checked: Export shown to a read-only viewer → the guard check fails.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /path="\/raise\/pitch\/present" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchPresent \/>\)\)\}/);
+  // D4359: inside the studio's plan gate.
+  assert.match(app, /path="\/raise\/pitch\/present" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(founderEditor\(<PitchPresent \/>\)\)\)\}/);
   // D1604 (#3716, pd1): the home's deck card. Present stays on its face; Export is its ⋯'s, a writer's only.
   const studio = read('frontend/src/pages/raise/pitch/StudioHome.jsx');
   assert.match(studio, /<Link to=\{presentHref\(project\?\.id, current\.id\)\}[^>]*data-testid="pitch-studio-present">Present<\/Link>/);

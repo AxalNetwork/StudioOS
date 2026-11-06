@@ -25,6 +25,7 @@ import { deckCheckApi } from '../../src/lib/api/deckCheck.js';
 import { deckGridApi } from '../../src/lib/api/deckGrid.js';
 import { railProposalsApi } from '../../src/lib/api/railProposals.js';
 import { cyclesApi } from '../../src/lib/api/cycles.js';
+import { deckInvestorLinksApi } from '../../src/lib/api/deckInvestorLinks.js';
 import { AuthProvider } from '../../src/hooks/useAuthSync.jsx';
 import PitchEditor from '../../src/pages/raise/pitch/PitchEditor.jsx';
 import PitchStudio from '../../src/pages/raise/pitch/PitchStudio.jsx';
@@ -46,6 +47,8 @@ Object.assign(deckCheckApi, { read: ok({ checked: false, claims: [], can_check: 
 Object.assign(deckGridApi, { grid: ok(h.grid) });
 Object.assign(railProposalsApi, { list: ok({ proposals: [] }) });
 Object.assign(cyclesApi, { module: ok({ card: null, records: [] }) });
+// D4273: the Decks tile's two reads — no variants and no links, so the home draws Main with "No links".
+Object.assign(deckInvestorLinksApi, { deckVariants: ok({ variants: [] }), investorLinks: ok({ links: [] }) });
 
 localStorage.setItem('user', JSON.stringify(h.user));
 if (h.dark) document.documentElement.classList.add('dark');

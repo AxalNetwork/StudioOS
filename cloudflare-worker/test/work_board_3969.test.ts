@@ -340,3 +340,58 @@ test('the engine mounts the board itself, and E1 offers an agent only Ready-colu
     assert.equal(coList.tasks.find((t:any)=>t.uid===co.task.uid).ready,true);
   }finally{w.db.close();}
 });
+
+test('#4394 (TM19c): a decision_expired item names its open proposal, so "Decide now" opens it; any other block names none',async()=>{
+  // Mutation checked: the open-proposal read dropped → proposal_uid is null on the expired item.
+  const w=world();
+  try {
+    const expired=await create(w,{title:'Waiting on a decision'});
+    const manual=await create(w,{title:'Waiting for a signature',status:'blocked',blocked_reason:'Waiting for a signature'});
+    const decided=await create(w,{title:'Decided already'});
+    const id=(uid:string)=>(w.db.prepare('SELECT id FROM scope_tasks WHERE uid = ?').get(uid) as any).id;
+    w.db.prepare("UPDATE scope_tasks SET status = 'blocked', blocked_reason = 'decision_expired' WHERE uid IN (?, ?)").run(expired.uid,decided.uid);
+    const proposal=w.db.prepare(`INSERT INTO ai_rail_proposals (uid,user_id,rail_page,rail_option,record_ref,kind,status,payload_json,task_id)
+      VALUES (?,?,'Founder · Studio','draft:studio',NULL,'draft',?,'{}',?)`);
+    proposal.run('prop-old',OWNER,'discarded',id(expired.uid));
+    proposal.run('prop-open',OWNER,'proposed',id(expired.uid));
+    proposal.run('prop-done',OWNER,'accepted',id(decided.uid));
+    const r=await call(w,OWNER,'GET','/project/7/work/board');
+    assert.equal(r.status,200,JSON.stringify(r.body));
+    const item=(uid:string)=>r.body.items.find((x:any)=>x.uid===uid);
+    assert.deepEqual([item(expired.uid).blocked_reason,item(expired.uid).proposal_uid],['decision_expired','prop-open']);
+    assert.deepEqual([item(decided.uid).blocked_reason,item(decided.uid).proposal_uid],['decision_expired',null],'no open proposal: none named, never a decided one');
+    assert.deepEqual([item(manual.uid).blocked_reason,item(manual.uid).proposal_uid],['Waiting for a signature',null]);
+    assert.equal((await call(w,STRANGER,'GET','/project/7/work/board')).status,403,'the read gate holds');
+  } finally { w.db.close(); }
+});
+
+test('#4420: summary shares board gates and counts every project column including legacy tasks', async()=>{
+  const w=world();try{
+    const path='/project/7/work/summary';
+    assert.equal((await call(w,null,'GET',path)).status,401);
+    assert.equal((await call(w,STRANGER,'GET',path)).status,403);
+    assert.equal((await call(w,OWNER,'GET','/company/co-one/work/summary')).status,404);
+    assert.equal((await call(w,OWNER,'GET','/company/7/work/summary')).status,404);
+    assert.equal((await call(w,OWNER,'GET','/project/999/work/summary')).status,404);
+    assert.deepEqual((await call(w,MEMBER,'GET',path)).body,{open:0,closed:0,columns:{triage:0,backlog:0,ready:0,in_progress:0,in_review:0,done:0}});
+    for(const column of ['triage','backlog','ready','in_progress','in_review']) {
+      const task=await create(w,{column});
+      if(['backlog','in_progress'].includes(column)) w.db.prepare('UPDATE scope_tasks SET board_column=NULL WHERE uid=?').run(task.uid);
+    }
+    const finished=await create(w); await close(w,finished.uid);
+    const cancelled=await create(w); await close(w,cancelled.uid,'not_planned');
+    w.db.prepare('UPDATE scope_tasks SET board_column=NULL,close_reason=NULL WHERE uid IN (?,?)').run(finished.uid,cancelled.uid);
+    const legacy=await create(w); w.db.prepare("UPDATE scope_tasks SET board_column=NULL,status='waiting_decision' WHERE uid=?").run(legacy.uid);
+    await create(w,{},8);
+    const board=await call(w,MEMBER,'GET','/project/7/work/board');
+    const summary=await call(w,MEMBER,'GET',path);
+    assert.equal(summary.status,200);
+    assert.deepEqual(summary.body,{open:6,closed:2,columns:Object.fromEntries(board.body.columns.map((c:any)=>[c.key,c.count]))});
+    assert.equal(summary.body.columns.in_review,2);
+    assert.equal(summary.body.columns.done,2);
+    for(const change of [{AGENT_ENGINE:'off'},{TEAM_AGENTS_ENABLED:'false'}]){
+      const prior={...w.env};Object.assign(w.env,change);
+      const off=await call(w,OWNER,'GET',path);assert.deepEqual([off.status,off.body.error],[404,'agent_engine_off']);Object.assign(w.env,prior);
+    }
+  }finally{w.db.close();}
+});

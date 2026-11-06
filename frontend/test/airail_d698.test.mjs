@@ -29,6 +29,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { installDocument } from './_contracts_dom.mjs';
+import { railRows } from '../../cloudflare-worker/src/services/ai/railMatrix.ts';
 import WorkerRail, { MANUAL_LINE, SAFETY_LINE, RailUsage } from '../src/ui/WorkerRail.jsx';
 import { ALL_MODELS, modelName, railView } from '../src/ui/railModels.js';
 import { RailCrumbsProvider, RailPageProvider, useRailCrumbs, useRailOption, useSetRailCrumbs } from '../src/ui/railCrumbs.js';
@@ -90,12 +91,14 @@ const PRICING = routerPricing();
 /**
  * D769 PR 2 (#2088): `GET /api/ai/rail` as the Worker answers it, built from
  * the Worker's own matrix (`railMatrix.json`), so the rail is tested against
- * the rows a run resolves from. Each model is priced at a stub rate.
+ * the rows a run resolves from. A page's row is the one the Worker builds from
+ * its kind's job (`railRows()`; #4313 part 3, the page row stores no list).
+ * Each model is priced at a stub rate.
  */
 const MATRIX = JSON.parse(read('cloudflare-worker/src/services/ai/railMatrix.json'));
 const STUB_PRICE = { cost: { tokens_in: 0.293, tokens_out: 2.253 }, billed: { tokens_in: 0.36625, tokens_out: 2.81625 } };
 function railAnswer(page, option, { pick = null, mode = null, picks = {} } = {}) {
-  const row = MATRIX.rows.find((r) => r.pageKey.toLowerCase() === String(page).toLowerCase());
+  const row = railRows().find((r) => r.pageKey.toLowerCase() === String(page).toLowerCase());
   if (!row) return Object.assign(new Error('The rail has no models for that page.'), { status: 404, code: 'unknown_page' });
   const view = (r) => r.models.map((m) => ({ ...m, name: modelName(m.id), price: STUB_PRICE }));
   const opts = MATRIX.options.filter((o) => o.pageKey === row.pageKey);
@@ -411,18 +414,19 @@ test('All models is the new canvas\'s ten groups, and its ids are the router\'s'
   assert.ok(listed.every((id) => modelName(id)), 'a row has no name');
 });
 
-test('12 · Customer research draws three cards: Whisper, Nova-3 and Flux, in the matrix\'s order, with role and line', async () => {
+// #4313 part 3: the fake answers a page with the row the Worker builds from its kind's job (`railRows()`),
+// since no page row stores a list. Customer research is speech, VA1: Whisper Turbo, then Nova-3.
+test('12 · Customer research draws its job\'s two cards: Whisper, then Nova-3, in VA1\'s order, with role and line', async () => {
   const m = await mount(onPage('/validate/customer-research', h(WorkerRail, { workspace: 'Validate' })));
   try {
     assert.deepEqual(m.stub.page, [['Founder · Validate · Customer research', null]]);
-    assert.deepEqual(cardIds(m), [WHISPER, NOVA, '@cf/deepgram/flux'].map((id) => `card-worker-rail-model-${id.split('/').pop()}`));
+    assert.deepEqual(cardIds(m), [WHISPER, NOVA].map((id) => `card-worker-rail-model-${id.split('/').pop()}`));
     const whisper = m.by('card-worker-rail-model-whisper-large-v3-turbo');
-    assert.equal(m.text(whisper), 'Whisper Large v3 Turbo Default Turns each recording into a transcript $0.293 in · $2.253 out per 1M tokens');
-    // Three suggestions: a choice, so each card is a radio, the default checked.
-    assert.equal(m.pr(whisper).role, 'radio');
-    assert.equal(m.pr(whisper)['aria-checked'], true);
-    assert.equal(m.pr(m.by('card-worker-rail-model-nova-3'))['aria-checked'], false);
-    assert.equal(m.text(m.by('text-worker-rail-model-note')), 'Remembered for this page. Switching changes nothing already accepted.');
+    assert.equal(m.text(whisper), 'Whisper Large v3 Turbo Default Cheap and multilingual $0.293 in · $2.253 out per 1M tokens');
+    // #4313 part 2 (D4313): the page itself has no pick, so with no option open the cards are a list, not radios.
+    assert.equal(m.pr(whisper).role, undefined);
+    assert.equal(whisper.tagName, 'DIV');
+    assert.equal(m.text(m.by('text-worker-rail-model-note')), 'The models this page\'s work runs on. Open one of its options to choose the model for it.');
   } finally { await m.unmount(); }
 });
 
@@ -455,10 +459,11 @@ test('12 · "Default" is the matrix\'s role word; the checked card is the member
   const ready = (over) => railView({ reading: { loading: false, data: { ...answer, ...over } }, page: answer.page });
   const v = ready({});
   assert.deepEqual(v.cards.map((c) => [c.name, c.role, c.checked]), [
-    ['Llama 3.3 70B Fast', 'Default', true], ['GLM-4.7 Flash', 'Alternative', false], ['GPT-OSS 120B', 'Deeper', false],
+    // #4313 part 3: Problem discovery is synth, so its cards are ST2's.
+    ['Llama 3.3 70B Fast', 'Default', true], ['GLM-4.7 Flash', 'Alternative', false], ['Mistral Small 3.1 24B', 'Deeper', false],
   ]);
-  assert.equal(v.cards[0].line, 'Groups notes and quotes into themes');
-  assert.deepEqual(ready({ pick: '@cf/openai/gpt-oss-120b' }).cards.map((c) => c.checked), [false, false, true]);
+  assert.equal(v.cards[0].line, 'The best English writer at the Balanced price');
+  assert.deepEqual(ready({ pick: '@cf/mistralai/mistral-small-3.1-24b-instruct' }).cards.map((c) => c.checked), [false, false, true]);
   // A pick the row does not offer is no pick; a pick made since the read wins.
   assert.equal(ready({ pick: 'm/gone' }).current, L70);
   assert.equal(railView({ reading: { loading: false, data: answer }, page: answer.page, pick: '@cf/zai-org/glm-4.7-flash' }).current, '@cf/zai-org/glm-4.7-flash');
@@ -467,14 +472,13 @@ test('12 · "Default" is the matrix\'s role word; the checked card is the member
   assert.equal(one.pickable, false);
 });
 
-test('13 · choosing a card stores the page\'s pick on the Worker and checks it at once', async () => {
+test('13 · with no option open the page offers no pick (#4313): its cards are not buttons and nothing is stored', async () => {
   const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate' })));
   try {
-    await m.click('card-worker-rail-model-gpt-oss-120b');
-    assert.deepEqual(m.stub.setPagePick, [['Founder · Validate · Problem discovery', '@cf/openai/gpt-oss-120b', null]]);
-    assert.equal(m.pr(m.by('card-worker-rail-model-gpt-oss-120b'))['aria-checked'], true);
-    assert.equal(m.pr(m.by('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast'))['aria-checked'], false);
-    assert.equal(m.stub.page.length, 2, 'the rail did not read the Worker\'s answer after the pick');
+    const card = m.by('card-worker-rail-model-mistral-small-3.1-24b-instruct');
+    assert.equal(card.tagName, 'DIV', 'a page card is not a button');
+    assert.equal(m.pr(card).role, undefined);
+    assert.deepEqual(m.stub.setPagePick, [], 'no page pick is stored');
     assert.equal(readRailModel('Validate', 'validate_tag_pains'), null, 'the rail wrote the old per-task store');
   } finally { await m.unmount(); }
 });
@@ -520,20 +524,24 @@ test('15 · all models: the canvas\'s groups in order, only the non-empty ones, 
   assert.ok(!chips.some((c) => c.id === RETIRED), 'the retired 8B is a row');
   assert.ok(chips.every((c) => c.name && !c.name.includes('@cf/')), 'a row shows an id');
   assert.deepEqual(v.groups.find((g) => g.title === 'Speech to text').chips.map((c) => c.name), ['Whisper Large v3 Turbo', 'Whisper', 'Deepgram Nova-3']);
-  // A row is pickable only where the page's row offers it.
-  assert.deepEqual(chips.filter((c) => c.pickable).map((c) => c.id), [L70, '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash'].sort((x, y) => chips.findIndex((c) => c.id === x) - chips.findIndex((c) => c.id === y)));
+  // #4313 part 2: with no option open nothing is pickable; with one open, a row is pickable only where its list offers it.
+  assert.deepEqual(chips.filter((c) => c.pickable), []);
+  const onOption = railView({ reading: { loading: false, data: answer }, page: answer.page, option: 'fill:pain_tag' }).groups.flatMap((g) => g.chips);
+  // #4313 part 3: the list is ST2's, the cards and the rest of what the job lists under All models.
+  const listed = [...answer.models, ...answer.more].map((m) => m.id);
+  assert.ok(listed.includes(L70) && listed.length > 3, 'the page lists its job\'s cards and more');
+  assert.deepEqual(onOption.filter((c) => c.pickable).map((c) => c.id), listed.sort((x, y) => onOption.findIndex((c) => c.id === x) - onOption.findIndex((c) => c.id === y)));
   assert.deepEqual(chips.filter((c) => c.selected).map((c) => c.id), [L70]);
   // The guard is never a pick, even on a row that lists it.
-  const withGuard = railView({ reading: { loading: false, data: { ...answer, models: [...answer.models, { id: GUARD, role: null, line: null }] } }, page: answer.page });
+  const withGuard = railView({ reading: { loading: false, data: { ...answer, models: [...answer.models, { id: GUARD, role: null, line: null }] } }, page: answer.page, option: 'fill:pain_tag' });
   assert.equal(withGuard.groups.at(-1).chips[0].pickable, false, 'a row that lists the guard makes it pickable');
-  // Mounted: a pickable row is a button and picks for the page; others are not.
+  // Mounted with no option open: no row is a button (#4313 part 2).
   const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate' })));
   try {
     await m.click('button-worker-rail-all-models');
-    assert.equal(m.by('chip-worker-rail-model-glm-4.7-flash').tagName, 'BUTTON');
+    assert.notEqual(m.by('chip-worker-rail-model-glm-4.7-flash').tagName, 'BUTTON');
     assert.notEqual(m.by('chip-worker-rail-model-whisper').tagName, 'BUTTON');
-    await m.click('chip-worker-rail-model-glm-4.7-flash');
-    assert.deepEqual(m.stub.setPagePick.at(-1), ['Founder · Validate · Problem discovery', '@cf/zai-org/glm-4.7-flash', null]);
+    assert.deepEqual(m.stub.setPagePick, []);
   } finally { await m.unmount(); }
 });
 
@@ -546,11 +554,13 @@ test('11 · a pick and a mode set on another device are in place after a load', 
     assert.equal(m.pr(m.by('switch-worker-rail-ai-off'))['aria-checked'], true, 'the stored mode did not reach the switch');
     assert.equal(m.text(m.by('text-worker-rail-mode')), MANUAL_LINE);
     await m.click('switch-worker-rail-ai-off');
-    assert.equal(m.pr(m.by('card-worker-rail-model-glm-4.7-flash'))['aria-checked'], true, 'the stored pick is not the checked card');
+    // #4313 part 2: the read's pick is shown as the model in use; with no option open it is not a radio.
+    assert.equal(m.pr(m.by('card-worker-rail-model-glm-4.7-flash'))['data-selected'], 'false');
+    assert.ok(m.by('card-worker-rail-model-glm-4.7-flash'), 'the stored pick\'s card is drawn');
   } finally { await m.unmount(); }
 });
 
-test('AI off: no card or row is drawn to pick; turning AI on makes them buttons', async () => {
+test('AI off: no card or row is drawn to pick; turning AI on draws them again', async () => {
   // D769 (D720 §6): D698 dimmed the list in Manual; with AI off the rail now
   // draws no suggestions at all.
   const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate' })), { storage: { 'assist_mode:validate': false } });
@@ -559,7 +569,8 @@ test('AI off: no card or row is drawn to pick; turning AI on makes them buttons'
     assert.ok(!m.nodes().some((n) => String(m.pr(n)['data-testid']).startsWith('chip-')));
     assert.equal(m.by('worker-rail-options'), undefined, 'the options are drawn with AI off');
     await m.click('switch-worker-rail-ai-off');
-    assert.equal(m.by('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast').tagName, 'BUTTON');
+    // #4313 part 2: drawn again with AI on; a page card is not a button (the page has no pick).
+    assert.equal(m.by('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast').tagName, 'DIV');
   } finally { await m.unmount(); }
 });
 
@@ -930,7 +941,7 @@ const answer3741 = () => ({ ...railAnswer('Founder · Build · Solution design')
 test('#3741: six suitable choices produce three cards, with every extra pickable under All models', () => {
   const data = answer3741();
   for (const supplied of [data, { ...data, models: [...data.models, ...data.more], more: [] }]) {
-    const v = railView({ reading: { data: { ...supplied, pick: MORE_3741[0].id } }, page: data.page });
+    const v = railView({ reading: { data: { ...supplied, pick: MORE_3741[0].id } }, page: data.page, option: 'draft:example' });
     assert.equal(v.cards.length, 3);
     assert.deepEqual(v.cards.map(c => c.id), data.models.map(m => m.id));
     assert.equal(v.current, MORE_3741[0].id);
@@ -946,10 +957,10 @@ test('#3741: six suitable choices produce three cards, with every extra pickable
   assert.equal(v.options[0].model, 'Future suitable model');
 });
 
-test('#3741: All models selects overflow without adding a fourth card, including a saved pick', async () => {
+test('#3741: All models selects an option\'s overflow without adding a fourth card, including a saved pick', async () => {
   const answer = answer3741();
   for (const saved of [null, MORE_3741[0].id]) {
-    const m = await mount(onPage('/build/solution-design', h(WorkerRail, { workspace: 'Build' })), { reads: { rail: () => ({ ...answer, pick: saved }) } });
+    const m = await mount(onPage('/build/solution-design', h(React.Fragment, null, h(WorkerRail, { workspace: 'Build' }), h(OpenOption, { k: 'draft:example', label: 'Draft' }))), { reads: { rail: () => ({ ...answer, pick: saved }) } });
     try {
       assert.equal(cardIds(m).length, 3);
       assert.equal(!!m.by('text-worker-rail-more-pick'), !!saved);
@@ -957,7 +968,7 @@ test('#3741: All models selects overflow without adding a fourth card, including
       const id = 'chip-worker-rail-model-deepseek-v4-flash-0731';
       assert.equal(m.by(id).tagName, 'BUTTON');
       await m.click(id);
-      assert.deepEqual(m.stub.setPagePick.at(-1), ['Founder · Build · Solution design', MORE_3741[0].id, null]);
+      assert.deepEqual(m.stub.setPagePick.at(-1), ['Founder · Build · Solution design', MORE_3741[0].id, 'draft:example']);
       assert.equal(m.pr(m.by(id))['aria-pressed'], true);
       assert.equal(m.text(m.by('text-worker-rail-more-pick')), 'Using DeepSeek V4 Flash from All models');
       assert.equal(cardIds(m).length, 3);

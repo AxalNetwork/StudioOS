@@ -189,6 +189,10 @@ const FORWARDED: Record<string, string[]> = {
 
 /** Every call site's fixed name, by file — the table D552.md lists. */
 const EXPECTED: Record<string, string[]> = {
+  'services/callOutputs.ts': ['AI_SURFACE.validateInterviews'], // D4412: selected post-call extractions
+
+  'routes/grow_distribution_ask.ts': ['AI_SURFACE.growDistribution'],
+  'routes/publish.ts': ['AI_SURFACE.growPublish'], // #4046: Publish to…'s post text (POST /api/publish/ask), which writes nothing
   'services/decks/dataroomExtract.ts': ['AI_SURFACE.raiseDataRoom'], // D1602: owner-approved document extraction
   'routes/data_room_proposals.ts': ['AI_SURFACE.raiseDataRoom'], // D4170 (#4170): Eadwyn's data room proposals, a quoted run over file names
   'routes/founder_validate.ts': ['AI_SURFACE.validate', 'AI_SURFACE.validateInterviews'],
@@ -214,12 +218,14 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_script.ts': ['AI_SURFACE.raisePitch'], // D4268: the Script tab's whole-deck script, card by card
   'routes/deck_transform.ts': ['AI_SURFACE.raisePitch'], // D1560: notes, proofread, fix this slide, translate
   'routes/deck_rehearsals.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1580 F1 (#3827): a rehearsal's transcript; part 2a: its coaching
+  'routes/deck_recordings.ts': ['AI_SURFACE.raisePitch'], // D1590 (#3837): a walkthrough take's captions, on the pitch deck's page
+  'routes/deck_voice.ts': ['AI_SURFACE.raisePitch'], // D1569 (#3816): a card's AI voice-over, on the pitch deck's page
   'routes/article_assist.ts': ['AI_SURFACE.articles', 'AI_SURFACE.articles'], // D1409: Eadwyn's writing options on an article, and its images
   'routes/event_syndication_assist.ts': ['AI_SURFACE.eventSyndication'], // D1493: Eadwyn's proposed copy for a syndication channel
   'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'services/decks/quoteRetrieval.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1556 (#3803): the quote embedding and its rerank
-  'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal; D1114: Story's Ask Eadwyn; D913: Answer it
+  'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal; D1114: Story's Ask Eadwyn; D1558: the coach; D913: Answer it
   'routes/build_plan.ts': ['AI_SURFACE.buildPlan'], // D1071: Eadwyn words the build plan
   'services/capTableDocumentRead.ts': ['AI_SURFACE.raiseCapTable'], // D1021: Eadwyn's read of a signed document
   'services/dataRoomSearch.ts': ['AI_SURFACE.raiseDataRoom'], // #3938: a data room search's embedding (its rerank goes through decide.ts)
@@ -236,6 +242,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
   'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask; D685: summarise
+  'services/relationshipDrafts.ts': ['AI_SURFACE.networkIntroductions'], // D4330: Eadwyn's drafts for an introduction (RI3, RI4, RI6)
   'services/sessionTranslation.ts': ['AI_SURFACE.validateInterviews'], // D857: translate a segment; #3938: detection runs through ai/decide.ts on this page
   'routes/profiling.ts': ['AI_SURFACE.onboardingChat', 'AI_SURFACE.onboardingChat'],
   'routes/advisor.ts': ['AI_SURFACE.studio', 'AI_SURFACE.studio', 'AI_SURFACE.studio'],

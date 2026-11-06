@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /** D628: fund administrator writes; LP summaries only. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -28,11 +29,11 @@ r.use('*',async(c,next)=>{
 });
 const parseId=(raw:string)=>/^\d+$/.test(raw) && ledgerId(Number(raw)) ? Number(raw) : null;
 async function funds(env:Env,user:any) {
-  if (user.role==='investor') await claimLpRowsByEmail(env,Number(user.id),user.email);
+  if (holdsLicence(user, 'investor')) await claimLpRowsByEmail(env,Number(user.id),user.email);
   const scope=lpMembershipScope(user);
   const result=user.role==='admin'
     ? await env.DB.prepare(`SELECT id,name,fund_admin_user_id FROM vc_funds ORDER BY id`).all<any>()
-    : user.role==='investor' ? await env.DB.prepare(`SELECT f.id,f.name,f.fund_admin_user_id FROM vc_funds f
+    : holdsLicence(user, 'investor') ? await env.DB.prepare(`SELECT f.id,f.name,f.fund_admin_user_id FROM vc_funds f
       WHERE f.fund_admin_user_id=? OR EXISTS (SELECT 1 FROM limited_partners lp WHERE lp.fund_id=f.id AND ${scope.sql}) ORDER BY f.id`)
       .bind(user.id,...scope.binds).all<any>() : {success:true,results:[]};
   if (!result.success) throw new Error('Fund ledger scope unreadable');
@@ -41,7 +42,7 @@ async function funds(env:Env,user:any) {
 /** D714: a write asserts its act; the administrator PUT asserts its own, a Super Admin act. */
 async function access(c:any,write:boolean|'fund_ledger.administrator'=false) {
   const user=await requireAuth(c), id=parseId(c.req.param('id'));
-  if (!id || !['admin','investor'].includes(user.role)) throw new LedgerRefusal('Fund not found.',404);
+  if (!id || !(user.role === 'admin' || holdsLicence(user, 'investor'))) throw new LedgerRefusal('Fund not found.',404);
   const fund=(await funds(c.env,user)).find((f:any)=>f.id===id);
   if (!fund) throw new LedgerRefusal('Fund not found.',404);
   const full=user.role==='admin' || fund.fund_admin_user_id===user.id;
@@ -56,7 +57,7 @@ async function access(c:any,write:boolean|'fund_ledger.administrator'=false) {
 const body=(c:any)=>c.req.json().catch(()=>null);
 r.get('/',async c=>{
   const user=await requireAuth(c);
-  if (!['admin','investor'].includes(user.role)) throw new LedgerRefusal('Fund not found.',404);
+  if (!(user.role === 'admin' || holdsLicence(user, 'investor'))) throw new LedgerRefusal('Fund not found.',404);
   const items=[];
   for (const fund of await funds(c.env,user)) items.push(await readFundLedger(c.env,fund,user.role==='admin'||fund.fund_admin_user_id===user.id));
   return c.json({items,basis:'Operational fund ledger; not the fund’s statutory books. No opening balances are inferred.'});

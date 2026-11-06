@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pill, Skeleton, Unrecorded } from '../../ui';
-import { AgentIdentity, AgentTile } from './AgentMark.jsx';
-import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
+import { AgentArchetypeBadge, AgentAvatar } from './AgentCard.jsx';
+import { AgentTile } from './AgentMark.jsx';
+import SkillsLink from './SkillsLink.jsx';
+import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, TeamCard } from './teamUi.jsx';
 import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamModel.js';
 
 /**
@@ -22,13 +24,18 @@ import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamMo
  *                                 `include=projects` groups each project's
  *                                 agents under its name, with the scope filter (TM1e)
  *
- * Every agent is drawn with its tile and the "AI agent" pill; spend and last
+ * The row shows the agent portrait and Studio archetype; spend and last
  * activity the Worker did not answer read "Not recorded", never "$0". A paused
- * pill is amber with brown text, never red, with its reason and its one fix.
+ * pill is amber with brown text, never red, with its reason and its one fix;
+ * D4387: the fix opens the profile on its dialog (`onOpen(row, action)`:
+ * Choose a new sponsor, or Edit cap).
  *
  * Below `md` a row keeps what the canvas's phone row keeps (TM9d1): the name
- * and pill, then one line with the role and this month's spend (or that it is
+ * and archetype, then one line with the role and this month's spend (or that it is
  * not recorded) and the status pill.
+ *
+ * #4363: the header carries a Skills link to this scope's Skills tab
+ * (`SkillsLink`), in every state, since the library is its own read.
  */
 
 /** TM9c4: the plan lock, from a 403 `plan_required` or the list's `plan_ok: false` (#3840). */
@@ -37,7 +44,7 @@ function PlanLine({ reason = refusalWords('plan_required') }) {
     <div className="flex flex-wrap items-center gap-3 rounded-axal-md border border-axal-hairline px-4 py-3 text-left dark:border-gray-700" data-testid="team-agents-plan">
       <AgentTile size={28} />
       <span className="text-[13px] text-axal-ink dark:text-gray-100">{reason}</span>
-      <PendingOwner />
+
       <Link to="/pricing" className={`ml-auto ${BTN_TEXT}`}>See plans</Link>
     </div>
   );
@@ -58,14 +65,21 @@ function AgentRow({ row, onOpen }) {
       className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] ${GRID} items-center gap-3 border-b border-axal-hairline py-2.5 last:border-b-0 hover:bg-axal-ground/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-axal-violet/50 dark:border-gray-800 dark:hover:bg-gray-800/50`}
       data-testid={`agent-${row.uid}`}>
       <span role="cell" className="min-w-0">
-        <AgentIdentity name={row.name} role={row.role} roleClassName="hidden md:block" />
+        <span className="flex min-w-0 items-center gap-2.5">
+          <AgentAvatar persona={{ ...row.persona, name: row.name }} size={32} />
+          <span className="min-w-0">
+            <b className="block truncate text-[13.5px] font-extrabold text-axal-ink dark:text-gray-100">{row.name}</b>
+            <AgentArchetypeBadge persona={row.persona} />
+            {row.role ? <span className="hidden md:block truncate text-[12px] text-axal-muted dark:text-gray-400">{row.role}</span> : null}
+          </span>
+        </span>
         <span className="mt-1 flex flex-wrap items-center gap-1.5 pl-[42px] md:hidden" data-testid="agent-phone-line">
           <span className="text-[12px] text-axal-ink dark:text-gray-200">{row.role || <Unrecorded />} · {row.spend ? <span className="font-mono">{row.spend}</span> : <>this month <Unrecorded /></>}</span>
           <StatusPill row={row} />
         </span>
       </span>
       <span role="cell" className="hidden min-w-0 md:block">
-        <span className="block truncate text-[13px] text-axal-ink dark:text-gray-200">Platform model · {row.model || <Unrecorded />}</span>
+        <span className="block truncate text-[13px] text-axal-ink dark:text-gray-200">{row.outside ? 'Connected app' : <>Platform model · {row.model || <Unrecorded />}</>}</span>
         {row.tools ? <span className={`block truncate ${MUTED}`}>{row.tools}</span> : null}
       </span>
       <span role="cell" className="hidden truncate text-[13px] text-axal-ink md:block dark:text-gray-200">{row.sponsor || <Unrecorded />}</span>
@@ -74,7 +88,8 @@ function AgentRow({ row, onOpen }) {
           <>
             <StatusPill row={row} />
             <span className={`block ${MUTED}`}>{row.pause.reason}</span>
-            {row.pause.fix ? <button type="button" className={BTN_TEXT} onClick={(e) => { e.stopPropagation(); onOpen?.(row); }}>{row.pause.fix}</button> : null}
+            {row.pause.hint ? <span className={`block ${MUTED}`}>{row.pause.hint}</span> : null}
+            {row.pause.fix ? <button type="button" className={BTN_TEXT} onClick={(e) => { e.stopPropagation(); onOpen?.(row, row.pause.action || null); }} data-testid={`agent-fix-${row.uid}`}>{row.pause.fix}</button> : null}
           </>
         ) : <Pill tone="ok">Active</Pill>}
       </span>
@@ -97,12 +112,13 @@ function AgentTable({ rows, onOpen, label }) {
   );
 }
 
-export default function AgentsCard({ block, loading, kind, companyName, canAdd, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
+export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
   // The grouped footer's company reach is said only once it is live (#3697 part 2), as the page's managed note is.
   const [hidden, setHidden] = useState(() => new Set());
+  const aside = <SkillsLink scope={scope} testId="team-agents-skills" />;
   if (loading) {
     return (
-      <TeamCard title="AI agents" testId="team-agents">
+      <TeamCard title="AI agents" aside={aside} testId="team-agents">
         <div aria-busy="true" className="flex flex-col gap-2">
           <span className={`self-end ${MUTED}`}>Reading…</span>
           {[0, 1, 2].map((i) => <Skeleton key={i} h={44} />)}
@@ -112,7 +128,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
   }
   if (!block || block.available !== true) {
     return (
-      <TeamCard title="AI agents" testId="team-agents">
+      <TeamCard title="AI agents" aside={aside} testId="team-agents">
         {block?.locked === 'plan' ? <PlanLine reason={block.reason} /> : block?.unreadable ? (
           <HonestBlock role="alert" testId="team-agents-unreadable" action={onRetry ? <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={onRetry}>Try again</button> : null}>
             AI agents could not be read. That is not the same as having none.
@@ -128,7 +144,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
   const agents = Array.isArray(block.value?.agents) ? block.value.agents : [];
   if (!agents.length) {
     return (
-      <TeamCard title="AI agents" testId="team-agents">
+      <TeamCard title="AI agents" aside={aside} testId="team-agents">
         <div className="flex flex-col items-center gap-3 rounded-axal-md border border-dashed border-axal-hairline px-6 py-8 text-center dark:border-gray-700" data-testid="team-agents-empty">
           <AgentTile size={40} />
           <p className={`m-0 max-w-md ${MUTED}`}>No agent works here yet. Add one in a role, like a CFO who drafts your runway note. It will only propose; you decide.</p>
@@ -142,7 +158,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
   const grouped = kind === 'company' && groups.length > 1;
   const toggle = (k) => setHidden((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   return (
-    <TeamCard title="AI agents" count={agents.length} testId="team-agents">
+    <TeamCard title="AI agents" count={agents.length} aside={aside} testId="team-agents">
       {grouped ? (
         <>
           <div role="group" aria-label="Scope" className="mb-3 flex flex-wrap gap-1.5" data-testid="team-agents-scope">

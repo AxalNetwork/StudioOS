@@ -98,6 +98,7 @@ import { lockedOut } from '../services/decks/elementModels';
 import { NOT_SWITCHED_ON, flagsFor, notSwitchedOn } from '../services/featureFlags';
 import type { Resolved } from '../services/decks/elementModels';
 import { promptFor } from '../services/decks/prompts';
+import { DECK_STUDIO_TIER } from '../services/decks/studioAccess';
 
 const deckNew = new Hono<{ Bindings: Env }>();
 
@@ -116,7 +117,7 @@ async function venture(c: any, user: User, projectId: number, write: boolean) {
 
 /** The plan gate New deck shares with the old /generate; its 402 is the plan's own body. */
 function planRefusal(user: User): Response | null {
-  try { ensureTier(user, 'studio'); return null; } catch (e) { if (e instanceof Response) return e; throw e; }
+  try { ensureTier(user, DECK_STUDIO_TIER); return null; } catch (e) { if (e instanceof Response) return e; throw e; }
 }
 
 /** A figure stated where only records may state one: 422, with the module that records it. */
@@ -387,7 +388,7 @@ deckNew.post('/new/quote', async (c) => {
 });
 
 /** Replaces the venture's unkept proposal with this one (D767: one per venture); returns its id. */
-async function writeProposal(env: Env, projectId: number, baseDeckId: number, title: string, slides: any[], outline: any, userId: number): Promise<number> {
+export async function writeProposal(env: Env, projectId: number, baseDeckId: number, title: string, slides: any[], outline: any, userId: number): Promise<number> {
   const res = await env.DB.batch([
     env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE project_id = ?').bind(projectId),
     env.DB.prepare(
@@ -398,7 +399,7 @@ async function writeProposal(env: Env, projectId: number, baseDeckId: number, ti
   return Number((res[1] as any)?.meta?.last_row_id || 0);
 }
 
-async function proposalRow(env: Env, id: number) {
+export async function proposalRow(env: Env, id: number) {
   return env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>();
 }
 

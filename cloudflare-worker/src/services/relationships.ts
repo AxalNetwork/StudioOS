@@ -144,6 +144,17 @@ const ONE_VISIBLE = `SELECT sr.contact_id, sr.owner_user_id, u.name AS teammate_
    AND sr.contact_id = ? AND theirs.user_id = ?
  GROUP BY sr.contact_id`;
 
+/**
+ * D4330 (#4330): one teammate's relationship, only when the caller may see it now: the same statement an
+ * introduction request checks, so a row the caller cannot see is null whatever the reason.
+ */
+export async function visibleRelationship(env: Env, user: User, teammate: unknown, ref: unknown) {
+  const t = Number(teammate), r = Number(ref);
+  if (!Number.isSafeInteger(t) || t < 1 || !Number.isSafeInteger(r) || r < 1) return null;
+  const row = await env.DB.prepare(ONE_VISIBLE).bind(user.id, r, t).first<Known>();
+  return row ? knownView(row) : null;
+}
+
 const knownView = (r: Known) => ({
   ref: r.contact_id,
   teammate: { id: r.owner_user_id, name: r.teammate_name },
@@ -158,6 +169,58 @@ export async function whoKnows(env: Env, user: User, q: WhoKnowsQuery) {
   // Each teammate whose relationship was shown can see that it was read, and by whom.
   for (const owner of [...new Set(rows.map((r) => r.owner_user_id))]) await audit(env, user.id, owner, 'access', `who_knows_shown:${q.kind}`);
   return { query: { kind: q.kind }, people: rows.map(knownView) };
+}
+
+/** D4464 (#4464): the caller's Network counters; failed reads never become zero.
+ * `recording` is keyed by the numeric field's dotted path. A partial failure
+ * preserves readable fields but the route answers 503, with no database details.
+ */
+export async function relationshipSummary(env: Env, user: User) {
+  const recording: Record<string, { recorded: boolean; reason?: string }> = {};
+  async function read<T>(keys: string[], fn: () => Promise<T>): Promise<T | null> {
+    try {
+      const value = await fn();
+      for (const key of keys) recording[key] = { recorded: true };
+      return value;
+    } catch {
+      for (const key of keys) recording[key] = { recorded: false, reason: 'Relationships could not be read. Try again.' };
+      return null;
+    }
+  }
+  const sharing = await read(['sharing.opted_in', 'sharing.teams_shared', 'sharing.teams_total'], async () => {
+    const mine = await myTeams(env, user);
+    return { opted_in: mine.opted_in, teams_shared: mine.teams.filter((t) => t.shared).length, teams_total: mine.teams.length };
+  });
+  const teammates = await read(['teammates_sharing'], async () => {
+    const row = await env.DB.prepare(`SELECT COUNT(DISTINCT theirs.user_id) AS n
+      FROM team_memberships mine
+      JOIN team_memberships theirs ON theirs.team_key = mine.team_key AND theirs.user_id <> mine.user_id
+      JOIN shared_relationships sr ON sr.owner_user_id = theirs.user_id
+      JOIN users u ON u.id = theirs.user_id
+      WHERE mine.user_id = ?
+   AND (EXISTS (SELECT 1 FROM relationship_shares rs WHERE rs.user_id = theirs.user_id AND rs.team_key = mine.team_key AND rs.granted_at IS NOT NULL AND rs.withdrawn_at IS NULL)
+        OR (EXISTS (SELECT 1 FROM relationship_shares rs WHERE rs.user_id = theirs.user_id AND rs.team_key = '*' AND rs.granted_at IS NOT NULL AND rs.withdrawn_at IS NULL)
+            AND NOT EXISTS (SELECT 1 FROM relationship_shares rs WHERE rs.user_id = theirs.user_id AND rs.team_key = mine.team_key AND rs.withdrawn_at IS NOT NULL)))`).bind(user.id).first<{ n: number }>();
+    if (!row || !Number.isSafeInteger(row.n)) throw new Error('Unreadable count');
+    return row.n;
+  });
+  const requests = await read(['requests.sent_pending', 'requests.received_pending', 'requests.made_90d'], async () => {
+    const row = await env.DB.prepare(`SELECT
+      COUNT(CASE WHEN requester_user_id = ? AND status = 'pending' THEN 1 END) AS sent_pending,
+      COUNT(CASE WHEN teammate_user_id = ? AND status = 'pending' THEN 1 END) AS received_pending,
+      COUNT(CASE WHEN status = 'made' AND datetime(made_at) >= datetime('now', '-90 days') THEN 1 END) AS made_90d
+      FROM relationship_interactions
+      WHERE kind = 'intro_requested' AND (requester_user_id = ? OR teammate_user_id = ?)`)
+      .bind(user.id, user.id, user.id, user.id).first<{ sent_pending: number; received_pending: number; made_90d: number }>();
+    if (!row || Object.values(row).some((n) => !Number.isSafeInteger(n))) throw new Error('Unreadable count');
+    return row;
+  });
+  return {
+    sharing: sharing ?? { opted_in: null, teams_shared: null, teams_total: null },
+    teammates_sharing: teammates,
+    requests: requests ?? { sent_pending: null, received_pending: null, made_90d: null },
+    recording,
+  };
 }
 
 // ---------------------------------------------------------------- introductions
@@ -177,13 +240,13 @@ export async function whoKnows(env: Env, user: User, q: WhoKnowsQuery) {
 // who never shared is in no request, no log row and no count. No route here
 // contacts the person: the intro goes from the introducer's own mailbox.
 
-type Interaction = {
+export type Interaction = {
   uid: string; kind: string; requester_user_id: number; teammate_user_id: number; team_key: string; person_name: string;
   person_company: string | null; note: string | null; context_note: string | null; decision_note: string | null; status: string;
   parent_uid: string | null; decided_at: string | null; accepted_at: string | null; made_at: string | null; withdrawn_at: string | null;
   mail_sent_uid: string | null; created_at: string; contact_id: number | null; person_key: string | null;
 };
-type Outcome = { parent_uid: string; outcome: string; outcome_note: string | null; recorded_by_user_id: number | null; created_at: string };
+export type Outcome = { parent_uid: string; outcome: string; outcome_note: string | null; recorded_by_user_id: number | null; created_at: string };
 type FollowUp = { request_uid: string; due_on: string; done_at: string | null; snoozed_until: string | null };
 
 export const OUTCOMES = ['meeting_held', 'replied', 'no_reply', 'not_a_fit'] as const;
@@ -218,10 +281,22 @@ export const followUpState = (f: FollowUp | null, on = today()) => {
   return { due_on: f.due_on, snoozed_until: until, done_at: f.done_at, state };
 };
 
-function interactionView(r: Interaction, caller: number, outcome: Outcome | null, followUp: FollowUp | null) {
+/** D1357 (#3572): the two people on a request, by name, for the page's "Omar Reyes → Lena Hart". Never an email. */
+type Names = ReadonlyMap<number, string | null>;
+async function namesOf(env: Env, ids: number[]): Promise<Map<number, string | null>> {
+  const unique = [...new Set(ids.filter((n) => Number.isSafeInteger(n) && n > 0))];
+  if (!unique.length) return new Map();
+  const rows = (await env.DB.prepare('SELECT id, name FROM users WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(unique)).all<{ id: number; name: string | null }>()).results || [];
+  return new Map(rows.map((r) => [Number(r.id), r.name ?? null]));
+}
+
+function interactionView(r: Interaction, caller: number, outcome: Outcome | null, followUp: FollowUp | null, names: Names = new Map()) {
   const asker = r.requester_user_id === caller;
   return {
     uid: r.uid, kind: r.kind, requester_user_id: r.requester_user_id, teammate_user_id: r.teammate_user_id, team_key: r.team_key,
+    // D1357 (#3572): the asker and the teammate by name (only the two of them read a request).
+    requester: { id: r.requester_user_id, name: names.get(r.requester_user_id) ?? null },
+    teammate: { id: r.teammate_user_id, name: names.get(r.teammate_user_id) ?? null },
     person: { name: r.person_name, company: r.person_company }, note: r.note,
     // The context for the person is the asker's note to the teammate, to forward if they choose: only the two of them read it.
     context_note: r.context_note, decision_note: r.decision_note,
@@ -237,7 +312,7 @@ function interactionView(r: Interaction, caller: number, outcome: Outcome | null
 }
 
 /** One request, only when the caller is on it (`side`: the asker, the teammate, or either). Else 404 "Not found.". */
-async function requestOf(env: Env, user: User, requestUid: string, side: 'asker' | 'teammate' | 'either'): Promise<Interaction> {
+export async function requestOf(env: Env, user: User, requestUid: string, side: 'asker' | 'teammate' | 'either'): Promise<Interaction> {
   if (!UID.test(String(requestUid))) throw new RelationshipRefusal(404, 'not_found', NOT_FOUND);
   const sql = side === 'asker'
     ? "SELECT * FROM relationship_interactions WHERE uid = ? AND kind = 'intro_requested' AND requester_user_id = ?"
@@ -256,7 +331,7 @@ async function viewOf(env: Env, user: User, requestUid: string) {
   ).bind(requestUid).first<Outcome>();
   const fu = await env.DB.prepare('SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE request_uid = ? AND user_id = ?')
     .bind(requestUid, user.id).first<FollowUp>();
-  return interactionView(row, user.id, outcome ?? null, fu ?? null);
+  return interactionView(row, user.id, outcome ?? null, fu ?? null, await namesOf(env, [row.requester_user_id, row.teammate_user_id]));
 }
 
 /** The event row a step writes under its request (653's intro_made/intro_declined shape). */
@@ -333,7 +408,8 @@ export async function introRequests(env: Env, user: User, filter: LogFilter = {}
       'SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE user_id = ? AND request_uid IN (SELECT value FROM json_each(?))',
     ).bind(user.id, list).all<FollowUp>()).results || []) followUps.set(f.request_uid, f);
   }
-  const view = (r: Interaction) => interactionView(r, user.id, outcomes.get(r.uid) ?? null, followUps.get(r.uid) ?? null);
+  const names = await namesOf(env, rows.flatMap((r) => [r.requester_user_id, r.teammate_user_id]));
+  const view = (r: Interaction) => interactionView(r, user.id, outcomes.get(r.uid) ?? null, followUps.get(r.uid) ?? null, names);
   return {
     sent: rows.filter((r) => r.requester_user_id === user.id).map(view),
     received: rows.filter((r) => r.teammate_user_id === user.id).map(view),

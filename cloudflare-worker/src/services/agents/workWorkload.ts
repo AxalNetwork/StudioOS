@@ -16,30 +16,89 @@
  * (`over_capacity: null`). Agents have no points capacity: their caps are money
  * (D1496), so their `capacity` and `over_capacity` are null.
  *
- * AGENTS' SESSIONS. #3957 adds an agent's scheduled work sessions. They join
- * the weekly rows through `WORKLOAD_DEPS.agentSessions`, which answers nothing
- * until #3957 merges; the shape does not change when it does.
+ * AGENTS' SESSIONS (#3957, PR #4238). An agent's scheduled work sessions join
+ * the agent's weekly rows through `WORKLOAD_DEPS.agentSessions`
+ * (`projectAgentSessions`), as items beside its tasks:
+ *   - which: a session (`agent_duties.kind = 'session'`) of an agent that is
+ *     not removed, whose team is this project, or a company agent's session
+ *     whose target is one of this project's decks;
+ *   - who reads: the viewer must read the agent's team (`canRead` on its
+ *     scope), as the calendar's `agent_session` reader asks;
+ *   - which states: only an `active` session counts, at each slot from its
+ *     `next_due_at` on, in the range (at most 40 a session). A `paused` one
+ *     will not run, a `done` once session has run and a `removed` one is
+ *     cancelled: none counts, as a done or cancelled task never does. Past
+ *     runs are not work still to do. A paused AGENT's active sessions still
+ *     count, as the calendar still shows them scheduled; its claim skips them;
+ *   - estimate: a session records no points estimate (its estimate is money,
+ *     a quote per run, never stored), so each slot is counted in
+ *     `unestimated`, never as 0 points;
+ *   - an item is `{ uid, title, estimate_points: null, when: { kind:
+ *     'scheduled', at }, session: { uid, cadence } }`, `uid` the session's;
+ *     a repeat has one item per slot.
  *
  * A person is `{ uid, name }`; an agent `{ uid, name, role_key }`. Never an email.
  */
-import type { Env } from '../../types';
+import type { Env, User } from '../../types';
 import { personaOf } from './personas';
+import { canRead, scopeOfAgent, type AgentRow } from './teams';
+import { fromSql, sqlTime } from './duties';
+import { sessionSchedule, zonedNext, type SessionRow } from './sessions';
 
 export const WEEKS_DEFAULT = 4;
 export const WEEKS_MAX = 12;
 export const NOT_RECORDED = 'Not recorded';
 
 type Block<T> = { available: true; value: T } | { available: false; reason: string };
-type Item = { uid: string; title: string; estimate_points: number | null; when: { kind: 'scheduled' | 'due'; at: string } | null };
+type Item = {
+  uid: string; title: string; estimate_points: number | null; when: { kind: 'scheduled' | 'due'; at: string } | null;
+  /** Only on an agent's session slot (#3957). */
+  session?: { uid: string; cadence: string };
+};
 type TaskRow = {
   uid: string; title: string; estimate_points: number | null; due_at: string | null; scheduled_start: string | null;
   assignee_kind: 'person' | 'agent'; assignee_user_id: number | null; assignee_agent_id: number | null;
 };
+type SessionSeam = (env: Env, projectId: number, from: string, to: string, viewer: User) => Promise<Array<{ agent_id: number; item: Item }>>;
 
-/** #3957's seam: an agent's scheduled sessions in [from, to), as items. Nothing until #3957 merges. */
-export const WORKLOAD_DEPS: { agentSessions: (env: Env, projectId: number, from: string, to: string) => Promise<Array<{ agent_id: number; item: Item }>> } = {
-  agentSessions: async () => [],
-};
+export const SESSION_SLOTS_MAX = 40;
+
+/**
+ * #3957's sessions in this project, as items: each slot in [from, to) (days,
+ * `YYYY-MM-DD`) of an active session the viewer may read. See AGENTS' SESSIONS above.
+ */
+export async function projectAgentSessions(env: Env, projectId: number, from: string, to: string, viewer: User) {
+  const lo = new Date(`${from}T00:00:00Z`), hi = new Date(`${to}T00:00:00Z`);
+  const rows = (await env.DB.prepare(
+    `SELECT d.* FROM agent_duties d JOIN team_agents a ON a.id = d.agent_id
+      WHERE d.kind = 'session' AND d.status = 'active' AND a.status <> 'removed' AND julianday(d.next_due_at) < julianday(?)
+        AND ((a.scope_kind = 'project' AND a.project_id = ?)
+          OR (a.scope_kind = 'company' AND d.target_kind = 'deck'
+            AND EXISTS (SELECT 1 FROM pitch_decks k WHERE CAST(k.id AS TEXT) = d.target_id AND k.project_id = ?)))
+      ORDER BY d.id LIMIT 200`,
+  ).bind(sqlTime(hi), projectId, projectId).all<SessionRow>()).results ?? [];
+  const readable = new Map<number, boolean>();
+  const out: Array<{ agent_id: number; item: Item }> = [];
+  for (const r of rows) {
+    if (!readable.has(r.agent_id)) {
+      const a = await env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(r.agent_id).first<AgentRow>();
+      const s = a ? await scopeOfAgent(env, a) : null;
+      readable.set(r.agent_id, !!s && await canRead(env, s, viewer));
+    }
+    if (!readable.get(r.agent_id)) continue;
+    let at: Date | null = fromSql(r.next_due_at);
+    for (let n = 0; at && at < hi && n < SESSION_SLOTS_MAX; n += 1) {
+      if (at >= lo) {
+        out.push({ agent_id: r.agent_id, item: { uid: r.uid, title: r.title, estimate_points: null, when: { kind: 'scheduled', at: sqlTime(at) }, session: { uid: r.uid, cadence: r.cadence } } });
+      }
+      at = r.cadence === 'once' ? null : zonedNext(sessionSchedule(r), at);
+    }
+  }
+  return out;
+}
+
+/** #3957's seam: an agent's scheduled sessions in [from, to), as items (`projectAgentSessions`). Tests may replace it. */
+export const WORKLOAD_DEPS: { agentSessions: SessionSeam } = { agentSessions: projectAgentSessions };
 
 const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
@@ -65,7 +124,7 @@ export function capacityBlock(points: number | null | undefined): Block<number> 
   return points == null ? { available: false, reason: NOT_RECORDED } : { available: true, value: Number(points) };
 }
 
-export async function projectWorkload(env: Env, projectId: number, weeks: number, now: Date) {
+export async function projectWorkload(env: Env, projectId: number, weeks: number, now: Date, viewer: User) {
   const start = weekStart(now);
   const end = start + weeks * 7 * 86_400_000;
   const tasks = (await env.DB.prepare(
@@ -93,7 +152,7 @@ export async function projectWorkload(env: Env, projectId: number, weeks: number
     const w = weekOf(when.at, start, weeks);
     if (w != null) table.get(key)!.weeks[w].push(item);
   }
-  for (const s of await WORKLOAD_DEPS.agentSessions(env, projectId, day(start), day(end))) {
+  for (const s of await WORKLOAD_DEPS.agentSessions(env, projectId, day(start), day(end), viewer)) {
     if (!agents.has(s.agent_id)) agents.set(s.agent_id, blank());
     const w = s.item.when ? weekOf(s.item.when.at, start, weeks) : null;
     if (w != null) agents.get(s.agent_id)!.weeks[w].push(s.item);

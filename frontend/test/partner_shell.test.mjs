@@ -108,8 +108,7 @@ test('collapsed Pipeline and Offers sections remain reachable from Partner tabs'
     assert.ok(bars.includes(`to: '${zone}'`), `${zone} is in no Partner tab set`);
     assert.ok(routeLine(zone).includes('<PartnerBucketRoutes />'), `${zone} is not the bucket's zone`);
     const forward = routeLine(old);
-    assert.ok(forward.includes('<MarketplaceRedirect role={user?.role} founderTab="') && forward.includes(`" to="${zone}" />`),
-      `${old} does not forward to ${zone}`);
+    assert.equal(forward, undefined);
     assert.ok(!bars.includes(`to: '${old}'`), `a tab still opens the removed ${old}`);
   }
   for (const path of [
@@ -156,11 +155,14 @@ test('the shared Network page only mounts Partner chrome for Partner users', () 
   // retired it, and Research is the role-branched ResearchWorkspace.
 });
 
-test('Trust stays in the user menu and Company Settings stays in the pinned footer', () => {
+test('Trust and account Portfolio stay in the user menu, outside the sidebar', () => {
   assert.ok(!targets.includes('/trust'));
   assert.ok(!targets.includes('/company-settings'));
   const sidebar = read('frontend/src/ui/SidebarNav.jsx');
-  assert.match(sidebar, /to="\/account\/portfolio"/); // D1140 (#3020)
+  assert.doesNotMatch(sidebar, /to="\/account\/portfolio"/); // D4416 amends D4152.
+  const app = readRoutesSource();
+  const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/);
   assert.ok(!/to="\/settings"/.test(sidebar));
 });
 

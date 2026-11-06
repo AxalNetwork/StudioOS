@@ -41,16 +41,16 @@ import { notify } from '../services/notify';
 import { newUid } from './_t13t14t15_helpers';
 import { agentModels } from './team_agents';
 import { skillByUid, taxonomyMaps, versionOf, type SkillRow, type VersionRow } from '../services/agents/skillLinks';
-import { draftPartsOf, publishDraft } from '../services/agents/skillPublish';
-import { pinTokens } from '../services/agents/runCost';
+import { draftParts, draftPartsOf, publishDraft } from '../services/agents/skillPublish';
+import { pinTokenMap } from '../services/agents/runCost';
 import {
-  CASES_MAX, PASS_BAR, approvalFor, checkCase, diffParts, draftHash, evalSummary, lifecycleStatus, openReview, pinnedAgents, runCase,
+  CASES_MAX, PASS_BAR, approvalFor, checkCase, diffParts, draftHash, evalSummary, lifecycleStatus, meetsBar, openReview, pinnedAgents, runCase,
   type CaseExpect, type CaseInput, type DraftParts, type ReviewRow,
 } from '../services/agents/skillLifecycle';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import { evaluatePublished } from '../services/agents/skillEval';
 import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
-import type { OutputKind } from '../services/agents/skills';
+import type { OutputKind, Tag } from '../services/agents/skills';
 
 type C = Context<{ Bindings: Env }>;
 const adminHqSkills = new Hono<{ Bindings: Env }>();
@@ -107,35 +107,72 @@ async function reviewDto(env: Env, r: ReviewRow | null, hash: string) {
   };
 }
 
-/** D4121: what a published version adds to a run that uses it (`context_tokens`), or null when there is no version or it cannot be read. */
-async function versionTokens(env: Env, skillId: number, version: number): Promise<number | null> {
-  if (!version) return null;
-  return (await pinTokens(env, [{ skill_id: skillId, version }]))?.[0] ?? null;
-}
-
 // ── The library ─────────────────────────────────────────────────────────────
+
+type LibraryRow = SkillRow & {
+  tags_json: string; role_keys_json: string; open_hash: string | null; agents: number; live_cases: number;
+};
 
 adminHqSkills.get('/', async (c) => {
   await requireSuperAdmin(c);
-  const rows = (await c.env.DB.prepare("SELECT * FROM agent_skills WHERE scope = 'hq' ORDER BY name, id").all<SkillRow>()).results ?? [];
-  const tax = await taxonomyMaps(c.env);
-  const skills = [];
-  for (const s of rows) {
-    const d = await draftPartsOf(c.env, s);
-    const hash = await draftHash(d);
-    const evals = await evalSummary(c.env, s.id, hash);
-    skills.push({
-      uid: s.uid, name: d.name, ...areaAndLevel(d, tax.category),
-      status: lifecycleStatus(s.status, await openReview(c.env, s.id), hash),
-      version: s.current_version || null,
-      agents: await pinnedAgents(c.env, s.id),
-      // D4121: what the current version adds to a run that uses it (its prompt, by the AI budget's estimate); null for a skill never published.
-      tokens_per_run: await versionTokens(c.env, s.id, s.current_version),
-      golden: { pass: evals.pass, total: evals.total, meets_bar: evals.meets_bar },
-      last_eval: evals.last_run,
-    });
-  }
-  return c.json({ skills, pass_bar: PASS_BAR });
+  const pageRaw = c.req.query('page');
+  const page = pageRaw == null ? null : Number(pageRaw);
+  if (page != null && (!Number.isSafeInteger(page) || page < 1)) return c.json({ detail: 'Invalid page' }, 400);
+
+  const env = c.env;
+  // Read the ordered draft inputs together so their hashes match the detail route.
+  const [result, tax] = await Promise.all([
+    env.DB.prepare(`SELECT s.*,
+      (SELECT json_group_array(json_object('slug', t.taxonomy_skill_slug, 'level', t.level))
+        FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t) AS tags_json,
+      (SELECT json_group_array(r.role_key)
+        FROM (SELECT role_key FROM agent_skill_roles WHERE skill_id = s.id ORDER BY rowid) r) AS role_keys_json,
+      (SELECT draft_hash FROM agent_skill_reviews WHERE skill_id = s.id AND status = 'requested') AS open_hash,
+      (SELECT COUNT(*) FROM agent_skill_links l JOIN team_agents a ON a.id = l.agent_id
+        WHERE l.skill_id = s.id AND a.status <> 'removed') AS agents,
+      (SELECT COUNT(*) FROM agent_skill_cases WHERE skill_id = s.id AND removed_at IS NULL) AS live_cases
+    FROM agent_skills s WHERE s.scope = 'hq' ORDER BY s.name, s.id LIMIT ? OFFSET ?`)
+      .bind(page == null ? -1 : 10, page == null ? 0 : (page - 1) * 10).all<LibraryRow>(),
+    taxonomyMaps(env),
+  ]);
+  const rows = result.results ?? [];
+  const drafts = await Promise.all(rows.map(async (row) => {
+    const draft = draftParts(row, parse<Tag[]>(row.tags_json, []), parse<string[]>(row.role_keys_json, []));
+    return { row, draft, hash: await draftHash(draft) };
+  }));
+
+  // Only the latest result per case/model counts. A model run solely on a
+  // removed case still counts towards the denominator, as on the detail page.
+  const [evalResult, tokens] = await Promise.all([
+    env.DB.prepare(`WITH latest AS (
+        SELECT MAX(r.id) AS id
+        FROM json_each(?) j JOIN agent_skill_eval_results r
+          ON r.skill_id = CAST(j.key AS INTEGER) AND r.draft_hash = j.value
+        GROUP BY r.skill_id, r.case_id, r.model_id
+      )
+      SELECT r.skill_id, COUNT(DISTINCT r.model_id) AS models,
+        SUM(CASE WHEN k.id IS NOT NULL AND r.result = 'pass' THEN 1 ELSE 0 END) AS pass,
+        MAX(r.run_at) AS last_run
+      FROM latest JOIN agent_skill_eval_results r ON r.id = latest.id
+      LEFT JOIN agent_skill_cases k ON k.id = r.case_id AND k.skill_id = r.skill_id AND k.removed_at IS NULL
+      GROUP BY r.skill_id`).bind(JSON.stringify(Object.fromEntries(drafts.map(({ row, hash }) => [row.id, hash]))))
+      .all<{ skill_id: number; models: number; pass: number; last_run: string }>(),
+    pinTokenMap(env, rows.filter((s) => s.current_version).map((s) => ({ skill_id: s.id, version: s.current_version }))),
+  ]);
+  const evals = new Map((evalResult.results ?? []).map((r) => [r.skill_id, r]));
+  const skills = drafts.map(({ row, draft, hash }) => {
+    const summary = evals.get(row.id);
+    const pass = summary?.pass ?? 0;
+    const total = row.live_cases * (summary?.models ?? 0);
+    return {
+      uid: row.uid, name: draft.name, ...areaAndLevel(draft, tax.category),
+      status: lifecycleStatus(row.status, row.open_hash ? { draft_hash: row.open_hash } : null, hash),
+      version: row.current_version || null, agents: row.agents,
+      tokens_per_run: tokens.get(`${row.id}:${row.current_version}`) ?? null,
+      golden: { pass, total, meets_bar: meetsBar(pass, total) }, last_eval: summary?.last_run ?? null,
+    };
+  });
+  return c.json({ skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null });
 });
 
 // D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.

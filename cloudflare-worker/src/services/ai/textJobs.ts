@@ -103,6 +103,29 @@ function ladder(job: UseJob): Array<{ model: string; source: TextSource }> {
   return rows.filter((r): r is { model: string; source: TextSource } => !!r.model && !seen.has(r.model) && !!seen.add(r.model));
 }
 
+/**
+ * #4351 (D4351): the plan-lock and input-fit checks `textChoice` applies to its
+ * own picks, for a model the caller names (an All models choice, a persona
+ * module) on a page whose job is `jobId`. Whether the model is on the page's
+ * list is the caller's check; this one never chooses another model. Null when
+ * the model may run; otherwise the refusal, in words that say why and what to do.
+ */
+export function namedModelCheck(jobId: string, model: string, ctx: TextContext):
+  | null
+  | { code: 'plan_locked'; message: string }
+  | { code: 'input_too_long'; message: string } {
+  const why = textBlock(model, ctx);
+  if (why === 'plan_locked') {
+    return { code: 'plan_locked', message: (lockedRefusal(model) as { message: string }).message };
+  }
+  if (why === 'too_long') {
+    const job = textJob(jobId);
+    const name = modelById(model)?.name ?? model;
+    return { code: 'input_too_long', message: job ? `${tooLongMessage(job, model)} Or pick another model.` : `This material is too long for ${name}. Pick another model, or shorten it. Nothing was run.` };
+  }
+  return null;
+}
+
 /** The model a text job runs, and the chain after it. See the file header for the order. */
 export function textChoice(jobId: string, ctx: TextContext): TextChoice {
   const job = textJob(jobId);
@@ -188,6 +211,7 @@ export const TASK_TEXT_JOBS: Readonly<Record<string, string>> = Object.freeze({
   brand_taglines: 'GR2',
   grow_theme_feedback: 'GR1', // feedback themes
   mail_draft: 'EM1', // a draft from ticked records
+  distribution_draft: 'GR5', // D4488: Distribution posts, creatives and outreach
 });
 
 /**
@@ -223,7 +247,7 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   'draft:raise/pmf-explain': 'RA6', 'draft:raise/legal': 'RA6',
   'draft:raise/pmf-questions': 'RA1', // nearest: Raise writing on the 70B
   'draft:raise/data-room': 'RA2',
-  'draft:raise/narrative-fix': 'RA1', 'draft:narrative-positioning': 'RA1', 'draft:narrative-section': 'RA1', 'draft:narrative-objection': 'RA1',
+  'draft:raise/narrative-fix': 'RA1', 'draft:narrative-positioning': 'RA1', 'draft:narrative-section': 'RA1', 'draft:narrative-objection': 'RA1', 'review:narrative-coach': 'DK8',
   'draft:raise/capital': 'RA8', 'draft:raise/liquidity': 'RA8', 'draft:update': 'RA12',
   // The deck
   'form:deck': 'DK1', 'form:deck-template': 'DK1', 'deck:outline': 'DK1', 'deck:build': 'DK1',
@@ -236,6 +260,8 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   // Grow
   'fill:feedback_theme': 'GR1', 'draft:grow/customers': 'GR2', 'form:landing': 'GR2', 'form:palette': 'GR2', 'draft:taglines': 'GR2',
   'draft:logo': 'GR3', 'draft:grow/talent': 'GR4',
+  'draft:distribution': 'GR5', // D4488: campaign assets and outreach text
+  'draft:publish': 'GR2', // #4046: Publish to…'s post text, as Grow's other marketing writing
   // Network
   'draft:network/re-engagement': 'NE2', 'draft:network/intro-email': 'NE2',
   'draft:network/relationships': 'NE1', 'draft:network/introductions': 'NE1',

@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
 /**
  * Task #25 — Pitch deck builder (Worker mirror).
  *
@@ -14,6 +15,7 @@ import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
 import { projectOwned as sharedProjectOwned } from '../middleware/projectContentAccess';
 import { getProjectMembershipRole } from '../services/projectAccess';
 import { ensureTier, tierCovers } from '../middleware/requireTier';
+import { DECK_STUDIO_TIER } from '../services/decks/studioAccess';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
@@ -60,15 +62,16 @@ import { approvalRefusal, pendingApprovers } from '../services/decks/deckApprova
 import { newAssignments, notifyAssignments } from '../services/decks/cardStatus';
 import { peopleOf } from '../services/decks/deckPeople';
 import { funnelPoint, structuresChanged } from '../services/decks/observability';
+import { keyOfProject } from '../services/decks/cardAudio';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
   user = { ...user, role: String(user.role || '').toLowerCase() };
-  if (user.role === 'advisor') throw new Error('Forbidden');
+  if (holdsOnlyLicence(user, 'advisor')) throw new Error('Forbidden');
   const adminWrite = opts.write && user.role === 'admin';
   if (adminWrite && (!isSuperAdmin(await hydrateSuperAdmin(c.env, user)) || await isSupportSession(c))) throw new Error('Forbidden');
   const project = await sharedProjectOwned(c, user, projectId, opts);
-  const owner = user.role === 'founder' && user.founder_id != null && user.founder_id === project.founder_id;
+  const owner = holdsLicence(user, 'founder') && user.founder_id != null && user.founder_id === project.founder_id;
   if (!owner && user.role !== 'admin' && await getProjectMembershipRole(c.env, projectId, user.id) === 'advisor') throw new Error('Forbidden');
   if (adminWrite && opts.audit !== false) {
     await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)')
@@ -79,7 +82,7 @@ export async function projectOwned(c: any, user: any, projectId: number, opts: {
 
 /** Called after projectOwned has verified this request's active-company scope. */
 async function mercuryRunwayOwner(c: any, user: any, projectId: number): Promise<number | null> {
-  if (user.role !== 'founder' || user.founder_id == null || await isSupportSession(c)) return null;
+  if (!holdsLicence(user, 'founder') || user.founder_id == null || await isSupportSession(c)) return null;
   const project = await c.env.DB.prepare('SELECT founder_id FROM projects WHERE id = ?').bind(projectId).first() as { founder_id: number | null } | null;
   return project?.founder_id === user.founder_id ? Number(user.id) : null;
 }
@@ -542,8 +545,10 @@ export function publicDeckOf(row: any): any {
   // D1545 (#3788): a hidden card reaches no reader: not Present, the share page or the print page.
   deck.slides = visibleCards(deck.slides || []).map((s: any) => {
     // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
-    const { notes, status, assignee, ...card } = s || {};
+    const { notes, status, assignee, voice, ...card } = s || {};
     void notes; void status; void assignee;
+    // D1569 (#3816): an accepted AI voice-over reaches a reader as its label and model only; the clip plays through a signed link.
+    if (voice?.key) card.voice = { label: voice.label, model: voice.model };
     return card;
   });
   // D1546: every reader of a deck (share, present, the print page the PDF and PowerPoint photograph)
@@ -990,7 +995,8 @@ decks.get('/share/:token', async (c) => {
   return c.json({
     ...publicDeckOf(row),
     // D1507: quotes and logos go out only with the consent or permission the venture's records hold.
-    slides: shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))),
+    // D1569 (#3816): a card's AI voice-over goes out as a signed link only, after every gate above passed.
+    slides: await withVoiceLinks(c.env, shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))), Number(row.project_id)),
     // D1565: who the link was made for, drawn over every card ("Prepared for …").
     watermark: link?.watermark_text ?? null,
     view_id: viewId,
@@ -1585,7 +1591,7 @@ decks.get('/:id/cards/:hash/rendition/:size', async (c) => {
 });
 
 decks.post('/:id/share', async (c) => {
-  ensureTier(await requireAuth(c), 'studio'); // D683: Raise + Grow
+  ensureTier(await requireAuth(c), DECK_STUDIO_TIER); // D683, D4359: Raise + Grow
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   await ensureSchema(c.env);
@@ -1883,7 +1889,26 @@ async function signingKey(env: Env): Promise<CryptoKey> {
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],
   );
 }
-async function mintSignedToken(env: Env, fileKey: string, ttlSeconds: number, actor: string | null): Promise<string> {
+/** D1569 (#3816): a voice link lives an hour: long enough to present, short enough that a copied link dies. */
+export const VOICE_LINK_TTL_S = 3600;
+/** D1569: a link that plays one clip of this venture for an hour; null for any other key. */
+export async function voiceLink(env: Env, key: unknown, projectId: number): Promise<string | null> {
+  if (!keyOfProject(key, projectId)) return null;
+  return `/api/decks/voice/${await mintSignedToken(env, key, VOICE_LINK_TTL_S, null)}`;
+}
+/** D1569: each card's voice as a reader gets it: its label, its model and a link to play it, never its key. */
+export async function withVoiceLinks(env: Env, slides: any[], projectId: number): Promise<any[]> {
+  const out: any[] = [];
+  for (const s of slides || []) {
+    const key = (s as any)?.voice?.key;
+    const url = key ? await voiceLink(env, key, projectId) : null;
+    if (!s || typeof s !== 'object' || !('voice' in s)) { out.push(s); continue; }
+    const { voice, ...card } = s as any;
+    out.push(url ? { ...card, voice: { label: voice.label, model: voice.model, url } } : card);
+  }
+  return out;
+}
+export async function mintSignedToken(env: Env, fileKey: string, ttlSeconds: number, actor: string | null): Promise<string> {
   const payload: any = { k: fileKey, exp: Math.floor(Date.now() / 1000) + Math.max(1, ttlSeconds) };
   if (actor) payload.a = actor;
   // D902 — a nonce, so two links made for one version in the same second are two

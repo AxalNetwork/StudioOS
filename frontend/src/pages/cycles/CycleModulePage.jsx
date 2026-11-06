@@ -181,7 +181,7 @@ function RowAction({ action }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -194,7 +194,8 @@ export default function CycleModulePage({
   const recs = records ?? data?.records;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug}>
-      <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} />
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
+      {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}
       {status === 'refused' ? (
@@ -223,7 +224,9 @@ export default function CycleModulePage({
               {item.label || `Open ${name}`}
             </Link>
           ))}
-          <RecordsTable
+          {/* #3938 (D1478 part 9): a control that acts on the records themselves (Partner network's Rank by fit). */}
+          {aboveRecords}
+          {showRecords && <RecordsTable
             key={`${meta.key}/${slug}`}
             title={data?.module?.records_title || name}
             records={recs}
@@ -236,7 +239,7 @@ export default function CycleModulePage({
             lovable={lovable}
             rowAction={rowAction}
             rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
-          />
+          />}
           {children}
         </>
       )}

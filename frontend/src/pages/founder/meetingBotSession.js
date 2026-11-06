@@ -38,7 +38,7 @@ const REFUSALS = Object.freeze({
   audio_removed: 'This session’s recording was removed. Create a new session.',
   bot_stop_pending: 'Eadwyn AI is still stopping. Read its status before trying again.',
   consent_required: 'Record the interviewee’s agreement before sending Eadwyn AI.',
-  unsupported_link: 'Use a Zoom, Google Meet or Microsoft Teams meeting link.',
+  unsupported_link: 'Use a Zoom, Google Meet or Microsoft Teams meeting link. A Google Meet link looks like https://meet.google.com/abc-defg-hij.',
   bot_already_running: 'Eadwyn AI is already assigned to this session. Check its status before trying again.',
 });
 const own = (object, key) => typeof key === 'string' && Object.hasOwn(object, key);

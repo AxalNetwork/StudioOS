@@ -89,6 +89,8 @@ export const ROW_READS: Readonly<Record<string, string>> = Object.freeze({
   competitor_tracking: 'SELECT * FROM competitor_tracking WHERE id = ? AND project_id = ?',
   product_feedback: 'SELECT * FROM product_feedback WHERE id = ? AND project_id = ?',
   compliance_events: 'SELECT * FROM compliance_events WHERE id = ? AND project_id = ?',
+  // #4046: Distribution's channel.
+  growth_channels: 'SELECT * FROM growth_channels WHERE id = ? AND project_id = ?',
   // D1329 (#3490): records that are not a venture's. Each is `scopes.ts`' own read, bound on the id alone and
   // reached only through the scoped branch, after the record's own scope is checked.
   ...SCOPED_READS,
@@ -114,6 +116,11 @@ export const ROW_KEYS: Readonly<Record<string, (env: Env, key: string, projectId
   },
   product_feedback: async (env: Env, key: string, projectId: number) => {
     const r = await env.DB.prepare('SELECT id FROM product_feedback WHERE uid = ? AND project_id = ?').bind(key, projectId).first<{ id: number }>();
+    return r ? Number(r.id) : null;
+  },
+  // #4046: a channel, by the uid its Add answers and its Edit names.
+  growth_channels: async (env: Env, key: string, projectId: number) => {
+    const r = await env.DB.prepare('SELECT id FROM growth_channels WHERE uid = ? AND project_id = ?').bind(key, projectId).first<{ id: number }>();
     return r ? Number(r.id) : null;
   },
 });

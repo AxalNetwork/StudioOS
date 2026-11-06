@@ -14,6 +14,7 @@ import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import useScrollToHash from '../../../hooks/useScrollToHash';
 import AdvisorAccessLog from './ClientAccessLog';
+import MyTasks from '../../work/MyTasks.jsx';
 
 /**
  * Practice · Engagements — canvas PR2, `/practice/engagements`.
@@ -200,6 +201,8 @@ export default function EngagementsZone() {
 
   return (
     <>
+    {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
+    <div className="mb-4"><MyTasks licence="advisor" testId="practice-my-tasks" /></div>
     <ZoneBody
       loading={state.loading}
       error={state.error}

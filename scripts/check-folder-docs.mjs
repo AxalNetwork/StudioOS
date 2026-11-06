@@ -110,6 +110,8 @@ const DOCUMENTED = new Map([
   ['documentation/architecture/route-map/canvases/part-5', 'one route-map canvas row per file (D4102)'],
   ['documentation/audits',            'dated snapshots — true on their date only'],
   ['documentation/operations',        'runbooks — the steps to ship, check and recover production'],
+  ['documentation/skill-drafts/D4526', 'newly authored HQ skill package staged outside deployment'],
+  ['documentation/skill-drafts/D4526/cases', 'synthetic evaluation cases for the staged HQ package'],
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
   ['frontend/src/components/checkout',        'the checkout sheet, its entry and the renewal banner (D1048, D1054)'],
@@ -138,6 +140,8 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/profiles',       'Partner profiles under Approvals (D989)'],
   ['frontend/src/pages/admin/payments',       'Payments under Platform, HQ only (D1008)'],
   ['frontend/src/pages/admin/partners',       'the admin Partner invitations desk (D923): its tabs, the records, the dialogs and the model they read'],
+  ['frontend/src/pages/incorporate',       'Incorporate: the flow, its steps, the itemised quote, the timeline and the HQ read-only frame (D4357, D4360)'],
+  ['frontend/src/pages/influencer/section', 'the member\'s Influencer section (D4289 P7, #4296): the page, its six tabs, the model and the one read seam'],
   ['frontend/src/pages/deal',                 'the deal page’s frame, working and reading tabs, staff views and who sees what (D1152–D1155)'],
   ['frontend/src/pages/investor/dealflow',     'Deal flow for an Investor and the Studio lens: the board, the table, their rules and controls (D1236, D1240, D1242)'],
   ['frontend/src/pages/duediligence',         'Due diligence (D1244): the list and case tabs as addresses, and the list tabs D1250 draws — Cases, Templates and their dialogs'],
@@ -149,6 +153,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/team',                 'Team (D1497): people and AI agents by scope, the agents seam, and Project settings › General'],
   ['frontend/src/pages/studio',               'Studio modularity (D1419): the module grid every /studio draws, Customise, the module map, and the layout-proposals seam'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
+  ['frontend/src/pages/cycles/distribution',  'Grow Distribution tabs (D4484): the shell, Channels (D4486), campaign plans (D4487), Ask drafts (D4488), Ads (D4490) and Inbox (D4494)'],
   ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],
   ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],
   ['frontend/src/pages/email',                'the Email page and its composer (D1344), and a record\'s Email in the right Sheet (#4017)'],
@@ -164,6 +169,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
+  ['frontend/src/pages/incorporate',          'Incorporate: the formation flow, its review quote, the bank step, Done and HQ\'s read-only frame'],
   ['frontend/src/pages/learning',             'the Learning center: one routed page, its components, and the coming-soon gate'],
   ['frontend/src/pages/advisor',               'advisor workspace framing, public profiles and booking links'],
   ['frontend/src/pages/advisor/practice',      'one file per Practice artboard, plus the pure module each keeps its derivations in'],
@@ -190,6 +196,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/contracts',         'D1511: one JSON Schema per swapped deck v2 adapter method, checked against the real reply'],
   ['cloudflare-worker/test/fixtures',         'recorded and synthetic inputs the worker tests read, the fake AI binding\'s recordings among them'],
   ['frontend/tests/visual',                   'D1511: the Pitch deck editor\'s visual regression and axe suites, their server and baselines'],
+  ['frontend/src/routes',                     'one route module per area (D528): App.jsx collects them, and a new area is one file here'],
 ]);
 
 // Trees inside which a heavy folder is expected to document itself.

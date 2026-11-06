@@ -7,6 +7,10 @@
  *
  *   uncovered        a current catalogue id is in no row of the model table;
  *   duplicated       a catalogue id is in two rows;
+ *   unreachable      an id the table offers, and does not hide, is in no job's
+ *                    list (`jobChoices`), so no job can run it (#4313 part 3:
+ *                    a page's list is its kind's job, so the jobs are where
+ *                    every model is reached);
  *   no-default       a job (or one of its steps) has no Default;
  *   two-defaults     a job has two Defaults (two values, or the same job id twice);
  *   default-kind     a Default is not in its kind's model list;
@@ -92,11 +96,14 @@ const asList = (v) => (v == null || v === '' ? [] : Array.isArray(v) ? v.filter(
  * @param {{ id: string }[]} input.models  the model table's rows: every current catalogue id, once
  * @param {{ id: string, kind?: string, default?: string|string[], steps?: { kind: string, default?: string|string[] }[] }[]} input.jobs
  * @param {Record<string, string[]>} input.kindModels  each kind's model list
- * @param {{ where: string, kind: string, models: string[] }[]} input.selectors  every selector a page lists (the rail matrix, and the kinds' lists)
+ * @param {{ where: string, kind: string, models: string[] }[]} input.selectors  every selector a page lists (the rows the rail builds, the stored options, and the kinds' lists)
+ * @param {string[]} [input.offered]  the ids the model table offers
+ * @param {string[]} [input.hidden]  the offered ids the table hides from every rail (MODEL_LOCKS "hidden")
+ * @param {{ job: string, models: string[] }[]} [input.reach]  each job step and the models it lists (`jobChoices`)
  * @param {{ id: string, job?: string }[]} input.elementGroups
  * @param {{ path: string, text: string }[]} input.sources
  */
-export function checkCoverage({ catalogue, models, jobs, kindModels, selectors = [], elementGroups = [], sources = [] }) {
+export function checkCoverage({ catalogue, models, jobs, kindModels, selectors = [], elementGroups = [], sources = [], offered = [], hidden = [], reach = [] }) {
   const findings = [];
   const add = (rule, detail) => findings.push({ rule, detail });
   const byId = new Map(catalogue.map((m) => [m.id, m]));
@@ -106,6 +113,9 @@ export function checkCoverage({ catalogue, models, jobs, kindModels, selectors =
   for (const row of models) seen.set(row.id, (seen.get(row.id) || 0) + 1);
   for (const id of current) if (!seen.has(id)) add('uncovered', `${id} is in the catalogue but in no row of the model table`);
   for (const [id, n] of seen) if (n > 1) add('duplicated', `${id} is in ${n} rows of the model table`);
+
+  const reached = new Set(reach.flatMap((r) => r.models));
+  for (const id of offered) if (!hidden.includes(id) && !reached.has(id)) add('unreachable', `${id} is offered but in no job's list, so no job runs it`);
 
   const jobIds = new Map();
   for (const job of jobs) jobIds.set(job.id, (jobIds.get(job.id) || 0) + 1);
@@ -203,6 +213,8 @@ export async function load() {
   const { CATALOGUE } = await import(worker('services/ai/catalogue.ts'));
   const useCases = await import(worker('services/ai/modelUseCases.ts'));
   const matrix = JSON.parse(readFileSync(join(ROOT, 'cloudflare-worker/src/services/ai/railMatrix.json'), 'utf8'));
+  // #4313 part 3: a page row stores no list; what a page and an option list is the row the rail builds from its job.
+  const rail = await import(worker('services/ai/railMatrix.ts'));
   const self = relative(ROOT, fileURLToPath(import.meta.url)).split(sep).join('/');
   const sources = SCAN_ROOTS.flatMap((r) => walk(join(ROOT, r), []))
     .map((p) => relative(ROOT, p).split(sep).join('/'))
@@ -211,12 +223,14 @@ export async function load() {
   // The model table: §1's set, every catalogue id offered or named as not offered, once each.
   const models = [...useCases.COVERAGE.offered, ...Object.keys(useCases.COVERAGE.notOffered)].map((id) => ({ id }));
   const kindModels = Object.fromEntries(Object.entries(useCases.USE_KINDS).map(([kind, row]) => [kind, [...row.models]]));
+  const listed = (from) => (s) => ({
+    where: `${from} ${s.pageKey}${s.optionKey ? ` / ${s.optionKey}` : ''}`,
+    kind: s.kind,
+    models: [...s.models, ...(s.more || [])].map((m) => m.id),
+  });
   const selectors = [
-    ...[...matrix.rows, ...(matrix.options || [])].map((s) => ({
-      where: `railMatrix ${s.pageKey}${s.optionKey ? ` / ${s.optionKey}` : ''}`,
-      kind: s.kind,
-      models: [...s.models, ...(s.more || [])].map((m) => m.id),
-    })),
+    ...[...rail.railRows(), ...rail.railOptionRows()].map(listed('rail')),
+    ...(matrix.options || []).map(listed('railMatrix')),
     ...Object.entries(kindModels).map(([kind, list]) => ({ where: `modelUseCases ${kind}`, kind, models: list })),
   ];
   return {
@@ -227,6 +241,9 @@ export async function load() {
     selectors,
     elementGroups: await elementGroupsOf(useCases.DECK_ELEMENT_JOBS),
     sources,
+    offered: [...useCases.COVERAGE.offered],
+    hidden: Object.entries(useCases.MODEL_LOCKS).filter(([, lock]) => lock === 'hidden').map(([id]) => id),
+    reach: useCases.JOBS.map((j) => ({ job: `${j.id} step ${j.step}`, models: useCases.jobChoices(j) })),
   };
 }
 
@@ -238,7 +255,7 @@ async function main() {
   }
   const findings = checkCoverage(input);
   if (!findings.length) {
-    console.log(`✓ check-model-coverage: ${input.catalogue.length} catalogue ids, ${input.jobs.length} jobs, ${input.selectors.length} selectors and ${input.elementGroups.length} deck element groups agree.`);
+    console.log(`✓ check-model-coverage: ${input.catalogue.length} catalogue ids, ${input.jobs.length} jobs reaching ${input.offered.filter((id) => !input.hidden.includes(id)).length} offered models, ${input.selectors.length} selectors and ${input.elementGroups.length} deck element groups agree.`);
     return 0;
   }
   console.error(`✗ check-model-coverage: ${findings.length} finding${findings.length === 1 ? '' : 's'}.`);

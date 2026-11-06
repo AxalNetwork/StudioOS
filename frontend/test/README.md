@@ -28,8 +28,12 @@ also exercises a `project_id` deep link.
 
 | File | Guarantee |
 | --- | --- |
+| `persona_segment_scopes_4438.test.mjs` | D4438: scope changes update SEG7, waiting suggestions, stale reply guards, failures and missing figures. |
+| `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
 | `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
 | `dataroom_deck_source_d1602.test.mjs` | D1602: owner controls, capability hiding, quote confirmation, failed saves, withdrawal and the deck-source client seam. |
+| `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
+| `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
 
 ## Conventions
 
@@ -65,6 +69,7 @@ mounts, and a keydown recorder on the window.
 D696's record contracts live in `record_page_d696.test.mjs` (real rendering,
 parent callbacks, safe links and declared actions) and `persona_pdf_d696.test.mjs`
 (allowlisted content, dated download and one-page measured bounds).
+`record_mode_d696.test.mjs` checks mounted record reads and writes; its mutation targets the record-mode guard separately from Distribution tab guards.
 `_record_d696.mjs` supplies synthetic records and isolated mutation imports.
 Each behavioral assertion group runs against the original source, against
 changes it must reject, and again against the restored source; no checkout
@@ -133,6 +138,29 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `messages_retirement_d1345.test.mjs` | EM10 routing and acknowledgment, blocked storage, account isolation, GP fund selection, and retirement of old client calls. |
 | `linkedin_brand_d1355.test.mjs` | D1355: official logo/button source pins, unchanged asset bytes, approved theme variants, minimum sizing and truthful sign-in/import entry points. |
 | `route_error_recording_3593.test.mjs` | #3593: recording-safe chunk-error copy, SPA return links, deferred manual reload and unchanged idle recovery. |
-
 | `pitch_shell_3717.test.mjs` | #3717: pitch route/frame/crumb integration, shared gutter and responsive grids, with restored-old-behavior mutations. |
 | `pitch_diagrams_d1542.test.mjs` | D1542 (#3780): `deckV2Adapter.diagrams` swapped to `deckDiagramsApi.check`, Flow, Cycle and Matrix on the areas route (the rest later), a diagram row's size check, a proposal that changes nothing before Accept, nodes edited on the canvas, and the check line. |
+| `work_w7_3993.test.mjs` | #4418: W7 client/adapter routes and off blocks, project item deep links, sheet writes, review filtering and latest failed-run opening; four failing-first regressions from S1’s review (reload stability, waiting-run filtering, burn-up refresh and refusal reset), plus missing-task text during a board reload. |
+| `work_controls_3968.test.mjs` | WK1–WK3 filter and burn-up interactions through real clients, attribution, failed reads and late responses (#3968). |
+| `general_counsel_4421.test.mjs` | #4421: rendered rule book, open/history queue, proposal and Ask notices; answered payment/plan pills removed. |
+| `syndication_review_4440.test.mjs` | D4440: all eight confirmed review findings, actual settings contract, dirty choices, accepted copy, private approval, event Save, reconnect and ticket-link validation. |
+| `redirect_retirement_d2319.test.mjs` | D2319 (#2319), #4415: retired aliases, protected outside links and retained beacon groups. |
+| `_retiredRedirects_2319.mjs` | D2319: recorded policy for route-pin tests, including concrete addresses matching retired dynamic patterns. |
+| `comarketing_split_4439.test.mjs` | D4439: founder Partner network door and counted forward, partner Offers, investor guard and navigation, and visit attribution path. |
+| `grow_campaigns_d4447.test.mjs` | D4447 (#4447): eight Grow campaign requests, encoded identifiers and project-bound write bodies. |
+| `distribution_campaigns_4487.test.mjs` | Campaign cards, full-page plan steps, status actions, honest figures, confirmations and partial-save retries (D4487). |
+| `distribution_shell_4484.test.mjs` | D4484: static Distribution routes, retained records/Overview, module primary, tabs, honest Ask states and proposal callbacks. |
+| `learning_home_actions_4481.test.mjs` | D4481: desktop/phone Register and refusals, rapid double-click guards, Join and enrolled progress, Browse courses, phone primary and unknown seats through existing clients. |
+| `distribution_inbox_4494.test.mjs` | D4494: real Inbox/composer behavior, actual count/empty states, client requests, source alignment, and stale selection/search guards. |
+| `_redirectLinks_2319.mjs` | D2319 (#4415): syntax-aware navigation-target audit across frontend and Worker source, without treating API paths or comparisons as links. |
+
+`team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
+| `account_licences_4472.test.mjs` | D4472: account licence client paths, payload and verbs. |
+| `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
+| `distribution_integration_4488.test.mjs` | Mounted campaign Ask acceptance, manual Save and canonical creative retries (D4488). |
+| `distribution_states_4496.test.mjs` | D4496 cross-tab triggers, fixed error copy, manual/AI separation and responsive Overview. |
+
+- `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
+
+- `distribution_overview_4485.test.mjs` — Distribution DS1 read/client, null-safe figures and real-date week columns, rendered independent failures, retries and existing contact-create actions (D4485).
+`distribution_ads_4490.test.mjs` checks the Ads banner, gaps without bars, budget sliders, unavailable platforms and Later copy.

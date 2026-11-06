@@ -5,7 +5,7 @@
 // Worker: routes/team_agents.ts, migration 712. Every route answers 404
 // `team_agents_off` until TEAM_AGENTS_ENABLED is on.
 //   GET    /api/teams/roles                               → { roles: [{ key, name, mission, works_in: [{ key, label }], default_rules }],
-//                                                           models: [{ id, label, kind, beta, plan_locked }] }
+//                                                           models: [{ id, label, kind, beta, plan_locked, input_usd_per_million, output_usd_per_million }] }
 // D4117 (#4117): the 16 personas an agent wears (fixed; no route edits one). Agent DTOs carry `persona`
 // and no job title (`role_name` is gone).
 //   GET    /api/teams/personas                            → { personas: [{ key, name, gender, tagline, goal, personality, story, risk,
@@ -17,6 +17,15 @@
 //   GET    /api/teams/agents/:uid                         → { agent, can_manage, rulebook, matrix, cap_microusd, month_spend, proposals, events }
 //   PATCH  /api/teams/agents/:uid                         { status?, monthly_cap_microusd?, first_name?, last_name? } → { agent }
 //   DELETE /api/teams/agents/:uid                         → { ok: true }
+// D4387 (#4387), a manager only (403 not_manager):
+//   GET    /api/teams/agents/:uid/sponsors                → { sponsor: { uid, name } | null,
+//                                                           candidates: [{ uid, name, current, can_sponsor, code, reason }] }
+//   PUT    /api/teams/agents/:uid/sponsor                 { sponsor_uid, reason, drop_tools? } → { agent };
+//                                                           400 reason_required; 409 same_sponsor | removed | sponsor_changed_meanwhile;
+//                                                           422 sponsor_not_found | sponsor_not_member | sponsor_cannot_manage |
+//                                                           sponsor_plan_required | sponsor_no_tokens | sponsor_tools { tools };
+//                                                           503 sponsor_balance_unreadable. An Agent carries `resumes_at`
+//                                                           (YYYY-MM-DD, UTC) while it is paused at its cap, else null.
 //   GET    /api/teams/:scope/:id/rulebooks/:role          → { role_key, default, effective, version, versions, diff, floor }
 //   PUT    /api/teams/:scope/:id/rulebooks/:role          { rules } → { effective, version }; 422 rule_floor | invalid_rules
 // Part 2 (#3842), the sponsor only (403 not_sponsor):
@@ -25,7 +34,8 @@
 //                                                           403 agent_paused | module_not_allowed | option_not_allowed | sponsor_lost_access | plan_required;
 //                                                           402 agent_cap_reached; 422 option_not_text; 503 agent_spend_unreadable;
 //                                                           and every AI run refusal in its own words (assist_off, guard_*, spend_limit, ai_paused, model_not_offered)
-// Part 3 (#3843), the approvals queue:
+// Part 3 (#3843), the approvals queue. #3727: each Item carries can_decide,
+// computed by the Worker for this caller and false after a decision:
 //   GET    /api/teams/:scope/:id/queue?role=&module=&option=&status=&cursor=&include=
 //                                                         → { items: [Item], counts: { proposed: { available, value } }, next_cursor };
 //                                                           403 not_member
@@ -71,7 +81,11 @@ import { request } from '../api.js';
 const enc = encodeURIComponent;
 const base = (scope, id) => `/teams/${enc(scope)}/${enc(id)}`;
 
+// D4422: GET/PUT /api/teams/:scope/:id/allowlists. Null lists retain defaults; [] denies all.
+// GET includes model/tool choices, effective scope, inheritance and can_manage. PUT is manage-only and audited.
 export const teamAgentsApi = {
+  readAllowlists: (scope, id) => request(`${base(scope, id)}/allowlists`),
+  saveAllowlists: (scope, id, lists) => request(`${base(scope, id)}/allowlists`, { method: 'PUT', body: JSON.stringify(lists) }),
   roles: () => request('/teams/roles'),
   personas: () => request('/teams/personas'),
   listAgents: (scope, id, { include, module } = {}) => {
@@ -85,6 +99,9 @@ export const teamAgentsApi = {
   agent: (uid) => request(`/teams/agents/${enc(uid)}`),
   updateAgent: (uid, patch) => request(`/teams/agents/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   removeAgent: (uid) => request(`/teams/agents/${enc(uid)}`, { method: 'DELETE' }),
+  sponsorCandidates: (uid) => request(`/teams/agents/${enc(uid)}/sponsors`),
+  changeSponsor: (uid, { sponsorUid, reason, dropTools = false } = {}) =>
+    request(`/teams/agents/${enc(uid)}/sponsor`, { method: 'PUT', body: JSON.stringify({ sponsor_uid: sponsorUid, reason, ...(dropTools ? { drop_tools: true } : {}) }) }),
   rulebook: (scope, id, role) => request(`${base(scope, id)}/rulebooks/${enc(role)}`),
   saveRulebook: (scope, id, role, rules) => request(`${base(scope, id)}/rulebooks/${enc(role)}`, { method: 'PUT', body: JSON.stringify({ rules }) }),
   runQuote: (uid, { module, option } = {}) => {

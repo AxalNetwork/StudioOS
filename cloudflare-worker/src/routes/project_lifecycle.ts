@@ -1,3 +1,4 @@
+import { heldLicences } from '../services/accountLicences';
 /**
  * D1137 (#3017, part 3 of #2422) — a venture's company and its owner: the
  * "assignment UI" `services/tenancyScope.ts` waits for. Mounted at
@@ -138,7 +139,7 @@ r.post('/:id/transfer', async (c) => {
       WHERE pm.project_id = ? AND pm.user_id = ? AND pm.status = 'accepted'`,
   ).bind(g.project.id, targetId).first<{ role: string; account_role: string; founder_id: number | null; is_active: number }>();
   if (!seat || seat.role !== 'cofounder') return c.json({ detail: 'The owner seat goes to a co-founder of this venture', code: 'not_cofounder' }, 404);
-  if (seat.account_role !== 'founder' || seat.founder_id == null || !Number(seat.is_active)) {
+  if (!(await heldLicences(c.env.DB, { id: targetId, role: seat.account_role })).includes('founder') || seat.founder_id == null || !Number(seat.is_active)) {
     return c.json({ detail: 'That co-founder has no founder account to own the venture', code: 'no_founder_account' }, 409);
   }
   if (Number(seat.founder_id) === Number(g.project.founder_id)) return c.json({ detail: 'That person already owns the venture', code: 'unchanged' }, 409);

@@ -1,8 +1,8 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
-import { RailFrame, WorkerRail } from '../../ui';
+import { RailFrame } from '../../ui';
 import { isSuperAdminUser } from '../../lib/shellRole';
-import { COMING_SOON_LINE, learningComingSoon } from './learningAccess';
+import { learningComingSoon } from './learningAccess';
 import { ComingSoonCard, LearningHeader } from './LearningStates';
 import LearningHome from './LearningHome';
 import { CoursePage, ItemPage, LessonPage, MePage } from './LearningWired';
@@ -118,46 +118,6 @@ export function adminLinks(user, activeRole, gated) {
   ];
 }
 
-/**
- * The rail beside the coming-soon card, with a literal accent per tier:
- * violet for learners, steel for an admin, oxblood for HQ. An admin browsing
- * as a held profile ("View as") can stand on an admin route and see the card.
- */
-function SubPageRail({ tier }) {
-  const unavailable = [['Courses, videos, webinars and more', COMING_SOON_LINE]];
-  if (tier === 'super') {
-    return (
-      <WorkerRail
-        workspace="Learning studio"
-        role="super_admin"
-        stance="Authoring view"
-        note="Eadwyn reads back what this page has loaded. It does not publish, assign, enrol or edit anything: every write here is the Super Admin’s own."
-        unavailable={unavailable}
-      />
-    );
-  }
-  if (tier === 'admin') {
-    return (
-      <WorkerRail
-        workspace="Learning programs"
-        role="admin"
-        stance="Read-only program view"
-        note="Eadwyn reads back what this page has loaded. A program view writes nothing: content and enrolment are managed at HQ."
-        unavailable={unavailable}
-      />
-    );
-  }
-  return (
-    <WorkerRail
-      workspace="Learning"
-      role="founder"
-      stance="Read-only learning view"
-      note="Eadwyn reads back what this page has loaded, on a click. It does not mark progress, register you, submit an answer or sit an exam."
-      unavailable={unavailable}
-    />
-  );
-}
-
 /** Any Learning route but the home: its wired view, or, for a profile the gate holds, the coming-soon card in place. */
 export function LearningSubPage({ view, gated }) {
   const params = useParams();
@@ -166,7 +126,7 @@ export function LearningSubPage({ view, gated }) {
   if (!config || !Wired) return null;
   if (!gated) return <Wired params={params} config={config} />;
   return (
-    <RailFrame rail={<SubPageRail tier={config.tier} />} data-testid={`learning-${view}`}>
+    <RailFrame data-testid={`learning-${view}`}>
       <div className="space-y-4">
         <LearningHeader title={config.title} sub={config.sub} back={config.back(params)} />
         <ComingSoonCard />

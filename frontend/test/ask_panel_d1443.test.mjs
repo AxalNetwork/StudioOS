@@ -184,7 +184,7 @@ test('the seam: D1442 turned the quote and the waiting count on; nothing is off,
 
   // PageAsk draws the count it read, and the panel prices once typing pauses.
   const button = codeOnly(read('frontend/src/ui/AskButton.jsx'));
-  assert.match(button, /askPanelAdapter\.waiting\(ask\.page\)\.then\(\(w\) => \{ if \(live\) setWaiting\(w\.available \? w\.data\?\.count \?\? null : null\); \}\)/);
+  assert.match(button, /askPanelAdapter\.waiting\(pageKey\)\.then\(\(w\) => \{ if \(live\) setWaiting\(w\.available \? w\.data\?\.count \?\? null : null\); \}\)/);
   assert.match(button, /<AskButtonView onClick=\{\(\) => openAskPanel\(label\)\} expanded=\{ask\.open\} waiting=\{waiting\}/);
   const panel = codeOnly(read('frontend/src/ui/AskPanel.jsx'));
   assert.match(panel, /setTimeout\(\(\) => \{\s*askPanelAdapter\.quote\(convUid, text, page\)/);
@@ -240,7 +240,7 @@ test('Ask buttons: PageAsk draws only where a rail serves the viewer; Team and R
   // D1443 part 5 (#3992): through HeaderAsk, the page's one header Ask, which is PageAsk.
   assert.match(codeOnly(read('frontend/src/pages/team/AskButton.jsx')), /return <HeaderAsk label=\{label\} \/>;/);
   assert.match(codeOnly(read('frontend/src/pages/cycles/RaiseOverviewLead.jsx')), /<HeaderAsk label="Raise · Overview" testId="raise-ask" \/>/);
-  assert.match(codeOnly(read('frontend/src/ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} \/>;/);
+  assert.match(codeOnly(read('frontend/src/ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} page=\{page\} state=\{state\} disabled=\{disabled\} sub=\{sub\} title=\{title\} ariaLabel=\{ariaLabel\} \/>;/);
 });
 
 test('the canvases are in design/incoming with the one named edit, and the decisions name them', () => {

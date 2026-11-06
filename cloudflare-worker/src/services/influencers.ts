@@ -157,6 +157,58 @@ export function memberView(m: MemberRow) {
   };
 }
 
+export const MEMBER_FILTERS = ['active', 'paused', 'ended', 'all'] as const;
+
+/**
+ * D4298 (#4298, P9): HQ's Influencers table. Each membership with its person,
+ * its handle and both uids (`uid` is the membership's, which PATCH takes;
+ * `user_uid` is the account's, which the offers, analytics and tax-form routes
+ * take), all-time sign-ups through the influencer, and commission per currency
+ * for the Super Admin only (O-MONEY A): any other admin reads `hq_reads`.
+ * Visits, paid members and revenue are not stored per influencer yet, so they
+ * read `not_recorded`, as P6's analytics do. Never an email.
+ */
+export async function listInfluencers(env: Env, status: typeof MEMBER_FILTERS[number], money: boolean, limit: number) {
+  const rows = await env.DB.prepare(
+    `SELECT m.*, u.uid AS user_uid, COALESCE(u.display_name, u.name) AS person_name, u.role AS person_role,
+            (SELECT COUNT(*) FROM referrals r WHERE r.referrer_id = m.user_id) AS signups
+       FROM influencers m JOIN users u ON u.id = m.user_id
+      WHERE ?1 = 'all' OR m.status = ?1
+      ORDER BY CASE m.status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, m.admitted_at DESC, m.id DESC
+      LIMIT ?2`,
+  ).bind(status, limit).all<MemberRow & { user_uid: string; person_name: string | null; person_role: string | null; signups: number }>();
+  const list = rows.results || [];
+  const commission = new Map<number, Array<{ currency: string; earned_cents: number }>>();
+  if (money && list.length) {
+    const ids = JSON.stringify(list.map((m) => Number(m.user_id)));
+    const sums = await env.DB.prepare(
+      `SELECT user_id, COALESCE(currency, 'USD') AS currency, SUM(amount_cents - COALESCE(reversed_amount_cents, 0)) AS cents
+         FROM commissions WHERE user_id IN (SELECT value FROM json_each(?)) AND status <> 'reversed'
+        GROUP BY user_id, COALESCE(currency, 'USD') ORDER BY currency`,
+    ).bind(ids).all<{ user_id: number; currency: string; cents: number }>();
+    for (const r of sums.results || []) {
+      const k = Number(r.user_id);
+      commission.set(k, [...(commission.get(k) || []), { currency: r.currency, earned_cents: Number(r.cents) || 0 }]);
+    }
+  }
+  const counts = await env.DB.prepare(
+    `SELECT SUM(status = 'active') AS active, SUM(status = 'paused') AS paused, SUM(status = 'ended') AS ended FROM influencers`,
+  ).first<{ active: number | null; paused: number | null; ended: number | null }>();
+  return {
+    influencers: list.map((m) => ({
+      ...memberView(m),
+      user_uid: m.user_uid,
+      person: { name: m.person_name ?? null, role: m.person_role ?? null },
+      signups: Number(m.signups) || 0,
+      visits: { available: false, reason: 'not_recorded', source: 'handle_visits' },
+      paid_members: { available: false, reason: 'not_recorded', source: 'subscription_commissions' },
+      revenue: money ? { available: false, reason: 'not_recorded', source: 'subscription_commissions' } : { available: false, reason: 'hq_reads' },
+      commission: money ? { by_currency: commission.get(Number(m.user_id)) || [] } : { available: false, reason: 'hq_reads' },
+    })),
+    counts: { active: Number(counts?.active ?? 0), paused: Number(counts?.paused ?? 0), ended: Number(counts?.ended ?? 0) },
+  };
+}
+
 /** The date a declined member may apply again, or null when nothing holds them. */
 export function reapplyAfter(latest: { status: string; decided_at: string | null } | null, now: number): string | null {
   if (!latest || latest.status !== 'declined' || !latest.decided_at) return null;

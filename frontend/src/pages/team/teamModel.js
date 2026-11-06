@@ -47,6 +47,37 @@ export function tabFrom(search = '') {
   return TAB_KEYS.has(t) ? t : 'people';
 }
 
+/**
+ * #4363: who may open a scope's Team page, as `routes/team.jsx` guards it, so
+ * a Skills link is drawn only for someone whose click lands on the tab. The
+ * two company forms admit the five profiles of a company's settings; a
+ * standalone project's Team admits what `/projects/:id` admits (`labRoles`:
+ * the four, or anyone in the Spin-Out Lab), so an advisor or an Explorer
+ * outside the Lab is not shown it.
+ */
+const COMPANY_TEAM_ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor'];
+const PROJECT_TEAM_ROLES = ['admin', 'founder', 'partner', 'investor'];
+export function canOpenTeam(user, kind) {
+  const role = String(user?.role || '').toLowerCase();
+  if (kind === 'company' || kind === 'company_project') return COMPANY_TEAM_ROLES.includes(role);
+  if (kind === 'project') return PROJECT_TEAM_ROLES.includes(role) || Number(user?.spinout_lab_active) === 1;
+  return false;
+}
+
+/**
+ * #4363: the scope whose Skills tab an agent's profile links to. A company
+ * editor's list includes its projects' agents (`include=projects`), so a
+ * project's agent opens that project's Skills, under the page's company; any
+ * other agent opens the page's own scope.
+ */
+export function agentSkillsScope(pageScope, agent) {
+  if (!pageScope) return null;
+  if (pageScope.kind === 'company' && agent?.scope_kind === 'project' && agent.project?.id != null) {
+    return { kind: 'company_project', company: pageScope.company, project: { id: agent.project.id } };
+  }
+  return pageScope;
+}
+
 export const TITLE = 'Team';
 export const purposeLine = (name) => `The people and AI agents working on ${name}. Agents propose; people decide.`;
 export const AGENTS_FOOT = 'Agents propose; a named person accepts. Nothing is written without Accept.';
@@ -354,6 +385,9 @@ export function refusalWords(code, detail) {
     case 'invalid_role': return 'Choose one of the roles.';
     case 'removed': return 'This agent was removed.';
     case 'agent_cap_reached': return 'Reached its monthly cap';
+    case 'not_sponsor': return 'Only this agent’s sponsor can run it.';
+    case 'payload_required': return 'Edit the proposal before saving your version.';
+    case 'never_fill': return 'This proposal includes a value that always needs a person. Open it in its module.';
     case 'agent_paused': return 'This agent is paused.';
     case 'not_open': return `Already decided${detail ? ` by ${detail}` : ''}.`;
     case 'already_pending': return 'An invitation to that address is already waiting. Nothing was sent.';
@@ -389,6 +423,8 @@ export const RULEBOOK_SECTIONS = [
   ['may_do_automatically', 'May do automatically'], ['always_asks_human', 'Always asks a human'],
   ['escalates_when', 'Escalates when'], ['kpis', 'KPIs'], ['tone', 'Tone'],
 ];
+/** D4387: a sponsor change keeps its reason, at least this long (the Worker's `SPONSOR_REASON_MIN`). */
+export const SPONSOR_REASON_MIN = 10;
 export const WHO_PAYS = 'Agents run as their sponsor and are paid from the sponsor’s AI tokens, capped per agent.';
 export const HOLD_LINE = (amount) => `Holds up to ${amount} · you pay what it uses`;
 
@@ -424,6 +460,7 @@ export function budgetLine(usedMicro, capMicro, tail = ' this month') {
 
 /** This month's spend: "$3.84 of $25 cap", or "Not recorded" when the read did not answer. Never "$0". */
 export function spendLine(a) {
+  if (a?.source === 'mcp_client') return 'Runs on your own assistant';
   const s = a?.month_spend;
   const cap = money(a?.monthly_cap_microusd, { whole: true });
   if (!s || !s.available || s.value_microusd == null) return null;
@@ -446,7 +483,9 @@ export function ago(iso, now = new Date()) {
 const EVENTS = {
   added: () => 'Added',
   paused: () => 'Paused',
-  resumed: () => 'Resumed',
+  // D4387: the sweep resumes a cap pause at the month's start; a new sponsor resumes a `sponsor_left` pause.
+  resumed: (d) => (d?.reason === 'cap_reset' ? 'Resumed at the start of the month'
+    : d?.reason === 'sponsor_changed' ? 'Resumed with its new sponsor' : 'Resumed'),
   removed: (d) => (Number(d?.proposals_withdrawn) > 0 ? `Removed; ${countWord(Number(d.proposals_withdrawn), 'open proposal')} withdrawn` : 'Removed'),
   cap_changed: (d) => {
     const from = money(d?.from_microusd, { whole: true });
@@ -456,6 +495,10 @@ const EVENTS = {
   rulebook_changed: (d) => (Number.isFinite(Number(d?.version)) && d?.version != null ? `Rule book saved as v${d.version}` : 'Rule book saved'),
   run: () => 'Ran',
   refused: () => 'A run was refused',
+  sponsor_changed: (d) => {
+    const to = String(d?.to?.name || '').trim();
+    return to ? `Sponsor changed to ${to}` : 'Sponsor changed';
+  },
 };
 /**
  * One profile event (#3840's `{ kind, actor: { uid, name } | null, at, detail }`)
@@ -472,25 +515,34 @@ export function eventWords(e) {
 
 // D4117 (#4117): an agent is its persona (Vesta, Orrin, …); the Worker sends no job title.
 /** D4119: the line under an agent's name: its persona's tagline, or null. */
-export const agentLine = (a) => String(a?.persona?.tagline || '').trim() || null;
+export const agentLine = (a) => a?.source === 'mcp_client' ? 'Connected app' : String(a?.persona?.tagline || '').trim() || null;
 export const agentName = (a) => String(a?.persona?.name || '').trim() || [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || 'Unnamed agent';
+
+/** The Worker's daily run limit (`agents/runtime.ts` DAILY_LIMIT). */
+export const DAILY_RUNS = 20;
 
 const PAUSE = {
   manual: (a) => ({ reason: a?.paused_by?.name ? `Paused by ${a.paused_by.name}` : 'Paused by a person', fix: 'Resume' }),
+  // D4387: `resumes_at` is the Worker's (the day its sweep resumes the agent); the page never works it out.
   cap: (a) => {
     const on = day(a?.resumes_at, { year: false });
-    return { reason: `Reached its monthly cap${on ? `. Resumes ${on}.` : ''}`, fix: 'Raise the cap' };
+    return { reason: `Reached its monthly cap${on ? `. Resumes ${on}.` : ''}`, fix: 'Raise the cap', action: 'cap' };
   },
-  sponsor_left: () => ({ reason: 'Its sponsor no longer manages this company', fix: 'Choose a new sponsor' }),
+  // D1531 (#3742 E8, TM19d/TM19e): the pause reasons TM9b lacked, in the canvas's words; `hint` is the line under it.
+  // D4387: `action: 'sponsor'` opens the sponsor sheet from "Choose a new sponsor".
+  sponsor_left: () => ({ reason: 'Paused because the person who added it can no longer manage this team.', fix: 'Choose a new sponsor', action: 'sponsor' }),
   tool_disconnected: (a) => {
     const server = a?.paused_server?.name || a?.paused_tool?.server_name || a?.paused_tool?.name || null;
     return { reason: server ? `A connected tool was disconnected: ${server} is disconnected` : 'A connected tool was disconnected', fix: 'Reconnect' };
   },
-  ai_paused: () => ({ reason: 'Eadwyn is paused for this account', fix: null }),
+  ai_paused: () => ({ reason: 'Paused because AI is paused for its sponsor.', hint: 'Resume is off until AI is on for the sponsor again.', fix: null }),
+  spend_limit: () => ({ reason: 'Paused because its sponsor reached their AI spend limit.', hint: 'Resumes when the sponsor’s limit resets or is raised.', fix: 'Resume' }),
+  daily_limit: () => ({ reason: `Paused because it ran ${DAILY_RUNS} times today.`, hint: 'It can run again after midnight UTC. There is no automatic resume.', fix: 'Resume' }),
+  scope_archived: () => ({ reason: 'Paused because its team was archived.', hint: 'Restore the team to resume its agents.', fix: null }),
   // D4158 (#4158): HQ retired the persona. Nothing on the team resumes it; its open proposals stay decidable.
-  persona_retired: () => ({ reason: 'Axal VC HQ retired this agent. Its open proposals can still be decided.', fix: null }),
+  persona_retired: () => ({ reason: 'Axal VC HQ retired this agent. It cannot be resumed.', hint: 'No Resume. Add another agent in its place.', fix: null }),
 };
-/** Why an agent is paused, and the one link that fixes it (TM9b). */
+/** Why an agent is paused, and the one link that fixes it (TM9b); `action` names the dialog the link opens (D4387). */
 export function pauseWords(a) {
   if (a?.status !== 'paused') return null;
   return (PAUSE[a.paused_reason] || (() => ({ reason: 'Paused', fix: null })))(a);
@@ -504,6 +556,7 @@ export function agentRow(a, now = new Date()) {
     key: a.uid,
     uid: a.uid,
     name: agentName(a),
+    outside: a.source === 'mcp_client',
     // D4119: an agent's line is its persona's tagline, never a job title (D4117 §6).
     role: agentLine(a),
     roleOrUnrecorded: agentLine(a) || NOT_RECORDED,
@@ -590,5 +643,29 @@ export function moveOutCopy(project, company, live = COMPANY_AUTHORITY_LIVE) {
       ? ['It becomes a standalone project managed by its Owner.', `${company}'s editors lose access now.`, 'Agents added by the company stop; their open proposals stay decidable.', 'Project agents keep working.']
       : ['It becomes a standalone project managed by its Owner.', `It no longer shows under ${company}.`],
     button: 'Move out', cancel: 'Cancel', danger: true,
+  };
+}
+
+
+// #3727 integration: TM7 reads the actual queue DTO, without inventing a
+// title, source, model or spend. Approval still happens only in the Worker.
+const proposalValue = (value) => {
+  if (value == null) return NOT_RECORDED;
+  if (Array.isArray(value)) return value.map(proposalValue).join('; ');
+  if (typeof value === 'object') return Object.entries(value).map(([key, v]) => `${key.replace(/[_-]/g, ' ')}: ${proposalValue(v)}`).join('\n');
+  return String(value);
+};
+export const QUEUE_HISTORY_STATUSES = ['accepted', 'edited', 'discarded', 'withdrawn'];
+export function queueProposal(item, { roles = [] } = {}) {
+  const modules = (Array.isArray(roles) ? roles : []).flatMap((r) => Array.isArray(r.works_in) ? r.works_in : []);
+  const label = modules.find((m) => m.key === item.module)?.label;
+  const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
+  const textKey = typeof payload.text === 'string' ? 'text' : typeof payload.value === 'string' ? 'value' : null;
+  return {
+    ...item, title: item.headline || null, proposed_at: item.created_at,
+    module_label: label || (item.module ? String(item.module).replace(/-/g, ' ') : null),
+    draft: textKey ? payload[textKey] : proposalValue(payload) || null, edit_key: textKey,
+    decision: item.status === 'proposed' ? null : item.status, by: item.decided_by,
+    can_decide: item.status === 'proposed' && item.can_decide === true,
   };
 }

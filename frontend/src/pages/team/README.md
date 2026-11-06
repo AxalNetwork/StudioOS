@@ -23,6 +23,7 @@ board → file map and what waits for which issue are in
   for a route that does not exist.
 - **An agent is its persona (D4117, D4119).** Draw an agent with `AgentCard.jsx` (full, compact or chip) or `AgentIdentity`, and its line with the persona's tagline (`teamModel.agentLine`); never a job title. Where a role key must be shown, it is the area of work (`personaModel.workLabel`). An agent's values go through `../../components/profile/AxalValuesBars.jsx`, the same block a person's use.
 - **Skills (D1612) are behind the same seam.** A1's two reads (`skillLibrary`, `skill`, wired by #4224) and A2's agent methods call `throughSkill(() => teamAgentsApi.<method>(…))`; A1's writes (`createSkill`, `updateSkill`, `publishSkill`, `importSkill`) still answer unavailable, and the builder who wires one replaces only its one-line body. `skillsModel.js`'s `fromWorker…` functions turn A1's answers into the shapes the screens draw. A pasted SKILL.md is untrusted text: draw it as text, never as HTML, and let the Worker's import be the parse that saves.
+- **The agent engine's screens (D1531, #3742 E8) read `agentEngineApi` directly** (`../../lib/api/agentEngine.js`), through `useEngineRead` in `EngineParts.jsx`: every engine route is mounted, and an engine that is off answers `agent_engine_off`, which the screens draw as "AI agents are not switched on for this team." Their words are in `engineModel.js`; a refusal is the Worker's own sentence first. Adding an agent from a suggestion (TM15) still goes through `agentsAdapter.addAgent`.
 - **An agent is never drawn as a person.** People are circles
   (`PersonAvatar`); agents are rounded squares with the spark (`AgentTile`)
   and, wherever an agent is named, the "AI agent" pill (`AgentIdentity`). All
@@ -63,10 +64,23 @@ board → file map and what waits for which issue are in
 | `SkillsTab.jsx` | Skills (D1612, v2 by #4224): the 8 areas (SK0), an area's directory or All, with search and sort (SK1), the skill page with its SKILL.md drawn as text, Copy and Download (SK2), and the states (SK6). |
 | `SkillSheets.jsx` | Assign to agents (SK3, natural fit first, each agent's run-cost change as the Worker serves it (D4121), SK5's explainer), Add skills to this agent and the Add-an-agent Skills step (each with the per-run cost range, D4121), and New skill: Write, or Paste a SKILL.md with a preview (SK4). |
 | `AgentSkillsCard.jsx` | The agent profile's Skills and Values (SK4, SK9b): the radar computed by the Worker, pinned versions, Update to vN, Remove, and values "Set by [Company]". |
+| `SkillsLink.jsx` | The Skills link (#4363): one literal `to` per Team form, to that scope's `?tab=skills`, drawn on the agents card, an agent's Skills and values, and the Team entries of the company and project pages, only for a viewer the Team route admits (`canOpenTeam`). HQ draws none. |
 | `TeamCoverageCard.jsx` | Team coverage (SK8): people and agents on the 8 /studio axes; a category covered only by agents reads as a people gap. Not drawn while its read is off. |
 | `SkillParts.jsx` | The taxonomy and tool chips, the energy image, the card's run cost line and its explainer, D4121's per-run cost range (`RunCostLine`) and a skill row's tokens per run, the directory card, a skill row and the agent radar the skill screens share. |
 | `skillsModel.js` | The skill words and pure derivations: levels and the 8 areas, filter and sort, run cost, natural fit and the Assign order, the radar and coverage, assignment groups, refusals, A1's answers as the screens draw them, and the client-side SKILL.md preview. |
+| `engineModel.js` | D1531 (#3742 E8): the engine screens' words and pure derivations: goals, plans, handoffs, evaluation, moves, the engine's states and every pause reason, memory and duties. |
+| `EngineParts.jsx` | D1531: `useEngineRead` and the pieces the engine screens share (Reading…, could not be read, chips, sentences, progress). |
+| `GoalsView.jsx` | Goals (TM10a, TM10a2, TM10e) and one goal's plan with the planner (TM10b, TM10c, TM10d). Work's Goals view and the company Team page's Goals section. |
+| `SuggestAgentsSheet.jsx` | An agent for this goal (TM15), and TM18c's Suggest a company team: one `addAgent` per ticked row, each result in words. |
+| `HandoffTrail.jsx` | The handoff trail (TM13): chains, depth, "task created", refused loops. |
+| `AgentEvaluation.jsx` | How agents are doing (TM14), 30 or 90 days, and the skills' golden cases (TM14b). |
+| `MoveNotices.jsx` | A project's move as each side sees it (TM18a–TM18c); Dismiss is kept in this browser. |
+| `EngineControl.jsx` | The team's engine control (TM19a), the engine banner (TM19b) and Start this task with its quote (TM19f). |
+| `AgentMemory.jsx` | The agent profile's Memory and Scheduled duties (TM5m). |
 | `WorkingHere.jsx` | Working here (TM6c) and Assign this task to… (TM6b). Built, not mounted: module headers mount them with the Ask panel (#3706) and the task store (#3845). |
+| `SponsorSheet.jsx` | D4387 (#4387): Choose a new sponsor, from TM9b's fix or the profile's Change sponsor. The team's members with whether each may sponsor the agent and why not, in the Worker's words; a reason of at least 10 characters; tools dropped only once ticked. |
+| `AgentDisclaimer.jsx` | D4421 (#4421): the shared counsel notice and its rule-book wording-pending marker. |
+| `TeamAllowlists.jsx` | D4422 (#4422): the inherited model/tool lists in TM8a; independent plan defaults, checked saves and honest refusals through agentsAdapter. |
 
 ## Skills v2: areas, not roles (#4224, D4116)
 

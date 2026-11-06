@@ -21,6 +21,7 @@
  * are testing the SAME source bytes that ship to Cloudflare.
  */
 import test from 'node:test';
+import { holdsLicence, holdsOnlyLicence } from '../src/services/accountLicences.ts';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -345,7 +346,7 @@ async function loadSpinoutDeckHandler() {
     // See the note on the /:id harness above — keep this list in step with the
     // handler's call sites, or the test dies with a ReferenceError instead of
     // exercising the authorization it exists to guard.
-    const { requireAuth, getSQL, ensureMethodAllowed, PREMIUM_METHOD_IDS, assembleSpinoutDeckData, getProjectMembershipRole, loadSpinoutDeckOverrides, applySpinoutOverrides } = __deps;
+    const { requireAuth, getSQL, ensureMethodAllowed, PREMIUM_METHOD_IDS, assembleSpinoutDeckData, getProjectMembershipRole, loadSpinoutDeckOverrides, applySpinoutOverrides, holdsLicence, holdsOnlyLicence } = __deps;
     async function resolveSpinoutDeckAccess(c, projectId, user) {
       ${helperBody}
     }
@@ -372,6 +373,7 @@ const OWNER_RE = /SELECT id FROM users WHERE founder_id = \? ORDER BY id ASC LIM
 function runSpinoutDeck({ user, projectRows, ownerRows, methodThrows = false, query = {} }) {
   const calls = { assembleUserId: undefined, assembleProjectId: undefined };
   const deps = {
+    holdsLicence, holdsOnlyLicence,
     requireAuth: async () => user,
     ensureMethodAllowed: () => { if (methodThrows) { const e = new Error('PAYWALL'); throw e; } },
     PREMIUM_METHOD_IDS: ['axal_spinout_demoday'],

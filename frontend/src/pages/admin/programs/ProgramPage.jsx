@@ -20,7 +20,9 @@ import AdminBoardFrame from '../AdminBoardFrame';
 import ActivityTab from './ActivityTab';
 import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
 import ProgramFrame from './ProgramFrame';
-import { LearningTabs, PartnersTabs, PerksTabs } from './ProgramTabs';
+import { InfluencerTabs, LearningTabs, PartnersTabs, PerksTabs } from './ProgramTabs';
+import { ApplicationsTab, InfluencersTab, OffersTab, PayoutsTab, SettingsTab } from './InfluencerPages';
+import { KEY as INFLUENCER_KEY, LANDING as INFLUENCER_LANDING } from './influencersModel';
 import { LearningOverview, LearningPeople } from './LearningPages';
 import { PerksOverview, PerksQueue } from './PerksPages';
 import { InvitePartner, PartnersOverview, PartnersQueue, useQueueCount } from './ReferralPartners';
@@ -120,6 +122,29 @@ function InvestorCohorts({ tab, superAdmin }) {
   );
 }
 
+/**
+ * D4298 (#4298, IN11): Influencers. Its own address opens Applications, where
+ * the work waits; the tab strip carries the count waiting on HQ.
+ */
+function Influencers({ tab, superAdmin }) {
+  const detail = useProgramDetail(INFLUENCER_KEY, tab === 'how');
+  const [counts, setCounts] = useState(null);
+  const t = tab === 'overview' ? INFLUENCER_LANDING : tab;
+  const waiting = counts ? Number(counts.applied || 0) : null;
+  const queue = waiting !== null ? { text: waiting.toLocaleString('en-US'), amber: waiting > 0, title: 'Applications waiting on HQ' } : null;
+  return (
+    <ProgramFrame program={INFLUENCER_KEY} superAdmin={superAdmin} status={registryStatus(detail)} tabs={<InfluencerTabs queue={queue} />}>
+      {t === 'how' ? <PlaybookEditor program={INFLUENCER_KEY} superAdmin={superAdmin} detail={detail} testId="programs-influencer-how" /> : null}
+      {t === 'applications' ? <ApplicationsTab onCount={setCounts} /> : null}
+      {t === 'influencers' ? <InfluencersTab /> : null}
+      {t === 'offers' ? <OffersTab superAdmin={superAdmin} /> : null}
+      {t === 'payouts' ? <PayoutsTab /> : null}
+      {t === 'activity' ? <ActivityTab program={INFLUENCER_KEY} testId="programs-influencer-activity" /> : null}
+      {t === 'settings' ? <SettingsTab superAdmin={superAdmin} /> : null}
+    </ProgramFrame>
+  );
+}
+
 /** PG13's four tiles: the program has not run, so each reads "Not running yet", never 0. */
 const AI_TILES = ['Founders', 'Cohorts', 'Applications', 'Studios offered'].map((label) => ({
   key: label.toLowerCase().replace(/ /g, '-'), label, state: 'placeholder', word: NOT_RUNNING_YET, reason: 'This program has not run.',
@@ -154,6 +179,7 @@ function ProgramBody() {
   if (program === 'referral-partners') return <ReferralPartners tab={tab} superAdmin={superAdmin} />;
   if (program === 'investor-cohorts') return <InvestorCohorts tab={tab} superAdmin={superAdmin} />;
   if (program === 'ai-native-venture') return <AiNativeVenture superAdmin={superAdmin} />;
+  if (program === INFLUENCER_KEY) return <Influencers tab={tab} superAdmin={superAdmin} />;
   return null;
 }
 

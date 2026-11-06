@@ -404,3 +404,100 @@ test('templates: one per role, each duty an option its role may propose and runs
     for (const p of ['/templates', '/capabilities', `/goals/${'a'.repeat(32)}/plan/quote`]) assert.equal((await call(w, MEMBER, 'GET', p)).status, 404, p);
   } finally { w.db.close(); }
 });
+
+// ── #4394 (TM10c, TM10d): the planner's agent, its cost, and Discard ─────────
+
+const RESERVATIONS = 'CREATE TABLE IF NOT EXISTS ai_budget_reservations (uid TEXT PRIMARY KEY, execution_id TEXT, included_microusd INTEGER NOT NULL, topup_microusd INTEGER NOT NULL)';
+
+test('#4394: the quote and the draft name the planning agent by its persona (never a job title), and null when Eadwyn plans', async () => {
+  // Mutation checked: plannerRef returning the role → the persona assertions and the no-title check.
+  const w = world();
+  try {
+    const g = await goal(w);
+    const eadwyn = await call(w, EDITOR, 'GET', `/goals/${g}/plan/quote`);
+    assert.equal(eadwyn.status, 200, eadwyn.text);
+    assert.deepEqual([eadwyn.body.by, eadwyn.body.agent], ['eadwyn', null]);
+    const drafted = await plan(w, g, PLAN);
+    assert.ok(drafted.ok);
+    assert.equal(drafted.proposal.agent, null, 'Eadwyn plans: no agent');
+
+    const made = await call(w, EDITOR, 'POST', `${CO}/agents`, { role_key: 'ceo', first_name: 'Cleo', last_name: 'Chief', model_id: MODEL, monthly_cap_microusd: 5_000_000 });
+    assert.equal(made.status, 201, made.text);
+    const row = w.db.prepare('SELECT uid, persona_key FROM team_agents WHERE uid = ?').get(made.body.agent.uid) as any;
+    assert.ok(row.persona_key, 'the CEO wears a persona (D4117)');
+    const goalRow = (await goalByUid(w.env, g))!;
+    const s = (await loadScope(w.env, 'company', 'co-uid-1'))!;
+    const user = w.db.prepare('SELECT * FROM users WHERE id = ?').get(EDITOR) as any;
+    const r = await draftPlan(w.env, s, goalRow, user, {
+      agentRun: (async (_env: any, input: any) => {
+        const p = await proposeRail(w.env, { userId: EDITOR, page: 'Founder · Studio', option: PLAN_OPTION, record: input.record, kind: 'draft', payload: { text: PLAN } });
+        return { ok: true, proposal: p, charged: { available: false }, usageLogId: null };
+      }) as any,
+    });
+    assert.ok(r.ok);
+    assert.equal(r.proposal.agent!.uid, row.uid);
+    assert.equal(r.proposal.agent!.persona!.key, row.persona_key);
+    assert.ok(r.proposal.agent!.persona!.name && !/Chief|CEO/.test(r.proposal.agent!.persona!.name), 'the persona name, not the job title');
+    assert.deepEqual(Object.keys(r.proposal.agent!).sort(), ['persona', 'uid'], 'no role key, no title');
+    assert.deepEqual(Object.keys(r.proposal.agent!.persona!).sort(), ['key', 'name']);
+    const q = await call(w, EDITOR, 'GET', `/goals/${g}/plan/quote`);
+    assert.equal(q.status, 200, q.text);
+    assert.deepEqual([q.body.by, q.body.agent], ['agent', r.proposal.agent], 'the quote names the same agent');
+    assert.doesNotMatch(JSON.stringify(r.proposal.agent), /Chief of staff|"role_key"/);
+  } finally { w.db.close(); }
+});
+
+test('#4394: the draft carries its cost { held, charged }; an unread one is { available: false }, never 0', async () => {
+  // Mutation checked: the run's uid not passed as executionId → held reads { available: false }.
+  const w = world();
+  try {
+    w.db.exec(RESERVATIONS);
+    const g = await goal(w);
+    const goalRow = (await goalByUid(w.env, g))!;
+    const s = (await loadScope(w.env, 'company', 'co-uid-1'))!;
+    const user = w.db.prepare('SELECT * FROM users WHERE id = ?').get(EDITOR) as any;
+    const log = w.db.prepare("INSERT INTO ai_usage_logs (user_id, task, model, charged_microusd) VALUES (?, 'rail_write', 'stub', 1200)").run(EDITOR);
+    const r = await draftPlan(w.env, s, goalRow, user, {
+      run: (async (_env: any, opts: any) => {
+        w.db.prepare('INSERT INTO ai_budget_reservations (uid, execution_id, included_microusd, topup_microusd) VALUES (?, ?, 4000, 1000)').run('h-1', opts.executionId);
+        return { ok: true, output: PLAN, usage: { model: 'stub' }, usageLogId: Number(log.lastInsertRowid) };
+      }) as any,
+    });
+    assert.ok(r.ok, JSON.stringify(r));
+    assert.deepEqual(r.proposal.cost, { held: { available: true, value_microusd: 5000 }, charged: { available: true, value_microusd: 1200 } });
+    const unread = await plan(w, g, PLAN);
+    assert.ok(unread.ok);
+    assert.deepEqual(unread.proposal.cost, { held: { available: false }, charged: { available: false } }, 'nothing recorded is unknown, not 0');
+  } finally { w.db.close(); }
+});
+
+test('#4394: POST /plan/discard claims the proposal once: 200, then 409 plan_decided; an accepted plan cannot be discarded; the manage gate holds', async () => {
+  // Mutation checked: the claim's `AND status = 'proposed'` dropped → the second discard answers 200.
+  const w = world();
+  try {
+    const g = await goal(w);
+    const r = await plan(w, g, PLAN);
+    assert.ok(r.ok);
+    const member = await call(w, MEMBER, 'POST', `/goals/${g}/plan/discard`, { proposal: r.proposal.uid });
+    assert.equal(member.status, 403, 'a member who cannot manage');
+    const stranger = await call(w, STRANGER, 'POST', `/goals/${g}/plan/discard`, { proposal: r.proposal.uid });
+    assert.equal(stranger.status, 404, 'a stranger sees no goal');
+    assert.equal((await call(w, EDITOR, 'POST', `/goals/${g}/plan/discard`, {})).status, 400);
+    assert.equal((await call(w, EDITOR, 'POST', `/goals/${g}/plan/discard`, { proposal: 'no-such' })).status, 404);
+    const d = await call(w, EDITOR, 'POST', `/goals/${g}/plan/discard`, { proposal: r.proposal.uid });
+    assert.deepEqual([d.status, d.body], [200, { ok: true }]);
+    const row = w.db.prepare('SELECT status, decided_at FROM ai_rail_proposals WHERE uid = ?').get(r.proposal.uid) as any;
+    assert.equal(row.status, 'discarded');
+    assert.ok(row.decided_at);
+    const again = await call(w, EDITOR, 'POST', `/goals/${g}/plan/discard`, { proposal: r.proposal.uid });
+    assert.deepEqual([again.status, again.body.code ?? again.body.error], [409, 'plan_decided']);
+    const accept = await call(w, EDITOR, 'POST', `/goals/${g}/plan/accept`, { proposal: r.proposal.uid });
+    assert.deepEqual([accept.status, accept.body.code ?? accept.body.error], [409, 'plan_decided'], 'a discarded plan cannot be accepted');
+    const r2 = await plan(w, g, PLAN);
+    assert.ok(r2.ok);
+    assert.equal((await call(w, EDITOR, 'POST', `/goals/${g}/plan/accept`, { proposal: r2.proposal.uid })).status, 201);
+    const late = await call(w, EDITOR, 'POST', `/goals/${g}/plan/discard`, { proposal: r2.proposal.uid });
+    assert.deepEqual([late.status, late.body.code ?? late.body.error], [409, 'plan_decided'], 'an accepted plan stays accepted');
+    assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM scope_tasks').get() as any).n, 3);
+  } finally { w.db.close(); }
+});

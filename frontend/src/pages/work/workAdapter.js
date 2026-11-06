@@ -1,9 +1,10 @@
 /**
  * D1614 (#3968) — Work's and company compliance's one seam to the Worker.
  *
- * A method is OFF until its route is on `main`: it answers
- * `{ available: false, reason }` without a request, so a page draws the honest
- * "not switched on yet" block and never invents a board, a chart or a task.
+ * A method was OFF until its route was on `main`, answering
+ * `{ available: false, reason }` without a request, so a page drew the honest
+ * "not switched on yet" block and never invented a board, a chart or a task.
+ * Since #3972 every method is on.
  * `burnup` is on (#3970), and so are W1's board, item, move, assign and create
  * (#3969, wired by #3973): each goes through `workApi`, and an engine that is
  * off answers the same honest block. The compliance methods are on (#3976),
@@ -17,25 +18,28 @@
  *   burnup                             W2  #3970  the burn-up series
  *   run, retry, feed                   W3  #3971  run detail and the project activity feed
  *   workload, schedule                 W4  #3972  people's and agents' items on the Calendar, a time block
- *   agentSessions                      W4  #3972  agents' scheduled sessions as Workload rows; off until W4's Worker fills
- *                                                  `WORKLOAD_DEPS.agentSessions` (CAL10's run sheet needs no seam: #3974 opens
- *                                                  `RunSheet` from the session's `last_runs[].uid`)
- *   D1614 W6 (#3974) turned on run, retry, feed, workload and schedule.
+ *   agentSessions                      W4  #3972  agents' scheduled sessions as Workload rows, from the workload read now that
+ *                                                  W4's Worker fills `WORKLOAD_DEPS.agentSessions` (CAL10's run sheet needs no
+ *                                                  seam: #3974 opens `RunSheet` from the session's `last_runs[].uid`)
+ *   D1614 W6 (#3974) turned on run, retry, feed, workload and schedule; #3972 turned on agentSessions.
  *   complianceTasks, complianceTask,
  *   markDone, createWork               #3976 (S15)  the company compliance list
  *   complianceCreate, complianceUpdate,
  *   complianceAssignable, complianceAssign,
  *   complianceComment, complianceReady,
  *   complianceReopen                   #3976        its task sheet's other changes
+ *   timeline, comment, editComment, deleteComment, review, setLabels, setMilestone, drafts, acceptDraft, discardDraft,
+ *   labels, createLabel, updateLabel, deleteLabel, milestones, createMilestone, updateMilestone, deleteMilestone
+ *                                      W7  #3993  item timeline, reviews, labels, milestones and drafts (#4418)
+ *   assignable, myTasks                W8   #3994   the Team picker (this Team's people and agents) and My tasks
  */
 import { workApi } from '../../lib/api/work.js';
+import { workloadSessions } from './workModel.js';
 import { agentEngineApi } from '../../lib/api/agentEngine.js';
 import { companyComplianceApi as cc } from '../../lib/api/companyCompliance.js';
 
 export const WORK_OFF = 'Work is not switched on yet. Its board, backlog and burn-up arrive with the Worker part (#3969).';
 export const COMPLIANCE_OFF = 'Compliance tasks are not switched on yet. They arrive with the company compliance list (#3976).';
-
-const off = (reason) => async () => ({ available: false, reason });
 
 /** A live method: `{ available: true, data }`, or the off block when the engine is off. */
 export async function through(call, reason) {
@@ -50,6 +54,26 @@ export async function through(call, reason) {
 }
 
 export const workAdapter = {
+  summary: (projectId) => through(() => workApi.summary(projectId), WORK_OFF),
+  timeline: (projectId, number) => through(() => workApi.timeline(projectId, number), WORK_OFF),
+  comment: (projectId, number, body) => through(() => workApi.comment(projectId, number, body), WORK_OFF),
+  editComment: (projectId, uid, body) => through(() => workApi.editComment(projectId, uid, body), WORK_OFF),
+  deleteComment: (projectId, uid) => through(() => workApi.deleteComment(projectId, uid), WORK_OFF),
+  review: (projectId, number, body) => through(() => workApi.review(projectId, number, body), WORK_OFF),
+  setLabels: (projectId, number, body) => through(() => workApi.setLabels(projectId, number, body), WORK_OFF),
+  setMilestone: (projectId, number, body) => through(() => workApi.setMilestone(projectId, number, body), WORK_OFF),
+  drafts: (projectId) => through(() => workApi.drafts(projectId), WORK_OFF),
+  acceptDraft: (projectId, uid, edit) => through(() => workApi.acceptDraft(projectId, uid, edit), WORK_OFF),
+  discardDraft: (projectId, uid, body) => through(() => workApi.discardDraft(projectId, uid, body), WORK_OFF),
+  labels: (projectId) => through(() => workApi.labels(projectId), WORK_OFF),
+  createLabel: (projectId, body) => through(() => workApi.createLabel(projectId, body), WORK_OFF),
+  updateLabel: (projectId, uid, body) => through(() => workApi.updateLabel(projectId, uid, body), WORK_OFF),
+  deleteLabel: (projectId, uid) => through(() => workApi.deleteLabel(projectId, uid), WORK_OFF),
+  milestones: (projectId) => through(() => workApi.milestones(projectId), WORK_OFF),
+  createMilestone: (projectId, body) => through(() => workApi.createMilestone(projectId, body), WORK_OFF),
+  updateMilestone: (projectId, uid, body) => through(() => workApi.updateMilestone(projectId, uid, body), WORK_OFF),
+  deleteMilestone: (projectId, uid) => through(() => workApi.deleteMilestone(projectId, uid), WORK_OFF),
+
   board: (projectId, opts) => through(() => workApi.board(projectId, opts), WORK_OFF),
   item: (uid) => through(async () => (await workApi.item(uid))?.task ?? null, WORK_OFF),
   move: (uid, column, position) => through(async () => (await workApi.move(uid, { column, position }))?.task ?? null, WORK_OFF),
@@ -62,8 +86,8 @@ export const workAdapter = {
   feed: (projectId, opts) => through(() => agentEngineApi.projectActivity(projectId, opts), WORK_OFF),
   workload: (projectId, opts) => through(() => workApi.workload(projectId, opts), WORK_OFF),
   schedule: (uid, block) => through(async () => (await workApi.schedule(uid, block))?.task ?? null, WORK_OFF),
-  // #3957 merged; agents' sessions join Workload once W4's Worker fills `WORKLOAD_DEPS.agentSessions` (#3972).
-  agentSessions: off('Scheduled agent sessions join Workload once the workload read includes them.'),
+  // #3972: the workload read carries agents' scheduled sessions; this is each agent's session slots from it.
+  agentSessions: (projectId, opts) => through(async () => workloadSessions(await workApi.workload(projectId, opts)), WORK_OFF),
   complianceTasks: (uid, filter) => through(() => cc.list(uid, filter), COMPLIANCE_OFF),
   complianceTask: (uid, taskUid) => through(() => cc.task(uid, taskUid), COMPLIANCE_OFF),
   markDone: (uid, taskUid, note) => through(() => cc.markDone(uid, taskUid, note), COMPLIANCE_OFF),
@@ -75,13 +99,37 @@ export const workAdapter = {
   complianceComment: (uid, taskUid, body) => through(() => cc.comment(uid, taskUid, body), COMPLIANCE_OFF),
   complianceReady: (uid, taskUid) => through(() => cc.ready(uid, taskUid), COMPLIANCE_OFF),
   complianceReopen: (uid, taskUid) => through(() => cc.reopen(uid, taskUid), COMPLIANCE_OFF),
+  // D1614 W8 (#3994): the Team picker and My tasks (#4286).
+  assignable: (projectId) => through(() => workApi.assignable(projectId), WORK_OFF),
+  myTasks: (filter) => through(() => workApi.myTasks(filter), WORK_OFF),
 };
 
 /** Every method, with the issue that turns it on, for the decision file and its test. */
 export const WORK_SEAM = Object.freeze({
+  summary: '#4420',
+  timeline: '#3993',
+  comment: '#3993',
+  editComment: '#3993',
+  deleteComment: '#3993',
+  review: '#3993',
+  setLabels: '#3993',
+  setMilestone: '#3993',
+  drafts: '#3993',
+  acceptDraft: '#3993',
+  discardDraft: '#3993',
+  labels: '#3993',
+  createLabel: '#3993',
+  updateLabel: '#3993',
+  deleteLabel: '#3993',
+  milestones: '#3993',
+  createMilestone: '#3993',
+  updateMilestone: '#3993',
+  deleteMilestone: '#3993',
+
   board: '#3969', item: '#3969', move: '#3969', assign: '#3969', create: '#3969',
   burnup: '#3970', run: '#3971', retry: '#3971', feed: '#3971', workload: '#3972', schedule: '#3972', agentSessions: '#3972',
   complianceTasks: '#3976', complianceTask: '#3976', markDone: '#3976', createWork: '#3976',
   complianceCreate: '#3976', complianceUpdate: '#3976', complianceAssignable: '#3976', complianceAssign: '#3976',
   complianceComment: '#3976', complianceReady: '#3976', complianceReopen: '#3976',
+  assignable: '#3994', myTasks: '#3994',
 });

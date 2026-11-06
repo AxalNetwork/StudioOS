@@ -10,10 +10,11 @@ import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import AiModelsTab from './AiModelsTab';
+import DeckGridTab from './DeckGridTab';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, BUILD, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOTE_MAX, NOT_RECORDED, OUTCOMES, PROJECT_NORMS_NOTE, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
-  addArmed, betaChoices, cohortRow, defaultOnKeys, filterReports, flagLabel, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, templateChangeArmed, templateGrid, templatePreview, templateResetArmed, viewFor,
+  BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, BUILD, FLAG_CHANGE_LINE, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOTE_MAX, NOT_RECORDED, OUTCOMES, PROJECT_NORMS_NOTE, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
+  addArmed, betaChoices, cohortRow, defaultOnKeys, defaultRow, filterReports, flagChange, flagChangeArmed, flagChangeTitle, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, takedownArmed, TAKEDOWN_REASON_MAX, templateChangeArmed, templateGrid, templatePreview, templateResetArmed, viewFor,
 } from './hqDecksModel';
 
 /**
@@ -23,7 +24,9 @@ import {
  * THE LIVE READS AND WRITES, each on a mounted route:
  *   Reports            GET  /api/admin/deck-reports?status=   (requireHqAdmin, D1540)
  *                      POST /api/admin/deck-reports/:uid/resolve  { outcome, note }
+ *                      POST /api/admin/deck-images/:uid/takedown  { reason }  (#4375)
  *   Feature flags      GET  /api/admin/feature-flags          (requireAdmin, D1509)
+ *                      PUT  the same, { key, scope, scope_id, enabled, reason }  (K2 #4189)
  *   Beta cohort        GET/POST /api/admin/deck-beta, GET /people, DELETE /:uid (requireHqAdmin, K3 #4190)
  *   Default templates  GET  /api/decks/admin/recommend-overrides  (any admin, D905)
  *                      PUT / DELETE the same, { reason }        (Super Admin, K4 #4191)
@@ -118,6 +121,48 @@ function ResolveForm({ row, onDone }) {
   );
 }
 
+/** #4375: take down one image the report names, with a reason the founder reads. */
+function TakedownForm({ image, onDone }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(image.takenDown);
+  const armed = takedownArmed(reason);
+  const submit = async () => {
+    setBusy(true); setError('');
+    try {
+      await deckReportsApi.takedownImage(image.uid, reason.trim());
+      setDone(true);
+      onDone?.();
+    } catch (e) {
+      setError(e?.message || 'The image could not be taken down.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li className="flex flex-wrap items-start gap-3" data-testid={`deck-report-image-${image.uid}`}>
+      <img src={image.url} alt="" className="h-16 w-28 shrink-0 rounded border border-axal-hairline object-cover dark:border-gray-700" />
+      {done
+        ? <p className={MUTED} data-testid="deck-report-image-taken-down">Taken down. Every card that used it shows “Image removed by Axal HQ”.</p>
+        : (
+          <div className="min-w-[14rem] flex-1 space-y-2">
+            <label className="block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+              Why take it down · required
+              <textarea className={`${INPUT} mt-1`} rows={2} maxLength={TAKEDOWN_REASON_MAX} value={reason} onChange={(e) => setReason(e.target.value)}
+                placeholder="What is wrong with it: reported as unlawful, a person without consent…" data-testid="deck-report-takedown-reason" />
+            </label>
+            <p className={MUTED}>The file is deleted and the founder is told, with this reason. It cannot be undone.</p>
+            {error && <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p>}
+            <button type="button" className={PRIMARY} disabled={!armed || busy} onClick={submit} data-testid="deck-report-takedown-button">
+              {busy ? 'Taking down…' : 'Take down image'}
+            </button>
+          </div>
+        )}
+    </li>
+  );
+}
+
 function ReportSheet({ row, onResolved }) {
   return (
     <Card data-testid="deck-report-sheet">
@@ -133,6 +178,12 @@ function ReportSheet({ row, onResolved }) {
       </dl>
       {PROPOSAL_LINE[row.proposal] && <p className={`${MUTED} mt-2`}>{PROPOSAL_LINE[row.proposal]}</p>}
       {!BUILD.K1.live && (isNR(row.founder) || isNR(row.before)) && <p className={`${MUTED} mt-2`} data-testid="deck-report-k1">{notYet('K1')}</p>}
+      {row.images.length > 0 && (
+        <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="deck-report-images">
+          <p className="text-[12px] font-semibold text-axal-ink dark:text-gray-200">Images on this result</p>
+          <ul className="mt-2 space-y-3">{row.images.map((im) => <TakedownForm key={im.uid} image={im} />)}</ul>
+        </div>
+      )}
       <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800">
         {row.open
           ? <ResolveForm row={row} onDone={onResolved} />
@@ -207,39 +258,88 @@ function Reports() {
 
 // ── HD2 · Feature flags ─────────────────────────────────────────────────────
 
+/**
+ * HD2b: one toggle's reason step. Pressing On or Off opens this, in the page;
+ * nothing is written until Save, which sends the same row the other way with
+ * the reason (one admin audit row, K2 #4189).
+ */
+function FlagSheet({ row, onDone, onClose }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const armed = flagChangeArmed({ reason });
+  const save = async () => {
+    if (!armed) return;
+    setBusy(true); setFailed(false);
+    try { await adminFeatureFlagsApi.set(flagChange(row), reason.trim()); onDone(); }
+    catch (e) { setFailed(true); reportError('hq-decks:flag-set', e); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Lightbox label={flagChangeTitle(row)} title={flagChangeTitle(row)} width={520} onClose={() => !busy && onClose()} testId="deck-flag-sheet"
+      footer={(
+        <div className="flex justify-end gap-2">
+          <button type="button" className={BTN} onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className={PRIMARY} onClick={save} disabled={busy || !armed} data-testid="deck-flag-save">{busy ? 'Saving…' : failed ? 'Try again' : 'Save'}</button>
+        </div>
+      )}>
+      <div className="flex flex-col gap-3">
+        <p className="text-[13px] text-axal-ink dark:text-gray-100"><span className="font-semibold">{row.name}</span> · {row.scope} · {row.on ? 'On → Off' : 'Off → On'}</p>
+        <p className={MUTED}>{FLAG_CHANGE_LINE}</p>
+        <label className="flex flex-col gap-1 text-[13px]">
+          <span className="font-semibold">Reason <span className={MUTED}>(required, ten characters or more; kept in the admin audit)</span></span>
+          <textarea className={INPUT} rows={2} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="deck-flag-reason" />
+        </label>
+        {failed ? <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300" data-testid="deck-flag-failed"><strong>Could not be saved.</strong> Nothing was changed. Try again.</p> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+function FlagToggle({ row, onOpen }) {
+  return (
+    <button type="button" className={BTN} disabled={!BUILD.K2.live} title={BUILD.K2.live ? undefined : notYet('K2')} aria-pressed={row.on}
+      aria-label={flagChangeTitle(row)} onClick={() => onOpen(row)} data-testid={`deck-flag-toggle-${row.id}`}>
+      {row.on ? 'On' : 'Off'}
+    </button>
+  );
+}
+
 function Flags() {
   const [reply, retry] = useRead(() => adminFeatureFlagsApi.list(), []);
+  const [open, setOpen] = useState(null);
   if (reply === undefined) return <Card><Reading testId="deck-flags-reading" /></Card>;
   if (reply === null) return <Card><ReadFailed what="The feature flags" claim="That is not the same as every feature being off." onRetry={retry} testId="deck-flags-unreadable" /></Card>;
   const rows = flagRows(reply);
-  const defaults = defaultOnKeys(reply);
+  const defaults = defaultOnKeys(reply).map((k) => defaultRow(k, reply?.labels));
   return (
     <Card data-testid="hq-decks-flags">
-      <p className={`${MUTED} mb-3`} data-testid="deck-flags-not-yet">{notYet('K2')}</p>
+      {!BUILD.K2.live && <p className={`${MUTED} mb-3`} data-testid="deck-flags-not-yet">{notYet('K2')}</p>}
       <div className="max-h-[32rem] overflow-auto">
         <table className="w-full" data-testid="deck-flags-table">
           <thead><tr>{['Feature', 'Scope', 'Last changed', 'On'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-t border-axal-hairline dark:border-gray-800">
+              <tr key={r.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`deck-flag-row-${r.id}`}>
                 <td className={TD}><span className="font-semibold">{r.name}</span>{r.what && <><br /><span className={MUTED}>{r.what}</span></>}</td>
-                <td className={TD}>{r.scope}</td>
+                <td className={TD}>{r.scope}<br /><span className={MUTED}>Reaches <Cell v={r.reaches} /></span></td>
                 <td className={TD}><Cell v={r.by} /> · {r.at ? day(r.at) : <Cell v={NOT_RECORDED} />}</td>
-                <td className={TD}><button type="button" className={BTN} disabled title={notYet('K2')} aria-pressed={r.on}>{r.on ? 'On' : 'Off'}</button></td>
+                <td className={TD}><FlagToggle row={r} onOpen={setOpen} /></td>
               </tr>
             ))}
-            {defaults.map((k) => (
-              <tr key={k} className="border-t border-axal-hairline dark:border-gray-800" data-testid="deck-flag-default">
-                <td className={TD}><span className="font-semibold">{flagLabel(k).name}</span></td>
-                <td className={TD}>Everyone · the default</td>
+            {defaults.map((r) => (
+              <tr key={r.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid="deck-flag-default">
+                <td className={TD}><span className="font-semibold">{r.name}</span>{r.what && <><br /><span className={MUTED}>{r.what}</span></>}</td>
+                <td className={TD}>{r.scope}</td>
                 <td className={TD}><Cell v={NOT_RECORDED} /></td>
-                <td className={TD}><button type="button" className={BTN} disabled title={notYet('K2')} aria-pressed>On</button></td>
+                <td className={TD}><FlagToggle row={r} onOpen={setOpen} /></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className={`${MUTED} mt-3`}>Scope is Everyone, one role, or named people. With no row a feature is on for everyone. A change applies within a minute.</p>
+      {open ? <FlagSheet key={open.id} row={open} onClose={() => setOpen(null)} onDone={() => { setOpen(null); retry(); }} /> : null}
     </Card>
   );
 }
@@ -694,6 +794,8 @@ export default function HqDecksPage() {
       <HeaderTab to="/admin/platform/decks/templates" end data-testid="hq-decks-tab-templates">Default templates</HeaderTab>
       <HeaderTab to="/admin/platform/decks/norms" end data-testid="hq-decks-tab-norms">Stage norms</HeaderTab>
       <HeaderTab to="/admin/platform/decks/models" end data-testid="hq-decks-tab-ai-models">AI models</HeaderTab>
+      <HeaderTab to="/admin/platform/decks/grid" end data-testid="hq-decks-tab-grid">Grid health</HeaderTab>
+      <HeaderTab to="/admin/platform/decks/funnel" end data-testid="hq-decks-tab-funnel">Funnel</HeaderTab>
     </>
   );
   return (
@@ -705,6 +807,7 @@ export default function HqDecksPage() {
       {view === 'templates' ? <Templates superAdmin={superAdmin} /> : null}
       {view === 'norms' ? <Norms /> : null}
       {view === 'models' ? <AiModelsTab /> : null}
+      {view === 'grid' || view === 'funnel' ? <DeckGridTab view={view} /> : null}
       <p className={MUTED}>The deck model defaults and locks stay on <Link to={MODELS_LINK.to} className="font-semibold text-axal-violet-deep underline dark:text-violet-300">AI usage</Link>.</p>
     </div>
   );

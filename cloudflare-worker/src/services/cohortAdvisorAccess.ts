@@ -1,3 +1,4 @@
+import { heldLicences } from './accountLicences';
 /**
  * U6 — a cohort's founders are told when an advisor can read them, and can
  * hide themselves from one (D492, migration 367).
@@ -195,8 +196,8 @@ export async function founderAdvisorAccess(env: Env, founderUserId: number): Pro
     year: number | null; month: number | null; assigned_at: string; unassigned_at: string | null;
     is_active: number; hidden_at: string | null;
   }>();
-  return (res.results || []).map((r) => {
-    const live = Number(r.is_active) === 1 && r.advisor_role === 'advisor';
+  return Promise.all((res.results || []).map(async (r) => {
+    const live = Number(r.is_active) === 1 && (await heldLicences(env.DB, { id: r.advisor_user_id, role: r.advisor_role || '' })).includes('advisor');
     return {
       advisor_user_id: Number(r.advisor_user_id),
       advisor_name: r.advisor_name ?? null,
@@ -207,7 +208,7 @@ export async function founderAdvisorAccess(env: Env, founderUserId: number): Pro
       can_see: live && !r.hidden_at,
       hidden_at: r.hidden_at ?? null,
     };
-  });
+  }));
 }
 
 /**

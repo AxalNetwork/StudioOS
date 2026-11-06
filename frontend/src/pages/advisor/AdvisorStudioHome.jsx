@@ -176,7 +176,8 @@ export default function AdvisorStudioHome({
     }).sort((a, b) => new Date(slotView(a).startsAt) - new Date(slotView(b).startsAt));
   }, [slots]);
 
-  const studio = useStudioLayout({ profile: 'advisor', viewer: user, readOnly: previewing });
+  // D4362 (#4362): an admin previewing arranges their own Advisor Studio; its tiles stay withheld (`withheld`).
+  const studio = useStudioLayout({ profile: 'advisor', viewer: user });
   const withheld = { state: TILE.WITHHELD };
   const tiles = previewing ? Object.fromEntries(['today', 'storefront', 'engagements', 'consented_proof', 'earnings'].map((k) => [k, withheld])) : {
     today: calendar.state === 'loading' || bookings.state === 'loading' ? { state: TILE.LOADING }
@@ -199,11 +200,11 @@ export default function AdvisorStudioHome({
           : { state: TILE.READY, href: '/expertise/profile', openLabel: 'Open storefront', body: <div className="advisor-keyvalues">{storefrontRows.map(([label, value, tone]) => <div key={label}><span>{label}</span><Status tone={tone}>{value}</Status></div>)}<div><span>Visibility</span><b>{profile.status || 'Not recorded'}</b></div></div> },
     engagements: bookings.state === 'loading' ? { state: TILE.LOADING }
       : bookings.state === 'unavailable' ? { state: TILE.UNREADABLE, onRetry: load }
-        : !engagements.length ? { state: TILE.EMPTY, empty: 'Engagements appear once someone books a session with you.', href: '/advisor/advisory/engagements', openLabel: 'Open clients' }
+        : !engagements.length ? { state: TILE.EMPTY, empty: 'Engagements appear once someone books a session with you.', href: '/practice/engagements', openLabel: 'Open clients' }
           : {
             state: TILE.READY,
             note: `${engagements.filter((c) => c.upcoming).length} active`,
-            href: '/advisor/advisory/engagements',
+            href: '/practice/engagements',
             openLabel: 'Open clients',
             body: <div className="advisor-list">{engagements.slice(0, 3).map((client) => <div className="advisor-row" key={client.key}><div><strong>{client.name}</strong><span>{client.total} session{client.total === 1 ? '' : 's'} · {client.completed} held{client.upcoming ? ` · ${client.upcoming} upcoming` : ''}</span></div><Status tone={client.upcoming ? 'good' : 'neutral'}>{client.upcoming ? 'Active' : 'History'}</Status></div>)}</div>,
           },

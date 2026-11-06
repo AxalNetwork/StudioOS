@@ -41,8 +41,8 @@ r.get('/channels', async (c) => {
         `SELECT slug, label, audience, is_invite_only FROM telegram_channels WHERE enabled = 1 ORDER BY audience, slug`,
       ).all<any>()
     : await c.env.DB.prepare(
-        `SELECT slug, label, audience, is_invite_only FROM telegram_channels WHERE enabled = 1 AND (slug = ? OR audience = 'public') ORDER BY audience, slug`,
-      ).bind(defaultSlug).all<any>();
+        `SELECT slug, label, audience, is_invite_only FROM telegram_channels WHERE enabled = 1 AND (slug IN (SELECT value FROM json_each(?)) OR audience = 'public') ORDER BY audience, slug`,
+      ).bind(JSON.stringify([...new Set([defaultSlug, ...(user.licences || []).map(licence => ROLE_TO_CHANNEL_SLUG[licence]).filter(Boolean)])])).all<any>();
   return c.json({
     default_slug: defaultSlug,
     channels: (rows.results || []).map((row: any) => ({
@@ -71,9 +71,9 @@ r.post('/join-request', async (c) => {
   // the public channel. Prevents an investor from requesting the
   // founders channel etc.
   if (role !== 'admin') {
-    const expected = ROLE_TO_CHANNEL_SLUG[role];
-    if (channel.slug !== expected && channel.audience !== 'public') {
-      return c.json({ error: 'role_channel_mismatch', allowed: [expected, 'axalvc-public'] }, 403);
+    const expected = [...new Set([ROLE_TO_CHANNEL_SLUG[role], ...(user.licences || []).map(licence => ROLE_TO_CHANNEL_SLUG[licence])].filter(Boolean))];
+    if (!expected.includes(channel.slug) && channel.audience !== 'public') {
+      return c.json({ error: 'role_channel_mismatch', allowed: [...expected, 'axalvc-public'] }, 403);
     }
   }
 

@@ -12,7 +12,9 @@ import { OFF_KEEPS, TIME_PER_SLIDE } from './slideAnalyticsModel.js';
 import {
   DEFAULT_SHARE, EXPIRIES, INCLUDE_ROWS, NDA_SWITCH, NEVER_SHARED, NO_LIMIT, SHARE_CTA, SHARE_TITLE, SHOWN_ONCE, TYPED,
   frozenLine, shareBody, shareFailure, shareProblem, shareUrl, whatShareDoes,
+  THIS_VERSION, VARIANTS_UNREAD, WATERMARK_LINE, linkTargets, variantOf,
 } from './shareModel';
+import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks';
 
 /**
  * D902 (#2681) — the share dialog (PD18), from Share in the editor and from
@@ -38,6 +40,13 @@ import {
  * D1573 (#3820, pd35's row editor): the new link's "Time per slide" switch,
  * on by default; off sends `time_per_slide: false`, and the link then keeps
  * visit counts only ("Off keeps visit counts only").
+ *
+ * #4272 (ps7n): "Version or variant". The link shows this version, or one of
+ * its tailored variants (`GET /api/decks/:id/variants`). A variant's link is
+ * made by `POST /api/decks/:id/investor-links` with `variant_uid`, which calls
+ * the same one link writer and then sets the variant. The watermark row is
+ * drawn on and fixed: every link names its investor (D1565), so it is never a
+ * choice. A failed variants read still offers this version, and says so.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -66,6 +75,8 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
   const [copied, setCopied] = useState(false);
   // D1570: the pre-share confirm, while it is open; null when Share goes straight through.
   const [gate, setGate] = useState(null);
+  // #4272 (ps7n): this version's tailored variants, for "Version or variant".
+  const [variants, setVariants] = useState({ status: 'loading', rows: [] });
   const set = (patch) => setState((s) => ({ ...s, ...patch }));
 
   useEffect(() => {
@@ -85,6 +96,21 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
       });
     return () => { alive = false; };
   }, [projectId]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!deck?.id) return undefined;
+    deckInvestorLinksApi.deckVariants(deck.id)
+      .then((r) => { if (alive) setVariants({ status: 'ok', rows: Array.isArray(r?.variants) ? r.variants : [] }); })
+      .catch((e) => {
+        if (e?.status !== 404) reportError('ShareDialog:variants', e);
+        if (alive) setVariants({ status: 'error', rows: [] });
+      });
+    return () => { alive = false; };
+  }, [deck?.id]);
+  const targets = linkTargets(deck, variants.rows);
+  const variantUid = variantOf(state.target);
+  const variantName = variantUid ? variants.rows.find((v) => v.uid === variantUid)?.name ?? null : null;
 
   const problem = shareProblem(state, deck);
   const investorName = state.investor === TYPED ? String(state.label || '').trim() : prospects.rows.find((p) => String(p.value) === String(state.investor))?.label;
@@ -122,7 +148,15 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
     setGate(null);
     setBusy(true); setFailed(null);
     try {
-      const r = await cyclesWrite.raise.deckLink(projectId, shareBody(state, deck));
+      // A variant's link goes through the investor-links route, which runs the same writer and sets the variant.
+      const body = shareBody(state, deck);
+      let r;
+      if (variantUid) {
+        const { deck_id: _deck, ...rest } = body;
+        r = await deckInvestorLinksApi.createInvestorLink(deck.id, { ...rest, variant_uid: variantUid });
+      } else {
+        r = await cyclesWrite.raise.deckLink(projectId, body);
+      }
       setMade(r);
       onCreated?.(r);
     } catch (e) {
@@ -161,7 +195,7 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
       )}
     >
       {/* D1565 (#3812, pd35): this version's links, one row per investor, above the new one. */}
-      <div className="mb-3"><InvestorLinksTable deck={deck} refreshKey={made ? 1 : 0} /></div>
+      <div className="mb-3"><InvestorLinksTable deck={deck} projectId={projectId} refreshKey={made ? 1 : 0} /></div>
       {gate && !made ? (
         <div className="mb-3 flex flex-col gap-2" role="alertdialog" aria-label="Before you share" data-testid="pitch-share-gate">
           {gate.lines.map((l) => (
@@ -217,6 +251,14 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
             {investorName ? <span className={MUTED} data-testid="pitch-share-watermark">Watermark: Prepared for {investorName}</span> : null}
           </div>
           <div className="flex flex-col gap-1.5">
+            <span className={EYE}>Version or variant</span>
+            <select className={FIELD} value={targets.some((t) => t.value === state.target) ? state.target : THIS_VERSION}
+              onChange={(e) => set({ target: e.target.value })} data-testid="pitch-share-target">
+              {targets.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+            {variants.status === 'error' ? <span className={MUTED} data-testid="pitch-share-variants-unread">{VARIANTS_UNREAD}</span> : null}
+          </div>
+          <div className="flex flex-col gap-1.5">
             <span className={EYE}>Expires</span>
             <div className="grid grid-cols-4 gap-1 rounded-[9px] bg-axal-ground p-1 dark:bg-gray-800" role="radiogroup" aria-label="Expires">
               {EXPIRIES.map((x) => {
@@ -239,6 +281,12 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
             <Toggle label="Forwarding" on={state.allowForwarding} onChange={(v) => set({ allowForwarding: v })} testId="pitch-share-forwarding" />
             <Toggle label={NDA_SWITCH} on={state.ndaRequired} onChange={(v) => set({ ndaRequired: v })} testId="pitch-share-nda" />
             <Toggle label={TIME_PER_SLIDE} on={state.timePerSlide !== false} onChange={(v) => set({ timePerSlide: v })} testId="pitch-share-time-per-slide" />
+            {/* #4272 (ps7n): the watermark row, on and fixed: every link names its investor (D1565). */}
+            <label className={`flex items-center justify-between gap-3 text-[12.5px] ${INK}`} title={WATERMARK_LINE}>
+              <span>Watermark</span>
+              <input type="checkbox" checked readOnly disabled aria-describedby="pitch-share-watermark-line" data-testid="pitch-share-watermark-toggle" />
+            </label>
+            <span id="pitch-share-watermark-line" className={MUTED}>{WATERMARK_LINE}</span>
             {state.timePerSlide === false ? <span className={MUTED} data-testid="pitch-share-time-off">{OFF_KEEPS}</span> : null}
           </div>
           <div className="flex flex-col gap-2">
@@ -253,7 +301,7 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
             </div>
             <span className={MUTED}>{NEVER_SHARED}</span>
           </div>
-          <p className={`m-0 ${MUTED}`} data-testid="pitch-share-what">{problem || whatShareDoes(state, deck, investorName)}</p>
+          <p className={`m-0 ${MUTED}`} data-testid="pitch-share-what">{problem || whatShareDoes(state, deck, investorName, variantName)}</p>
           {failed ? (
             <div role="alert" className="rounded-[10px] bg-red-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-destructive dark:bg-red-950/40 dark:text-red-300" data-testid="pitch-share-failed">{failed}</div>
           ) : null}

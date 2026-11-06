@@ -39,6 +39,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
+import { roleOf } from '../services/decks/ensembles';
 import { refuse } from '../util/refusal';
 import { D1GenRuntime, modelLabel, type BatchStatus, type StepRow } from '../services/decks/genRuntime';
 import { admitDeckRun, admitStatus, cancelInRoom, eventsFromRoom } from '../services/decks/genRooms';
@@ -59,11 +60,21 @@ const secondsOf = (s: StepRow): number | null => {
 };
 const parsed = (v: string | null): unknown => { if (!v) return null; try { return JSON.parse(v); } catch { return null; } };
 
+/** D4374 (#4374): a run's state in words. A run the stuck-run sweep closed reads "Stopped · timed out", never "Running". */
+export const STATE_LINES: Readonly<Record<string, string>> = Object.freeze({
+  queued: 'Waiting to start', running: 'Running', cancelling: 'Stopping', done: 'Done', cancelled: 'Stopped', failed: 'Failed',
+});
+export function stateLine(state: string, stopReason: string | null | undefined): string {
+  if (state === 'cancelled' && stopReason === 'timed_out') return 'Stopped · timed out';
+  return STATE_LINES[state] ?? state;
+}
+
 /** What pd2b and pd2c draw: the run, its running "charged so far of held", and one row per step. The step's request stays in D1. */
 export function runView(st: BatchStatus) {
   const charged = st.steps.reduce((n, s) => n + Number(s.charged_microusd || 0), 0);
   return {
     uid: st.uid, deck_id: Number(st.deck_id), class: st.class, state: st.state,
+    stop_reason: st.stop_reason ?? null, state_line: stateLine(st.state, st.stop_reason),
     quote_microusd: Number(st.quote_microusd), held_microusd: Number(st.quote_microusd), charged_microusd: charged,
     created_at: st.created_at, started_at: st.started_at, settled_at: st.settled_at,
     counts: {
@@ -75,6 +86,8 @@ export function runView(st: BatchStatus) {
     },
     steps: st.steps.map((s) => ({
       seq: Number(s.seq), card_uid: s.card_uid, area_id: s.area_id, element: s.element, kind: s.kind,
+      // D1551 (#3798): draft, refine, judge or a plain variant, so pd2b's row says which pass it is.
+      role: roleOf(s.kind, parsed(s.input) as Record<string, unknown> | null),
       model_label: modelLabel(s.model_used ?? s.model), state: s.state, seconds: secondsOf(s),
       cost_microusd: Number(s.charged_microusd || 0), fallback_used: !!Number(s.fallback_used), error_code: s.error_code,
       result: parsed(s.result),

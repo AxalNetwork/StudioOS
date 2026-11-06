@@ -9,6 +9,7 @@ used to be one file, `../ROUTE_MAP.md`; that file is now only a pointer here.
 | --- | --- |
 | `sections/` | The map's prose and tables, one file per section, read in file-name order. The first file (number 0000) is the top of the map. |
 | `canvases/` | One folder per canvas table: `part-1/`, `part-2/`, `part-3/`, `part-4/` and `part-5/`. Each holds one file per canvas, and each file is exactly one table row. |
+| `sections/0999-grow-campaign-store-d4447.md` | #4447 / #3722 Part A: Grow campaign store routes; no UI. |
 
 A section that holds a canvas table keeps the table's header and separator, then
 one marker line, `<!-- route-map rows: canvases/part-N -->`. The rows of that
@@ -35,3 +36,9 @@ folder are placed there, in file-name order.
 Code reads the map only through `scripts/lib/routeMap.mjs`. Its `readRouteMap()`
 returns the whole map as one text, exactly as the single file read before the
 split.
+
+D2319: an address followed by `(retired D2319)` is historical only. Any old
+forwarding or counted-redirect description for that marked address predates its
+retirement; it no longer mounts or forwards. The frontend guard scans every
+fragment for unmarked retired SPA addresses. Worker endpoint columns have their
+own `/api` mount and are checked separately from SPA navigation.

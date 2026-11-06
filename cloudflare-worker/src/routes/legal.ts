@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
@@ -79,7 +80,7 @@ const LEGAL_PAGE_DOCUMENTS: ReadonlyArray<{ key: string; layer: string }> = [
 // Task #30 — Jurisdiction wizard (worker parity).
 // Read-only catalogue endpoint. Doc generation + entity creation stays
 // on the FastAPI backend, which is the source of truth for both DBs.
-const JURISDICTIONS = [
+export const JURISDICTIONS = [
   { id: 'us_de_ccorp', label: 'Delaware C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'The default for VC-backed startups.', est_cost_usd: [500, 1500], time_to_form_days: [1, 7], fundraising_friendly: true, atlas_supported: true, pros: ['Stripe Atlas one-click', 'Universally accepted by US VCs'], cons: ['21% federal corporate tax', 'Annual filings + agent'], tax_summary: '21% federal corporate income tax. DE franchise tax $400–$1,750.', templates: ['certificate_of_incorporation_de', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
   // D586 (#1213, the owner's answer A) — Wyoming C-Corp. Priced only from the
   // catalog (a Stripe price tagged jurisdiction_id = us_wy_ccorp): there is no
@@ -202,7 +203,7 @@ legal.post('/incorporate/wizard', async (c) => {
   // Bypass `canAccessFounderResource` here — its phase 0.1 semantics still
   // treat investors as privileged for read-path back-compat, which would be a
   // cross-project IDOR on this write path. Require explicit founder ownership.
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     const ownsProject =
       project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) {
@@ -417,7 +418,7 @@ legal.post('/incorporate/checkout', async (c) => {
   const project = projRows[0] as any;
 
   // Ownership: admin/partner OR founder-owns-project. Investors blocked.
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
        // Company scoping. Only this branch narrows: admin and partner are
@@ -529,7 +530,7 @@ legal.post('/incorporate/checkout', async (c) => {
 //   workflow. Also returns an optional annual "Registered Agent" subscription
 //   offer the founder can opt into via the same embedded terminal.
 
-interface IncorporationPrice { amountCents: number; currency: string; priceId?: string }
+export interface IncorporationPrice { amountCents: number; currency: string; priceId?: string }
 
 /**
  * Resolve the incorporation SKU for a jurisdiction from the Stripe catalog (the
@@ -540,7 +541,7 @@ interface IncorporationPrice { amountCents: number; currency: string; priceId?: 
  * configured so callers fail closed (production) or simulate (keyless dev) —
  * never charging the hardcoded `JURISDICTION_COSTS` amount against real Stripe.
  */
-async function resolveIncorporationPrice(
+export async function resolveIncorporationPrice(
   env: Env,
   jurisdictionId: string,
 ): Promise<IncorporationPrice | null> {
@@ -565,7 +566,7 @@ async function resolveIncorporationPrice(
   return null;
 }
 
-interface RegisteredAgentOffer {
+export interface RegisteredAgentOffer {
   price_id: string;
   amount_cents: number | null;
   currency: string;
@@ -579,7 +580,7 @@ interface RegisteredAgentOffer {
  * (`metadata.category === 'registered_agent'` or `metadata.plan === 'registered_agent'`).
  * Returns `null` when not configured so the wizard simply omits the opt-in.
  */
-async function resolveRegisteredAgentOffer(env: Env): Promise<RegisteredAgentOffer | null> {
+export async function resolveRegisteredAgentOffer(env: Env): Promise<RegisteredAgentOffer | null> {
   try {
     const products = await getCatalog(env, 'subscription');
     const prod = products.find(
@@ -622,7 +623,7 @@ legal.post('/incorporation/order', async (c) => {
   if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = projRows[0] as any;
   // Ownership: admin/partner OR founder-owns-project. Investors blocked.
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
        // Company scoping. Only this branch narrows: admin and partner are
@@ -1058,7 +1059,7 @@ legal.post('/cofounder-agreement', async (c) => {
   // are NOT privileged on this write path — a co-founder agreement records who
   // owns the company, so writing one against a project you do not own is a
   // cross-project IDOR, not a read-path convenience.
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) {
       await sql.end();

@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /** D1147: a preview writes no reading or score; only Keep persists the reading. */
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
@@ -20,7 +21,7 @@ async function scope(c: any) {
   let user;
   try { user = await requireAuth(c); } catch { return c.json({ detail: 'Sign in to read this plan.' }, 401); }
   // This is a founder's own evidence, never an admin bypass or a support-session AI run.
-  if (user.role !== 'founder' || (await selectJwt(c))?.payload.impersonated_by) return c.json({ detail: 'This reading belongs to the venture founder.' }, 403);
+  if (!holdsLicence(user, 'founder') || (await selectJwt(c))?.payload.impersonated_by) return c.json({ detail: 'This reading belongs to the venture founder.' }, 403);
   const raw = c.req.query('project') ?? '';
   if (!/^[1-9][0-9]{0,9}$/.test(raw)) return c.json({ detail: 'Choose a venture first.' }, 400);
   const projectId = Number(raw);

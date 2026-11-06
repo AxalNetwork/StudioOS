@@ -331,37 +331,51 @@ function dumpOf(decks: Array<{ id: number; slides: unknown[] }>): string {
 }
 
 test('the dry run lists zero unexplained differences on the three sample ventures, keeps no copy, and names no word of a deck', async () => {
-  // Mutation checked: the conversion dropping a field (a paragraph left out of fieldBlocks) → words_lost on the legacy deck.
-  const { dryRun } = await import('../../scripts/deck-dry-run.mjs');
-  const ventures = { full: fullRecords(), sparse: sparseRecords(), conflicting: conflictingRecords() } as Record<string, any>;
-  const decks = Object.values(ventures).map((rec, i) => {
-    const rows = standardOutline('standard', 'seed_fund');
-    const { slides, problems } = buildCards(rows, rec.items, wordsFor(rows), 'Synthetic venture', new Set(), { series: rec.series, diagrams: rec.diagrams, rows: rec.rows });
-    assert.deepEqual(problems, []);
-    return { id: i + 1, slides };
-  });
-  // A legacy deck saved with fields, as the editor's first version stored them.
-  decks.push({ id: 9, slides: [{ title: 'Synthetic problem', fields: [{ kind: 'text', key: 'p', value: 'Synthetic founders lose weeks' }, { kind: 'bullets', key: 'b', value: ['One synthetic', 'Two synthetic'] }, { kind: 'text', key: 'm', label: 'Market', source: 'placeholder' }] }] });
-  const before = readdirSync(tmpdir()).length;
-  const report = await dryRun(dumpOf(decks));
-  assert.equal(report.decks, 4);
-  assert.ok(report.cards > 20, `${report.cards} cards`);
-  assert.deepEqual(report.unexplained, [], JSON.stringify(report.unexplained));
-  assert.ok(report.explained.converted >= 1 && report.explained.placeholder >= 1, JSON.stringify(report.explained));
-  assert.equal(readdirSync(tmpdir()).length, before, 'no file written');
-  assert.equal(/Synthetic|founders/.test(JSON.stringify(report)), false, 'the report holds ids, kinds and counts only');
-  // An unexplained one is listed by deck, card and kind: a block over another.
-  const bad = await dryRun(dumpOf([{ id: 5, slides: [{ title: 'x', blocks: [
-    { id: 'a', kind: 'text', style: 'paragraph', text: 'Synthetic', grid: { c1: 1, c2: 6, r1: 1, r2: 3 } },
-    { id: 'b', kind: 'text', style: 'paragraph', text: 'Synthetic', grid: { c1: 4, c2: 9, r1: 2, r2: 4 } },
-  ] }] }]));
-  assert.deepEqual(bad.unexplained.map((u: any) => [u.deck, u.card, u.kind]), [[5, 1, 'overlap'], [5, 1, 'overlap']]);
-  assert.ok(existsSync(new URL('../../scripts/deck-dry-run.mjs', import.meta.url)));
-  // A conversion that left words behind is listed, never passed as explained.
-  // Mutation checked: the words_lost line dropped from compareCard → this fails.
-  const { compareCard, loadModels } = await import('../../scripts/deck-dry-run.mjs');
-  const real = await loadModels();
-  const lossy = { ...real, editor: { ...real.editor, withFieldBlocks: (c: any) => ({ card: { ...c, blocks: [{ id: 'f1', kind: 'text', style: 'heading', text: c.title, grid: { c1: 1, c2: 12, r1: 1, r2: 1 } }] } }) } };
-  const legacy = decks.find((d) => d.id === 9)!.slides[0];
-  assert.deepEqual(compareCard(lossy, legacy, 0).unexplained.map((u: any) => u.kind), ['words_lost']);
+  // Each test file has its own process; isolate this read-only proof from
+  // temporary files created by other Worker test processes.
+  const isolatedTemp = mkdtempSync(join(tmpdir(), 'deck-dry-run-test-'));
+  const tempVariables = ['TMPDIR', 'TEMP', 'TMP'] as const;
+  const previousTemp = tempVariables.map((key) => [key, process.env[key]] as const);
+  for (const key of tempVariables) process.env[key] = isolatedTemp;
+  try {
+    // Mutation checked: the conversion dropping a field (a paragraph left out of fieldBlocks) → words_lost on the legacy deck.
+    const { dryRun } = await import('../../scripts/deck-dry-run.mjs');
+    const ventures = { full: fullRecords(), sparse: sparseRecords(), conflicting: conflictingRecords() } as Record<string, any>;
+    const decks = Object.values(ventures).map((rec, i) => {
+      const rows = standardOutline('standard', 'seed_fund');
+      const { slides, problems } = buildCards(rows, rec.items, wordsFor(rows), 'Synthetic venture', new Set(), { series: rec.series, diagrams: rec.diagrams, rows: rec.rows });
+      assert.deepEqual(problems, []);
+      return { id: i + 1, slides };
+    });
+    // A legacy deck saved with fields, as the editor's first version stored them.
+    decks.push({ id: 9, slides: [{ title: 'Synthetic problem', fields: [{ kind: 'text', key: 'p', value: 'Synthetic founders lose weeks' }, { kind: 'bullets', key: 'b', value: ['One synthetic', 'Two synthetic'] }, { kind: 'text', key: 'm', label: 'Market', source: 'placeholder' }] }] });
+    const before = readdirSync(tmpdir()).length;
+    const report = await dryRun(dumpOf(decks));
+    assert.equal(report.decks, 4);
+    assert.ok(report.cards > 20, `${report.cards} cards`);
+    assert.deepEqual(report.unexplained, [], JSON.stringify(report.unexplained));
+    assert.ok(report.explained.converted >= 1 && report.explained.placeholder >= 1, JSON.stringify(report.explained));
+    assert.equal(readdirSync(tmpdir()).length, before, 'no file written');
+    assert.equal(/Synthetic|founders/.test(JSON.stringify(report)), false, 'the report holds ids, kinds and counts only');
+    // An unexplained one is listed by deck, card and kind: a block over another.
+    const bad = await dryRun(dumpOf([{ id: 5, slides: [{ title: 'x', blocks: [
+      { id: 'a', kind: 'text', style: 'paragraph', text: 'Synthetic', grid: { c1: 1, c2: 6, r1: 1, r2: 3 } },
+      { id: 'b', kind: 'text', style: 'paragraph', text: 'Synthetic', grid: { c1: 4, c2: 9, r1: 2, r2: 4 } },
+    ] }] }]));
+    assert.deepEqual(bad.unexplained.map((u: any) => [u.deck, u.card, u.kind]), [[5, 1, 'overlap'], [5, 1, 'overlap']]);
+    assert.ok(existsSync(new URL('../../scripts/deck-dry-run.mjs', import.meta.url)));
+    // A conversion that left words behind is listed, never passed as explained.
+    // Mutation checked: the words_lost line dropped from compareCard → this fails.
+    const { compareCard, loadModels } = await import('../../scripts/deck-dry-run.mjs');
+    const real = await loadModels();
+    const lossy = { ...real, editor: { ...real.editor, withFieldBlocks: (c: any) => ({ card: { ...c, blocks: [{ id: 'f1', kind: 'text', style: 'heading', text: c.title, grid: { c1: 1, c2: 12, r1: 1, r2: 1 } }] } }) } };
+    const legacy = decks.find((d) => d.id === 9)!.slides[0];
+    assert.deepEqual(compareCard(lossy, legacy, 0).unexplained.map((u: any) => u.kind), ['words_lost']);
+  } finally {
+    for (const [key, value] of previousTemp) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(isolatedTemp, { recursive: true, force: true });
+  }
 });

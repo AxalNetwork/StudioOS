@@ -73,7 +73,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -85,10 +85,10 @@ export default function PhoneModulePage({
   // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
-  const bar = (
+  const bar = header === undefined ? (
     <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
-  );
+  ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
   // narrative), in every state: each tab has its own read.
   const tabs = (subnav || more) ? <div className="mb-[14px] flex min-w-0 flex-col gap-2">{more && <div className="flex justify-end">{more}</div>}{subnav}</div> : null;
@@ -155,6 +155,9 @@ export default function PhoneModulePage({
         {interviewLine && <p className="m-0 mt-2.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
       </section>
 
+      {showRecords && <>
+      {/* #3938 (D1478 part 9): a control that acts on the records themselves, as on the desktop page. */}
+      {aboveRecords && <div className="mt-[22px]">{aboveRecords}</div>}
       <div className="mt-[22px] flex flex-col gap-2" data-testid="phone-module-controls">
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}
@@ -193,6 +196,7 @@ export default function PhoneModulePage({
           <button type="button" className={CONTROL} disabled={count.page >= count.pages} onClick={() => onQuery?.({ ...query, page: count.page + 1 })} aria-label="Next page">›</button>
         </nav>
       )}
+      </>}
       {toolLinks.map((item) => (
         <Link key={item.href} to={item.href} className="mt-3 text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="phone-module-tool">
           {item.label || `Open ${name}`}

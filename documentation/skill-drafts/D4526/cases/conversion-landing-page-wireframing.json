@@ -1,0 +1,43 @@
+{
+  "skill": "conversion-landing-page-wireframing",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "build.records": {
+        "offer": "Book a product walkthrough",
+        "audience": "Operations teams",
+        "proof": [
+          "Setup demonstration"
+        ],
+        "primary_action": "Book walkthrough",
+        "testimonials": null
+      },
+      "grow.records": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Book walkthrough",
+      "Operations teams",
+      "Setup demonstration"
+    ],
+    "must_say_not_recorded": [
+      "testimonials"
+    ],
+    "must_not_include": [
+      "customers love us"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why testimonials is missing rather than inventing it.",
+    "Do not assert: customers love us.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Book walkthrough; Operations teams; Setup demonstration. testimonials: Not recorded. Human review required."
+}

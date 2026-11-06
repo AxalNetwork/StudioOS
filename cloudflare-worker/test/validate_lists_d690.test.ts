@@ -79,10 +79,10 @@ function interview(db: DatabaseSync, o: Record<string, unknown> = {}) {
 function session(db: DatabaseSync, interviewId: number, o: Record<string, unknown> = {}) {
   seq += 1;
   const r = db.prepare(
-    `INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, submitted_via, processing_stage, active_ms, consent_status)
-     VALUES (?, ?, ?, ?, 'in_person', ?, ?, ?, ?, ?) RETURNING id`,
+    `INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, submitted_via, processing_stage, active_ms, consent_status, consent_method)
+     VALUES (?, ?, ?, ?, 'in_person', ?, ?, ?, ?, ?, ?) RETURNING id`,
   ).get(`session-${seq}`, interviewId, P, FOUNDER, o.status ?? 'draft', o.via ?? null, o.processing ?? null, o.active_ms ?? 0,
-    o.consent ?? 'not_recorded') as any;
+    o.consent ?? 'not_recorded', o.method ?? null) as any;
   return Number(r.id);
 }
 function group(db: DatabaseSync, id: number, title: string, phrase: string) {
@@ -115,8 +115,8 @@ const LISTS: Record<string, { title: string; cols: string[]; filters: Array<[str
     sorts: ['mentions', 'trend', 'theme', 'recent'],
   },
   'customer-research': {
-    title: 'Interviews', cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'],
-    filters: [['icp', 'ICP fit', ['strong', 'partial', 'none', 'not_recorded']], ['consent', 'Consent', ['agreed', 'declined', 'not_asked']],
+    title: 'Interviews', cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Recording consent', 'Quotes OK', 'State'],
+    filters: [['icp', 'ICP fit', ['strong', 'partial', 'none', 'not_recorded']], ['recording_consent', 'Recording consent', ['given', 'declined', 'not_asked']], ['consent', 'Quotes OK', ['agreed', 'declined', 'not_asked']],
       ['channel', 'Channel', ['in_person', 'call', 'text']]],
     sorts: ['newest', 'oldest', 'name'],
   },
@@ -159,7 +159,7 @@ test('D690 decision 10: each module read carries the canvas\'s title, columns, f
     assert.equal(r.body.parts.can_write, true, `${slug}: the founder writes`);
   }
   const cr = await mod(db, 'customer-research');
-  assert.equal(cr.body.records.filters[1].options[0].label, 'Agreed · deck-eligible', 'Deck-eligible is the Agreed option, not a second filter');
+  assert.equal(cr.body.records.filters.find((f: any) => f.key === 'consent').options[0].label, 'Agreed · deck-eligible', 'Deck-eligible is the Agreed option, not a second filter');
   const ex = await mod(db, 'experiments');
   assert.deepEqual(ex.body.records.filters[0].options.slice(-2).map((o: any) => o.label), ['Fit not recorded', 'Retired']);
   assert.deepEqual(ex.body.records.filters[4].options.map((o: any) => o.label), ['As of last week', 'Changed this month']);
@@ -441,4 +441,64 @@ test('D690 decision 16: Changed this month keeps a verdict change on the first o
   assert.deepEqual(r.body.records.rows.map((x: any) => x.id), [1]);
   assert.equal(r.body.records.rows[0].status, 'untested', 'rows show today\'s status');
   assert.equal(r.body.parts.stats.history_since, at(first - 5 * 86_400_000));
+});
+
+test('#4411: latest recording permission and quote permission stay independent, with scoped session reads', async () => {
+  const db = fixture();
+  const given = interview(db, { name: 'Recording given' });
+  session(db, given, { consent: 'declined' });
+  session(db, given, { consent: 'given', method: 'verbal' });
+  // A higher id belonging to another venture must never become the latest session here.
+  db.prepare(`INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status)
+    VALUES ('foreign-consent-4411', ?, 2, 10, 'in_person', 'draft', 'declined')`).run(given);
+  const quoteOnly = interview(db, { name: 'Quotes only', consent: 1 });
+  const declined = interview(db, { name: 'Recording declined', consent: 1 });
+  session(db, declined, { consent: 'given', method: 'written' });
+  session(db, declined, { consent: 'declined', method: 'verbal' });
+  const unknown = interview(db, { name: 'Method without permission', consent: 0 });
+  session(db, unknown, { method: 'written' });
+  const response = await mod(db, 'customer-research');
+  assert.equal(response.status, 200);
+  const row = (id: number) => response.body.records.rows.find((r: any) => r.id === id);
+  assert.deepEqual(row(given).recording_consent, { status: 'given', method: 'verbal' });
+  assert.equal(row(given).consent, null, 'recording yes never grants permission to quote');
+  assert.deepEqual(row(quoteOnly).recording_consent, { status: 'not_asked', method: null });
+  assert.equal(row(quoteOnly).consent, 'agreed', 'quote permission does not grant recording permission');
+  assert.deepEqual(row(declined).recording_consent, { status: 'declined', method: null });
+  assert.equal(row(declined).consent, 'agreed', 'declining recording does not rewrite quote permission');
+  assert.deepEqual(row(unknown).recording_consent, { status: 'not_asked', method: null });
+  assert.equal(row(unknown).consent, 'declined');
+});
+
+test('#4411: both consent filters agree with their counts, combine, and page through given rows', async () => {
+  const db = fixture();
+  const given: number[] = [];
+  for (let n = 0; n < 27; n += 1) {
+    const id = interview(db, { name: `Given ${n}`, consent: n % 2 === 0 ? 1 : 0 });
+    session(db, id, { consent: 'given', method: 'in_app' });
+    given.push(id);
+  }
+  const declined = interview(db, { name: 'Declined' }); session(db, declined, { consent: 'declined' });
+  const unasked = interview(db, { name: 'No session', consent: 1 });
+  const empty = interview(db, { name: 'No recording answer' }); session(db, empty);
+  const read = async (f: string, page = 1) => {
+    const response = await mod(db, 'customer-research', `&filter=${encodeURIComponent(f)}&page=${page}`);
+    assert.equal(response.status, 200);
+    return response.body.records;
+  };
+  const page = await read('recording_consent:given');
+  assert.equal(page.total, 27);
+  assert.equal(page.rows.length, 25);
+  const tail = await read('recording_consent:given', 2);
+  assert.equal(tail.total, 27);
+  assert.deepEqual([...page.rows, ...tail.rows].map((r: any) => r.id).sort((a, b) => a - b), given);
+  const no = await read('recording_consent:declined');
+  assert.deepEqual([no.total, no.rows.map((r: any) => r.id)], [1, [declined]]);
+  const notAsked = await read('recording_consent:not_asked');
+  assert.deepEqual([notAsked.total, notAsked.rows.map((r: any) => r.id).sort((a, b) => a - b)], [2, [unasked, empty]]);
+  const quotes = await read('consent:agreed');
+  assert.equal(quotes.total, 15);
+  assert.equal(quotes.rows.every((r: any) => r.consent === 'agreed'), true);
+  const combined = await read('recording_consent:given,consent:agreed');
+  assert.deepEqual([combined.total, combined.rows.map((r: any) => r.id).sort((a, b) => a - b)], [14, given.filter((_, n) => n % 2 === 0)]);
 });

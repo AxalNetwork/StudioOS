@@ -66,6 +66,8 @@ import {
   logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation,
   updatePartner, updateRole,
 } from '../services/growWriters';
+import { distributionOverview } from '../services/distribution/overview';
+import { campaign, campaignCreatives, putCampaignCreative, campaigns, createCampaign, updateCampaign, campaignChannel, campaignItem, archiveCampaign } from '../services/growCampaigns';
 import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
@@ -437,6 +439,46 @@ const write = (fn: Writer, created = false) => async (c: C) => {
 };
 const param = (c: C, k: string): string => c.req.param(k) ?? '';
 const intId = (v: string) => Number(v);
+
+// D4447 / #3722 Part A: plans only, through the same venture read/write gates.
+// D4485: static overview read, before parameter routes, through the existing venture gate.
+r.get('/distribution/overview', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await distributionOverview(c.env, pid, { week: c.req.query('week'), userId: user.id, canWrite: await writes(c, user, pid), canAddProspects: user.role === 'founder' }));
+  } catch (e) { return fail(c, e); }
+});
+r.get('/campaigns', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await campaigns(c.env, pid, { status: c.req.query('status'), q: c.req.query('q') }));
+  } catch (e) { return fail(c, e); }
+});
+// D4483: detail and creative reads use the same venture reader gate.
+r.get('/campaigns/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await campaign(c.env, pid, param(c, 'uid')));
+  } catch (e) { return fail(c, e); }
+});
+r.get('/campaigns/:uid/creatives', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await campaignCreatives(c.env, pid, param(c, 'uid')));
+  } catch (e) { return fail(c, e); }
+});
+r.put('/campaigns/:uid/creatives/:placement/:field', write((c, u, pid, b) => putCampaignCreative(c.env, pid, u, param(c, 'uid'), param(c, 'placement'), param(c, 'field'), b)));
+r.post('/campaigns', write((c, u, pid, b) => createCampaign(c.env, pid, u, b), true));
+r.patch('/campaigns/:uid', write((c, u, pid, b) => updateCampaign(c.env, pid, u, param(c, 'uid'), b)));
+r.put('/campaigns/:uid/channels/:channelUid', write((c, u, pid, b) => campaignChannel(c.env, pid, u, param(c, 'uid'), param(c, 'channelUid'), b)));
+r.delete('/campaigns/:uid/channels/:channelUid', write((c, u, pid, b) => campaignChannel(c.env, pid, u, param(c, 'uid'), param(c, 'channelUid'), b, true)));
+r.post('/campaigns/:uid/items', write((c, u, pid, b) => campaignItem(c.env, pid, u, param(c, 'uid'), b.kind, b.uid)));
+r.delete('/campaigns/:uid/items/:kind/:itemUid', write((c, u, pid) => campaignItem(c.env, pid, u, param(c, 'uid'), param(c, 'kind'), param(c, 'itemUid'), true)));
+r.delete('/campaigns/:uid', write((c, u, pid) => archiveCampaign(c.env, pid, u, param(c, 'uid'))));
 
 r.post('/feedback', write((c, u, pid, b) => addFeedback(c.env, pid, u, b), true));
 r.patch('/feedback/:uid', write((c, u, pid, b) => updateFeedback(c.env, pid, u, param(c, 'uid'), b)));

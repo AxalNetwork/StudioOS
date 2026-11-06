@@ -19,6 +19,7 @@ import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioM
 import { NEW_PATH } from './newDeckModel';
 import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
+import DeckBar from './DeckBar';
 import useDeckPresence from './useDeckPresence';
 import CardsStrip from './CardsStrip';
 import { cardStatus, diagrams, media as uploadVideoAdapter } from './deckV2Adapter';
@@ -29,14 +30,15 @@ import { ArrangeSet, DecorLayers } from './BlockTools';
 import { isDecorOn } from './arrangeModel';
 import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
-import { editorCardOf } from './reviewTileModel';
+import { areaFromLink, cardFromLink } from './deckLinkModel';
 import ExportDialog from './ExportDialog';
 import TransitionSheet from './TransitionSheet';
+import VoiceSheet from './VoiceSheet';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, ReplaceImagesSheet, SizeSheet, SourcesSheet, StageSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 // D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo.
 import DeriveSheet from './DeriveSheet.jsx';
 import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from './deckV2Model';
-import { AiOffBanner } from './DeckAsk';
+import DeckAsk, { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
 import AreaLightbox from './AreaLightbox';
 import CritiqueDialog from './CritiqueDialog';
@@ -272,6 +274,9 @@ export default function PitchEditor() {
   // open Editor (keyed to the version) keeps its unsaved cards.
   const shell = {
     query: ventureQuery(projectId || requested), title, tools, overlay, heading: deck.status === 'ok' ? title : null, deckId: current?.id ?? null,
+    // The bar's Edit/Comment: Comment opens the selected card's comments, Edit closes them (the editor's own sheet).
+    commenting: Boolean(chrome?.commenting), compact: phone,
+    onMode: chrome ? (mode) => actionRef.current?.(mode === 'comment' ? 'comments' : 'close_comments') : null,
     ask: { projectId, readOnly, onPlace, versions, onChanged: versions.refresh, editsKey: proposalsTick, openKey: askOpenKey },
   };
 
@@ -323,11 +328,17 @@ export default function PitchEditor() {
   );
 }
 
-function Shell({ children, query, title, ask, tools, heading, overlay = null, deckId = null }) {
+function Shell({ children, query, title, ask, tools, heading, overlay = null, deckId = null, commenting = false, onMode = null, compact = false }) {
   // D1604 (§5): the rail is the element groups' models and the deck's usage.
   const groups = useMemo(() => deckRail(deckId), [deckId]);
   const rail = <WorkerRail workspace="Raise" role="founder" groups={groups} note="The editor reads your deck and its recorded sources. Each Eadwyn run shows its cost first." data-testid="pitch-editor-rail" />;
-  return <PitchPage rail={rail} crumb={{ query, trail: title, tools, heading }} ask={ask} testId="pitch-editor"><PitchMovedNotice />{children}{overlay}</PitchPage>;
+  // D4254 P1 slice 2 (#4274, psE): the deck bar takes the header's place while a deck is open.
+  const askOn = ask && !ask.readOnly && ask.projectId != null;
+  const bar = (
+    <DeckBar q={query} heading={heading} tools={tools} ask={askOn ? <DeckAsk {...ask} /> : null}
+      commenting={commenting} onMode={onMode} readOnly={Boolean(ask?.readOnly)} compact={compact} />
+  );
+  return <PitchPage rail={rail} crumb={{ query, trail: title, tools, heading }} ask={ask} bar={bar} testId="pitch-editor"><PitchMovedNotice />{children}{overlay}</PitchPage>;
 }
 
 /** PD24: the header at once; the strip and the card as grey skeletons. */
@@ -404,7 +415,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const setAudience = (a) => edit({ type: 'setAudience', audience: a }, { label: 'Audience' });
   // D4271 (#4271): `?card=<n>` (from 1) opens on that card, and `&comments=1` with its comments, as the Review tile links them.
   const [deepLink] = useSearchParams();
-  const [sel, setSel] = useState(() => editorCardOf(deepLink.get('card'), cardsOf(deck).length));
+  // D1558 (#3805): `card` may also be a card uid, and `&area=c1-6r2-4` (or an area id) selects that Grid area once the card is open.
+  const [sel, setSel] = useState(() => cardFromLink(deepLink.get('card'), cardsOf(deck)));
+  const linkedArea = useRef(deepLink.get('area'));
   const [pickState, setPickState] = useState(NO_PICK);
   const [askLine, setAskLine] = useState(null);
   const [dialog, setDialog] = useState(null);
@@ -448,6 +461,13 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const areas = useMemo(() => areasOf(card, model), [card, model]);
   // D1533: a decor item (`decor:<id>`, from the layers list) stays selected while it is on the card.
   const selection = pickState.selection.filter((id) => (areas || []).some((a) => a.id === id) || isDecorOn(card, id));
+  // D1558: the linked area is selected once, on the card the link opened; a link that names no area here selects nothing.
+  useEffect(() => {
+    if (linkedArea.current == null || !areas) return;
+    const id = areaFromLink(linkedArea.current, areas);
+    linkedArea.current = null;
+    if (id) setPickState({ selection: [id], focus: id });
+  }, [areas]);
   // D1577 (#3824): the area this member is in is theirs (a soft lock) while they edit it; the room says
   // "Wait or ask [Name]" when another member holds it. One area, or none when several or none are picked;
   // a decor item (D1533) is not an area, so picking one claims none.
@@ -652,8 +672,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const chip = saveChip({ dirty, readOnly, when: state, version: base.deck.version, sync: sync ? { ...sync, clock: clockOf(sync.at) } : null });
   const appendixLabel = card?.appendix ? 'Not an appendix' : 'Mark as appendix';
   useEffect(() => {
-    onChrome?.({ chip, preflight: pf.chip, outOfTokens, history: readOnly ? null : counts, labels: { appendix: appendixLabel, ...(readOnly ? { notes: 'Leave a note' } : {}) } });
-  }, [chip.text, chip.title, chip.save, appendixLabel, readOnly, outOfTokens, counts.undo, counts.redo, pf.chip?.text, pf.chip?.tone]); // eslint-disable-line react-hooks/exhaustive-deps
+    onChrome?.({ chip, preflight: pf.chip, outOfTokens, history: readOnly ? null : counts, commenting: sheet === 'comments', labels: { appendix: appendixLabel, ...(readOnly ? { notes: 'Leave a note' } : {}) } });
+  }, [chip.text, chip.title, chip.save, appendixLabel, readOnly, outOfTokens, counts.undo, counts.redo, pf.chip?.text, pf.chip?.tone, sheet === 'comments']); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onChrome?.(null), [onChrome]);
 
   // D1500: a duplicate is a new card, with its own uid (`duplicateCard` copies it whole).
@@ -687,7 +707,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     // D1561 (#3808): ⋯ › Stage and ⋯ › Reorder for stage open the same stage sheet (pd23).
     if (id === 'stage' || id === 'reorder') { setSheet('stage'); return; }
     if (id === 'replace_images') { if (!readOnly) setSheet('replace_images'); return; }
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'transition', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
+    // D4254 P1 slice 2 (#4274): the deck bar's Edit closes the comments it opened.
+    if (id === 'close_comments') { setSheet((s) => (s === 'comments' ? null : s)); return; }
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'transition', 'remix', 'derive', 'comments', 'find', 'voice'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i, value) => {
@@ -803,7 +825,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             ) : null}
             {card ? <DecorLayers card={card} selection={selection} readOnly={readOnly} onSelection={setPickState} /> : null}
             {card && !readOnly && chosen.length ? (
-              <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
+              <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} cards={cards} model={model} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
                 onRemove={(id) => setPickState((p) => ({ selection: p.selection.filter((x) => x !== id), focus: p.focus }))}
                 onPlace={placeCard} onProposals={onProposals} />
             ) : null}
@@ -854,6 +876,11 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : null}
       {sheet === 'transition' && card ? (
         <TransitionSheet card={card} index={sel} readOnly={readOnly} onTransition={(t) => edit({ type: 'setFlag', index: sel, key: 'transition', value: t ?? undefined }, { label: 'Transition' })} onClose={() => setSheet(null)} />
+      ) : null}
+      {/* D1569 (#3816): ⋯ › This card › AI voice-over. Accept writes a new version, read back as Restore's is. */}
+      {sheet === 'voice' && card && base.deck?.id ? (
+        <VoiceSheet deckId={base.deck.id} card={card} index={sel} readOnly={readOnly} dirty={dirty}
+          onAccepted={() => onSaved?.()} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'derive' && base.deck?.id ? (
         <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}

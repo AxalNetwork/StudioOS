@@ -105,6 +105,9 @@ export interface Env {
   // New code should prefer these; APP_URL stays as the legacy name.
   PUBLIC_BASE_URL?: string;
   PUBLIC_MARKETING_URL?: string;
+  // D4356 (#4356): the owner's Mercury referral link for Incorporate's bank step. Used only when it is https on
+  // mercury.com (`services/mercury/oauth.ts` `isMercuryHttps`); else `/api/mercury/personal/status` names Mercury's public site.
+  MERCURY_REFERRAL_URL?: string;
   // Phase 2 canonical-host flip: post-callback redirects go to axal.vc
   // (via APP_URL / PUBLIC_BASE_URL), but the Google OAuth redirect_uri
   // must stay on the host registered in Google Cloud Console
@@ -441,6 +444,9 @@ export interface Env {
   // #3778 phase 2 (D1534): the deck's Bria image tools (background removal) through AI Gateway,
   // offered only when exactly 'on' (`imageToolsOn`). Off until the owner's steps on #1008.
   AI_PROVIDER_BRIA?: string;
+  // D4316 (#4316): the deck's Upscale (Pruna p-image-upscale) through AI Gateway, its own switch,
+  // exactly 'on' (`imageToolOn`). Off until the owner's 10-day sub-processor notice (#1008).
+  AI_PROVIDER_PRUNA?: string;
   AI_PROVIDER_ANTHROPIC_KEY?: string;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.
@@ -484,6 +490,11 @@ export interface Env {
   MEETING_BOT_SECRET?: string;
   // #3708: the bot host's deployed commit, set by meeting-bot-deploy.yml; read only by the owner's diagnostic.
   MEETING_BOT_VERSION?: string;
+  // D3678 (#3678): Eadwyn AI's own Google Workspace account, for a signed-in Meet join.
+  // The TOTP key never leaves the site Worker (services/meetBotGoogle.ts).
+  MEET_BOT_GOOGLE_EMAIL?: string;
+  MEET_BOT_GOOGLE_PASSWORD?: string;
+  MEET_BOT_GOOGLE_TOTP?: string;
   MEETING_BOT_ZOOM_CLIENT_ID?: string;
   MEETING_BOT_ZOOM_CLIENT_SECRET?: string;
   MEETING_BOT_COST_MICROUSD_PER_MINUTE?: string;
@@ -690,7 +701,10 @@ export interface User {
   name: string;
   // 'exploring' = Spin-Out Lab holding role (Task #9 onboarding queue) — it
   // authenticates like any other role, so it belongs in the union.
-  role: 'admin' | 'founder' | 'partner' | 'investor' | 'exploring';
+  role: 'admin' | 'founder' | 'partner' | 'investor' | 'advisor' | 'exploring';
+  /** D4472: request-time union of the primary licence and active additional grants. */
+  licences?: Array<'founder' | 'investor' | 'advisor' | 'partner'>;
+  advisor_id?: number | null;
   investor_id?: number | null;
   password_hash: string | null;
   founder_id: number | null;

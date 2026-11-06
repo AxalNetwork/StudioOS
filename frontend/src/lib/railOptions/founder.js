@@ -52,7 +52,6 @@ const REVIEWER = 'frontend/src/pages/DeckReviewerPage.jsx';
 const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
 // D1604 (#3716, pd1): the one-click moved from PitchStudio.jsx to the studio's home.
 const ONE_CLICK = 'frontend/src/pages/raise/pitch/OneClickBuild.jsx';
-const TEMPLATES = 'frontend/src/pages/raise/pitch/TemplatesGallery.jsx';
 const STUDIO_ACTIONS = 'frontend/src/pages/raise/pitch/StudioActions.jsx';
 const REHEARSE = 'frontend/src/pages/raise/pitch/RehearsePanel.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
@@ -195,6 +194,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-section', route: '/raise/investor-narrative/story', label: 'Draft this section', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/raise/narrative/StoryTab.jsx', 'narrativeApi.draftSection(']],
   },
+  // D1558 (#3805, deck v2 C10): Story's coach — this version read against the current deck, findings with proposals, no chat.
+  {
+    page: 'Founder · Raise · Investor narrative', key: 'review:narrative-coach', route: '/raise/investor-narrative/story', label: 'Coach against the deck', kind: 'reason', handler: 'draft',
+    at: [['frontend/src/pages/raise/narrative/NarrativeCoach.jsx', 'narrativeCoachApi.coach(']],
+  },
   // D913 (#2697, NAR10): Story's Objections panel — "Answer it" drafts the open section to answer one objection.
   {
     page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-objection', route: '/raise/investor-narrative/story', label: 'Answer an objection', kind: 'write', handler: 'draft',
@@ -209,7 +213,7 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch/new', label: 'Use this template', kind: 'write', handler: 'form',
-    at: [[NEW_DECK, 'api.deckApplyMethod('], [TEMPLATES, 'api.deckApplyMethod(']],
+    at: [[NEW_DECK, 'api.deckApplyMethod(']],
   },
   // D897 (#2677): New deck (PD5, PD6) and the studio's fast path (PD2), which D1604 (#3716) made
   // `OneClickBuild.jsx`: on the studio's home and on top of New deck. The gallery (pd29) uses a template.
@@ -323,6 +327,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Grow', key: 'draft:update', route: '/grow/update', label: 'Share an update', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/founder/ShareUpdateSheet.jsx', 'shareUpdateApi.draftLines(']],
   },
+  // #4046: Publish to…'s post text, drafted for the ticked places in the Ask panel; it writes nothing.
+  {
+    page: 'Founder · Grow', key: 'draft:publish', route: '/grow', label: 'Draft the post', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/cycles/publish/PublishAskIntent.jsx', 'api.ask(']],
+  },
   {
     page: 'Founder · Grow · Product improvement', key: 'fill:feedback_theme', route: '/grow/product-improvement', label: 'Propose themes', kind: 'synth', handler: 'form',
     at: [[CYCLE, "'feedback_theme'"]],
@@ -330,6 +339,11 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Grow · Distribution', key: 'draft:grow/customers', route: '/grow/distribution', label: 'Draft a sequence', kind: 'write', handler: 'draft',
     at: [[CYCLE, "surface: 'grow/customers'"]],
+  },
+  // D4488: campaign drafts run in the Ask intent; models and usage remain in AIRail.
+  {
+    page: 'Founder · Grow · Distribution', key: 'draft:distribution', route: '/grow/distribution', label: 'Draft Distribution text', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/cycles/distribution/DistributionAskIntent.jsx', 'api.run(']],
   },
   // The brand builder, Distribution's "Open landing-page builder" door. #4046 B3: its one Ask (was "Auto-fill with AI").
   {

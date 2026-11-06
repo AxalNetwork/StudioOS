@@ -17,6 +17,7 @@ import {
 } from './storyModel';
 import { OBJECTION_OPTION, answerSaveLines, versionHref } from './narrativeModel';
 import { ObjectionsPanel } from './ObjectionsPanel';
+import NarrativeCoach from './NarrativeCoach';
 import { FIX_PROPOSAL_NOTE, appendFix, fixParts } from './claimsModel';
 
 /**
@@ -461,6 +462,8 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
             <Link className={`${LINK} text-[12.5px]`} to={versionHref(version, search)} data-testid="narrative-story-open">{roleReadOnly ? `Open v${version}` : `One-liner, investor type and what it checks against: open v${version}`}</Link>
           </section>
         ) : null}
+        {/* D1558 (#3805): Deck ready to send, and the coach against the deck. */}
+        <NarrativeCoach projectId={projectId} version={version} canRun={!readOnly && !phone} aiOn={aiOn} offLine={AI_OFF_LINE} />
         <ObjectionsPanel projectId={projectId} canAnswer={!readOnly && !phone && Boolean(spec && cur)} aiOn={aiOn} busy={Boolean(asking)}
           focusKey={focusObjection} sectionLabel={spec?.label ?? null} onAnswer={answer} offLine={AI_OFF_LINE}
           canMark={!readOnly && Boolean(spec && cur)} version={version} section={active} unsaved={writes.some((w) => w.section === active)} search={search} />

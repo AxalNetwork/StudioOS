@@ -1,3 +1,5 @@
+import { eventSyndicationApi } from '../../../lib/api/eventSyndication';
+import { approveWithChannels } from '../../hq/eventSyndication/syndicationModel';
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminEvents } from '../../../lib/api';
@@ -296,10 +298,10 @@ export default function EventsReview({ reads }) {
     reads.reload();
   };
 
-  const approve = async ({ feature }) => {
+  const approve = async ({ feature, channels }) => {
     setBusy(true); setRefusal(null);
     try {
-      await adminEvents.approve(ev.id);
+      await approveWithChannels(eventSyndicationApi, adminEvents, ev.id, channels);
     } catch (e) { refused(e); return; }
     let featureError = null;
     if (feature) {

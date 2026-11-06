@@ -9,7 +9,8 @@
  *   · v1's Change tone and Translate are typed: words that are only a tone
  *     or a language run `tone` / `translate` under their own options;
  *   · a figure in the instruction is refused before any quote;
- *   · several areas answer through the adapter (#3773), with no quote;
+ *   · several areas (D1527, #3795): one quote for the selection with its hold and
+ *     variants, Run once, one proposal per area, Accept all as one undo step;
  *   · chips are removable; a bound figure or an area without words says why;
  *   · the phone: tap an area, then Ask opens the full-height sheet with the
  *     box at its foot (pd9k);
@@ -25,10 +26,10 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { CARD, MODEL, mountEditor } from './_pitch_editor_mount.mjs';
-import { SURFACES } from '../src/pages/raise/pitch/deckV2Adapter.js';
 import { areasOf } from '../src/pages/raise/pitch/gridSelection.js';
 import {
   FIGURE_REFUSAL, INSTRUCTION_OFF, NOT_WORDS, instructionField, instructionPlan, placeholderFor, typedChange,
+  labelResults, severalBody, severalHold, stillRunning,
 } from '../src/pages/raise/pitch/instructionModel.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 
@@ -155,16 +156,100 @@ test('a figure in the instruction is refused before any quote; nothing was charg
   } finally { await m.close(); }
 });
 
-test('several areas answer through the adapter; a chip comes out; a bound figure says why', async () => {
-  const m = await mountEditor({ answers: { 'assist.quote': QUOTE } });
+/** D1527 (#3795): the several-area run's answers, in the shape D1521 and D1512 send. */
+const SEV_QUOTE = async () => ({
+  class: 'areas', quote_uid: 'q-sev', expires_at: '2099-01-01', hold_microusd: 2400, runs: 2, refused: 1,
+  areas: [
+    { key: 'b1', area_id: 'b1', refusal: null, hold_microusd: 1200 },
+    { key: 'b2', area_id: 'b2', refusal: null, hold_microusd: 1200 },
+    { key: 'b3', area_id: 'b3', refusal: { code: 'not_text', message: 'A figure tile changes from its own tools.' }, hold_microusd: 0 },
+  ],
+});
+const variant = (n, after) => ({ n, seed: n, model_label: 'Synthetic writer', cost_microusd: 600, seconds: 2, state: 'ready', error: null, payload: { kind: 'text', before: '', after }, critique: null });
+const proposalFor = (area, before, afters) => ({
+  uid: `p-${area}`, card_uid: 'c-1', area_id: area, element: 'text', kind: 'text', state: 'ready', outcome: null, accepted_variant: null, replaces_block: area,
+  variants: afters.map((a, i) => ({ ...variant(i + 1, a), payload: { kind: 'text', before, after: a } })),
+});
+const SEV_RUN = async () => ({
+  batch_uid: 'batch-1', class: 'areas', hold_microusd: 2400, replayed: false,
+  proposals: [proposalFor('b1', 'Synthetic heading', ['Synthetic shorter heading']), proposalFor('b2', 'Synthetic body words', ['Synthetic shorter body'])],
+  refused: [{ key: 'b3', refusal: { code: 'not_text', message: 'A figure tile changes from its own tools.' } }],
+});
+
+test('D1527: an instruction on a 3-area selection quotes those areas, runs once, and proposes changes to exactly them', async () => {
+  // Mutation checked: the selection built from every text block → the quote names b1, b2 (not b3) and the deepEqual fails;
+  // Run without the quote's uid → the run body check fails; proposals drawn for any area → the b3 proposal check fails.
+  const m = await mountEditor({ answers: { 'assist.quote': QUOTE, 'instruct.quote': SEV_QUOTE, 'instruct.run': SEV_RUN } });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
     await m.press(m.by('pitch-editor-block-b2'), { shiftKey: true });
-    assert.equal(m.pr(node(m, 'pitch-instruction-field')).placeholder, 'Tell Eadwyn what to change in these 2 areas');
-    await m.type(node(m, 'pitch-instruction-field'), 'make both warmer');
+    await m.press(m.by('pitch-editor-block-b3'), { shiftKey: true });
+    assert.equal(m.pr(node(m, 'pitch-instruction-field')).placeholder, 'Tell Eadwyn what to change in these 3 areas');
+    await m.type(node(m, 'pitch-instruction-field'), 'shorter');
+    assert.ok(!m.by('pitch-instruction-variants'), 'the at-rest box draws no picker (pd19, the pd11 screenshot)');
     await m.press(node(m, 'pitch-instruction-send'));
-    assert.equal(m.text(node(m, 'pitch-instruction-later')), `Coming later: ${SURFACES.instruct.what}. Not switched on yet.`);
-    assert.equal(m.calls.filter((c) => c[0] === 'assist.quote').length, 0, 'nothing is quoted for a route not on main');
+    await m.settle();
+    let asked = m.calls.filter((c) => c[0] === 'instruct.quote');
+    assert.equal(asked.length, 1);
+    assert.deepEqual(asked[0][2], { card: 0, selection: [{ area_id: 'b1' }, { area_id: 'b2' }, { area_id: 'b3' }], instruction: 'shorter', variants: 1 });
+    // Picking 2 variants quotes again, with the same words.
+    await m.fire(node(m, 'pitch-instruction-variants'), 'onChange', { target: { value: '2' } });
+    await m.settle();
+    asked = m.calls.filter((c) => c[0] === 'instruct.quote');
+    assert.equal(asked.length, 2, 'the picker re-quotes');
+    assert.deepEqual(asked[1][2], { card: 0, selection: [{ area_id: 'b1' }, { area_id: 'b2' }, { area_id: 'b3' }], instruction: 'shorter', variants: 2 });
+    assert.match(m.text(node(m, 'pitch-instruction-hold')), /^Holds up to .+ · you pay what it uses · 2 areas · 1 cannot run$/);
+    assert.match(m.text(node(m, 'pitch-instruction-area-refused-b3')), /A figure tile changes from its own tools\./);
+    assert.equal(m.calls.filter((c) => c[0] === 'instruct.run').length, 0, 'nothing runs until Run');
+    assert.equal(m.calls.filter((c) => c[0] === 'assist.quote').length, 0, 'several areas never use the one-area quote');
+
+    await m.press(node(m, 'pitch-instruction-run'));
+    await m.settle();
+    const ran = m.calls.filter((c) => c[0] === 'instruct.run');
+    assert.equal(ran.length, 1, 'one run');
+    assert.equal(ran[0][2].quote_uid, 'q-sev', 'the run is the quoted one');
+    assert.equal(ran[0][2].variants, 2, 'the run asks for the variants that were quoted');
+    assert.ok(m.by('pitch-area-result-b1') && m.by('pitch-area-result-b2'), 'a proposal for each area that could run');
+    assert.ok(!m.by('pitch-area-result-b3') || m.pr(m.by('pitch-area-result-b3'))['data-state'] === 'refused', 'b3 proposes nothing');
+    assert.match(m.text(node(m, 'pitch-area-result-b2')), /Synthetic shorter body/);
+    assert.match(m.text(node(m, 'pitch-area-result-b2')), /Synthetic writer/, 'the model label, read-only');
+    assert.match(m.text(node(m, 'pitch-area-result-b1')), /c1–12 × r1/, 'named by its area');
+    assert.ok(m.by('pitch-instruction-retry'));
+  } finally { await m.close(); }
+});
+
+test('D1527: Accept all places every area as ONE undo step; undo takes both back', async () => {
+  // Mutation checked: Accept all without its shared group → two steps, and one undo leaves b1 changed.
+  const m = await mountEditor({ answers: { 'assist.quote': QUOTE, 'instruct.quote': SEV_QUOTE, 'instruct.run': SEV_RUN,
+    'areas.accept': async (_d, _c, area, uid, n) => ({ proposal: { uid, outcome: 'accepted', accepted_variant: n }, variant: n }) } });
+  try {
+    await m.press(m.by('pitch-editor-block-b1'));
+    await m.press(m.by('pitch-editor-block-b2'), { shiftKey: true });
+    await m.type(node(m, 'pitch-instruction-field'), 'shorter');
+    await m.press(node(m, 'pitch-instruction-send'));
+    await m.press(node(m, 'pitch-instruction-run'));
+    await m.settle();
+    await m.press(node(m, 'pitch-instruction-areas-accept-all'));
+    await m.settle();
+    assert.deepEqual(m.calls.filter((c) => c[0] === 'areas.accept').map((c) => c[3]), ['b1', 'b2'], 'each area accepted by its own route');
+    assert.match(m.text(node(m, 'pitch-editor-block-b1')), /Synthetic shorter heading/);
+    assert.match(m.text(node(m, 'pitch-editor-block-b2')), /Synthetic shorter body/);
+    await m.press(node(m, 'pitch-editor-undo'));
+    await m.settle();
+    assert.match(m.text(node(m, 'pitch-editor-block-b1')), /Synthetic heading/, 'one undo step takes back both areas');
+    assert.match(m.text(node(m, 'pitch-editor-block-b2')), /Synthetic body words/);
+  } finally { await m.close(); }
+});
+
+test('D1527: a figure in a several-area instruction is refused before any quote; a chip comes out; a bound figure says why', async () => {
+  const m = await mountEditor({ answers: { 'assist.quote': QUOTE, 'instruct.quote': SEV_QUOTE } });
+  try {
+    await m.press(m.by('pitch-editor-block-b1'));
+    await m.press(m.by('pitch-editor-block-b2'), { shiftKey: true });
+    await m.type(node(m, 'pitch-instruction-field'), 'say we reached $2.4M ARR');
+    await m.press(node(m, 'pitch-instruction-send'));
+    assert.equal(m.text(node(m, 'pitch-instruction-refused')), FIGURE_REFUSAL);
+    assert.equal(m.calls.filter((c) => c[0] === 'instruct.quote').length, 0, 'not even quoted');
     await m.press(node(m, 'pitch-instruction-chip-b1-remove'));
     assert.ok(!m.by('pitch-instruction-chip-b1'), 'the chip came out');
     assert.equal(m.pr(node(m, 'pitch-editor-block-b1'))['aria-pressed'], false, 'and so did the area');
@@ -172,6 +257,41 @@ test('several areas answer through the adapter; a chip comes out; a bound figure
     await m.press(m.by('pitch-editor-block-b3'));
     assert.match(m.text(node(m, 'pitch-instruction-why')), /^Figures come from your records/);
     assert.equal(m.pr(node(m, 'pitch-instruction-field')).disabled, true);
+  } finally { await m.close(); }
+});
+
+test('D1527: the several-area body, the hold line, the area names and whether a run is still going', () => {
+  // Mutation checked: variants not clamped → 7 is sent; the refused count dropped → "1 cannot run" missing.
+  assert.deepEqual(severalBody({ cardIndex: 2, areas: [{ id: 'a' }, { id: 'b' }], instruction: ' shorter ', variants: 7 }),
+    { card: 2, selection: [{ area_id: 'a' }, { area_id: 'b' }], instruction: 'shorter', variants: 1 });
+  const tokens = (m) => `$${(m / 1e6).toFixed(4)}`;
+  assert.equal(severalHold(null, tokens), 'Reading the cost…');
+  assert.equal(severalHold({ hold_microusd: 2400, areas: [{ refusal: null }, { refusal: null }, { refusal: { message: 'x' } }] }, tokens), 'Holds up to $0.0024 · you pay what it uses · 2 areas · 1 cannot run');
+  assert.equal(severalHold({ hold_microusd: 0, areas: [{ refusal: { message: 'x' } }] }, tokens), 'None of the selected areas can run. Nothing is held.');
+  const named = labelResults([{ key: 'b2', areaKey: 'b2' }, { key: 'b1', areaKey: 'b1' }], [area('b1'), area('b2')], () => 'Body');
+  assert.deepEqual(named.map((r) => [r.areaKey, r.label, r.area?.id]), [['b1', 'c1–12 × r1 · Body', 'b1'], ['b2', 'c1–7 × r2–6 · Body', 'b2']]);
+  assert.equal(stillRunning([{ state: 'running', variants: [] }]), true);
+  assert.equal(stillRunning([{ state: 'ready', variants: [{ n: 1 }] }]), false);
+});
+
+test('D1527: an area still generating when Run answers is read again until it settles', async () => {
+  // Mutation checked: no re-read → the b2 proposal is never drawn.
+  const running = { ...proposalFor('b2', 'Synthetic body words', []), state: 'running', variants: [] };
+  const m = await mountEditor({ answers: { 'assist.quote': QUOTE, 'instruct.quote': SEV_QUOTE,
+    'instruct.run': async () => ({ batch_uid: 'batch-2', proposals: [proposalFor('b1', 'Synthetic heading', ['Synthetic shorter heading']), running], refused: [] }),
+    'areas.proposals': async () => ({ batch: { uid: 'batch-2', state: 'done' }, done: true, proposals: [proposalFor('b1', 'Synthetic heading', ['Synthetic shorter heading']), proposalFor('b2', 'Synthetic body words', ['Synthetic shorter body'])] }) } });
+  try {
+    await m.press(m.by('pitch-editor-block-b1'));
+    await m.press(m.by('pitch-editor-block-b2'), { shiftKey: true });
+    await m.type(node(m, 'pitch-instruction-field'), 'shorter');
+    await m.press(node(m, 'pitch-instruction-send'));
+    await m.press(node(m, 'pitch-instruction-run'));
+    for (let i = 0; i < 40 && !m.by('pitch-area-result-b2'); i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 100)); await m.settle();
+    }
+    assert.deepEqual(m.calls.filter((c) => c[0] === 'areas.proposals').map((c) => c[2]), ['batch-2'], 'the batch is read again by its uid');
+    assert.match(m.text(node(m, 'pitch-area-result-b2')), /Synthetic shorter body/);
   } finally { await m.close(); }
 });
 

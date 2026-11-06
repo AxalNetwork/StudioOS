@@ -465,7 +465,7 @@ test('#1692 test 5: each record has its title, four facts, its sections in the c
   for (const [slug, r] of Object.entries(RECORDS)) {
     const { body } = await real(db, 10, 'GET', rec(slug, r.a));
     assert.ok(body.title, slug);
-    assert.equal(body.facts.length, 4, slug);
+    assert.equal(body.facts.length, slug === 'customer-research' ? 5 : 4, slug);
     for (const f of body.facts) assert.ok(f.value != null || f.reason, `${slug} ${f.label} is a value or a reason`);
     assert.deepEqual(body.main.map((s: any) => s.title), r.main, slug);
     assert.deepEqual(body.side.map((s: any) => s.title), r.side, slug);
@@ -477,7 +477,7 @@ test('#1692 test 5: each record has its title, four facts, its sections in the c
   assert.deepEqual(theme.pills.map((p: any) => p.text), ['Severe', 'Frequent']);
   const iv = (await real(db, 10, 'GET', rec('customer-research', '1'))).body;
   assert.equal(iv.sub, 'Ops lead at Northwind Example · 12 Oct · 2 min');
-  assert.deepEqual(iv.facts.map((f: any) => f.value), ['Recorded in Axal VC', 'Said yes out loud', 'Strong · Fleet ops leads', 'Yes']);
+  assert.deepEqual(iv.facts.map((f: any) => f.value), ['Recorded in Axal VC', 'Given · Said yes out loud', 'Agreed · deck-eligible', 'Strong · Fleet ops leads', 'Yes']);
   const seg = (await real(db, 10, 'GET', rec('ideal-customer-profile', '3'))).body;
   assert.deepEqual(seg.main[0].rows.map((r: any) => r.c), ['Done', 'Missing', 'Missing', 'Done', 'Needs a source']);
   // The next step is the row and its status (nextFor, CO:263-269).
@@ -660,8 +660,8 @@ test('D1456 only null facts offer declared writer actions; consent never offers 
   const db=seeded();
   const writer=(await real(db,10,'GET',rec('customer-research','2'))).body;
   const reader=(await real(db,40,'GET',rec('customer-research','2'))).body;
-  assert.deepEqual(writer.facts.map((f:any)=>f.action??null),[null,null,'judge-fit','judge-need']);
-  assert.deepEqual(reader.facts.map((f:any)=>f.action??null),[null,null,null,null]);
+  assert.deepEqual(writer.facts.map((f:any)=>f.action??null),[null,null,null,'judge-fit','judge-need']);
+  assert.deepEqual(reader.facts.map((f:any)=>f.action??null),[null,null,null,null,null]);
   assert.deepEqual(reader.actions,[]);
   assert.deepEqual(await RECORD_SPECS.validate!['customer-research'].actions({env:{DB:d1Over(db)},projectId:1,project:{id:1,founder_id:1001},user:{id:40,role:'partner'}} as any,'2',reader),[],'the spec itself refuses reader actions');
   assert.equal(writer.actions.find((a:any)=>a.key==='judge-need').href,'/validate/customer-research/2?project=1#interview-tools');
@@ -708,4 +708,23 @@ test('D1456 pending findings are primary only for the latest session, without an
   body=await read();
   assert.equal(body.pills[0].text,'Pasted');
   assert.equal(body.actions.some((a:any)=>a.key==='review-findings'),false);
+});
+
+test('#4411: interview facts name both permissions and follow the latest session status', async () => {
+  const db = seeded();
+  db.prepare('UPDATE discovery_interviews SET quote_consent = NULL WHERE id = 1').run();
+  const facts = async () => (await real(db, 10, 'GET', rec('customer-research', '1'))).body.facts;
+  const consentFacts = (f: any[]) => f.filter(x => ['Recording consent', 'Quotes OK'].includes(x.label));
+  assert.deepEqual(consentFacts(await facts()), [
+    { label: 'Recording consent', value: 'Given · Said yes out loud' },
+    { label: 'Quotes OK', value: 'Not asked' },
+  ]);
+  db.exec("UPDATE interview_sessions SET consent_status = 'declined' WHERE id = 4");
+  db.exec('UPDATE discovery_interviews SET quote_consent = 1 WHERE id = 1');
+  assert.deepEqual(consentFacts(await facts()), [
+    { label: 'Recording consent', value: 'Declined' },
+    { label: 'Quotes OK', value: 'Agreed · deck-eligible' },
+  ]);
+  db.exec('DELETE FROM interview_session_chunks WHERE session_id = 4; DELETE FROM interview_sessions WHERE id = 4');
+  assert.equal((await facts()).find((f: any) => f.label === 'Recording consent').value, 'Not asked');
 });

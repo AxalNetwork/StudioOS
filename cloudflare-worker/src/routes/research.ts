@@ -1,3 +1,4 @@
+import { heldLicences } from '../services/accountLicences';
 /**
  * `/api/research/*` — the document library, and Ask over it.
  *
@@ -2484,7 +2485,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?')
         .bind(userId).first<{ role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // SCOPED THROUGH THE ONE HELPER THAT OWNS THE PREDICATE.
       // `scopedDecisions` is `routes/ic.ts`'s single list read; a draft surface
       // running its own `SELECT ... FROM ic_decisions` would be the second copy
@@ -2536,7 +2537,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // The SAME predicate `esign.get('/')` puts in its WHERE clause, from the
       // same shared helper — not a second copy of it. An envelope carries the
       // executed paper of a deal; an unscoped read here would hand one firm's
@@ -2592,7 +2593,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // The same scope every read in `routes/positions.ts` uses. An empty
       // accessible set means an empty draft, never an unscoped one — the CSV
       // predicate treats NULL as "all rows", so [] must short-circuit here
@@ -2655,7 +2656,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // Same scope as every read in `routes/positions.ts` and the same
       // short-circuit: the CSV predicate reads NULL as "all rows", so an empty
       // accessible set must never reach the query.
@@ -2754,7 +2755,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // The same scope and the same short-circuit as every Portfolio read: the
       // CSV predicate reads NULL as "all rows", so an empty accessible set must
       // never reach the query.
@@ -2838,7 +2839,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'advisor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).includes('advisor')) return [];
       // The caller's OWN advisor row. No row means no practice, which means an
       // empty gather and a 409 — never a fallback to whichever advisor sorted
       // first.

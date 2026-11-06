@@ -71,7 +71,7 @@ const MEMBERS = {
 };
 /** #3840's Agent DTO, as the canvas draws TM1a's rows. */
 const AGENTS = [
-  { uid: 'a1', role_key: 'cfo', persona: { key: 'orrin', tagline: '[Every road ends at a market.]' }, first_name: '[Nora]', last_name: '[Vale]', model_id: 'm-a', model_label: '[Model A]', tools: [{ tool: 'get_balance', server_name: '[Finance MCP]' }, { tool: 'list_transactions', server_name: '[Finance MCP]' }], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 25_000_000, month_spend: { available: true, value_microusd: 3_840_000 }, last_activity_at: '2026-10-31T10:00:00Z', project: null },
+  { uid: 'a1', role_key: 'cfo', persona: { key: 'orrin', avatar: '/agents/orrin.webp', tagline: '[Every road ends at a market.]' }, first_name: '[Nora]', last_name: '[Vale]', model_id: 'm-a', model_label: '[Model A]', tools: [{ tool: 'get_balance', server_name: '[Finance MCP]' }, { tool: 'list_transactions', server_name: '[Finance MCP]' }], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 25_000_000, month_spend: { available: true, value_microusd: 3_840_000 }, last_activity_at: '2026-10-31T10:00:00Z', project: null },
   { uid: 'a2', role_key: 'cmo', persona: { key: 'kade', tagline: '[Light ten lanterns.]' }, first_name: '[Iris]', last_name: '[Cole]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'paused', paused_reason: 'cap', monthly_cap_microusd: 10_000_000, month_spend: { available: true, value_microusd: 10_000_000 }, last_activity_at: '2026-10-28T12:00:00Z', project: null },
   { uid: 'a3', role_key: 'research', persona: { key: 'ryssa', tagline: '[If the plan survives me.]' }, first_name: '[Milo]', last_name: '[Hart]', model_id: 'm-c', model_label: '[Model C]', tools: [], sponsor: { uid: 'u3', name: '[Sam Okafor]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 10_000_000, month_spend: { available: false }, last_activity_at: null, project: null },
   { uid: 'a4', role_key: 'cto', persona: { key: 'corvane', tagline: '[Ask the right question.]' }, first_name: '[Ada]', last_name: '[Quinn]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 20_000_000, month_spend: { available: true, value_microusd: 2_100_000 }, last_activity_at: '2026-10-31T08:00:00Z', project: { id: 7, name: '[Atlas Pilot]' } },
@@ -104,15 +104,18 @@ test('an agent is a rounded square with the spark and the "AI agent" pill; a per
   assert.doesNotMatch(person, /agent-tile|AI agent/);
 });
 
-test('no people row draws the agent marker, and every agent row draws it with no circle', () => {
+test('agent rows show Studio archetypes and use the persona portrait when present', () => {
   const people = render(h(PeopleCard, { kind: 'company', people: peopleFromCompany(COMPANY, 1, VOCAB), canEdit: true }));
   assert.doesNotMatch(people, /agent-tile|agent-pill/);
   assert.equal((people.match(/data-shape="circle"/g) || []).length, 3);
   const card = render(h(AgentsCard, { block: { available: true, value: { can_manage: true, agents: AGENTS.slice(0, 3) } }, kind: 'project', companyName: '[Lantern]', now: NOW }));
-  for (const uid of ['a1', 'a2', 'a3']) {
+  for (const [uid, archetype] of [['a1', 'Disciplined Allocator'], ['a2', 'Growth Catalyst'], ['a3', 'Thesis-Driven Backer']]) {
     const row = card.slice(card.indexOf(`data-testid="agent-${uid}"`)).split('role="row"')[0];
     assert.match(row, /data-shape="square"/, uid);
-    assert.match(row, /AI agent/, uid);
+    assert.match(row, new RegExp(`data-testid="agent-archetype">${archetype}<`), uid);
+    assert.doesNotMatch(row, /data-testid="agent-pill"/, uid);
+    if (uid === 'a1') assert.match(row, /<img src="\/agents\/orrin\.webp"/, uid);
+    else assert.doesNotMatch(row, /<img /, uid);
     assert.doesNotMatch(row, /data-shape="circle"/, uid);
   }
 });
@@ -144,25 +147,14 @@ test('"Not recorded" is muted and never a zero: spend, last activity, title, cou
 
 // ---------------------------------------------------------------- unavailable is not none
 
-/** #3842 (runQuote, runAgent), #3843 (queue, queueItem, decide) and #3844 (toolChoices): no route yet. */
-const UNBUILT = ['runQuote', 'runAgent', 'queue', 'queueItem', 'decide', 'toolChoices'];
+/** #3727 integration: the merged run, queue and tool routes are wired. */
+const INTEGRATED = ['runQuote', 'runAgent', 'queue', 'queueItem', 'decide', 'toolChoices'];
 /** #3840's eight, wired to `teamAgentsApi`. */
 const WIRED = ['roles', 'listAgents', 'addAgent', 'agent', 'updateAgent', 'removeAgent', 'rulebook', 'saveRulebook'];
 
-test('the seam: #3842–#3844 still answer unavailable without a request, and the card says it is not "none"', async () => {
-  const restore = installDocument();
-  const previous = globalThis.fetch;
-  const seen = [];
-  globalThis.fetch = async (u) => { seen.push(String(u)); return response({ ok: true }); };
-  try {
-    for (const name of UNBUILT) {
-      const out = await adapter[name]('company', 'nw1', {});
-      assert.deepEqual(out, { available: false, reason: 'AI agents aren’t switched on yet.' }, `${name} claims something with no route`);
-    }
-    assert.deepEqual(seen, [], 'an unbuilt function reaches no route');
-  } finally { globalThis.fetch = previous; restore(); }
+test('the seam: merged parts answer through their routes; unavailable is never the same as none', async () => {
   const exported = Object.entries(adapter).filter(([, fn]) => typeof fn === 'function').map(([n]) => n);
-  for (const name of [...UNBUILT, ...WIRED]) assert.ok(exported.includes(name), name);
+  for (const name of [...INTEGRATED, ...WIRED]) assert.ok(exported.includes(name), name);
   const off = renderedText(render(h(AgentsCard, { block: adapter.unavailable(), kind: 'company', companyName: 'x' })));
   assert.match(off, /AI agents aren’t switched on yet\. That is not the same as having none\./);
   assert.doesNotMatch(off, /No agent works here yet/);
@@ -190,7 +182,7 @@ test('through() maps the Worker\'s answers to what the page draws, in words', as
     assert.ok(!refusalWords(code).includes(code), `${code} reaches the page as words`);
   }
   const plan = renderedText(render(h(AgentsCard, { block: await fail(403, 'plan_required'), kind: 'company', companyName: 'x' })));
-  assert.match(plan, /AI agents come with a paid Founder plan\.pending ownerSee plans/);
+  assert.match(plan, /AI agents come with a paid Founder plan\.See plans/);
   const unread = renderedText(render(h(AgentsCard, { block: await fail(500), kind: 'company', companyName: 'x', onRetry() {} })));
   assert.match(unread, /AI agents could not be read\. That is not the same as having none\.Try again/);
 });
@@ -275,8 +267,8 @@ test('no client method exists for a route that does not exist', () => {
     assert.match(seam, new RegExp(`export const ${m} = [^\\n]*through\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} is wired to teamAgentsApi.${m}`);
   }
   // S1 wires the existing run, queue and tool client methods into the adapter.
-  for (const m of ['queue', 'queueItem', 'decide', 'toolChoices']) {
-    assert.doesNotMatch(seam, new RegExp(`export const ${m} = [^\\n]*teamAgentsApi`), `${m} adapter wiring remains with S1`);
+  for (const m of INTEGRATED) {
+    assert.match(seam, new RegExp(`export const ${m} = [^\\n]*through\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} reaches its merged client`);
   }
   for (const f of readdirSync(TEAM).filter((x) => /\.jsx?$/.test(x))) {
     assert.doesNotMatch(read(`${TEAM}/${f}`), /request\(|fetch\(/, `${f} reaches the network itself`);
@@ -312,7 +304,7 @@ test('a rule book keeps the seven-item floor locked and nothing automatic', () =
   const book = { role_key: 'cfo', version: 3, effective: { mission: 'Drafts the runway note.', may_propose: ['Use of funds rows'], kpis: [], tone: null }, diff: [], versions: [] };
   const text = renderedText(render(h(RulebookView, { book, role: { name: 'CFO' }, onBack() {}, onEdit() {}, onRestore() {}, canManage: true })));
   for (const item of ['Payments', 'Signing', 'Filing', 'Cap table writes', 'Sending an email', 'Publishing a post', 'Inviting a person']) assert.ok(text.includes(item), item);
-  assert.match(text, /Nothing is automatic in v1\.pending owner/);
+  assert.match(text, /Nothing is automatic in v1\./);
   assert.match(text, /KPIsNot recorded/);
   assert.match(text, /ToneNot recorded/);
 });
@@ -377,7 +369,7 @@ const COMPANY_ROUTE = '/account/companies/:uid/settings/team';
 test('company Team: people and invitations on the routes that exist; agents unavailable; Resend and Revoke wired', async () => {
   const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }));
   try {
-    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/platform-status', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route; D4162: and the platform status');
+    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/company/nw1/moves', 'GET /api/teams/company/nw1/queue', 'GET /api/teams/platform-status', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route; D4162: and the platform status; D1531 (TM18): and the moves');
     assert.equal(v.has('platform-paused-banner'), false, 'nothing paused: no banner');
     const text = v.text();
     assert.match(text, /Company settings/);
@@ -572,7 +564,7 @@ test('TM3a–TM3c (D4119 AG4): tools are granted from #3844\'s servers, the rule
 });
 
 test('TM7a, TM7b2, TM9b1: four filters, Accept decides from the row, and the decision and pause words in full', () => {
-  const value = { items: [{ uid: 'p1', title: 'Weekly runway note draft', module_label: 'Raise › Runway', status: 'proposed', agent: AGENTS[0], cost: { available: true, value_microusd: 40_000 }, sponsor: { name: '[Avery Stone]' } }], decided: [] };
+  const value = { items: [{ uid: 'p1', can_decide: true, title: 'Weekly runway note draft', module_label: 'Raise › Runway', status: 'proposed', agent: AGENTS[0], cost: { available: true, value_microusd: 40_000 }, sponsor: { name: '[Avery Stone]' } }], decided: [] };
   const html = render(h(ApprovalsBoard, { value, onOpen() {}, onAccept() {} }));
   for (const l of ['Agent', 'Module', 'Status', 'Cost']) assert.match(html, new RegExp(`aria-label="${l}"`), l);
   assert.match(html, /data-testid="approval-accept-p1"/);
@@ -584,7 +576,7 @@ test('TM7a, TM7b2, TM9b1: four filters, Accept decides from the row, and the dec
 test('TM4b2 and TM4c: the counsel banner, the Edit sheet\'s own floor line, and dates as days', () => {
   const book = { role_key: 'general_counsel', version: 3, effective: {}, diff: [], versions: [{ version: 3, by: { name: '[Avery Stone]' }, at: '2026-10-30T10:00:00Z' }] };
   const text = renderedText(render(h(RulebookView, { book, role: { key: 'general_counsel', name: 'General counsel (assistant)' }, onBack() {}, onEdit() {}, onRestore() {}, canManage: false })));
-  assert.match(text, /Not legal advice\. Always escalates\.pending owner: wording from counsel/);
+  assert.match(text, /Not legal advice\. Always escalates\.counsel wording pending/);
   assert.match(text, /v3 by \[Avery Stone\] · 30 Oct/);
   assert.match(read(`${TEAM}/RulebooksTab.jsx`), /note=\{FLOOR_EDIT_NOTE\}/);
   const profile = renderedText(render(h(AgentProfile, { data: { agent: AGENTS[0], matrix: [], month_spend: { available: true, value_microusd: 3_840_000 }, resets_at: '2026-11-01', events: [{ text: 'Ran', at: '2026-10-31T09:12:00Z' }] } })));
@@ -805,13 +797,13 @@ const agentsOn = (over = {}) => worker({
   ...over,
 });
 
-test('#3840 switched on: the agents card draws the list with the AI agent pill, Not recorded for unread spend, and no Add without the plan', async () => {
+test('#3840 switched on: the agents card draws the list with Studio archetypes, Not recorded for unread spend, and no Add without the plan', async () => {
   const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), { handle: agentsOn() });
   try {
     assert.ok(v.keys().includes('GET /api/teams/company/nw1/agents'));
     const text = v.text();
-    assert.match(text, /\[Nora\] \[Vale\]AI agent/);
-    assert.match(text, /\[Milo\] \[Hart\]AI agent/);
+    assert.match(text, /\[Nora\] \[Vale\]Disciplined Allocator/);
+    assert.match(text, /\[Milo\] \[Hart\]Thesis-Driven Backer/);
     assert.match(text, /Platform model · m-a/, 'the model the Worker names, with no invented label');
     assert.match(text, /\[If the plan survives me\.\] · this month Not recorded/, 'unread spend is Not recorded');
     assert.doesNotMatch(text, /\$0\.00|aren’t switched on/);
@@ -891,7 +883,7 @@ test('#3840 rule books: the default reads "Default", a floor refusal outlines th
 });
 
 test('#3840 Add agent (D4119): the sheet posts who, the area of work, the model and the cap, and a refusal comes back in words', async () => {
-  const models = [{ id: 'm-a', label: '[Model A]' }];
+  const models = [{ id: 'm-a', label: '[Model A]', input_usd_per_million: 0.06, output_usd_per_million: 0.24 }];
   const personas = { personas: [
     { key: 'orrin', name: 'Orrin', gender: 'man', tagline: '[Every road ends at a market.]', risk: 3, values: {}, top_values: ['stewardship', 'integrity', 'resilience'], natural_fit: ['finance', 'legal'] },
     { key: 'kade', name: 'Kade', gender: 'man', tagline: '[Light ten lanterns.]', risk: 5, values: {}, top_values: ['curiosity', 'ambition', 'collaboration'], natural_fit: ['product', 'marketing'] },
@@ -905,9 +897,13 @@ test('#3840 Add agent (D4119): the sheet posts who, the area of work, the model 
     await v.click('agent-pick-orrin');
     await v.click('add-agent-next');
     // D1612 (SK6): the Skills step. Skills aren't open yet, so nothing is picked and no \`skills\` is sent.
+    assert.match(v.text(), /Area of work · Finance/, 'the selected area explains what this AI agent is joining to do');
     assert.match(v.text(), /Skills aren’t open yet/);
     assert.match(v.text(), /Coverage with these skillsNot recorded/);
     await v.click('add-agent-next');
+    assert.match(v.text(), /Area of work · Finance · 0 skills/, 'the role remains visible while model and cap are chosen');
+    assert.match(v.text(), /Input \$0\.06 \/ 1M tokens · Output \$0\.24 \/ 1M tokens/);
+    assert.doesNotMatch(v.text(), /Offered on your plan/);
     const radio = walkRadio();
     assert.ok(radio, 'the model radio');
     await act(async () => { radio.onChange(); });

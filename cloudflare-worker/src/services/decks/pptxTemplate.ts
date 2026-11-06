@@ -137,6 +137,8 @@ const ATTR = {
   x: /\sx="([^"]*)"/, y: /\sy="([^"]*)"/, cx: /\scx="([^"]*)"/, cy: /\scy="([^"]*)"/,
   val: /\sval="([^"]*)"/, lastClr: /\slastClr="([^"]*)"/, typeface: /\stypeface="([^"]*)"/,
   type: /\stype="([^"]*)"/, idx: /\sidx="([^"]*)"/, name: /\sname="([^"]*)"/,
+  // D1563 (#3810): a slide's relationships, to find the layout its placeholders inherit from.
+  target: /\sTarget="([^"]*)"/, relType: /\sType="([^"]*)"/,
 } as const;
 const attr = (tag: string, name: keyof typeof ATTR) => {
   const m = ATTR[name].exec(tag);
@@ -192,26 +194,57 @@ export function fontOf(found: string | null, role: 'display' | 'body'): Template
   return { role, found, use, fallback: true };
 }
 
-type Box = { x: number; y: number; w: number; h: number; kind: AreaKind; type: string; idx: string | null };
+export type Box = { x: number; y: number; w: number; h: number; kind: AreaKind; type: string; idx: string | null };
 
 const SKIP = new Set(['dt', 'ftr', 'sldNum', 'hdr', 'sldImg']);
 const KIND: Record<string, AreaKind> = { title: 'heading', ctrTitle: 'heading', subTitle: 'text', body: 'text', obj: 'text', pic: 'image', chart: 'chart', tbl: 'table', dgm: 'graphic', media: 'image', clipArt: 'image' };
 
 /** Every placed shape of a layout or master: its box (EMU), what it holds and its placeholder type. */
 export function shapesOf(xml: string): Box[] {
-  const out: Box[] = [];
+  return readShapes(xml, false).map(({ text: _t, paras: _p, ...b }) => b);
+}
+
+/** A slide's shape with its words: each paragraph a line, as the file holds it. */
+export type TextBox = Box & { text: string; paras: number };
+
+/**
+ * D1563 (#3810): every shape of a slide, with its text. A slide's own text box
+ * (a drawn shape that holds words) is content here, unlike a layout's, where a
+ * drawn shape is decoration.
+ */
+export function slideShapesOf(xml: string): TextBox[] {
+  return readShapes(xml, true);
+}
+
+/** The text of a shape's paragraphs (`<a:p>`), each a line; a run's characters as written, unescaped. */
+export function paragraphsOf(body: string): string[] {
+  const out: string[] = [];
+  for (const p of body.matchAll(/<a:p\b[^>]*?(?:\/>|>([\s\S]*?)<\/a:p>)/g)) {
+    const inner = p[1] ?? '';
+    let line = '';
+    for (const r of inner.matchAll(/<a:t>([\s\S]*?)<\/a:t>|<a:br\b[^>]*\/>/g)) line += r[1] != null ? unescape(r[1]) : ' ';
+    line = line.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (line) out.push(line);
+  }
+  return out;
+}
+
+function readShapes(xml: string, slide: boolean): TextBox[] {
+  const out: TextBox[] = [];
   const tree = /<p:spTree>([\s\S]*)<\/p:spTree>/.exec(xml)?.[1] ?? '';
   for (const m of tree.matchAll(/<p:(sp|pic|graphicFrame)>([\s\S]*?)<\/p:\1>/g)) {
     const [, tag, body] = m;
     const ph = /<p:ph\b[^>]*\/?>/.exec(body)?.[0] ?? null;
     const type = ph ? (attr(ph, 'type') ?? 'body') : (tag === 'pic' ? 'pic' : tag === 'graphicFrame' ? (body.includes('/chart"') ? 'chart' : 'tbl') : 'shape');
     if (SKIP.has(type)) continue;
-    if (!ph && tag === 'sp') continue; // a drawn shape is decoration, not a place for content
+    const lines = slide ? paragraphsOf(body) : [];
+    // A drawn shape is decoration, not a place for content, unless it is a slide's shape that holds words.
+    if (!ph && tag === 'sp' && !lines.length) continue;
     const off = /<a:off\b[^>]*>/.exec(body)?.[0];
     const ext = /<a:ext\b[^>]*cx="[^"]*"[^>]*>/.exec(body)?.[0];
     const n = (s: string | null | undefined) => (s != null && /^-?\d+$/.test(s) ? Number(s) : NaN);
     const box = { x: n(off && attr(off, 'x')), y: n(off && attr(off, 'y')), w: n(ext && attr(ext, 'cx')), h: n(ext && attr(ext, 'cy')) };
-    out.push({ ...box, kind: KIND[type] ?? 'text', type, idx: ph ? attr(ph, 'idx') : null });
+    out.push({ ...box, kind: KIND[type] ?? 'text', type, idx: ph ? attr(ph, 'idx') : null, text: lines.join('\n'), paras: lines.length });
   }
   return out;
 }
@@ -224,35 +257,53 @@ const COLS = lines(12, FRAME.marginX, CELL.width, FRAME.gutter);
 const ROWS = lines(6, FRAME.marginTop, CELL.height, FRAME.gutter);
 
 /** The cell an edge snaps to (1-based), or null when it sits between two lines. A box reaching into a margin snaps to the outer cell. */
-function snap(v: number, set: number[], pitch: number, outer: 'first' | 'last'): number | null {
+function snap(v: number, set: number[], pitch: number, outer: 'first' | 'last', tolerance = SNAP_TOLERANCE): number | null {
   if (outer === 'first' && v <= set[0]) return 1;
   if (outer === 'last' && v >= set[set.length - 1]) return set.length;
   let best = -1, dist = Infinity;
   set.forEach((s, i) => { const d = Math.abs(v - s); if (d < dist) { dist = d; best = i; } });
-  return dist <= SNAP_TOLERANCE * pitch ? best + 1 : null;
+  return dist <= tolerance * pitch ? best + 1 : null;
 }
 
 /** One layout's boxes on The Grid's whole cells, or the reason they cannot be. */
 export function placeLayout(name: string, boxes: Box[], slide: { cx: number; cy: number }): TemplateLayout {
   const ok = boxes.filter((b) => [b.x, b.y, b.w, b.h].every(Number.isFinite) && b.w > 0 && b.h > 0);
   if (!ok.length) return { name, placed: false, reason: 'empty', why: UNPLACED.empty };
-  const sx = SLIDE.width / slide.cx, sy = SLIDE.height / slide.cy;
   const areas: TemplateArea[] = [];
   for (const b of ok) {
-    const x1 = b.x * sx, x2 = (b.x + b.w) * sx, y1 = b.y * sy, y2 = (b.y + b.h) * sy;
-    const c1 = snap(x1, COLS.starts, CELL.width + FRAME.gutter, 'first');
-    const c2 = snap(x2, COLS.ends, CELL.width + FRAME.gutter, 'last');
-    if (c1 == null || c2 == null || c2 < c1) return { name, placed: false, reason: 'between_columns', why: UNPLACED.between_columns };
-    const r1 = snap(y1, ROWS.starts, CELL.height + FRAME.gutter, 'first');
-    const r2 = snap(y2, ROWS.ends, CELL.height + FRAME.gutter, 'last');
-    if (r1 == null || r2 == null || r2 < r1) return { name, placed: false, reason: 'between_rows', why: UNPLACED.between_rows };
-    areas.push({ kind: b.kind, c1, c2, r1, r2 });
+    const a = areaOn(b, slide);
+    if (typeof a === 'string') return { name, placed: false, reason: a, why: UNPLACED[a] };
+    areas.push(a);
   }
   for (let i = 0; i < areas.length; i += 1) for (let j = i + 1; j < areas.length; j += 1) {
-    const a = areas[i], z = areas[j];
-    if (a.c1 <= z.c2 && z.c1 <= a.c2 && a.r1 <= z.r2 && z.r1 <= a.r2) return { name, placed: false, reason: 'overlap', why: UNPLACED.overlap };
+    if (areasOverlap(areas[i], areas[j])) return { name, placed: false, reason: 'overlap', why: UNPLACED.overlap };
   }
   return { name, placed: true, areas: areas.sort((a, z) => (a.r1 - z.r1) || (a.c1 - z.c1)) };
+}
+
+/** Whether two areas share a cell. */
+export const areasOverlap = (a: { c1: number; c2: number; r1: number; r2: number }, z: { c1: number; c2: number; r1: number; r2: number }) =>
+  a.c1 <= z.c2 && z.c1 <= a.c2 && a.r1 <= z.r2 && z.r1 <= a.r2;
+
+/**
+ * One box (EMU) on The Grid's whole cells, each edge within `SNAP_TOLERANCE`
+ * of a line, or why not. With `nearest`, an edge between two lines takes the
+ * nearer one instead (D1563: an imported slide's box, moved onto the grid).
+ */
+export function areaOn(b: Box, slide: { cx: number; cy: number }, nearest = false): TemplateArea | 'between_columns' | 'between_rows' {
+  const sx = SLIDE.width / slide.cx, sy = SLIDE.height / slide.cy;
+  const x1 = b.x * sx, x2 = (b.x + b.w) * sx, y1 = b.y * sy, y2 = (b.y + b.h) * sy;
+  const tol = nearest ? Infinity : SNAP_TOLERANCE;
+  const c1 = snap(x1, COLS.starts, CELL.width + FRAME.gutter, 'first', tol);
+  let c2 = snap(x2, COLS.ends, CELL.width + FRAME.gutter, 'last', tol);
+  const r1 = snap(y1, ROWS.starts, CELL.height + FRAME.gutter, 'first', tol);
+  let r2 = snap(y2, ROWS.ends, CELL.height + FRAME.gutter, 'last', tol);
+  // A box narrower or shorter than one cell, moved to the nearer lines, takes the one cell it starts in.
+  if (nearest && c1 != null && c2 != null && c2 < c1) c2 = c1;
+  if (nearest && r1 != null && r2 != null && r2 < r1) r2 = r1;
+  if (c1 == null || c2 == null || c2 < c1) return 'between_columns';
+  if (r1 == null || r2 == null || r2 < r1) return 'between_rows';
+  return { kind: b.kind, c1, c2, r1, r2 };
 }
 
 const numberOf = (name: string) => Number(/(\d+)\.xml$/.exec(name)?.[1] ?? 0);
@@ -298,6 +349,61 @@ export async function parseTemplate(bytes: Uint8Array): Promise<TemplateReport> 
     layouts,
     counts: { found: layouts.length, placed, not_placed: layouts.length - placed },
   };
+}
+
+export const SLIDES_MAX = 60;
+
+export type ImportedSlide = { n: number; shapes: TextBox[] };
+
+/** The layout a slide's relationships name (`ppt/slides/_rels/slideN.xml.rels`), as a part name; null when none. */
+export function layoutOfRels(rels: string): string | null {
+  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+    const type = attr(m[0], 'relType') ?? '';
+    const target = attr(m[0], 'target') ?? '';
+    if (!type.endsWith('/slideLayout')) continue;
+    const file = /slideLayout\d+\.xml$/.exec(target)?.[0];
+    return file ? `ppt/slideLayouts/${file}` : null;
+  }
+  return null;
+}
+
+/**
+ * D1563 (#3810): a deck's slides, in order, each with its shapes and their
+ * words. A placeholder the slide does not place takes its layout's box (by
+ * index, then by type), else its master's, as PowerPoint draws it.
+ */
+export async function readPptxSlides(bytes: Uint8Array): Promise<{ cx: number; cy: number; slides: ImportedSlide[]; found: number }> {
+  const parts = readPptxZip(bytes);
+  const text = async (name: string) => {
+    const p = parts.find((x) => x.name === name);
+    return p ? new TextDecoder().decode(await p.read()) : null;
+  };
+  const pres = (await text('ppt/presentation.xml')) ?? '';
+  const sz = /<p:sldSz\b[^>]*>/.exec(pres)?.[0];
+  const cx = Number(sz && attr(sz, 'cx')) || 12192000;
+  const cy = Number(sz && attr(sz, 'cy')) || 6858000;
+  const masterName = parts.map((p) => p.name).filter((n) => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(n)).sort((a, z) => numberOf(a) - numberOf(z))[0];
+  const master = masterName ? shapesOf((await text(masterName)) ?? '') : [];
+  const layouts = new Map<string, Box[]>();
+  const names = parts.map((p) => p.name).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, z) => numberOf(a) - numberOf(z));
+  const slides: ImportedSlide[] = [];
+  for (const name of names.slice(0, SLIDES_MAX)) {
+    const n = numberOf(name);
+    const layoutName = layoutOfRels((await text(`ppt/slides/_rels/slide${n}.xml.rels`)) ?? '');
+    if (layoutName && !layouts.has(layoutName)) layouts.set(layoutName, shapesOf((await text(layoutName)) ?? ''));
+    const layout = layoutName ? layouts.get(layoutName) ?? [] : [];
+    const placed = (b: Box) => [b.x, b.y, b.w, b.h].every(Number.isFinite);
+    const shapes = slideShapesOf((await text(name)) ?? '').map((s) => {
+      if (placed(s) || (s.idx == null && s.type === 'shape')) return s;
+      const from = (s.idx != null ? layout.find((l) => l.idx === s.idx && placed(l)) : undefined)
+        ?? layout.find((l) => l.type === s.type && placed(l))
+        ?? master.find((m) => m.type === s.type && placed(m))
+        ?? master.find((m) => m.kind === s.kind && placed(m));
+      return from ? { ...s, x: from.x, y: from.y, w: from.w, h: from.h } : s;
+    });
+    slides.push({ n, shapes });
+  }
+  return { cx, cy, slides, found: names.length };
 }
 
 /** A saved layout as a prompt names it: its name is the file's text, so it is framed as untrusted data (D1506). */

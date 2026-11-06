@@ -40,6 +40,13 @@
 
 /* The tile frame (SM7). */
 .sm-tile { display: flex; min-width: 0; flex-direction: column; gap: 12px; border: 1px solid var(--sm-line); border-radius: 12px; background: var(--sm-card); padding: 16px; }
+/* Shared artifact frame. The catalogue uses purpose text, the grid uses live content. */
+.sm-artifact { box-shadow: 0 1px 2px rgba(24, 24, 27, .06); }
+.sm-artifact-mark { display: inline-grid; flex: none; place-items: center; width: 30px; height: 34px; border: 1px solid var(--sm-lavE); border-radius: 8px 12px 8px 8px; background: var(--sm-lav); color: var(--sm-vtx); }
+.sm-artifact-content { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--sm-line); border-radius: 9px; background: var(--sm-raised); }
+.sm-tile-head > .sm-artifact-mark { margin-right: 2px; }
+.sm-tile[data-editing="true"] .sm-tile-head { flex-wrap: wrap; }
+.sm-tile[data-editing="true"] .sm-tile-head h3 { flex-basis: 6rem; }
 .sm-tile[data-editing="true"] { border-color: var(--sm-lavE); }
 .sm-tile[data-lifted="true"] { transform: rotate(-1deg) scale(1.02); box-shadow: 0 22px 46px rgba(24, 24, 27, .26); }
 .sm-tile[data-fixed="true"] { opacity: .62; }
@@ -98,18 +105,22 @@
 .sm-dim { opacity: .62; }
 
 /* The module map (SM6). */
-.sm-map { display: flex; flex-direction: column; gap: 16px; }
+.sm-map { display: flex; flex-direction: column; gap: 20px; padding: 20px; }
+.sm-map > p { margin: 0; }
 .sm-search { width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid var(--sm-line2); border-radius: 9px; background: var(--sm-card); color: var(--sm-ink); font-size: 13.5px; }
 .sm-search:focus { outline: 2px solid #7c3aed; outline-offset: 0; }
 .sm-group h3 { margin: 0 0 8px; font-size: 14px; font-weight: 800; }
 .sm-group h3 span { margin-left: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--sm-mut); }
 .sm-group[data-tone="lav"] { padding: 12px; border-radius: 12px; background: var(--sm-lav); }
-.sm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
-.sm-entry { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--sm-line); border-radius: 12px; background: var(--sm-card); }
+.sm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+.sm-entry { display: flex; min-width: 0; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--sm-line); border-radius: 12px; background: var(--sm-card); }
 .sm-entry[data-locked="true"] { background: var(--sm-raised); color: var(--sm-mut); }
-.sm-entry b { font-size: 13px; font-weight: 800; }
-.sm-entry p { margin: 0; font-size: 12px; color: var(--sm-mut); }
-.sm-preview { height: 40px; border-radius: 8px; background: var(--sm-lav); }
+.sm-artifact-cover { display: grid; place-items: center; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--sm-line); border-radius: 8px; background: var(--sm-raised); }
+.sm-artifact-cover img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: cover; }
+.sm-artifact-details { display: grid; align-content: start; gap: 4px; flex: 1; min-width: 0; }
+.sm-artifact-details h4 { margin: 0; font-size: 13px; font-weight: 800; color: var(--sm-ink); }
+.sm-artifact-details p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--sm-mut); }
+.sm-entry-actions { padding-top: 2px; }
 .sm-added { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--sm-pos); }
 .sm-add { min-height: 30px; padding: 0 10px; border: 1px solid var(--sm-vio); border-radius: 9px; background: transparent; color: var(--sm-vtx); font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .sm-add[aria-disabled="true"] { opacity: .5; cursor: not-allowed; border-color: var(--sm-line2); color: var(--sm-mut); }

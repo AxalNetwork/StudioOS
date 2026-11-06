@@ -257,6 +257,7 @@ import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
 import deckAreas from './routes/deck_areas';
+import deckInstruct from './routes/deck_instruct';
 import deckNarrative from './routes/deck_narrative';
 import deckBatches from './routes/deck_batches';
 import deckDraft from './routes/deck_draft';
@@ -918,6 +919,9 @@ const COOL_OFF_ROUTES = [
   // added or taken on someone else's behalf. The member-account read beside it
   // stays open.
   '/api/ai-budget/members/:userId/adjustments',
+  // D4373 — HQ's refund of a deck generation run: money given back on a
+  // member's behalf, the same class as an adjustment.
+  '/api/ai-budget/deck-batches/:uid/refund',
   // D966 — the SAFE basis repair writes founders' cap tables: the money-adjacent
   // class D892's reconciliation is paused under (`/api/admin/billing`). The exact
   // route, so D710's entity reads under `/api/admin/mercury` stay open.
@@ -1419,6 +1423,8 @@ app.route('/api/decks', deckGrid);
 app.route('/api/decks', deckBatches);
 // D1512 (#3764): Generate into areas (quote, admit, proposals, accept, discard).
 app.route('/api/decks', deckAreas);
+// D1521 (#3773): an instruction on the grid selection (quote, then one run into area proposals).
+app.route('/api/decks', deckInstruct);
 // D1516 (#3768): New deck from the narrative (outline with the grid plan and quote; one deck_build run).
 app.route('/api/decks', deckNarrative);
 // D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
@@ -2294,34 +2300,40 @@ export default {
           }
         }
         // D1528 (#3847): the agent sweep. Its own minute (% 5 === 1), under
-        // this lease, only while the engine is enabled. NOT GATED ON
+        // this lease. NOT GATED ON
         // `hqCadences`: each deployment's agents and runs are its own rows.
-        if (now.getUTCMinutes() % 5 === 1 && env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off' && env.TEAM_AGENTS_ENABLED === 'true') {
+        // D4387 (#4387): the sweep runs whenever team agents are on, so an
+        // agent paused at its cap resumes when the month turns even with the
+        // engine off; `sweepAgents` itself still admits nothing while the
+        // engine is off or halted. Duties and alerts stay the engine's.
+        if (now.getUTCMinutes() % 5 === 1 && env.TEAM_AGENTS_ENABLED === 'true') {
           try {
             const { sweepAgents } = await import('./agents/sweep');
             const r = await sweepAgents(env, now);
-            if (r.resent || r.admitted) cronSummary.push(`agents resent=${r.resent} admitted=${r.admitted}`);
+            if (r.resent || r.admitted || r.cap_resumed) cronSummary.push(`agents resent=${r.resent} admitted=${r.admitted} cap_resumed=${r.cap_resumed}`);
           } catch {
             console.error('[cron] agent sweep unreadable');
           }
-          // D1530 (#3849, E5): the due duties, claim before act.
-          try {
-            const { sweepAgentDuties } = await import('./agents/sweep');
-            const d = await sweepAgentDuties(env, now);
-            if (d && (d.task_created || d['skipped:agent_paused'] || d['skipped:no_tokens'])) {
-              cronSummary.push(`agent duties tasks=${d.task_created} skipped=${d['skipped:agent_paused'] + d['skipped:no_tokens'] + d['skipped:scope_gone']}`);
+          if (env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off') {
+            // D1530 (#3849, E5): the due duties, claim before act.
+            try {
+              const { sweepAgentDuties } = await import('./agents/sweep');
+              const d = await sweepAgentDuties(env, now);
+              if (d && (d.task_created || d['skipped:agent_paused'] || d['skipped:no_tokens'])) {
+                cronSummary.push(`agent duties tasks=${d.task_created} skipped=${d['skipped:agent_paused'] + d['skipped:no_tokens'] + d['skipped:scope_gone']}`);
+              }
+            } catch {
+              console.error('[cron] agent duties unreadable');
             }
-          } catch {
-            console.error('[cron] agent duties unreadable');
-          }
-          // #3851 (E7): the engine's alerts (caps, blocked tasks, waiting approvals, DLQ, gateway), each once per its window.
-          try {
-            const { sweepAgentAlerts } = await import('./services/agents/alerts');
-            const a = await sweepAgentAlerts(env, now);
-            const sent = Object.values(a).reduce((x, y) => x + y, 0);
-            if (sent) cronSummary.push(`agent alerts ${Object.entries(a).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' ')}`);
-          } catch {
-            console.error('[cron] agent alerts unreadable');
+            // #3851 (E7): the engine's alerts (caps, blocked tasks, waiting approvals, DLQ, gateway), each once per its window.
+            try {
+              const { sweepAgentAlerts } = await import('./services/agents/alerts');
+              const a = await sweepAgentAlerts(env, now);
+              const sent = Object.values(a).reduce((x, y) => x + y, 0);
+              if (sent) cronSummary.push(`agent alerts ${Object.entries(a).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' ')}`);
+            } catch {
+              console.error('[cron] agent alerts unreadable');
+            }
           }
         }
         // D1259: a published venture model rescores the next batch of ventures
@@ -2337,6 +2349,12 @@ export default {
           }
         }
         // D886 B10: counts-only alerts in the existing HQ notification inbox.
+        // D1537 (#3786): the error budget, once an hour at :17. HQ only:
+        // the alert goes to HQ's admins. It never throws into the tick.
+        if (hqCadences && now.getUTCMinutes() === 17) {
+          const { noteErrorBudgetAlert } = await import('./services/deckErrorBudgetCron');
+          if (await noteErrorBudgetAlert(env, now)) cronSummary.push('error budget alert sent');
+        }
         if (hqCadences && now.getUTCMinutes() % 5 === 3) {
           try {
             const { sweepMeetingBotOperations } = await import('./services/meetingBotOperationsAlerts');
@@ -2482,6 +2500,18 @@ export default {
             if (r.written || r.failed.length) console.info(`[cron] leaderboard snapshots written=${r.written} failed=${r.failed.length}`);
           } catch (e) {
             console.error('[cron] leaderboard snapshots failed', e);
+          }
+        }
+        // D4292 (#4292) — the influencer commission hold: pending subscription
+        // commissions 30 days past their invoice become payable, then each
+        // referrer's milestone bonuses fire once. Daily at 05:30 UTC; idempotent.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 30) {
+          try {
+            const { sweepPendingCommissions } = await import('./services/influencerCommission');
+            const r = await sweepPendingCommissions(env, now.getTime());
+            if (r.payable || r.bonuses || r.custom) console.info(`[cron] influencer commissions payable=${r.payable} bonuses=${r.bonuses} custom=${r.custom}`);
+          } catch (e) {
+            console.error('[cron] influencer commission sweep failed', e instanceof Error ? e.message : 'error');
           }
         }
         // D484 — publish approved articles whose scheduled time has passed.

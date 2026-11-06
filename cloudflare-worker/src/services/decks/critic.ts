@@ -24,7 +24,12 @@
  * stage benchmark recorded" and the run is told to cite none. A citation
  * quotes the norm, its range and its source; it never rates the company.
  */
-import type { Warning } from '../narrative/arcs';
+/**
+ * A stage plan's warning (`narrative/arcs.ts` `Warning`), as the critic reads it. Kept here, not imported, so
+ * `familyOf`'s module graph does not reach the record sources: the generation runtime's judge (D1551) uses it,
+ * and the cron drives that runtime (D752's privacy guard).
+ */
+type Warning = { card: string; code: 'missing_card' | 'missing_proof' | 'unchecked_proof'; message: string; action: string };
 import { untrustedBlock, withUntrustedRule } from '../ai/untrusted';
 
 export const SEVERITIES = ['deal_breaker', 'will_be_asked', 'polish'] as const;
@@ -54,16 +59,9 @@ export type Finding = {
 
 // ─────────────────────────────────────────────────────────── the family rule
 
-/** A model id's family: `@cf/<org>/…` → org, `anthropic/…` or `claude…` → anthropic; null when unreadable. */
-export function familyOf(model: string | null | undefined): string | null {
-  const id = String(model ?? '').trim().toLowerCase();
-  if (!id) return null;
-  const cf = /^@cf\/([^/]+)\//.exec(id);
-  if (cf) return cf[1];
-  if (/^(anthropic\/|claude)/.test(id)) return 'anthropic';
-  const org = /^([a-z0-9._-]+)\//.exec(id);
-  return org ? org[1] : null;
-}
+// D1551: it lives in `family.ts`, which imports nothing, so the judge reaches it without this module.
+import { familyOf } from './family';
+export { familyOf };
 
 /** The first candidate whose family differs from the writer's; null when none, or the writer is unknown. */
 export function criticModelFor(candidates: readonly string[], writer: string | null | undefined): string | null {

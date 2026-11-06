@@ -1,3 +1,4 @@
+import { holdsLicence, heldLicences } from '../services/accountLicences';
 /** `/api/private-data`: signed-in reads — the caller's profile, private market signals, portfolio metrics and a founder's record. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -27,7 +28,7 @@ privateData.get('/profile', async (c) => {
 
 privateData.get('/market/private-signals', async (c) => {
   const user = await requireAuth(c);
-  if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') return c.json({ error: 'Insufficient permissions' }, 403);
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner') && !holdsLicence(user, 'investor')) return c.json({ error: 'Insufficient permissions' }, 403);
 
   // D538 (#1078): these signals and benchmarks were figures written into
   // routes/market_intel.ts (sector multiples, sentiment, hiring claims,
@@ -136,7 +137,7 @@ privateData.get('/founder/:userId', async (c) => {
 
   const sql = getSQL(c.env);
   const target = await sql`SELECT * FROM users WHERE id = ${userId}`;
-  if (target.length === 0 || target[0].role !== 'founder') { await sql.end(); return c.json({ error: 'Founder not found' }, 404); }
+  if (target.length === 0 || !(await heldLicences(c.env.DB, target[0] as any)).includes('founder')) { await sql.end(); return c.json({ error: 'Founder not found' }, 404); }
 
   // Two callers reach here: an admin looking at someone, and a founder looking
   // at themselves. Only the self case narrows — narrowing the admin case would

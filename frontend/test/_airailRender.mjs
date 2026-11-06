@@ -45,6 +45,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { NO_RAIL_ROUTES, RAIL_PAGES, pageKeyFor } from '../src/lib/railPages.js';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
+import { readRoutesSource } from './_routesSource.mjs';
 
 /** The task that finishes each profile's boards (part 1's `BOARD_TASK`). */
 export const RENDER_TASK = {
@@ -73,6 +75,10 @@ export const FIXTURES = [
   // The Studio dashboard (`pages/Dashboard.jsx`) draws a spinner, then an
   // error card, until `/dashboard` returns its `user`.
   [/\/api\/dashboard(\?|$)/, (m) => ({ user: m, role_view: m.role })],
+  // D4359 (#4359): the Pitch deck studio draws only behind its plan gate, so
+  // its pages are drawn as a Raise + Grow member reads them (the Worker's
+  // `deckStudioAccess` answer when the plan covers the studio).
+  [/\/api\/decks\/access(\?|$)/, () => ({ open: true, required: 'studio', plan: { tier: 'studio', name: 'Raise + Grow', plan_key: 'founder:studio' }, message: null })],
 ];
 
 /** `<Profile> <route>`: how a route is named in `RENDER_NOT_YET`. */
@@ -165,7 +171,6 @@ export const RENDER_NOT_YET = {
   2099: [
   ],
   2100: [
-    'Admin /branch',
     'Admin /admin/fund-admin',
     'Admin /admin/programs/spinout-lab/applications',
     'Admin /admin/spinout-moderation',
@@ -411,13 +416,20 @@ export function renderProfile(profile) {
   test(`every ${profile} route draws its expected rail count and page key`, async () => {
     const cases = renderCases().filter((c) => c.profile === profile);
     assert.ok(cases.length > 0, `the page map has ${profile} routes`);
+    // D2319: historical aliases in the page map are no longer screens. Keep
+    // their cases, asserting removal instead of demanding a rail at an unmounted URL.
+    const routes = readRoutesSource();
+    for (const c of cases.filter((c) => isRetiredRedirect(c.route))) {
+      assert.equal(routes.includes(`<Route path="${c.route}"`), false, `${c.name} retired by D2319`);
+    }
+    const live = cases.filter((c) => !isRetiredRedirect(c.route));
     const renderer = await railRenderer();
     const verdicts = new Map();
     try {
-      for (const c of cases) verdicts.set(c.name, await renderer.verdict(c.profile, c.route));
+      for (const c of live) verdicts.set(c.name, await renderer.verdict(c.profile, c.route));
     } finally {
       renderer.close();
     }
-    assert.deepEqual(renderRatchet(cases, RENDER_NOT_YET, verdicts, (name) => name.startsWith(`${profile} `)), []);
+    assert.deepEqual(renderRatchet(live, RENDER_NOT_YET, verdicts, (name) => name.startsWith(`${profile} `)), []);
   });
 }

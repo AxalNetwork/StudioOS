@@ -1,3 +1,4 @@
+import EventSyndicationPanel from './EventSyndicationPanel';
 // Task #40 (E2) — EventEditorPage: create (/events/new) + edit (/events/:id/edit).
 // Title, type, schedule + timezone, location, cover, capacity, waitlist,
 // approval, visibility, and the audience-rules builder (design §7.1). A draft
@@ -18,7 +19,7 @@ import { EVENT_TYPE_IDS } from '../../lib/eventTypes';
 import { syndicateNote } from '../hq/eventSyndication/syndicationModel';
 import SyndicationAsk from './SyndicationAsk.jsx';
 import Lightbox from '../../ui/Lightbox';
-import CoverDrawPress from '../../ui/CoverDrawPress';
+import EventCoverStep from './EventCoverStep';
 import { publishAction } from './eventOrganiserModel';
 import HostHeader, { NewEventHeader } from './HostHeader';
 import { pendingCount } from './hostHeaderModel';
@@ -74,6 +75,7 @@ export default function EventEditorPage() {
   const [publishError, setPublishError] = useState('');
   // What the header shows: the event as last read or saved, and Registrations' count.
   const [saved, setSaved] = useState(null);
+  const [channelCopy, setChannelCopy] = useState(null);
   const [pending, setPending] = useState(undefined);
   // D1329 (#3490, AF20): Fill with Eadwyn on a saved event's Title and
   // Description, for an admin or its host (`canManage`). #4046 (B2): on
@@ -247,10 +249,8 @@ export default function EventEditorPage() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Cover image URL</label>
-              <input className={inputCls} value={form.cover_url} onChange={(e) => set('cover_url', e.target.value)} placeholder="https://…" />
-              {/* #3935 (EV2): a saved event can have its cover drawn; the URL fills this field, and Save writes it. */}
-              {id && <CoverDrawPress testid="event-cover-draw" quote={coverQuote} draw={coverDraw} onDrawn={onCoverDrawn} />}
+              {/* D3724 (NE2): upload or generate; #3935's press draws, and Save writes the link. */}
+              <EventCoverStep id={id} form={form} set={set} coverQuote={coverQuote} coverDraw={coverDraw} onCoverDrawn={onCoverDrawn} />
             </div>
           </div>
           <div>
@@ -348,7 +348,9 @@ export default function EventEditorPage() {
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Syndicate to</h3>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{syndicateNote(form.visibility)}</p>
             {/* D1493 (#3906, SY8): Ask proposes each kept listing's title and description. */}
-            {isEdit && form.visibility === 'public' && <SyndicationAsk eventId={id} />}
+            {isEdit && form.visibility === 'public' && saved?.visibility === 'public'
+              ? <><EventSyndicationPanel key={id} eventId={id} editable acceptedCopy={channelCopy} /><SyndicationAsk eventId={id} onSaved={(_data, copy) => setChannelCopy(copy)} /></>
+              : form.visibility === 'public' && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Save a public draft before choosing channels.</p>}
           </div>
         </section>
 

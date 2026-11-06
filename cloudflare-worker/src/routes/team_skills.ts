@@ -140,9 +140,13 @@ type Parts = { name: string; purpose: string; steps: string[]; tools: string[]; 
 async function draftParts(env: Env, s: SkillRow): Promise<Parts> {
   const tags = await all<{ taxonomy_skill_slug: string; level: Tag['level'] }>(env, 'SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = ? ORDER BY rowid', s.id);
   const roles = await all<{ role_key: string }>(env, 'SELECT role_key FROM agent_skill_roles WHERE skill_id = ? ORDER BY rowid', s.id);
+  return draftContent(s, tags.map((t) => ({ slug: t.taxonomy_skill_slug, level: t.level })), roles.map((r) => r.role_key));
+}
+
+function draftContent(s: SkillRow, tags: Tag[], roles: string[]): Parts {
   return {
     name: s.name, purpose: s.purpose, steps: parse(s.steps_json, []), tools: parse(s.allowed_tools_json, []), output_kind: s.output_kind,
-    tags: tags.map((t) => ({ slug: t.taxonomy_skill_slug, level: t.level })), roles: roles.map((r) => r.role_key),
+    tags, roles,
   };
 }
 const versionParts = (v: VersionRow): Parts => ({
@@ -167,22 +171,59 @@ function partsDto(p: Parts, tax: Taxonomy) {
   };
 }
 
-/** A library card: readers see the published version; a writer also sees the draft. */
-async function cardOf(env: Env, s: SkillRow, user: User, tax: Taxonomy, authorName: string) {
-  const writer = await mayWrite(env, s, user);
-  const current = s.current_version > 0 ? await versionOf(env, s.id, s.current_version) : null;
-  const shown = current ? versionParts(current) : await draftParts(env, s);
+function skillCard(s: SkillRow, tax: Taxonomy, authorName: string, shown: Parts, draft: Parts | null, usedByCount: number, contextTokens: number | null) {
   return {
     uid: s.uid, scope: s.scope, slug: s.slug, status: s.status, version: s.current_version || null,
     author: s.scope === 'hq' ? 'Axal' : authorName,
     ...partsDto(shown, tax),
-    used_by: await usedBy(env, s.id),
-    // D4121: what the current version adds to every run, in tokens; null for a draft never published.
-    context_tokens: current ? (await pinTokens(env, [{ skill_id: s.id, version: s.current_version }]))?.[0] ?? null : null,
+    used_by: usedByCount,
+    context_tokens: contextTokens,
     updated_at: s.updated_at,
-    can_write: writer,
-    ...(writer ? { draft: partsDto(await draftParts(env, s), tax) } : {}),
+    can_write: draft !== null,
+    ...(draft ? { draft: partsDto(draft, tax) } : {}),
   };
+}
+
+/** A library card: readers see the published version; a writer also sees the draft. */
+async function cardOf(env: Env, s: SkillRow, user: User, tax: Taxonomy, authorName: string) {
+  const writer = await mayWrite(env, s, user);
+  const current = s.current_version > 0 ? await versionOf(env, s.id, s.current_version) : null;
+  const draft = writer || !current ? await draftParts(env, s) : null;
+  const tokens = current ? (await pinTokens(env, [{ skill_id: s.id, version: s.current_version }]))?.[0] ?? null : null;
+  return skillCard(s, tax, authorName, current ? versionParts(current) : draft!, writer ? draft : null, await usedBy(env, s.id), tokens);
+}
+
+/** Read the scoped catalogue with a fixed number of D1 requests, even for HQ’s full draft library. */
+async function libraryCards(env: Env, tax: Taxonomy, company: { id: number; company_name: string } | null, canWriteHq: boolean, canWriteCompany: boolean) {
+  const rows = await all<SkillRow & { draft_tags: string; draft_roles: string; used_by: number }>(env,
+    `SELECT s.*,
+       (SELECT json_group_array(json_object('slug', t.taxonomy_skill_slug, 'level', t.level))
+          FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t) AS draft_tags,
+       (SELECT json_group_array(r.role_key)
+          FROM (SELECT role_key FROM agent_skill_roles WHERE skill_id = s.id ORDER BY rowid) r) AS draft_roles,
+       (SELECT COUNT(*) FROM agent_skill_links l JOIN team_agents a ON a.id = l.agent_id
+          WHERE l.skill_id = s.id AND a.status <> 'removed') AS used_by
+       FROM agent_skills s
+      WHERE (s.scope = 'hq' AND (? = 1 OR (s.current_version > 0 AND s.status <> 'retired')))
+         OR (s.scope = 'company' AND s.company_id = ? AND (? = 1 OR (s.current_version > 0 AND s.status <> 'retired')))
+      ORDER BY s.id`, Number(canWriteHq), company?.id ?? -1, Number(canWriteCompany));
+  const pins = rows.filter((s) => s.current_version > 0).map((s) => `${s.id}:${s.current_version}`);
+  const versions = pins.length ? await all<VersionRow>(env,
+    `SELECT v.* FROM agent_skill_versions v WHERE v.skill_id || ':' || v.version IN (SELECT value FROM json_each(?))`,
+    JSON.stringify(pins)) : [];
+  const byId = new Map(versions.map((v) => [v.skill_id, v]));
+  const tokens = await pinTokens(env, versions.map((v) => ({ skill_id: v.skill_id, version: v.version })));
+  const tokensById = new Map(versions.map((v, i) => [v.skill_id, tokens?.[i] ?? null]));
+
+  const cards: Array<ReturnType<typeof skillCard>> = [];
+  for (const s of rows) {
+    const writer = s.scope === 'hq' ? canWriteHq : canWriteCompany;
+    const current = byId.get(s.id);
+    if (!writer && !current) continue;
+    const draft = writer ? draftContent(s, parse(s.draft_tags, []), parse(s.draft_roles, [])) : null;
+    cards.push(skillCard(s, tax, company?.company_name ?? '', current ? versionParts(current) : draft!, draft, s.used_by, tokensById.get(s.id) ?? null));
+  }
+  return cards;
 }
 
 // ── The library ─────────────────────────────────────────────────────────────
@@ -201,13 +242,9 @@ router.get('/skills', async (c) => {
   const sort = c.req.query('sort') ?? 'popular';
   if (!['popular', 'new', 'az'].includes(sort)) return say(c, 400, 'sort_invalid', 'Sort by popular, new or A–Z.');
 
-  const rows = await all<SkillRow>(c.env, `SELECT * FROM agent_skills WHERE scope = 'hq' OR (scope = 'company' AND company_id = ?) ORDER BY id`, company?.id ?? -1);
-  const cards: Array<Awaited<ReturnType<typeof cardOf>>> = [];
-  for (const s of rows) {
-    if (!(await mayRead(c.env, s, user))) continue;
-    if (s.status === 'retired' && !(await mayWrite(c.env, s, user))) continue;
-    cards.push(await cardOf(c.env, s, user, tax, company?.company_name ?? ''));
-  }
+  const canWriteHq = isSuperAdmin(user as any);
+  const canWriteCompany = company ? await canEditAsMember(c.env, company, user) : false;
+  const cards = await libraryCards(c.env, tax, company, canWriteHq, canWriteCompany);
   // The role grid counts every readable skill, before the filters narrow the list.
   const agentCounts = company
     ? await all<{ role_key: string; n: number }>(c.env, `SELECT a.role_key, COUNT(*) AS n FROM team_agents a LEFT JOIN projects p ON p.id = a.project_id
@@ -227,8 +264,8 @@ router.get('/skills', async (c) => {
   return c.json({
     roles,
     hq: list.filter((k) => k.scope === 'hq'),
-    company: company ? { uid: company.uid, name: company.company_name, skills: list.filter((k) => k.scope === 'company'), can_write: await canEditAsMember(c.env, { id: company.id }, user) } : null,
-    can_write_hq: isSuperAdmin(user as any),
+    company: company ? { uid: company.uid, name: company.company_name, skills: list.filter((k) => k.scope === 'company'), can_write: canWriteCompany } : null,
+    can_write_hq: canWriteHq,
   });
 });
 
@@ -605,7 +642,7 @@ router.get('/:scope/:id/cost-estimate', async (c) => {
   if (!pins) return say(c, 404, 'skill_not_found', 'One of those skills is not one this agent can be given.');
   const { rules } = await effectiveBook(c.env, scope, role.key);
   const label = moduleOf(rules.works_in[0] ?? '')?.label ?? 'its modules';
-  const draft = { persona_key: personaKey, first_name: null, last_name: null } as Pick<AgentRow, 'persona_key' | 'first_name' | 'last_name'>;
+  const draft = { role_key: role.key, persona_key: personaKey, first_name: null, last_name: null } as Pick<AgentRow, 'role_key' | 'persona_key' | 'first_name' | 'last_name'>;
   return costAnswer(c, {
     model, sponsorId: user.id, prompt: systemPrompt(draft, rules, scope, label), capMicro: cap,
     before: [], after: pins.map((p) => ({ skill_id: p.skill_id, version: p.version })), scope,

@@ -1,5 +1,5 @@
 // D1140 (#3020, CMP19) — one place for companies: the switcher's Manage link,
-// the sidebar row, "Your companies" off Profile and identity, the forward from
+// the Account menu, "Your companies" off Profile and identity, the forward from
 // /company-settings and the settings at their new address.
 // D1415 part 4 (#3856): the section's address is /account/portfolio; every old
 // /account/companies… address forwards there in one hop (tests at the end).
@@ -24,6 +24,7 @@ import { MANAGE_LABEL as SWITCHER_MANAGE, setReadState } from '../src/ui/Company
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor } from '../src/lib/redirectBeacon.js';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -82,11 +83,11 @@ test('mounted, /company-settings forwards with the query, to the active company,
   } finally { restore(); }
 });
 
-test('/company-settings is a counted forward (#2319): a path-only entry and a route that only forwards', () => {
-  assert.ok(REDIRECT_ROUTES.some((r) => r.path === '/company-settings'), 'the beacon does not count /company-settings');
+test('D2319 removes /company-settings from routes and beacon keys', () => {
+  assert.equal(REDIRECT_ROUTES.some((r) => r.path === '/company-settings'), false, 'retired by D2319');
   const app = read('frontend/src/App.jsx');
   const line = app.split('\n').find((l) => l.includes('path="/company-settings"'));
-  assert.match(line, /<CompanySettingsRedirect \/>/);
+  assert.equal(line, undefined);
   for (const p of ['/account/portfolio/settings', '/account/portfolio/:uid/settings']) {
     const at = app.indexOf(`path="${p}"`);
     assert.ok(at > 0 && at < app.indexOf('path="/account/portfolio/:tab"'), `${p} must precede /account/portfolio/:tab`);
@@ -103,13 +104,16 @@ test('the settings segment is never read as a company or a tab', () => {
   assert.equal(companySettingsPathFor('beta-co'), '/account/portfolio/beta-co/settings');
 });
 
-test('Manage opens the right company: the switcher, the sidebar row, and Your companies', () => {
+test('Manage opens the right company: the switcher, Account menu, and Your companies', () => {
   assert.equal(SWITCHER_MANAGE, MANAGE_LABEL);
   const switcher = read('frontend/src/ui/CompanySwitcher.jsx');
   assert.match(switcher, /<Link\s+to="\/account\/portfolio"[^>]*\n?[^>]*onClick=\{\(\) => setOpen\(false\)\}[\s\S]{0,200}data-testid="switcher-manage"/);
   const sidebar = read('frontend/src/ui/SidebarNav.jsx');
-  assert.match(sidebar, /to="\/account\/portfolio"/);
-  assert.ok(sidebar.includes(SIDEBAR_LABEL), 'the sidebar row carries the section\'s name (D1413: Portfolio)');
+  assert.doesNotMatch(sidebar, /to="\/account\/portfolio"/);
+  const app = read('frontend/src/App.jsx');
+  const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/);
+  assert.equal(SIDEBAR_LABEL, 'Portfolio', 'D1413 name retained in Account (D4416)');
   assert.doesNotMatch(sidebar, />\s*Company Settings\s*</);
   const settings = read('frontend/src/pages/SettingsPage.jsx');
   const card = settings.slice(settings.indexOf('function YourCompaniesSection'));
@@ -240,8 +244,8 @@ test('D1415 part 4: App.jsx routes the new addresses (settings before :tab) and 
   const app = read('frontend/src/App.jsx');
   for (const p of ['/account/companies', '/account/companies/settings', '/account/companies/:uid/settings', '/account/companies/:tab']) {
     const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    assert.ok(line, `${p} is not routed`);
-    assert.match(line, /element=\{<CompaniesMovedRedirect \/>\}/, `${p} must only forward`);
+    assert.equal(Boolean(line), !isRetiredRedirect(p), p);
+    assert.equal(line, undefined);
   }
   const at = (p) => app.indexOf(`path="${p}"`);
   assert.ok(at('/account/portfolio/settings') > 0 && at('/account/portfolio/settings') < at('/account/portfolio/:tab'));
@@ -249,7 +253,7 @@ test('D1415 part 4: App.jsx routes the new addresses (settings before :tab) and 
   // /partner/operations[/overview] go straight to the new settings address.
   for (const p of ['/partner/operations', '/partner/operations/overview']) {
     const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    assert.match(line, /<Navigate to="\/account\/portfolio\/settings" replace \/>/, p);
+    assert.equal(line, undefined);
   }
 });
 
@@ -260,14 +264,14 @@ test('D1415 part 4: /company-settings lands under /account/portfolio in one hop,
   }
 });
 
-test('D1415 part 4: the beacon counts each old address under its own pattern, exact before :tab', () => {
+test('D2319: old company aliases no longer count; portfolio destinations remain canonical', () => {
   const paths = REDIRECT_ROUTES.map((r) => r.path);
   const tab = paths.indexOf('/account/companies/:tab');
   for (const p of ['/account/companies', '/account/companies/settings', '/account/companies/:uid/settings']) {
-    assert.ok(paths.includes(p), `${p} is not counted`);
-    assert.ok(paths.indexOf(p) < tab, `${p} must precede /account/companies/:tab`);
+    assert.equal(paths.includes(p), false, `${p} retired by D2319`);
+    assert.equal(tab, -1, 'the retired parameter alias is absent too');
   }
-  for (const [from, , pattern] of OLD) assert.equal(redirectPatternFor(split(from)[0]), pattern, from);
+  for (const [from, , pattern] of OLD) assert.equal(redirectPatternFor(split(from)[0]), isRetiredRedirect(split(from)[0]) ? null : pattern, from);
   for (const now of ['/account/portfolio', '/account/portfolio/acme', '/account/portfolio/settings']) assert.equal(redirectPatternFor(now), null, now);
 });
 

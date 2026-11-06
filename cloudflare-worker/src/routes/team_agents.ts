@@ -8,11 +8,15 @@
  *   POST   /:scope/:id/agents                  add one (manage + paid plan)
  *   GET    /agents/:uid                        its profile: rule book, matrix, spend, proposals, events
  *   PATCH  /agents/:uid                        pause, resume, cap, name (manage)
+ *   GET    /agents/:uid/sponsors               D4387: the team's members and whether each may sponsor it (manage)
+ *   PUT    /agents/:uid/sponsor                D4387: a new sponsor, with a reason; resumes a `sponsor_left` pause (manage)
  *   DELETE /agents/:uid                        remove: rows kept, open proposals withdrawn (manage)
  *   GET    /:scope/:id/rulebooks/:role         default, effective, versions, diff, floor
  *   PUT    /:scope/:id/rulebooks/:role         a new version, within the floor (manage)
  *   GET    /agents/:uid/run/quote?module=&option=  what a run would hold (the sponsor)
  *   POST   /agents/:uid/run                    run it: a proposal, charged to the sponsor (part 2, #3842); `tool_reads` (part 5)
+ *   GET/PUT /:scope/:id/allowlists              D4422: inherited model/tool restrictions, saved by the effective scope’s editors
+ *   GET/PUT /:scope/:id/outside-assistant-tools D4424: inherited inbound Axal tool names, separate from outbound custom-server grants
  *   GET    /tools                              the caller's own approved read tools, to grant an agent (part 5, #3844)
  *   GET    /:scope/:id/queue?role=&module=&option=&status=&cursor=&include=projects   the approvals queue (part 3, #3843)
  *   GET    /queue/:proposalUid                 one proposal and what the agent read for it
@@ -40,17 +44,18 @@
  * `decided_by_user_id` and a `proposal_decided` event.
  * Part 5 (#3844, owner Q3 = A) adds the sponsor's approved read tools
  * (D852), through `services/agents/agentTools.ts`.
+ * D4387 (#4387, #3742 E8) adds the sponsor change, checked by
+ * `services/agents/sponsor.ts`, and each agent's `resumes_at`: the UTC day a
+ * cap-paused agent resumes, which the sweep does (null otherwise).
  */
+import { agentModels, planOk } from '../services/agents/modelOffers';
+import { effectiveAllowlistScope, readAllowlists, saveAllowlists, allowlistRefusal, allowlistTools, parseAllowlists } from '../services/agents/allowlists';
 import { maxTeamCap } from '../services/agents/aiPolicy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
-import { userMeetsTier } from '../middleware/requireTier';
-import { modelRefusal } from '../services/aiRouter';
-import { CATALOGUE } from '../services/ai/catalogue';
-import { MODEL_CONNECTIONS } from '../services/ai/moduleConnections';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
 import { ATTACH_STATUS, checkSkillList, linkStatement } from '../services/agents/skillLinks';
@@ -64,10 +69,17 @@ import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '
 import { AREAS, ROLE_PERSONA, VALUE_LEGEND, personaOf } from '../services/agents/personas';
 import { PLATFORM_CAP_MAX_MICROUSD, RETIRED_PAUSE, galleryPersonas, loadPersonaSettings, maxCapOf, personaView, statusOf, unavailable } from '../services/agents/rosterAdmin';
 import { checkRules, diffRules } from '../services/agents/rulebook';
+import { SPONSOR_WORDS, capResumesAt, sponsorRefusal, teamMembers } from '../services/agents/sponsor';
+import { notify } from '../services/notify';
+import { outsideBindingForAgent, revokeOutsideBinding, OutsideProviderCleanupPending } from '../services/agents/outsideAssistant';
+import { oauthHelpers } from '../mcp/oauth';
+import { OUTSIDE_TOOLS, outsideToolPolicy, saveOutsideToolPolicy } from '../services/agents/outsidePolicy';
 import {
   agentByUid, bookRows, canManage, canRead, effectiveBook, loadScope, logEvent, monthSpend, scopeCols, scopeOfAgent,
   type AgentRow,
 } from '../services/agents/teams';
+
+export { agentModels, planOk } from '../services/agents/modelOffers';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -98,12 +110,6 @@ const notFound = (c: C) => say(c, 404, 'not_found', 'There is no such team.');
 // ── Gates ───────────────────────────────────────────────────────────────────
 // Scope, read and manage live in `services/agents/teams.ts`, shared with the run.
 
-/** Owner Q6 = A: a founder on a paid plan (the D852 rule), or HQ's admin. */
-export function planOk(user: User): boolean {
-  if (isAdmin(user)) return true;
-  return String(user.role) === 'founder' && userMeetsTier(user, 'growth');
-}
-
 // ── Agents ──────────────────────────────────────────────────────────────────
 
 async function lastActivity(env: Env, agentId: number): Promise<string | null> {
@@ -130,6 +136,8 @@ async function agentDto(env: Env, a: AgentRow) {
     uid: a.uid,
     // D4117: the role keys the rule book only; no job title reaches the client.
     role_key: a.role_key,
+    source: a.source ?? 'platform',
+    billing: a.source === 'mcp_client' ? 'own_assistant' : 'platform',
     persona: persona ? personaView(persona, settings!.get(persona.key)) : null,
     first_name: a.first_name,
     last_name: a.last_name,
@@ -139,8 +147,10 @@ async function agentDto(env: Env, a: AgentRow) {
     sponsor: await personOf(env, a.sponsor_user_id),
     status: a.status,
     paused_reason: a.paused_reason,
-    monthly_cap_microusd: a.monthly_cap_microusd,
-    month_spend: await monthSpend(env, a.id),
+    // D4387: the UTC day (YYYY-MM-DD) a cap-paused agent resumes; null for every other agent. The page never works it out.
+    resumes_at: await capResumesAt(env, a),
+    monthly_cap_microusd: a.source === 'mcp_client' ? null : a.monthly_cap_microusd,
+    month_spend: a.source === 'mcp_client' ? { available: false } : await monthSpend(env, a.id),
     last_activity_at: await lastActivity(env, a.id),
     scope_kind: a.scope_kind,
     project: project ? { id: project.id, name: project.name } : null,
@@ -156,20 +166,6 @@ export function namePart(v: unknown): { ok: true; value: string | null } | { ok:
   return { ok: true, value: t || null };
 }
 
-/**
- * #3842 add-on (S1, for TM3b): the models an agent may run on. Every text
- * model the module connections give chat work (`MODEL_CONNECTIONS`), from the
- * catalogue; `plan_locked` when the run would refuse it today
- * (`modelRefusal`: a beta, the partner gate shut, unpriced) or the caller's
- * plan cannot add agents, so the list and the add route's
- * `model_not_offered` agree. Deprecated models are not listed.
- */
-export function agentModels(env: Env, user: User) {
-  const plan = planOk(user);
-  return CATALOGUE
-    .filter((m) => MODEL_CONNECTIONS[m.id]?.operation === 'chat' && m.status !== 'deprecated' && m.status !== 'not_found')
-    .map((m) => ({ id: m.id, label: m.name, kind: m.kind, beta: m.status === 'beta', plan_locked: !plan || modelRefusal(env, m.id) !== null }));
-}
 
 const answer = (c: C, r: AgentRefusal) => say(c, r.status, r.code, r.message, r.extra);
 
@@ -307,7 +303,7 @@ router.get('/:scope/:id/queue', async (c) => {
       role: c.req.query('role') || null, module: c.req.query('module') || null, option: c.req.query('option') || null,
       status: status as RailProposalStatus, cursor: rawCursor ? Number(rawCursor) : null, includeProjects,
     };
-    const page = await queueList(c.env, s, filter);
+    const page = await queueList(c.env, s, filter, user);
     return c.json({ items: page.items, counts: { proposed: await queueCount(c.env, s, filter) }, next_cursor: page.next_cursor });
   } catch (e) { return mapError(c, e); }
 });
@@ -369,7 +365,7 @@ router.get('/agents/:uid', async (c) => {
       can_manage: await canManage(c.env, s, user),
       rulebook: { effective: book.rules, version: book.version },
       matrix,
-      cap_microusd: a.monthly_cap_microusd,
+      cap_microusd: a.source === 'mcp_client' ? null : a.monthly_cap_microusd,
       month_spend: agent.month_spend,
       proposals,
       events: (ev.results ?? []).map((e) => ({
@@ -395,6 +391,12 @@ router.patch('/agents/:uid', async (c) => {
     if (a.status === 'removed') return say(c, 409, 'removed', 'This agent was removed.');
     const b = await readBody(c);
     if (!b) return say(c, 400, 'invalid_body', 'Send what to change.');
+    if (a.source === 'mcp_client' && ['monthly_cap_microusd', 'first_name', 'last_name'].some((k) => k in b)) {
+      return say(c, 409, 'outside_assistant', 'This connected app keeps its own name and pays for its own model.');
+    }
+    if (a.source === 'mcp_client' && b.status === 'active' && a.paused_reason === 'awaiting_connection') {
+      return say(c, 409, 'connection_pending', 'Finish connecting this outside assistant before resuming it.');
+    }
     const next = { status: a.status, paused_reason: a.paused_reason, cap: a.monthly_cap_microusd, first_name: a.first_name, last_name: a.last_name };
     const events: [string, unknown?][] = [];
     if ('status' in b) {
@@ -438,6 +440,102 @@ router.patch('/agents/:uid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// ── The sponsor (D4387) ─────────────────────────────────────────────────────
+
+export const SPONSOR_REASON_MIN = 10;
+export const SPONSOR_REASON_MAX = 500;
+const USER_UID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The agent and its scope, for one of its managers; or the refusal, in PATCH's gate order. */
+async function managed(c: C, user: User) {
+  const a = await agentByUid(c.env, c.req.param('uid') ?? '');
+  const s = a && await scopeOfAgent(c.env, a);
+  if (!a || !s) return { refusal: say(c, 404, 'not_found', 'There is no such agent.') };
+  if (!(await canRead(c.env, s, user))) return { refusal: say(c, 403, 'not_member', 'Only the team can see its agents.') };
+  if (!(await canManage(c.env, s, user))) return { refusal: say(c, 403, 'not_manager', 'Only the team’s editors can change who sponsors an agent.') };
+  if (a.status === 'removed') return { refusal: say(c, 409, 'removed', 'This agent was removed.') };
+  return { agent: a, scope: s };
+}
+
+/** The team's members, each with whether they may sponsor this agent and, when not, why in words. Never an email or a numeric id. */
+router.get('/agents/:uid/sponsors', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const got = await managed(c, user);
+    if (!got.agent) return got.refusal;
+    const candidates = [];
+    for (const m of await teamMembers(c.env, got.scope)) {
+      const current = m.id === got.agent.sponsor_user_id;
+      const r = current ? null : await sponsorRefusal(c.env, got.scope, m);
+      candidates.push({ uid: m.uid, name: m.name, current, can_sponsor: !current && !r, code: r?.code ?? null, reason: r?.message ?? null });
+    }
+    return c.json({ sponsor: await personOf(c.env, got.agent.sponsor_user_id), candidates });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * A new sponsor, `{ sponsor_uid, reason, drop_tools? }`. The new sponsor
+ * passes `sponsorRefusal`; the reason (10 to 500 characters) is kept in the
+ * `sponsor_changed` event with the caller as its actor. An agent paused
+ * `sponsor_left` resumes. Its read tools are the old sponsor's own servers,
+ * which no one else can read through, so an agent with tools changes sponsor
+ * only with `drop_tools: true`, and they are dropped.
+ */
+router.put('/agents/:uid/sponsor', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const got = await managed(c, user);
+    if (!got.agent) return got.refusal;
+    const a = got.agent;
+    if (a.source === 'mcp_client') return say(c, 409, 'outside_assistant', 'Connect the outside assistant again as its new sponsor. Its current connection cannot be transferred.');
+    const b = await readBody(c);
+    if (!b) return say(c, 400, 'invalid_body', 'Send the new sponsor and why.');
+    const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
+    if (reason.length < SPONSOR_REASON_MIN || reason.length > SPONSOR_REASON_MAX) {
+      return say(c, 400, 'reason_required', `Say why the sponsor changes, in ${SPONSOR_REASON_MIN} to ${SPONSOR_REASON_MAX} characters. It is kept in the agent’s activity.`);
+    }
+    const target = typeof b.sponsor_uid === 'string' && USER_UID.test(b.sponsor_uid)
+      ? await c.env.DB.prepare('SELECT * FROM users WHERE uid = ? AND is_active = 1').bind(b.sponsor_uid).first<User>()
+      : null;
+    if (!target) return say(c, 422, 'sponsor_not_found', SPONSOR_WORDS.sponsor_not_found);
+    if (target.id === a.sponsor_user_id) return say(c, 409, 'same_sponsor', 'That person already sponsors this agent.');
+    const refusal = await sponsorRefusal(c.env, got.scope, target);
+    if (refusal) return say(c, refusal.status, refusal.code, refusal.message);
+    let grants: unknown[] = [];
+    try { const g = JSON.parse(a.tool_grants_json || '[]'); grants = Array.isArray(g) ? g : []; } catch { grants = []; }
+    if (grants.length && b.drop_tools !== true) {
+      return say(c, 422, 'sponsor_tools', `This agent reads through ${grants.length === 1 ? 'a tool' : `${grants.length} tools`} on its current sponsor’s own connected servers, which a new sponsor cannot use. Choose to drop ${grants.length === 1 ? 'it' : 'them'} to change the sponsor.`, { tools: grants.length });
+    }
+    const resume = a.status === 'paused' && a.paused_reason === 'sponsor_left';
+    // Only from the sponsor this read saw: a change made meanwhile is not overwritten.
+    const u = await c.env.DB.prepare(
+      `UPDATE team_agents SET sponsor_user_id = ?, tool_grants_json = ?,
+         status = CASE WHEN status = 'paused' AND paused_reason = 'sponsor_left' THEN 'active' ELSE status END,
+         paused_reason = CASE WHEN status = 'paused' AND paused_reason = 'sponsor_left' THEN NULL ELSE paused_reason END,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND sponsor_user_id = ? AND status <> 'removed'`,
+    ).bind(target.id, grants.length ? '[]' : a.tool_grants_json, a.id, a.sponsor_user_id).run();
+    if (!u.meta?.changes) return say(c, 409, 'sponsor_changed_meanwhile', 'Someone changed this agent a moment ago. Reload it and try again.');
+    await logEvent(c.env, a.id, user.id, 'sponsor_changed', {
+      from: await personOf(c.env, a.sponsor_user_id), to: { uid: target.uid, name: target.name }, reason,
+      ...(grants.length ? { tools_dropped: grants.length } : {}),
+    });
+    if (resume) await logEvent(c.env, a.id, user.id, 'resumed', { reason: 'sponsor_changed' });
+    const fresh = await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(a.id).first<AgentRow>();
+    const agent = await agentDto(c.env, fresh!);
+    // The new sponsor is told: their tokens pay this agent's runs from now on. Best effort.
+    try {
+      const name = agent.persona?.name || [agent.first_name, agent.last_name].filter(Boolean).join(' ') || 'An agent';
+      await notify(c.env, {
+        userId: target.id, type: 'agent_sponsor', channels: ['in_app'], category: 'proactive_nudges', link: null,
+        title: `You now sponsor ${name}`,
+        body: `${user.name || 'An editor'} made you the sponsor of ${name} on ${got.scope.name}. Its runs are paid from your AI tokens, capped per month. Their reason: "${reason.slice(0, 200)}"`,
+      });
+    } catch { console.warn('[agents] sponsor_notice_failed'); }
+    return c.json({ agent });
+  } catch (e) { return mapError(c, e); }
+});
+
 router.delete('/agents/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -446,6 +544,17 @@ router.delete('/agents/:uid', async (c) => {
     if (!a || !s) return say(c, 404, 'not_found', 'There is no such agent.');
     if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
     if (!(await canManage(c.env, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can remove its agents.');
+    if (a.source === 'mcp_client') {
+      const binding = await outsideBindingForAgent(c.env, a.id);
+      if (!binding) return say(c, 503, 'connection_unreadable', 'This agent’s connection could not be read. Try again shortly.');
+      // Also retry provider cleanup for an already-removed agent.
+      try { await revokeOutsideBinding(c.env, user, binding.uid, (id, sponsor) => oauthHelpers(c.env).revokeGrant(id, sponsor)); }
+      catch (e) {
+        if (e instanceof OutsideProviderCleanupPending) return say(c, 503, 'connection_cleanup_pending', e.message);
+        throw e;
+      }
+      return c.json({ ok: true });
+    }
     if (a.status === 'removed') return c.json({ ok: true });
     const withdrawn = await c.env.DB.prepare(
       "UPDATE ai_rail_proposals SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE agent_id = ? AND status = 'proposed'",
@@ -503,6 +612,73 @@ router.get('/:scope/:id/agents', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D4422: company projects always read and write the parent company's policy.
+/** Inbound Axal tools have their own namespace, never a fabricated custom-server connection id. */
+router.get('/:scope/:id/outside-assistant-tools', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return notFound(c);
+    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its tools.');
+    const tools = await outsideToolPolicy(c.env, s);
+    if (tools === undefined) return say(c, 503, 'allowlists_unreadable', 'The team’s allowed tools could not be read.');
+    const parent = await effectiveAllowlistScope(c.env, s);
+    return c.json({ tools, offered: OUTSIDE_TOOLS, can_manage: !!parent && await canManage(c.env, parent, user) });
+  } catch (e) { return mapError(c, e); }
+});
+router.put('/:scope/:id/outside-assistant-tools', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    const parent = s && await effectiveAllowlistScope(c.env, s);
+    if (!s || !parent) return notFound(c);
+    if (!(await canManage(c.env, parent, user))) return say(c, 403, 'not_manager', 'Only this team’s editors can choose its tools.');
+    const b = await readBody(c); const tools: unknown = b?.tools;
+    if (tools !== null && (!Array.isArray(tools) || tools.length > OUTSIDE_TOOLS.length || tools.some(t => typeof t !== 'string' || !OUTSIDE_TOOLS.includes(t)))) {
+      return say(c, 400, 'invalid_tools', 'Choose offered Axal VC tools, or the role default.');
+    }
+    await saveOutsideToolPolicy(c.env, parent, user.id, tools as string[] | null);
+    return c.json({ tools: await outsideToolPolicy(c.env, parent) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/:scope/:id/allowlists', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return notFound(c);
+    const parent = await effectiveAllowlistScope(c.env, s);
+    if (!parent) return say(c, 503, 'allowlists_unreadable', 'The company settings could not be read.');
+    if (!(await canRead(c.env, s, user)) && !(await canRead(c.env, parent, user))) return say(c, 403, 'not_member', 'Only the team can read its settings.');
+    const lists = await readAllowlists(c.env, parent);
+    if (!lists) return say(c, 503, 'allowlists_unreadable', 'The allowed models and tools could not be read.');
+    const manage = await canManage(c.env, parent, user);
+    return c.json({ ...lists, can_manage: manage, inherited: parent.kind !== s.kind,
+      scope: { kind: parent.kind, id: parent.kind === 'company' ? parent.uid : String(parent.id), name: parent.name },
+      models: agentModels(c.env, user), servers: manage ? await allowlistTools(c.env, parent) : [] });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.put('/:scope/:id/allowlists', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return notFound(c);
+    const parent = await effectiveAllowlistScope(c.env, s);
+    if (!parent) return say(c, 503, 'allowlists_unreadable', 'The company settings could not be read.');
+    if (!(await canRead(c.env, s, user)) && !(await canRead(c.env, parent, user))) return say(c, 403, 'not_member', 'Only the team can read its settings.');
+    if (!(await canManage(c.env, parent, user))) return say(c, 403, 'not_manager', 'Only this company or project’s editors can change its allowed models and tools.');
+    const wanted = parseAllowlists(await readBody(c));
+    if (!wanted) return say(c, 400, 'invalid_allowlists', 'Send model_ids and tool_grants as lists, or null for the plan default.');
+    const offered = agentModels(c.env, user);
+    if (wanted.model_ids?.some((id) => !offered.some((m) => m.id === id && !m.plan_locked))) return say(c, 403, 'model_not_allowed', 'Choose only models currently offered on your plan.');
+    const servers = await allowlistTools(c.env, parent);
+    if (wanted.tool_grants?.some((g) => !planOk(user) || !servers.some((v) => v.integration_uid === g.integration_uid && v.tools.some((t) => t.name === g.tool)))) return say(c, 403, 'tool_not_allowed', 'Choose only approved read tools connected to this team.');
+    await saveAllowlists(c.env, parent, user.id, wanted);
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
 router.post('/:scope/:id/agents', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -529,12 +705,14 @@ router.post('/:scope/:id/agents', async (c) => {
     if (maxCap != null && b.monthly_cap_microusd > maxCap) return say(c, 422, 'cap_above_max', 'That cap is above the most a team may set for this agent.', { max_cap_microusd: maxCap });
     const first = namePart(b.first_name); const last = namePart(b.last_name);
     if (!first.ok || !last.ok) return say(c, 400, 'invalid_name', `A name is at most ${NAME_MAX} characters.`);
-    if (typeof b.model_id !== 'string' || !b.model_id || modelRefusal(c.env, b.model_id)) {
+    if (typeof b.model_id !== 'string' || !agentModels(c.env, user).some((m) => m.id === b.model_id && !m.plan_locked)) {
       return say(c, 422, 'model_not_offered', 'That model is not offered. Choose one from the list.');
     }
     // Part 5: each grant is the sponsor's (the caller's) own connected server, an approved, pinned read tool.
     const granted = await checkGrants(c.env, user.id, b.tool_grants);
     if (!granted.ok) return answer(c, granted);
+    const allowed = await allowlistRefusal(c.env, s, b.model_id, granted.grants);
+    if (allowed) return answer(c, allowed);
     // D1612 A2 (#3956): the Add-an-agent Skills step, through the same gates as PUT …/skills.
     if (b.skills !== undefined && (!Array.isArray(b.skills) || b.skills.length > 40)) return say(c, 400, 'invalid_skills', 'Send the agent\'s skills as a list of up to 40.');
     const [cId, pId] = scopeCols(s);

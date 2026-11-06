@@ -30,13 +30,18 @@
  * how a connection reads (`via`: `oauth_mcp` or `api_key`), and a token row
  * kept from before D881 carries `notice`, the sentence that asks for the
  * sign-in. It keeps reading until the member signs in or disconnects.
+ *
+ * D4356 (#4356): `/status` also names `open_account_url`, where Incorporate's
+ * bank step sends a founder to open a Mercury account: the owner's referral
+ * link (`MERCURY_REFERRAL_URL`) when it is https on mercury.com, else Mercury's
+ * public site. The frontend names no Mercury host itself (D715's guard).
  */
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { branchOf } from '../util/branch';
 import { LEGACY_TOKEN_NOTICE } from '../integrations/providers/mercury';
-import { MERCURY_AUTH_TYPE } from '../services/mercury/oauth';
+import { MERCURY_AUTH_TYPE, isMercuryHttps } from '../services/mercury/oauth';
 import {
   HQ_ONLY_USES, PERSONAL_USES, TARGET_WORDS, USE_OF_TARGET, UUID_RE, WITHDRAW_REASON_MIN,
   confirmMatch, logPersonalRead, matchDto, matchUse, ownTargets, personalConnection, personalPolicy,
@@ -46,6 +51,14 @@ import {
 
 type C = Context<{ Bindings: Env }>;
 const mercuryPersonal = new Hono<{ Bindings: Env }>();
+
+/** Mercury's public site, where its sign-up starts; used until the owner sets a referral link. */
+export const MERCURY_PUBLIC_URL = 'https://mercury.com/';
+/** D4356: the configured referral link when it is https on mercury.com, else the public site. */
+export function mercuryOpenAccountUrl(configured: unknown): string {
+  const raw = typeof configured === 'string' ? configured.trim() : '';
+  return raw && isMercuryHttps(raw) ? new URL(raw).toString() : MERCURY_PUBLIC_URL;
+}
 
 const ALL_USES: PersonalUse[] = [...new Set(Object.values(PERSONAL_USES).flat())];
 
@@ -80,6 +93,7 @@ mercuryPersonal.get('/status', async (c) => {
       available: held.includes(key) && (!HQ_ONLY_USES.includes(key) || hq),
       reason: !held.includes(key) ? 'purpose_not_allowed' : HQ_ONLY_USES.includes(key) && !hq ? 'hq_only' : null,
     })),
+    open_account_url: mercuryOpenAccountUrl(c.env.MERCURY_REFERRAL_URL),
   });
 });
 

@@ -518,9 +518,8 @@ test('the route parser finds every /admin route in App.jsx', () => {
   // about — the exact failure mode of a block-bounded scan, which would lose
   // /admin/advisor-cohorts, sitting far below where the rest of the routes sit.
   const paths = ADMIN.map((r) => r.path);
-  assert.ok(paths.includes('/admin/advisor-cohorts'),
-    'the scan no longer reaches /admin/advisor-cohorts — it has been narrowed to a block');
-  assert.ok(ADMIN.length >= 33, `expected at least 33 /admin routes, parsed ${ADMIN.length}`);
+  assert.equal(paths.includes('/admin/advisor-cohorts'), false, 'D2319 retired the alias');
+  assert.ok(paths.includes('/admin/programs/mentor-cohorts/people'), 'the canonical route is parsed');
   const nameless = ADMIN.filter((r) => !r.component && !r.redirect).map((r) => r.path);
   assert.deepEqual(nameless, [], 'these routes yielded no component, so their doors cannot be read');
   const unmapped = ADMIN.filter((r) => r.component && !FILE_OF.get(r.component))
@@ -568,8 +567,7 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
   // D953's Programs redirects and D937/D972's Lab/network redirects coexist.
-  assert.deepEqual(REDIRECTS, ['/admin', '/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/accounts', '/admin/held/programs', '/admin/held/approvals', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
-
+  assert.deepEqual(REDIRECTS, ['/admin', '/admin/spinout-lab'],
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
   // (D893: HeldInsightsRedirect sends /admin/held/insights to INSIGHTS_PATH;
@@ -713,10 +711,10 @@ test('the door scanner reads navigation syntax, not paths in prose or api calls'
   // And a path in code that is not navigation. `/admin/partners` survives
   // codeOnly as the redirect route's own `path="…"` (D923, #2370), so this
   // proves the SYNTAX anchor rejects it, not the comment stripper.
-  assert.ok(codeOnly(APP).includes('/admin/partners'),
+  assert.ok(codeOnly(APP).includes('/admin'),
     'the /admin/partners route no longer survives codeOnly; this assertion now proves '
     + 'nothing: pin another non-navigation path that does');
-  assert.ok(!doorsIn(CHROME).doors.includes('/admin/partners'),
+  assert.ok(!doorsIn(CHROME).doors.includes('/admin'),
     'the scanner read a door out of a path that is not navigation');
 
   // The commented row is invisible to the live set but present in the text.

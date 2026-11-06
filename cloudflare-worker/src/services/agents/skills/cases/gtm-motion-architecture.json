@@ -1,0 +1,34 @@
+{
+  "skill": "gtm-motion-architecture",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "project.summary": {
+        "synthetic_fixture": true,
+        "skill_name": "GTM Motion Architecture",
+        "task_scope": "Selects primary and supporting sales-led, product-led and partner-led motions against buyer and delivery constraints.",
+        "evidence": [
+          "primary acquisition and sales motion"
+        ],
+        "omitted_field": "sales capacity"
+      },
+      "grow.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for primary acquisition and sales motion."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "primary acquisition and sales motion"
+    ],
+    "must_say_not_recorded": [
+      "sales capacity"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

@@ -165,7 +165,7 @@ test('the page is the Super Admin\'s at /admin/credit-rules, the review queue li
   // #1412 — Platform's Perk credits zone is the other door, and the page lights the Platform row.
   assert.match(codeOnly(read('frontend/src/pages/hq/PlatformPage.jsx')), /<Link to="\/admin\/credit-rules" className=\{CONSOLE_LINK\} data-testid="hq-credits-link">/);
   assert.match(codeOnly(read('frontend/src/sidebarConfig.js')), /label: 'Platform', match: \['\/admin\/platform', '\/admin\/credit-rules'\] \}/);
-  assert.match(app, /<Route path="\/hq\/credits" element=\{<HqCreditsRedirect \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/hq\/credits" element=\{<HqCreditsRedirect \/>\} \/>/);
   assert.doesNotMatch(app, /pages\/hq\/CreditRulesPage'/, 'one page: #1399\'s copy is gone');
   globalThis.localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
   globalThis.document ??= { cookie: '' };
