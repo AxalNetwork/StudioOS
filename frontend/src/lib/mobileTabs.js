@@ -1,4 +1,4 @@
-import { Briefcase, Check, DollarSign, Mail, TrendingUp } from 'lucide-react';
+import { Check, Mail, ShieldCheck, Cog, Coins, Sprout } from 'lucide-react';
 import { SIDEBAR_GROUPS } from '../sidebarConfig.js';
 
 /**
@@ -32,10 +32,10 @@ export const FOUNDER_TAB_PATHS = ['/validate', '/build', '/raise', '/grow'];
 
 /** The canvas's tab icons (CO:593): a check, a briefcase, a dollar, a trend line. */
 export const TAB_ICONS = {
-  '/validate': Check,
-  '/build': Briefcase,
-  '/raise': DollarSign,
-  '/grow': TrendingUp,
+  '/validate': ShieldCheck,
+  '/build': Cog,
+  '/raise': Coins,
+  '/grow': Sprout,
 };
 
 /** Sidebar rows the phone band carries, so More leaves them out (D699). */
