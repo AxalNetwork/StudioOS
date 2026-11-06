@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CircleAlert, GripVertical, MoreHorizontal, X } from 'lucide-react';
+import StudioArtifactMark from './StudioArtifactMark';
 import { SIZES, SIZE_NAME, SIZE_SHORT, TILE } from './studioLayoutModel';
 
 export function TileBody({ title, spec }) {
@@ -87,7 +88,7 @@ export default function StudioModuleTile({ mod, size, spec, edit = null, fixed =
   const linked = href && state !== TILE.LOADING && state !== TILE.WITHHELD;
   return (
     <article
-      className="sm-tile"
+      className="sm-tile sm-artifact"
       aria-label={title}
       data-size={size}
       data-state={state}
@@ -103,6 +104,7 @@ export default function StudioModuleTile({ mod, size, spec, edit = null, fixed =
             <GripVertical size={16} aria-hidden="true" />
           </span>
         )}
+        <StudioArtifactMark group={mod.group} />
         <h3>{title}</h3>
         {!edit && spec?.note && state === TILE.READY && <span className="sm-note">{spec.note}</span>}
         {edit && <SizeControl title={title} size={size} onSize={edit.onSize} />}
@@ -113,7 +115,9 @@ export default function StudioModuleTile({ mod, size, spec, edit = null, fixed =
           </button>
         )}
       </div>
-      <TileBody title={title} spec={spec} />
+      <div className="sm-artifact-content">
+        <TileBody title={title} spec={spec} />
+      </div>
       {linked && (
         <div className="sm-foot">
           <Link to={href} className="sm-link" data-testid={`studio-tile-open-${mod.key}`}>{spec?.openLabel || 'Open'} ›</Link>

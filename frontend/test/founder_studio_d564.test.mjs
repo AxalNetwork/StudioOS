@@ -100,13 +100,13 @@ test('the summary strip reads each store, and a missing one is Not recorded, nev
     ['Company progress', READY, `${companyProgress(LAB).percent}%`],
     ['Profile complete', READY, '68%'],
     ['Questions answered', READY, '18'],
-    ['Modules active', READY, '7'],
+    ['Artifacts active', READY, '7'],
     ['Tasks done', READY, '7'],
     ['Readiness', READY, '71'],
   ]);
   assert.equal(ready[1].sub, '1 gap');
   const bare = summaryOf({ ...READS, lab: { ...LAB, active: false }, scores: { scores: [] }, lifecycle: { checklist: [] } });
-  for (const k of ['Venture progress', 'Modules active', 'Tasks done', 'Readiness']) {
+  for (const k of ['Venture progress', 'Artifacts active', 'Tasks done', 'Readiness']) {
     const tl = bare.find((x) => x.k === k);
     assert.equal(tl.state, NOT_RECORDED, `${k} was drawn without a store`);
     assert.equal(tl.v, null);
