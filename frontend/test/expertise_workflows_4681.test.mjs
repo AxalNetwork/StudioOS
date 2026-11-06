@@ -85,13 +85,13 @@ test('Services edits a saved service in place: one PATCH, no delete and recreate
   // Mutation checked: Save sending the whole draft → the PATCH carries kind and scope too;
   // Save routed through delete + create → the delete/create assertion fails.
   const calls = [];
-  globalThis.__api4681 = {
+  globalThis.__api4681 = { api: {
     async listMyAdvisorServices() { calls.push(['list']); return { items: [SERVICE] }; },
     async updateMyAdvisorService(id, body) { calls.push(['update', id, body]); return { ...SERVICE, ...body }; },
     async createMyAdvisorService(b) { calls.push(['create', b]); return {}; },
     async deleteMyAdvisorService(id) { calls.push(['delete', id]); return {}; },
-  };
-  const mod = await zone('ServicesZone.jsx', "import { api } from '../../../lib/api';", 'const api = globalThis.__api4681;');
+  } };
+  const mod = await zone('ServicesZone.jsx', "import { api } from '../../../lib/api';", 'const { api } = globalThis.__api4681;');
   const f = await mountForm(h(mod.default));
   try {
     await f.flush();
@@ -119,12 +119,12 @@ const PROOF = { id: 8, uid: 'p-8', kind: 'engagement', title: 'Led a synthetic r
 
 async function proofZone(deleteImpl) {
   const calls = [];
-  globalThis.__api4681 = {
+  globalThis.__api4681 = { api: {
     async listMyAdvisorProof() { calls.push(['list']); return { items: calls.some((c) => c[0] === 'deleted') ? [] : [PROOF] }; },
     async getMyAdvisor() { return { uid: 'adv-synthetic' }; },
     async deleteMyAdvisorProof(id) { calls.push(['delete', id]); const r = await deleteImpl(id); calls.push(['deleted']); return r; },
-  };
-  const mod = await zone('ProofZone.jsx', "import { api } from '../../../lib/api';", 'const api = globalThis.__api4681;');
+  } };
+  const mod = await zone('ProofZone.jsx', "import { api } from '../../../lib/api';", 'const { api } = globalThis.__api4681;');
   const f = await mountForm(h(mod.default));
   await f.flush();
   return { f, calls };
