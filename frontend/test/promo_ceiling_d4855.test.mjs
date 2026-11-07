@@ -19,7 +19,6 @@ const MAPS = [
 ];
 const WORDS = {
   ceiling_exceeded: "This code's discount is more than this licence's promotion budget has left. Pay without it.",
-  ceiling_not_recorded: 'No discount can be given yet. Pay without the code.',
   ceiling_unreadable: "This code can't be checked right now. Try again in a moment.",
 };
 
@@ -44,4 +43,10 @@ test('D4855: the plan quote says them too, and the Worker names exactly these re
   const src = read('cloudflare-worker/src/services/promoRedemption.ts');
   const block = src.slice(src.indexOf('export type CeilingRefusal ='), src.indexOf(';', src.indexOf('export type CeilingRefusal =')));
   for (const reason of Object.keys(WORDS)) assert.ok(block.includes(`'${reason}'`), reason);
+});
+
+test('D4855 option B: "ceiling not recorded" is not a refusal any more, so no screen, map or Worker sentence carries it', () => {
+  for (const file of [...MAPS, 'frontend/src/components/checkout/checkoutModel.js', 'cloudflare-worker/src/services/promoRedemption.ts']) {
+    assert.doesNotMatch(read(file), /ceiling_not_recorded/, file);
+  }
 });
