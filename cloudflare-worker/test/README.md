@@ -249,3 +249,4 @@ advisor CTA and stored search-result URLs after redirect retirement (#4415).
 - every completion rule run on the real schema.
 
 `_lab_evidence.ts` is its helper, and the helper other Lab tests use: it applies the enrollment migration and writes the invented saved work that proves a milestone.
+D4856 (#4856): `catalog_modes_4856.test.ts` holds Platform's catalogue summary to `getCatalog`'s mode rule (current, other and unknown rows), and `storage_populations_4856.test.ts` holds the storage read's members, staff and unattributed populations to their sum.
