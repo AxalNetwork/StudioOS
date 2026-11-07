@@ -27,8 +27,19 @@
 # Exit codes:
 #   0  drill green
 #   1  setup failure (couldn't list backups, etc.)
-#   2  restore failed
+#   2  restore failed (or the backup does not match its manifest)
 #   3  smoke tests failed
+#
+# D4558 — THE BACKUP MUST MATCH ITS MANIFEST. backup-d1.yml writes
+# `<key minus .sql>.manifest.json` beside each export (scripts/d1-backup-manifest.mjs):
+# sha256, size, the export's start time, every table's row count and the
+# last migration. The drill reads it, downloads the backup and checks it
+# BEFORE creating any database, and fails closed on a missing or stale
+# manifest, a size or sha256 mismatch, or a migration this checkout does
+# not know. After the restore it compares every table's row count with the
+# manifest. The marker records the recovery point and its age (the RPO this
+# drill saw) and the duration (its RTO). Every line is a name, a count, a
+# hash or a time; backup content is never printed.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -41,6 +52,12 @@ STARTED_EPOCH=$(date -u +%s)
 STARTED_AT=$(date -u +%FT%TZ)
 LATEST_KEY=""
 DB_CREATED=0
+MAX_AGE_HOURS="${DR_MAX_BACKUP_AGE_HOURS:-36}"
+RECOVERY_POINT=""
+BACKUP_SHA=""
+MIGRATION=""
+TABLES=0
+FAIL_REASON=
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 log() { echo "[dr-drill] $*"; }
@@ -70,10 +87,22 @@ write_marker() {
       --argjson exit_code "${rc}" \
       --arg backup_key "${LATEST_KEY}" \
       --arg run_id "${GITHUB_RUN_ID:-}" \
+      --arg recovery_point "${RECOVERY_POINT}" \
+      --arg sha256 "${BACKUP_SHA}" \
+      --arg migration "${MIGRATION}" \
+      --argjson tables "${TABLES}" \
+      --arg reason "${FAIL_REASON}" \
+      --argjson started "${STARTED_EPOCH}" \
       '{at: $at, outcome: $outcome, duration_s: $duration_s, source: $source, step: $step,
         exit_code: $exit_code,
         backup_key: (if $backup_key == "" then null else $backup_key end),
-        run_id: (if $run_id == "" then null else $run_id end)}' > "${marker}"; then
+        run_id: (if $run_id == "" then null else $run_id end),
+        recovery_point: (if $recovery_point == "" then null else $recovery_point end),
+        recovery_point_age_s: (if $recovery_point == "" then null else ($started - ($recovery_point | fromdateiso8601)) end),
+        sha256: (if $sha256 == "" then null else $sha256 end),
+        migration: (if $migration == "" then null else $migration end),
+        tables: (if $tables == 0 then null else $tables end),
+        reason: (if $reason == "" then null else $reason end)}' > "${marker}"; then
     wrangler r2 object put "${BUCKET}/drill-d1.json" --file "${marker}" --content-type application/json --remote \
       || log "WARN: could not write the drill marker (r2://${BUCKET}/drill-d1.json)"
   else
@@ -131,13 +160,34 @@ if ! [[ "${LATEST_KEY}" =~ ^d1/(studioos-db/)?backup-[0-9]{4}-[0-9]{2}-[0-9]{2}\
 fi
 log "latest backup: ${LATEST_KEY}"
 
-# Backup freshness check — RPO is 24h.
-BACKUP_DATE=$(echo "${LATEST_KEY}" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
-AGE_DAYS=$(( ( $(date -u +%s) - $(date -u -d "${BACKUP_DATE}" +%s) ) / 86400 ))
-if [[ "${AGE_DAYS}" -gt 1 ]]; then
-  log "WARN: latest backup is ${AGE_DAYS} days old — RPO breach"
-  page "rpo_breach age_days=${AGE_DAYS}"
+# ---------- 1b. Verify it against its manifest (D4558) -------------
+# Before any database exists: a backup its manifest does not vouch for is
+# never restored. Staleness is measured from the manifest's export time, the
+# real recovery point, not from the date in the key.
+STEP="verify"
+TMP=$(mktemp -d)
+MANIFEST_KEY="${LATEST_KEY%.sql}.manifest.json"
+if ! wrangler r2 object get "${BUCKET}/${MANIFEST_KEY}" --file "${TMP}/manifest.json" --remote; then
+  FAIL_REASON="manifest_missing"
+  log "FATAL: no manifest at r2://${BUCKET}/${MANIFEST_KEY}; a backup nothing vouches for is not restored"
+  exit 2
 fi
+RECOVERY_POINT=$(jq -r '.exported_at // empty' "${TMP}/manifest.json" 2>/dev/null || true)
+MIGRATION=$(jq -r '.migrations.last // empty' "${TMP}/manifest.json" 2>/dev/null || true)
+TABLES=$(jq -r '(.tables | length) // 0' "${TMP}/manifest.json" 2>/dev/null || echo 0)
+[[ "${TABLES}" =~ ^[0-9]+$ ]] || TABLES=0
+wrangler r2 object get "${BUCKET}/${LATEST_KEY}" --file "${TMP}/backup.sql" --remote
+log "backup downloaded: $(wc -c < "${TMP}/backup.sql") bytes"
+if ! VERIFY=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" verify "${TMP}/backup.sql" "${TMP}/manifest.json" \
+    --key "${LATEST_KEY}" --migrations "${REPO_ROOT}/cloudflare-worker/sql/migrations" --max-age-hours "${MAX_AGE_HOURS}"); then
+  FAIL_REASON=$(printf '%s' "${VERIFY}" | sed -n 's/^reason=//p' | head -1)
+  FAIL_REASON="${FAIL_REASON:-verify_failed}"
+  [[ "${FAIL_REASON}" == "stale" ]] && page "rpo_breach: the newest backup is older than ${MAX_AGE_HOURS} h"
+  log "FATAL: the backup does not match its manifest: ${FAIL_REASON}"
+  exit 2
+fi
+BACKUP_SHA=$(jq -r '.sha256' "${TMP}/manifest.json")
+log "${VERIFY}"
 
 # ---------- 2. Provision throwaway DB -------------------------------
 STEP="create_db"
@@ -154,11 +204,7 @@ DB_CREATED=1
 
 # ---------- 3. Restore ---------------------------------------------
 STEP="restore"
-log "downloading + restoring backup into ${TARGET_DB}"
-TMP=$(mktemp -d)
-wrangler r2 object get "${BUCKET}/${LATEST_KEY}" --file "${TMP}/backup.sql" --remote
-log "backup downloaded: $(wc -c < "${TMP}/backup.sql") bytes"
-
+log "restoring the verified backup into ${TARGET_DB}"
 # D523 — THE RESTORE IMPORTS IN CHUNKS. One remote import of the whole export
 # ended `{"D1_RESET_DO":true}` 1.4 s after the upload (run 36862064332): D1
 # reset the Durable Object behind the throwaway database mid-import, which is
@@ -186,6 +232,10 @@ while IFS=$'\t' read -r CHUNK_FILE CHUNK_PHASE CHUNK_STMTS CHUNK_SIZE CHUNK_OVER
   if ! wrangler d1 execute "${TARGET_DB}" --remote --file "${CHUNK_FILE}" > "${TMP}/chunk.log" 2>&1; then
     CODES=$(grep -oE 'D1_[A-Z_]+|SQLITE_[A-Z_]+|exceeded its memory limit|D1 reset before execute completed|File could not be uploaded|did not upload successfully' "${TMP}/chunk.log" | sort -u | paste -sd ' ' - || true)
     log "FATAL: restore failed at chunk ${CHUNK_N}/${CHUNK_TOTAL} (${CHUNK_PHASE}); wrangler's error codes: ${CODES:-none recognised (its full output is withheld because it can quote backup SQL)}"
+    # D4558: which tables that chunk writes, and their parents, so the next
+    # failure says where to look. Schema names only.
+    log "chunk ${CHUNK_N} $(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" chunk-tables "${CHUNK_FILE}" "${TMP}/manifest.json" 2>/dev/null || echo 'tables: unreadable')"
+    FAIL_REASON="chunk_${CHUNK_N}_of_${CHUNK_TOTAL}"
     exit 2
   fi
   EXECUTED=$(grep -oE 'Executed [0-9]+ queries in [0-9.]+ms \([0-9]+ rows read, [0-9]+ rows written\)' "${TMP}/chunk.log" | head -1 || true)
@@ -228,6 +278,33 @@ for t in "${REQUIRED_TABLES[@]}"; do
   fi
 done
 log "schema smoke ok (${#REQUIRED_TABLES[@]} required tables present)"
+
+# 4b'. D4558 — every table's row count against the manifest. The counts are
+# read 40 tables to a query; a table missing from the restore counts as a
+# mismatch. Only table names and the number that differ are logged.
+node -e '
+  const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  const q = (n) => `"${n.replace(/"/g, "\"\"")}"`;
+  const lit = (n) => `${String.fromCharCode(39)}${n.replace(/\x27/g, "\x27\x27")}${String.fromCharCode(39)}`;
+  for (let i = 0; i < m.tables.length; i += 40) {
+    console.log(m.tables.slice(i, i + 40).map((t) => `SELECT ${lit(t.name)} AS t, COUNT(*) AS n FROM ${q(t.name)}`).join(" UNION ALL ") + ";");
+  }' "${TMP}/manifest.json" > "${TMP}/counts.sql"
+: > "${TMP}/counts.jsonl"
+while IFS= read -r COUNT_SQL <&4; do
+  if ! wrangler d1 execute "${TARGET_DB}" --remote --command "${COUNT_SQL}" --json > "${TMP}/count.json" 2>"${TMP}/count.err"; then
+    FAIL_REASON="row_counts_unreadable"
+    log "FATAL: a row-count query failed (a table in the manifest is missing from the restore)"
+    exit 3
+  fi
+  jq -c '.[] .results[]' "${TMP}/count.json" >> "${TMP}/counts.jsonl"
+done 4< "${TMP}/counts.sql"
+jq -s '.' "${TMP}/counts.jsonl" > "${TMP}/counts.json"
+if ! COMPARE=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" compare "${TMP}/manifest.json" "${TMP}/counts.json"); then
+  FAIL_REASON="row_counts_differ"
+  log "FATAL: ${COMPARE}"
+  exit 3
+fi
+log "${COMPARE}"
 
 # 4c. (removed, D263) This ran `npm run test:drift` from the checkout. That
 # suite never touches the restored database, the workflow never ran `npm ci`
@@ -300,5 +377,5 @@ fi
 # The EXIT trap deletes the throwaway database and writes the marker, on this
 # path and on every failure path alike.
 STEP="teardown"
-log "DR drill GREEN ✓ (backup=${LATEST_KEY}, users=${USERS}, projects=${PROJECTS})"
+log "DR drill GREEN ✓ (backup=${LATEST_KEY}, recovery point ${RECOVERY_POINT}, migration ${MIGRATION:-none recorded}, $(( $(date -u +%s) - STARTED_EPOCH )) s)"
 exit 0

@@ -800,6 +800,23 @@ r.put('/take-rate', async (c) => {
   });
 });
 
+// D4703 (#4703): advisory charges that landed on a cancelled or missed
+// booking, owed back under the no-cancellation-fee policy. Open rows first.
+// Booking uid and amount only: no founder or advisor is named here.
+r.get('/advisory-refunds-due', async (c) => {
+  await requireSuperAdmin(c);
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT booking_uid, booking_status, payment_intent_id, amount_cents, currency, created_at, resolved_at
+         FROM advisory_refunds_due ORDER BY (resolved_at IS NOT NULL), created_at DESC LIMIT 200`,
+    ).all<Record<string, unknown>>();
+    const items = rows.results || [];
+    return c.json({ items, open: items.filter((r) => r.resolved_at == null).length });
+  } catch {
+    return c.json({ error: 'The refunds-due record could not be read.', code: 'store_unavailable' }, 503);
+  }
+});
+
 // D886 B10: aggregated HQ operations, never customer content.
 r.get('/meeting-bots', async (c) => {
   await requireSuperAdmin(c);

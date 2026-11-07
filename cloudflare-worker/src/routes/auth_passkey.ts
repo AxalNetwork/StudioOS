@@ -31,6 +31,7 @@ import {
 } from '../auth';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { hashEmail } from '../util/hashEmail';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { rpID, rpName, expectedOrigins } from '../util/webauthn';
 
 const passkey = new Hono<{ Bindings: Env }>();
@@ -39,6 +40,9 @@ const CHALLENGE_TTL_MIN = 5;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function err(c: any, label: string, friendly: string, e: unknown, status = 500) {
+  // #4570: a gate's refusal (`requireAuth`'s 'Unauthorized', …) is re-thrown, so app.onError answers it
+  // with its own status (401, 403) instead of this 500.
+  if (e instanceof Error && AUTH_ERROR_STATUSES[e.message]) throw e;
   console.error('[PASSKEY]', label, e);
   return c.json({ error: friendly }, status);
 }
