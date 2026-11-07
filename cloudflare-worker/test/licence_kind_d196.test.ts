@@ -29,6 +29,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { splitStatements } from './_baseline.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { licenceRoutesSource } from './_licenceRoutes.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL_DIR = resolve(HERE, '../sql');
@@ -102,14 +103,16 @@ test('the create handler refuses a kind the CHECK would refuse, and says which t
   // WHY THE HANDLER CHECKS TOO, when the column already does: the column's
   // refusal is a 500 carrying SQLite's own wording. An operator who mistypes a
   // kind should be told what the two are.
-  const src = codeOnly(readFileSync(resolve(HERE, '../src/routes/admin_licences.ts'), 'utf8'));
+  const src = codeOnly(licenceRoutesSource());
   assert.match(src, /LICENCE_KINDS\s*=\s*\['subsidiary',\s*'white_label'\]/,
     'the handler no longer names the two kinds');
   // ANCHORED ON THE `if`, NOT THE CALL. A bare match on the expression is
   // satisfied by `if (false && !LICENCE_KINDS.includes(kind))` — a guard that
   // reads as live and refuses nothing. Measured: that mutation escaped the
   // first version of this line.
-  assert.match(src, /if \(!LICENCE_KINDS\.includes\(kind\)\) \{/,
+  // #4707: the list is the contract's `as const` tuple, so the handler widens it
+  // to `readonly string[]` to ask whether an arbitrary string is in it.
+  assert.match(src, /if \(!\(LICENCE_KINDS as readonly string\[\]\)\.includes\(kind\)\) \{/,
     'the create handler stopped validating kind against that list');
   // Stored, not merely validated — and bound, never interpolated.
   assert.match(src, /signatory_title,\s*kind,\s*status/,
@@ -117,7 +120,7 @@ test('the create handler refuses a kind the CHECK would refuse, and says which t
 });
 
 test('the kind reaches the audit row, because it is not recoverable from the others', () => {
-  const src = codeOnly(readFileSync(resolve(HERE, '../src/routes/admin_licences.ts'), 'utf8'));
+  const src = codeOnly(licenceRoutesSource());
   assert.match(src, /'created',\s*admin\.id,\s*\{\s*licence_ref:\s*ref,\s*kind\s*\}/,
     'licence_events no longer records which kind the licence was issued as');
 });

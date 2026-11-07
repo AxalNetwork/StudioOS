@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contracts v2 · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "1000px"}, "board": {"editor": "enum", "default": "CT01", "options": ["CT01", "CT02", "CT03", "CT04", "CT05", "CT06", "CT07a", "CT07b", "CT07c", "CT08", "CT09", "CT10", "CT11", "CT12a", "CT12b", "CT13", "CT14a", "CT14b", "CT14c", "CT15", "CT16", "CT90", "CT91", "CT92", "CT93", "CT94"], "tsType": "string"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'CT01';
+    const P = { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d9d6e0', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.38)', skel: '#ececf1', s2: '#0369a1', s3: '#0f766e', s4: '#d4d4d8', s5: '#a1a1aa' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const pill = (tone, t) => '<span class="pl ' + (tone || '') + '">' + t + '</span>';
+    const note = (tone, icon, html, btn) => '<div class="nt ' + (tone || '') + '"><span class="ic" aria-hidden="true">' + icon + '</span><div style="min-width:0;flex:1">' + html + '</div>' + (btn ? '<span class="bt" style="display:flex;gap:6px">' + btn + '</span>' : '') + '</div>';
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- state vocabulary (three lifecycles + overlays) ---------- */
+    const OT = { tpl: ['Template', 'tpl'], agr: ['Agreement', ''], gov: ['Governance', 'gov'], rev: ['Legal review', 'rev'], env: ['Envelope', ''] };
+    const ot = (k) => '<span class="otag ' + OT[k][1] + '">' + OT[k][0] + '</span>';
+    const ST = {
+      'tpl:Draft': ['', '✎ Draft'], 'tpl:Under legal review': ['a', '◷ Under legal review'], 'tpl:Approved for use': ['v dash', '✓ Approved for use'], 'tpl:Superseded': ['', '⤳ Superseded'], 'tpl:Archived': ['', '▣ Archived'],
+      'agr:Prepared': ['', '○ Prepared'], 'agr:Ready for signature': ['v', '◔ Ready for signature'], 'agr:Sent': ['v', '➤ Sent · awaiting signature'], 'agr:Executed': ['seal', '● Executed'], 'agr:Voided': ['void', '⊘ Voided'],
+      'gov:Draft': ['', '✎ Draft'], 'gov:Reviewed': ['', '◑ Reviewed'], 'gov:Approved': ['g', '✓ Approved'], 'gov:Executed': ['seal', '● Executed'], 'gov:Archived': ['', '▣ Archived'],
+      'rec:Current': ['g', '✓ Current'], 'rec:Review required': ['a', '◷ Review required'], 'rec:Missing — expected': ['miss', '! Missing — expected'], 'rec:Not recorded — add if applicable': ['', '○ Not recorded — add if applicable'], 'rec:Restricted': ['ovr', '🔒 Restricted'], 'rec:Incomplete': ['inc', '◌ Incomplete'],
+      'ovr:Restricted': ['ovr', '🔒 Restricted'], 'ovr:Incomplete': ['inc', '◌ Incomplete'],
+      'rv:Counsel approved': ['seal', '⚖ Counsel approved'], 'rv:In review': ['a', '◷ In counsel review'], 'rv:AI research': ['v dash', '✦ AI research · not approval']
+    };
+    const st = (k, s) => { const x = ST[k + ':' + s]; return pill(x[0], x[1]); };
+
+    /* ---------- shell (HQ) ---------- */
+    const NAV = ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const spine = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask about this document</span></aside>';
+    const shell = (body, overlay, h) => '<div class="sh" style="min-height:' + (h || 900) + 'px">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">HQ</span><nav aria-label="HQ">' + J(NAV.map(t => '<a href="#"' + (t === 'Contracts' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search contracts, templates, governance…<span class="mo" style="margin-left:auto;font-size:11px">/</span></div><div style="display:flex;align-items:center;gap:12px"><span class="bdg" style="background:#881337">HQ</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">S</span></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + spine + (overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o.overlay, o.h || 900) + '</div>'; };
+    const TABS = [['Agreements', '236'], ['Templates', '31'], ['Corporate Governance', '21'], ['Closings', '4']];
+    const head = (tab, o) => { o = o || {};
+      return '<header style="display:flex;flex-direction:column;gap:6px"><span class="eye">HQ</span><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><h1 style="font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2">' + (o.title || 'Contracts') + '</h1><p style="font-size:13px;color:var(--mu);margin-top:3px">' + (o.copy || 'Agreements, templates and corporate governance for the Axal VC group.') + '</p></div><div style="display:flex;gap:8px">' + (o.actions || '<button type="button" class="btn">Upload document</button><button type="button" class="btn">Request legal review</button><button type="button" class="btn p">New agreement</button>') + '</div></div></header>'
+        + '<div style="display:flex;align-items:flex-end;border-bottom:1px solid var(--hair)"><nav class="ptabs" aria-label="Contracts" style="border-bottom:0">' + J(TABS.map(t => '<a href="#"' + (t[0] === tab ? ' aria-current="page"' : '') + '>' + t[0] + '<span>' + t[1] + '</span></a>')) + '</nav><button type="button" class="lib" aria-haspopup="true" aria-expanded="false" style="border:0;background:none">Library: Forms · Document types ▾</button></div>'; };
+
+    /* ---------- overview ---------- */
+    const MX = [['Awaiting signature', '12', 'sent, not yet executed', 'View 12'], ['Executed', '148', 'this year · 9 this month', 'View executed'], ['Stalled / overdue', '4', 'sent over 30 days ago', 'View 4'], ['Legal review required', '5', '3 templates · 2 governance', 'View 5'], ['Restricted', '6', 'confidential or blocked', 'View 6'], ['Data repair required', '7', 'missing links or evidence', 'View 7']];
+    const metrics = () => '<nav class="mx" aria-label="Contracts status">' + J(MX.map((m, i) => '<a href="#"><span class="eye">' + m[0] + '</span><span class="v"' + (i === 2 ? ' style="color:var(--amT)"' : '') + '>' + m[1] + '</span><span class="s">' + m[2] + '</span><span class="go">' + m[3] + ' →</span></a>')) + '</nav>';
+    const listCard = (id, title, sm, rows, foot) => '<section class="cd" aria-labelledby="' + id + '" style="padding:14px 0 0;gap:6px"><div class="ch" style="padding:0 16px"><h2 id="' + id + '">' + title + '</h2><span class="sm">' + sm + '</span></div><table class="ctab"><tbody>' + J(rows) + '</tbody></table><div class="cf" style="padding:10px 16px"><span></span><a class="btn t" href="#">' + foot + ' →</a></div></section>';
+    const lrow = (a, b, c) => '<tr><td><span class="tt">' + a + '</span><span class="ts">' + b + '</span></td><td style="text-align:right;white-space:nowrap">' + c + '</td></tr>';
+    const overview = () => head('Agreements', { copy: 'Agreements, templates and corporate governance for the Axal VC group. Every figure opens the records behind it.' })
+      + metrics()
+      + '<div class="g">'
+      + '<div class="c7" style="display:flex;flex-direction:column;gap:16px">'
+      + listCard('aw-h', 'Stalled and awaiting signature', '16 · oldest first', [
+        lrow('Founder Collaboration Agreement', ot('agr') + 'Norman Laudini · Unlinked recipient · Native', st('agr', 'Sent') + '<div class="mo" style="font-size:11.5px;color:var(--amT);margin-top:3px">Sent 12 May 2026 · 179 d · stalled</div>'),
+        lrow('Subscription Agreement · Fund I', ot('agr') + 'Helvetia Capital AG · 1 of 2 signed · Native', st('agr', 'Sent') + '<div class="mo" style="font-size:11.5px;color:var(--mu);margin-top:3px">Sent 28 Oct 2026 · 10 d</div>'),
+        lrow('Service Agreement', ot('agr') + 'Studio Vireo B.V. · Netherlands · cross-border checks open', st('agr', 'Ready for signature') + '<div class="mo" style="font-size:11.5px;color:var(--mu);margin-top:3px">Prepared 4 Nov 2026</div>')], 'All awaiting signature')
+      + listCard('rp-h', 'Data repair required', '7', [
+        lrow('Co-founder Agreement · Novacraft SAS', ot('agr') + '<span class="wrn">⚠ Marked signed · no execution evidence</span>', '<button type="button" class="btn bsm">Attach evidence</button>'),
+        lrow('Founder Collaboration Agreement', ot('agr') + 'Recipient not linked to a company or member', '<button type="button" class="rep">⚭ Link recipient</button>'),
+        lrow('IP License · Harbor Robotics', ot('agr') + 'Executed upload not bound to a version', '<button type="button" class="rep">Bind to version</button>')], 'All repairs')
+      + '</div><div class="c5" style="display:flex;flex-direction:column;gap:16px">'
+      + listCard('lr-h', 'Legal review required', '5', [
+        lrow('Initial Limited Partnership Agreement', ot('tpl') + 'GP / Fund · v0.4', st('tpl', 'Under legal review')),
+        lrow('Amended and Restated LPA', ot('tpl') + 'GP / Fund · v0.1', st('ovr', 'Restricted') + ' ' + st('ovr', 'Incomplete')),
+        lrow('Operating Agreement (A&R draft)', ot('gov') + 'Axal VC GP LLC · v3', st('rv', 'In review'))], 'All reviews')
+      + '<section class="cd" aria-labelledby="gv-h"><div class="ch"><h2 id="gv-h">Corporate Governance</h2><a class="btn t" href="#">Open →</a></div><p class="sub" style="color:var(--ink)">3 legal entities · <b>4</b> records need legal review · <b>4</b> expected records missing · <b>6</b> restricted · <b>1</b> incomplete</p></section>'
+      + '</div></div>';
+
+    /* ---------- agreements table ---------- */
+    const AG = [
+      { t: 'Founder Collaboration Agreement', cp: 'Norman Laudini', link: 'Unlinked recipient', s: 'Sent', when: 'Sent 12 May 2026', extra: '<span class="mo" style="color:var(--amT)">179 d · stalled</span>', ent: 'Axal VC Management LLC', tpl: 'Founder Collaboration v2.1', ch: 'Native', up: '6 Nov' },
+      { t: 'Subscription Agreement · Fund I', cp: 'Helvetia Capital AG', link: 'Switzerland', s: 'Sent', when: 'Sent 28 Oct 2026', extra: '1 of 2 signed', ent: 'Axal VC GP LLC', tpl: 'Subscription Booklet v2.2', ch: 'Native', up: '6 Nov' },
+      { t: 'Service Agreement', cp: 'Studio Vireo B.V.', link: 'Netherlands', s: 'Ready for signature', when: 'Prepared 4 Nov 2026', extra: 'cross-border checks: 2 open', ent: 'Axal VC Management LLC', tpl: 'Service Agreement v3.0', ch: 'Native', up: '5 Nov', sel: 1 },
+      { t: 'Mutual NDA', cp: 'Bråten AB', link: 'Sweden', s: 'Executed', when: 'Executed 3 Nov 2026', extra: 'envelope ENV-2026-0412', ent: 'Axal VC Holdings LLC', tpl: 'Mutual NDA v1.0', ch: 'DocuSign', up: '3 Nov' },
+      { t: 'Co-founder Agreement', cp: 'Novacraft SAS', link: 'France', s: 'INCONS', when: 'Marked signed 21 Oct 2026', extra: '', ent: 'Axal VC Management LLC', tpl: 'Co-founder Agreement v2.0', ch: 'External', up: '21 Oct' },
+      { t: 'Revenue Share Agreement', cp: 'Partner A', link: 'Partner deal', s: 'Prepared', when: 'Prepared 19 Oct 2026', extra: 'not yet sent', ent: 'Axal VC Management LLC', tpl: 'Partner Revenue Share v1.3', ch: 'Native', up: '19 Oct' },
+      { t: 'Advisor Agreement (FAST)', cp: 'Dana Example', link: 'United States', s: 'Executed', when: 'Executed 14 Sep 2026', extra: '', ent: 'Axal VC Management LLC', tpl: 'Advisor Agreement v1.2', ch: 'Native', up: '14 Sep' },
+      { t: 'Mutual NDA', cp: 'Kai Example', link: 'United Kingdom', s: 'Voided', when: 'Voided 30 Oct 2026', extra: 'replaced by a new envelope', ent: 'Axal VC Holdings LLC', tpl: 'Mutual NDA v1.0', ch: 'Native', up: '30 Oct' },
+      { t: 'Side Letter · LP 14', cp: 'Restricted counterparty', link: 'Fund I', s: 'RESTR', when: 'Executed 30 Jun 2026', extra: '', ent: 'Axal VC GP LLC', tpl: '—', ch: 'External', up: '30 Jun' },
+      { t: 'IP License', cp: 'Harbor Robotics', link: 'United States', s: 'Executed', when: 'Executed 2 Aug 2026', extra: '<button type="button" class="rep">Bind to version</button>', ent: 'Axal VC Holdings LLC', tpl: 'IP License v1.1', ch: 'External', up: '2 Aug' }];
+    const agState = (a) => a.s === 'INCONS' ? '<span class="wrn">⚠ Marked signed · no execution evidence</span>' : a.s === 'RESTR' ? st('agr', 'Executed') + ' ' + st('ovr', 'Restricted') : st('agr', a.s);
+    const agRow = (a) => '<tr class="' + (a.sel ? 'sel' : '') + (a.s === 'INCONS' ? ' inc' : '') + '"><td><input type="checkbox" aria-label="Select ' + a.t + '" style="accent-color:#7c3aed"></td>'
+      + '<td><a href="#" class="tt">' + a.t + '</a><span class="ts">' + a.cp + ' · ' + (a.link === 'Unlinked recipient' ? '<span>Unlinked recipient</span> <button type="button" class="rep">⚭ Link</button>' : a.link) + '</span></td>'
+      + '<td>' + agState(a) + '<span class="ts mo" style="font-size:11.5px">' + a.when + (a.extra ? ' · ' + a.extra : '') + '</span>' + (a.s === 'INCONS' ? '<button type="button" class="btn bsm" style="margin-top:5px">Attach execution evidence</button>' : '') + '</td>'
+      + '<td>' + a.ent.replace('Axal VC ', '') + '</td><td><span style="font-size:12px">' + a.tpl + '</span></td><td>' + pill('', a.ch) + '</td><td class="mo">' + a.up + '</td><td><button type="button" class="mo3" aria-haspopup="true" aria-expanded="false" aria-label="Actions for ' + a.t + '">⋯</button></td></tr>';
+    const VIEWS = [['All', 236], ['NDAs', 88], ['Partner deals', 31], ['Founder & advisor', 64], ['Fund', 41], ['Other', 12]];
+    const agTable = () => head('Agreements')
+      + '<section class="qc" aria-label="Agreements"><div class="qtb"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div role="radiogroup" aria-label="Category" class="chips">' + J(VIEWS.map((v, i) => '<button type="button" role="radio" aria-checked="' + !i + '">' + v[0] + '<span>' + v[1] + '</span></button>')) + '</div></div><div style="display:flex;gap:8px"><label class="inp" style="min-width:240px"><span aria-hidden="true">⌕</span>Filter agreements</label><button type="button" class="dd">Filters</button><button type="button" class="dd">Sort: Updated ▾</button></div></div>'
+      + '<table class="ctab"><caption style="position:absolute;width:1px;height:1px;overflow:hidden">Agreements</caption><thead><tr><th scope="col" style="width:34px"><input type="checkbox" aria-label="Select all" style="accent-color:#7c3aed"></th><th scope="col">Agreement · counterparty</th><th scope="col">Lifecycle</th><th scope="col">Axal party</th><th scope="col">Template · version</th><th scope="col">Channel</th><th scope="col">Updated ↓</th><th scope="col"><span style="position:absolute;width:1px;height:1px;overflow:hidden">Actions</span></th></tr></thead><tbody>' + J(AG.map(agRow)) + '</tbody></table>'
+      + '<div class="qft"><span>1–10 of 236 · NDAs and partner deals are categories of agreements, not separate tabs</span><span class="pb"><button type="button" aria-current="page">1</button><button type="button">2</button><button type="button">3</button><span>…</span><button type="button">24</button><button type="button" aria-label="Next page">›</button></span></div></section>';
+    const quickPanel = () => '<aside class="drw" role="dialog" aria-modal="false" aria-labelledby="qp-t" style="width:420px;box-shadow:-14px 0 40px rgba(0,0,0,.12)"><div class="drh"><div class="tr"><span class="eye">Agreement · quick view</span><button type="button" class="ib fv" aria-label="Close panel (Esc)">✕</button></div><h2 id="qp-t" style="font-size:18px">Service Agreement</h2><div class="mt">' + ot('agr') + st('agr', 'Ready for signature') + '</div></div>'
+      + '<div class="drb" style="gap:14px"><dl class="kv2" style="grid-template-columns:150px minmax(0,1fr)"><dt>Counterparty</dt><dd>Studio Vireo B.V. · Amsterdam</dd><dt>Axal party</dt><dd>Axal VC Management LLC</dd><dt>Template</dt><dd>Service Agreement v3.0 <span class="mu">· approved for use</span></dd><dt>Generated version</dt><dd class="mo">v1 · 4 Nov 2026</dd><dt>Governing law</dt><dd>Netherlands <span class="mu">· chosen in clause 18</span></dd></dl>'
+      + note('a', '!', '<b>2 cross-border checks are open</b><div>Data-transfer mechanism and tax review must be resolved before sending.</div>') + '</div>'
+      + '<div class="drf"><div style="display:flex;gap:8px"><a class="btn p" href="#" style="flex:1">Open workspace →</a><button type="button" class="btn">Download</button><button type="button" class="btn">View history</button></div><p class="ln">Send for signature becomes available when the open checks are resolved.</p></div></aside>';
+
+    /* ---------- governance ---------- */
+    const ENT = {
+      h: { n: 'Axal VC Holdings LLC', sub: 'Parent · Delaware LLC · formed 3 Mar 2023', facts: [['Latest executed', 'Amended & Restated Operating Agreement v2', 'executed 15 Jan 2025'], ['Last review', '4 Oct 2026', 'R. Okafor · Example LLP (counsel)'], ['Outstanding issue', 'No signing-authority resolution recorded', 'expected for this entity'], ['Next required action', 'Request review of Written Consent 2026-04', 'approve GP capital commitment']],
+        recs: [['Operating Agreement', 'Current', 'A&R v2 · executed', '15 Jan 2025', '4 Oct 2026', 'Open'], ['Certificate of Formation', 'Current', 'v1 · filed', '3 Mar 2023', '4 Oct 2026', 'Open'], ['Member Register', 'Restricted', 'v4 · current', '1 Jul 2026', '4 Oct 2026', 'View (authorised)'], ['Written Consents', 'Review required', '6 recorded · 2026-04 awaiting review', '4 Oct 2026', '—', 'Request legal review'], ['Ownership records', 'Restricted', '2 records', '1 Jul 2026', '4 Oct 2026', 'View (authorised)'], ['Signing authority', 'Missing — expected', '—', '—', '—', 'Add governance record'], ['IP ownership documents', 'Incomplete', 'IP assignments · 2 of 3 executed', '12 Apr 2023', '22 Aug 2026', 'Complete record']] },
+      m: { n: 'Axal VC Management LLC', sub: '100% owned by Holdings · Delaware LLC · formed 3 Mar 2023', facts: [['Latest executed', 'Sole-Member Operating Agreement v1', 'executed 3 Mar 2023'], ['Last review', '12 Jun 2026', 'R. Okafor · Example LLP (counsel)'], ['Outstanding issue', 'Management–GP services agreement expired', 'on 30 Jun 2026'], ['Next required action', 'Review renewal of intercompany services agreement', 'draft v2 prepared 2 Nov']],
+        recs: [['Sole-Member Operating Agreement', 'Current', 'v1 · executed', '3 Mar 2023', '12 Jun 2026', 'Open'], ['Certificate of Formation', 'Current', 'v1 · filed', '3 Mar 2023', '12 Jun 2026', 'Open'], ['Sole-Member Consents', 'Restricted', '5 recorded · 1 confidential', '9 Sep 2026', '12 Jun 2026', 'View (authorised)'], ['Manager appointments', 'Review required', 'Appointment of 1 Oct 2026', '1 Oct 2026', '—', 'Request legal review'], ['Delegation of Authority', 'Missing — expected', '—', '—', '—', 'Add governance record'], ['Compliance records', 'Not recorded — add if applicable', '—', '—', '—', 'Add if applicable'], ['Intercompany agreements', 'Review required', 'Services agreement v1 · expired 30 Jun 2026', '1 Jul 2024', '12 Jun 2026', 'Review renewal']] },
+      g: { n: 'Axal VC GP LLC', sub: '100% owned by Holdings · Delaware LLC · general partner of Axal VC Fund I', facts: [['Latest executed', 'GP LLC Operating Agreement v1', 'executed 20 Apr 2023 · A&R v3 in review'], ['Last review', '22 Aug 2026', 'R. Okafor · Example LLP (counsel)'], ['Outstanding issue', 'Fund I formation approval not recorded', 'and no authorised-signatory list'], ['Next required action', 'Add Fund-formation approval (Fund I)', 'then record authorised signatories']],
+        recs: [['GP LLC Operating Agreement', 'Current', 'v1 executed · v3 draft in review', '20 Apr 2023', '22 Aug 2026', 'Open workspace'], ['Certificate of Formation', 'Current', 'v1 · filed', '20 Apr 2023', '22 Aug 2026', 'Open'], ['Parent Member Consent', 'Current', 'v1 · executed', '20 Apr 2023', '22 Aug 2026', 'Open'], ['GP resolutions', 'Review required', 'Resolution 2026-07 · capital call policy', '14 Jul 2026', '—', 'Request legal review'], ['Fund-formation approvals', 'Missing — expected', '—', '—', '—', 'Add governance record'], ['Authorized signatories', 'Missing — expected', '—', '—', '—', 'Add governance record'], ['Fund-governance records', 'Restricted', 'LPAC minutes · 2 records', '3 Sep 2026', '22 Aug 2026', 'View (authorised)']] } };
+    const orgChart = (big) => '<div class="org" role="img" aria-label="Axal VC Holdings LLC owns 100% of Axal VC Management LLC and 100% of Axal VC GP LLC."><div class="nd"><b>Axal VC Holdings LLC</b><small>parent</small></div><div class="vl"></div><div class="hz"><div class="br2"><span class="pc">100%</span><div class="nd"><b>Axal VC Management LLC</b><small>management company</small></div></div><div class="br2"><span class="pc">100%</span><div class="nd"><b>Axal VC GP LLC</b><small>general partner · Fund I</small></div></div></div></div>';
+    const counts = (e) => { const c = {}; e.recs.forEach(r => { c[r[1]] = (c[r[1]] || 0) + 1; }); return c; };
+    const govOverview = () => head('Corporate Governance', { actions: '<button type="button" class="btn">Request legal review</button><button type="button" class="btn p">Add governance record</button>' })
+      + '<section class="cd" aria-labelledby="grp-h" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:24px;align-items:center"><div style="display:flex;flex-direction:column;gap:10px"><span class="eye">Group structure</span><h2 id="grp-h" style="font-size:18px;font-weight:800">Axal VC group</h2>'
+      + '<nav class="mx" style="grid-template-columns:repeat(2,minmax(0,1fr))" aria-label="Governance summary">' + J([['Legal entities', '3', ''], ['Need legal review', '4', 'records'], ['Missing — expected', '4', 'records the system expects'], ['Restricted', '6', 'records · access-controlled']].map((m, i) => '<a href="#" style="border-bottom:' + (i < 2 ? '1px solid var(--hair)' : '0') + '"><span class="eye">' + m[0] + '</span><span class="v">' + m[1] + '</span><span class="s">' + m[2] + '</span></a>')) + '</nav>'
+      + '<p class="foot">Beneficial-owner details are not shown in this view. <button type="button" class="btn t bsm" style="padding:0">🔒 View restricted ownership details</button> <span class="pl">Super Admin</span></p></div>' + orgChart() + '</section>'
+      + '<section class="qc" aria-label="Entities"><table class="ctab"><thead><tr><th scope="col">Entity</th><th scope="col">Latest executed</th><th scope="col">Last review</th><th scope="col">Outstanding issue</th><th scope="col">Next required action</th><th scope="col">Records</th></tr></thead><tbody>'
+      + J(['h', 'm', 'g'].map(k => { const e = ENT[k], c = counts(e); return '<tr><td><a href="#" class="tt">' + e.n + '</a><span class="ts">' + e.sub.split(' · ')[0] + '</span></td><td>' + e.facts[0][1] + '<span class="ts mo">' + e.facts[0][2] + '</span></td><td class="mo">' + e.facts[1][1] + '</td><td>' + e.facts[2][1] + '</td><td><a href="#" style="font-weight:700">' + e.facts[3][1] + ' →</a></td><td><div style="display:flex;gap:4px;flex-wrap:wrap">' + (c['Review required'] ? pill('a', '◷ ' + c['Review required']) : '') + (c['Missing — expected'] ? pill('miss', '! ' + c['Missing — expected'] + ' missing') : '') + (c['Restricted'] ? pill('ovr', '🔒 ' + c['Restricted']) : '') + (c['Incomplete'] ? pill('inc', '◌ ' + c['Incomplete']) : '') + '</div></td></tr>'; })) + '</tbody></table></section>'
+      + '<p class="foot">No legal-health score is calculated. Counts link to the records; restricted counts include records you can’t open.</p>';
+    const entity = (k) => { const e = ENT[k];
+      return '<nav aria-label="Breadcrumb" class="eye"><a href="#">Contracts</a> › <a href="#">Corporate Governance</a> › <span style="color:var(--ink)">' + e.n + '</span></nav>'
+        + '<header style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px"><div><h1 style="font-size:24px;font-weight:800;letter-spacing:-.02em">' + e.n + '</h1><p class="sub">' + e.sub + '</p></div><div style="display:flex;gap:8px"><button type="button" class="btn">Request legal review</button><button type="button" class="btn p">Add governance record</button></div></header>'
+        + '<div class="ef">' + J(e.facts.map((f, i) => '<div' + (i === 2 ? ' style="background:var(--amBg)"' : '') + '><span class="eye">' + f[0] + '</span><b>' + f[1] + '</b><small>' + f[2] + '</small></div>')) + '</div>'
+        + '<section class="qc" aria-labelledby="er-h"><div class="ch" style="padding:12px 14px;border-bottom:1px solid var(--hair)"><h2 id="er-h">Expected records</h2><span class="sm">' + e.recs.length + ' record types this entity should hold</span></div><table class="ctab"><thead><tr><th scope="col">Record</th><th scope="col">State</th><th scope="col">Latest version</th><th scope="col">Effective</th><th scope="col">Last review</th><th scope="col">Next action</th></tr></thead><tbody>'
+        + J(e.recs.map(r => '<tr><td><span class="tt">' + r[0] + '</span><span class="ts">' + ot('gov') + '</span></td><td>' + st('rec', r[1]) + (r[1] === 'Missing — expected' ? '<span class="ts">This entity should hold one. None is recorded.</span>' : r[1] === 'Not recorded — add if applicable' ? '<span class="ts">Only needed if the entity files them.</span>' : r[1] === 'Restricted' ? '<span class="ts">Contents need restricted access.</span>' : '') + '</td><td>' + (r[2] === '—' ? '<span class="mu">—</span>' : r[2]) + '</td><td class="mo">' + r[3] + '</td><td class="mo">' + r[4] + '</td><td>' + (/^(Add|Request|Complete|Review)/.test(r[5]) ? '<button type="button" class="btn bsm">' + r[5] + '</button>' : '<a href="#" class="btn t bsm">' + r[5] + ' →</a>') + '</td></tr>')) + '</tbody></table></section>'; };
+
+    /* ---------- document workspace ---------- */
+    const wsHead = (o) => '<nav aria-label="Breadcrumb" class="eye"><a href="#">Contracts</a> › <a href="#">' + (o.crumb || 'Corporate Governance › Axal VC GP LLC') + '</a></nav>'
+      + '<header style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px"><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:8px;align-items:center">' + o.tags + '</div><h1 style="font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.2">' + o.title + '</h1><p class="sub">' + o.sub + '</p></div><div style="display:flex;gap:8px;flex:none">' + o.actions + '</div></header>'
+      + (o.banner || '')
+      + '<nav class="ptabs" role="tablist" aria-label="Document workspace">' + J(['Overview', 'Document', 'Versions', 'Legal Review', 'Activity', 'Related'].map(t => '<a href="#" role="tab" aria-selected="' + (t === o.tab) + '"' + (t === o.tab ? ' aria-current="page"' : '') + '>' + t + (t === 'Related' && o.relN ? '<span>' + o.relN + '</span>' : '') + '</a>')) + '</nav>';
+    const GPOA = { title: 'Operating Agreement — Axal VC GP LLC', tags: ot('gov') + st('gov', 'Executed') + '<span class="mo" style="font-size:11.5px;color:var(--mu)">v1 in force</span><span class="mu">·</span>' + st('gov', 'Draft') + '<span class="mo" style="font-size:11.5px;color:var(--mu)">A&R v3 in counsel review</span>', sub: 'Delaware LLC agreement of the general partner of Axal VC Fund I. Version 1 governs until an amended version is executed.', actions: '<button type="button" class="btn">Download v1</button><button type="button" class="btn">Request legal review</button><button type="button" class="mo3" aria-label="More actions" aria-haspopup="true" aria-expanded="false" style="border-color:var(--hair)">⋯</button>' };
+    const wsOverview = () => wsHead(Object.assign({ tab: 'Overview', relN: 6 }, GPOA))
+      + '<div class="ws"><section class="cd" aria-label="Overview"><dl class="kv2">' + J([['Entity', 'Axal VC GP LLC'], ['Document type', 'Operating Agreement · LLC'], ['Jurisdiction', 'Delaware, United States'], ['Lifecycle state', 'Executed (v1) · A&R draft v3 under review'], ['Safety state', 'None — not restricted, complete'], ['Effective date', '<span class="mo">20 Apr 2023</span>'], ['Latest version', '<span class="mo">v3 · draft · 28 Oct 2026</span>'], ['Executed version', '<span class="mo">v1 · ENV-2023-0091 · sha 4be1…a90c</span>'], ['Last review', '<span class="mo">22 Aug 2026</span> · v1 · periodic'], ['Reviewer', 'R. Okafor · Example LLP (counsel)'], ['Required fields', '9 of 9 complete']].map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl></section>'
+      + '<div style="display:flex;flex-direction:column;gap:12px"><section class="cd" aria-labelledby="ui-h" style="gap:8px"><h2 id="ui-h" style="font-size:14px;font-weight:800">Unresolved issues · 2</h2>' + note('a', '!', '<b>v3 changes capital-call authority (§6.2)</b><div>Counsel review in progress; 4 related fund documents may need review once approved.</div>') + note('', 'i', '<b>Authorised signatories not recorded</b><div>Expected for this entity; needed before v3 can be executed.</div>', '<button type="button" class="btn bsm">Add</button>') + '</section>'
+      + '<section class="cd" style="gap:6px"><span class="eye">Ask Eadwyn about this document</span>' + J(['Compare v1 and v3', 'Identify missing fields', 'Find related agreements', 'Prepare review checklist'].map(t => '<button type="button" class="btn" style="justify-content:flex-start">' + t + '</button>')) + '<p class="foot">Eadwyn drafts and analyses. People approve and execute.</p></section></div></div>';
+    const wsDocument = () => wsHead(Object.assign({ tab: 'Document', relN: 6 }, GPOA))
+      + '<div class="ws"><section class="cd" style="padding:0;gap:0" aria-label="Document preview"><div class="qtb"><div style="display:flex;gap:8px;align-items:center"><span class="eye">Viewing</span><button type="button" class="dd">v1 · executed ▾</button><span class="foot">A different version than the latest draft</span></div><div style="display:flex;gap:6px"><button type="button" class="btn bsm">Open in new tab ↗</button><button type="button" class="btn bsm">Download PDF</button></div></div>'
+      + '<div style="padding:28px 56px;background:var(--raised);height:560px;overflow:hidden"><article style="background:#fff;border:1px solid var(--hair);padding:40px 48px;font-family:Georgia,serif;font-size:13px;line-height:1.7;color:#18181b;box-shadow:0 1px 3px rgba(0,0,0,.05)"><p style="text-align:center;font-weight:700;letter-spacing:.05em">LIMITED LIABILITY COMPANY AGREEMENT<br>OF<br>AXAL VC GP LLC</p><p style="margin-top:14px">This Limited Liability Company Agreement (this “Agreement”) of Axal VC GP LLC (the “Company”) is entered into as of April 20, 2023 by Axal VC Holdings LLC, as sole member (the “Member”).</p><p><b>1. Formation.</b> The Company was formed as a Delaware limited liability company by the filing of a Certificate of Formation with the Secretary of State of the State of Delaware…</p><p><b>6. Management.</b> 6.1 The business and affairs of the Company shall be managed by the Member. 6.2 Capital calls on behalf of any fund for which the Company serves as general partner…</p><p class="mo" style="font-family:var(--mo);font-size:11px;color:var(--mu);margin-top:16px">Page 1 of 14 · v1 · sha 4be1…a90c</p></article></div></section>'
+      + '<section class="cd" style="gap:8px"><span class="eye">Contents</span><ol style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">' + J(['1. Formation', '2. Name and office', '3. Purpose', '4. Member', '5. Capital', '6. Management', '7. Officers and signatories', '8. Distributions', '9. Dissolution'].map(t => '<li><a href="#" style="color:var(--ink)">' + t + '</a></li>')) + '</ol></section></div>';
+    const wsVersions = () => wsHead(Object.assign({ tab: 'Versions', relN: 6 }, GPOA))
+      + '<section class="cd" aria-labelledby="vh-h"><div class="ch"><h2 id="vh-h">Version history</h2><span class="sm">Immutable · a new upload always creates a new version</span></div><ol class="vh">'
+      + J([['v3', 'Amended & Restated draft · uploaded 28 Oct 2026 by Admin A', 'sha 77c0…12de · changes §6.2 capital-call authority, adds §7.3 signatories', pill('', '✎ Draft') + ' ' + st('rv', 'In review') + ' ' + pill('v', 'Latest')], ['v2', 'Draft · uploaded 10 Feb 2025 by Admin B', 'sha 1f09…c771 · never approved', pill('', '⤳ Superseded draft')], ['v1', 'Executed · 20 Apr 2023 · StudioOS envelope ENV-2023-0091 (2 of 2 signed)', 'sha 4be1…a90c · counsel approved 18 Apr 2023', st('gov', 'Executed') + ' ' + pill('g', 'In force') + ' ' + pill('', 'Approved')]].map(v => '<li><span class="vn">' + v[0] + '</span><div><b style="font-size:13px">' + v[1] + '</b><div class="ks mo" style="font-size:11.5px">' + v[2] + '</div></div><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end">' + v[3] + '<button type="button" class="btn bsm">Compare</button></div></li>')) + '</ol>'
+      + '<p class="foot">Markers: In force = the executed version that governs. Approved = counsel approved this exact version. Latest = most recent upload. Replacing an approved version is a high-risk action and creates a new version — nothing is overwritten.</p></section>';
+
+    /* ---------- legal review ---------- */
+    const wsReview = () => wsHead(Object.assign({ tab: 'Legal Review', relN: 6 }, GPOA))
+      + '<div class="ws"><section class="cd" aria-labelledby="rv-h"><div class="ch"><h2 id="rv-h">Review LR-2026-031</h2>' + st('rv', 'In review') + '</div><dl class="kv2">' + J([['Review status', 'In counsel review · requested 29 Oct 2026'], ['Reviewer', 'R. Okafor · Example LLP (outside counsel)'], ['Review type', 'Amendment · pre-execution'], ['Jurisdiction', 'Delaware, United States'], ['Version reviewed', '<span class="mo">v3 · sha 77c0…12de</span> — a newer upload would need a new review'], ['Review date', '<span class="mo">Due 12 Nov 2026</span>'], ['Findings', '2 recorded so far (below)'], ['Required changes', '§7.3 must name signatories by office, not by person'], ['Source references', 'Del. Code tit. 6 § 18-402 · Fund I LPA §4.1, §9.2'], ['Next review', 'Periodic · 22 Aug 2027'], ['Approval decision', '<b>Not yet decided.</b> Only counsel can record approval.']].map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl></section>'
+      + '<div style="display:flex;flex-direction:column;gap:12px"><section class="ai2" aria-labelledby="air-h"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2 id="air-h" style="font-size:13.5px;font-weight:800">Eadwyn research</h2>' + st('rv', 'AI research') + '</div><p style="font-size:12.5px;line-height:1.55">§6.2 now lets the Member authorise capital calls without LPAC notice. This may conflict with Fund I LPA §9.2 (LPAC notice before a call over 20% of commitments).</p><p class="foot">Research to help counsel. It is not legal advice and does not approve anything. Generated 29 Oct 2026 from v3 and the Fund I LPA.</p><button type="button" class="btn bsm" style="align-self:flex-start">Summarise for counsel</button></section>'
+      + '<section class="cs2" aria-labelledby="cd-h"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2 id="cd-h" style="font-size:13.5px;font-weight:800">Counsel decision</h2>' + pill('', 'Pending') + '</div><p style="font-size:12.5px;line-height:1.55">Recorded only by the assigned counsel, against v3. Shows their name, the decision, conditions and the date.</p><div style="display:flex;gap:6px"><button type="button" class="btn bsm" aria-disabled="true">Record approval</button><span class="foot">Counsel only</span></div></section>'
+      + '<section class="cd" style="gap:6px"><span class="eye">Previous reviews</span><div class="ar" style="grid-template-columns:minmax(0,1fr) auto"><span>v1 periodic review · 22 Aug 2026</span>' + st('rv', 'Counsel approved') + '</div><div class="ar" style="grid-template-columns:minmax(0,1fr) auto"><span>v1 pre-execution · 18 Apr 2023</span>' + st('rv', 'Counsel approved') + '</div></section></div></div>';
+
+    /* ---------- template states ---------- */
+    const tplHead = (o) => wsHead({ crumb: 'Templates', tab: 'Overview', title: o.title, tags: o.tags, sub: o.sub, actions: o.actions, banner: o.banner });
+    const restricted = () => tplHead({ title: 'Amended and Restated LPA', tags: ot('tpl') + st('tpl', 'Under legal review') + st('ovr', 'Restricted') + '<span class="mo" style="font-size:11.5px;color:var(--mu)">v0.1</span>', sub: 'GP / Fund template · Delaware', actions: '<button type="button" class="btn">View</button><button type="button" class="btn">Review history</button><button type="button" class="btn p">Request legal review</button>',
+      banner: '<section role="status" style="border:1.5px solid var(--ink);border-radius:12px;background:var(--card);padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px"><div><h2 style="font-size:15px;font-weight:800">🔒 Restricted — Legal Review Required</h2><p class="sub" style="color:var(--ink);margin-top:4px">This template can’t be used yet. It changes LP economic terms (§8 distributions and clawback) and has not been reviewed by counsel. It also references a side-letter schedule that isn’t attached.</p><p class="foot" style="margin-top:6px">Restricted on 2 Nov 2026 by Admin A · reason recorded</p></div><div style="border-left:1px solid var(--hair);padding-left:16px"><span class="eye">Not available while restricted</span><ul style="font-size:12.5px;margin-top:6px;display:flex;flex-direction:column;gap:3px;color:var(--mu)"><li>⊘ Generate agreement</li><li>⊘ Use template</li><li>⊘ Publish</li></ul><p class="foot" style="margin-top:6px">These actions aren’t shown as buttons until counsel approves and the restriction is lifted.</p></div></section>' })
+      + '<section class="cd"><dl class="kv2">' + J([['Lifecycle', 'Under legal review · not approved for use'], ['Safety state', 'Restricted · Incomplete (missing schedule)'], ['Last review', 'None for this template'], ['Required fields', '14 of 16 · 2 missing']].map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl></section>';
+    const incomplete = () => tplHead({ title: 'Investor Questionnaire — Fund I', tags: ot('tpl') + st('tpl', 'Draft') + st('ovr', 'Incomplete') + '<span class="mo" style="font-size:11.5px;color:var(--mu)">v0.0 · empty</span>', sub: 'GP / Fund template', actions: '<button type="button" class="btn">Assign reviewer</button><button type="button" class="btn">View requirements</button><button type="button" class="btn p">Complete template</button>',
+      banner: '<section role="status" style="border:1.5px dashed var(--amD);border-radius:12px;background:var(--amBg);padding:14px 16px"><h2 style="font-size:15px;font-weight:800;color:var(--amT)">◌ Template incomplete</h2><p class="sub" style="color:var(--ink);margin-top:4px">This document has not yet been completed and cannot be used to generate an agreement.</p></section>' })
+      + '<section class="cd" aria-labelledby="req-h"><div class="ch"><h2 id="req-h">Requirements · 2 of 6 met</h2></div><ul style="display:flex;flex-direction:column">' + J([[1, 'Document type set', 'Investor Questionnaire'], [1, 'Entity and fund set', 'Axal VC GP LLC · Fund I'], [0, 'Document body uploaded', 'No file yet'], [0, 'Required fields mapped', '0 of 11'], [0, 'Jurisdiction and governing law set', 'Not set — not assumed'], [0, 'Legal reviewer assigned', 'Nobody yet']].map(r => '<li class="ar" style="grid-template-columns:22px minmax(0,1fr) auto"><span aria-hidden="true" style="color:' + (r[0] ? 'var(--pos)' : 'var(--mu)') + '">' + (r[0] ? '✓' : '○') + '</span><span><b style="font-size:13px">' + r[1] + '</b><span class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden">' + (r[0] ? ' done' : ' not done') + '</span></span><span class="ks">' + r[2] + '</span></li>')) + '</ul></section>';
+
+    /* ---------- related ---------- */
+    const related = () => wsHead({ crumb: 'Agreements › Fund', tab: 'Related', relN: 6, title: 'Fund I Limited Partnership Agreement', tags: ot('agr') + st('agr', 'Executed') + '<span class="mo" style="font-size:11.5px;color:var(--mu)">v2 in force · Amendment No. 2 approved 5 Nov 2026</span>', sub: 'Axal VC Fund I, L.P. · general partner Axal VC GP LLC · Delaware', actions: '<button type="button" class="btn">Download</button><button type="button" class="btn">Request legal review</button>',
+      banner: note('a', '!', '<b>4 related documents may require review.</b> Amendment No. 2 changed §9.2 (capital-call notice). Nothing has been changed in the related documents — each needs a person to review it.', '<button type="button" class="btn p bsm">Review affected documents</button><button type="button" class="btn bsm">Dismiss for me</button>') })
+      + '<section class="cd" aria-labelledby="rel-h"><div class="ch"><h2 id="rel-h">Depends on this agreement</h2><span class="sm">6 documents</span></div><ol class="tree">'
+      + J([['Subscription Agreement', 'agr', 'Template v2.2 · 112 executed', 1], ['Investment Management Agreement', 'agr', 'Executed v1 · Axal VC Management LLC', 1], ['Investor Questionnaire', 'tpl', 'Template · incomplete', 0], ['Side Letters', 'agr', '14 executed · restricted', 1], ['Capital Call Notice', 'tpl', 'Template v1.1 · approved for use', 1], ['Distribution Notice', 'tpl', 'Template v1.0 · approved for use', 0]].map((r, i) => '<li><span class="tl" aria-hidden="true">' + (i === 5 ? '└' : '├') + '</span><span><b style="font-size:13px">' + r[0] + '</b><span class="ts" style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--mu)">' + ot(r[1]) + r[2] + '</span></span>' + (r[3] ? pill('a', '◷ May require review') : pill('', 'Not affected')) + '</li>')) + '</ol><p class="foot">Related documents are never rewritten automatically. Marking one as reviewed records who checked it against Amendment No. 2.</p></section>';
+
+    /* ---------- execution evidence ---------- */
+    const modal = (o) => '<div class="dim2" aria-hidden="true"></div><div class="mdl" role="dialog" aria-modal="true" aria-labelledby="md-t" style="width:' + (o.w || 600) + 'px;top:' + (o.top || 70) + 'px"><div class="mdh"><div><span class="eye">' + o.eye + '</span><h2 id="md-t" style="margin-top:2px">' + o.title + '</h2></div><button type="button" class="ib" aria-label="Close (Esc)">✕</button></div><div class="mdb">' + o.body + '</div><div class="mdf">' + o.foot + '</div></div>';
+    const evidence = (mode) => modal({ eye: 'Sole-Member Consent 2026-05 · Axal VC Management LLC', title: 'Record execution evidence', body: '<p class="sub" style="color:var(--ink)">Execution is bound to one immutable approved version. A draft can never establish execution.</p><div role="radiogroup" aria-label="Execution evidence" style="display:flex;flex-direction:column;gap:8px">'
+      + '<label class="optc' + (mode === 'env' ? ' on' : '') + '"><input type="radio" name="ev"' + (mode === 'env' ? ' checked' : '') + '><span style="flex:1"><b>Signed through StudioOS envelope</b><span class="ks" style="display:block">Pick a completed envelope. Its signed PDF, signer audit trail and version are linked automatically.</span>' + (mode === 'env' ? '<span style="display:flex;flex-direction:column;gap:6px;margin-top:8px"><span class="selb">ENV-2026-0418 · completed 6 Nov 2026 · 2 of 2 signed ▾</span><span class="ks mo" style="font-size:11.5px">Binds to v2 · approved 1 Nov 2026 · sha 9f3c…e041</span></span>' : '') + '</span></label>'
+      + '<label class="optc' + (mode === 'up' ? ' on' : '') + '"><input type="radio" name="ev"' + (mode === 'up' ? ' checked' : '') + '><span style="flex:1"><b>Upload externally signed document</b><span class="ks" style="display:block">A copy signed outside StudioOS (wet ink or another e-signature service).</span>' + (mode === 'up' ? '<span style="display:flex;flex-direction:column;gap:8px;margin-top:8px"><span class="selb">📄 Consent_2026-05_signed.pdf · 4 pages ✓</span><span class="fld"><label>Binds to version <span>· required</span></label><span class="selb" style="border-color:var(--neg)">v3 · draft · 4 Nov 2026 ▾</span><span role="alert" style="font-size:12px;color:var(--neg);font-weight:600">v3 is a draft. Execution can only be bound to an approved version — choose v2, or get v3 approved first.</span></span><span style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><span class="fld"><label>Signed by Member on</label><span class="selb mo">5 Nov 2026</span></span><span class="fld"><label>Signatory</label><span class="selb">S. Example, Manager</span></span></span><label class="ack" style="margin:0"><input type="checkbox"><span>I confirm this is the complete, fully signed copy of the selected version.</span></label></span>' : '') + '</span></label></div>',
+      foot: '<button type="button" class="btn">Cancel</button><button type="button" class="btn p"' + (mode === 'up' ? ' aria-disabled="true"' : '') + '>Record execution</button>' });
+    const evBase = () => wsHead({ crumb: 'Corporate Governance › Axal VC Management LLC', tab: 'Versions', title: 'Sole-Member Consent 2026-05', tags: ot('gov') + st('gov', 'Approved') + '<span class="mo" style="font-size:11.5px;color:var(--mu)">v2</span>', sub: 'Appointment of manager and delegation of signing authority', actions: '<button type="button" class="btn p">Record execution…</button>' });
+
+    /* ---------- high-risk ---------- */
+    const highRisk = () => modal({ eye: 'Template · Initial Limited Partnership Agreement', title: 'Activate template v1.0?', w: 560, body: '<dl class="ex"><dt>What changes</dt><dd>v1.0 becomes Approved for use. Admins can generate Fund agreements from it. v0.4 is superseded.</dd><dt>Who is told</dt><dd>Fund admins with template access.</dd><dt>What is recorded</dt><dd>Your account, the time, the counsel approval it relies on (LR-2026-027, 3 Nov 2026) and your reason. Logged in Security as contracts.template.activate.</dd></dl><div class="fld"><label>Reason <span>· required</span></label><div class="ta">Counsel approved v1.0 with no remaining conditions.</div></div><div class="fld"><label>Type <span class="mo">ACTIVATE</span> to confirm</label><span class="selb mo">ACTIVATE</span></div><p class="foot">Super Admin only · requires re-authentication.</p>', foot: '<button type="button" class="btn">Cancel</button><button type="button" class="btn dg">Activate template</button>' });
+
+    /* ---------- cross-border ---------- */
+    const crossBorder = () => wsHead({ crumb: 'Agreements', tab: 'Overview', title: 'Service Agreement — Studio Vireo B.V.', tags: ot('agr') + st('agr', 'Ready for signature') + '<span class="mo" style="font-size:11.5px;color:var(--mu)">v1</span>', sub: 'Axal VC Management LLC and Studio Vireo B.V. · design and research services', actions: '<button type="button" class="btn">Download</button><button type="button" class="btn p" aria-disabled="true" title="2 cross-border checks are open">Send for signature</button>' })
+      + '<section class="cd" aria-labelledby="xb-h"><div class="ch"><h2 id="xb-h">Cross-border</h2><span class="sm">5 of 7 resolved</span></div><dl class="kv2" style="grid-template-columns:220px minmax(0,1fr) auto">' + J([['Counterparty jurisdiction', 'Netherlands', st('rec', 'Current')], ['Governing law', 'Netherlands — set in clause 18, not defaulted to Delaware', st('rec', 'Current')], ['Countries of performance', 'Netherlands, United States', st('rec', 'Current')], ['Tax review', 'Withholding and VAT treatment', pill('a', '◷ Open')], ['Data-transfer mechanism', 'Personal data flows to the US — mechanism not yet chosen', pill('a', '◷ Open')], ['Local-counsel review', 'Example Advocaten · completed 3 Nov 2026', st('rec', 'Current')], ['Sanctions / trade review', 'Cleared 2 Nov 2026 · screening ref SCR-2210', st('rec', 'Current')]].map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd><dd style="text-align:right">' + r[2] + '</dd>')) + '</dl></section>';
+
+    /* ---------- search ---------- */
+    const RES = [['Initial Limited Partnership Agreement', 'tpl', 'Axal VC GP LLC · GP / Fund', st('tpl', 'Under legal review'), 'v0.4'], ['Subscription Booklet & LPA', 'agr', 'Fund I · Helvetia Capital AG', st('agr', 'Executed'), 'v2.2'], ['Amended and Restated LPA', 'tpl', 'Axal VC GP LLC · GP / Fund', st('ovr', 'Restricted') + ' ' + st('ovr', 'Incomplete'), 'v0.1'], ['Fund I Limited Partnership Agreement', 'agr', 'Axal VC Fund I, L.P.', st('agr', 'Executed'), 'v2 in force'], ['LPA Side Letter', 'tpl', 'GP / Fund', st('tpl', 'Approved for use'), 'v1.2'], ['LR-2026-027 · Initial LPA v1.0 review', 'rev', 'Axal VC GP LLC · Delaware', st('rv', 'Counsel approved'), 'reviewed v1.0']];
+    const search = () => head('Agreements') + '<div class="srch2" role="search"><span aria-hidden="true">⌕</span><span>LPA</span><span class="foot" style="margin-left:auto">6 results · current versions only</span></div>'
+      + '<div class="tools">' + J([['Entity'], ['Document type'], ['Category'], ['Jurisdiction'], ['Lifecycle status'], ['Review state'], ['Version: Current only', 1], ['Updated: Any time']].map(f => '<button type="button" class="dd' + (f[1] ? ' on' : '') + '">' + f[0] + ' ▾</button>')) + '</div>'
+      + '<section class="qc" aria-label="Search results"><ol class="res">' + J(RES.map(r => '<li><a href="#" class="t">' + r[0].replace('LPA', '<mark>LPA</mark>').replace('Limited Partnership Agreement', '<mark>Limited Partnership Agreement</mark>') + '</a><span class="mo" style="font-size:12px;color:var(--mu);text-align:right">' + r[4] + '</span><span class="m">' + ot(r[1]) + r[2] + ' · ' + r[3] + '</span></li>')) + '</ol>'
+      + '<div class="qft"><span>6 historical versions hidden</span><button type="button" class="btn t bsm">Include historical versions</button></div></section>';
+
+    /* ---------- mobile ---------- */
+    const pTop = (back, t) => '<div class="pt">' + (back ? '<a class="pi" href="#" style="font-size:14px;color:var(--vt)"><span aria-hidden="true" style="font-size:20px">‹</span>' + back + '</a><span class="eye">' + (t || '') + '</span><button type="button" class="pi" aria-label="More actions">⋯</button>' : '<button type="button" class="pi" aria-label="Menu">☰</button><span style="display:flex;align-items:center;gap:7px"><span class="logo" aria-hidden="true"></span><b style="font-size:13px">Axal VC</b><span class="bdg" style="background:#881337">HQ</span></span><button type="button" class="pi" aria-label="Search">⌕</button>') + '</div>';
+    const mList = () => '<div class="ph" style="height:844px;position:relative">' + pTop() + '<main class="pbd" style="gap:12px"><h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em">Contracts</h1>'
+      + '<div class="selb" style="min-height:44px">Agreements · 236 ▾</div><div style="display:flex;gap:8px"><button type="button" class="dd on" style="min-height:44px;flex:1;justify-content:center">Awaiting signature · 12</button><button type="button" class="dd" style="min-height:44px">Filters</button></div>'
+      + '<ol class="cd" style="padding:0 14px;gap:0">' + J([AG[0], AG[1], AG[2], AG[4]].map(a => '<li class="pcard"><a href="#" style="color:var(--ink)"><b>' + a.t + '</b></a><span class="ks">' + a.cp + ' · ' + a.ent.replace('Axal VC ', '') + '</span><div>' + agState(a) + '</div><span class="ks mo" style="font-size:11.5px">' + a.when + (a.s === 'Sent' && a.extra ? ' · ' + a.extra.replace(/<[^>]+>/g, '') : '') + '</span>' + (a.link === 'Unlinked recipient' ? '<button type="button" class="rep" style="min-height:44px;align-self:flex-start">⚭ Link recipient</button>' : a.s === 'INCONS' ? '<button type="button" class="btn" style="align-self:flex-start">Attach execution evidence</button>' : '') + '</li>')) + '</ol></main></div>';
+    const mRecord = () => '<div class="ph" style="height:844px;position:relative">' + pTop('Governance', 'GP LLC') + '<main class="pbd" style="gap:12px;padding-bottom:110px"><div style="display:flex;flex-direction:column;gap:6px"><span class="eye">Axal VC GP LLC</span><h1 style="font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.25">Operating Agreement</h1><div style="display:flex;gap:6px;flex-wrap:wrap">' + ot('gov') + st('gov', 'Executed') + '<span class="mo" style="font-size:11.5px;color:var(--mu)">v1 in force</span></div></div>'
+      + '<section class="cd" style="gap:8px"><span class="eye">Next action</span><b style="font-size:14px">Record authorised signatories</b><span class="ks">Needed before A&R v3 can be executed.</span><button type="button" class="btn p" style="align-self:stretch">Add governance record</button></section>'
+      + '<section class="cd" style="gap:8px"><span class="eye">Legal review</span><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b style="font-size:13.5px">A&R v3 · LR-2026-031</b>' + st('rv', 'In review') + '</div><span class="ks">R. Okafor · due 12 Nov 2026 · not yet approved</span></section>'
+      + '<nav aria-label="Document sections" class="pl2 cd" style="padding:0 14px;gap:0">' + J([['Document', 'v1 · 14 pages'], ['Versions', '3 · v1 executed'], ['Activity', '12 events'], ['Related', '6 documents · 4 may need review']].map(r => '<a href="#"><span><b>' + r[0] + '</b><small>' + r[1] + '</small></span><span></span><span class="chev" aria-hidden="true">›</span></a>')) + '</nav></main>'
+      + '<div class="pbar" style="gap:8px"><button type="button" class="btn">Download</button><button type="button" class="btn p">Request legal review</button></div></div>';
+    const mDanger = () => '<div class="ph" style="height:844px;position:relative">' + pTop('Consent 2026-05', 'Management LLC') + '<main class="pbd"></main><div class="dim2" aria-hidden="true"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mk-t"><span class="grab" aria-hidden="true"></span><div style="padding:10px 16px 6px"><span class="eye">High-risk action</span><h2 id="mk-t" style="font-size:18px;font-weight:800;margin-top:2px">Mark as executed?</h2></div><div style="padding:0 16px 10px;display:flex;flex-direction:column;gap:10px"><dl class="ex" style="grid-template-columns:110px minmax(0,1fr)"><dt>Changes</dt><dd>v2 becomes the executed, in-force version.</dd><dt>Evidence</dt><dd>Envelope ENV-2026-0418 · 2 of 2 signed</dd><dt>Recorded</dt><dd>You, the time and the evidence.</dd></dl><div class="fld"><label>Type <span class="mo">EXECUTED</span> to confirm</label><span class="selb mo" style="min-height:44px;color:var(--mu)">Type here</span></div></div><div style="display:flex;gap:8px;padding:12px 16px 18px;border-top:1px solid var(--hair)"><button type="button" class="btn" style="flex:1">Cancel</button><button type="button" class="btn p" style="flex:1" aria-disabled="true">Mark executed</button></div></div></div>';
+
+    /* ---------- spec boards ---------- */
+    const tbl = (cols, rows) => '<table class="dt"><thead><tr>' + J(cols.map(c => '<th scope="col">' + c + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const doc = (eye, title, intro, body) => '<div class="cv" style="' + VARS + '"><article class="dk"><span class="eye">' + eye + '</span><h1 style="margin-top:4px">' + title + '</h1><p style="margin-top:8px">' + intro + '</p>' + body + '</article></div>';
+    const recs = () => doc('Contracts v2 · CT-90', 'Recommendations: problem → design → benefit', 'Each change below exposes behaviour the live product already supports (agreements, templates, forms, document types, closings, governance collections, versions, confidential records, restricted ownership metadata, envelope linking, status transitions, preview/download, permissions). Nothing here invents a parallel product.',
+      tbl(['Area', 'Current problem', 'Proposed design', 'Operational benefit'], [
+        ['Navigation (CT-01)', 'Eight peer tabs mix workflows (Agreements, NDAs, Partner deals, Closings) with configuration (Forms, Document types).', 'Four workflow tabs: Agreements · Templates · Corporate Governance · Closings. NDAs and Partner deals become category views inside Agreements. Forms and Document types move to a Library menu at the right of the tab row.', 'Fewer places to look; configuration no longer competes with daily work. No new navigation level.'],
+        ['Lifecycles (CT-91)', 'Templates, agreements and governance records share status styling, so an approved template can read like a signed contract.', 'Three separate state vocabularies with distinct glyphs, plus an object-type tag on every row. Templates use a dashed tag and “Approved for use”; executed instruments use a solid dark “● Executed” seal that no template state can show.', 'An approved template can never be mistaken for an executed agreement, in tables, search or mobile.'],
+        ['Overview metrics (CT-01)', 'Generic counts with no route to the records behind them.', 'Six operational measures (Awaiting signature, Executed, Stalled / overdue, Legal review required, Restricted, Data repair required). Each is a link to the filtered list, followed by short queues for stalled, repair and review work.', 'The overview answers “what needs doing” and every number opens the records behind it.'],
+        ['Missing metadata (CT-02)', '“Not recorded”, “No signature date”, “Both dates are needed” appear on rows that are simply waiting for signature.', 'Rows show lifecycle meaning (“Sent 12 May 2026 · Awaiting signature”). A missing signature date on an unsigned agreement is expected, not flagged. Real linkage gaps get a quiet dashed repair action (⚭ Link). Amber warning is reserved for contradictions, e.g. Marked signed with no execution evidence.', 'Warnings regain meaning. Admins stop clearing false alarms and find the few real data problems.'],
+        ['Governance overview (CT-03)', 'Entities appear as flat collections with “None recorded”, and the ownership structure isn’t visible.', 'Group header with the Holdings → 100% Management / 100% GP structure, counts that link to records, and a per-entity row: latest executed, last review, outstanding issue, next action. Beneficial-owner detail sits behind a Super Admin control.', 'The group is understood at a glance; private ownership data stays out of the general view.'],
+        ['Expected records (CT-04–06)', '“None recorded” is shown even where the system knows a record should exist.', 'Each entity lists the record types it should hold, with six states: Current, Review required, Missing — expected, Not recorded — add if applicable, Restricted, Incomplete.', 'Gaps become a to-do list. “Missing” is no longer confused with “not applicable”.'],
+        ['Document workspace (CT-07)', 'A side panel carries both quick actions and substantive work.', 'Keep the side panel for quick actions (CT-02). Substantive work opens a workspace with Overview · Document · Versions · Legal Review · Activity · Related.', 'Long legal work gets room; quick checks stay one click away.'],
+        ['Legal review (CT-08)', 'Review is implied by status, and AI research is not separated from counsel’s decision.', 'A review record with eleven defined fields, tied to an exact version hash. Eadwyn research sits in a dashed lavender panel labelled “AI research · not approval”; counsel’s decision sits in a solid ink panel only counsel can complete.', 'No one can read AI output as legal approval, and every approval is tied to the exact text reviewed.'],
+        ['Restricted / incomplete (CT-09, CT-10)', 'Restricted or empty templates can still look usable.', 'Restricted and Incomplete overlays sit on top of the lifecycle state. Generate, Use template and Publish are not rendered (not just disabled) while either overlay applies; the reason and the available actions are spelled out.', 'Unusable documents can’t produce agreements by accident.'],
+        ['Related documents (CT-11)', 'Documents appear isolated; a change to a governing document doesn’t flag its dependants.', 'A Related tab shows the dependency tree. A change to the governing document raises a non-destructive banner (“4 related documents may require review”) and a review checklist. Nothing is rewritten.', 'Downstream risk becomes visible without automating legal changes.'],
+        ['Execution evidence (CT-12)', 'Envelope-signed and uploaded copies are treated alike, and an upload could imply execution.', 'An explicit choice between a StudioOS envelope and an externally signed upload, always bound to an approved, immutable version. A draft version is rejected, with an explanation.', 'Execution is always provable, and a draft can never become the executed record.'],
+        ['Search (CT-13)', 'Per-tab search only; historical versions clutter results.', 'Cross-object search from the top bar or the / key. Each result shows its type, entity, status and version. Defaults to current versions, with historical versions counted and opt-in. Eight simple filters, no filter builder.', 'Finding “the LPA” takes one query and returns the right object type.'],
+        ['Cross-border (CT-15)', 'Delaware is effectively assumed.', 'A cross-border section on agreements with a foreign party: counterparty jurisdiction, governing law (as chosen, never defaulted), countries of performance, tax, data-transfer mechanism, local counsel, sanctions/trade. Open items block Send.', 'International deals get the checks they need before signature.'],
+        ['Eadwyn (CT-07)', 'Model choice, token prices, usage and top-up balance take persistent space beside legal work.', 'A collapsed 44px rail, plus contextual actions in the workspace (Compare versions, Identify missing fields, Explain this clause, Find related agreements, Prepare review checklist, Summarise findings). Model settings live in Account › AI tokens.', 'The legal work gets the space; AI help appears only where a concrete task needs it.'],
+        ['High-risk actions (CT-16)', 'Consequential actions sit beside routine ones.', 'Three action tiers. High-risk actions are permission-gated, need a reason and typed confirmation, and are logged in Security.', 'Fewer irreversible mistakes, and every consequential change can be audited.']]));
+    const inventory = () => doc('Contracts v2 · CT-91', 'State system and component inventory', 'All components extend existing StudioOS primitives (pill, card, table, segmented control, tabs, drawer, modal, note). New variants are listed with the primitive they extend.',
+      '<h2>Lifecycle states</h2>' + tbl(['System', 'States in order', 'Rendering'], [
+        ['Templates', st('tpl', 'Draft') + ' → ' + st('tpl', 'Under legal review') + ' → ' + st('tpl', 'Approved for use') + ' → ' + st('tpl', 'Superseded') + ' / ' + st('tpl', 'Archived'), 'Object tag <code>TEMPLATE</code> has a dashed border. “Approved for use” is a dashed lavender pill — never filled.'],
+        ['Generated agreements', st('agr', 'Prepared') + ' → ' + st('agr', 'Ready for signature') + ' → ' + st('agr', 'Sent') + ' → ' + st('agr', 'Executed') + ' / ' + st('agr', 'Voided'), '“Executed” is the only filled ink seal, shared only with executed governance records. Voided is struck through.'],
+        ['Governance records', st('gov', 'Draft') + ' → ' + st('gov', 'Reviewed') + ' → ' + st('gov', 'Approved') + ' → ' + st('gov', 'Executed') + ' → ' + st('gov', 'Archived'), 'Object tag <code>GOVERNANCE</code> uses ink text.'],
+        ['Safety overlays', st('ovr', 'Restricted') + ' ' + st('ovr', 'Incomplete'), 'Shown beside the lifecycle state, never replacing it. Either one removes Generate, Use template and Publish.'],
+        ['Expected-record states', st('rec', 'Current') + ' ' + st('rec', 'Review required') + ' ' + st('rec', 'Missing — expected') + ' ' + st('rec', 'Not recorded — add if applicable'), 'Restricted and Incomplete as above. Each state has a one-line explanation under it.'],
+        ['Review provenance', st('rv', 'AI research') + ' ' + st('rv', 'In review') + ' ' + st('rv', 'Counsel approved'), 'AI is dashed lavender; counsel approval is a filled ink seal. They never share a style.'],
+        ['Data contradiction', '<span class="wrn">⚠ Marked signed · no execution evidence</span>', 'The only amber warning in tables. Missing-but-expected data uses a dashed repair button instead.']])
+      + '<h2>Components</h2>' + tbl(['Component', 'Extends', 'Props / variants', 'Used on'], [
+        ['ObjectTypeTag', 'Pill', 'type: template | agreement | governance | legal-review | envelope', 'Every row, search result and workspace header'],
+        ['LifecycleBadge', 'Pill', 'system: template | agreement | governance; state; glyph is always present', 'Tables, headers, mobile rows'],
+        ['SafetyOverlayBadge', 'Pill', 'restricted | incomplete', 'Next to LifecycleBadge'],
+        ['RecordStateBadge', 'Pill', 'current | review-required | missing-expected | not-recorded | restricted | incomplete', 'Entity expected-records tables'],
+        ['RepairAction', 'Button (ghost)', 'Dashed border, 22px desktop / 44px mobile; label is the verb (Link recipient, Bind to version)', 'Agreements table, Data repair queue'],
+        ['InconsistencyFlag', 'Pill (amber)', 'Text names the contradiction', 'Agreements table'],
+        ['MetricLinkStrip', 'Urgency strip (Approvals v2)', 'Six cells, each an anchor to a filtered URL', 'Overview'],
+        ['EntityFactsStrip', 'Card grid', 'Latest executed · last review · outstanding issue (amber tint) · next action', 'Entity pages'],
+        ['OwnershipChart', 'Plain elements', 'Parent + 100% children; role="img" with a text summary', 'Governance overview'],
+        ['WorkspaceTabs', 'Page tabs (violet underline)', 'Overview · Document · Versions · Legal Review · Activity · Related; count badges', 'Workspace'],
+        ['VersionList', 'Ordered list', 'Markers: In force · Approved · Latest · Superseded draft; hash shown', 'Versions tab'],
+        ['ReviewRecord', 'Definition list', 'Eleven fields; version hash; decision slot locked to counsel', 'Legal Review tab'],
+        ['AIResearchPanel / CounselDecisionPanel', 'Card', 'Dashed lavender vs solid ink; fixed labels', 'Legal Review tab'],
+        ['SafetyBanner', 'Note', 'restricted (ink border) | incomplete (dashed amber); lists unavailable actions as text', 'Template workspace'],
+        ['DependencyTree', 'List', 'Rows with type, status and affected flag; the banner is a Note', 'Related tab'],
+        ['EvidenceChooser', 'Radio cards in a Modal', 'envelope | upload; version binding with validation', 'Record execution'],
+        ['HighRiskDialog', 'Modal', 'What changes · who is told · what is recorded · reason · typed confirmation', 'Activate, Publish, Replace approved version, Mark executed, Delete'],
+        ['QuickPanel', 'Drawer (420px, non-modal)', 'Summary and three actions; Open workspace →', 'Agreements table']]));
+    const interactions = () => doc('Contracts v2 · CT-92', 'Interaction specifications', 'Behaviour an implementation agent must follow. URLs are illustrative and keep the existing /admin/contracts base path.',
+      tbl(['Interaction', 'Behaviour'], [
+        ['Tabs and URL', 'Tabs are links: <code>/admin/contracts?tab=agreements|templates|governance|closings</code>. Old <code>tab=ndas</code> and <code>tab=partner-deals</code> redirect to <code>tab=agreements&amp;category=…</code>. Forms and Document types keep their routes under Library.'],
+        ['Metric drill-down', 'Each metric links to the agreements or records list with the matching filter in the URL (e.g. <code>state=sent&amp;age=30d+</code>). Back returns to the overview at its scroll position.'],
+        ['Row click / quick panel', 'Clicking a row title opens the 420px quick panel without leaving the table; ↑/↓ move between rows while it is open. “Open workspace →” navigates to <code>/admin/contracts/doc/:id</code>. Esc closes the panel and returns focus to the row.'],
+        ['Repair actions', 'Link recipient opens a picker of member/company records; nothing is created automatically. Bind to version lists approved versions only. Both write an Activity entry.'],
+        ['Inconsistency flag', 'Shown when state = signed/executed and no envelope or bound upload exists. Clears only once valid evidence is recorded; it can’t be dismissed.'],
+        ['Expected records', 'The expected record set per entity comes from document-type configuration. “Not recorded — add if applicable” is used only for types marked conditional. Adding a record opens the upload flow pre-filled with entity and type.'],
+        ['Restricted ownership', 'The “View restricted ownership details” control renders only for Super Admin. It opens a modal after re-authentication and logs each view.'],
+        ['Legal review', 'Request legal review creates a review record bound to the current version hash. A new upload after the request marks the review “Stale — newer version exists” and the decision slot locks until reassigned. Only the assigned counsel role can record Approve / Approve with conditions / Reject.'],
+        ['AI actions', 'Eadwyn actions produce drafts in a side sheet labelled AI research. Results are never written into review fields automatically; a person copies or cites them.'],
+        ['Restricted / incomplete', 'The overlays are computed on the server. While either is set, the API refuses generate/use/publish (not only the UI). Lifting a restriction is a high-risk action that needs counsel approval on record.'],
+        ['Related-document warning', 'Raised when a governing document gets a new approved or executed version. Each affected document gets a “Review suggested” flag until someone marks it reviewed (with an optional note). Dismissing the banner hides it only for that user.'],
+        ['Execution evidence', 'Envelope: completed envelopes for this document only. Upload: PDF required, version selector limited to approved versions (a draft shows the inline error in CT-12B), signature date, signatory and attestation. Recording sets state to Executed, sets In force on the version and logs the evidence hash.'],
+        ['High-risk actions', 'Activate template, Publish, Replace approved version, Mark executed and Delete need the right permission, a dialog with what changes / who is told / what is recorded, a reason, typed confirmation and re-authentication (Super Admin). Delete is soft: the record moves to Archived with a recovery window. All are logged in Security.'],
+        ['Search', '“/” focuses search from anywhere in Contracts. Results update after 250 ms. Defaults: current versions only, all object types. Enter opens the top result; ↑/↓ move through results. “Include historical versions” adds them with a Historical tag.'],
+        ['Success and failure', 'Successful actions announce via a polite live region and keep filters and scroll. Failures never claim “nothing changed” unless the server confirms it; partial outcomes (e.g. evidence saved, notification failed) are stated exactly.']]));
+    const a11y = () => doc('Contracts v2 · CT-93', 'Accessibility notes', 'These mockups are built to WCAG 2.2 AA intent, but static boards can’t demonstrate compliance. The items marked “Test” need verification in the built product with keyboard, screen readers (VoiceOver, NVDA) and zoom.',
+      tbl(['Topic', 'Specification', 'Verify'], [
+        ['Keyboard', 'Tabs are links; the category chips and evidence choice are radiogroups (arrow keys move, Tab leaves). Row ⋯ menus are disclosure popovers, not ARIA menus. All actions are reachable without a pointer.', 'Test'],
+        ['Visible focus', '2px violet outline with 2px offset on every interactive element, including table links and repair buttons.', 'Test at 200% zoom'],
+        ['Dialogs and panels', 'Modals trap focus, restore it to the opener and close on Esc. The quick panel is non-modal: focus moves into it, and Esc returns to the row.', 'Test'],
+        ['Tables', 'Native <code>&lt;table&gt;</code> with <code>&lt;caption&gt;</code>, <code>scope="col"</code> and <code>aria-sort</code> on the sorted column. The selection checkbox is named after the row title.', 'Screen-reader pass'],
+        ['Status without colour', 'Every state pairs a glyph with words (✓ Approved for use, ● Executed, 🔒 Restricted, ◌ Incomplete). Dashed vs solid borders add a third cue. Read as text, e.g. “Executed”, not “filled circle”.', 'Check glyphs are aria-hidden where words follow'],
+        ['Contrast', 'Text tokens #18181b / #6b6577 on #fff and #f8f7fb, and amber text #92400e on #fffbeb, all meet 4.5:1 by calculation. The dashed lavender pill text #6d28d9 on #f4f0fe is about 6:1.', 'Measure in build'],
+        ['Icon labels', 'Icon-only buttons (✕, ⋯, ‹, E) carry aria-labels naming the action and object.', 'Screen-reader pass'],
+        ['Names', 'The workspace heading is the document title; tabs announce selected state; review panels have headings (“Eadwyn research”, “Counsel decision”) so they can’t be confused.', 'Screen-reader pass'],
+        ['Responsive tables', 'Desktop tables become structured rows on phones (CT-14A) instead of scrolling sideways; definition lists replace wide tables.', 'Test at 320px and 200% zoom'],
+        ['Touch targets', '44px minimum on phones, including repair actions and sheet buttons.', 'Test on device'],
+        ['Validation', 'Errors name the problem and the fix (“v3 is a draft… choose v2, or get v3 approved first”), sit next to the field, and use role="alert". The confirm button stays disabled with a reason until the form is valid.', 'Test announcement timing'],
+        ['Live regions', 'Search result counts and action outcomes use polite live regions; errors use assertive ones.', 'Test'],
+        ['Reduced motion', 'The panel and sheet slide in under 200 ms and don’t animate under prefers-reduced-motion.', 'Test']]));
+    const impl = () => doc('Contracts v2 · CT-94', 'Implementation notes mapped to StudioOS', 'Build against existing tokens and components. Nothing here requires a new visual identity. Do not modify production code during the design phase; this sheet is for the build phase.',
+      '<div class="cols"><div><h2>Tokens</h2>' + tbl(['Token', 'Value', 'Use'], [['page / card / raised', '#f4f3f7 / #fff / #f8f7fb', 'Unchanged'], ['ink / muted / hairline', '#18181b / #6b6577 / #ececf1', 'Unchanged'], ['violet / text', '#7c3aed / #6d28d9', 'Primary actions, focus, Approved for use'], ['amber text / tint / edge', '#92400e / #fffbeb / #fcd34d', 'Inconsistency flag, review required, incomplete'], ['destructive', '#b91c1c / #fef2f2 / #fecaca', 'Missing — expected, high-risk confirm'], ['HQ badge', '#881337', 'Existing HQ shell badge'], ['fonts', 'Space Grotesk · Roboto Mono', 'Mono for dates, versions, hashes, counts']]) + '</div>'
+      + '<div><h2>Reuse</h2>' + tbl(['New piece', 'Build from'], [['Lifecycle / overlay / record badges', 'Existing status pill + glyph prop + border-style variant'], ['Metric strip', 'Approvals v2 urgency strip, cells as anchors'], ['Workspace tabs', 'Existing violet-underline page tabs'], ['Quick panel', 'Existing side panel, width 420px'], ['Dialogs', 'Existing modal with the three-row explanation block from Approvals v2'], ['Phone rows / sheets', 'Approvals v2 phone cards and bottom sheet']]) + '</div></div>'
+      + '<h2>Data the UI relies on (already present or derivable)</h2>' + tbl(['Field', 'Source', 'Note'], [['object_type', 'template | agreement | governance_record | legal_review', 'Drives the tag and the allowed lifecycle'], ['lifecycle_state', 'Existing status transitions', 'Map current statuses to the three vocabularies; NDAs and partner deals map to agreement states'], ['restricted, incomplete', 'Existing confidential / restricted flags; incomplete = required fields or body missing', 'Server-enforced action guard'], ['version_id, sha256, markers', 'Existing document versions', 'In force / approved / latest are derived, not stored separately'], ['execution_evidence', 'Envelope id (completed) or upload id + bound version id', 'Required for Executed'], ['expected_records', 'Document-type config per entity, with a conditional flag', 'Feeds Missing vs Not recorded'], ['review', 'Status, reviewer, type, jurisdiction, version hash, dates, findings, required changes, sources, next review, decision, decided_by_role', 'decided_by_role must be counsel for approval'], ['relations', 'governs / depends_on links between documents', 'Feeds the Related tab and the change warning'], ['cross_border', 'Counterparty jurisdiction, governing law, countries, tax, transfer mechanism, local counsel, sanctions', 'Shown only when a party is outside the US or performance is outside the US']])
+      + '<h2>Permissions</h2>' + tbl(['Action', 'Who'], [['View restricted ownership / restricted records', 'Super Admin (re-auth, logged)'], ['Activate template, Publish, Replace approved version', 'Super Admin'], ['Mark executed, Record execution evidence', 'Admin with contracts.execute'], ['Record counsel decision', 'Counsel role only'], ['Delete (soft)', 'Super Admin; record moves to Archived']])
+      + '<h2>Open questions for product</h2><p>· The entities are shown as Delaware LLCs; confirm the formation jurisdiction of each. · Confirm whether Closings needs its own lifecycle or reuses the agreement one. · Confirm the counsel role exists, or whether approval is recorded by an admin on counsel’s behalf with an attached opinion.</p>');
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'CT01') html = page(overview(), { h: 1000 });
+    else if (B === 'CT02') html = page(agTable(), { h: 1000, overlay: quickPanel() });
+    else if (B === 'CT03') html = page(govOverview(), { h: 900 });
+    else if (B === 'CT04') html = page(entity('h'), { h: 900 });
+    else if (B === 'CT05') html = page(entity('m'), { h: 900 });
+    else if (B === 'CT06') html = page(entity('g'), { h: 900 });
+    else if (B === 'CT07a') html = page(wsOverview(), { h: 900 });
+    else if (B === 'CT07b') html = page(wsDocument(), { h: 1000 });
+    else if (B === 'CT07c') html = page(wsVersions(), { h: 900 });
+    else if (B === 'CT08') html = page(wsReview(), { h: 1000 });
+    else if (B === 'CT09') html = page(restricted(), { h: 900 });
+    else if (B === 'CT10') html = page(incomplete(), { h: 900 });
+    else if (B === 'CT11') html = page(related(), { h: 900 });
+    else if (B === 'CT12a') html = page(evBase(), { h: 900, overlay: evidence('env') });
+    else if (B === 'CT12b') html = page(evBase(), { h: 900, overlay: evidence('up') });
+    else if (B === 'CT13') html = page(search(), { h: 900 });
+    else if (B === 'CT14a') html = '<div class="cv" style="' + VARS + '">' + mList() + '</div>';
+    else if (B === 'CT14b') html = '<div class="cv" style="' + VARS + '">' + mRecord() + '</div>';
+    else if (B === 'CT14c') html = '<div class="cv" style="' + VARS + '">' + mDanger() + '</div>';
+    else if (B === 'CT15') html = page(crossBorder(), { h: 900 });
+    else if (B === 'CT16') html = page(tplHead({ title: 'Initial Limited Partnership Agreement', tags: ot('tpl') + st('tpl', 'Under legal review') + '<span class="mo" style="font-size:11.5px;color:var(--mu)">v1.0 · counsel approved 3 Nov 2026</span>', sub: 'GP / Fund template · Delaware', actions: '<button type="button" class="btn">Review history</button><button type="button" class="btn dg">Activate template…</button>' }), { h: 900, overlay: highRisk() });
+    else if (B === 'CT90') html = recs();
+    else if (B === 'CT91') html = inventory();
+    else if (B === 'CT92') html = interactions();
+    else if (B === 'CT93') html = a11y();
+    else if (B === 'CT94') html = impl();
+    else html = page(overview(), { h: 1000 });
+    return { html: { __html: html } };
+  }
+}
+</script>
+</body>
+</html>
