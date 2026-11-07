@@ -267,7 +267,9 @@ test('secondary investor diligence and fund reads stay scoped; revoked Advisor a
     await grantLicence(f.DB,change('advisor'));
     const profile=await f.call('/api/advisors/me'); assert.equal(profile.status,200); assert.ok(profile.body);
     await revokeLicence(f.DB,change('advisor'));
-    assert.equal((await f.call('/api/advisors/me')).body,null);
+    // D4670 (#4670): a revoked Advisor is refused, never told "no profile"; the row is retained.
+    const revoked=await f.call('/api/advisors/me');
+    assert.deepEqual([revoked.status,revoked.body?.error],[403,'advisor_licence_required']);
     assert.equal(count(f.db,'advisors'),1);
   } finally { f.db.close(); }
 });

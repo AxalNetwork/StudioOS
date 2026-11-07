@@ -28,6 +28,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import advisors from '../src/routes/advisors.ts';
+import { attestationMailer } from '../src/services/advisorProofAttestation.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -138,6 +139,7 @@ function freshDb() {
   db.exec(migration('202_advisor_profile_fields'));
   db.exec(migration('203_advisor_services'));
   db.exec(migration('204_advisor_proof'));
+  db.exec(migration('202611062216_advisor_proof_attestation'));
   db.exec(migration('205_advisor_booking_amounts'));
   db.exec(migration('206_advisor_cohort_assignments'));
   // 241 — `PATCH /me/bookings/:id/billing` now stamps `platform_cut_cents`
@@ -441,7 +443,21 @@ test('a proof item an advisor wrote about themselves is self-stated, not atteste
   assert.equal(item.body.status, 'self_stated');
 });
 
-test('only the attester can make a claim attested, and the advisor never sees the token again', async () => {
+// D4670: answering needs a code mailed to the named address. The mailer is
+// swapped so a test reads the code it would have sent, and to whom.
+const mailed: Array<{ to: string; code: string }> = [];
+attestationMailer.send = async (_env: any, to: string, _name: string, code: string) => { mailed.push({ to, code }); return true; };
+async function answer(e: any, tok: string, body: any) {
+  const sent = await advisors.request(`/proof-consents/${tok}/code`, { method: 'POST' }, e);
+  assert.equal(sent.status, 200, 'the attester asks for a code');
+  const res = await advisors.request(`/proof-consents/${tok}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, code: mailed.at(-1)!.code }),
+  }, e);
+  return res;
+}
+
+test('only the attester can make a claim attested: the link the advisor holds is not enough (D4670)', async () => {
   const e = env(freshDb());
   const item = await call(e, 'POST', '/me/proof', ada, { title: 'Led the payments rebuild' });
   const req = await call(e, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, {
@@ -449,50 +465,50 @@ test('only the attester can make a claim attested, and the advisor never sees th
   });
   assert.equal(req.status, 200);
   assert.equal(req.body.delivered, false, 'recorded, not sent');
-  const tok = req.body.request_token;
-  assert.ok(tok, 'the token is handed over exactly once');
+  const tok = req.body.invite_token;
+  assert.ok(tok, 'the advisor gets the link to hand over');
 
   const listed = await call(e, 'GET', '/me/proof', ada);
   assert.equal(listed.body.items[0].attested, false, 'asking is not being told yes');
-  assert.equal(listed.body.items[0].consents[0].request_token, undefined,
-    'the advisor cannot read the token back and answer for the attester');
+  assert.equal(listed.body.items[0].consents[0].invite_token, tok, 'and can read the link again after a refresh');
 
-  const res = await advisors.request(`/proof-consents/${tok}/respond`, {
+  const bare = await advisors.request(`/proof-consents/${tok}/respond`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ consent_text: 'I confirm Ada led this work.', statement: 'She ran it end to end.' }),
+    body: JSON.stringify({ consent_text: 'I confirm Ada led this work.' }),
   }, e);
+  assert.equal(bare.status, 400, 'the link alone answers nothing');
+  assert.equal((await bare.json() as any).error, 'code_required');
+
+  const res = await answer(e, tok, { consent_text: 'I confirm Ada led this work.', statement: 'She ran it end to end.' });
   assert.equal(res.status, 200);
+  assert.equal(mailed.at(-1)!.to, 'sam@example.com', 'the code went to the person named');
 
   const after = await call(e, 'GET', '/me/proof', ada);
   assert.equal(after.body.items[0].attested, true);
   assert.equal(after.body.items[0].status, 'attested');
   assert.equal(after.body.items[0].consents[0].statement, 'She ran it end to end.');
+  assert.equal(after.body.items[0].consents[0].invite_token, null, 'an answered request no longer offers its link');
 });
 
 test('consent without recorded wording is refused', async () => {
   const e = env(freshDb());
   const item = await call(e, 'POST', '/me/proof', ada, { title: 'A claim' });
-  const req = await call(e, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam' });
-  const res = await advisors.request(`/proof-consents/${req.body.request_token}/respond`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
-  }, e);
+  const req = await call(e, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam', attester_email: 'sam@example.com' });
+  const res = await answer(e, req.body.invite_token, {});
   assert.equal(res.status, 400, 'consent_text must say what was agreed to');
 });
 
 test('a withdrawn consent leaves the record that it was given', async () => {
   const e = env(freshDb());
   const item = await call(e, 'POST', '/me/proof', ada, { title: 'A claim' });
-  const req = await call(e, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam' });
-  const url = `/proof-consents/${req.body.request_token}/respond`;
-  const post = (b: any) => advisors.request(url, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b),
-  }, e);
-  await post({ consent_text: 'Confirmed.' });
-  await post({ consent_given: false });
+  const req = await call(e, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam', attester_email: 'sam@example.com' });
+  await answer(e, req.body.invite_token, { consent_text: 'Confirmed.' });
+  await answer(e, req.body.invite_token, { consent_given: false });
   const after = await call(e, 'GET', '/me/proof', ada);
   assert.equal(after.body.items[0].attested, false, 'the claim is no longer attested');
   assert.equal(after.body.items[0].consents.length, 1, 'and the row is still there');
   assert.ok(after.body.items[0].consents[0].withdrawn_at, 'saying when it was withdrawn');
+  assert.equal(after.body.items[0].consents[0].state, 'withdrawn');
 });
 
 /**
@@ -518,11 +534,9 @@ test('D4681: a failed proof delete keeps the claim and every consent behind it',
   const db = freshDb();
   const ok = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
   const item = await call(ok, 'POST', '/me/proof', ada, { title: 'Led the payments rebuild' });
-  const req = await call(ok, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam Example' });
-  await advisors.request(`/proof-consents/${req.body.request_token}/respond`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ consent_text: 'I confirm this.' }),
-  }, ok);
+  // D4670: the attester is named by address and answers with the emailed code.
+  const req = await call(ok, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam Example', attester_email: 'sam@example.com' });
+  assert.equal((await answer(ok, req.body.invite_token, { consent_text: 'I confirm this.' })).status, 200);
 
   const broken = { ...ok, DB: failingItemDelete(db) };
   const res = await call(broken, 'DELETE', `/me/proof/${item.body.id}`, ada);

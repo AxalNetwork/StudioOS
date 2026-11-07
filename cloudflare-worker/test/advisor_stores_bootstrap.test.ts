@@ -84,6 +84,8 @@ const MIGRATIONS = [
   '367_cohort_advisor_founder_notice',
   // D960: the grant and end history.
   '565_advisor_cohort_assignment_events',
+  // D4670: the claim a confirmation was asked about, its codes and its history.
+  '202611062216_advisor_proof_attestation',
 ];
 
 function fresh() {
@@ -119,7 +121,7 @@ test('the bootstrap produces the same schema the migrations do', async () => {
 
   assert.deepEqual(tables(healed), tables(migrated), 'same tables');
   for (const t of ['advisors', 'advisor_bookings', 'advisor_services',
-                   'advisor_proof_items', 'advisor_proof_consents',
+                   'advisor_proof_items', 'advisor_proof_consents', 'advisor_proof_consent_codes', 'advisor_proof_consent_events',
                    'advisor_cohort_assignments',
                    'cohort_advisor_notices', 'cohort_advisor_optouts', 'advisor_cohort_assignment_events',
                    'advisor_deliverables', 'advisor_session_types', 'advisor_booking_links']) {
