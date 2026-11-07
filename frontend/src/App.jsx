@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useR
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { preserveReloadGuards } from './lib/reloadGuard';
-import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
+import { consumePendingNextOnce, loginRedirectFor, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
@@ -1776,7 +1776,8 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   }
 
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    // #4646: a Learning deep link comes back to the exact course, lesson or webinar after sign-in, through every method.
+    return <Navigate to={loginRedirectFor(location)} state={{ from: location }} replace />;
   }
 
   // Task #1 — route to the stored invite/deep-link target (at most once per
