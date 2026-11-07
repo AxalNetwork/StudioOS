@@ -97,8 +97,6 @@ async function open(db: DatabaseSync, made: any) {
 }
 const beat = (db: DatabaseSync, made: any, viewId: number, seconds: number, slides: Record<string, number>) =>
   req(db, 'POST', `/api/decks/share/${tokenOf(made.body.share_path)}/heartbeat`, null, { view_id: viewId, seconds, slides });
-const analytics = (db: DatabaseSync, linkId: number, as = ADMIN) => req(db, 'GET', `/api/decks/${DECK}/investor-links/${linkId}/analytics`, as);
-const secondsOf = (body: any) => Object.fromEntries(body.cards.map((c: any) => [c.card_uid, c.seconds]));
 
 
 const click = (db: DatabaseSync, made: any, cardUid: string, blockId: string, viewId: number | null) =>
