@@ -212,7 +212,12 @@ test('every licence transition reports the push beside its own outcome', () => {
   // contract, and a notice review that reinstates). Still exact, so a push
   // added or dropped moves this figure on purpose. D797 — eleven: the terms
   // schedule (`PUT /:uid/terms`) rides the copy too (`terms_json`).
-  assert.equal(calls.length, 11, `expected eleven licence changes to push, found ${calls.length}`);
+  // #4686 — ten of them here: the termination's push moved into
+  // `runTerminationConsequences` (so a repeat request can resume it), where it is
+  // the one `pushLicenceToBranch(env, licence.id)` call — asserted just below.
+  assert.equal(calls.length, 10, `expected ten licence changes to push in the handlers, found ${calls.length}`);
+  assert.equal([...src.matchAll(/await pushLicenceToBranch\(env, licence\.id\)/g)].length, 1,
+    'the termination must still push the branch its copy, exactly once per run');
   for (const status of ['active', 'suspended', 'terminated']) {
     assert.ok(
       new RegExp(`status: '${status}'[^}]*pushed`).test(src) || src.includes(`status: '${status}', pushed }`),

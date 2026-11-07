@@ -16,6 +16,8 @@ export const LICENCE_KINDS = Object.freeze(['subsidiary', 'white_label']);
 export const SEAT_TYPES = Object.freeze(['founder', 'investor', 'advisor', 'partner']);
 export const EVENT_OUTCOMES = Object.freeze(['committed', 'partial']);
 export const ACTOR_STATES = Object.freeze(['known', 'unknown', 'none']);
+export const TERMINATION_STEPS = Object.freeze(['notices', 'notify', 'admins', 'push', 'unbind']);
+export const TERMINATION_STEP_STATES = Object.freeze(['pending', 'done', 'failed']);
 export const EVENTS_PAGE_DEFAULT = 50;
 export const EVENTS_PAGE_MAX = 100;
 
@@ -62,6 +64,10 @@ export const LICENCE_RESPONSE_FIELDS = Object.freeze({
   renew: Object.freeze(['ok', 'renews_on', 'pushed']),
   territories: Object.freeze(['ok', 'countries', 'pushed']),
   seats: Object.freeze(['ok', 'seats', 'pushed']),
+  // D4686 — a termination's answer, `GET /:uid`'s `sync`, and its `termination` ledger.
+  terminate: Object.freeze(['ok', 'status', 'resumed', 'released', '...result', 'pushed']),
+  terminate_operation: Object.freeze(['status', 'steps', 'failure_step', 'failure_code']),
+  sync: Object.freeze(['available', 'hq_revision', 'branch_revision', 'last_success_at', 'pending', 'pending_available', 'termination', 'termination_available']),
   terms: Object.freeze(['ok', 'term_years', 'annual_fee_cents', 'currency', 'revenue_share_bps', 'token_split_bps', 'starts_on', 'renews_on', 'pushed']),
 });
 
