@@ -30,6 +30,10 @@ import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { loadSchema } from './_schema_once.mjs';
+import { __setPublicResolverForTest } from '../src/services/webFetch.ts';
+// #4572 follow-up: a member-given URL's host is resolved before any fetch or socket; these tests answer DNS
+// with a public address (the private cases are refused by name, before DNS, as before).
+__setPublicResolverForTest(async () => ['93.184.216.34']);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
