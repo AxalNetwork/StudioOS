@@ -166,7 +166,6 @@ async function call(
 }
 
 const ada = { user: ADVISOR_USER, role: 'advisor' };
-const grace = { user: OTHER_ADVISOR_USER, role: 'advisor' };
 
 
 const FRAN = 95;
