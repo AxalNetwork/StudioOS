@@ -373,7 +373,8 @@ export default function PartnerRetainersZone() {
   // consumed one — and sweeping it into `Under-consuming` would report it as a
   // churn risk on the strength of a number it does not have.
   const live = useMemo(
-    () => items.filter((r) => r.retainer && !r.retainer.ended_at),
+    // D4693: the Worker's own rule (`retainer.active`): not ended, and its engagement not cancelled.
+    () => items.filter((r) => r.retainer && (r.retainer.active ?? !r.retainer.ended_at)),
     [items],
   );
   const renewingSoon = useMemo(

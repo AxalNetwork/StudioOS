@@ -44,13 +44,18 @@ import { isAdmin, isPartner } from './_t13t14t15_helpers';
  * sentences into a 400, so the caller raises the Response itself.
  */
 export async function requireOwnEngagement(
-  env: Env, partnerId: number, engagementId: number,
+  env: Env, partnerId: number, engagementId: number, companyId: number | null = null,
 ): Promise<{ id: number; uid: string; partner_id: number; founder_id: number; status: string; price: number }> {
   const row = await env.DB.prepare(
     `SELECT id, uid, partner_id, founder_id, status, price
        FROM engagements WHERE id = ?`,
   ).bind(engagementId).first<any>();
-  if (!row || Number(row.partner_id) !== Number(partnerId)) {
+  // D4693: a write is scoped to the selected company exactly as the reads are (a row with no company stays visible).
+  // The company is read only when one is selected, so a caller with none behaves as it always did.
+  const company = row && companyId !== null
+    ? (await env.DB.prepare('SELECT company_id FROM engagements WHERE id = ?').bind(engagementId).first<{ company_id: number | null }>())?.company_id
+    : null;
+  if (!row || Number(row.partner_id) !== Number(partnerId) || outsideCompany(company, companyId)) {
     throw new Response(JSON.stringify({ detail: 'Engagement not found' }), {
       status: 404, headers: { 'Content-Type': 'application/json' },
     });
@@ -58,14 +63,26 @@ export async function requireOwnEngagement(
   return row;
 }
 
+/**
+ * True when a row belongs to another company than the one selected. No selection
+ * (null) sees every company, and a row with no company is visible in any: the
+ * same rule `/quotes/me` and `/quotes/analytics` apply in SQL.
+ */
+export function outsideCompany(rowCompany: unknown, selected: number | null): boolean {
+  return selected !== null && rowCompany != null && Number(rowCompany) !== Number(selected);
+}
+
 /** The quote, if it belongs to this partner. Same 404-not-403 reasoning. */
 export async function requireOwnQuote(
-  env: Env, partnerId: number, quoteId: number,
+  env: Env, partnerId: number, quoteId: number, companyId: number | null = null,
 ): Promise<{ id: number; uid: string; partner_id: number; need_id: number; status: string; price: number }> {
   const row = await env.DB.prepare(
     `SELECT id, uid, partner_id, need_id, status, price FROM quotes WHERE id = ?`,
   ).bind(quoteId).first<any>();
-  if (!row || Number(row.partner_id) !== Number(partnerId)) {
+  const company = row && companyId !== null
+    ? (await env.DB.prepare('SELECT company_id FROM quotes WHERE id = ?').bind(quoteId).first<{ company_id: number | null }>())?.company_id
+    : null;
+  if (!row || Number(row.partner_id) !== Number(partnerId) || outsideCompany(company, companyId)) {
     throw new Response(JSON.stringify({ detail: 'Quote not found' }), {
       status: 404, headers: { 'Content-Type': 'application/json' },
     });
@@ -515,6 +532,8 @@ export interface RetainerProjection extends Utilisation {
     monthly_amount_cents: number | null;
     /** What counts toward CURRENT recurring revenue: monthly if active, else null. */
     current_monthly_cents: number | null;
+    /** D4693: the amount a Monthly heading prints. Null when the cadence is unknown. */
+    monthly_cents?: number | null;
   } | null;
   /** The period utilisation was measured in, by cadence. Null with no retainer. */
   current_period: string | null;
