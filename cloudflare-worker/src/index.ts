@@ -2818,6 +2818,13 @@ export default {
             if (!r.available) console.warn('[cron] licence push retry', r.reason);
             else if (r.tried) console.info(`[cron] licence push retry tried=${r.tried} ok=${r.ok} failed=${r.failed}`);
           } catch (e) { taskFailed('licence push retry', e); }
+          // D4805 — notices written with a program decision that did not land are sent again; a retry only sends.
+          try {
+            const { retryOutbox } = await import('./services/programOutbox');
+            const o = await retryOutbox(env, now);
+            if (!o.available) console.warn('[cron] program outbox retry', o.reason);
+            else if (o.tried) console.info(`[cron] program outbox retry tried=${o.tried} sent=${o.sent}`);
+          } catch (e) { taskFailed('program outbox retry', e); }
         }
         // D237 — cron_run_history keeps 30 days, and always each trigger's
         // newest row (the reasons and the batch cap are in

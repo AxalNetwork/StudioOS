@@ -135,7 +135,9 @@ test('D816\'s read: `monthly`, `yearly` and `yearly_saving_percent` are used as 
 
 test('the buttons: a visitor registers; a member\'s own plan is "Current plan"; another plan opens the checkout sheet (D1048)', () => {
   const visitor = cardsOf('founder', {});
-  assert.deepEqual(byId(visitor, 'growth').button, { label: 'Get started', to: '/register?lane=founder', disabled: false });
+  // #4651: a paid card carries its plan, interval and the Pricing return to registration; the free card keeps `?lane=` only.
+  assert.deepEqual(byId(visitor, 'growth').button, { label: 'Get started', to: '/register?lane=founder&plan=founder%3Agrowth&interval=monthly&next=%2Fpricing%3Fcheckout%3Dfounder%253Agrowth%26interval%3Dmonthly%26seen%3D7900', disabled: false });
+  assert.equal(byId(visitor, 'free').button.to, '/register?lane=founder');
   const member = cardsOf('founder', { held: 'growth', signedIn: true });
   assert.equal(byId(member, 'growth').current, true);
   assert.deepEqual(byId(member, 'growth').button, { label: 'Current plan', to: null, disabled: true });

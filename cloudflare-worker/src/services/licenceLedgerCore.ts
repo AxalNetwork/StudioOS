@@ -8,6 +8,7 @@ import type { Env } from '../types';
 import { nowIso } from '../routes/_t13t14t15_helpers';
 import { domainPayload, type LicenceDomainRow } from './licenceDomain';
 import { idChunks } from './licenceLedgerReads';
+import { staleBody } from './licenceTransitions';
 
 // #4707 — the seat types and kinds are the API's contract; they live there.
 export { SEAT_TYPES, LICENCE_KINDS } from './licenceContracts';
@@ -23,6 +24,8 @@ export type LicenceRow = {
   revenue_share_bps: number | null; token_split_bps: number | null;
   starts_on: string | null; renews_on: string | null; suspended_at: string | null;
   terminated_at: string | null; status_note: string | null; created_at: string;
+  /** #4678: bumped by every lifecycle move and every edit that activation depends on; the compare-and-swap token. */
+  revision: number;
   /** 'subsidiary' | 'white_label' — migration 279. `byUid` is SELECT *, so this
    *  arrives without a query change; before 279 it was undefined on every row. */
   kind: string;
@@ -148,12 +151,29 @@ export async function countriesOf(env: Env, licenceId: number): Promise<string[]
  * what HQ's Team table and the addressee's own page read as "frozen since".
  * Silently restarting that clock is worse than refusing to.
  */
+/**
+ * #4678 — an `expected_revision` in the query is a caller saying "I decided
+ * this on revision N". A different current revision is a 409 before any write.
+ * Without one, the revision read by the handler itself is the token, which is
+ * what closes the race between two requests in flight.
+ */
+export function staleRequest(c: any, licence: LicenceRow): Response | null {
+  const raw = c.req.query('expected_revision');
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) return c.json({ error: 'bad_revision', message: 'expected_revision is a whole number.' }, 400);
+  return n === Number(licence.revision) ? null : c.json(staleBody({ status: licence.status, revision: Number(licence.revision) }), 409);
+}
+
 export function transitionRefusal(
   status: string | null | undefined, verb: 'suspend' | 'renew' | 'terminate',
 ): string | null {
   const now = String(status || '');
   if (now === 'terminated') {
     return `This licence is terminated — it is over and its territory has been released, so it cannot be ${verb === 'renew' ? 'renewed' : `${verb}d`}.`;
+  }
+  if (verb === 'suspend' && now !== 'suspended' && now !== 'active') {
+    return 'Only an active licence can be suspended. A licence that has not been activated has not started, so there is nothing to suspend; activate it once its prerequisites are met.';
   }
   if (verb === 'suspend' && now === 'suspended') {
     return 'This licence is already suspended. Suspending it again would restart the "suspended since" clock its administrators are measured against; reinstate it first, or edit the note on the licence.';
@@ -288,10 +308,10 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
  * the operator needs to know WHICH thing. Mirrors the canvas's step 5: a
  * territory conflict blocks, a pending signature does not.
  */
-export async function activationBlockers(env: Env, licence: LicenceRow): Promise<string[]> {
+export async function activationBlockers(env: Env, licence: LicenceRow, opts: { reinstating?: boolean } = {}): Promise<string[]> {
   const out: string[] = [];
   if (licence.status === 'terminated') out.push('This licence is terminated.');
-  if (licence.status === 'active') out.push('This licence is already active.');
+  if (licence.status === 'active' && !opts.reinstating) out.push('This licence is already active.');
   const terr = await env.DB.prepare(
     'SELECT COUNT(*) AS n FROM licence_territories WHERE licence_id = ?',
   ).bind(licence.id).first<{ n: number }>();

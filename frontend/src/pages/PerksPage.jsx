@@ -19,6 +19,7 @@ import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../workspaces/canvasKit';
 import { useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions';
+import { perkState, matchesPerkChip, perkListingBook, perkListingName, PERK_REVIEW_LABEL, PERK_STATE_LABEL } from '../lib/perkListings.js';
 
 /**
  * Perks & Products — built from `design/canvases/backlog/Perks & Products.dc.html`
@@ -727,45 +728,11 @@ function MyPerks({ data, onRated }) {
  * Partner: submissions                                                *
  * ------------------------------------------------------------------ */
 
-/**
- * `live` | `expiring` | `expired` for one listing, as the worker computed it.
- *
- * NEVER RECOMPUTED HERE. `routes/perks.ts` owns the thirty-day window and
- * serves `lifecycle` on every row; `routes/research.ts` imports the same helper
- * for the AI gather. A copy of the arithmetic in this file is how the strip and
- * the chips come to disagree about which perks are ending.
- *
- * The fallback is `live` rather than a guess, and it is only reachable against a
- * response that predates the field.
- */
-export function perkState(p) {
-  const s = String(p?.lifecycle || '');
-  return s === 'expiring' || s === 'expired' ? s : 'live';
-}
+// `perkState` and `matchesPerkChip` live in lib/perkListings.js (#4696): the
+// Offers overview board draws the same listings through the same functions.
+export { perkState, matchesPerkChip };
 
-/**
- * Which chip a listing answers to.
- *
- * `Live` IS BOTH THINGS, and this is the correction migration 228 made
- * possible. It used to be `status === 'live'` alone — the REVIEW state, "an
- * admin approved it" — while the artboard's own note for the word is
- * "accepting redemptions". A perk approved in March and ended in June is not
- * accepting anything.
- *
- * A draft with a far-off end date answers to `All` and to nothing else. That is
- * a real fourth state with no word on the artboard, and the two wrong homes for
- * it would each claim something untrue: `Live` claims a review that has not
- * happened, `Expiring` claims an urgency it does not have.
- */
-export function matchesPerkChip(p, chip) {
-  const state = perkState(p);
-  if (chip === 'live') return p.status === 'live' && state === 'live';
-  if (chip === 'expiring') return state === 'expiring';
-  if (chip === 'expired') return state === 'expired';
-  return true;
-}
-
-const STATE_LABEL = { live: 'Live', expiring: 'Expiring', expired: 'Expired' };
+const STATE_LABEL = PERK_STATE_LABEL;
 const STATE_TONE = { live: 'ok', expiring: 'warn', expired: 'danger' };
 const REVIEW_NOTE = {
   draft: 'draft — not submitted',
@@ -822,7 +789,7 @@ function ExtendModal({ rows, busy, onSave, onClose, note }) {
             <div className="mt-3 space-y-3">
               {rows.map((p) => (
                 <div key={p.uid} className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                  <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{p.offer}</div>
+                  <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{perkListingName(p)}</div>
                   <div className="mt-0.5 text-[11px] text-gray-500">
                     {STATE_LABEL[perkState(p)]} · ends {String(p.ends_at || '').slice(0, 10)}
                     {p.grant_scope ? ` · grants ${p.grant_scope}` : ''}
@@ -1172,9 +1139,8 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
   // ══ THE ARTBOARD'S FOUR TILES, COUNTED OVER THE WHOLE BOOK ═══════════════
   // Never over `visible`: a figure that changes because a chip was clicked is
   // not reporting what its label claims.
-  const live = rows.filter((p) => p.status === 'live' && perkState(p) === 'live');
-  const expiring = rows.filter((p) => perkState(p) === 'expiring');
-  const expired = rows.filter((p) => perkState(p) === 'expired');
+  // One definition, shared with the Offers overview (`lib/perkListings.js`).
+  const { live, expiring, expired } = perkListingBook(rows);
   // `Grants revoked` COUNTS WHAT THIS BOOK NAMES, and the distinction is the
   // artboard's own: a perk whose expiry took something back is one that RECORDED
   // what it granted. A perk with no grant recorded contributes nothing — not
@@ -1270,7 +1236,7 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
             return {
               key: p.uid,
               cells: [
-                { text: p.offer, sub: REVIEW_NOTE[p.status] || undefined },
+                { text: perkListingName(p), sub: REVIEW_NOTE[p.status] || undefined },
                 { pill: STATE_LABEL[state], pillTone: STATE_TONE[state] },
                 // THE BAR IS DRAWN ONLY WHERE THERE IS A DENOMINATOR. An
                 // uncapped offer has a redemption count and no ratio, and a bar
@@ -1490,12 +1456,12 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
                     <div key={p.uid} className="border-b border-gray-100 px-4 py-3 last:border-0 dark:border-gray-800">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{p.offer}</div>
+                          <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{perkListingName(p)}</div>
                           <div className="mt-0.5 text-[11px] text-gray-500">
                             {p.category} · submitted {String(p.created_at || '').slice(0, 10)} · {p.claim_cap == null ? 'uncapped' : `cap ${p.claim_cap}`}
                           </div>
                         </div>
-                        <Pill tone={STATUS_PILL[p.status]}>{String(p.status).replace('_', ' ')}</Pill>
+                        <Pill tone={STATUS_PILL[p.status]}>{PERK_REVIEW_LABEL[p.status] || String(p.status).replace('_', ' ')}</Pill>
                       </div>
                       {p.status === 'rejected' && p.review_note && (
                         <p className="mt-2 rounded bg-red-50 p-2 text-xs text-red-700">{p.review_note}</p>

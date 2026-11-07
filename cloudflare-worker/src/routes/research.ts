@@ -1597,7 +1597,7 @@ const DRAFT_SURFACES: Record<string, {
     // unpriced entries as a SCORING gap rather than a tidying one, because
     // Pipeline scores leads against exactly these rows.
     instruction: [
-      'Say where revenue concentrates across this catalog and which entries have sold nothing.',
+      'Say where requests concentrate across this catalog and which entries have been requested or booked least. Requests are not sales and no revenue figure exists: do not state one.',
       'Name any entry with no price as a gap in lead scoring, not as a cosmetic one: an unpriced service scores as a capability and not as a fit.',
       'Use only the figures below. Do not estimate a price for anything that has none.',
     ].join(' '),
@@ -1606,15 +1606,17 @@ const DRAFT_SURFACES: Record<string, {
         `SELECT o.title AS title, o.engagement_model AS model, o.price_cents AS cents,
                 o.summary AS summary,
                 (SELECT COUNT(*) FROM service_engagements se
-                  WHERE se.offering_id = o.id AND se.status <> 'cancelled') AS sold
+                  WHERE se.offering_id = o.id) AS requested,
+                (SELECT COUNT(*) FROM service_engagements se
+                  WHERE se.offering_id = o.id AND se.status IN ('accepted', 'in_progress', 'delivered', 'reviewed', 'invoiced', 'paid')) AS booked
            FROM service_offerings o WHERE o.owner_user_id = ? ORDER BY o.id ASC LIMIT 100`
       ).bind(userId).all<{
-        title: string; model: string | null; cents: number | null; summary: string | null; sold: number;
+        title: string; model: string | null; cents: number | null; summary: string | null; requested: number; booked: number;
       }>();
       const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
       return (rows.results || []).map((r) =>
         `${r.title} — ${r.model || 'engagement model not recorded'}; `
-        + `${r.cents == null ? 'NO PRICE RECORDED' : money(r.cents)}; sold ${r.sold} time${r.sold === 1 ? '' : 's'}`
+        + `${r.cents == null ? 'NO PRICE RECORDED' : money(r.cents)}; requested ${r.requested} time${r.requested === 1 ? '' : 's'}, booked ${r.booked}`
         + `${r.summary ? `; includes ${r.summary}` : ''}`);
     },
   },
