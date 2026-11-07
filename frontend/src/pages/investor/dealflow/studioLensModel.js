@@ -12,6 +12,7 @@
  * move the Worker refuses.
  */
 import { BASE, ROUND_WORD, roundWord } from './dealFlowModel';
+import { roundAsk } from '../../../components/deals/dealMoney.js';
 
 export const CRUMB = 'Studio';
 export const STUDIO_LINE = 'Every round on the platform, how it scores, and who is looking at it.';
@@ -49,7 +50,7 @@ export function studioRow(r = {}) {
     sector: r.project_sector || null,
     status: r.status || null,
     round: roundWord(r.status),
-    ask: num(r.amount ?? r.target_raise),
+    ask: roundAsk(r),
     currency: r.currency || null,
     source: r.source || null,
     lead: r.lead_partner_name || null,
