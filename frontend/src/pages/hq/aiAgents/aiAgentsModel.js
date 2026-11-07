@@ -1,14 +1,17 @@
 /**
  * D4137 (#4137) — HQ › AI agents, the words and rules the page draws by.
  *
- * Pure, for the Node test. The page (`HqAiAgentsPage.jsx`) reads one route that
- * exists on main — `GET /api/teams/skills`, D1612's library, whose `hq` list is
- * the "From Axal" skills — and draws every other board with the build task that
- * switches it on. When a task lands, its builder flips `BUILD[key].live` and
- * wires the read; the words here stay as they are.
+ * Pure, for the Node test. The page (`HqAiAgentsPage.jsx`) reads the admin
+ * routes under `/api/admin/ai-agents` (H1–H5: the roster, the From Axal skills,
+ * company skills, the policy, runs, spend and the audit) and draws a board with
+ * the build task that switches it on only while that task has not landed. All
+ * five have (`BUILD[key].live`); the words here stay as they are. The lifecycle
+ * rules are in `skillLifecycleModel.js`, the policy's in `policyModel.js`, and the
+ * words for every refusal in `refusals.js`.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { REASON_MIN, wordsFor } from './refusals.js';
 
 /** The four tabs and their addresses (SA0–SA8). Overview is the landing tab. */
 export const BASE = '/hq/ai-agents';
@@ -58,11 +61,12 @@ export function viewFor(pathname = '') {
 /**
  * The build tasks behind the boards (#4137 H1–H5). `live: false` until the
  * task lands its routes; the page says "Not switched on yet" and names the
- * issue, and draws no control the server would only refuse.
+ * issue, and draws no control the server would only refuse. All five are live
+ * since #4739 wired H2's review, golden cases, evals and retire.
  */
 export const BUILD = {
   H1: { issue: 4158, live: true, what: 'The roster admin API', boards: 'SA1, SA2' },
-  H2: { issue: 4160, live: false, what: 'Review, golden cases and retire for From Axal skills', boards: 'SA3 actions, SA4' },
+  H2: { issue: 4160, live: true, what: 'Review, golden cases and retire for From Axal skills', boards: 'SA3 actions, SA4' },
   H3: { issue: 4161, live: true, what: 'Company skills moderation', boards: 'SA5' },
   H4: { issue: 4162, live: true, what: 'Platform AI policy and the kill switch', boards: 'SA6' },
   H5: { issue: 4163, live: true, what: 'Runs, spend and the admin audit', boards: 'SA0 tiles, SA7, SA8' },
@@ -117,7 +121,7 @@ export function levelOf(card) {
   return ranks.length ? levelWord(Math.max(...ranks)) : null;
 }
 
-/** SA3's status chip. `in_review` arrives with H2; today a skill is draft, published or retired. */
+/** SA3's status chip: a skill is a draft, in review, published or retired. */
 export const STATUS = {
   draft: { label: 'Draft', tone: 'draft' },
   in_review: { label: 'In review', tone: 'review' },
@@ -127,8 +131,8 @@ export const STATUS = {
 export const statusOf = (s) => STATUS[s] ?? { label: s ? String(s) : NOT_RECORDED, tone: 'muted' };
 
 /**
- * One SA3 row from a D1612 library card. Golden cases and the last eval are
- * H2's; until it lands they read "Not recorded", never a pass count.
+ * One SA3 row from a library card (`GET /api/admin/ai-agents/skills`). A skill
+ * with no golden cases or no eval run reads "Not recorded", never a pass count.
  */
 export function skillRow(card) {
   const area = areaOf(card);
@@ -158,12 +162,12 @@ export function areaTiles(cards = []) {
   });
 }
 
-/** SA0's KPI tiles. Only "Skills published" is read today; the rest wait for H5. */
+/** SA0's KPI tiles. The page fills the rest from H5's overview; a tile with no figure reads "Not recorded". */
 export function overviewTiles({ hqSkills = null } = {}) {
   const published = Array.isArray(hqSkills) ? hqSkills.filter((s) => s.status === 'published').length : null;
   return [
     { key: 'agents', label: 'Agents active', value: NOT_RECORDED, note: notYet('H5') },
-    { key: 'skills', label: 'Skills published', value: shown(published), note: published == null ? 'Could not be read.' : 'From Axal. Company skills arrive with #4161.' },
+    { key: 'skills', label: 'Skills published', value: shown(published), note: published == null ? 'Could not be read.' : 'From Axal. Company skills are on their own tab.' },
     { key: 'runs', label: 'Runs this week', value: NOT_RECORDED, note: notYet('H5') },
     { key: 'spend', label: 'AI spend this month', value: NOT_RECORDED, note: notYet('H5') },
     { key: 'accepted', label: 'Proposals accepted', value: NOT_RECORDED, note: notYet('H5') },
@@ -177,7 +181,7 @@ export const ROSTER_COLUMNS = ['Agent', 'Top values', 'Risk · natural fit', 'St
 // ─── SA1 / SA2 · Roster (H1, #4158) ─────────────────────────────────────────
 
 /** Every change on this panel takes a reason of at least 10 characters (the Worker refuses a shorter one). */
-export const REASON_MIN = 10;
+export { REASON_MIN };
 export const reasonOk = (r) => String(r ?? '').trim().length >= REASON_MIN;
 
 /** Risk 1 (most cautious) … 5 (boldest), the canvas's words. */
@@ -291,7 +295,7 @@ const REFUSALS = {
   model_not_offered: 'That model is not offered.',
   cap_above_platform: 'That cap is above the platform maximum.',
 };
-export const rosterRefusal = (e) => REFUSALS[e?.code ?? e?.data?.error] ?? e?.message ?? 'That change was not saved.';
+export const rosterRefusal = (e) => wordsFor(REFUSALS, e, 'That change was not saved.');
 /** SA5's columns. */
 export const COMPANY_COLUMNS = ['Skill', 'Company', 'Author', 'Area', 'Tools', 'Status'];
 /** SA7's columns. */
