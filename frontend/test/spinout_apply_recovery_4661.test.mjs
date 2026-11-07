@@ -7,7 +7,6 @@ import { h, mountForm, propsOf } from './_form_d695.mjs';
 import SpinoutLabApplyPage from '../src/pages/SpinoutLabApplyPage.jsx';
 
 const APPLICATION = { id: 41, company_name: 'Synthetic Robotics', status: 'pending', created_at: '2026-11-07 10:00:00', decided_at: null };
-const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 const reply = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
 
 function network(handlers) {
@@ -25,7 +24,6 @@ function network(handlers) {
 }
 
 const settle = (m) => m.flush().then(() => m.flush());
-const text = (m) => m.text();
 
 const NONE = () => reply({ admitted: false, applicant: null, application: null });
 const REVIEW = () => reply({ admitted: false, application: APPLICATION, applicant: { application_id: 41, status: 'pending', submitted_at: '2026-11-07 10:00:00', decided_at: null, withdrawn_at: null, answers: null, answers_recorded: true, pool: null, note: null, interview: null, reapply: null } });
