@@ -179,13 +179,11 @@ async function call(
 
 const ours = { user: OURS_USER, role: 'partner' };
 const theirs = { user: THEIRS_USER, role: 'partner' };
-const fran = { user: FOUNDER_USER, role: 'founder' };
 
 function nowPeriod(): string {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
-const past = (days: number) => new Date(Date.now() - days * 86400000).toISOString();
 
 import { statusReportAccess } from '../src/services/statusReportAccess.ts';
 import { RECORD_SCOPES } from '../src/services/fills/scopes.ts';
