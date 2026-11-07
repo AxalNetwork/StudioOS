@@ -359,8 +359,8 @@ test('the two writers are reachable, and the period chips actually re-read', () 
   // rather than filtering what came back — and the loader has to depend on it
   // or the chip moves nothing at all.
   assert.match(zone, /const period = view === 'next_week' \? nextPeriod\(\) : undefined;/);
-  const loader = between(zone, 'const load = useCallback(', 'useEffect(');
-  assert.ok(/\}, \[period\]\);/.test(loader),
+  const loader = between(zone, 'useZoneRead(async () => {', 'const state = {');
+  assert.ok(/\[period\]\);/.test(loader),
     'the loader no longer re-reads when the period chip changes');
   assert.ok(/api\.getPartnerCapacity\(period\)/.test(loader), 'the load stopped passing the period');
 });
