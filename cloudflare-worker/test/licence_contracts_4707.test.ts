@@ -21,10 +21,13 @@ import * as worker from '../src/services/licenceContracts.ts';
 import * as spa from '../../frontend/src/lib/licenceContracts.js';
 
 const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8');
+/** The quoted values of `CHECK (<col> IN (...))`, found by plain string search. */
 const listIn = (sql: string, col: string) => {
-  const m = sql.match(new RegExp(`CHECK \\(${col} IN \\(([^)]*)\\)`));
-  assert.ok(m, `no CHECK on ${col}`);
-  return m![1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''));
+  const marker = `CHECK (${col} IN (`;
+  const at = sql.indexOf(marker);
+  assert.ok(at >= 0, `no CHECK on ${col}`);
+  const inner = sql.slice(at + marker.length, sql.indexOf(')', at + marker.length));
+  return inner.split(',').map((x) => x.trim().replace(/^'|'$/g, ''));
 };
 
 test('the SPA mirrors every value the Worker contract names', () => {
@@ -43,7 +46,8 @@ test('statuses and kinds are the migrations\' own CHECK lists', () => {
 test('the SPA draws every status, kind and seat the contract names', () => {
   const shared = read('frontend/src/pages/admin/licences/licenceShared.jsx');
   const tones = shared.slice(shared.indexOf('export const STATUS_TONE = {'), shared.indexOf('};', shared.indexOf('export const STATUS_TONE = {')));
-  for (const s of worker.LICENCE_STATUSES) assert.match(tones, new RegExp(`\\b${s}:`), `no tone for ${s}`);
+  const toneKeys = [...tones.matchAll(/^\s+(\w+):/gm)].map((m) => m[1]);
+  for (const st of worker.LICENCE_STATUSES) assert.ok(toneKeys.includes(st), `no tone for ${st}`);
   const seats = shared.slice(shared.indexOf('export const SEAT_TYPES = ['), shared.indexOf('];', shared.indexOf('export const SEAT_TYPES = [')));
   assert.deepEqual([...seats.matchAll(/k: '(\w+)'/g)].map((m) => m[1]), [...worker.SEAT_TYPES]);
   const page = read('frontend/src/pages/admin/AdminLicences.jsx');
