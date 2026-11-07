@@ -41,7 +41,11 @@ export function useRead(scope, what, tick, enabled, load) {
     return () => { live = false; };
     // `load` is rebuilt on every render; `what`, `tick` and `enabled` say when to call it.
   }, [what, tick, enabled]);
-  return read;
+  // D4807: an answer belongs to the request that asked for it. On the render
+  // where `what` changes, state still holds the previous request's answer until
+  // the effect resets it; returning that would show one studio's figures under
+  // the next studio's name. Anything not made for this `what` is loading.
+  return read.what === what ? read : idle(what);
 }
 
 /** A reply without the list it should carry is a failed read, never an empty one. */
@@ -105,7 +109,8 @@ const readLabApplications = () => api.adminSpinoutApplications().then(labReply);
  * per-studio form, so they are not read under a studio.
  *
  * The cards do not follow the period (S-PER): while a new period is read,
- * `cards` keeps the last answer for the same studio, so they do not flicker.
+ * `cards` keeps the last answer for the same studio (marked `stale`), so they
+ * do not flicker.
  */
 export function useCatalogueReads(superAdmin, { weeks, scopeOf = () => ({ code: null, canRead: true }) } = {}) {
   const [tick, reload] = useTick();
@@ -120,9 +125,13 @@ export function useCatalogueReads(superAdmin, { weeks, scopeOf = () => ({ code: 
   // summaries. Neither has a per-studio form, so neither is read under a studio's name.
   const partners = useRead('partners:summary', 'partners-summary', tick, canRead && !scope, () => referralPartnersApi.summary());
   const investors = useRead('investors:summary', 'investors-summary', tick, canRead && !scope, () => investorCohortsApi.summary());
+  // D4807: the last answer is carried only while the next one is loading, only
+  // for the same studio, and is marked `stale`; a read that failed shows its
+  // failure, never the figures from before it.
   const last = useRef({ scope: null, read: null });
   if (catalogue.status === 'ready') last.current = { scope: scope || '', read: catalogue };
-  const cards = catalogue.status === 'ready' || last.current.scope !== (scope || '') || !last.current.read ? catalogue : last.current.read;
+  const carried = catalogue.status === 'loading' && last.current.read && last.current.scope === (scope || '');
+  const cards = carried ? { ...last.current.read, stale: true } : catalogue;
   const drawn = [catalogue, ...(scope || !canRead ? [] : [labApps])];
   return { catalogue, cards, labApps, partners, investors, scopes, studio, drawn, reload };
 }
