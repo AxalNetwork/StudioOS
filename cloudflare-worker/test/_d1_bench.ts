@@ -485,3 +485,69 @@ export function scanControl(w: World, sizes: number[], reps = 200) {
   }
   return out;
 }
+
+// ── D4568: the candidate indexes, with and without ─────────────────────────
+
+/** The two partial indexes migration 202611070806 adds (D4568), by name. */
+export const CANDIDATE_INDEX_NAMES = Object.freeze(['idx_ai_usage_logs_guard_for', 'idx_ai_usage_logs_reservation_ref']);
+const RESERVATION_SUM_SQL = 'SELECT COALESCE(SUM(charged_microusd), 0) AS n FROM ai_usage_logs WHERE reservation_uid = ?1 AND record_ref = ?2';
+
+/**
+ * The candidates' read benefit and write cost on this throwaway database. For
+ * each size: the two charge reads' mean time and plan, and the time to insert
+ * a burst of usage rows shaped like a run's (one model row with a hold, two
+ * guard rows naming it), with the candidates and without them. The burst is
+ * timed inside one transaction, so the figure is the indexes' upkeep, not the
+ * commit. The indexes are put back as the migration wrote them.
+ */
+export function indexControl(w: World, sizes: number[], o: { reps?: number; burst?: number } = {}) {
+  const reps = o.reps ?? 200, burst = o.burst ?? 3000;
+  const ddl = new Map(CANDIDATE_INDEX_NAMES.map((n) => [n, String((w.db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?").get(n) as any)?.sql ?? '')]));
+  if ([...ddl.values()].some((s) => !s)) throw new Error('the candidate indexes are not in this schema: is migration 202611070806 applied?');
+  const user = w.tenants[0].userId;
+  const plan = (sql: string) => (w.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as any[]).map((r) => r.detail).join('; ');
+  const time = (sql: string, args: unknown[]) => { const st = w.db.prepare(sql); const t = performance.now(); for (let i = 0; i < reps; i++) st.get(...args); return round((performance.now() - t) / reps, 4); };
+  const insertBurst = () => {
+    const ins = w.db.prepare(`INSERT INTO ai_usage_logs (user_id, task, model, charged_microusd, reservation_uid, record_ref, guard_for) VALUES (?, 'rail_numbers', 'synthetic', 10, ?, ?, ?)`);
+    w.db.exec('BEGIN');
+    const t = performance.now();
+    for (let i = 0; i < burst; i += 3) {
+      const r = ins.run(user, `bench-res-${i}`, `bench-ref-${i}`, null);
+      const id = Number(r.lastInsertRowid);
+      ins.run(user, null, null, id); ins.run(user, null, null, id);
+    }
+    const ms = performance.now() - t;
+    w.db.exec('ROLLBACK');
+    return round(ms / burst, 5);
+  };
+  const drop = () => { for (const n of CANDIDATE_INDEX_NAMES) w.db.exec(`DROP INDEX IF EXISTS ${n}`); };
+  const restore = () => { for (const s of ddl.values()) w.db.exec(s.replace(/^CREATE INDEX /i, 'CREATE INDEX IF NOT EXISTS ')); };
+  let have = Number((w.db.prepare('SELECT COUNT(*) AS n FROM ai_usage_logs').get() as any).n);
+  const out: any[] = [];
+  try {
+    for (const size of [...sizes].sort((a, b) => a - b)) {
+      if (!Number.isSafeInteger(size) || size < 1 || size > 1_000_000) throw new Error('a control size is 1 to 1,000,000 rows');
+      if (size > have) {
+        // A third are runs under a parent hold; the rest their guard rows, naming earlier ids: the shape the reads meet.
+        w.db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
+          INSERT INTO ai_usage_logs (user_id, task, model, charged_microusd, reservation_uid, record_ref, guard_for)
+          SELECT ?, 'rail_numbers', 'synthetic', 10, CASE WHEN i % 3 = 0 THEN 'bench-hold-' || (i / 30) END, CASE WHEN i % 3 = 0 THEN 'bench-step-' || i END,
+                 CASE WHEN i % 3 = 0 THEN NULL ELSE i END FROM n`).run(size - have, user);
+        have = size;
+      }
+      const probe = Number((w.db.prepare('SELECT MAX(id) AS id FROM ai_usage_logs WHERE guard_for IS NULL').get() as any).id);
+      const step = w.db.prepare('SELECT reservation_uid AS r, record_ref AS f FROM ai_usage_logs WHERE reservation_uid IS NOT NULL ORDER BY id DESC LIMIT 1').get() as any;
+      drop();
+      const without = { charged_for_plan: plan(CHARGED_FOR_SQL), charged_for_ms: time(CHARGED_FOR_SQL, [probe, probe]),
+        reservation_plan: plan(RESERVATION_SUM_SQL), reservation_ms: time(RESERVATION_SUM_SQL, [step.r, step.f]), insert_ms_per_row: insertBurst() };
+      restore();
+      const withIdx = { charged_for_plan: plan(CHARGED_FOR_SQL), charged_for_ms: time(CHARGED_FOR_SQL, [probe, probe]),
+        reservation_plan: plan(RESERVATION_SUM_SQL), reservation_ms: time(RESERVATION_SUM_SQL, [step.r, step.f]), insert_ms_per_row: insertBurst() };
+      out.push({ rows: size, without, with: withIdx });
+    }
+  } finally { restore(); }
+  return out;
+}
+
+/** Drop the candidates from this world, for a before run of a whole mix. */
+export function withoutCandidates(w: World) { for (const n of CANDIDATE_INDEX_NAMES) w.db.exec(`DROP INDEX IF EXISTS ${n}`); return w; }

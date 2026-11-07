@@ -67,7 +67,7 @@ import { agentModels, planOk } from './modelOffers';
 import { allowlistRefusal } from './allowlists';
 import type { Env, User } from '../../types';
 import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
-import { agentAreas } from './adminReads';
+import { agentArea } from './adminReads';
 import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOptions, type TaskClass } from '../aiRouter';
 import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
 import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
@@ -302,7 +302,7 @@ async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'r
   if (!policy) return no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
   if (policy.paused.on) return no(403, 'platform_paused', PLATFORM_PAUSED_MESSAGE);
   if (c.opts.model) {
-    const area = (await agentAreas(env)).get(a.id) ?? null;
+    const area = await agentArea(env, a.id);
     const m = modelUnder(policy, String(c.opts.model), area);
     if (!m) return no(403, 'model_locked', 'This agent\'s model is switched off on the platform, and so is its area\'s default. Pick another model for it.');
     const scope = await scopeOfAgent(env, a);
