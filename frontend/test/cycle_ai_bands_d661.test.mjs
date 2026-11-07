@@ -69,7 +69,8 @@ const BANDS = {
     ['fundraising-readiness', 'raise/data-room'], ['fundraising-readiness', 'raise/legal'],
     ['investor-narrative', 'raise/narrative-fix'],
   ],
-  grow: [['team-expansion', 'grow/talent'], ['distribution', 'grow/customers']],
+  // D4493: Distribution's outreach-sequence band is retired; the sequence builder's Ask replaces it.
+  grow: [['team-expansion', 'grow/talent']],
   build: [
     ['product-roadmap', 'build/roadmap'],
     ['operating-systems', 'build/this-week'], ['operating-systems', 'build/retro'], ['operating-systems', 'build/kpi'],
@@ -120,7 +121,8 @@ test('a band is drawn only with the switch on and a venture chosen, and spends n
   }).join('\n');
   for (const field of ['label', 'run', 'accept', 'empty', 'nothingToDraft', 'foot']) {
     const n = (drafts.match(new RegExp(`\\b${field}: '`, 'g')) || []).length;
-    assert.equal(n, 11, `${n} of the eleven bands carry ${field}`);
+    // D4493: ten, since Distribution's outreach-sequence band was retired.
+    assert.equal(n, 10, `${n} of the ten bands carry ${field}`);
   }
   // D424's voice rule, kept from the desks: Eadwyn's output is never advice.
   assert.doesNotMatch(drafts, /\b(advice|recommend\w*)\b/i, 'a band calls what Eadwyn produces advice');
@@ -153,18 +155,9 @@ test('every founder draft surface scopes to a project the caller owns', () => {
   const talent = table.slice(talentStart, table.indexOf('\n};', talentStart));
   assert.doesNotMatch(talent, /SELECT[^`]*\bemail\b/, 'an applicant email is being sent to the model');
   assert.match(talent, /APPLICANT'S EMAIL IS DELIBERATELY NOT HERE/);
-  // The outreach sequence opens on the founder's own recorded pains, and names
-  // only the stages a signup can be in.
-  const customers = table.slice(table.indexOf("'grow/customers': {"), table.indexOf("'grow/talent': {"));
-  assert.match(customers, /FROM pain_groups g WHERE g\.project_id = \?/);
-  assert.match(customers, /NO PAIN IS RECORDED for this startup/);
-  const rank = progress.match(/const CRM_STATUS_RANK: Record<string, number> = \{([^}]*)\}/)?.[1] || '';
-  const stored = [...rank.matchAll(/(\w+): \d+/g)].map((m) => m[1]);
-  assert.deepEqual(stored, ['new', 'invited', 'followed_up', 'promoted']);
-  const named = customers.match(/Use only the (\w+) stages the record has — ([^.]+)\./)?.[2] || '';
-  assert.deepEqual(named.split(',').map((s) => s.trim().replace(/^and /, '').replace(/ /g, '_')), stored,
-    'the outreach instruction no longer names exactly the stages a signup can be in');
-  assert.match(customers, /Do not place anyone at a demo, a trial or a paid plan: none of those is recorded\./);
+  // D4493: the outreach-sequence surface ('grow/customers') is retired; the
+  // Distribution sequence builder drafts through D4488's task instead.
+  assert.ok(!table.includes("\n  'grow/customers': {"), 'the retired outreach-sequence surface is back');
   // The liquidity read hands the model a company with no preference terms, and
   // says so, or a model supplies a standard stack and calls it this founder's.
   const liquidity = table.slice(table.indexOf("'raise/liquidity': {"));

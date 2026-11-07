@@ -18,7 +18,7 @@
  * any other failure is `unreachable`. Nothing a provider says is passed on.
  */
 import type { Env } from '../../../types';
-import { buildMime, b64url } from './mime';
+import { buildMime, b64url, bytesB64 } from './mime';
 import { AdapterError, type Creds, type MailAdapter, type OAuthCreds, type Outgoing, type ThreadMessage } from './types';
 
 export type OAuthProvider = 'outlook' | 'gmail';
@@ -125,6 +125,7 @@ export const outlookAdapter: MailAdapter = {
     // A draft first, then its send: `sendMail` alone returns no message id.
     const draft = await graph(t.access, '/me/messages', { method: 'POST', body: JSON.stringify({
       subject: msg.subject, body: { contentType: 'Text', content: msg.body }, toRecipients: [{ emailAddress: { address: msg.to } }],
+      ...(msg.attachments?.length ? { attachments: msg.attachments.map((a) => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename, contentType: a.mime, contentBytes: bytesB64(a.bytes) })) } : {}),
     }) });
     await graph(t.access, `/me/messages/${encodeURIComponent(String(draft?.id))}/send`, { method: 'POST' });
     return { messageId: draft?.internetMessageId || draft?.id || null, creds: t.creds };
