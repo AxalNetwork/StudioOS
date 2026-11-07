@@ -166,10 +166,19 @@ function Section({ section, zone, to, role, source }) {
         <div className="space-y-2" aria-busy="true"><Skeleton className="h-7" /><Skeleton className="h-20" /></div>
       )}
       {state === 'error' && (
-        <p className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
-          {source.error} Nothing is shown rather than an empty list, because an empty list here
-          would say you have no records — and that is not something this page can currently know.
-        </p>
+        <div role="alert">
+          <p className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
+            {source.error} Nothing is shown rather than an empty list, because an empty list here
+            would say you have no records — and that is not something this page can currently know.
+          </p>
+          {/* #4697: this section reads again on its own; the others stay as they are. */}
+          {typeof source.retry === 'function' && (
+            <button type="button" onClick={source.retry}
+              className="mt-2 rounded-lg border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold hover:bg-axal-ground dark:border-gray-700 dark:hover:bg-gray-800">
+              Try again
+            </button>
+          )}
+        </div>
       )}
       {state === 'ready' && <Body section={section} payload={payload} to={to} />}
     </Card>

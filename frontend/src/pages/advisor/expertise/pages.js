@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { reportError } from '../../../lib/log';
 
 /**
  * #4689 — one Expertise list, read a page at a time.
@@ -60,8 +61,16 @@ export function showingLine(shown, page) {
  *   rowKey                 the field each row is merged on
  *   counts                 which rows the page's `total` counts (Visibility's
  *                          "Booked without a link" row is not one of its links)
+ *   errorText              the sentence for a first page that failed
+ *   moreErrorText          the sentence for a "Show more" that failed
+ *
+ * A FAILURE READS AS A FIXED SENTENCE (#4697), never the thrown error's text:
+ * `errorText` for a first page, `moreErrorText` for a "Show more". A raw
+ * message can carry a driver or SQL fragment, and a zone is read by the
+ * advisor, not by us. The thrown error goes to `reportError`, so nothing
+ * is hidden from the logs.
  */
-export function usePagedList(fetchPage, { key = 'items', pageKey = 'page', rowKey = 'id', counts = null, errorText = 'This list could not be read.' } = {}) {
+export function usePagedList(fetchPage, { key = 'items', pageKey = 'page', rowKey = 'id', counts = null, errorText = 'This list could not be read.', moreErrorText = 'The next rows could not be read. Try again.' } = {}) {
   const [state, setState] = useState({ loading: true, error: '', rows: [], res: null, moreBusy: false, moreError: '' });
   const latest = useRef(null);
   const load = useCallback(async () => {
@@ -71,8 +80,9 @@ export function usePagedList(fetchPage, { key = 'items', pageKey = 'page', rowKe
       latest.current = res;
       setState({ loading: false, error: '', rows: rowsOf(res, key), res, moreBusy: false, moreError: '' });
     } catch (e) {
+      reportError('expertise:list', e);
       latest.current = null;
-      setState({ loading: false, error: e?.message || errorText, rows: [], res: null, moreBusy: false, moreError: '' });
+      setState({ loading: false, error: errorText, rows: [], res: null, moreBusy: false, moreError: '' });
     }
   }, [fetchPage, key, errorText]);
   const more = useCallback(async () => {
@@ -84,9 +94,10 @@ export function usePagedList(fetchPage, { key = 'items', pageKey = 'page', rowKe
       latest.current = res;
       setState((c) => ({ ...c, rows: appendRows(c.rows, rowsOf(res, key), rowKey), res, moreBusy: false }));
     } catch (e) {
-      setState((c) => ({ ...c, moreBusy: false, moreError: e?.message || 'The next rows could not be read. Try again.' }));
+      reportError('expertise:list-more', e);
+      setState((c) => ({ ...c, moreBusy: false, moreError: moreErrorText }));
     }
-  }, [fetchPage, key, pageKey, rowKey]);
+  }, [fetchPage, key, pageKey, rowKey, moreErrorText]);
   const line = showingLine(counts ? state.rows.filter(counts).length : state.rows.length, state.res?.[pageKey]);
   return { ...state, load, more, line };
 }
