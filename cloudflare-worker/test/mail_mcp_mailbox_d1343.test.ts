@@ -60,6 +60,7 @@ async function setup(opts: { flag?: string | null; dns?: Record<string, string[]
   customDepsFor.current = () => ({ resolve, fetcher: fake.fetch, log: () => {} });
   mcpMailDeps.current = () => ({ resolve, fetcher: fake.fetch, log: () => {} });
   db.exec(readFileSync('cloudflare-worker/sql/migrations/647_mail_accounts.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/202611071555_mail_account_lifecycle.sql', 'utf8')); // #4654
   env.KEK_PII = 'synthetic-kek-d1343-'.repeat(3);
   return { db, env, fake, dns, lookups };
 }
