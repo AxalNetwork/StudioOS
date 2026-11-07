@@ -755,7 +755,10 @@ export function etTime(stamp) {
 /** A cohort deadline is 00:00 ET and inclusive, so it reads "8 Nov 00:00 ET", never "7 Nov 23:59". */
 export const etStamp = (stamp) => (parseStamp(stamp) === null ? null : `${etDay(stamp)} ${etTime(stamp)} ET`);
 
-const isAdvisor = (row) => String(row?.advisor_role || '').toLowerCase() === 'advisor';
+// D4807: prefer the Worker's one eligibility answer; role-alone is the fallback.
+const isAdvisor = (row) => (typeof row?.advisor_eligible === 'boolean'
+  ? row.advisor_eligible || row.advisor_is_active === false
+  : String(row?.advisor_role || '').toLowerCase() === 'advisor');
 /** D960's account rule: the holder's account is active (`advisor_is_active`, true only when `users.is_active` is 1). */
 const isActiveAccount = (row) => row?.advisor_is_active === true;
 const isOpen = (row) => row?.is_active === true || row?.is_active === 1;

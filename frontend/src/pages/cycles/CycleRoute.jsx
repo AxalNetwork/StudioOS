@@ -21,6 +21,7 @@ import ConnectToolSheet from '../account/ConnectToolSheet';
 import { takeBuildProject, toolDeepLink } from '../account/connectorsModel';
 import RoundCallSheet from '../founder/RoundCallSheet';
 import RecordLightbox from '../founder/RecordLightbox';
+import { interviewListOf } from '../../lib/discoveryEvidence';
 import { recordingHref } from '../founder/recordSetup';
 import { openingStep } from '../founder/assistantSession.js';
 import { reviewPath } from '../../lib/activeRecording';
@@ -578,24 +579,68 @@ export function underModule(modules, path, cycle = 'validate', action = 'record'
 
 /**
  * The lightbox, with the interview it was opened on (`?interview=<id>`, from a
- * row's "Record a session") read first so Who is pre-filled. An interview that
- * cannot be found opens the lightbox with Who empty rather than not at all.
+ * row's "Record a session") read first so Who is pre-filled.
+ *
+ * D4625 (#4625): `listInterviews` answers `{ project_id, interviews: [...] }`,
+ * which `interviewListOf` decodes. The requested interview is one of four
+ * things, and never silently another:
+ *   - none requested: the intentional new-person flow (no read at all);
+ *   - found: the lightbox opens on it, Who pre-filled, and Start attaches the
+ *     session to that interview;
+ *   - not in this venture's list (missing, or out of the caller's scope): said
+ *     so, with a deliberate "Record someone new" and a Close;
+ *   - unreadable (the read failed, or its answer was not a list): said so,
+ *     with Try again. It never falls into the new-person flow.
+ * A result is kept with the venture and interview it was read for, so
+ * switching either while a read is in flight can never show or apply the
+ * earlier one.
  */
-export function RecordMount({ projectId, interviewId, onClose, onStarted, asPage }) {
+export function RecordMount({ projectId, interviewId, onClose, onStarted, asPage, read = (id) => api.listInterviews(id), lightboxProps }) {
   const { recorder } = useActiveRecording();
   // D768: while Record a session is open, the rail is that option's (transcription).
   useRailOption('transcribe:interview', 'Record a session');
-  const [interview, setInterview] = useState(interviewId ? undefined : null);
+  const key = interviewId ? `${projectId}|${interviewId}` : null;
+  const [result, setResult] = useState(null); // { key, status: 'ready' | 'missing' | 'error', interview }
+  const [attempt, setAttempt] = useState(0);
+  const [newFor, setNewFor] = useState(null); // the key the founder chose "Record someone new" for
   useEffect(() => {
-    if (!interviewId) { setInterview(null); return undefined; }
+    if (!key) return undefined;
     let alive = true;
-    api.listInterviews(projectId)
-      .then((rows) => { if (alive) setInterview((rows || []).find((r) => String(r.id) === String(interviewId)) || null); })
-      .catch(() => { if (alive) setInterview(null); });
+    const settle = (next) => { if (alive) setResult({ key, ...next }); };
+    Promise.resolve().then(() => read(projectId))
+      .then((res) => {
+        const rows = interviewListOf(res);
+        if (!rows) { settle({ status: 'error', interview: null }); return; }
+        const found = rows.find((r) => String(r.id) === String(interviewId));
+        settle(found ? { status: 'ready', interview: found } : { status: 'missing', interview: null });
+      })
+      .catch(() => settle({ status: 'error', interview: null }));
     return () => { alive = false; };
-  }, [projectId, interviewId]);
-  if (interview === undefined) return null;
-  return <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} recorder={recorder} asPage={asPage} />;
+  }, [key, projectId, interviewId, attempt]); // eslint-disable-line react-hooks/exhaustive-deps -- `read` is a test seam, not a trigger
+  const lightbox = (interview) => <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} recorder={recorder} asPage={asPage} {...lightboxProps} />;
+  if (!key) return lightbox(null);
+  if (newFor === key) return lightbox(null);
+  const current = result?.key === key ? result : null;
+  if (!current) return null;
+  if (current.status === 'ready') return lightbox(current.interview);
+  const missing = current.status === 'missing';
+  return (
+    <Lightbox label="Record a session" eyebrow="Validate · Customer research" title="Record a session" onClose={onClose} testId="record-unavailable" {...asPage}
+      footer={(
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-unavailable-close">Close</button>
+          {missing
+            ? <button type="button" onClick={() => setNewFor(key)} className="rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep" data-testid="record-unavailable-new">Record someone new</button>
+            : <button type="button" onClick={() => { setResult(null); setAttempt((n) => n + 1); }} className="rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep" data-testid="record-unavailable-retry">Try again</button>}
+        </div>
+      )}>
+      <p className="m-0 text-[13px] leading-relaxed text-axal-ink dark:text-gray-100" role={missing ? 'status' : 'alert'} data-testid="record-unavailable-message">
+        {missing
+          ? 'That interview is not in this venture, or you cannot open it. Nothing was recorded.'
+          : 'The interview could not be read just now, so the session was not set up. Nothing was recorded. Try again.'}
+      </p>
+    </Lightbox>
+  );
 }
 
 /** The module slug of a cycle path (`/validate/customer-research?…`), or null for the overview and the cycle's own action path. */
@@ -952,7 +997,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // The table's query resets when the module changes.
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
 
+  // D4601: the overview on screen has an identity: its cycle, its venture and a generation that every
+  // (re)read, venture switch or page change advances. A card retry applies only to the identity it started under.
+  const overviewId = useRef({ gen: 0, key: '' });
+  const retrySeq = useRef({});
   useEffect(() => {
+    overviewId.current = { gen: overviewId.current.gen + 1, key: `${cycle}|${projectId}|${overviewId.current.gen + 1}` };
     // D1056, D1063: the Reporting desk and Build's plan make their own reads, never the overview's.
     if (record || slug || reporting || buildPlan || !projectId || !def) return undefined;
     let alive = true;
@@ -999,8 +1049,15 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // others stay drawn (D656: a failing source leaves the others alone).
   const retryCard = useCallback((cardSlug) => {
     if (!projectId) return;
+    const started = overviewId.current.key;
+    const seq = (retrySeq.current[cardSlug] || 0) + 1;
+    retrySeq.current[cardSlug] = seq;
     cyclesApi.module(cycle, projectId, cardSlug, {})
-      .then((data) => setOverview((o) => (o ? { ...o, cards: o.cards.map((c) => (c.slug === cardSlug ? adaptCard(cycle, { slug: cardSlug, ...data.card }) : c)) } : o)))
+      .then((data) => {
+        // A venture switch, a re-read or a newer retry of this card has happened since: this answer is obsolete.
+        if (overviewId.current.key !== started || retrySeq.current[cardSlug] !== seq) return;
+        setOverview((o) => (o ? { ...o, cards: o.cards.map((c) => (c.slug === cardSlug ? adaptCard(cycle, { slug: cardSlug, ...data.card }) : c)) } : o));
+      })
       .catch(() => {});
   }, [cycle, projectId]);
 

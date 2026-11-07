@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, Copy, Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  ASK_REFUSALS, Field, MoreRows, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
+  ASK_REFUSALS, Field, MoreRows, NothingYet, Pill, SaveNote, StaleNote, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass, refusalText,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -102,10 +102,13 @@ function ConsentLink({ token }) {
   );
 }
 
-function AskForm({ item, onDone }) {
+function AskForm({ item, onDone, onClose }) {
   const [draft, setDraft] = useState({ attester_name: '', attester_email: '', attester_role: '', relationship: '' });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  // D4711: the form opens with the cursor on its first field.
+  const nameRef = useRef(null);
+  useEffect(() => { nameRef.current?.focus?.(); }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -139,10 +142,12 @@ function AskForm({ item, onDone }) {
   };
 
   return (
-    <form onSubmit={submit} className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
+    <form onSubmit={submit} className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700"
+      aria-label={`Ask someone to confirm “${item.title}”`} data-testid={`advisor-proof-ask-${item.id}`}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault?.(); onClose?.(); } }}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Who confirms this">
-          <input className={inputClass} value={draft.attester_name}
+          <input ref={nameRef} className={inputClass} value={draft.attester_name} data-testid={`advisor-proof-ask-name-${item.id}`}
             onChange={(e) => setDraft({ ...draft, attester_name: e.target.value })} />
         </Field>
         <Field label="Their email" hint="Required. When they answer, Axal emails their code here. It cannot be your own.">
@@ -161,7 +166,7 @@ function AskForm({ item, onDone }) {
       <button type="submit" className={`${buttonClass} mt-3`} disabled={busy}>
         {busy ? 'Recording…' : 'Record the ask'}
       </button>
-      <SaveNote note={note} />
+      <SaveNote note={note} testid={`advisor-proof-ask-note-${item.id}`} />
     </form>
   );
 }
@@ -178,6 +183,19 @@ export default function ProofZone() {
   const [asking, setAsking] = useState(null);
   const [view, setView] = useState('all');
   const [confirming, setConfirming] = useState(null);
+  // D4711: the delete question takes focus on its safe answer; closing it, or
+  // the ask form, hands focus back to the row button that opened it.
+  const rowButtons = useRef({});
+  const keepRef = useRef(null);
+  const [returnFocus, setReturnFocus] = useState(null);
+  useEffect(() => { if (confirming != null) keepRef.current?.focus?.(); }, [confirming]);
+  useEffect(() => {
+    if (!returnFocus) return;
+    rowButtons.current[returnFocus]?.focus?.();
+    setReturnFocus(null);
+  }, [returnFocus]);
+  const closeConfirm = (id) => { setConfirming(null); setReturnFocus(`delete-${id}`); };
+  const closeAsk = (id) => { setAsking(null); setReturnFocus(`ask-${id}`); };
   const [deleting, setDeleting] = useState(false);
   const [uid, setUid] = useState(null);
   const navigate = useNavigate();
@@ -208,7 +226,7 @@ export default function ProofZone() {
       });
       setDraft(BLANK);
       setNote({ ok: true, text: 'Added — self-stated until someone confirms it.' });
-      await load();
+      await list.refresh();
     } catch (err) {
       setNote({ ok: false, text: refusalText(err, 'That could not be saved.') });
     } finally {
@@ -223,7 +241,7 @@ export default function ProofZone() {
       const res = await api.deleteMyAdvisorProof(row.id);
       setConfirming(null);
       setNote({ ok: true, text: proofDeletedLine(Number(res?.consents_removed) || 0) });
-      await load();
+      await list.refresh();
     } catch (err) {
       setNote({ ok: false, text: refusalText(err, PROOF_DELETE_FAILED) });
     } finally {
@@ -313,7 +331,7 @@ export default function ProofZone() {
             <button type="submit" className={buttonClass} disabled={busy}>
               {busy ? 'Adding…' : 'Add claim'}
             </button>
-            <SaveNote note={note} />
+            <SaveNote note={note} testid="advisor-proof-note" />
           </div>
         </form>
       </Card>
@@ -325,6 +343,7 @@ export default function ProofZone() {
         actions={advisorZoneActions('expertise/proof', { handlers: { openPublicPreview: preview }, view: { header: ['Proof', 'Kind', 'Detail', 'Attested', 'Consents recorded'], rows: shown, cells: (r) => [r.title, r.kind, r.detail, r.attested ? 'yes' : 'no', (r.consents || []).length] } })}
       />
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
+        notice={<StaleNote error={list.refreshError} onRetry={list.refresh} testid="advisor-proof-stale" />}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
           <p className="text-[12.5px] text-axal-muted">{`No claim is in this state. ${counts?.total ?? state.items.length} in total.`}</p>
@@ -358,10 +377,13 @@ export default function ProofZone() {
                   </div>
                   <div className="flex gap-2">
                     <button type="button" className={ghostButtonClass}
-                      onClick={() => setAsking(asking === row.id ? null : row.id)}>
+                      ref={(n) => { rowButtons.current[`ask-${row.id}`] = n; }} aria-expanded={asking === row.id}
+                      data-testid={`advisor-proof-ask-toggle-${row.id}`}
+                      onClick={() => (asking === row.id ? closeAsk(row.id) : setAsking(row.id))}>
                       {asking === row.id ? 'Close' : 'Ask someone to confirm'}
                     </button>
-                    <button type="button" className={ghostButtonClass} onClick={() => setConfirming(confirming === row.id ? null : row.id)}
+                    <button type="button" className={ghostButtonClass} onClick={() => (confirming === row.id ? closeConfirm(row.id) : setConfirming(row.id))}
+                      ref={(n) => { rowButtons.current[`delete-${row.id}`] = n; }} aria-expanded={confirming === row.id}
                       aria-label={`Delete ${row.title}`} data-testid={`advisor-proof-delete-${row.id}`}>
                       <Trash2 size={13} />
                     </button>
@@ -369,14 +391,16 @@ export default function ProofZone() {
                 </div>
 
                 {confirming === row.id && (
-                  <div role="alertdialog" aria-label={proofDeleteTitle(row)} data-testid={`advisor-proof-confirm-${row.id}`}
+                  <div role="alertdialog" aria-label={proofDeleteTitle(row)} aria-describedby={`advisor-proof-confirm-lines-${row.id}`}
+                    data-testid={`advisor-proof-confirm-${row.id}`}
+                    onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault?.(); closeConfirm(row.id); } }}
                     className="mt-3 rounded-[10px] border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
                     <div className="text-[12.5px] font-bold">{proofDeleteTitle(row)}</div>
-                    <ul className="m-0 mt-1 list-disc pl-5 text-[12px] leading-relaxed text-axal-muted">
+                    <ul id={`advisor-proof-confirm-lines-${row.id}`} className="m-0 mt-1 list-disc pl-5 text-[12px] leading-relaxed text-axal-muted">
                       {proofDeleteLines(row).map((l) => <li key={l}>{l}</li>)}
                     </ul>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" className={ghostButtonClass} onClick={() => setConfirming(null)} data-testid={`advisor-proof-keep-${row.id}`}>Keep it</button>
+                      <button type="button" ref={keepRef} className={ghostButtonClass} onClick={() => closeConfirm(row.id)} data-testid={`advisor-proof-keep-${row.id}`}>Keep it</button>
                       <button type="button" disabled={deleting} onClick={() => remove(row)} data-testid={`advisor-proof-delete-confirm-${row.id}`}
                         className="inline-flex min-h-[32px] items-center rounded-lg bg-axal-destructive px-3 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-50">
                         {deleting ? 'Deleting…' : 'Delete for good'}
@@ -424,7 +448,7 @@ export default function ProofZone() {
                   </p>
                 )}
 
-                {asking === row.id && <AskForm item={row} onDone={load} />}
+                {asking === row.id && <AskForm item={row} onDone={list.refresh} onClose={() => closeAsk(row.id)} />}
               </Card>
             );
           })}

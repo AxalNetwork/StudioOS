@@ -7,8 +7,9 @@
  *   · The estimate is read before every draft (`estimate: true` runs nothing)
  *     and shown on the Draft button's line; Draft is not pressable without it.
  *   · The draft: its subject and body (editable by hand), "Used: … Nothing
- *     else was read.", its versions (‹ ›), Regenerate (a new estimate first),
- *     and Shorter (a revision).
+ *     else was read.", its versions (‹ ›), Regenerate (the same request's
+ *     estimate), and Shorter (a revision, with its OWN estimate of the text in the
+ *     editor: D4666).
  *   · Send, behind a confirmation: one nonce (`/send/confirm`), then the send.
  *     No "Copy to Gmail drafts" (D1347 §3): every draft is kept in Axal VC.
  *     Schedule is not drawn: nothing on the Worker schedules a send yet.
@@ -18,7 +19,9 @@ import Sheet from '../../ui/Sheet';
 import Lightbox from '../../ui/Lightbox';
 import { mailApi } from '../../lib/api/mail.js';
 import { ADD_TOKENS_PATH } from '../../lib/aiTokens';
-import { BLOCKS, bodyText, canDraft, cap, estimateLine, INTENTS, LENGTHS, TONES } from './emailModel.js';
+import { BLOCKS, bodyText, cap, estimateLine, INTENTS, LENGTHS, reviseHoldLine, TONES } from './emailModel.js';
+import { pressable, refreshedFrom } from './estimateGate.js';
+import { useOperationEstimate } from './useOperationEstimate.js';
 import { BODY, BTN, Chips, ERROR, EYEBROW, INPUT, MUTED, PRIMARY } from './emailParts.jsx';
 
 
@@ -29,7 +32,6 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
   const [tone, setTone] = useState('warm');
   const [length, setLength] = useState('short');
   const [blocks, setBlocks] = useState([]);
-  const [estimate, setEstimate] = useState(null);
   const [versions, setVersions] = useState([]);
   const [at, setAt] = useState(0);
   const [edit, setEdit] = useState(null);
@@ -42,25 +44,31 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
     [person.ref, intent, tone, length, refs, blocks, project]);
   const draft = versions[at] ?? null;
 
-  // The estimate, read again whenever the request changes; nothing runs and nothing is charged.
-  useEffect(() => {
-    let live = true;
-    setEstimate(null);
-    if (!intent) return undefined;
-    api.estimate(ask).then((r) => { if (live) setEstimate(r?.estimate ?? null); }).catch((e) => { if (live) setError(e?.message || 'The estimate could not be read. Try again.'); });
-    return () => { live = false; };
-  }, [ask, api, intent]);
+  // D4666: the estimate is of the operation on screen. The draft and a regenerate share one (the same request);
+  // Shorter has its own, of the text in the editor, so the price shown is the price of what will run.
+  const gate = useOperationEstimate(() => api.estimate(ask), { kind: 'draft', ask }, { enabled: !!intent });
+  const estimate = gate.estimate;
+  const base = edit ? { subject: edit.subject, body: edit.body } : null;
+  const shortGate = useOperationEstimate(
+    () => api.revise(draft.uid, { instruction: 'shorter', base, ...(project ? { project } : {}), estimate: true }),
+    { kind: 'revise', uid: draft?.uid ?? null, instruction: 'shorter', base, project },
+    { enabled: !!(draft && edit?.subject?.trim() && edit?.body?.trim()), debounceMs: 400 },
+  );
 
   useEffect(() => { setEdit(draft ? { subject: draft.subject, body: draft.body } : null); }, [draft]);
 
-  const run = async (go) => {
+  const run = async (go, which) => {
     setBusy(true); setError(null);
     try { const r = await go(); if (r?.draft) { setVersions((v) => [...v, r.draft]); setAt(versions.length); } }
-    catch (e) { setError(e?.status === 402 ? { line: e.message || 'Not enough AI tokens for this draft.', topUp: true } : (e?.message || 'Eadwyn could not draft this email. Try again.')); }
+    catch (e) {
+      const fresh = refreshedFrom(e);
+      if (fresh) { which?.accept(fresh); setError(e.message || 'This changed since you saw the estimate. Review the new one, then press again.'); setBusy(false); return; }
+      setError(e?.status === 402 ? { line: e.message || 'Not enough AI tokens for this draft.', topUp: true } : (e?.message || 'Eadwyn could not draft this email. Try again.'));
+    }
     finally { setBusy(false); }
   };
-  const press = () => run(() => api.draft(ask));
-  const shorter = () => draft && run(() => api.revise(draft.uid, { instruction: 'shorter', ...(project ? { project } : {}) }));
+  const press = () => gate.estimate && run(() => api.draft({ ...ask, quote: gate.estimate.quote }), gate);
+  const shorter = () => draft && shortGate.estimate && run(() => api.revise(draft.uid, { instruction: 'shorter', base, ...(project ? { project } : {}), quote: shortGate.estimate.quote }), shortGate);
 
   const send = async () => {
     setBusy(true); setError(null);
@@ -85,8 +93,10 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
         <span className={`text-[12px] ${MUTED}`}>Every draft is kept in Axal VC.</span>
       </div>
     : <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className={`text-[12px] ${MUTED}`}>Eadwyn drafts. You send.</span>
-        <button type="button" className={PRIMARY} disabled={!canDraft({ estimate, intent, busy })} onClick={press} data-testid="compose-draft">Draft with Eadwyn</button>
+        {gate.status === 'failed'
+          ? <span className={`text-[12px] ${MUTED}`} data-testid="compose-estimate-failed">{gate.error} <button type="button" className="underline" onClick={gate.retry}>Try again</button></span>
+          : <span className={`text-[12px] ${MUTED}`}>Eadwyn drafts. You send.</span>}
+        <button type="button" className={PRIMARY} disabled={!pressable(gate, busy) || !intent} onClick={press} data-testid="compose-draft">Draft with Eadwyn</button>
       </div>;
 
   return <Sheet title="Draft an email" eyebrow="Email" sub={`Email to ${person.name}`} onClose={onClose} footer={footer} width={560} testId="compose-sheet">
@@ -132,10 +142,13 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
         <textarea className={`${INPUT} min-h-[220px] py-2`} aria-label="Body" aria-describedby={questionOpening ? 'compose-fund-question' : undefined} value={edit.body} onChange={(e) => setEdit({ ...edit, body: e.target.value })} />
         <p className={`text-[12px] ${MUTED}`} data-testid="compose-used">Used: {(draft.sources ?? []).map((s) => s.label).join(', ') || 'nothing'}. Nothing else was read.</p>
         <div className="flex flex-wrap gap-1.5">
-          <button type="button" className={BTN} disabled={!canDraft({ estimate, intent, busy })} onClick={press}>Regenerate{line ? '' : ' (reading the estimate…)'}</button>
-          <button type="button" className={BTN} disabled={busy} onClick={shorter}>Shorter</button>
+          <button type="button" className={BTN} disabled={!pressable(gate, busy) || !intent} onClick={press}>Regenerate{line ? '' : gate.status === 'failed' ? ' (estimate unavailable)' : ' (reading the estimate…)'}</button>
+          <button type="button" className={BTN} disabled={!pressable(shortGate, busy)} onClick={shorter} data-testid="compose-shorter">Shorter{shortGate.status === 'ready' ? '' : shortGate.status === 'failed' ? ' (estimate unavailable)' : ' (reading the estimate…)'}</button>
         </div>
         {line && <p className={`text-[12px] ${MUTED}`}>{line}</p>}
+        {shortGate.status === 'ready' && <p className={`text-[12px] ${MUTED}`} data-testid="compose-shorter-hold">{reviseHoldLine('Shorter', shortGate.estimate)}</p>}
+        {(gate.status === 'failed' || shortGate.status === 'failed') && <p className={`text-[12px] ${MUTED}`} data-testid="compose-estimate-failed-draft">
+          {(gate.status === 'failed' ? gate : shortGate).error} <button type="button" className="underline" onClick={() => { gate.retry(); shortGate.retry(); }}>Try again</button></p>}
       </section>}
 
       {error && <div className={ERROR} role="alert" data-testid="compose-error">

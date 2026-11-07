@@ -174,7 +174,10 @@ export default function PartnerDeliveryBoardZone() {
             <BoardTile
               label="Embedded / month"
               value={moneyDollars(d?.embedded_monthly ?? 0)}
-              note={`${items.filter((r) => r.mode === 'embedded' && !r.seat_revoked_at).length} granted seats`}
+              nr={d?.embedded_monthly == null}
+              note={d?.embedded_monthly == null
+                ? (d?.embedded_monthly_note || 'no recurring amount recorded')
+                : `${items.filter((r) => r.mode === 'embedded' && r.seat_state === 'active').length} engagements with a live seat · recorded recurring amount, per month${d?.embedded_monthly_note ? ` · ${d.embedded_monthly_note}` : ''}`}
             />
             <BoardTile
               label="Need attention"
@@ -188,7 +191,9 @@ export default function PartnerDeliveryBoardZone() {
               value={String(d?.revoked_seats ?? 0)}
               note={revoked.length
                 ? `${revoked[0].client || 'a client'} · closed ${String(revoked[0].seat_revoked_at).slice(0, 10)}`
-                : 'no founder has closed a seat'}
+                : (d?.revoked_seats > 0
+                  ? 'on engagements that still hold a live seat'
+                  : 'no founder has closed a seat')}
             />
           </div>
 
@@ -239,8 +244,8 @@ export default function PartnerDeliveryBoardZone() {
                   : (r.seat_revoked_at
                     ? { nr: true }
                     : (r.hours_cap != null
-                      ? { text: `${r.hours_this_period ?? 0} of ${r.hours_cap} h this period` }
-                      : { text: `${r.hours_this_period ?? 0} h this period`, sub: 'no retained-hours cap agreed' })),
+                      ? { text: `${r.hours_this_period ?? 0} of ${r.hours_cap} h`, sub: r.hours_period ? `in ${r.hours_period}` : undefined }
+                      : { text: `${r.hours_this_period ?? 0} h`, sub: `${r.hours_period ? `in ${r.hours_period} · ` : ''}no retained-hours cap agreed` })),
                 r.health
                   ? { pill: HEALTH_LABEL[r.health], pillTone: HEALTH_TONE[r.health] }
                   : (r.seat_revoked_at ? { pill: 'Revoked', pillTone: 'neutral' } : { nr: true }),

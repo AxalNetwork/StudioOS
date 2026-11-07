@@ -266,7 +266,7 @@ test('Ask for consent runs, and its old reason described a page that exists', ()
   assert.ok(actionsRaw.includes('/attest/partner/:token'),
     'the table no longer records which surface the retired reason was wrong about');
   // The page supplies it, or the op renders nowhere at all.
-  assert.match(zone, /askConsent: \(\) => \{ setNote\(null\); setAsking\(true\); \}/,
+  assert.match(zone, /askConsent: \(\) => \{ clearNote\(\); setAsking\(true\); \}/,
     'the page no longer supplies the handler');
   assert.match(zone, /partnerZoneActions\('offers\/proof', \{ handlers, view: \{/,
     'the action row drops handlers, so the op renders nowhere');

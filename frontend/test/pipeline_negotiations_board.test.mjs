@@ -77,7 +77,7 @@ test('the strip is the artboard’s four, counted over what is in play', () => {
   // tracking is not a negotiation at all — folding either in would make the
   // board look busier than the work is.
   const read = between(worker, "partnerPipeline.get('/negotiations'", 'PUT because');
-  assert.ok(/const open = items\.filter\(\s*\(x: any\) => x\.negotiation && x\.negotiation\.stage !== 'closed',\s*\);/.test(read),
+  assert.ok(/if \(!x\.negotiation \|\| x\.negotiation\.stage === 'closed'\) continue;/.test(read),
     'the counts stopped excluding untracked and closed negotiations');
   for (const field of ['live_count', 'awaiting_us_count', 'awaiting_them_count', 'stalled_count']) {
     assert.ok(read.includes(`${field}:`), `the read stopped returning ${field}`);

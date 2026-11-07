@@ -15,6 +15,8 @@ unchanged when it was split.
 - `AdminsEditor.jsx` — the licence's administrators: appoint, demote, detach.
 - `NoticesEditor.jsx` — compliance notices and their review.
 - `BrandKitEditor.jsx` — the brand kit, white-label licences only.
+- `LicenceSyncStrip.jsx` — branch sync (HQ and branch revision, last sync, pending revision and why) and the
+  unfinished-termination notice with its resume button (#4686).
 - `Coverage.jsx` — the EU coverage grid and the renewal pipeline above the list.
 - `licenceShared.jsx` — what the parts share: tones, seat types, step numbers,
   residency choices, `Chip` and `Field`.

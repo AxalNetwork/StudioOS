@@ -110,7 +110,7 @@ export async function transition(env: Env, held: Held, verb: LicenceVerb, change
     ).bind(change.note ?? null, change.now, change.now, ...at);
   } else {
     move = env.DB.prepare(
-      'UPDATE territory_licences AS l SET renews_on = ?, revision = revision + 1, updated_at = ? WHERE l.id = ? AND l.status = ? AND l.revision = ?',
+      'UPDATE territory_licences AS l SET renews_on = ?, terms_revision = terms_revision + 1, revision = revision + 1, updated_at = ? WHERE l.id = ? AND l.status = ? AND l.revision = ?',
     ).bind(change.renewsOn ?? null, change.now, ...at);
   }
   let results: Array<{ meta?: { changes?: number } }>;

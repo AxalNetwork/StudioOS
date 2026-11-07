@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Programs v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Programs · UX V2 · #4873</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Programs — an operating console</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The top answers four questions in order: what’s operational, where people take part, what HQ must act on, and what’s incomplete. The four headline numbers reconcile with the queues below them (13 = 12 perk listings + 1 strategic referral). A partial count is drawn dashed, marked Incomplete and shows how much it covers — never as a complete-looking number. Programme state is split into five labelled dimensions: build, operational, member access, studio offering and existing grants. The catalogue is compact rows grouped by category, and a custom programme uses the same row, card and detail shell, with optional capability modules. Proposals get a summary here and a dedicated review workspace that shows the exact revision being decided. Eadwyn shows recommendations, or a calm empty line when it has none. No internal IDs appear in the UI.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026, 14:30 UTC · Super Admin · counts follow the brief’s live examples; studio names and listings are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Programs v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PG-01', 'Programs overview', 'The header has a neutral Scope selector, the reporting period as a radio group, last updated, Refresh and the New program primary action, with Catalogue / Proposals below. The four-card strip shows People participating dashed and Incomplete (9 of 10 programmes counted). Needs attention sits beside the proposals summary. Activity has one accessible Chart / Table control. The catalogue rows are grouped by category, with five state columns and one Open action; the custom programme sits in the same rows. The Eadwyn rail is open with three recommendations.', [F('PG01', false, 1990)]],
+      ['PG-02', 'Card system and state model', 'A · Eight card states from the brief: proposed (custom), not built, partly built, operational, paused, HQ only, offered with none granted, and granted. The lead line carries the most important state; the others are labelled rows, not badges. B · The five dimensions, and what stores each one today.', [C('PG02', 'A · Cards', 1400, 640), C('PG02b', 'B · Five dimensions', 1100, 320)]],
+      ['PG-03', 'Generic programme shell', 'A · Perks, a built-in programme with the Perk queue capability module. B · A custom programme with no modules: the core sections (Overview, Playbook, Availability & grants, Participation, History, Settings) carry it alone.', [F('PG03', 'A · Built-in with a module', 1000), F('PG03b', 'B · Custom, no modules', 1000)]],
+      ['PG-04', 'Proposal review workspace', 'The Proposals route keeps search, status and studio filters; the overview no longer duplicates them. The drawer shows the full submitted specification for one revision, read-only, with its history. The primary action names the revision it approves, and a note is required to Send back or Decline.', [F('PG04', false, 900)]],
+      ['PG-05', 'Eadwyn rail states', 'A · Recommendations. B · Nothing to recommend. C · Recommendations unavailable — the page itself is unaffected. Model lists and pricing don’t appear.', [F('PG05a', 'A · Recommendations', 760), F('PG05b', 'B · Empty', 760), F('PG05c', 'C · Unavailable', 760)]],
+      ['PG-06', 'Region states', 'A · Loading, ready, stale, partial, empty, unavailable, permission-restricted, and a headline whose queue wasn’t read (12+). B · Activity in the Table view.', [C('PG06', 'A · States', 1400, 480), F('PG06b', 'B · Table view', 640)]],
+      ['PG-07', 'Tablet and phone', 'A · Tablet 768: the strip goes to 2×2, attention stays above the catalogue, and the catalogue becomes cards. B · Phone 390: scope and period come first, the most urgent action is full width, and programmes are compact rows.', [D('PG07a', 'A · Tablet 768', 768, 1024, 16), P('PG07b', 'B · Phone 390')]],
+      ['PG-08', 'Rationale, status model and handoff', 'Why the hierarchy is ordered this way; which parts need the backend (member access field, proposal revisions, capability modules) and which are frontend-only; accessibility; and the mapping to pages/admin/programs.', [W('PG08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
