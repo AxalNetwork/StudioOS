@@ -6,6 +6,8 @@
  * skill uses the version PINNED on the agent (`agent_skill_links.version`),
  * never the skill's latest. Before the model sees anything, in order:
  *   skill_not_attached   422  the agent has no link to that skill
+ *   skill_version_changed 409 the caller saved another version than the one
+ *                             pinned now (D4534: a scheduled session)
  *   skill_unavailable    409  the pinned version cannot be read
  *   skill_suspended      409  HQ suspended it (D4161, `skillRunRefusal`)
  *   tool_not_approved    422  a tool the version uses is no longer in the
@@ -90,11 +92,16 @@ export type SkillForRun = { ok: true; skill: SkillRow; version: VersionRow; tool
 const no = (status: number, code: string, message: string, extra?: Record<string, unknown>): SkillRefusal => ({ ok: false, status, code, message, ...(extra ? { extra } : {}) });
 
 /** The pinned version of the skill `uid` for this agent, gated; see the header for the order. */
-export async function skillForRun(env: Env, a: Pick<AgentRow, 'id' | 'tool_grants_json'>, uid: unknown, readTools: readonly string[]): Promise<SkillForRun> {
+export async function skillForRun(env: Env, a: Pick<AgentRow, 'id' | 'tool_grants_json'>, uid: unknown, readTools: readonly string[], expectedVersion: number | null = null): Promise<SkillForRun> {
   const s = typeof uid === 'string' && /^[a-f0-9]{32}$/.test(uid)
     ? await env.DB.prepare('SELECT * FROM agent_skills WHERE uid = ?').bind(uid).first<SkillRow>() : null;
   const link = s ? await env.DB.prepare('SELECT version FROM agent_skill_links WHERE agent_id = ? AND skill_id = ?').bind(a.id, s.id).first<{ version: number }>() : null;
   if (!s || !link) return no(422, 'skill_not_attached', 'This agent does not have that skill. Add it on the agent first.');
+  // D4534: a run saved for one version (a scheduled session) never runs another the agent was re-pinned to since.
+  if (expectedVersion != null && Number(link.version) !== expectedVersion) {
+    return no(409, 'skill_version_changed', `This was saved for version ${expectedVersion} of the skill, and the agent now uses version ${Number(link.version)}. Review it and save it again.`,
+      { saved_version: expectedVersion, pinned_version: Number(link.version) });
+  }
   const v = await versionOf(env, s.id, Number(link.version));
   if (!v) return no(409, 'skill_unavailable', 'The version of this skill the agent uses could not be read, so it was not run.');
   const suspended = await skillRunRefusal(env, s.id, Number(link.version));

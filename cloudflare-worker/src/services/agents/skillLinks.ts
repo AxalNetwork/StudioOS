@@ -28,7 +28,7 @@ import { roleOf } from './catalogue';
 import { grantsOf } from './agentTools';
 import { missingTools, type Tag } from './skills';
 import type { AgentRow } from './teams';
-import { openModeration } from './skillModeration';
+import { skillRunRefusal } from './skillModeration';
 
 const LEVEL: Record<string, number> = { aware: 1, working: 2, proficient: 3, advanced: 4, expert: 5 };
 
@@ -87,7 +87,9 @@ export async function attachCheck(env: Env, a: AgentPart, s: SkillRow, version: 
   if (!v) return { code: 'version_not_published' };
   if (pinned === version) return null;
   if (s.status === 'retired') return { code: 'skill_retired' };
-  if ((await openModeration(env, s.id))?.action === 'suspend') return { code: 'skill_suspended' };
+  // D4534: the run gate's own rule, so nothing is pinned that would be refused at run: an open suspension,
+  // or an older version a suspension covered when the company republished to lift it.
+  if (await skillRunRefusal(env, s.id, version)) return { code: 'skill_suspended' };
   if (!versionRoles(v).includes(a.role_key)) return { code: 'role_mismatch' };
   const missing = missingTools(versionTools(v), grantsOf(a.tool_grants_json));
   if (missing.length) return { code: 'tool_not_approved', tool: { key: missing[0], label: toolLabel(missing[0]) } };
