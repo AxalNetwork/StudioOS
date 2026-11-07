@@ -11,13 +11,14 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import {
-  LEARNING_STREAM_TASKS, NO_CHAPTERS, PLAIN_TRANSCRIPT_LINE, RECOMMENDED_FUTURE,
+  LEARNING_STREAM_TASKS, NO_CHAPTERS, PLAIN_TRANSCRIPT_LINE, nextView,
   clockLabel, newThisWeek, positionWriter, resumeAt, statsTiles,
 } from '../src/pages/learning/learningModel.js';
 import { continueTarget, enrolmentCopy, memberProgramHref } from '../src/pages/learning/programModel.js';
 import { readMyStats } from '../src/pages/learning/learningReads.js';
 import { learningApi } from '../src/lib/api/learning.js';
-import { NewThisWeek, ProgressStrip, RecommendedFuture } from '../src/pages/learning/LearningHome.jsx';
+import { NewThisWeek, ProgressStrip } from '../src/pages/learning/LearningHome.jsx';
+import { NextForYouCard } from '../src/pages/learning/NextForYou.jsx';
 import LessonPlayer from '../src/pages/learning/LessonPlayer.jsx';
 import { MemberProgramView } from '../src/pages/learning/MemberProgram.jsx';
 import { readMemberProgram } from '../src/pages/learning/programReads.js';
@@ -31,7 +32,6 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 
 test('every board this build cannot fill names its task', () => {
   assert.deepEqual(LEARNING_STREAM_TASKS, { stream: 4176, studio: 4177, player: 4178, copy: 4179, lists: 4180, analytics: 4181 });
-  assert.match(RECOMMENDED_FUTURE, /#3724/);
 });
 
 test('LR1 Your progress: the four figures of #4180; one not recorded reads "Not recorded", never a 0; a failed read is never zeros', () => {
@@ -71,10 +71,18 @@ test('LR1 New this week: courses, videos and readings of the last seven days, ne
   assert.match(failed, /not a claim that nothing is new/, 'a failed read is never an empty week');
 });
 
-test('LR1 Recommended for you is a marked future block with no rows', () => {
-  const m = html(h(RecommendedFuture));
-  assert.match(flat(m), /Recommended for you Future/);
-  assert.doesNotMatch(m, /<li/);
+test('LR1 Recommended for you (#4650): the next action with its reason, the server\'s empty state, or a failed read; never an issue number', () => {
+  // Mutation checked: the reason dropped from the card -> the "2 of 5" line is missing; the unreadable branch drawn as empty -> the claim is missing.
+  const next = { status: 'ready', next: { rule: 'continue_course', kind: 'lesson', uid: 'l1', title: 'Raising: Term sheets', href: '/learning/courses/raising/l1', reason: '2 of 5 required lessons complete.', plan: { kind: 'lesson', uid: 'l1', title: 'Term sheets' } }, checked: ['continue_course'], empty: null };
+  const a = flat(html(h(NextForYouCard, { state: next, onRetry: () => {} })));
+  assert.match(a, /Recommended for you Continue Raising: Term sheets 2 of 5 required lessons complete\./);
+  assert.match(a, /Add to my plan/);
+  assert.deepEqual(nextView(next).plan, { kind: 'lesson', uid: 'l1', title: 'Term sheets' });
+  const empty = flat(html(h(NextForYouCard, { state: { status: 'ready', next: null, checked: ['continue_course', 'program', 'plan'], empty: 'Nothing is waiting: browse courses.' }, onRetry: () => {} })));
+  assert.match(empty, /Nothing is waiting: browse courses\./);
+  const failed = flat(html(h(NextForYouCard, { state: { status: 'unreadable' }, onRetry: () => {} })));
+  assert.match(failed, /not a claim that nothing is waiting/);
+  for (const m of [a, empty, failed]) assert.doesNotMatch(m, /#\d{3,}|Future|Waits on/, 'no internal issue or dependency is product copy');
 });
 
 test('LR4 resume: a position worth resuming, as a clock', () => {

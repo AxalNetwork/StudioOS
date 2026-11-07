@@ -532,7 +532,9 @@ test('P3: the catalog counts active products and active prices, and an unparsed 
   const c = (await summary(db)).body.payments_catalog.catalog;
   assert.equal(c.available, true);
   assert.deepEqual(c.products, { all: 4, active: 3 });
-  assert.deepEqual(c.prices, { all: 3, active: 2 }, 'an inactive price was counted as active');
+  // D4703: b1 is active under the archived prod_b, so it cannot be bought; it is still counted, and said apart.
+  assert.deepEqual(c.prices, { all: 3, active: 2, active_under_inactive_products: 1 }, 'an inactive price was counted as active');
+  assert.equal(c.complete, false, 'two rows did not parse, so this is not the whole mirror');
   assert.equal(c.unreadable_price_rows, 2, 'a price list that did not parse was read as zero prices');
   // Same day, ISO at 10:00 and SQL at 11:00: the SQL row is the later write.
   assert.equal(c.last_written_at, '2026-01-05 11:00:00');
@@ -543,7 +545,7 @@ test('P3: an empty mirror is empty; a missing one is unreadable and is not creat
   const empty = (await summary(freshDb())).body.payments_catalog.catalog;
   assert.deepEqual(
     { available: empty.available, products: empty.products, prices: empty.prices, last: empty.last_written_at },
-    { available: true, products: { all: 0, active: 0 }, prices: { all: 0, active: 0 }, last: null },
+    { available: true, products: { all: 0, active: 0 }, prices: { all: 0, active: 0, active_under_inactive_products: 0 }, last: null },
   );
   const db = freshDb({ without: ['stripe_products'] });
   const gone = (await summary(db, { STRIPE_SECRET_KEY: 'sk_test_x' })).body.payments_catalog.catalog;
