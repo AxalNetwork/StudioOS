@@ -16,6 +16,13 @@
  *   POST /evals/published            { models?, uid? }  D1612 part D (#3954): every published Axal skill's golden cases (its
  *                                    starter case and HQ's live ones) on its CURRENT version; a case that passed and now
  *                                    fails is a regression, told to HQ once → { skills, results, regressions }
+ *                                    D4668 (#4668): without `uid`, a CAMPAIGN — the first press starts one (its manifest:
+ *                                    every eligible published skill at its current version) and runs its first batch of at
+ *                                    most 20; `{ campaign: uid }` runs the next batch. → { skills, results, regressions,
+ *                                    evaluated, campaign: { uid, status, total, done, skipped, pending, results, … } }
+ *                                    400 models_fixed · 404 campaign_not_found · 409 campaign_busy, campaign_cancelled, models_unavailable
+ *   GET  /evals/published/campaigns/:uid         D4668: a campaign's progress → { campaign }
+ *   POST /evals/published/campaigns/:uid/cancel  D4668: final; what it ran stays → { campaign }; 409 campaign_complete
  *   POST /:uid/retire                { replacement_uid, reason }  → { pinned_agents }
  *   POST /bulk                       { action: publish | retire | evals, uids, reason, replacement_uid?, models? }
  *                                    each item done or refused on its own: { results: [{ uid, ok, code?, message? }] }
@@ -48,7 +55,7 @@ import {
   type CaseExpect, type CaseInput, type DraftParts, type ReviewRow,
 } from '../services/agents/skillLifecycle';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
-import { evaluatePublished } from '../services/agents/skillEval';
+import { campaignProgress, cancelCampaign, continueCampaign, evaluatePublished, startCampaign } from '../services/agents/skillEval';
 import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
 import type { OutputKind, Tag } from '../services/agents/skills';
 
@@ -391,10 +398,53 @@ adminHqSkills.post('/evals/published', async (c) => {
     if (s.status !== 'published') return say(c, 409, 'not_published', 'Only a published Axal skill has a version to evaluate.');
     only = s.id;
   }
-  const done = await evaluatePublished(c.env, admin.id, m.models, {}, only);
+  if (only != null) {
+    const done = await evaluatePublished(c.env, admin.id, m.models, {}, only);
+    await logAdminAction(c.env, admin.id, admin.email, 'agent_skill_published_evals_run', {
+      skill_uid: String(b.uid), models: m.models, skills: done.skills, results: done.results, regressions: done.regressions.length,
+    });
+    return c.json(done);
+  }
+  // D4668 (#4668): every published skill, a campaign batch at a time. With no `campaign`, a new one starts.
+  let uid = b.campaign;
+  if (uid == null) {
+    uid = newUid();
+    await startCampaign(c.env, admin.id, m.models, uid as string);
+  } else if (b.models != null) {
+    return say(c, 400, 'models_fixed', 'A campaign runs on the models it started with. Leave out models to continue it.');
+  }
+  return campaignBatch(c, admin, uid);
+});
+
+async function campaignBatch(c: Context<{ Bindings: Env }>, admin: User, uid: unknown) {
+  const camp = await campaignProgress(c.env, uid);
+  if (camp && camp.status === 'running') {
+    // The models are checked again at each press: one withdrawn since the start stops the campaign until it is cancelled.
+    const m = evalModels(c.env, admin, camp.models);
+    if (!m.ok) return say(c, 409, 'models_unavailable', 'A model this campaign runs on is no longer available. Cancel it and start a new one.');
+  }
+  const done = await continueCampaign(c.env, admin.id, uid, new Date());
+  if (!done.ok) return refuse(c, done.status as 404 | 409, { code: done.code, message: done.message, extra: done.campaign ? { campaign: done.campaign } : undefined });
   await logAdminAction(c.env, admin.id, admin.email, 'agent_skill_published_evals_run', {
-    skill_uid: only != null ? String(b.uid) : null, models: m.models, skills: done.skills, results: done.results, regressions: done.regressions.length,
+    campaign_uid: done.campaign.uid, models: done.campaign.models, skills: done.skills, results: done.results, regressions: done.regressions.length,
+    status: done.campaign.status, pending: done.campaign.pending,
   });
+  const { ok: _ok, ...out } = done;
+  return c.json(out);
+}
+
+adminHqSkills.get('/evals/published/campaigns/:uid', async (c) => {
+  await requireSuperAdmin(c);
+  const camp = await campaignProgress(c.env, c.req.param('uid'));
+  if (!camp) return say(c, 404, 'campaign_not_found', 'There is no such evaluation campaign.');
+  return c.json({ campaign: camp });
+});
+
+adminHqSkills.post('/evals/published/campaigns/:uid/cancel', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const done = await cancelCampaign(c.env, admin.id, c.req.param('uid'), new Date());
+  if (!done.ok) return refuse(c, done.status as 404 | 409, { code: done.code, message: done.message, extra: done.campaign ? { campaign: done.campaign } : undefined });
+  await logAdminAction(c.env, admin.id, admin.email, 'agent_skill_published_evals_cancelled', { campaign_uid: done.campaign.uid, done: done.campaign.done, pending: done.campaign.pending });
   return c.json(done);
 });
 

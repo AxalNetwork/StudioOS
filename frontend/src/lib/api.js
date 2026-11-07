@@ -3524,10 +3524,12 @@ export const api = {
   // D1170 — HQ › Platform › Storage: every member's stored bytes as totals by
   // kind, plan and state; no name, email, id or file name. Super admin.
   hqPlatformStorage: () => request('/admin/platform/storage'),
-  hqSetPlatformSwitch: (key, action, reason) =>
+  // D4703: a release names the throw it ends (`revision`, from the switch's
+  // stored half), so an old tab cannot release a newer throw.
+  hqSetPlatformSwitch: (key, action, reason, revision) =>
     request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
       method: 'POST',
-      body: JSON.stringify({ action, reason }),
+      body: JSON.stringify(action === 'release' ? { action, reason, revision } : { action, reason }),
     }),
   // HQ · Security. The overview is read-only; force re-auth signs every
   // active account out everywhere (the caller included) and needs a TOTP

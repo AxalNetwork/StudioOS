@@ -44,7 +44,7 @@ import { lovableHandler } from '../services/lovable/launch';
 import { hasRecords } from '../services/records';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { canReadBoard, canReadDecision, canWrite, type ProjectRef } from './_founder_validate_helpers';
+import { canReadBoard, canReadDecision, canWrite, ownsVenture, type ProjectRef } from './_founder_validate_helpers';
 import { focusOf, indexOf, meterOf } from '../services/validateFocus';
 import { part } from '../services/cycleFocus';
 import {
@@ -118,7 +118,9 @@ cycleValidate.get('/overview', async (c) => {
   // focus reads the meter's count, so the two never disagree.
   const meter = await part('meter', () => meterOf(c.env, s.projectId, figs));
   const [focus, index] = await Promise.all([
-    part('focus', () => focusOf(c.env, s.projectId, canWrite(s.project, s.user), cs, figs, meter)),
+    // D4589 (#4589): the shared next-action policy; Plan the build only for the venture's founder (D1069).
+    part('focus', () => focusOf(c.env, s.projectId, canWrite(s.project, s.user), cs, figs, meter,
+      { canReadDecision: decisions, ownsVenture: ownsVenture(s.project, s.user) })),
     part('index', () => indexOf(c.env, s.project, s.user, figs, cs)),
   ]);
   // D693 decision 7: whether this viewer may see decisions, so the page can

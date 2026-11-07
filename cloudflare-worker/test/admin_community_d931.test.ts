@@ -69,11 +69,12 @@ const TABLES = ['users', 'super_admins', 'user_sessions', 'projects', 'job_posti
  *   week 10-19: the founder on 101 (10-20), the explorer on 102 (10-21)  → 2 (to date)
  * The period before (2026-08-31 to 2026-09-28): one, the explorer on 101 (09-10).
  */
-function seeded(pulseMembers = 8) {
+function seeded(pulseMembers = 8, otherPulses = 0) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of TABLES) db.exec(ddl(t));
   db.exec(readFileSync(resolve(SQL, 'migrations/550_job_postings_submitted_at.sql'), 'utf8'));
   db.exec(readFileSync(resolve(SQL, 'migrations/609_job_postings_published_at.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(SQL, 'migrations/551_network_profiles_roster.sql'), 'utf8'));
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   // users.role admits no `mentor` (its CHECK); participationRole's own test covers it.
@@ -115,6 +116,8 @@ function seeded(pulseMembers = 8) {
   nwk.run('Advisor Private', 'advisor', 1);
   nwk.run('Partner Private', 'partner', 0);
   nwk.run('Investor Private', 'investor', 1);
+  // #4717: an archived row is off the roster and is never counted in it.
+  db.prepare("INSERT INTO network_profiles (name, kind, is_active, archived_at) VALUES ('Archived Private', 'advisor', 0, '2026-10-01 10:00:00')").run();
 
   const e = db.prepare('INSERT INTO experts (id, uid, name, verified, is_active, hidden_by_admin) VALUES (?, ?, ?, ?, ?, ?)');
   e.run(1, 'real-1', 'Expert1 Private', 1, 1, 0);
@@ -129,6 +132,13 @@ function seeded(pulseMembers = 8) {
   b.run(1, 4, '2026-09-15 10:00:00'); // the period before
 
   const w = db.prepare('INSERT INTO wellbeing_daily_pulses (user_id, day, mood_enc) VALUES (?, ?, ?)');
+  // #4717: the band counts founders. Pulse members 100+ are founders; 200+ hold other roles.
+  for (let i = 0; i < pulseMembers; i++) u.run(100 + i, 'founder', `Pulse${i} Private`, `pulse${i}@secret.example`);
+  const others = ['investor', 'advisor', 'partner', 'admin'];
+  for (let i = 0; i < otherPulses; i++) {
+    u.run(200 + i, others[i % others.length], `Other${i} Private`, `other${i}@secret.example`);
+    w.run(200 + i, '2026-10-07', 'ciphertext-not-to-be-read');
+  }
   for (let i = 0; i < pulseMembers; i++) {
     w.run(100 + i, '2026-10-05', 'ciphertext-not-to-be-read');
     w.run(100 + i, '2026-10-06', 'ciphertext-not-to-be-read'); // the same member twice is one member
@@ -199,9 +209,13 @@ test('circles: totals by state, type and access, and the members as entered, typ
   });
 });
 
-test('network: by kind with mentor as advisor, active and inactive', async () => {
+test('network: by kind with mentor as advisor, active and hidden; an archived row is counted only as archived', async () => {
+  // Mutation checked (#4717): drop the archived branch and advisor reads 3, inactive 2.
   assert.deepEqual((await read()).blocks.network, {
-    available: true, by_kind: { advisor: 2, partner: 1, investor: 1 }, active: 3, inactive: 1,
+    available: true,
+    by_kind: { advisor: 2, partner: 1, investor: 1 },
+    by_kind_state: { advisor: { active: 2, hidden: 0 }, partner: { active: 0, hidden: 1 }, investor: { active: 1, hidden: 0 } },
+    active: 3, inactive: 1, archived: 1,
   });
 });
 
@@ -226,6 +240,16 @@ test('wellbeing: a cohort under seven withholds the band', async () => {
   assert.deepEqual(six.checkins, { available: true, withheld: true, min_cohort: 7, band: null });
   const seven = (await read(seeded(7))).blocks.wellbeing as any;
   assert.deepEqual(seven.checkins.band, { at_least: 5, under: 10 });
+});
+
+test('#4717 wellbeing: other roles never lift a founder cohort over the floor', async () => {
+  // Five founders and six investors, advisors, partners and admins checked in: the band is withheld.
+  // Mutation checked: count every user_id and eleven members show a band.
+  const mixed = (await read(seeded(5, 6))).blocks.wellbeing as any;
+  assert.deepEqual(mixed.checkins, { available: true, withheld: true, min_cohort: 7, band: null });
+  // Eight founders and twenty others: the band is the founders' alone.
+  const many = (await read(seeded(8, 20))).blocks.wellbeing as any;
+  assert.deepEqual(many.checkins.band, { at_least: 5, under: 10 });
 });
 
 test('the check-in band never reads an answer column', () => {

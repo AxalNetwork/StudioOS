@@ -86,6 +86,9 @@ const CONSOLE_TABLES = [
 /** Migration 283, off disk — the operator switch store post-dates the baseline. */
 const SWITCHES_MIGRATION = readFileSync(
   resolve(process.cwd(), 'cloudflare-worker/sql/migrations/283_platform_switches.sql'), 'utf8',
+) + '\n' + readFileSync(
+  // D4703 (#4703): the revision column, applied after 283 as production applies it.
+  resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611062212_platform_switch_revision.sql'), 'utf8',
 );
 
 function freshDb() {
