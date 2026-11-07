@@ -5,6 +5,7 @@ import {
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { bpsPercent } from '../../lib/bps';
+import { TOKEN_SPLIT_OWN_LABEL } from '../../lib/tokenSplit';
 import { FROZEN, STILL_READABLE, FREEZE_RULE } from '../../lib/branchFreeze';
 import { reportError } from '../../lib/log';
 import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
@@ -413,7 +414,7 @@ export function ledgerSections(l) {
     { title: 'Fees and money', schedule: true, rows: [
       r('Annual licence fee', fmtMoney(l?.annual_fee_cents, l?.currency), 'fee'),
       r('Revenue share', fmtBps(l?.revenue_share_bps)),
-      r('AI token split', fmtBps(l?.token_split_bps)),
+      r(TOKEN_SPLIT_OWN_LABEL, fmtBps(l?.token_split_bps)),
     ] },
     { title: 'Deal terms', schedule: true, rows: [] },
     { title: 'Seats', rows: ['founder', 'investor', 'advisor', 'partner'].map((k) => r(

@@ -48,6 +48,7 @@ import {
 import { api } from '../../lib/api';
 import { licenceLedgerApi } from '../../lib/api/licenceLedger';
 import { bpsPercent as pct } from '../../lib/bps';
+import { TOKEN_SPLIT_HQ_INPUT, TOKEN_SPLIT_HQ_LABEL } from '../../lib/tokenSplit';
 import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
 import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
@@ -445,7 +446,7 @@ function TermsEditor({ licence, onSaved }) {
       </label>
       <label className="text-sm">
         <span className="text-[11px] uppercase tracking-wide text-gray-500">
-          Token split to HQ (basis points)
+          {TOKEN_SPLIT_HQ_INPUT}
         </span>
         <input type="number" min="0" max="10000" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
           value={f.token_split_bps} onChange={set('token_split_bps')} />
@@ -472,6 +473,47 @@ function TermsEditor({ licence, onSaved }) {
           reason money is stored in cents: 0.35 is not exactly representable in binary floating
           point, and a revenue share is a contractual number.
         </p>
+      </div>
+    </div>
+  );
+}
+
+/** D4671 — the entity and signatory fields a contract names, as HQ completes them. */
+const ENTITY_INPUTS = [
+  ['legal_entity_name', 'Legal entity name'], ['brand_name', 'Brand name'],
+  ['registered_address', 'Registered address'], ['signatory_name', 'Signatory name'],
+  ['signatory_title', 'Signatory title'],
+];
+function EntityCompletion({ licence, onSaved }) {
+  const [f, setF] = useState(() => Object.fromEntries(ENTITY_INPUTS.map(([k]) => [k, licence[k] || ''])));
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  async function save() {
+    setBusy(true); setMsg(null);
+    try {
+      await api.licenceEntityComplete(licence.uid, f);
+      setMsg({ ok: true, text: 'Saved. Issue the contract again to carry these details.' });
+      onSaved?.();
+    } catch (e) {
+      reportError('licence_entity_complete_failed', e);
+      setMsg({ ok: false, text: e?.message || 'Could not save.' });
+    } finally { setBusy(false); }
+  }
+  return (
+    <div data-testid="licence-entity-completion" className="mt-2 grid gap-2 rounded-md border border-gray-200 p-2 sm:grid-cols-2 dark:border-gray-800">
+      {ENTITY_INPUTS.map(([k, label]) => (
+        <label key={k} className="text-xs">
+          <span className="text-[11px] uppercase tracking-wide text-gray-500">{label}</span>
+          <input value={f[k]} onChange={(e) => setF((x) => ({ ...x, [k]: e.target.value }))}
+            className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700" />
+        </label>
+      ))}
+      <div className="sm:col-span-2">
+        <button type="button" disabled={busy} onClick={save} data-testid="licence-entity-save"
+          className="rounded-md border border-indigo-300 px-3 py-1.5 text-sm font-medium text-indigo-800 disabled:opacity-50">
+          {busy ? 'Saving…' : 'Save entity and signatory'}
+        </button>
+        {msg && <span role={msg.ok ? 'status' : 'alert'} className={`ml-2 text-xs ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
       </div>
     </div>
   );
@@ -562,6 +604,18 @@ function ContractStep({ licence, onSaved }) {
               than blanked — a contract with an empty clause reads as finished.
             </div>
           )}
+          {current.body_sha256 && (
+            <p data-testid="contract-fingerprint" className="mt-1 text-xs text-gray-500">
+              Fingerprint <code>{String(current.body_sha256).slice(0, 12)}</code> · template v{current.template_version}.
+              This is the text that is sent for signature; editing the licence or the template afterwards does not change it.
+            </p>
+          )}
+          {current.unfilled_fields?.length > 0 && (
+            <details className="mt-2" open>
+              <summary className="cursor-pointer text-xs text-indigo-800">Complete the entity and signatory</summary>
+              <EntityCompletion licence={licence} onSaved={onSaved} />
+            </details>
+          )}
           {current.sent_at && (
             <p className="mt-1 text-xs text-gray-500">
               Sent {String(current.sent_at).slice(0, 10)}
@@ -584,7 +638,8 @@ function ContractStep({ licence, onSaved }) {
           {current.status === 'draft' && !current.envelope_uid && data.contracts_available && (
             <button
               type="button"
-              disabled={sendBusy}
+              disabled={sendBusy || current.unfilled_fields?.length > 0}
+              title={current.unfilled_fields?.length > 0 ? 'Fill the remaining fields and issue the contract again first.' : undefined}
               onClick={sendForSignature}
               className="mt-2 rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-800 hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-800 dark:bg-gray-900 dark:text-indigo-200 dark:hover:bg-gray-800"
               data-testid="licence-contract-send"
@@ -1697,7 +1752,7 @@ function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB, onTab 
         <Field label="Seats licensed" value={n0(d.seats_licensed)} />
         <Field label="Annual fee" value={fee(d.annual_fee_cents, d.currency)} />
         <Field label="Revenue share" value={pct(d.revenue_share_bps)} />
-        <Field label="Token split to HQ" value={pct(d.token_split_bps)} />
+        <Field label={TOKEN_SPLIT_HQ_LABEL} value={pct(d.token_split_bps)} />
         <Field
           label="Renews"
           value={d.renews_on || null}

@@ -72,7 +72,7 @@ function licenceEventsDdl(): string {
 
 import adminLicences from '../src/routes/admin_licences.ts';
 import {
-  mergeValues, renderContract, moneyFromCents, pctFromBps,
+  mergeValues, renderContract, moneyFromCents, pctFromBps, unresolvedFields,
 } from '../src/services/licenceContract.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -126,6 +126,22 @@ test('money and percentages come out of the ledger\'s integers, not out of float
   assert.equal(pctFromBps(3050), '30.5%');
   assert.equal(pctFromBps(0), '0%');
   assert.equal(pctFromBps(null), null);
+});
+
+test('D4671 basis points and minor units keep every digit they have', () => {
+  assert.equal(pctFromBps(3501), '35.01%', 'the old toFixed(1) read this as 35.0%');
+  assert.equal(pctFromBps(1), '0.01%');
+  assert.equal(pctFromBps(10000), '100%');
+  assert.equal(pctFromBps(3550.5), null, 'half a basis point is not an agreed rate, so the field stays unfilled');
+  assert.equal(moneyFromCents(1234.5, 'EUR'), 'EUR 12.345', 'a fraction of a cent is shown, not rounded away');
+  assert.equal(moneyFromCents(5, 'EUR'), 'EUR 0.05');
+  assert.equal(moneyFromCents(-1250, 'EUR'), 'EUR -12.50');
+  assert.equal(moneyFromCents(100000000000, 'USD'), 'USD 1,000,000,000.00');
+});
+
+test('D4671 unresolvedFields reads the body: namespaced fields, once each, in order', () => {
+  assert.deepEqual(unresolvedFields('a {{licence.x}} b {{ terms.y }} c {{licence.x}} d'), ['licence.x', 'terms.y']);
+  assert.deepEqual(unresolvedFields('nothing left'), []);
 });
 
 test('a field the licence cannot fill keeps its placeholder AND is named', () => {
@@ -204,7 +220,7 @@ const SCHEMA = `
     created_at TEXT DEFAULT (datetime('now')));
   CREATE TABLE licence_contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
     licence_uid TEXT NOT NULL, template_slug TEXT NOT NULL, template_version INTEGER NOT NULL,
-    template_title TEXT NOT NULL, body_md TEXT NOT NULL, unfilled_fields TEXT NOT NULL DEFAULT '[]',
+    template_title TEXT NOT NULL, body_md TEXT NOT NULL, body_sha256 TEXT, unfilled_fields TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'draft', envelope_uid TEXT, superseded_at TEXT,
     created_by_user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')),
     sent_at TEXT, signed_at TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')));

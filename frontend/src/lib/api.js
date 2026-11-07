@@ -3624,6 +3624,12 @@ export const api = {
       `/admin/licences/${encodeURIComponent(uid)}/contract/${encodeURIComponent(contractUid)}/send`,
       { method: 'POST' },
     ),
+  // D4671 — complete the entity and signatory a contract names.
+  licenceEntityComplete: (uid, fields) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/entity`, {
+      method: 'PATCH',
+      body: JSON.stringify(fields),
+    }),
   // D111 — H5's statements ledger. `draw` computes owed from what the branch
   // reported; `update` is the HQ-entered half (paid, disputed, status), which
   // nothing reconciles against Stripe (D.8).
