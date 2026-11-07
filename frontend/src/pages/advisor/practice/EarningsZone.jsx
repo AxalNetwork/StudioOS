@@ -376,7 +376,8 @@ export default function EarningsZone() {
       if (!text) throw new Error('The model returned nothing to read.');
       // A response for an earlier period is dropped, not filed under this one.
       if (!draftTicket.current.isCurrent(t)) return;
-      setDraft(text); setModelText(text); setDraftKey(forKey); setEditing(true);
+      setDraftKey(forKey);
+      setDraft(text); setModelText(text); setEditing(true);
     } catch (e) {
       if (!draftTicket.current.isCurrent(t)) return;
       setSaveNote({ ok: false, text: e?.message || 'Nothing was drafted.' });
@@ -392,13 +393,13 @@ export default function EarningsZone() {
     setBusy(true); setSaveNote(null);
     try {
       const res = await api.saveMyAdvisorPeriodNote(window_.key, {
-        period_key: window_.key,
         body: draft,
         // 'edited' when the advisor changed a draft, 'ai' when they accepted
         // it as written, 'advisor' when no draft was involved. Over-crediting
         // the model and hiding it are both wrong, so the distinction is stored
         // (migration 242).
         source: periodNoteSource(draft, modelText, note?.source),
+        period_key: window_.key,
         figures: totals ? {
           gross_cents: totals.gross_cents, cut_cents: totals.cut_cents, net_cents: totals.net_cents,
         } : null,
