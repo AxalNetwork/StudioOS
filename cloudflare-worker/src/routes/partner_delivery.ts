@@ -71,6 +71,65 @@ function notFound(what: string): Response {
   });
 }
 
+/**
+ * D4682 — a stale write loses, and says so.
+ *
+ * Every edit states the revision it read (`WHERE id = ? AND revision = ?`) and
+ * bumps it, and the route checks the affected-row count: a request that read an
+ * older row changes nothing and answers 409 `delivery_changed`.
+ */
+function changedOne(res: any): boolean {
+  return Number(res?.meta?.changes ?? 0) === 1;
+}
+
+function deliveryChanged(c: any, what: string, current?: { revision?: unknown } | null): Response {
+  return c.json({
+    detail: `That ${what} changed while you were editing it. Reload it and try again.`,
+    code: 'delivery_changed',
+    revision: current?.revision == null ? null : Number(current.revision),
+  }, 409);
+}
+
+/** The revision a caller says it read, if it says one. */
+function expectedRevision(b: any): number | null {
+  const n = b?.expected_revision;
+  return n == null || !Number.isInteger(Number(n)) ? null : Number(n);
+}
+
+/**
+ * Apply a PATCH against the CURRENT persisted row.
+ *
+ * Omitted fields come from the row as it is now, not from a pre-read that
+ * another request may have outdated: if the write loses the revision check,
+ * the row is read again and merged again. It is retried once, and only when
+ * the concurrent change did not touch a field this request sets; otherwise it
+ * is a conflict, because the caller was about to overwrite something it never
+ * saw. A caller that sends `expected_revision` gets no retry at all.
+ */
+async function patchCurrent(opts: {
+  read: () => Promise<any>;
+  body: any;
+  fields: string[];
+  write: (merged: any, row: any) => Promise<any>;
+}): Promise<{ ok: true; merged: any; before: any } | { ok: false; current: any }> {
+  const first = await opts.read();
+  const want = expectedRevision(opts.body);
+  if (want != null && Number(first.revision) !== want) return { ok: false, current: first };
+  const merged0 = mergePatch(first, opts.body, opts.fields);
+  if (changedOne(await opts.write(merged0, first))) return { ok: true, merged: merged0, before: first };
+  if (want != null) return { ok: false, current: await opts.read().catch(() => first) };
+  const fresh = await opts.read().catch(() => null);
+  if (!fresh) return { ok: false, current: null };
+  for (const f of opts.fields) {
+    if (Object.prototype.hasOwnProperty.call(opts.body, f) && fresh[f] !== first[f]) {
+      return { ok: false, current: fresh };
+    }
+  }
+  const merged1 = mergePatch(fresh, opts.body, opts.fields);
+  if (changedOne(await opts.write(merged1, fresh))) return { ok: true, merged: merged1, before: fresh };
+  return { ok: false, current: await opts.read().catch(() => fresh) };
+}
+
 /** A child row, if its engagement belongs to this partner. 404 otherwise. */
 async function ownChild(
   env: Env, partnerId: number, table: 'engagement_milestones' | 'engagement_deliverables'
@@ -671,7 +730,7 @@ partnerDelivery.get('/engagements/:engagementId/milestones', async (c) => {
 
 partnerDelivery.post('/engagements/:engagementId/milestones', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const b = await body<any>(c);
@@ -686,43 +745,59 @@ partnerDelivery.post('/engagements/:engagementId/milestones', async (c) => {
     ).run();
     const row = await c.env.DB.prepare('SELECT * FROM engagement_milestones WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<any>();
+    await logActorAct(c.env, user, 'delivery_milestone_added', { milestone_id: Number(row.id), engagement_id: engagementId });
     return c.json({
       id: Number(row.id), uid: row.uid, title: row.title,
       due_at: row.due_at ?? null, completed_at: row.completed_at ?? null,
+      revision: Number(row.revision),
     });
   } catch (e) { return mapError(c, e); }
 });
 
 partnerDelivery.patch('/milestones/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    const row = await ownChild(c.env, partnerId, 'engagement_milestones', id, 'Milestone');
     const b = await body<any>(c);
-    const merged = mergePatch(row, b, ['title', 'due_at', 'completed_at']);
-    const title = trimOrNull(merged.title, 200);
-    if (!title) return c.json({ detail: 'A milestone needs a title' }, 400);
-    await c.env.DB.prepare(
-      `UPDATE engagement_milestones SET title = ?, due_at = ?, completed_at = ?, updated_at = ?
-        WHERE id = ?`,
-    ).bind(
-      title, trimOrNull(merged.due_at, 40), trimOrNull(merged.completed_at, 40), nowIso(), id,
-    ).run();
+    let bad: string | null = null;
+    const res = await patchCurrent({
+      read: () => ownChild(c.env, partnerId, 'engagement_milestones', id, 'Milestone'),
+      body: b, fields: ['title', 'due_at', 'completed_at'],
+      write: (merged, row) => {
+        const title = trimOrNull(merged.title, 200);
+        if (!title) { bad = 'A milestone needs a title'; return Promise.resolve({ meta: { changes: 1 } }); }
+        return c.env.DB.prepare(
+          `UPDATE engagement_milestones
+              SET title = ?, due_at = ?, completed_at = ?, updated_at = ?, revision = revision + 1
+            WHERE id = ? AND revision = ?`,
+        ).bind(
+          title, trimOrNull(merged.due_at, 40), trimOrNull(merged.completed_at, 40), nowIso(),
+          id, Number(row.revision),
+        ).run();
+      },
+    });
+    if (bad) return c.json({ detail: bad }, 400);
+    if (!res.ok) return deliveryChanged(c, 'milestone', res.current);
     const out = await c.env.DB.prepare('SELECT * FROM engagement_milestones WHERE id = ?')
       .bind(id).first<any>();
+    await logActorAct(c.env, user, 'delivery_milestone_edited', { milestone_id: id, engagement_id: Number(out.engagement_id) });
     return c.json({
       id: Number(out.id), uid: out.uid, title: out.title,
       due_at: out.due_at ?? null, completed_at: out.completed_at ?? null,
+      revision: Number(out.revision),
     });
   } catch (e) { return mapError(c, e); }
 });
 
 partnerDelivery.delete('/milestones/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    await ownChild(c.env, partnerId, 'engagement_milestones', id, 'Milestone');
-    await c.env.DB.prepare('DELETE FROM engagement_milestones WHERE id = ?').bind(id).run();
+    const row = await ownChild(c.env, partnerId, 'engagement_milestones', id, 'Milestone');
+    const del = await c.env.DB.prepare('DELETE FROM engagement_milestones WHERE id = ? AND revision = ?')
+      .bind(id, Number(row.revision)).run();
+    if (!changedOne(del)) return deliveryChanged(c, 'milestone');
+    await logActorAct(c.env, user, 'delivery_milestone_deleted', { milestone_id: id, engagement_id: Number(row.engagement_id) });
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
@@ -778,21 +853,31 @@ partnerDelivery.patch('/blockers/:id', async (c) => {
   try {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    const row = await ownChild(c.env, partnerId, 'engagement_blockers', id, 'Blocker');
     const b = await body<any>(c);
-    const merged = mergePatch(row, b, ['side', 'summary', 'cleared_at']);
-    const summary = trimOrNull(merged.summary, 600);
-    if (!summary) return c.json({ detail: 'Say what the blocker is' }, 400);
-    if (!SIDES.includes(String(merged.side))) {
-      return c.json({ detail: "Side must be 'ours' or 'client'" }, 400);
-    }
-    await c.env.DB.prepare(
-      'UPDATE engagement_blockers SET side = ?, summary = ?, cleared_at = ?, updated_at = ? WHERE id = ?',
-    ).bind(String(merged.side), summary, trimOrNull(merged.cleared_at, 40), nowIso(), id).run();
+    let bad: string | null = null;
+    const res = await patchCurrent({
+      read: () => ownChild(c.env, partnerId, 'engagement_blockers', id, 'Blocker'),
+      body: b, fields: ['side', 'summary', 'cleared_at'],
+      write: (merged, cur) => {
+        const summary = trimOrNull(merged.summary, 600);
+        if (!summary) { bad = 'Say what the blocker is'; return Promise.resolve({ meta: { changes: 1 } }); }
+        if (!SIDES.includes(String(merged.side))) {
+          bad = "Side must be 'ours' or 'client'"; return Promise.resolve({ meta: { changes: 1 } });
+        }
+        return c.env.DB.prepare(
+          `UPDATE engagement_blockers
+              SET side = ?, summary = ?, cleared_at = ?, updated_at = ?, revision = revision + 1
+            WHERE id = ? AND revision = ?`,
+        ).bind(String(merged.side), summary, trimOrNull(merged.cleared_at, 40), nowIso(), id, Number(cur.revision)).run();
+      },
+    });
+    if (bad) return c.json({ detail: bad }, 400);
+    if (!res.ok) return deliveryChanged(c, 'blocker', res.current);
     const out = await c.env.DB.prepare('SELECT * FROM engagement_blockers WHERE id = ?')
       .bind(id).first<any>();
     // D637 — Clear keeps the blocker on record with its cleared date; the log
     // line says which of clear, reopen or edit this was.
+    const row = res.before;
     const action = !row.cleared_at && out.cleared_at ? 'delivery_blocker_cleared'
       : row.cleared_at && !out.cleared_at ? 'delivery_blocker_reopened'
       : 'delivery_blocker_edited';
@@ -800,6 +885,7 @@ partnerDelivery.patch('/blockers/:id', async (c) => {
     return c.json({
       id: Number(out.id), uid: out.uid, side: out.side, summary: out.summary,
       raised_at: out.raised_at, cleared_at: out.cleared_at ?? null,
+      revision: Number(out.revision),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -814,7 +900,9 @@ partnerDelivery.delete('/blockers/:id', async (c) => {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_blockers', id, 'Blocker');
-    await c.env.DB.prepare('DELETE FROM engagement_blockers WHERE id = ?').bind(id).run();
+    const del = await c.env.DB.prepare('DELETE FROM engagement_blockers WHERE id = ? AND revision = ?')
+      .bind(id, Number(row.revision)).run();
+    if (!changedOne(del)) return deliveryChanged(c, 'blocker');
     await logActorAct(c.env, user, 'delivery_blocker_deleted', {
       blocker_id: id, engagement_id: Number(row.engagement_id), was_cleared: !!row.cleared_at,
     });
@@ -918,32 +1006,44 @@ partnerDelivery.patch('/deliverables/:id', async (c) => {
   try {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    const row = await ownChild(c.env, partnerId, 'engagement_deliverables', id, 'Deliverable');
     const b = await body<any>(c);
-    const merged = mergePatch(row, b, DELIVERABLE_FIELDS);
-    const title = trimOrNull(merged.title, 200);
-    if (!title) return c.json({ detail: 'A deliverable needs a title' }, 400);
-    const sentAt = trimOrNull(merged.sent_at, 40);
-    await c.env.DB.prepare(
-      `UPDATE engagement_deliverables
-          SET title = ?, version = ?, link_url = ?, sent_at = ?, sent_by = ?, updated_at = ?
-        WHERE id = ?`,
-    ).bind(
-      title, trimOrNull(merged.version, 60), trimOrNull(merged.link_url, 600),
-      sentAt, sentAt ? (row.sent_by ?? user.id) : null, nowIso(), id,
-    ).run();
+    let bad: string | null = null;
+    const res = await patchCurrent({
+      read: () => ownChild(c.env, partnerId, 'engagement_deliverables', id, 'Deliverable'),
+      body: b, fields: DELIVERABLE_FIELDS as unknown as string[],
+      write: (merged, cur) => {
+        const title = trimOrNull(merged.title, 200);
+        if (!title) { bad = 'A deliverable needs a title'; return Promise.resolve({ meta: { changes: 1 } }); }
+        const sentAt = trimOrNull(merged.sent_at, 40);
+        return c.env.DB.prepare(
+          `UPDATE engagement_deliverables
+              SET title = ?, version = ?, link_url = ?, sent_at = ?, sent_by = ?, updated_at = ?,
+                  revision = revision + 1
+            WHERE id = ? AND revision = ?`,
+        ).bind(
+          title, trimOrNull(merged.version, 60), trimOrNull(merged.link_url, 600),
+          sentAt, sentAt ? (cur.sent_by ?? user.id) : null, nowIso(), id, Number(cur.revision),
+        ).run();
+      },
+    });
+    if (bad) return c.json({ detail: bad }, 400);
+    if (!res.ok) return deliveryChanged(c, 'deliverable', res.current);
     const out = await c.env.DB.prepare('SELECT * FROM engagement_deliverables WHERE id = ?')
       .bind(id).first<any>();
+    await logActorAct(c.env, user, 'delivery_deliverable_edited', { deliverable_id: id, engagement_id: Number(out.engagement_id) });
     return c.json(deliverableDto(out));
   } catch (e) { return mapError(c, e); }
 });
 
 partnerDelivery.delete('/deliverables/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    await ownChild(c.env, partnerId, 'engagement_deliverables', id, 'Deliverable');
-    await c.env.DB.prepare('DELETE FROM engagement_deliverables WHERE id = ?').bind(id).run();
+    const row = await ownChild(c.env, partnerId, 'engagement_deliverables', id, 'Deliverable');
+    const del = await c.env.DB.prepare('DELETE FROM engagement_deliverables WHERE id = ? AND revision = ?')
+      .bind(id, Number(row.revision)).run();
+    if (!changedOne(del)) return deliveryChanged(c, 'deliverable');
+    await logActorAct(c.env, user, 'delivery_deliverable_deleted', { deliverable_id: id, engagement_id: Number(row.engagement_id) });
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
@@ -1367,9 +1467,13 @@ partnerDelivery.post('/seats/:id/revoke', async (c) => {
     const row = await ownChild(c.env, partnerId, 'engagement_seats', id, 'Seat');
     if (row.revoked_at) return c.json({ detail: 'That seat is already revoked' }, 400);
     const now = nowIso();
-    await c.env.DB.prepare(
-      'UPDATE engagement_seats SET revoked_at = ?, updated_at = ? WHERE id = ?',
+    // Revoking states that the seat is still live: a second revoke, or one
+    // racing a scope edit, changes nothing and does not move `revoked_at`.
+    const rev = await c.env.DB.prepare(
+      `UPDATE engagement_seats SET revoked_at = ?, updated_at = ?, revision = revision + 1
+        WHERE id = ? AND revoked_at IS NULL`,
     ).bind(now, now, id).run();
+    if (!changedOne(rev)) return c.json({ detail: 'That seat is already revoked' }, 400);
     await logActorAct(c.env, user, 'delivery_seat_revoked', { seat_id: id, engagement_id: Number(row.engagement_id) });
     return c.json({ ok: true, id, revoked_at: now });
   } catch (e) { return mapError(c, e); }
@@ -1379,14 +1483,23 @@ partnerDelivery.patch('/seats/:id', async (c) => {
   try {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    const row = await ownChild(c.env, partnerId, 'engagement_seats', id, 'Seat');
     // D637 — a revoked seat's scope is history: what it held when it ended.
-    if (row.revoked_at) return c.json({ detail: 'This seat is revoked, so its scope can no longer change' }, 409);
+    const REVOKED = { detail: 'This seat is revoked, so its scope can no longer change' };
     const b = await body<any>(c);
-    const merged = mergePatch(row, b, ['scope']);
-    await c.env.DB.prepare(
-      'UPDATE engagement_seats SET scope = ?, updated_at = ? WHERE id = ?',
-    ).bind(trimOrNull(merged.scope, 400), nowIso(), id).run();
+    // The UPDATE repeats `revoked_at IS NULL`: a revoke that lands after the
+    // read above wins, and the stale edit changes nothing.
+    const res = await patchCurrent({
+      read: () => ownChild(c.env, partnerId, 'engagement_seats', id, 'Seat'),
+      body: b, fields: ['scope'],
+      write: (merged, cur) => c.env.DB.prepare(
+        `UPDATE engagement_seats SET scope = ?, updated_at = ?, revision = revision + 1
+          WHERE id = ? AND revision = ? AND revoked_at IS NULL`,
+      ).bind(trimOrNull(merged.scope, 400), nowIso(), id, Number(cur.revision)).run(),
+    });
+    if (!res.ok) {
+      return res.current?.revoked_at ? c.json(REVOKED, 409) : deliveryChanged(c, 'seat', res.current);
+    }
+
     const out = await c.env.DB.prepare('SELECT * FROM engagement_seats WHERE id = ?')
       .bind(id).first<any>();
     await logActorAct(c.env, user, 'delivery_seat_scope_edited', { seat_id: id, engagement_id: Number(out.engagement_id) });
@@ -1394,6 +1507,7 @@ partnerDelivery.patch('/seats/:id', async (c) => {
       id: Number(out.id), uid: out.uid, engagement_id: Number(out.engagement_id),
       holder_user_id: Number(out.holder_user_id), scope: out.scope ?? null,
       granted_at: out.granted_at, revoked_at: out.revoked_at ?? null,
+      revision: Number(out.revision),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -1537,6 +1651,8 @@ function reportDto(r: any) {
     shipped: r.shipped ?? null,
     next_up: r.next_up ?? null,
     sent_at: r.sent_at ?? null,
+    revision: Number(r.revision ?? 0),
+    sent_revision: r.sent_revision == null ? null : Number(r.sent_revision),
   };
 }
 
@@ -1677,7 +1793,7 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
 
 partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const p = parsePeriod(c.req.param('period'), 'monthly');
@@ -1709,20 +1825,47 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
       }, 409);
     }
 
+    const SENT_NOW = {
+      detail: 'That report was sent. A sent report is a record of what the client received and is not editable.',
+      code: 'report_sent',
+    };
     if (existing) {
-      await c.env.DB.prepare(
-        'UPDATE engagement_status_reports SET shipped = ?, next_up = ?, updated_at = ? WHERE id = ?',
-      ).bind(trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), nowIso(), existing.id).run();
+      // D4682 — THE DRAFT IS EDITED ONLY WHILE IT IS A DRAFT, AND ONLY AT THE
+      // REVISION READ. A send that lands between the read above and this write
+      // wins: the report the client received is not edited afterwards, and a
+      // second edit that read an older draft does not overwrite a newer one.
+      const want = expectedRevision(b);
+      if (want != null && want !== Number(existing.revision)) return deliveryChanged(c, 'report', existing);
+      const upd = await c.env.DB.prepare(
+        `UPDATE engagement_status_reports
+            SET shipped = ?, next_up = ?, updated_at = ?, revision = revision + 1
+          WHERE id = ? AND state = 'draft' AND revision = ?`,
+      ).bind(trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), nowIso(), existing.id, Number(existing.revision)).run();
+      if (!changedOne(upd)) {
+        const now = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
+          .bind(existing.id).first<any>();
+        return now?.state === 'sent' ? c.json(SENT_NOW, 409) : deliveryChanged(c, 'report', now);
+      }
     } else {
-      await c.env.DB.prepare(
+      // The unique (engagement, period) index makes a concurrent first save
+      // lose cleanly instead of making a second row.
+      const ins = await c.env.DB.prepare(
         `INSERT INTO engagement_status_reports
            (uid, engagement_id, period, state, shipped, next_up, created_at, updated_at)
-         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)
+         ON CONFLICT (engagement_id, period) DO NOTHING`,
       ).bind(
         newUid(), engagementId, p.period,
         trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), nowIso(), nowIso(),
       ).run();
+      if (!changedOne(ins)) {
+        const now = await c.env.DB.prepare(
+          'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
+        ).bind(engagementId, p.period).first<any>();
+        return now?.state === 'sent' ? c.json(SENT_NOW, 409) : deliveryChanged(c, 'report', now);
+      }
     }
+    await logActorAct(c.env, user, 'delivery_report_saved', { engagement_id: engagementId, period: p.period });
     const row = await c.env.DB.prepare(
       'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
     ).bind(engagementId, p.period).first<any>();
@@ -1744,34 +1887,63 @@ partnerDelivery.post('/status-reports/:id/send', async (c) => {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_status_reports', id, 'Status report');
-    if (row.state === 'sent') {
-      return c.json({ detail: 'That report is already marked sent' }, 409);
-    }
+    const b = await body<any>(c);
+    // D4682 — ONE DEFINED OUTCOME FOR A DUPLICATE SEND. The same person
+    // retrying gets the record that already exists, unchanged (200,
+    // `already_sent`); anyone else is refused (409). Either way the recorded
+    // sender and time are never replaced.
+    const alreadySent = (r: any) => {
+      if (Number(r.sent_by) === Number(user.id)) {
+        return c.json({ ...reportDto(r), already_sent: true });
+      }
+      return c.json({ detail: 'That report is already marked sent', code: 'already_sent' }, 409);
+    };
+    if (row.state === 'sent') return alreadySent(row);
+    // The caller may name the revision it showed the person who pressed Send.
+    const want = expectedRevision(b);
+    if (want != null && want !== Number(row.revision)) return deliveryChanged(c, 'report', row);
     if (!trimOrNull(row.shipped, 4000) && !trimOrNull(row.next_up, 4000)) {
       return c.json({ detail: 'An empty report has nothing to send' }, 400);
     }
     const now = nowIso();
-    await c.env.DB.prepare(
-      `UPDATE engagement_status_reports SET state = 'sent', sent_at = ?, sent_by = ?, updated_at = ?
-        WHERE id = ?`,
-    ).bind(now, user.id, now, id).run();
+    // THE REVISION THAT IS SENT IS THE REVISION THAT WAS CHECKED. The UPDATE
+    // names the draft revision read above and records it as `sent_revision`;
+    // an edit that landed since makes this write change nothing, so the text
+    // checked for emptiness is the text the client receives.
+    const upd = await c.env.DB.prepare(
+      `UPDATE engagement_status_reports
+          SET state = 'sent', sent_at = ?, sent_by = ?, sent_revision = revision + 1,
+              updated_at = ?, revision = revision + 1
+        WHERE id = ? AND state = 'draft' AND revision = ?`,
+    ).bind(now, user.id, now, id, Number(row.revision)).run();
+    if (!changedOne(upd)) {
+      const cur = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
+        .bind(id).first<any>();
+      return cur?.state === 'sent' ? alreadySent(cur) : deliveryChanged(c, 'report', cur);
+    }
     const out = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
       .bind(id).first<any>();
+    await logActorAct(c.env, user, 'delivery_report_sent', { report_id: id, engagement_id: Number(out.engagement_id), revision: Number(out.sent_revision) });
     return c.json(reportDto(out));
   } catch (e) { return mapError(c, e); }
 });
 
 partnerDelivery.delete('/status-reports/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_status_reports', id, 'Status report');
-    if (row.state === 'sent') {
-      return c.json({
-        detail: 'That report was sent. Deleting it would erase a record of what the client received.',
-      }, 409);
-    }
-    await c.env.DB.prepare('DELETE FROM engagement_status_reports WHERE id = ?').bind(id).run();
+    const SENT = {
+      detail: 'That report was sent. Deleting it would erase a record of what the client received.',
+    };
+    if (row.state === 'sent') return c.json(SENT, 409);
+    // The delete repeats the draft state, so a send that landed since the read
+    // keeps the report.
+    const del = await c.env.DB.prepare(
+      "DELETE FROM engagement_status_reports WHERE id = ? AND state = 'draft'",
+    ).bind(id).run();
+    if (!changedOne(del)) return c.json(SENT, 409);
+    await logActorAct(c.env, user, 'delivery_report_deleted', { report_id: id, engagement_id: Number(row.engagement_id) });
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
