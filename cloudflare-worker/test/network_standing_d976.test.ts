@@ -67,6 +67,12 @@ function fixture() {
   db.exec(read('cloudflare-worker/sql/migrations/313_lab_host_applications.sql'));
   db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/238_advisor_engagements.sql'), 'advisor_engagements')));
   db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/241_advisor_money_model.sql'), 'advisor_payout_accounts')));
+  // D4692: the booking path reads the advisor's saved availability rules and the session types a booking joins.
+  for (const t of ['advisor_availability_rules', 'advisor_session_types']) {
+    db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/240_advisor_sessions_config.sql'), t)));
+  }
+  // ... and a slot's blocked_reason (migration 240), which the booking rules read.
+  db.exec('ALTER TABLE advisor_office_hour_slots ADD COLUMN blocked_reason TEXT');
   db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/361_partner_booking_ratings.sql'), 'partner_booking_ratings')));
   db.exec(MIGRATION);
   const u = db.prepare('INSERT INTO users (id, email, role, name, partner_id, spinout_lab_active, is_active) VALUES (?,?,?,?,?,?,?)');
