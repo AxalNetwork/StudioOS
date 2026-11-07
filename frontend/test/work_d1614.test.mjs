@@ -123,11 +123,13 @@ const LIVE = new Set(['summary', 'burnup', 'board', 'item', 'move', 'assign', 'c
   'complianceTasks', 'complianceTask', 'markDone', 'createWork', 'complianceCreate', 'complianceUpdate',
   'complianceAssignable', 'complianceAssign', 'complianceComment', 'complianceReady', 'complianceReopen',
   // D1614 W8 (#3994): the Team picker and My tasks, on #4286's routes.
-  'assignable', 'myTasks']);
+  'assignable', 'myTasks',
+  // #4735: the weekly-capacity writer, on #4286's capacity route.
+  'setCapacity']);
 test('the seam: every method not yet live is off, with the issue that turns it on, and makes no request', async () => {
   assert.deepEqual(Object.keys(WORK_SEAM).sort(), Object.keys(workAdapter).sort());
   for (const [m, issue] of Object.entries(WORK_SEAM)) {
-    assert.match(issue, /^#(?:39(57|69|70|71|72|76|93|94)|4420)$/);
+    assert.match(issue, /^#(?:39(57|69|70|71|72|76|93|94)|4420|4735)$/);
     if (LIVE.has(m) || issue === '#3993') continue; // W7 routes are on main and covered by work_w7_3993.
     const r = await workAdapter[m]('x');
     assert.equal(r.available, false, m);
@@ -172,7 +174,7 @@ test('the views draw the canvas\'s parts with fixtures', () => {
 
 test('the routes, the Project settings card, and the honest block while off', () => {
   const routes = read('frontend/src/routes/team.jsx');
-  assert.match(routes, /path="\/projects\/:id\/work" element=\{guard\(labRoles\(\['admin', 'founder', 'partner', 'investor'\]\), <WorkPage \/>\)\}/);
+  assert.match(routes, /path="\/projects\/:id\/work" element=\{guard\(labRoles\(\['admin', 'founder', 'partner', 'investor', 'advisor'\]\), <WorkPage \/>\)\}/);
   assert.match(routes, /path="\/account\/companies\/:uid\/settings\/compliance"/);
   const settings = read('frontend/src/pages/team/ProjectSettingsPage.jsx');
   assert.match(settings, /to=\{`\/projects\/\$\{encodeURIComponent\(id\)\}\/work`\}/);
