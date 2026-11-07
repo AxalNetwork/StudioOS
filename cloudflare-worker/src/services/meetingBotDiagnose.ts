@@ -8,6 +8,14 @@
  * - `container` … `audio`: reported by the container itself (`meeting-bot/src/diagnose.ts`);
  * - `last_run`: the owner's latest real run on that platform, its stored failure and detail (D1368).
  *
+ * The container's reports are cumulative snapshots (#4857, D4857): every one
+ * carries each stage it has run, with the diagnosis id, a revision and a per-stage
+ * event revision. The Worker keeps, per stage, the row with the highest event
+ * revision, so a repeated or out-of-order snapshot changes nothing, and a stage
+ * whose own report was lost still arrives with the next. A row carries how many
+ * sends failed before it arrived, so the console can say "delivered late"; a stage
+ * that never arrives reads "Not recorded", which is not a pass and not a failed check.
+ *
  * Nothing here is a meeting run: no session, no consent, no charge, no notice.
  * The record and its screenshot live in R2 under `meeting-bot-diagnostics/`,
  * read only by the Super Admin who started it. No page text, name, link or
@@ -29,11 +37,20 @@ export type DiagnoseStage = typeof DIAGNOSE_STAGES[number];
 /** The stages only the container reports. */
 export const RUNTIME_STAGES = ['container', 'browser', 'egress', 'join', 'admission', 'audio'] as const;
 export type DiagnoseResult = 'pass' | 'fail' | 'skipped' | 'running';
+/** What the console is told: the stored results, or `unrecorded` for a stage whose report never arrived. */
+export type ViewResult = DiagnoseResult | 'unrecorded';
 export type Fact = string | number | boolean;
-export interface DiagnoseRow { stage: DiagnoseStage; result: DiagnoseResult; code: string; facts?: Record<string, Fact>; at: number }
+/**
+ * `at` is when the Worker wrote the row. A container's row also carries `rev` (the
+ * stage's event revision), `ran_at` (when the container ran it) and `attempts`
+ * (sends of it that failed before this one arrived); the Worker's own rows have none.
+ */
+export interface DiagnoseRow { stage: DiagnoseStage; result: DiagnoseResult; code: string; facts?: Record<string, Fact>; at: number; rev?: number; ran_at?: number; attempts?: number }
 export interface DiagnoseRecord {
   id: string; owner_id: number; platform: BotPlatform; created_at: number;
   rows: DiagnoseRow[]; screenshot: boolean; probe_bytes: number | null;
+  /** The highest snapshot revision applied. */
+  revision?: number;
 }
 
 /** A diagnostic's container lives at most 8 minutes (`DIAGNOSE_MS`); its callbacks a little longer. */
@@ -99,7 +116,7 @@ export const DIAGNOSE_FIXES: Record<string, string> = {
   signin_unknown_page: 'Google showed a sign-in page the bot does not recognise. Open the screenshot and correct meet/signin.ts against it.',
   signin_unavailable: 'The bot could not fetch its Google account from the Worker. Read the Worker log around this time.',
   signin_not_kept: 'The bot signed in, but Meet showed the guest name field: Google did not keep the session. Open the screenshot.',
-  never_reported: 'The container went quiet at this stage. Read the meeting-bot host’s log for diagnose_failed or runtime_failed around this time.',
+  never_reported: 'This step’s report did not arrive, so whether the check ran is unknown. It is a reporting gap, not a failed check: press Try again. If it repeats, read the meeting-bot host’s log for diagnose_delivery_failed or runtime_failed around this time.',
   last_run_failed: 'Your last real run failed with the code shown. Its detail says where it stopped (D1368).',
 };
 const fixFor = (code: string) => DIAGNOSE_FIXES[code] ?? 'No fix recorded for this code yet.';
@@ -309,6 +326,36 @@ const base64 = (value: unknown, max: number) => {
 export const SCREENSHOT_MAX = 3 * 1024 * 1024;
 export const PROBE_MAX = 64 * 1024;
 
+interface Snapshot { revision: number; events: Array<{ stage: DiagnoseStage; result: DiagnoseResult; code: string; facts?: Record<string, Fact>; rev: number; ran_at: number; attempts: number }> }
+/** A snapshot as the container sends it, or null when any part of it is malformed (nothing is applied then). */
+function cleanSnapshot(body: any, id: string, now: number): Snapshot | null {
+  const int = (v: unknown, min: number, max: number) => typeof v === 'number' && Number.isSafeInteger(v) && v >= min && v <= max;
+  if (body.diagnosis_id !== id || !int(body.revision, 1, 10_000) || !Array.isArray(body.events) || body.events.length < 1 || body.events.length > RUNTIME_STAGES.length) return null;
+  const events: Snapshot['events'] = [], seen = new Set<string>();
+  for (const e of body.events) {
+    if (!RUNTIME_STAGES.includes(e?.stage) || seen.has(e.stage) || !['pass', 'fail', 'skipped', 'running'].includes(e?.result) || typeof e?.code !== 'string' || !CODE.test(e.code)
+      || !int(e.rev, 1, body.revision) || !int(e.at, 0, Number.MAX_SAFE_INTEGER) || !int(e.attempts, 0, 100)) return null;
+    seen.add(e.stage);
+    let facts: Record<string, Fact> | undefined;
+    try { facts = cleanFacts(e.facts); } catch { return null; }
+    // The container's clock can run ahead; a time in the future reads as now.
+    events.push({ stage: e.stage, result: e.result, code: e.code, ...(facts && Object.keys(facts).length ? { facts } : {}), rev: e.rev, ran_at: Math.min(e.at, now), attempts: e.attempts });
+  }
+  return { revision: body.revision, events };
+}
+/** Per stage, the highest event revision wins; the same revision again, or an older one, changes nothing. */
+function mergeSnapshot(rec: DiagnoseRecord, snap: Snapshot, now: number): boolean | void {
+  let changed = false;
+  for (const e of snap.events) {
+    const have = rec.rows.find((r) => r.stage === e.stage);
+    if (have && (have.rev ?? 0) >= e.rev) continue;
+    put(rec, { ...e, at: now });
+    changed = true;
+  }
+  if (snap.revision > (rec.revision ?? 0)) { rec.revision = snap.revision; changed = true; }
+  return changed ? undefined : false;
+}
+
 /** One callback from the container. Returns an HTTP status; never echoes what it was sent. */
 export async function diagnosisCallback(env: Env, id: string, kind: string, raw: string, now = Date.now()): Promise<number> {
   const existing = await load(env, id);
@@ -318,11 +365,16 @@ export async function diagnosisCallback(env: Env, id: string, kind: string, raw:
   try { body = JSON.parse(raw); } catch { return 400; }
   let change: (rec: DiagnoseRecord) => void;
   try {
-    if (kind === 'report') {
+    if (kind === 'report' && body && typeof body === 'object' && 'events' in body) {
+      const snap = cleanSnapshot(body, id, now);
+      if (!snap) return 400;
+      change = (rec) => mergeSnapshot(rec, snap, now);
+    } else if (kind === 'report') {
       if (!RUNTIME_STAGES.includes(body?.stage) || !['pass', 'fail', 'skipped', 'running'].includes(body?.result) || typeof body?.code !== 'string' || !CODE.test(body.code)) return 400;
       const facts = cleanFacts(body.facts);
       const row: DiagnoseRow = { stage: body.stage, result: body.result, code: body.code, ...(facts && Object.keys(facts).length ? { facts } : {}), at: now };
-      change = (rec) => put(rec, row);
+      // The single-stage report of a container built before #4857: it has no revision, so it never replaces a revised row.
+      change = (rec) => { if (!rec.rows.find((r) => r.stage === row.stage)?.rev) put(rec, row); };
     } else if (kind === 'screenshot') {
       const png = base64(body?.png, SCREENSHOT_MAX);
       if (png.byteLength < 8 || png[0] !== 0x89 || png[1] !== 0x50 || png[2] !== 0x4e || png[3] !== 0x47) return 400;
@@ -342,17 +394,23 @@ export async function diagnosisCallback(env: Env, id: string, kind: string, raw:
 export function view(rec: DiagnoseRecord, now = Date.now()) {
   // Past its window, a stage still waiting (or never heard from) is a failure: the container went quiet there.
   const over = now - rec.created_at > DIAGNOSE_WINDOW_MS;
-  const rows = DIAGNOSE_STAGES.map((stage): DiagnoseRow => {
-    const row = rec.rows.find((r) => r.stage === stage) ?? { stage, result: 'running', code: 'waiting', at: rec.created_at };
-    return over && row.result === 'running' ? { ...row, result: 'fail', code: 'never_reported', facts: { last_code: row.code } } : row;
+  // A stage still waiting past the window is not a failed check: its report never arrived, so what it found is not recorded.
+  const rows = DIAGNOSE_STAGES.map((stage): Omit<DiagnoseRow, 'result'> & { result: ViewResult } => {
+    const row = rec.rows.find((r) => r.stage === stage) ?? { stage, result: 'running' as const, code: 'waiting', at: rec.created_at };
+    return over && row.result === 'running' ? { ...row, result: 'unrecorded', code: 'never_reported', facts: { last_code: row.code } } : row;
   });
   const settled = rows.every((r) => r.result !== 'running');
+  // "ran" and "delivered" apart: a container row that needed resends arrived late; one that never came is not recorded.
+  const delivery = (r: typeof rows[number]) => r.result === 'unrecorded' ? 'not_recorded' : (r.attempts ?? 0) > 0 ? 'late' : 'ok';
   return {
     id: rec.id, platform: rec.platform, created_at: new Date(rec.created_at).toISOString(), done: settled,
     // The first failing row in the order the bot meets them is the answer to "where does it fail".
     stops_at: rows.find((r) => r.result === 'fail' && r.stage !== 'last_run' && r.stage !== 'config')?.stage
       ?? rows.find((r) => r.result === 'fail')?.stage ?? null,
-    rows: rows.map((r) => ({ stage: r.stage, result: r.result, code: r.code, facts: r.facts ?? {}, fix: r.result === 'fail' ? fixFor(r.code) : null })),
+    // `unrecorded` is a reporting problem, so it is never `stops_at`; the console says so in its own words (`unrecorded`).
+    unrecorded: rows.filter((r) => r.result === 'unrecorded').map((r) => r.stage),
+    rows: rows.map((r) => ({ stage: r.stage, result: r.result, code: r.code, facts: r.facts ?? {}, fix: r.result === 'fail' || r.result === 'unrecorded' ? fixFor(r.code) : null,
+      delivery: delivery(r), ...(r.attempts ? { attempts: r.attempts } : {}) })),
     screenshot: rec.screenshot, probe_bytes: rec.probe_bytes,
   };
 }

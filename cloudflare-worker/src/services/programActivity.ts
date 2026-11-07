@@ -29,8 +29,8 @@ import { INFLUENCER_ACTIONS } from './influencerActions';
 /** Mentor cohort access's audited writes (D960, `routes/advisors.ts`): giving a mentor a cohort, and ending it. */
 export const MENTOR_ACCESS_ACTIONS = ['advisor_cohort.assigned', 'advisor_cohort.ended'] as const;
 
-/** Investor cohort access's audited writes (D959, `routes/admin_investor_cohorts.ts`): give, end, and send the cohort NDA. */
-export const INVESTOR_ACCESS_ACTIONS = ['investor_cohort.granted', 'investor_cohort.ended', 'investor_cohort.nda_sent'] as const;
+/** Investor cohort access's audited writes (D959, `routes/admin_investor_cohorts.ts`): give, end, send the cohort NDA, and (D4809) a failed send and a void before resending. */
+export const INVESTOR_ACCESS_ACTIONS = ['investor_cohort.granted', 'investor_cohort.ended', 'investor_cohort.nda_sent', 'investor_cohort.nda_send_failed', 'investor_cohort.nda_voided'] as const;
 
 /** Learning's audited writes (`routes/admin_learning_programs.ts`). */
 export const LEARNING_PROGRAM_ACTIONS = [

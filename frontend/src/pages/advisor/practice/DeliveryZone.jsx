@@ -233,17 +233,136 @@ export default function DeliveryZone() {
   const ratings = Object.values(state.reviews).flat().map((r) => Number(r.rating)).filter(Boolean);
   const avg = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
 
+  const reviewLoop = (
+    <>
+      {/* ── The post-session review loop ──────────────────────────────────────
+          NOT ON THE ARTBOARD, AND KEPT ANYWAY. It arrived here when
+          `/office-hours` was retired as the one capability that lived nowhere
+          else, and an artboard that does not draw a working feature is not an
+          instruction to delete it. PR4 may move it to Sessions. */}
+      <Card padding="md" className="mt-3">
+        <ZoneHeading
+          title="Sessions you have held"
+          blurb="Still here, and not on this artboard: whether each held session has a review, and your own review of them."
+        />
+        {state.sessionsUnavailable
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
+            Your held sessions could not be read. That is not a claim that you have none.
+          </p>
+          : <>
+            <div className="grid grid-cols-3 gap-3">
+              <Stat label="Sessions held" value={state.sessions.length}
+                note={state.sessions.length ? 'marked completed' : 'none marked completed yet'} />
+              <Stat label="Reviewed" value={reviewed.length}
+                note={`${awaiting.length} without a review`} />
+              {/* THE EM-DASH THIS PAGE INHERITED AND DOES NOT KEEP. The legacy
+                  tab rendered `'—'` here when no rating existed, which is the
+                  absent-as-dash form D56/D68 forbids. */}
+              <Stat label="Average rating"
+                value={avg == null ? <Unrecorded>Not recorded</Unrecorded> : avg.toFixed(1)}
+                note={ratings.length ? `${ratings.length} review${ratings.length === 1 ? '' : 's'}` : 'no review has been filed'} />
+            </div>
+            {state.sessions.length > 0 && (
+              <ul className="mt-3 space-y-2">{state.sessions.slice(0, 10).map((b) => {
+                const rs = state.reviews[b.id] || [];
+                const mine = rs.find((r) => r.reviewer_role === 'advisor');
+                return (
+                  <li key={b.id} data-testid={`row-pr3-session-${b.id}`}
+                    className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <strong className="text-[12.5px] font-extrabold tracking-tight">{b.topic || 'Session'}</strong>
+                        <p className="mt-0.5 text-[11px] text-axal-faint">
+                          {b.founder_name || b.founder_email || `Member #${b.founder_user_id}`}
+                          {' · '}{b.slot_starts_at ? formatDateTime(b.slot_starts_at) : <Unrecorded>date not recorded</Unrecorded>}
+                        </p>
+                      </div>
+                      {rs.length === 0
+                        ? <Pill tone="warn">No review</Pill>
+                        : <span className="flex items-center gap-1 text-[11px] font-semibold">
+                          <Star size={11} fill="currentColor" className="text-amber-400" />
+                          {Number(rs[0].rating).toFixed(1)}
+                          {mine ? <Pill tone="ok">Yours filed</Pill> : <Pill tone="neutral">Theirs only</Pill>}
+                        </span>}
+                    </div>
+                    {/* THE CONTROL, NOT JUST THE COUNT. Porting the tiles and
+                        leaving the form behind would have deleted the capability
+                        the moment `/advisor/advisory/delivery` became a
+                        redirect: a page that says "3 without a review" and
+                        cannot file one is the gap it is reporting. */}
+                    {!mine && <ReviewForm booking={b} onFiled={load} />}
+                  </li>
+                );
+              })}</ul>
+            )}
+          </>}
+      </Card>
+    </>
+  );
+
+  const createForm = (
+          <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Title">
+                <input className={inputClass} value={draft.title} placeholder="Q2 advisory review"
+                  onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+              </Field>
+              <Field label="Engagement" hint="A work product under a contract takes its client from it. Sending requires one whose client has an Axal account — nothing an unlinked client is sent can ever be recorded as opened.">
+                <select className={inputClass} value={draft.engagement_id}
+                  onChange={(e) => setDraft({ ...draft, engagement_id: e.target.value })}>
+                  <option value="">No engagement — type a client below</option>
+                  {engagements.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.client_name}{e.founder_user_id ? '' : ' (no account — cannot be sent)'}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {!draft.engagement_id && (
+                <Field label="Client" hint="Used when there is no engagement to take the name from.">
+                  <input className={inputClass} value={draft.client_name} placeholder="Halverton"
+                    onChange={(e) => setDraft({ ...draft, client_name: e.target.value })} />
+                </Field>
+              )}
+              <Field label="What changed" hint="The line the version trail shows against v1.">
+                <input className={inputClass} value={draft.summary} placeholder="First pass from the Aug 5 teardown"
+                  onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
+              </Field>
+              <Field label="Link">
+                <input className={inputClass} value={draft.link_url} placeholder="https://…"
+                  onChange={(e) => setDraft({ ...draft, link_url: e.target.value })} />
+              </Field>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+              It opens at <strong>v1, not sent</strong>. Sending is its own step, because that is the
+              moment the client can start reading it.
+            </p>
+            <button type="button" className={`${buttonClass} mt-2`}
+              disabled={busy === 'new' || !draft.title.trim() || (!draft.engagement_id && !draft.client_name.trim())}
+              onClick={create}>
+              Add as v1
+            </button>
+          </div>
+  );
+
   return (
     <ZoneBody
       loading={state.loading}
       error={state.error}
       isEmpty={!state.loading && !state.error && items.length === 0}
       onRetry={load}
-      empty={<NothingYet
+      empty={<>
+      <NothingYet
         title="No work product is on file"
         body="This collection fills as you record what you send a client — each version, when it went out, and whether they opened it. It is empty because nothing has been recorded, not because anything was lost."
         action={<button type="button" className={buttonClass} onClick={() => setAdding(true)}>Record a work product</button>}
-      />}
+      />
+      {/* D4687 (#4687): the form and the held-sessions review loop used to
+          live only in the non-empty body, so a first-use advisor could neither
+          open the form nor review a completed session. */}
+      {adding && <Card padding="md" className="mt-3" data-testid="work-product-create-empty">{createForm}</Card>}
+      {reviewLoop}
+      </>}
     >
       <ZoneToolbar
         className="mb-3"
@@ -329,50 +448,7 @@ export default function DeliveryZone() {
             {adding ? 'Close' : 'New work product'}
           </button>}
         />
-        {adding && (
-          <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Title">
-                <input className={inputClass} value={draft.title} placeholder="Q2 advisory review"
-                  onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-              </Field>
-              <Field label="Engagement" hint="A work product under a contract takes its client from it. Sending requires one whose client has an Axal account — nothing an unlinked client is sent can ever be recorded as opened.">
-                <select className={inputClass} value={draft.engagement_id}
-                  onChange={(e) => setDraft({ ...draft, engagement_id: e.target.value })}>
-                  <option value="">No engagement — type a client below</option>
-                  {engagements.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.client_name}{e.founder_user_id ? '' : ' (no account — cannot be sent)'}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              {!draft.engagement_id && (
-                <Field label="Client" hint="Used when there is no engagement to take the name from.">
-                  <input className={inputClass} value={draft.client_name} placeholder="Halverton"
-                    onChange={(e) => setDraft({ ...draft, client_name: e.target.value })} />
-                </Field>
-              )}
-              <Field label="What changed" hint="The line the version trail shows against v1.">
-                <input className={inputClass} value={draft.summary} placeholder="First pass from the Aug 5 teardown"
-                  onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
-              </Field>
-              <Field label="Link">
-                <input className={inputClass} value={draft.link_url} placeholder="https://…"
-                  onChange={(e) => setDraft({ ...draft, link_url: e.target.value })} />
-              </Field>
-            </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-              It opens at <strong>v1, not sent</strong>. Sending is its own step, because that is the
-              moment the client can start reading it.
-            </p>
-            <button type="button" className={`${buttonClass} mt-2`}
-              disabled={busy === 'new' || !draft.title.trim() || (!draft.engagement_id && !draft.client_name.trim())}
-              onClick={create}>
-              Add as v1
-            </button>
-          </div>
-        )}
+        {adding && createForm}
         {/* D571 — "By client" GROUPS rather than only sorting: the Ops canvas's
             per-client deliverables (A1), with the flow legend, the due column
             it cannot fill, and the edit and attach forms. Still every row:
@@ -456,68 +532,7 @@ export default function DeliveryZone() {
         </Card>
       </div>
 
-      {/* ── The post-session review loop ──────────────────────────────────────
-          NOT ON THE ARTBOARD, AND KEPT ANYWAY. It arrived here when
-          `/office-hours` was retired as the one capability that lived nowhere
-          else, and an artboard that does not draw a working feature is not an
-          instruction to delete it. PR4 may move it to Sessions. */}
-      <Card padding="md" className="mt-3">
-        <ZoneHeading
-          title="Sessions you have held"
-          blurb="Still here, and not on this artboard: whether each held session has a review, and your own review of them."
-        />
-        {state.sessionsUnavailable
-          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
-            Your held sessions could not be read. That is not a claim that you have none.
-          </p>
-          : <>
-            <div className="grid grid-cols-3 gap-3">
-              <Stat label="Sessions held" value={state.sessions.length}
-                note={state.sessions.length ? 'marked completed' : 'none marked completed yet'} />
-              <Stat label="Reviewed" value={reviewed.length}
-                note={`${awaiting.length} without a review`} />
-              {/* THE EM-DASH THIS PAGE INHERITED AND DOES NOT KEEP. The legacy
-                  tab rendered `'—'` here when no rating existed, which is the
-                  absent-as-dash form D56/D68 forbids. */}
-              <Stat label="Average rating"
-                value={avg == null ? <Unrecorded>Not recorded</Unrecorded> : avg.toFixed(1)}
-                note={ratings.length ? `${ratings.length} review${ratings.length === 1 ? '' : 's'}` : 'no review has been filed'} />
-            </div>
-            {state.sessions.length > 0 && (
-              <ul className="mt-3 space-y-2">{state.sessions.slice(0, 10).map((b) => {
-                const rs = state.reviews[b.id] || [];
-                const mine = rs.find((r) => r.reviewer_role === 'advisor');
-                return (
-                  <li key={b.id} data-testid={`row-pr3-session-${b.id}`}
-                    className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <strong className="text-[12.5px] font-extrabold tracking-tight">{b.topic || 'Session'}</strong>
-                        <p className="mt-0.5 text-[11px] text-axal-faint">
-                          {b.founder_name || b.founder_email || `Member #${b.founder_user_id}`}
-                          {' · '}{b.slot_starts_at ? formatDateTime(b.slot_starts_at) : <Unrecorded>date not recorded</Unrecorded>}
-                        </p>
-                      </div>
-                      {rs.length === 0
-                        ? <Pill tone="warn">No review</Pill>
-                        : <span className="flex items-center gap-1 text-[11px] font-semibold">
-                          <Star size={11} fill="currentColor" className="text-amber-400" />
-                          {Number(rs[0].rating).toFixed(1)}
-                          {mine ? <Pill tone="ok">Yours filed</Pill> : <Pill tone="neutral">Theirs only</Pill>}
-                        </span>}
-                    </div>
-                    {/* THE CONTROL, NOT JUST THE COUNT. Porting the tiles and
-                        leaving the form behind would have deleted the capability
-                        the moment `/advisor/advisory/delivery` became a
-                        redirect: a page that says "3 without a review" and
-                        cannot file one is the gap it is reporting. */}
-                    {!mine && <ReviewForm booking={b} onFiled={load} />}
-                  </li>
-                );
-              })}</ul>
-            )}
-          </>}
-      </Card>
+      {reviewLoop}
 
       <StatedLimit title="What this collection cannot say">
         <p>
