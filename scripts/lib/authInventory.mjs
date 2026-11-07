@@ -59,6 +59,8 @@ const EVIDENCE_RE = new RegExp(`\\b(${EVIDENCE_TOKENS.join('|')})\\s*\\(`, 'g');
 // A domain helper named for an access check: requireCaseWriter, canReadFund, assertDealParticipant, ensureVentureMember…
 const NAMED_CHECK_RE = /\b((?:require|assert|ensure|check|can|may|userMay)[A-Z]\w*?(?:Access|Owner|Member|Writer|Reader|Editor|Manager|Party|Participant|Read|Write|Edit|View|Scope|Gp|Lp|Founder|Advisor)\w*)\s*\(/g;
 // A query that binds the caller's own id is evidence too: `founder_id = ?` … `.bind(user.id`.
+/** The Worker's auth module: where every gate lives. Its own queries are about the caller, not about a record. */
+const IS_AUTH_MODULE = /(?:^|\/)cloudflare-worker\/src\/auth\.ts$/;
 const OWNER_SQL_RE = /\b(?:founder_id|user_id|owner_id|created_by|sponsor_user_id|investor_user_id)\s*=\s*\?/;
 
 // ── Source reading ──────────────────────────────────────────────────────────
@@ -243,7 +245,11 @@ function expand(file, name, depth) {
   if (expanded.has(key)) return expanded.get(key);
   expanded.set(key, ''); // a cycle reads as nothing more
   const src = readSrc(file);
-  const body = src && bodyIn(file, src, name);
+  let body = src && bodyIn(file, src, name);
+  // The Worker's auth module is the gate, not a record. `getCurrentUser` reads the caller's own row by `user_id = ?`,
+  // which is not an ownership check on whatever record a route names. Read as evidence, it vouched for every route
+  // that reached it, and a refactor that moved it one call deeper (#4573) un-vouched 91 of them at once (#4570).
+  if (body && IS_AUTH_MODULE.test(file.split('\\').join('/'))) body = body.replace(new RegExp(OWNER_SQL_RE.source, 'g'), ' ');
   const out = body ? reach(body, src, file, depth) : '';
   expanded.set(key, out);
   return out;
