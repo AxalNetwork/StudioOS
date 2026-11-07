@@ -288,6 +288,8 @@ function wholeReads(s: { sql: string; binds: unknown[] }): string[] {
     const table = names.get(m[1]) ?? m[1];
     if (!HISTORY.has(table)) continue;
     if (m[2] && ALL_TIME_BY_DEFINITION.has(m[3])) continue;
+    // The day cut walks the day index newest first and stops at its LIMIT; SQLite builds differ on whether they call that scan covering.
+    if (m[3] === 'idx_event_registrations_day' && /\bDISTINCT date\(r\.registered_at\)[\s\S]*\bLIMIT \?/.test(s.sql)) continue;
     out.push(`${d}  ←  ${s.sql.replace(/\s+/g, ' ').slice(0, 100)}`);
   }
   return out;
