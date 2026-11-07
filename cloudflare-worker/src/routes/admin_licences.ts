@@ -17,8 +17,11 @@ import { grantLicence, isLicence, LicenceRefusal } from '../services/accountLice
  * the same mount-precedence trick admin_billing and admin_promos use. Schema:
  * migration 187.
  *
- *   GET    /                       every licence, with territories and seats
+ *   GET    /                       one page of licences, with territories and seats
+ *                                  (?q=&kind=&status=&limit=&cursor=, #4700)
  *   GET    /territories            who holds what, for the picker
+ *   GET    /summary                coverage, renewals and counts over every licence (#4700)
+ *   GET    /:uid/requests          this licence's open requests, HQ- and branch-origin (#4700)
  *   POST   /                       step 1 — create a draft from an entity
  *   PUT    /:uid/territories       step 2 — set the countries (refuses overlap)
  *   PUT    /:uid/seats             step 3 — seats licensed, per persona
@@ -77,6 +80,9 @@ import { mirrorBranchAction } from '../services/auditMirror';
 // detach; the tenant's own binds live in `routes/licence.ts`, deliberately not
 // behind an admin gate.
 import { domainPayload, type LicenceDomainRow } from '../services/licenceDomain';
+import {
+  idChunks, ledgerSummary, licenceRequests, LedgerReadRefusal, pageLicences,
+} from '../services/licenceLedgerReads';
 import { logAdminAction } from '../services/adminAudit';
 // D198 — the brand kit's upload rules and its hex validator are `brand.ts`'s,
 // reused rather than declared a second time. What is NOT shared is the gate
@@ -268,16 +274,26 @@ function seatsUsed(): null { return null; }
  */
 export async function hydrate(env: Env, rows: LicenceRow[]) {
   if (!rows.length) return [];
-  const ids = rows.map((l) => l.id);
-  const placeholders = ids.map(() => '?').join(',');
-  const terr = await env.DB.prepare(
-    `SELECT licence_id, country_code FROM licence_territories
-      WHERE licence_id IN (${placeholders}) ORDER BY country_code`,
-  ).bind(...ids).all<{ licence_id: number; country_code: string }>();
-  const seats = await env.DB.prepare(
-    `SELECT licence_id, seat_type, seats_licensed FROM licence_seats
-      WHERE licence_id IN (${placeholders})`,
-  ).bind(...ids).all<{ licence_id: number; seat_type: string; seats_licensed: number }>();
+  // #4700 — ONE BIND PER ID, SO THE IDS GO IN CHUNKS. D1 refuses a statement
+  // with more than 100 bound parameters, and this used to bind every licence
+  // in one `IN (…)`: fine at today's ledger, a failed read at its 101st row.
+  // Each chunk is its own statement; a licence's rows all come back in the
+  // chunk that holds its id, so the per-licence order below is unchanged.
+  const chunks = idChunks(rows.map((l) => l.id));
+  const terr: { results: Array<{ licence_id: number; country_code: string }> } = { results: [] };
+  const seats: { results: Array<{ licence_id: number; seat_type: string; seats_licensed: number }> } = { results: [] };
+  for (const { part, placeholders } of chunks) {
+    const t = await env.DB.prepare(
+      `SELECT licence_id, country_code FROM licence_territories
+        WHERE licence_id IN (${placeholders}) ORDER BY country_code`,
+    ).bind(...part).all<{ licence_id: number; country_code: string }>();
+    terr.results.push(...(t.results || []));
+    const s = await env.DB.prepare(
+      `SELECT licence_id, seat_type, seats_licensed FROM licence_seats
+        WHERE licence_id IN (${placeholders})`,
+    ).bind(...part).all<{ licence_id: number; seat_type: string; seats_licensed: number }>();
+    seats.results.push(...(s.results || []));
+  }
 
   // D197 — THE HOST RIDES THE LICENCE PAYLOAD, exactly as D196's `kind` did:
   // H31's strip needs no second fetch and no `api.js` read method. Its own
@@ -287,14 +303,16 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
   const domains = new Map<number, LicenceDomainRow>();
   let domainsReadable = true;
   try {
-    const bound = await env.DB.prepare(
-      `SELECT id, licence_id, hostname, challenge_token, state,
-              txt_verified_at, cname_verified_at, last_checked_at, last_check_json,
-              is_primary, detached_at, detached_by_user_id, detach_reason,
-              created_by_user_id, created_at, updated_at
-         FROM licence_domains WHERE licence_id IN (${placeholders})`,
-    ).bind(...ids).all<LicenceDomainRow>();
-    for (const d of bound.results || []) domains.set(Number(d.licence_id), d);
+    for (const { part, placeholders } of chunks) {
+      const bound = await env.DB.prepare(
+        `SELECT id, licence_id, hostname, challenge_token, state,
+                txt_verified_at, cname_verified_at, last_checked_at, last_check_json,
+                is_primary, detached_at, detached_by_user_id, detach_reason,
+                created_by_user_id, created_at, updated_at
+           FROM licence_domains WHERE licence_id IN (${placeholders})`,
+      ).bind(...part).all<LicenceDomainRow>();
+      for (const d of bound.results || []) domains.set(Number(d.licence_id), d);
+    }
   } catch (e) {
     console.warn('[licences] licence_domains unreadable', (e as Error).message);
     domainsReadable = false;
@@ -309,12 +327,14 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
   const kits = new Map<number, LicenceBrandKitRow>();
   let kitsReadable = true;
   try {
-    const found = await env.DB.prepare(
-      `SELECT id, licence_id, mark_r2_key, mark_mime, mark_bytes, primary_hex, accent_hex,
-              updated_by_user_id, created_at, updated_at
-         FROM licence_brand_kits WHERE licence_id IN (${placeholders})`,
-    ).bind(...ids).all<LicenceBrandKitRow>();
-    for (const k of found.results || []) kits.set(Number(k.licence_id), k);
+    for (const { part, placeholders } of chunks) {
+      const found = await env.DB.prepare(
+        `SELECT id, licence_id, mark_r2_key, mark_mime, mark_bytes, primary_hex, accent_hex,
+                updated_by_user_id, created_at, updated_at
+           FROM licence_brand_kits WHERE licence_id IN (${placeholders})`,
+      ).bind(...part).all<LicenceBrandKitRow>();
+      for (const k of found.results || []) kits.set(Number(k.licence_id), k);
+    }
   } catch (e) {
     console.warn('[licences] licence_brand_kits unreadable', (e as Error).message);
     kitsReadable = false;
@@ -409,17 +429,29 @@ async function activationBlockers(env: Env, licence: LicenceRow): Promise<string
 
 /* ---------------------------------------------------------------- */
 
+// #4700 — ONE PAGE, NOT THE LEDGER. `?q=&kind=&status=&limit=&cursor=`: the
+// search, the filters and the order run in SQL, then the page is cut, then
+// only that page is hydrated. `total` counts every match, so the console never
+// reads a page's length as the ledger's size. The coverage grid and renewal
+// pipeline read `GET /summary`, which is over the whole ledger.
 r.get('/', async (c) => {
   try {
     await requireSuperAdmin(c);
-    const rows = await c.env.DB.prepare(
-      `SELECT * FROM territory_licences ORDER BY
-         CASE status WHEN 'active' THEN 0 WHEN 'suspended' THEN 1
-                     WHEN 'pending_activation' THEN 2 WHEN 'draft' THEN 3 ELSE 4 END,
-         licence_ref`,
-    ).all<LicenceRow>();
+    let page;
+    try {
+      page = await pageLicences(c.env, {
+        q: c.req.query('q'), kind: c.req.query('kind'), status: c.req.query('status'),
+        limit: c.req.query('limit'), cursor: c.req.query('cursor'),
+      });
+    } catch (e) {
+      if (e instanceof LedgerReadRefusal) return refuse(c, 400, { code: e.code, message: e.sentence });
+      throw e;
+    }
     return c.json({
-      items: await hydrate(c.env, rows.results || []),
+      items: await hydrate(c.env, page.rows as LicenceRow[]),
+      total: page.total,
+      next_cursor: page.next_cursor,
+      limit: page.limit,
       // Said once, at the top, rather than implied by a column of dashes.
       seats_used_available: false,
       seats_used_reason:
@@ -441,6 +473,36 @@ r.get('/territories', async (c) => {
         ORDER BY lt.country_code`,
     ).all<any>();
     return c.json({ items: rows.results || [] });
+  } catch (e) { return mapError(c, e); }
+});
+
+// #4700 — coverage, renewals and counts over the WHOLE ledger, apart from the
+// page, so the grid and the pipeline are right whichever page is open.
+r.get('/summary', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    return c.json(await ledgerSummary(c.env));
+  } catch (e) { return mapError(c, e); }
+});
+
+// #4700 — this licence's open requests, HQ-origin and branch-origin, scoped
+// and counted on the server before the page. `?limit=&cursor=`.
+r.get('/:uid/requests', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    try {
+      return c.json(await licenceRequests(c.env, licence.uid, { limit: c.req.query('limit'), cursor: c.req.query('cursor') }));
+    } catch (e) {
+      if (e instanceof LedgerReadRefusal) return refuse(c, 400, { code: e.code, message: e.sentence });
+      // The request board itself could not be read (migration 259): unknown, not none.
+      console.warn('[licences] hq_escalations unreadable', (e as Error).message);
+      return c.json({
+        available: false,
+        reason: 'HQ\'s request board could not be read on this database, so this licence\'s requests are unknown — not none.',
+      });
+    }
   } catch (e) { return mapError(c, e); }
 });
 

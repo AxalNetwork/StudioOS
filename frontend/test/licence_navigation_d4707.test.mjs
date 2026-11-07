@@ -11,7 +11,7 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
-  LICENCE_TABS, kindFromParam, reconcileSelection, stepOfTab, tabFromParam, tabKeyMove, tabOfStep, tabsFor,
+  LICENCE_TABS, kindFromParam, ledgerSelection, reconcileSelection, stepOfTab, tabFromParam, tabKeyMove, tabOfStep, tabsFor,
 } from '../src/pages/admin/licenceNavModel.js';
 import { LICENCE_REASONS, checkReason } from '../src/pages/admin/licenceReasonModel.js';
 import { actorLabel, changeRows, outcomeLabel } from '../src/pages/admin/licenceHistoryModel.js';
@@ -70,12 +70,27 @@ test('a selection the filter hides moves to the first row still shown, or to non
   assert.equal(reconcileSelection('b', null), null);
 });
 
-test('the editor is fed the reconciled selection, computed from the visible rows', () => {
-  assert.match(PAGE, /const visible = filterByKind\(allItems, kindFilter\);/);
-  assert.match(PAGE, /const sel = data && data !== UNAVAILABLE \? reconcileSelection\(wanted, visible\) : null;/);
-  assert.match(PAGE, /if \(sel !== wanted\) setParam\(\{ licence: sel \}, \{ replace: true \}\);/);
-  // Opening a hidden licence widens the filter instead of editing an invisible row.
-  assert.match(PAGE, /setParam\(shown \? \{ licence: uid \} : \{ licence: uid, kind: 'all' \}\);/);
+test('over the paged ledger, a named licence is looked for on later pages before anything is reconciled', () => {
+  const page = [{ uid: 'a' }, { uid: 'b' }];
+  // The page for the current filters has not arrived: the open licence stays, nothing moves.
+  assert.deepEqual(ledgerSelection({ wanted: 'b', visible: page, ready: false, hasMore: false }), { sel: 'b', finding: false, settle: false });
+  assert.deepEqual(ledgerSelection({ wanted: 'z', visible: page, ready: false, hasMore: false }), { sel: null, finding: false, settle: false });
+  // Named, not on this page, more pages exist: read on, open nothing meanwhile.
+  assert.deepEqual(ledgerSelection({ wanted: 'z', visible: page, ready: true, hasMore: true }), { sel: null, finding: true, settle: false });
+  // Every page read and still absent: it is hidden, so the first shown row opens and the URL follows.
+  assert.deepEqual(ledgerSelection({ wanted: 'z', visible: page, ready: true, hasMore: false }), { sel: 'a', finding: false, settle: true });
+  assert.deepEqual(ledgerSelection({ wanted: 'b', visible: page, ready: true, hasMore: true }), { sel: 'b', finding: false, settle: true });
+  assert.deepEqual(ledgerSelection({ wanted: null, visible: [], ready: true, hasMore: false }), { sel: null, finding: false, settle: true });
+});
+
+test('the page wires that rule: the right page, the next page while finding, and the URL once settled', () => {
+  assert.match(PAGE, /const ready = Boolean\(data\) && data !== UNAVAILABLE && dataFor === filters && query\.trim\(\) === search;/);
+  assert.match(PAGE, /ledgerSelection\(\{ wanted, visible, ready, hasMore: Boolean\(data\?\.next_cursor\) \}\)/);
+  assert.match(PAGE, /if \(settle && sel !== wanted\) setParam\(\{ licence: sel \}, \{ replace: true \}\);/);
+  assert.match(PAGE, /if \(finding && !loadingMore\) loadMore\(\);/);
+  assert.match(PAGE, /setData\(d\);\n\s+setDataFor\(filters\);/, 'a page records the filters it was read for');
+  // Opening a hidden licence clears the search and widens the kind instead of editing an invisible row.
+  assert.match(PAGE, /setQuery\(''\);\n\s+setParam\(\{ licence: uid, kind: 'all' \}\);/);
 });
 
 // ── semantics ──────────────────────────────────────────────────────────────

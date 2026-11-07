@@ -52,6 +52,25 @@ export function reconcileSelection(selected, visibleItems) {
   return list[0]?.uid ?? null;
 }
 
+/**
+ * The selection over a PAGED, server-filtered ledger (#4700). Returns
+ * `{ sel, finding, settle }`:
+ *   - `ready` false (the page for the current filters is still on its way):
+ *     the licence already on screen stays open, nothing else is decided, and
+ *     the URL is left alone (`settle` false);
+ *   - the named licence not on the loaded rows while another page exists:
+ *     `finding`, so the caller reads the next page; nothing is open meanwhile;
+ *   - otherwise `reconcileSelection`, and `settle` tells the caller to write
+ *     the result back to the URL.
+ */
+export function ledgerSelection({ wanted, visible, ready, hasMore }) {
+  const list = Array.isArray(visible) ? visible : [];
+  const onScreen = Boolean(wanted) && list.some((l) => l.uid === wanted);
+  if (!ready) return { sel: onScreen ? wanted : null, finding: false, settle: false };
+  if (wanted && !onScreen && hasMore) return { sel: null, finding: true, settle: false };
+  return { sel: reconcileSelection(wanted, list), finding: false, settle: true };
+}
+
 /** Arrow keys, Home and End move between tabs (WAI-ARIA tabs pattern). Returns the next index, or null. */
 export function tabKeyMove(key, index, count) {
   if (!count) return null;

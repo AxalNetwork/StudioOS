@@ -39,6 +39,8 @@ import { cutCents, derivePayoutState, settlementMode, takeRate } from './advisor
 
 export interface PayoutAccountRow {
   id: number;
+  /** The local row's own id; D4703 keys the provider's account create on it. */
+  uid: string;
   advisor_id: number;
   state: string;
   provider: string;
@@ -139,11 +141,26 @@ export async function connectLink(
       // wellbeing account are indistinguishable in the dashboard and in any
       // reconciliation built on top of it.
       'metadata[axal_product]': 'advisory',
+    }, {
+      // D4703 (#4703): ONE ACCOUNT PER LOCAL ROW. Two starts at once (two tabs,
+      // a double click) both read no account and both created one; the last
+      // UPDATE won and the other was orphaned at the provider, possibly after
+      // the advisor had begun onboarding into it. The key is the local row's
+      // own uid, so a repeat within the provider's window returns the same
+      // account rather than a new one.
+      idempotencyKey: `connect:advisory:${account.uid}`,
     });
-    accountId = acct.id;
-    await env.DB.prepare(
-      'UPDATE advisor_payout_accounts SET provider_account_id = ?, updated_at = ? WHERE advisor_id = ?',
-    ).bind(accountId, nowIso(), account.advisor_id).run();
+    // ATTACHED ONLY WHERE NONE IS: if another start attached one first, that
+    // one stands and this request uses it.
+    const attached = await env.DB.prepare(
+      'UPDATE advisor_payout_accounts SET provider_account_id = ?, updated_at = ? WHERE advisor_id = ? AND provider_account_id IS NULL',
+    ).bind(acct.id, nowIso(), account.advisor_id).run();
+    if (Number((attached as any)?.meta?.changes ?? 0) > 0) {
+      accountId = acct.id;
+    } else {
+      const now = await loadPayoutAccount(env, account.advisor_id);
+      accountId = now?.provider_account_id || acct.id;
+    }
   }
   const link = await stripeCall<{ url: string }>(env, '/account_links', {
     account: accountId,

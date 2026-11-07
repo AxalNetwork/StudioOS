@@ -40,13 +40,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import DeployVersion from '../../components/DeployVersion';
-import { filterByKind } from '../../lib/licenceKind';
 import { utcDay } from '../../lib/utcStamp';
 import {
   Loader2, AlertCircle, AlertTriangle, Check, X, Globe, Users, FileText, Ban, RotateCw,
   Send, ShieldOff, UserPlus,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { licenceLedgerApi } from '../../lib/api/licenceLedger';
 import { bpsPercent as pct } from '../../lib/bps';
 import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
 import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
@@ -61,7 +61,7 @@ import { useReasonDialog } from './LicenceReasonDialog';
 import LicenceHistory from './LicenceHistory';
 import { LICENCE_REASONS } from './licenceReasonModel';
 import {
-  DEFAULT_TAB, kindFromParam, reconcileSelection, stepOfTab, tabFromParam, tabKeyMove, tabOfStep, tabsFor,
+  DEFAULT_TAB, kindFromParam, ledgerSelection, stepOfTab, tabFromParam, tabKeyMove, tabOfStep, tabsFor,
 } from './licenceNavModel';
 
 const UNAVAILABLE = Symbol('unavailable');
@@ -1912,12 +1912,17 @@ const COVERAGE_SORTS = [
   { key: 'az', label: 'A–Z' },
 ];
 
-function Coverage({ items, onOpen }) {
+/**
+ * #4700 — `items` is the summary's coverage (every licence that holds a
+ * country) and `renewals` its soonest renewals with their total, both over the
+ * whole ledger rather than the page on screen.
+ */
+function Coverage({ items, renewals, onOpen }) {
   const { cells, held_active: active, held_suspended: suspended, free, outside_eu: outside } =
     useMemo(() => coverageCells(items), [items]);
   const [sort, setSort] = useState('state');
   const ordered = useMemo(() => sortCells(cells, sort), [cells, sort]);
-  const pipeline = useMemo(() => renewalPipeline(items), [items]);
+  const pipeline = useMemo(() => renewalPipeline(renewals?.items || []), [renewals]);
 
   const tone = {
     held_active: 'border-green-300 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200',
@@ -2032,6 +2037,11 @@ function Coverage({ items, onOpen }) {
             ))}
           </ul>
         )}
+        {renewals && renewals.complete === false && (
+          <p className="mt-2 text-[11px] text-gray-500" data-testid="hq-renewal-pipeline-partial">
+            The {pipeline.length} soonest of {renewals.total} renewals.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -2043,8 +2053,17 @@ const KIND_FILTERS = [
   ['white_label', 'White-label'],
 ];
 
+/** How long the search box waits after a keystroke before it asks the server. */
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function AdminLicences() {
+  // #4700 — ONE PAGE OF THE LEDGER, read from the server with its search and
+  // kind filter; `data.total` is every match. The coverage grid and renewal
+  // pipeline read `summary`, which is over every licence, so they are right
+  // whichever page is open.
   const [data, setData] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [held, setHeld] = useState([]);
   const [heldUnreadable, setHeldUnreadable] = useState(false);
   // D4707 — the licence, its tab and the kind filter live in the URL, so a
@@ -2064,39 +2083,94 @@ export default function AdminLicences() {
     }, { replace });
   }, [setParams]);
   const setKindFilter = (k) => setParam({ kind: k });
+  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
+  // D4707 — the filters the loaded page was read for. Until the page for the
+  // current filters has arrived, the rows on screen are the old filter's, and
+  // reconciling against them would move the selection for the wrong reason.
+  const [dataFor, setDataFor] = useState(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
   const [err, setErr] = useState('');
+  // #4700: `data.items` is the server's page for the current search and kind,
+  // so it is exactly the rows the list draws.
   const allItems = Array.isArray(data?.items) ? data.items : [];
   const visible = filterByKind(allItems, kindFilter);
-  // Never the hidden row: a selection the filter hides moves to the first row
-  // still shown, and the editor shows only that.
-  const sel = data && data !== UNAVAILABLE ? reconcileSelection(wanted, visible) : null;
+  const filters = useMemo(() => ({ q: search, kind: kindFilter === 'all' ? '' : kindFilter, limit: 50 }), [search, kindFilter]);
+  // Never the hidden row (D4707, over #4700's paged ledger): see
+  // `ledgerSelection`. `ready` means the loaded page is the one for the
+  // current search and kind, so the rows on screen are the filter's own.
+  const ready = Boolean(data) && data !== UNAVAILABLE && dataFor === filters && query.trim() === search;
+  const { sel, finding, settle } = ledgerSelection({ wanted, visible, ready, hasMore: Boolean(data?.next_cursor) });
   useEffect(() => {
-    if (!data || data === UNAVAILABLE) return;
-    if (sel !== wanted) setParam({ licence: sel }, { replace: true });
-  }, [data, sel, wanted, setParam]);
+    if (settle && sel !== wanted) setParam({ licence: sel }, { replace: true });
+  }, [settle, sel, wanted, setParam]);
   // Opening a licence the filter hides (a coverage cell, a link from another
   // licence) widens the filter rather than opening a row nobody can see.
   const setSel = (uid) => {
     const shown = visible.some((l) => l.uid === uid);
-    setParam(shown ? { licence: uid } : { licence: uid, kind: 'all' });
+    if (shown) { setParam({ licence: uid }); return; }
+    // Hidden by the search or the kind: clear both, then the paging above
+    // finds it if it is past the first page.
+    setQuery('');
+    setParam({ licence: uid, kind: 'all' });
   };
   // D775 (#2101): the licence open in the detail pane is the rail's record.
   const open = allItems.find((l) => l.uid === sel) || null;
   const tab = tabFromParam(params.get('tab'), open?.kind).key;
   useRecordCrumb(open ? (open.brand_name || open.licence_ref) : null, 'licence', open?.uid);
 
+  // The search waits for the typing to stop, so one search is one request.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(query.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Each read carries its own sequence number: a slow answer to an older
+  // search never replaces a newer one.
+  const seq = React.useRef(0);
+  const loadPage = useCallback(() => {
+    const mine = ++seq.current;
+    return licenceLedgerApi.page(filters)
+      .then((d) => {
+        if (mine !== seq.current) return;
+        setData(d);
+        setDataFor(filters);
+      })
+      .catch((e) => { if (mine === seq.current) { reportError('licences_failed', e); setData(UNAVAILABLE); } });
+  }, [filters]);
   const load = useCallback(() => {
-    const ledger = api.licences()
-      .then((d) => { setData(d); })
-      .catch((e) => { reportError('licences_failed', e); setData(UNAVAILABLE); });
+    const ledger = loadPage();
+    licenceLedgerApi.summary()
+      .then(setSummary)
+      .catch((e) => { reportError('licence_summary_failed', e); setSummary(UNAVAILABLE); });
     api.licenceTerritories()
       .then((d) => { setHeld(d?.items || []); setHeldUnreadable(false); })
       .catch((e) => { reportError('licence_territories_load_failed', e); setHeldUnreadable(true); });
     return ledger;
-  }, []);
-  useEffect(() => { load(); }, [load]);
+  }, [loadPage]);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // A new search or kind re-reads the first page; the summary does not change with it.
+  const first = React.useRef(true);
+  useEffect(() => { if (first.current) { first.current = false; return; } loadPage(); }, [loadPage]);
+  const loadMore = useCallback(() => {
+    if (!data?.next_cursor) return;
+    const mine = seq.current;
+    setLoadingMore(true);
+    licenceLedgerApi.page({ ...filters, cursor: data.next_cursor })
+      .then((d) => {
+        if (mine !== seq.current) return;
+        setData((cur) => ({ ...d, items: [...(cur?.items || []), ...(d?.items || []).filter((l) => !(cur?.items || []).some((c) => c.uid === l.uid))] }));
+      })
+      .catch((e) => reportError('licences_more_failed', e))
+      .finally(() => setLoadingMore(false));
+  }, [data, filters]);
+  // D4707 — a licence the URL names that is not on the loaded page yet is
+  // looked for by reading the next page, so a link past the first page still
+  // reopens it. The selection waits meanwhile (see `sel`).
+  useEffect(() => {
+    if (finding && !loadingMore) loadMore();
+  }, [finding, loadingMore, loadMore]);
 
   async function create(e) {
     e.preventDefault();
@@ -2139,8 +2213,9 @@ export default function AdminLicences() {
       </RailFrame>
     );
   }
-  const items = allItems;
-  const filteredItems = visible;
+  const filteredItems = data.items || [];
+  const total = Number.isFinite(data.total) ? data.total : null;
+  const filtered = Boolean(search) || kindFilter !== 'all';
 
   return (
     <RailFrame rail={rail} data-testid="hq-licences-page">
@@ -2178,9 +2253,29 @@ export default function AdminLicences() {
         ))}
       </div>
 
+      <div className="mt-3">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by reference, brand, entity or country code"
+          aria-label="Search licences"
+          data-testid="licence-search"
+          className="w-full max-w-md rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+      </div>
+
       {/* `setSel` is the same selector the licence rows below use, so a click on
           a held country and a click on its row land in exactly one place. */}
-      <Coverage items={items} onOpen={setSel} />
+      {summary === UNAVAILABLE ? (
+        <div className="mt-5">
+          <Unreadable what="The coverage grid and renewal pipeline" claim="This is not a claim that no territory is held." onRetry={load} />
+        </div>
+      ) : summary ? (
+        <Coverage items={summary.coverage} renewals={summary.renewals} onOpen={setSel} />
+      ) : (
+        <p className="mt-5 text-sm text-gray-500">Loading the coverage…</p>
+      )}
 
       {heldUnreadable && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
@@ -2253,7 +2348,7 @@ export default function AdminLicences() {
       )}
 
       {filteredItems.length === 0 ? (
-        items.length === 0 ? (
+        !filtered && total === 0 ? (
         <div className="mt-6 rounded-lg border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
           <FileText size={22} className="mx-auto text-gray-400" />
           <p className="mt-3 text-sm font-medium text-gray-900 dark:text-gray-100">No licences have been issued.</p>
@@ -2265,7 +2360,7 @@ export default function AdminLicences() {
         ) : (
         <div className="mt-6 rounded-lg border border-dashed border-gray-300 p-6 text-center dark:border-gray-700">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            No licences match this kind filter. Switch to All to see every row in the ledger.
+            No licences match this search or kind. Clear the search and switch to All to see every row in the ledger.
           </p>
         </div>
         )
@@ -2313,6 +2408,17 @@ export default function AdminLicences() {
                 </div>
               </button>
             ))}
+            <div className="pt-1 text-[11px] text-gray-500" data-testid="licence-list-count">
+              {total !== null ? `Showing ${filteredItems.length} of ${total}` : `Showing ${filteredItems.length}`}
+            </div>
+            {data.next_cursor && (
+              <button
+                type="button" onClick={loadMore} disabled={loadingMore} data-testid="licence-list-more"
+                className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+              >
+                {loadingMore ? 'Loading…' : 'Show more'}
+              </button>
+            )}
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
             {sel ? (
@@ -2321,7 +2427,7 @@ export default function AdminLicences() {
                 tab={tab} onTab={(t) => setParam({ tab: t === DEFAULT_TAB ? null : t })}
               />
             ) : (
-              <p className="text-sm text-gray-500">Pick a licence.</p>
+              <p className="text-sm text-gray-500">{finding ? 'Finding that licence in the ledger…' : 'Pick a licence.'}</p>
             )}
           </div>
         </div>

@@ -13,7 +13,7 @@ async function fixture(t: any) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   t.after(() => db.close());
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  for (const name of ['277_user_recovery_state.sql', '302_push_subscriptions.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  for (const name of ['277_user_recovery_state.sql', '302_push_subscriptions.sql', '346_article_publish_at.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   db.exec("INSERT INTO users(id,email,name,role,is_active) VALUES(1,'writer@example.test','Writer','advisor',1),(2,'other@example.test','Other','advisor',1)");
   db.prepare('INSERT INTO cohort_cycles(id,year,month,start_at,end_at) VALUES(9,2099,1,?,?)')
     .run(new Date(Date.now() + 86400000).toISOString(), new Date(Date.now() + 10 * 86400000).toISOString());
