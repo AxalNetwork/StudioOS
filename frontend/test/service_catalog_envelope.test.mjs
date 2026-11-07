@@ -45,7 +45,8 @@ test('GET /services/offerings answers an `items` envelope — read from the work
   const at = SERVICES_ROUTE.indexOf("services.get('/offerings',");
   assert.ok(at > 0, 'the offerings list handler is gone — has it been renamed?');
   const body = SERVICES_ROUTE.slice(at, SERVICES_ROUTE.indexOf("services.get('/offerings/:id'", at));
-  assert.match(body, /return c\.json\(\{ items \}\)/,
+  // `items` first; the request counts ride beside it (#4696).
+  assert.match(body, /return c\.json\(\{\s*items,/,
     'if this route ever changes its envelope, this test says so rather than pinning the old one');
 });
 
