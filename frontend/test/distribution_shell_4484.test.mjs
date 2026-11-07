@@ -97,7 +97,7 @@ test('shared parts preserve unknowns and proposals decide only on a press',async
 });
 
 
-test('the mounted Overview keeps its tool doors without the moved channel table; unlanded tabs make no module read',async()=>{
+test('the mounted Overview keeps its tool doors without the moved channel table; a tab with no data of its own makes no module read',async()=>{
  const original=globalThis.fetch;const paths=[];
  globalThis.fetch=async(url)=>{
   const path=String(url);paths.push(path);
@@ -108,9 +108,10 @@ test('the mounted Overview keeps its tool doors without the moved channel table;
   const m=await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role:'founder'},h(CycleRoute,{cycle:'grow',slug:'distribution'}))),'/grow/distribution?project_id=7',{id:1,role:'founder'});
   try{await m.flush();assert.doesNotMatch(m.text(),/Synthetic existing channel/);assert.equal(m.nodes().some(n=>m.props(n)?.['data-testid']==='cycle-records'),false);assert.match(m.text(),/Open landing-page builder/);assert.match(m.text(),/Open launch calendar/);assert.equal(m.nodes().filter(n=>m.props(n)?.['data-testid']==='distribution-ask').length,1);}finally{await m.unmount();}
   paths.length=0;
-  // #4741: Ads (#4510) was mounted — see distribution_ads_integration_4741.test.mjs — so this
-  // still-unlanded-tab guard now reads Newsletter, not Ads, to keep testing a tab with no screen.
+  // Every Distribution tab has a screen now (#4741 mounted Ads; D4495 built Newsletter). Newsletter
+  // is the one that reads nothing of its own: it draws its not-connected screen, never the Overview's
+  // module read or the campaign list.
   const other=await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role:'founder'},h(CycleRoute,{cycle:'grow',slug:'distribution',tab:'newsletter'}))),'/grow/distribution/newsletter?project_id=7',{id:1,role:'founder'});
-  try{await other.flush();assert.match(other.text(),/Coming in this module soon/);assert.equal(paths.some(p=>/\/cycles\/grow\/modules\/distribution(?:\?|$)/.test(p)||p.includes('/cycles/grow/campaigns')),false);}finally{await other.unmount();}
+  try{await other.flush();assert.match(other.text(),/Connect Beehiiv to send your newsletter\./);assert.doesNotMatch(other.text(),/Coming in this module soon/);assert.equal(paths.some(p=>/\/cycles\/grow\/modules\/distribution(?:\?|$)/.test(p)||p.includes('/cycles/grow/campaigns')),false);}finally{await other.unmount();}
  }finally{globalThis.fetch=original;__resetEadwynPanelForTest();}
 });

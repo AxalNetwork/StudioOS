@@ -115,11 +115,13 @@ test('every tab in DISTRIBUTION_TABS is either mounted or on the explicit not-bu
   const mounted = new Set(arrayMatch[1].split(',').map((s) => s.trim().replace(/'/g, '')));
   assert.match(src, /distributionTab === 'overview' \|\| projectStatus !== 'ready' \? body/);
   assert.match(src, /distributionTab === 'campaigns' \? <CampaignsTab/);
-  mounted.add('overview'); mounted.add('campaigns');
-  // D4484/D4489/D4490/D4492/D4494/D4486: these tabs have a built screen. Newsletter and Results
-  // (also listed in distributionModel.js) do not, and legitimately still show "Coming in this
-  // module soon" (distribution/README.md) until a task builds them.
-  const NOT_BUILT_YET = new Set(['newsletter', 'results']);
+  // D4491 (#4778) and D4495 (#4777) mounted Results and Newsletter in their own branches of the switch.
+  assert.match(src, /distributionTab === 'results' \? <ResultsTab/);
+  assert.match(src, /distributionTab === 'newsletter' \? <NewsletterTab/);
+  mounted.add('overview'); mounted.add('campaigns'); mounted.add('results'); mounted.add('newsletter');
+  // Every tab in distributionModel.js has a built screen now. A tab added there without one goes
+  // here, and keeps showing "Coming in this module soon" until a task builds it.
+  const NOT_BUILT_YET = new Set();
   for (const { key } of DISTRIBUTION_TABS) {
     if (NOT_BUILT_YET.has(key)) assert.ok(!mounted.has(key), `${key} has no screen yet; it must keep showing Coming in this module soon, not be added to the mounted set without a screen`);
     else assert.ok(mounted.has(key), `${key} has a built screen but falls through to <ComingSoon /> — mount it in CycleRoute.jsx's distribution switch`);
@@ -133,12 +135,8 @@ test('every tab in DISTRIBUTION_TABS is either mounted or on the explicit not-bu
 // ---- optional item-3 coverage: every built-screen Distribution route has a route-map row ----
 test('every mounted Distribution screen route (routes/growDistribution.jsx) appears in the route map', () => {
   const map = readRouteMap();
-  for (const path of ['/grow/distribution/channels', '/grow/distribution/campaigns', '/grow/distribution/campaigns/new', '/grow/distribution/campaigns/:uid', '/grow/distribution/calendar', '/grow/distribution/ads', '/grow/distribution/prospects', '/grow/distribution/inbox']) {
+  for (const path of ['/grow/distribution/channels', '/grow/distribution/campaigns', '/grow/distribution/campaigns/new', '/grow/distribution/campaigns/:uid', '/grow/distribution/calendar', '/grow/distribution/ads', '/grow/distribution/newsletter', '/grow/distribution/prospects', '/grow/distribution/inbox', '/grow/distribution/results']) {
     assert.ok(map.includes(path), `${path} has no route-map row`);
   }
-  // Newsletter and Results are routed (routes/growDistribution.jsx) but have no screen yet
-  // (distribution/README.md) — they are deliberately absent, not a gap this guard should close.
-  assert.ok(!map.includes('/grow/distribution/newsletter'));
-  assert.ok(!map.includes('/grow/distribution/results'));
   assert.ok(map.includes('/api/grow/distribution/ask'), 'the Distribution Ask has no route-map row');
 });
