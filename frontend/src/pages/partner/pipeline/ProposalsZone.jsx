@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
@@ -6,6 +6,7 @@ import {
   Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyDollars, formatDay,
 } from '../kit';
+import { usePipelineZone } from './usePipelineZone';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -52,6 +53,7 @@ const LOSS_LABEL = {
   timing: 'Timing',
   other: 'Other',
 };
+const EMPTY_DRAFT = Object.freeze({ change_summary: '', note: '', price: '' });
 const STATE_TONE = { Won: 'ok', Lost: 'danger', Sent: 'neutral', Withdrawn: 'neutral' };
 
 /**
@@ -79,37 +81,26 @@ function ProposalTile({ label, value, note, nr = false }) {
 }
 
 export default function PartnerProposalsZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null });
+  const { state, load, run, busy, note } = usePipelineZone(
+    () => api.listPartnerProposals(), 'The proposals did not load.',
+  );
   const [view, setView] = useState('all');
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);
-  const [openTrail, setOpenTrail] = useState(null);
-  const [draft, setDraft] = useState({ change_summary: '', note: '', price: '' });
+  // TWO SELECTIONS, NOT ONE (#4685). `historyId` is the proposal whose version
+  // trail is on screen; `editId` is the proposal the version form will write to.
+  // They were one `openTrail`, so pressing History on another row silently
+  // retargeted a half-typed version, and the form submitted it to a proposal the
+  // person had only looked at. Drafts are keyed by quote id for the same reason:
+  // switching proposals and switching back finds each one as it was left.
+  const [historyId, setHistoryId] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const draft = (editId != null && drafts[editId]) || EMPTY_DRAFT;
+  const setDraftField = (field, value) => {
+    if (editId == null) return;
+    setDrafts((all) => ({ ...all, [editId]: { ...(all[editId] || EMPTY_DRAFT), [field]: value } }));
+  };
 
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      const r = await api.listPartnerProposals();
-      setState({ loading: false, error: '', data: r || {} });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'The proposals did not load.', data: null });
-    }
-  }, []);
-  useEffect(() => { load(); }, [load]);
 
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
-    }
-  }, [load]);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -128,7 +119,8 @@ export default function PartnerProposalsZone() {
     return items;
   })();
 
-  const trail = openTrail ? items.find((r) => r.quote_id === openTrail) : null;
+  const trail = historyId != null ? items.find((r) => r.quote_id === historyId) : null;
+  const priceBad = draft.price.trim() !== '' && !(Number.isFinite(Number(draft.price)) && Number(draft.price) >= 0);
 
   const rowActions = partnerZoneActions('pipeline/proposals', { view: { header: ['Client', 'Shape', 'Value', 'Version', 'State', 'Loss reason', 'Days since sent'], rows: visible, cells: (r) => [r.client, r.shape, r.price_dollars, r.version, r.state, r.loss_reason, r.days_since_sent] } });
 
@@ -241,9 +233,9 @@ export default function PartnerProposalsZone() {
                   node: r.versions.length > 0 ? (
                     <button
                       type="button" className={ghostButtonClass}
-                      onClick={() => setOpenTrail(openTrail === r.quote_id ? null : r.quote_id)}
+                      onClick={() => setHistoryId(historyId === r.quote_id ? null : r.quote_id)}
                     >
-                      {openTrail === r.quote_id ? 'Hide history' : 'History'}
+                      {historyId === r.quote_id ? 'Hide history' : 'History'}
                     </button>
                   ) : undefined,
                 },
@@ -353,8 +345,8 @@ export default function PartnerProposalsZone() {
           <Section title="Record a version, or why one was lost">
             <div className="grid gap-3 md:grid-cols-4">
               <Field label="Proposal">
-                <select className={inputClass} value={openTrail || ''}
-                  onChange={(e) => setOpenTrail(e.target.value ? Number(e.target.value) : null)}>
+                <select className={inputClass} value={editId ?? ''}
+                  onChange={(e) => setEditId(e.target.value ? Number(e.target.value) : null)}>
                   <option value="">Choose one</option>
                   {items.map((r) => (
                     <option key={r.quote_id} value={r.quote_id}>
@@ -365,39 +357,48 @@ export default function PartnerProposalsZone() {
               </Field>
               <Field label="What changed" hint="In your words — “Split into 3 phases, same total”.">
                 <input className={inputClass} value={draft.change_summary} maxLength={400}
-                  onChange={(e) => setDraft({ ...draft, change_summary: e.target.value })} />
+                  disabled={editId == null}
+                  onChange={(e) => setDraftField('change_summary', e.target.value)} />
               </Field>
               <Field label="Why" hint="Usually about the client: what they asked for.">
                 <input className={inputClass} value={draft.note} maxLength={600}
-                  onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
+                  disabled={editId == null}
+                  onChange={(e) => setDraftField('note', e.target.value)} />
               </Field>
-              <Field label="New price" hint="Leave empty where the shape changed and the money did not.">
+              <Field label="New price" hint={priceBad ? 'Type a figure in dollars, such as 41000.' : 'Leave empty where the shape changed and the money did not.'}>
                 <input className={inputClass} value={draft.price} inputMode="decimal" placeholder="e.g. 41000"
-                  onChange={(e) => setDraft({ ...draft, price: e.target.value })} />
+                  disabled={editId == null}
+                  onChange={(e) => setDraftField('price', e.target.value)} />
               </Field>
             </div>
             <button
               type="button" className={`${buttonClass} mt-3`}
-              disabled={busy || !openTrail || !draft.change_summary.trim()}
+              disabled={busy || editId == null || !draft.change_summary.trim() || priceBad}
               onClick={async () => {
-                await run(
-                  () => api.addPartnerProposalVersion(openTrail, {
-                    change_summary: draft.change_summary,
-                    note: draft.note,
+                // The target and the text are read NOW. Nothing below reads
+                // `editId` or `draft` again, so choosing another proposal while
+                // this is in flight cannot retarget it or clear that one's draft.
+                const id = editId;
+                const sent = draft;
+                const saved = await run(
+                  () => api.addPartnerProposalVersion(id, {
+                    change_summary: sent.change_summary,
+                    note: sent.note,
                     // DOLLARS IN THE BOX, CENTS ON THE WIRE. Every new money
                     // column in this bucket is integer cents; the field asks
                     // for the figure a person says out loud.
-                    price_cents: draft.price.trim() === ''
-                      ? null : Math.round(Number(draft.price) * 100),
+                    price_cents: sent.price.trim() === ''
+                      ? null : Math.round(Number(sent.price) * 100),
                   }),
-                  'Version recorded.', 'version',
+                  'Version recorded.', `version:${id}`,
                 );
-                setDraft({ change_summary: '', note: '', price: '' });
+                // Cleared only after the server took it, and only that proposal's.
+                if (saved) setDrafts((all) => { const n = { ...all }; delete n[id]; return n; });
               }}
             >
               Add the version
             </button>
-            <SaveNote note={note?.scope === 'version' ? note : null} />
+            <SaveNote note={editId != null && note?.scope === `version:${editId}` ? note : null} />
 
             {items.some((r) => r.state === 'Lost') && (
               <div className="mt-5 border-t border-axal-hairline pt-4 dark:border-gray-700">

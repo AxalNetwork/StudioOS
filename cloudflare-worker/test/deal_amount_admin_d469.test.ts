@@ -63,7 +63,12 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
+    // D4632: a batch runs, as one transaction, as D1's does (the routes' moves are batches now).
+    async batch(x: any[]) {
+      db.exec('SAVEPOINT b');
+      try { const out: any[] = []; for (const s of x) out.push(await s.run()); db.exec('RELEASE b'); return out; }
+      catch (e) { db.exec('ROLLBACK TO b'); db.exec('RELEASE b'); throw e; }
+    },
   };
 }
 
@@ -98,7 +103,7 @@ function freshDb() {
     CREATE TABLE partners (id INTEGER PRIMARY KEY, name TEXT);
     CREATE TABLE deal_stage_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, deal_id INTEGER NOT NULL,
-      from_stage TEXT, from_stage_changed_at TEXT, to_stage TEXT, kind TEXT,
+      from_stage TEXT, to_stage TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'set', days_in_from INTEGER,
       actor_user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     -- logAdminAction's table (services/adminAudit.ts).
@@ -218,7 +223,7 @@ test('any admin edit to someone else\'s deal is audited, not only the amount', a
   assert.deepEqual(a[0].details, { deal_id: DEAL, lead_partner_id: PARTNER, fields: ['notes'], complete: true });
 });
 
-test('a write that fails part way still audits what an admin already committed', async () => {
+test('a write that fails part way writes nothing, and the audit says so (D4632: one statement)', async () => {
   const db = freshDb();
   // Production D1 refuses a lead_partner_id that is no user (a foreign key);
   // the test schema has no FK, so a trigger refuses it the same way.
@@ -226,12 +231,11 @@ test('a write that fails part way still audits what an admin already committed',
     WHEN NEW.lead_partner_id = 999999 BEGIN SELECT RAISE(ABORT, 'FOREIGN KEY constraint failed'); END`);
   const r = await put(admin, DEAL, { amount: 750000, lead_partner_id: 999999 }, db);
   assert.equal(r.status, 500, 'the failure still reaches the caller');
-  assert.equal(deal(db).amount, 750000, 'each UPDATE commits on its own: the amount stays written');
+  assert.equal(deal(db).amount, 500000, 'the request lands whole or not at all: the amount is not written');
   const a = audits(db);
-  assert.equal(a.length, 1, 'the committed amount is audited, not skipped by the throw');
+  assert.equal(a.length, 1, 'the failed request is still audited');
   assert.deepEqual(a[0].details, {
-    deal_id: DEAL, lead_partner_id: PARTNER, fields: ['amount', 'lead_partner_id'],
-    amount_from: 500000, amount_to: 750000, complete: false, written: ['amount'],
+    deal_id: DEAL, lead_partner_id: PARTNER, fields: ['amount', 'lead_partner_id'], complete: false, written: [],
   });
 });
 

@@ -262,6 +262,8 @@ const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
 // occurred" banner: logout and session expiry hard-navigate here, the lazy
 // import fails, and three independent reload recoveries stack on top of each other.
 import RegisterPage from './pages/RegisterPage';
+import { planIntentFrom } from './lib/planIntent';
+import { SignedInPlanNotice } from './components/auth/RegistrationPlan';
 import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 const NetworkIntroReviewPage = lazy(() => import('./pages/NetworkIntroReviewPage'));
@@ -1996,14 +1998,21 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
 // it setUser(null)s synchronously, `user` flips to null and the form renders —
 // the server-side cookie/session revoke completes in the background. A signed-
 // out visitor renders the form immediately with no teardown.
-function AuthScreen({ user, clearSession, children }) {
+function AuthScreen({ user, clearSession, children, heldFor = null }) {
   const startedRef = React.useRef(false);
+  // #4651: a signed-in visitor who follows a plan link to /register is told so and given the choice, instead of
+  // being signed out in silence with the plan they chose lost. `heldFor` reads that plan from the address.
+  const held = user && heldFor ? heldFor() : null;
+  const [signingOut, setSigningOut] = React.useState(false);
   useEffect(() => {
-    if (user && !startedRef.current) {
+    if (user && !held && !startedRef.current) {
       startedRef.current = true;
       clearSession();
     }
-  }, [user, clearSession]);
+  }, [user, held, clearSession]);
+  if (user && held && !signingOut) {
+    return <SignedInPlanNotice user={user} intent={held} onSignOut={() => { setSigningOut(true); clearSession(); }} />;
+  }
   if (user) {
     return (
       <div className="flex items-center justify-center min-h-screen text-sm text-gray-500 dark:text-gray-400">
@@ -2612,7 +2621,7 @@ function AppInner() {
       <Route path="/for-service-partners" element={<DoorPage door="partners" />} />
       <Route path="/for-advisors" element={<DoorPage door="advisors" />} />
       {/* D786 (#2211): the Investor tab of the one /pricing page. */}
-      <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
+      <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession} heldFor={() => planIntentFrom(window.location.search)}><RegisterPage /></AuthScreen>} />
       <Route path="/login" element={<AuthScreen user={user} clearSession={clearSession}><LoginPage /></AuthScreen>} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/network-intro/:token" element={<NetworkIntroReviewPage />} />

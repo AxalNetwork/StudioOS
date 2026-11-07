@@ -2,7 +2,7 @@
  * D1344 — Connect your mailbox (EM1), the consent sheet before Google or
  * Microsoft (EM1b, without "Save drafts to your Gmail drafts": D1347 §3), the
  * IMAP and SMTP form, and the outcome the OAuth callback returns to
- * (`?mail=connected|declined|expired|failed`, EM1c and EM1d).
+ * (`?mail=connected|declined|expired|superseded|failed`, EM1c and EM1d).
  *
  * A card is drawn only for a provider `GET /api/mail/accounts` offers. The MCP
  * card sends the member to their custom connectors: a send tool is chosen
@@ -19,6 +19,8 @@ const OUTCOME = {
   connected: { ok: true, title: 'Your mailbox is connected', line: 'Email now sends from your own address, only when you press Send.' },
   declined: { ok: false, title: 'The connection was refused', line: 'You declined access on the provider’s screen, so nothing was connected. Axal VC can’t send from that mailbox until you allow it.' },
   expired: { ok: false, title: 'The sign-in took too long', line: 'The sign-in link expired before you finished. Nothing was connected. Try again.' },
+  // #4654: a connection started before a newer one, or before the member disconnected the mailbox, is not applied.
+  superseded: { ok: false, title: 'This connection was not used', line: 'A newer connection for this mailbox, or a disconnect, came after you started this one, so nothing changed. Connect it again if you still want it.' },
   failed: { ok: false, title: 'The mailbox could not be connected', line: 'Nothing was connected. Try again, or choose another mailbox.' },
 };
 

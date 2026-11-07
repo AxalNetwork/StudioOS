@@ -29,10 +29,9 @@ import type { RouteMount } from '../util/routeRegistry';
 import { isSuperAdmin, requireHqAdmin, requireSuperAdminWriteBar } from '../auth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
-import { notify } from '../services/notify';
 import { decideFlag, listFlags } from '../services/referrals/handleAttribution';
 import {
-  APPLICATION_FILTERS, REASON_MAX, REASON_MIN, INFLUENCER_ACTIONS, InfluencerRefusal, TIER_LABEL, changeInfluencer, decideApplication, isTier,
+  APPLICATION_FILTERS, REASON_MAX, REASON_MIN, INFLUENCER_ACTIONS, InfluencerRefusal, changeInfluencer, decideApplication, isTier,
   MEMBER_FILTERS, listApplications, listInfluencers, readChange, readDecision, tierDefaults, writeTierDefault,
 } from '../services/influencers';
 
@@ -43,12 +42,6 @@ function answer(c: Ctx, e: unknown) {
   if (e instanceof InfluencerRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence, extra: e.extra });
   console.error('[admin_influencers] read or write failed', (e as Error)?.message);
   return refuse(c, 503, { code: 'influencers_unreadable', message: 'The Influencer program could not be read or saved. Read it again before retrying.' });
-}
-
-/** Tell the member, after the write. A notice that fails is logged, never thrown. */
-async function tell(env: Env, userId: number, type: string, title: string, body: string, link: string) {
-  try { await notify(env, { userId, type, title, body, link, channels: ['in_app', 'email'] }); }
-  catch (e) { console.error('[admin_influencers] notice failed', (e as Error)?.message); }
 }
 
 r.get('/', async (c) => {
@@ -87,16 +80,7 @@ r.post('/applications/:uid/decision', async (c) => {
       ...(decision.kind === 'decline' ? { reason: decision.reason } : {}),
       ...(decision.kind === 'more' ? { question: decision.question } : {}),
     });
-    if (decision.kind === 'admit') {
-      await tell(c.env, userId, 'influencer_admitted', 'You are an Axal influencer',
-        `HQ admitted you as ${TIER_LABEL[decision.tier]}. Your terms are being prepared for you to sign, and Investor Pro is yours while you are active.`, '/influencer');
-    } else if (decision.kind === 'decline') {
-      await tell(c.env, userId, 'influencer_declined', 'Your influencer application',
-        `HQ declined your application. Reason: ${decision.reason} You can apply again after 90 days.`, '/referrals');
-    } else {
-      await tell(c.env, userId, 'influencer_more_requested', 'HQ asked about your influencer application',
-        `HQ asked: ${decision.question} Answer by updating your application.`, '/referrals');
-    }
+    // D4805: the member's notice was written with the decision (`program_outbox`) and sent by the service; the cron resends one that did not land.
     return c.json(out);
   } catch (e) { return answer(c, e); }
 });
@@ -163,13 +147,7 @@ r.patch('/:uid', async (c) => {
         after: { tier: out.membership.tier, status: out.membership.status }, reason: change.reason,
       });
     }
-    const m = out.membership;
-    const what = out.events.includes('ended') ? 'HQ ended your influencer membership.'
-      : out.events.includes('handle_taken_down') && out.events.length === 1 ? 'HQ took your handle down. Choose a new one in your Influencer section.'
-      : out.events.includes('paused') ? 'HQ paused your influencer membership. Your link does not earn while paused.'
-        : out.events.includes('resumed') ? 'HQ resumed your influencer membership.'
-          : `HQ changed your tier to ${m.tier_label}.`;
-    await tell(c.env, userId, 'influencer_changed', 'Your influencer membership changed', `${what} Reason: ${change.reason}`, '/influencer');
+    // D4805: the member's notice was written with the change (`program_outbox`) and sent by the service.
     return c.json(out);
   } catch (e) { return answer(c, e); }
 });

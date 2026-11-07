@@ -222,10 +222,13 @@ test('D1273: a monthly-only code is refused on a yearly price, and a one-time pr
   // The route: refused before a subscription starts, and the preview says the same.
   const res = await post(d, '/api/payments/intent', ADA, { price_id: 'price_growth_y', promo_code: 'MONTHLY', nonce: 'n1' });
   assert.equal(res.status, 400, res.text);
-  assert.deepEqual(res.body, { error: 'promo_invalid', reason: 'interval_not_eligible' });
+  // D4855: the refusal also carries our sentence (message, detail) beside the stable code and reason.
+  assert.deepEqual([res.body.error, res.body.reason], ['promo_invalid', 'interval_not_eligible']);
+  assert.ok(res.body.message && res.body.message === res.body.detail);
   assert.equal(posted('/subscriptions').length, 0, 'no subscription started');
   const preview = await post(d, '/api/payments/promo/validate', ADA, { code: 'MONTHLY', price_id: 'price_growth_y' });
-  assert.deepEqual(preview.body, { valid: false, reason: 'interval_not_eligible' });
+  assert.deepEqual([preview.body.valid, preview.body.reason], [false, 'interval_not_eligible']);
+  assert.ok(preview.body.message, 'D4855: the preview says what to do, not only why');
   const ok = await post(d, '/api/payments/intent', ADA, { price_id: 'price_growth_m', promo_code: 'MONTHLY', nonce: 'n2' });
   assert.equal(ok.status, 200, ok.text);
   assert.equal(new URLSearchParams(posted('/subscriptions')[0].body).get('discounts[0][promotion_code]'), 'id-MONTHLY');
@@ -248,7 +251,8 @@ test('D1273: once per member — a second use by one member is refused, another 
   assert.equal(held?.user_id, BEA, 'the use is the member\'s once Stripe applies it');
   assert.equal((d.prepare("SELECT times_redeemed FROM promo_codes WHERE id = 'id-ONCE'").get() as any).times_redeemed, 0, 'Stripe counts a subscription redemption; the mirror does not add it');
   const second = await post(d, '/api/payments/intent', BEA, { price_id: 'price_pro_m', promo_code: 'ONCE', nonce: 'n2' });
-  assert.deepEqual(second.body, { error: 'promo_invalid', reason: 'already_used' });
+  assert.deepEqual([second.body.error, second.body.reason], ['promo_invalid', 'already_used']);
+  assert.ok(second.body.message && second.body.message === second.body.detail);
   assert.equal(posted('/subscriptions').length, 1, 'no second subscription with the code');
   assert.equal(await reserveMemberUse(e, 'id-ONCE', BEA), false, 'the reservation is one per member');
 
@@ -260,7 +264,9 @@ test('D1273: once per member — a second use by one member is refused, another 
 
   // A cart checks the member too.
   const cart = { lines: [{ product_id: 'prod_report', price_id: 'price_report', quantity: 1, unit_amount: 5000, line_total: 5000 }], subtotal: 5000, currency: 'usd' } as any;
-  assert.deepEqual(await resolveCartPromo(e, 'ONCE', cart, ADA), { error: 'already_used' });
+  const cartRefusal = await resolveCartPromo(e, 'ONCE', cart, ADA) as any;
+  assert.equal(cartRefusal.error, 'already_used');
+  assert.equal(cartRefusal.refusal.reason, 'already_used', 'D4855: the refusal travels with its sentence');
   const fresh = await resolveCartPromo(e, 'ONCE', cart, CY);
   assert.equal('error' in fresh, false, 'a member who has not used it gets the discount in a cart');
 });
