@@ -54,6 +54,13 @@ import {
   type GuidanceRow, type CalendarItem,
 } from './_advisor_cohort_helpers';
 import { advisorVisibility } from '../services/advisorVisibility';
+import {
+  isPaidType, loadBookability, REFUSALS, slotRefusal, writeGuard, type RefusalCode,
+} from '../services/advisorBookability';
+import {
+  advanceRefusal, bookingMoveAllowed, CHANGED_WHILE_LOOKING, everSigned,
+  lifecycleEventStatement, renewalRefusal, SIGNED_LANE_SET,
+} from '../services/advisorLifecycle';
 import { pageFacts, pageWindow } from '../services/listPage';
 
 /** #4689: the most rows one page of each Expertise list returns (the caps they had). */
@@ -129,6 +136,7 @@ type SlotRow = {
   starts_at: string; ends_at: string; capacity: number;
   meeting_url: string | null; notes: string | null;
   is_cancelled: number; created_at: string;
+  blocked_reason?: string | null;
 };
 type BookingRow = {
   id: number; uid: string; slot_id: number; advisor_id: number;
@@ -283,15 +291,6 @@ async function takenForSlot(env: Env, slotId: number): Promise<number> {
 // ---------------------------------------------------------------------------
 // Advisor profile CRUD
 // ---------------------------------------------------------------------------
-/** D976: true while an admin has paused this advisor in the network. */
-async function advisorPaused(env: Env, advisorId: number): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `SELECT 1 AS paused FROM advisors v JOIN network_member_states nms ON nms.user_id = v.user_id
-      WHERE v.id = ? AND nms.paused_at IS NOT NULL LIMIT 1`
-  ).bind(advisorId).first<{ paused: number }>();
-  return !!row;
-}
-
 advisors.get('/', async (c) => {
   try {
     await requireAuth(c);
@@ -649,19 +648,43 @@ advisors.get('/:uid', async (c) => {
 // ---------------------------------------------------------------------------
 advisors.get('/:uid/slots', async (c) => {
   try {
-    await requireAuth(c);
+    const user = await requireAuth(c);
     const m = await loadAdvisorByUid(c.env, c.req.param('uid'));
     if (!m) return c.json({ detail: 'Advisor not found' }, 404);
     const upcoming = (c.req.query('upcoming_only') || 'true').toLowerCase() === 'true';
-    const sql = upcoming
-      ? 'SELECT * FROM advisor_office_hour_slots WHERE advisor_id = ? AND is_cancelled = 0 AND ends_at >= ? ORDER BY starts_at ASC'
+    // D4692: the history view (upcoming_only=false) is the advisor's own, or an admin's.
+    // Anyone else gets the same bookable list as everyone, whatever they ask for.
+    const owner = isAdmin(user) || (m.user_id != null && m.user_id === user.id);
+    const bookableOnly = upcoming || !owner;
+    const sql = bookableOnly
+      ? 'SELECT * FROM advisor_office_hour_slots WHERE advisor_id = ? AND is_cancelled = 0 AND blocked_reason IS NULL AND ends_at >= ? ORDER BY starts_at ASC'
       : 'SELECT * FROM advisor_office_hour_slots WHERE advisor_id = ? ORDER BY starts_at DESC LIMIT 200';
-    const rows = upcoming
+    const rows = bookableOnly
       ? await c.env.DB.prepare(sql).bind(m.id, nowIso()).all<SlotRow>()
       : await c.env.DB.prepare(sql).bind(m.id).all<SlotRow>();
+    if (!bookableOnly) {
+      const items: any[] = [];
+      for (const s of (rows.results || []) as SlotRow[]) items.push(slotDto(s, await takenForSlot(c.env, s.id)));
+      return c.json({ items });
+    }
+    // D4692: a slot is listed only if the booking endpoint would take it right now,
+    // by the same calculation. `session_type_id` asks it for that type (a paid type meets the paid cap).
+    let paid = false;
+    if (c.req.query('session_type_id') != null) {
+      const typeId = Number(c.req.query('session_type_id'));
+      const type = Number.isSafeInteger(typeId) && typeId > 0
+        ? await c.env.DB.prepare('SELECT * FROM advisor_session_types WHERE id = ? AND advisor_id = ? AND is_active = 1')
+          .bind(typeId, m.id).first<SessionTypeRow>() : null;
+      if (!type) return c.json({ detail: 'Session type not found' }, 404);
+      paid = isPaidType(type);
+    }
+    const now = Date.now();
+    const ctx = await loadBookability(c.env, m.id, now);
     const items: any[] = [];
     for (const s of (rows.results || []) as SlotRow[]) {
-      items.push(slotDto(s, await takenForSlot(c.env, s.id)));
+      if (slotRefusal(s, ctx, { paid, now })) continue;
+      const taken = ctx.booked.filter((b) => b.slot_id === s.id).length;
+      items.push(slotDto(s, taken));
     }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
@@ -702,17 +725,27 @@ advisors.delete('/me/slots/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(id).first<SlotRow>();
     if (!slot || slot.advisor_id !== m.id) return c.json({ detail: 'Slot not found' }, 404);
-    await c.env.DB.prepare('UPDATE advisor_office_hour_slots SET is_cancelled = 1 WHERE id = ?').bind(id).run();
-    // Cancel any open bookings on this slot. D4703 (#4703): RETURNING names
-    // exactly the bookings this statement cancelled, and each gets the same
-    // calendar cleanup a one-at-a-time cancel does (`transition` below). The
-    // bulk path used to change the status and leave every external copy in
-    // the attendees' calendars.
-    const cancelled = await c.env.DB.prepare(
-      `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = COALESCE(cancel_reason, 'slot_cancelled'), updated_at = ?
-       WHERE slot_id = ? AND status IN ('pending','confirmed') RETURNING id`
-    ).bind(nowIso(), id).all<{ id: number }>();
-    const ids = (cancelled.results || []).map((r) => Number(r.id));
+    // D4692: the slot's cancellation, the decision rows and the cancel of its open bookings are
+    // ONE batch (one transaction), so a booking cannot land between "slot cancelled" and
+    // "bookings cancelled", and each cancel is attributed to the advisor who made it. The two
+    // source states are the ones the booking graph lets `cancelled` be reached from. D4703 (#4703): RETURNING names
+    // exactly the bookings the statement cancelled, and each gets the calendar cleanup a
+    // one-at-a-time cancel does (`transition` below).
+    const now = nowIso();
+    const [, , cancelled] = await c.env.DB.batch([
+      c.env.DB.prepare('UPDATE advisor_office_hour_slots SET is_cancelled = 1 WHERE id = ?').bind(id),
+      c.env.DB.prepare(
+        `INSERT INTO advisor_lifecycle_events
+           (subject_kind, subject_id, advisor_id, from_state, to_state, actor_user_id, actor_role, reason, created_at)
+         SELECT 'booking', id, advisor_id, status, 'cancelled', ?, 'advisor', 'slot_cancelled', ?
+           FROM advisor_bookings WHERE slot_id = ? AND status IN ('pending','confirmed')`
+      ).bind(user.id, now, id),
+      c.env.DB.prepare(
+        `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = COALESCE(cancel_reason, 'slot_cancelled'), updated_at = ?
+         WHERE slot_id = ? AND status IN ('pending','confirmed') RETURNING id`
+      ).bind(now, id),
+    ]) as any[];
+    const ids = ((cancelled?.results || []) as Array<{ id: number }>).map((r) => Number(r.id));
     if (ids.length) deferCalendarCancel(c, ids);
     return c.json({ ok: true, bookings_cancelled: ids.length });
   } catch (e) { return mapError(c, e); }
@@ -770,6 +803,11 @@ advisors.post('/booking-links/open', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+function refuseSlot(c: Context<{ Bindings: Env }>, why: RefusalCode) {
+  const r = REFUSALS[why];
+  return refuse(c, r.status, { code: why, message: r.message, extra: { code: why } });
+}
+
 advisors.post('/slots/:id/book', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -787,11 +825,15 @@ advisors.post('/slots/:id/book', async (c) => {
     const slotId = Number(c.req.param('id'));
     const body = await c.req.json().catch(() => ({} as any));
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();
-    if (!slot || slot.is_cancelled) return c.json({ detail: 'Slot not available' }, 404);
-    // D976: an advisor an admin paused takes no new bookings; bookings already made stay.
-    if (await advisorPaused(c.env, slot.advisor_id)) {
-      return c.json({ detail: 'This advisor is not taking new bookings', code: 'advisor_paused' }, 409);
-    }
+    if (!slot) return c.json({ detail: 'Slot not available' }, 404);
+    // D4692: ONE calculation of "can this slot be booked", shared with the slot list. It runs here
+    // for the rules that do not need the session type (standing, cancelled, blocked, past, full,
+    // notice, blackout, buffer), again below once the type is known (the paid cap), and the INSERT
+    // re-asserts the ones another request can change in between.
+    const now = Date.now();
+    const ctx = await loadBookability(c.env, slot.advisor_id, now);
+    const early = slotRefusal(slot, ctx, { paid: false, now });
+    if (early) return refuseSlot(c, early);
     const context = body.booking_link_slug === undefined ? null
       : await usableBookingLink(c, body.booking_link_slug, user);
     if (context && context.advisor.id !== slot.advisor_id) {
@@ -824,39 +866,60 @@ advisors.post('/slots/:id/book', async (c) => {
       ).bind(type.id, user.id).first<{ id: number }>();
       if (previous) return c.json({ detail: 'This session type is available once per client' }, 409);
     }
-    if (new Date(slot.starts_at).getTime() < Date.now()) {
-      return c.json({ detail: 'Slot is in the past' }, 400);
-    }
-    const taken = await takenForSlot(c.env, slotId);
-    if (taken >= slot.capacity) return c.json({ detail: 'Slot full' }, 409);
+    const paid = isPaidType(type);
+    const why = slotRefusal(slot, ctx, { paid, now });
+    if (why) return refuseSlot(c, why);
+    const guard = writeGuard(slot, ctx, { paid, now });
     const uid = newUid();
     try {
+      // D4692: every rule a second request can change between the read above and this write is
+      // asserted IN the statement: cancelled, blocked, notice, capacity, advisor standing, buffer,
+      // the weekly paid cap, and (D573) the type, link and once-per-client switches. The loser
+      // of a race inserts nothing and is refused below, so only the winner holds the hour.
       const r = await c.env.DB.prepare(
         `INSERT INTO advisor_bookings
           (uid, slot_id, advisor_id, founder_user_id, topic, notes, status, session_type_id, booking_link_id, created_at, updated_at)
-         SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?
-          WHERE (? IS NULL OR EXISTS (SELECT 1 FROM advisor_session_types
-            WHERE id = ? AND advisor_id = ? AND is_active = 1
-              AND (is_included = 1 OR is_free_intro = 1 OR price_cents IS NOT NULL)))
+         SELECT ?, s.id, s.advisor_id, ?, ?, ?, 'pending', ?, ?, ?, ?
+           FROM advisor_office_hour_slots s
+          WHERE s.id = ? AND s.is_cancelled = 0 AND s.blocked_reason IS NULL
+            AND datetime(s.starts_at) >= datetime(?)
+            AND (SELECT COUNT(*) FROM advisor_bookings x
+                  WHERE x.slot_id = s.id AND x.status IN ('pending','confirmed','completed')) < s.capacity
+            AND EXISTS (SELECT 1 FROM advisors a WHERE a.id = s.advisor_id AND a.is_active = 1)
+            AND NOT EXISTS (SELECT 1 FROM advisors v JOIN network_member_states nms ON nms.user_id = v.user_id
+                             WHERE v.id = s.advisor_id AND nms.paused_at IS NOT NULL)
+            AND (? = 0 OR NOT EXISTS (SELECT 1 FROM advisor_bookings bb
+                  JOIN advisor_office_hour_slots bs ON bs.id = bb.slot_id
+                 WHERE bb.advisor_id = s.advisor_id AND bb.status IN ('pending','confirmed','completed')
+                   AND bs.id != s.id AND datetime(bs.starts_at) < datetime(?) AND datetime(bs.ends_at) > datetime(?)))
+            AND (? = 0 OR (SELECT COUNT(*) FROM advisor_bookings pb
+                  JOIN advisor_office_hour_slots ps ON ps.id = pb.slot_id
+                  JOIN advisor_session_types pt ON pt.id = pb.session_type_id
+                 WHERE pb.advisor_id = s.advisor_id AND pb.status IN ('pending','confirmed','completed')
+                   AND COALESCE(pt.price_cents, 0) > 0 AND COALESCE(pt.is_included, 0) = 0 AND COALESCE(pt.is_free_intro, 0) = 0
+                   AND datetime(ps.starts_at) >= datetime(?) AND datetime(ps.starts_at) < datetime(?)) < ?)
+            AND (? IS NULL OR EXISTS (SELECT 1 FROM advisor_session_types
+              WHERE id = ? AND advisor_id = s.advisor_id AND is_active = 1
+                AND (is_included = 1 OR is_free_intro = 1 OR price_cents IS NOT NULL)))
             AND (? IS NULL OR EXISTS (SELECT 1 FROM advisor_booking_links WHERE id = ? AND is_active = 1))
             AND (? = 0 OR NOT EXISTS (SELECT 1 FROM advisor_bookings
               WHERE session_type_id = ? AND founder_user_id = ? AND status != 'cancelled'))`
-      ).bind(uid, slotId, slot.advisor_id, user.id,
+      ).bind(uid, user.id,
              (body.topic || '').toString().slice(0, 200),
              (body.notes || '').toString().slice(0, 2000),
              type?.id ?? null, context?.link.id ?? null, nowIso(), nowIso(),
-             type?.id ?? null, type?.id ?? null, slot.advisor_id,
+             slotId, guard.minStart,
+             guard.bufferOn, guard.bufferEnd, guard.bufferStart,
+             guard.capOn, guard.weekStart, guard.weekEnd, guard.cap,
+             type?.id ?? null, type?.id ?? null,
              context?.link.id ?? null, context?.link.id ?? null,
              type?.once_per_client ?? 0, type?.id ?? null, user.id).run();
-      if (!(r as any).meta?.changes) return c.json({ detail: 'The session type or booking link is no longer available' }, 409);
-      // Re-check capacity after insert (D1 has no SELECT-FOR-UPDATE).
-      const after = await takenForSlot(c.env, slotId);
-      if (after > slot.capacity) {
-        await c.env.DB.prepare(
-          `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = 'capacity_race', updated_at = ?
-           WHERE id = ?`
-        ).bind(nowIso(), (r as any).meta?.last_row_id).run();
-        return c.json({ detail: 'Slot full (race)' }, 409);
+      if (!(r as any).meta?.changes) {
+        // Nothing was written. Say which rule it was when the shared calculation can see it now.
+        const fresh = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();
+        const again = fresh ? slotRefusal(fresh, await loadBookability(c.env, slot.advisor_id, Date.now()), { paid, now: Date.now() }) : 'slot_cancelled';
+        if (again) return refuseSlot(c, again);
+        return c.json({ detail: 'The session type or booking link is no longer available' }, 409);
       }
       const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
         .bind((r as any).meta?.last_row_id).first<BookingRow>();
@@ -1064,32 +1127,48 @@ function deferCalendarConfirm(c: Context<{ Bindings: Env }>, id: number) {
 }
 
 async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
-  allowed: string[]; nextStatus: string; whoCan: 'advisor' | 'founder' | 'either';
+  nextStatus: string; whoCan: 'advisor' | 'founder' | 'either';
   reason?: string | null;
 }) {
   const user = await requireAuth(c);
   const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?').bind(id).first<BookingRow>();
-  if (!b) return c.json({ detail: 'Booking not found' }, 404);
-  const m = b.advisor_id;
-  const isAdvisor = !!(user as any).advisor_id && (user as any).advisor_id === m;
-  const isOwner = b.founder_user_id === user.id;
+  // D4692: a booking that is not the caller's reads exactly like one that does not exist, so a
+  // stranger cannot learn an id is in use. The party check comes before any state talk.
+  const m = b?.advisor_id;
+  const isAdvisor = !!b && !!(user as any).advisor_id && (user as any).advisor_id === m;
+  const isOwner = !!b && b.founder_user_id === user.id;
   const adm = isAdmin(user);
   let allowed = adm;
   if (opts.whoCan === 'advisor') allowed = allowed || isAdvisor;
   if (opts.whoCan === 'founder') allowed = allowed || isOwner;
   if (opts.whoCan === 'either') allowed = allowed || isAdvisor || isOwner;
+  if (!b || !(adm || isAdvisor || isOwner)) return c.json({ detail: 'Booking not found' }, 404);
   if (!allowed) return c.json({ detail: 'Forbidden' }, 403);
-  if (!opts.allowed.includes(b.status)) {
-    return c.json({ detail: `Cannot transition from ${b.status}` }, 409);
+  // D4692: the ONE graph of booking states decides, for every transition route.
+  if (!bookingMoveAllowed(b.status, opts.nextStatus)) {
+    return refuse(c, 409, {
+      code: 'booking_move_not_allowed',
+      message: `A ${b.status.replace('_', '-')} booking cannot be changed to ${opts.nextStatus.replace('_', '-')}.`,
+    });
   }
-  // D4703 (#4703): the status read above is the status this write expects.
-  // Two presses at once (a cancel and a confirm, or two cancels) used to both
-  // pass the check and both write; now the second changes nothing and says so.
-  const wrote = await c.env.DB.prepare(
-    'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ? AND status = ?'
-  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id, b.status).run();
-  if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
-    return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
+  // D4703 (#4703) and D4692: the status read above is the status this write expects, and its
+  // affected-row count is checked. Two presses at once (a cancel and a confirm, a confirm and a
+  // complete) both pass the check above; the first to reach the database wins, the second changes
+  // nothing and is told so, rather than overwriting the winner or reporting success. The decision
+  // row (actor, role, time) is written in the same batch and only if the UPDATE changed a row.
+  const at = nowIso();
+  const [wrote] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ? AND status = ?'
+    ).bind(opts.nextStatus, opts.reason ?? null, at, id, b.status),
+    lifecycleEventStatement(c.env, {
+      kind: 'booking', id, advisorId: b.advisor_id, from: b.status, to: opts.nextStatus,
+      actorUserId: user.id, actorRole: isAdvisor ? 'advisor' : isOwner ? 'founder' : 'admin',
+      reason: opts.reason ?? null, at,
+    }),
+  ]) as any[];
+  if (Number(wrote?.meta?.changes ?? 0) === 0) {
+    return refuse(c, 409, { code: 'changed_while_looking', message: CHANGED_WHILE_LOOKING });
   }
   // Task #52 — remove from external calendars on cancel/no-show.
   // Defer the dynamic import + provider DELETE work via waitUntil so
@@ -1103,18 +1182,18 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
 }
 
 advisors.post('/bookings/:id/confirm', (c) => transition(c, Number(c.req.param('id')),
-  { allowed: ['pending'], nextStatus: 'confirmed', whoCan: 'advisor' }));
+  { nextStatus: 'confirmed', whoCan: 'advisor' }));
 advisors.post('/bookings/:id/cancel', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   return transition(c, Number(c.req.param('id')),
-    { allowed: ['pending', 'confirmed'], nextStatus: 'cancelled', whoCan: 'either', reason: body.reason || null });
+    { nextStatus: 'cancelled', whoCan: 'either', reason: body.reason || null });
 });
 advisors.post('/bookings/:id/complete', (c) => transition(c, Number(c.req.param('id')),
-  { allowed: ['pending', 'confirmed'], nextStatus: 'completed', whoCan: 'advisor' }));
+  { nextStatus: 'completed', whoCan: 'advisor' }));
 advisors.post('/bookings/:id/no-show', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   return transition(c, Number(c.req.param('id')),
-    { allowed: ['pending', 'confirmed'], nextStatus: 'no_show', whoCan: 'advisor', reason: body.reason || null });
+    { nextStatus: 'no_show', whoCan: 'advisor', reason: body.reason || null });
 });
 
 // ---------------------------------------------------------------------------
@@ -3688,7 +3767,7 @@ advisors.delete('/admin/cohort-assignments/:id', async (c) => {
 export const ENGAGEMENT_LANES = ['drafting', 'proposed', 'signed', 'renewal_due', 'ended'];
 export const ENGAGEMENT_SHAPES = ['retainer', 'sprint', 'equity', 'per_call'];
 /** The two lanes that mean "under contract" — what the Active tile counts. */
-const SIGNED_LANES = new Set(['signed', 'renewal_due']);
+const SIGNED_LANES = SIGNED_LANE_SET;
 
 type EngagementRow = {
   id: number; uid: string; advisor_id: number;
@@ -3717,6 +3796,8 @@ function engagementDto(r: EngagementRow): any {
     proposed_at: r.proposed_at, started_at: r.started_at,
     term_ends_at: r.term_ends_at, ended_at: r.ended_at,
     cycles: Number(r.cycles || 0),
+    // D4692: signed at least once, whatever lane it is in now. An ending needs the renewal decision when true.
+    ever_signed: everSigned(r),
     // NULL until the row is signed. The fixture's placeholder 'Active' on an
     // unsent draft is the thing this deliberately does not reproduce.
     outcome: r.outcome ?? null,
@@ -3930,43 +4011,51 @@ advisors.post('/me/engagements/:id/advance', async (c) => {
     if (!ENGAGEMENT_LANES.includes(lane)) {
       return c.json({ detail: `lane must be one of: ${ENGAGEMENT_LANES.join(', ')}` }, 400);
     }
-    // Ended is terminal, the same rule `portfolio_support.ts` applies to a
-    // delivered promise: re-opening one would let a recorded outcome be
-    // quietly un-recorded, and the renewal rate is exactly what that would
-    // falsify.
-    if (row.lane === 'ended') {
-      return c.json({ detail: 'an engagement that has ended cannot change lane' }, 409);
-    }
-    if (lane === 'ended' && SIGNED_LANES.has(row.lane)) {
-      return c.json({
-        detail: 'a signed engagement ends through a renewal decision — POST /me/engagements/:id/renewal with decision "ended"',
-      }, 409);
-    }
+    // D4692: the lane graph (`ENGAGEMENT_ADVANCE`) and the "ever signed" rule decide, in
+    // `advanceRefusal`. Ended is terminal, the same rule `portfolio_support.ts` applies to a
+    // delivered promise: re-opening one would let a recorded outcome be quietly un-recorded.
+    // Ending a relationship that was EVER signed needs the renewal decision whatever lane it
+    // is in now (`cycles` only goes up), so `signed → proposed → ended` is refused the same
+    // way `signed → ended` is.
+    const refusal = advanceRefusal(row, lane);
+    if (refusal) return refuse(c, refusal.status, { code: refusal.code, message: refusal.message });
 
     const now = nowIso();
     const day = now.slice(0, 10);
-    const signing = SIGNED_LANES.has(lane) && !SIGNED_LANES.has(row.lane);
-    await c.env.DB.prepare(
-      `UPDATE advisor_engagements
-          SET lane = ?, proposed_at = ?, started_at = ?, ended_at = ?,
-              cycles = ?, outcome = ?, updated_at = ?
-        WHERE id = ?`
-    ).bind(
-      lane,
-      lane === 'proposed' ? (engagementDate(body.proposed_at) || day) : row.proposed_at,
-      signing ? (row.started_at || engagementDate(body.started_at) || day) : row.started_at,
-      // Only an UNSIGNED row can reach 'ended' here — the signed case was
-      // refused above — so this stamps an abandoned draft and nothing else.
-      lane === 'ended' ? (row.ended_at || day) : row.ended_at,
-      // The first term begins at signing. `max` rather than `+ 1` so a lane
-      // correction (renewal_due → signed and back) cannot inflate the count.
-      signing ? Math.max(Number(row.cycles || 0), 1) : row.cycles,
-      // Signing is what gives a row an outcome to have. Ending an unsigned one
-      // leaves it NULL, which is what keeps an abandoned draft out of the
-      // renewal rate's denominator.
-      signing ? (row.outcome || 'active') : row.outcome,
-      now, row.id,
-    ).run();
+    const signing = SIGNED_LANE_SET.has(lane) && !SIGNED_LANE_SET.has(row.lane);
+    const nextOutcome = signing ? (row.outcome || 'active') : row.outcome;
+    // D4692: conditional on the lane, term count and outcome this request read, and the row
+    // count is checked; a stale request changes nothing and says so.
+    const [wrote] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE advisor_engagements
+            SET lane = ?, proposed_at = ?, started_at = ?, ended_at = ?,
+                cycles = ?, outcome = ?, updated_at = ?
+          WHERE id = ? AND lane = ? AND cycles = ? AND outcome IS ?`
+      ).bind(
+        lane,
+        lane === 'proposed' ? (engagementDate(body.proposed_at) || day) : row.proposed_at,
+        signing ? (row.started_at || engagementDate(body.started_at) || day) : row.started_at,
+        // Only an UNSIGNED row can reach 'ended' here — a signed one was refused above — so
+        // this stamps an abandoned draft and nothing else.
+        lane === 'ended' ? (row.ended_at || day) : row.ended_at,
+        // The first term begins at signing. `max` rather than `+ 1` so a lane
+        // correction (renewal_due → signed and back) cannot inflate the count.
+        signing ? Math.max(Number(row.cycles || 0), 1) : row.cycles,
+        // Signing is what gives a row an outcome to have. Ending an unsigned one
+        // leaves it NULL, which is what keeps an abandoned draft out of the
+        // renewal rate's denominator.
+        nextOutcome,
+        now, row.id, row.lane, row.cycles, row.outcome,
+      ),
+      lifecycleEventStatement(c.env, {
+        kind: 'engagement', id: row.id, advisorId: m.id, from: row.lane, to: lane,
+        actorUserId: user.id, actorRole: 'advisor', at: now,
+      }),
+    ]) as any[];
+    if (Number(wrote?.meta?.changes ?? 0) === 0) {
+      return refuse(c, 409, { code: 'changed_while_looking', message: CHANGED_WHILE_LOOKING });
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
       .bind(row.id).first<EngagementRow>();
     return c.json(engagementDto(fresh!));
@@ -3991,35 +4080,43 @@ advisors.post('/me/engagements/:id/renewal', async (c) => {
     if (decision !== 'renewed' && decision !== 'ended') {
       return c.json({ detail: 'decision must be "renewed" or "ended"' }, 400);
     }
-    if (!SIGNED_LANES.has(row.lane)) {
-      return c.json({
-        detail: row.lane === 'ended'
-          ? 'this engagement has already ended'
-          : 'only a signed engagement has a renewal to decide',
-      }, 409);
-    }
+    // D4692: an ending is a decision about a relationship that was signed once, so it is accepted
+    // for any engagement that ever was (`everSigned`), whatever lane it is in now; a renewal
+    // needs it under contract.
+    const refusal = renewalRefusal(row, decision);
+    if (refusal) return refuse(c, refusal.status, { code: refusal.code, message: refusal.message });
 
     const now = nowIso();
     const day = now.slice(0, 10);
     const renewed = decision === 'renewed';
-    await c.env.DB.prepare(
-      `UPDATE advisor_engagements
-          SET lane = ?, cycles = ?, outcome = ?, renewal_note = ?,
-              term_ends_at = ?, ended_at = ?, updated_at = ?
-        WHERE id = ?`
-    ).bind(
-      renewed ? 'signed' : 'ended',
-      // A renewal starts a term, so it adds one. Ending does not: the term
-      // that just ran was already counted when it began.
-      renewed ? Number(row.cycles || 0) + 1 : row.cycles,
-      decision,
-      // One note column, because the artboard draws one — migration 238's
-      // header records why there is no separate end_reason beside it.
-      'note' in body ? trimOrNull(body.note, 2000) : row.renewal_note,
-      renewed ? engagementDate(body.term_ends_at) : row.term_ends_at,
-      renewed ? row.ended_at : (row.ended_at || day),
-      now, row.id,
-    ).run();
+    const [wrote] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE advisor_engagements
+            SET lane = ?, cycles = ?, outcome = ?, renewal_note = ?,
+                term_ends_at = ?, ended_at = ?, updated_at = ?
+          WHERE id = ? AND lane = ? AND cycles = ? AND outcome IS ?`
+      ).bind(
+        renewed ? 'signed' : 'ended',
+        // A renewal starts a term, so it adds one. Ending does not: the term
+        // that just ran was already counted when it began.
+        renewed ? Number(row.cycles || 0) + 1 : row.cycles,
+        decision,
+        // One note column, because the artboard draws one — migration 238's
+        // header records why there is no separate end_reason beside it.
+        'note' in body ? trimOrNull(body.note, 2000) : row.renewal_note,
+        renewed ? engagementDate(body.term_ends_at) : row.term_ends_at,
+        renewed ? row.ended_at : (row.ended_at || day),
+        now, row.id, row.lane, row.cycles, row.outcome,
+      ),
+      lifecycleEventStatement(c.env, {
+        kind: 'engagement', id: row.id, advisorId: m.id, from: row.lane,
+        to: renewed ? 'signed' : 'ended', decision, actorUserId: user.id, actorRole: 'advisor',
+        reason: 'note' in body ? trimOrNull(body.note, 500) : null, at: now,
+      }),
+    ]) as any[];
+    if (Number(wrote?.meta?.changes ?? 0) === 0) {
+      return refuse(c, 409, { code: 'changed_while_looking', message: CHANGED_WHILE_LOOKING });
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
       .bind(row.id).first<EngagementRow>();
     return c.json(engagementDto(fresh!));
@@ -4885,10 +4982,20 @@ advisors.post('/me/slots/block', async (c) => {
     let blocked = 0;
     let skippedBooked = 0;
     for (const id of ids) {
-      if ((await takenForSlot(c.env, id)) > 0) { skippedBooked++; continue; }
-      await c.env.DB.prepare(
-        'UPDATE advisor_office_hour_slots SET blocked_reason = ? WHERE id = ? AND advisor_id = ?'
+      // D4692: THE RULE IS ONE CONDITIONAL WRITE. The slot is blocked only if no live booking
+      // holds it at the moment of the write; a booking that landed after the read above makes
+      // this change nothing and counts as skipped. The booking INSERT in turn refuses a blocked
+      // slot, so whichever statement the database runs first wins and a blocked slot never
+      // carries a booking. Existing bookings in the range are never touched: cancelling one is
+      // the advisor's separate act (cancel the booking or the slot), because it tells the client.
+      const wrote = await c.env.DB.prepare(
+        `UPDATE advisor_office_hour_slots SET blocked_reason = ?
+          WHERE id = ? AND advisor_id = ? AND is_cancelled = 0
+            AND NOT EXISTS (SELECT 1 FROM advisor_bookings b
+                             WHERE b.slot_id = advisor_office_hour_slots.id
+                               AND b.status IN ('pending','confirmed','completed'))`
       ).bind(reason || 'Blocked', id, m.id).run();
+      if (Number((wrote as any)?.meta?.changes ?? 0) === 0) { skippedBooked++; continue; }
       blocked++;
     }
     return c.json({ blocked, skipped_booked: skippedBooked, examined: ids.length });

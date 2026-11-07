@@ -59,6 +59,11 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
         async first() { return db.prepare(sql).get(...b) ?? null; },
         async all() { return { results: db.prepare(sql).all(...b) }; },
         async run() {
+          // D4692: a RETURNING write reports the rows it wrote, as D1 does.
+          if (/\bRETURNING\b/i.test(sql)) {
+            const rows = db.prepare(sql).all(...b);
+            return { results: rows, meta: { last_row_id: 0, changes: rows.length } };
+          }
           const r = db.prepare(sql).run(...b);
           return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
         },
@@ -136,6 +141,7 @@ function freshDb() {
   // The new schema comes from the migration files verbatim. If one of them
   // stops parsing, these tests stop running — which is the point.
   db.exec(migration('201_advisors_table_in_ledger'));
+  db.exec(migration('202611071600_advisor_lifecycle_events'));
   db.exec(migration('202_advisor_profile_fields'));
   db.exec(migration('203_advisor_services'));
   db.exec(migration('204_advisor_proof'));

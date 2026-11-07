@@ -452,7 +452,8 @@ test('blocking a range refuses the slots it cannot take, and says how many', () 
   const h = WORKER.slice(WORKER.indexOf("advisors.post('/me/slots/block'"));
   const handler = h.slice(0, h.indexOf('\n});'));
   assert.match(handler, /skipped_booked/);
-  assert.match(handler, /taken/, 'the refusal has to be decided from the taken count');
+  // D4692: decided inside the UPDATE itself (no live booking holds the slot at the write), not from a count read earlier.
+  assert.match(handler, /NOT EXISTS \(SELECT 1 FROM advisor_bookings b/, 'the refusal has to be decided from the live bookings, in the write');
   assert.match(P, /skipped_booked/, 'and the page has to report it');
 });
 

@@ -50,19 +50,34 @@ export function boardLaneOf(lane) {
  *     a control on the page whose only outcome is an error — and if it somehow
  *     worked, it would take a lost renewal out of the rate's denominator.
  */
-export function laneMoves(lane) {
-  switch (String(lane || '')) {
-    case 'drafting': return ['proposed', 'signed', 'ended'];
-    case 'proposed': return ['drafting', 'signed', 'ended'];
-    case 'signed': return ['renewal_due'];
-    case 'renewal_due': return ['signed'];
-    default: return [];
-  }
+export function laneMoves(lane, everSigned = false) {
+  const moves = (() => {
+    switch (String(lane || '')) {
+      case 'drafting': return ['proposed', 'signed', 'ended'];
+      case 'proposed': return ['drafting', 'signed', 'ended'];
+      case 'signed': return ['renewal_due'];
+      case 'renewal_due': return ['signed'];
+      default: return [];
+    }
+  })();
+  // D4692: an engagement that was EVER signed ends only through the renewal
+  // decision, whatever lane it is in now; the Worker refuses the lane move.
+  return everSigned ? moves.filter((to) => to !== 'ended') : moves;
 }
 
-/** Whether this row has a renewal decision to record. */
-export function canDecideRenewal(lane) {
-  return SIGNED_LANES.has(String(lane || ''));
+/**
+ * Whether this row has a renewal decision to record. A signed row can renew or
+ * end; a row that was signed once and sits in an earlier lane can only be ENDED
+ * (`decisionsFor`), and that ending still needs the decision.
+ */
+export function canDecideRenewal(lane, everSigned = false) {
+  const l = String(lane || '');
+  return SIGNED_LANES.has(l) || (everSigned && l !== 'ended' && l !== '');
+}
+
+/** The decisions the Worker accepts for this row: renewing needs it under contract. */
+export function decisionsFor(lane) {
+  return SIGNED_LANES.has(String(lane || '')) ? ['renewed', 'ended'] : ['ended'];
 }
 
 export const LANE_LABEL = {

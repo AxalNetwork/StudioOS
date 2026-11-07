@@ -20,6 +20,7 @@ import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import useScrollToHash from '../../../hooks/useScrollToHash';
 import SessionTypesPanel from './SessionTypesPanel';
+import { failureNote } from './lifecycleConflict';
 import BookingLinksPanel from './BookingLinksPanel';
 
 /**
@@ -266,7 +267,8 @@ export default function SessionsZone() {
       setBlockForm({ ...CLOSED_BLOCK });
       loadSlots(view);
     } catch (e) {
-      setBlockNote({ ok: false, text: e?.message || 'Nothing was blocked.' });
+      // D4692: the Worker's words as sent; the dates stay in the form, and a stale answer offers a reload.
+      setBlockNote(failureNote(e, 'Nothing was blocked.'));
     } finally { setBlocking(false); }
   }, [blockForm, loadSlots, view]);
 
@@ -339,6 +341,12 @@ export default function SessionsZone() {
         </Card>
       )}
       <SaveNote note={blockNote} />
+      {blockNote?.stale && (
+        <button type="button" className="mt-2 text-[12px] font-semibold underline" data-testid="reload-sessions"
+          onClick={() => { setBlockNote(null); loadSlots(view); loadBookings(); }}>
+          Reload the sessions
+        </button>
+      )}
 
       {/* D377 — Spin-Out Lab founders see only approved hosts. */}
       <LabHostApplyCard kind="advisor" />
