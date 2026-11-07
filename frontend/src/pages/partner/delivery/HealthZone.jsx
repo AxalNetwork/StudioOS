@@ -429,7 +429,9 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
           <div className="mt-0.5 text-[12.5px] tabular-nums">
             {row.deliverables_sent === 0
               ? <Unrecorded>Nothing sent</Unrecorded>
-              : <>{row.deliverables_unopened} of {row.deliverables_sent}</>}
+              : (row.deliverables_unopened == null
+                ? <Unrecorded>{row.deliverables_sent} sent · opens not recorded</Unrecorded>
+                : <>{row.deliverables_unopened} of {row.deliverables_sent}</>)}
           </div>
         </div>
         <div>
@@ -669,13 +671,13 @@ export default function PartnerHealthZone() {
         {/* THE ARTBOARD'S LEGEND, two entries — drawn only where the table
             carries the marks it explains. A legend over rows that are all one
             kind explains a distinction the reader cannot see. */}
-        {(items.some((r) => r.utilisation_pct != null) || items.some((r) => r.seat_scope)) && (
+        {(items.some((r) => r.utilisation_pct != null) || items.some((r) => r.mode === 'embedded')) && (
           <Legend
             items={[
               ...(items.some((r) => r.utilisation_pct != null)
                 ? [{ chip: 'Read · Pipeline', tone: 'seam', note: 'utilisation read from the retainer record, not recomputed' }]
                 : []),
-              ...(items.some((r) => r.seat_scope)
+              ...(items.some((r) => r.mode === 'embedded')
                 ? [{ chip: 'Granted · scope', grant: true, note: 'scoped, revocable operator grant' }]
                 : []),
             ]}
@@ -696,7 +698,9 @@ export default function PartnerHealthZone() {
                 ? 'bg-red-50/40 dark:bg-red-950/10' : '',
               cells: [
                 r.founder_name ? { text: r.founder_name, sub: r.owner_name ? `owner ${r.owner_name}` : 'unassigned' } : { nr: true },
-                { mode: r.seat_scope ? 'Embedded' : 'Project' },
+                // From the engagement's whole set of seats, as the Board reads it
+                // (#4690) — a seat with no scope is still a seat.
+                { mode: r.mode === 'embedded' ? 'Embedded' : 'Project' },
                 // THREE STATES AND A FOURTH THAT IS NO STATE. Not-assessed is
                 // absent rather than "within scope": an engagement nobody has
                 // looked at has not been cleared of drift.
