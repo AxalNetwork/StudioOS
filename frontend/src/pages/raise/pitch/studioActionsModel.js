@@ -1,11 +1,9 @@
 /**
- * D898 group E (#2676) — the four actions that lived only in the old template
+ * D898 group E (#2676) — the actions that lived only in the old template
  * builder, now the studio's own. Their words and derivations are kept pure so
- * the tests read them without a browser.
+ * the tests read them without a browser. (The fourth, "Ask Eadwyn to draft from
+ * project", has been unmounted since D1604 and was removed by #4734.)
  *
- *   Ask Eadwyn to draft from project   `POST /api/decks/:id/autofill` (the Decks tab). The
- *                       fill is a proposal beside the current version, kept
- *                       card by card at New deck's step 4 (`?proposal=`).
  *   Recommended         `GET /api/decks/recommend` (New deck's Start from).
  *   Spin-Out readiness  `POST /api/projects/:id/spinout-deck?preview=1` (the
  *                       Decks tab, Spin-Out decks only). A read: no file is built.
@@ -15,7 +13,6 @@
 
 import { deckReadinessState } from '../../../lib/deckReadiness.js';
 import { NOT_RECORDED } from '../../../lib/absence.js';
-import { refusalOf } from './newDeckModel.js';
 
 export const SPINOUT_METHOD = 'axal_spinout_demoday';
 
@@ -26,33 +23,6 @@ export function isSpinoutDeck(deck) {
   let slides = deck.slides;
   if (typeof slides === 'string') { try { slides = JSON.parse(slides); } catch { slides = []; } }
   return Array.isArray(slides) && slides.some((s) => s?.method_id === SPINOUT_METHOD);
-}
-
-// ──────────────────────────────── Ask Eadwyn to draft from project (#3930)
-
-export const DRAFT_TITLE = 'Ask Eadwyn to draft from project';
-export const DRAFT_SENTENCE = 'Eadwyn drafts this deck\'s template again from your records, as a proposal beside the current version. Nothing changes until you keep cards and save.';
-export const DRAFT_NO_TEMPLATE = 'This deck has no template to draft from. Start a new deck from a template first.';
-export const DRAFT_PLAN = 'This deck\'s template is on a paid plan. Upgrade to draft from it again.';
-export const DRAFT_FAILED = 'The draft did not run. Nothing changed.';
-
-/**
- * A refused fill, as a sentence and, where there is one, the place that fixes
- * it. The template's plan (`PAYWALL_PREMIUM_METHOD`) is not the token balance:
- * any other 402 is New deck's own refusal, with its Add tokens link.
- */
-export function draftRefusal(e, newPath) {
-  const data = e?.data && typeof e.data === 'object' ? e.data : {};
-  const code = e?.code || data.code || data.error || null;
-  if (e?.status === 409 || code === 'no_method_id') return { message: DRAFT_NO_TEMPLATE, link: { href: newPath, text: 'New deck ›' }, topUp: null };
-  if (e?.status === 402 && (code === 'PAYWALL_PREMIUM_METHOD' || code === 'paywall')) return { message: DRAFT_PLAN, link: { href: '/pricing', text: 'Plans ›' }, topUp: null };
-  const r = refusalOf(e) || {};
-  return { message: e?.message ? `${DRAFT_FAILED} ${e.message}` : DRAFT_FAILED, link: r.link || null, topUp: r.topUp || null };
-}
-
-/** Where a fill's proposal is reviewed: New deck's step 4, on this venture. */
-export function proposalHref(newPath, q, proposalId) {
-  return `${newPath}${q}${q ? '&' : '?'}proposal=${encodeURIComponent(proposalId)}`;
 }
 
 // ─────────────────────────────────────────────────── Recommended
