@@ -58,7 +58,12 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
+    // D4632: a batch runs, as one transaction, as D1's does (the routes' moves are batches now).
+    async batch(x: any[]) {
+      db.exec('SAVEPOINT b');
+      try { const out: any[] = []; for (const s of x) out.push(await s.run()); db.exec('RELEASE b'); return out; }
+      catch (e) { db.exec('ROLLBACK TO b'); db.exec('RELEASE b'); throw e; }
+    },
   };
 }
 
