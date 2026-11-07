@@ -343,6 +343,69 @@ r.post('/company/create', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// ---------------------------------------------------------------------------
+// General settings: one plan, two doors (D4962, D4961)
+//
+// `PATCH /company/:uid` (the fields) and `POST /company/:uid/settings` (the
+// fields and a pending logo together, below) check and build the same update
+// with `planGeneralUpdate`, so the contract cannot differ between them.
+// ---------------------------------------------------------------------------
+
+type GeneralPlan = { values: Record<string, any>; events: any[] };
+
+/**
+ * The checked values to store and the membership events that go with them, or the refusal to return.
+ * D4962: the General fields are checked against one contract (`services/companyProfileFields.ts`) before
+ * any write: an unknown field, a link in place of an upload, an unsupported stage, a negative head count
+ * and an over-long string are refused, and URLs and regions are stored canonical.
+ */
+async function planGeneralUpdate(c: any, company: Company, user: User, input: unknown): Promise<Response | GeneralPlan> {
+  const checked = validateCompanyFields(input);
+  if (!checked.ok) return c.json({ code: checked.code, field: checked.field, detail: checked.detail }, 400);
+  const body: Record<string, any> = { ...(input as Record<string, any>), ...checked.values };
+  if (body.company_name !== undefined) {
+    const name = typeof body.company_name === 'string' ? body.company_name.trim() : '';
+    if (!name || name.length > 200) return c.json({ code: 'invalid_company_name', detail: 'Enter a company name between 1 and 200 characters.' }, 400);
+    const clash = await c.env.DB.prepare(
+      `SELECT cp.id FROM company_profiles cp JOIN user_company_links ucl ON ucl.company_id = cp.id
+       WHERE ucl.user_id = ? AND cp.id != ? AND lower(trim(cp.company_name)) = lower(trim(?)) LIMIT 1`
+    ).bind(user.id, company.id, name).first();
+    if (clash) return c.json({ code: 'company_name_clash', detail: 'You already belong to a company with that name.' }, 409);
+    body.company_name = name;
+  }
+  // #3932 (#3696 Q4): a currency on the ISO 4217 list, or null to clear it. Anything else is refused before any write.
+  if (body.default_currency !== undefined && body.default_currency !== null) {
+    const code = currencyCode(body.default_currency);
+    if (!code) return c.json({ code: 'currency_invalid', detail: CURRENCY_INVALID_MESSAGE }, 422);
+    body.default_currency = code;
+  }
+  // `logo_url` is not in this list: the logo changes only through its own routes (POST and DELETE
+  // /company/:uid/logo) or the settings save below, never as a field.
+  const values: Record<string, any> = {};
+  for (const f of GENERAL_FIELDS) if (body[f] !== undefined) values[f] = body[f];
+  // D1137: a rename is a membership event, recorded with the update.
+  const renamed = values.company_name !== undefined && values.company_name !== company.company_name;
+  // #3932: a currency change is a company event too, in the same batch.
+  const currencyChanged = values.default_currency !== undefined && values.default_currency !== (company.default_currency ?? null);
+  return {
+    values,
+    events: [
+      ...(renamed ? [membershipEvent(c.env, { kind: 'rename', companyId: company.id, actorUserId: user.id, before: { company_name: company.company_name }, after: { company_name: values.company_name } })] : []),
+      ...(currencyChanged ? [membershipEvent(c.env, { kind: 'currency_change', companyId: company.id, actorUserId: user.id, before: { default_currency: company.default_currency ?? null }, after: { default_currency: values.default_currency } })] : []),
+    ],
+  };
+}
+
+/** The one UPDATE for a plan's values (and, from the settings save, the server-built `logo_url`). */
+function generalUpdate(env: Env, company: Company, values: Record<string, any>) {
+  const sets: string[] = []; const params: any[] = [];
+  for (const f of [...GENERAL_FIELDS, 'logo_url'] as const) {
+    if (values[f] !== undefined) { sets.push(`${f} = ?`); params.push(values[f]); }
+  }
+  sets.push('updated_at = ?'); params.push(nowIso()); params.push(company.id);
+  return env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ?`).bind(...params);
+}
+
 // /company/:uid (PATCH update / GET detail-or-summary)
 r.patch('/company/:uid', async (c) => {
   try {
@@ -352,45 +415,10 @@ r.patch('/company/:uid', async (c) => {
     const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to edit this company' }, 403));
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({} as any));
-    // D4962: the General fields are checked against one contract (`services/companyProfileFields.ts`)
-    // before any write: an unknown field, a link in place of an upload, an unsupported stage, a negative
-    // head count and an over-long string are refused, and URLs and regions are stored canonical.
-    const checked = validateCompanyFields(body);
-    if (!checked.ok) return c.json({ code: checked.code, field: checked.field, detail: checked.detail }, 400);
-    Object.assign(body, checked.values);
-    if (body.company_name !== undefined) {
-      const name = typeof body.company_name === 'string' ? body.company_name.trim() : '';
-      if (!name || name.length > 200) return c.json({ code: 'invalid_company_name', detail: 'Enter a company name between 1 and 200 characters.' }, 400);
-      const clash = await c.env.DB.prepare(
-        `SELECT cp.id FROM company_profiles cp JOIN user_company_links ucl ON ucl.company_id = cp.id
-         WHERE ucl.user_id = ? AND cp.id != ? AND lower(trim(cp.company_name)) = lower(trim(?)) LIMIT 1`
-      ).bind(user.id, company.id, name).first();
-      if (clash) return c.json({ code: 'company_name_clash', detail: 'You already belong to a company with that name.' }, 409);
-      body.company_name = name;
-    }
-    // #3932 (#3696 Q4): a currency on the ISO 4217 list, or null to clear it. Anything else is refused before any write.
-    if (body.default_currency !== undefined && body.default_currency !== null) {
-      const code = currencyCode(body.default_currency);
-      if (!code) return c.json({ code: 'currency_invalid', detail: CURRENCY_INVALID_MESSAGE }, 422);
-      body.default_currency = code;
-    }
-    // `logo_url` is not in this list: the logo changes only through POST and DELETE /company/:uid/logo.
-    const sets: string[] = []; const params: any[] = [];
-    for (const f of GENERAL_FIELDS) {
-      if (body[f] !== undefined) { sets.push(`${f} = ?`); params.push(body[f]); }
-    }
-    if (sets.length) {
-      sets.push('updated_at = ?'); params.push(nowIso()); params.push(company.id);
-      const update = c.env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ?`).bind(...params);
-      // D1137: a rename is a membership event, recorded with the update.
-      const renamed = body.company_name !== undefined && body.company_name !== company.company_name;
-      // #3932: a currency change is a company event too, in the same batch.
-      const currencyChanged = body.default_currency !== undefined && body.default_currency !== (company.default_currency ?? null);
-      await c.env.DB.batch([
-        update,
-        ...(renamed ? [membershipEvent(c.env, { kind: 'rename', companyId: company.id, actorUserId: user.id, before: { company_name: company.company_name }, after: { company_name: body.company_name } })] : []),
-        ...(currencyChanged ? [membershipEvent(c.env, { kind: 'currency_change', companyId: company.id, actorUserId: user.id, before: { default_currency: company.default_currency ?? null }, after: { default_currency: body.default_currency } })] : []),
-      ]);
+    const plan = await planGeneralUpdate(c, company, user, body);
+    if (plan instanceof Response) return plan;
+    if (Object.keys(plan.values).length) {
+      await c.env.DB.batch([generalUpdate(c.env, company, plan.values), ...plan.events]);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
     return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
@@ -562,6 +590,112 @@ r.delete('/company/:uid/logo', async (c) => {
       ]);
     }
     if (previous && store) await dropStoredLogo(store, previous.key);
+    const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
+    return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// POST /company/:uid/settings — one Save, one operation (D4961)
+//
+// The General form has one "Save changes". It used to make up to two requests,
+// the logo and then the fields, so a failure in the second left the first
+// committed and the page said nothing was saved. This takes both together, as
+// multipart/form-data:
+//
+//   fields       a JSON object of General fields, exactly what PATCH takes (optional)
+//   logo         a PNG or SVG file (optional)
+//   logo_action  "remove" (optional; not with a file)
+//
+// EVERYTHING IS CHECKED BEFORE ANYTHING IS WRITTEN: the fields against the
+// contract, the file against `checkLogo`, the name against the company's other
+// names. Then the new object is put in R2 and ONE D1 batch writes the fields,
+// the logo URL and every membership event together, so either all of it
+// committed or none did. A failed batch deletes the new object; a committed
+// one deletes the previous stored logo, best effort. The answer is the company
+// as it now is, so the page, the preview, the active company and the switcher
+// all take one state.
+//
+// A retry is safe: the same fields write the same values, and a logo upload
+// replaces the stored logo (it never adds a second). The client re-reads the
+// company after any failure and does not resend what already committed.
+// ---------------------------------------------------------------------------
+r.post('/company/:uid/settings', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const company = await getCompanyOr404(c.env, c.req.param('uid'));
+    if (!company) return c.json({ detail: 'Company not found' }, 404);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to edit this company' }, 403));
+    if (denied) return denied;
+
+    const bad = (code: string, detail: string) => c.json({ code, detail, error: detail }, 400);
+    if (!(c.req.header('content-type') || '').toLowerCase().includes('multipart/form-data')) return bad('multipart_required', 'Send the fields and the logo as multipart form data.');
+    let form: FormData;
+    try { form = await c.req.formData(); } catch { return bad('multipart_required', 'Send the fields and the logo as multipart form data.'); }
+    for (const key of form.keys()) {
+      if (!['fields', 'logo', 'logo_action'].includes(key)) return c.json({ code: 'unknown_field', field: key, detail: `Not a settings part: ${key}.` }, 400);
+    }
+
+    let input: unknown = {};
+    const rawFields = form.get('fields');
+    if (rawFields != null) {
+      if (typeof rawFields !== 'string') return bad('body_invalid', 'fields must be a JSON object.');
+      try { input = JSON.parse(rawFields); } catch { return bad('body_invalid', 'fields must be a JSON object.'); }
+    }
+    const action = form.get('logo_action');
+    if (action != null && action !== 'remove') return bad('logo_action_invalid', 'logo_action is "remove" or absent.');
+    const file = form.get('logo') as unknown as { type?: string; size?: number; arrayBuffer?: () => Promise<ArrayBuffer> } | null;
+    if (file != null && (typeof file !== 'object' || typeof file.arrayBuffer !== 'function')) return bad('file_required', 'Choose a PNG or SVG file to upload.');
+    if (file && action === 'remove') return bad('logo_conflict', 'Send a logo or remove the logo, not both.');
+
+    // 1. Everything is checked first.
+    const plan = await planGeneralUpdate(c, company, user, input);
+    if (plan instanceof Response) return plan;
+    let upload: { key: string; bytes: Uint8Array; kind: 'png' | 'svg'; token: string } | null = null;
+    if (file) {
+      const tooLarge = () => refuse(c, 413, { code: 'file_too_large', message: LOGO_MESSAGES.file_too_large });
+      if (typeof file.size === 'number' && file.size > MAX_LOGO_BYTES) return tooLarge();
+      const bytes = new Uint8Array(await file.arrayBuffer!());
+      const check = checkLogo(bytes, file.type);
+      if (!check.ok) return check.code === 'file_too_large' ? tooLarge() : refuse(c, 400, { code: check.code, message: LOGO_MESSAGES[check.code] });
+      const token = newLogoToken();
+      upload = { key: logoKeyFor(company.uid, token, check.kind), bytes, kind: check.kind, token };
+    }
+    const store = logoStore(c.env);
+    const previous = storedLogoOf(company.uid, company.logo_url);
+    if ((upload || (action === 'remove' && previous)) && !store) return storageUnconfigured(c);
+
+    // 2. The object, then one batch for everything the database holds.
+    if (upload && store) {
+      try {
+        await store.put(upload.key, upload.bytes, {
+          httpMetadata: { contentType: LOGO_CONTENT_TYPE[upload.kind] },
+          customMetadata: { companyId: String(company.id), userId: String(user.id) },
+        });
+      } catch (e) {
+        return refuse(c, 502, { code: 'storage_failed', message: 'The logo could not be stored. Try again.', raw: e });
+      }
+    }
+    const values = { ...plan.values };
+    const events = [...plan.events];
+    if (upload) {
+      values.logo_url = logoUrlFor(company.uid, upload.token, upload.kind);
+      events.push(membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: 'stored' } }));
+    } else if (action === 'remove' && company.logo_url != null) {
+      values.logo_url = null;
+      events.push(membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }));
+    }
+    if (Object.keys(values).length) {
+      try {
+        await c.env.DB.batch([generalUpdate(c.env, company, values), ...events]);
+      } catch (e) {
+        if (upload && store) await dropStoredLogo(store, upload.key);
+        throw e;
+      }
+    }
+    // 3. Committed. The previous object is an orphan now; failing to delete it never makes the save fail.
+    if (store && previous && (upload || (action === 'remove')) && (!upload || previous.key !== upload.key)) await dropStoredLogo(store, previous.key);
+
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
     return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }

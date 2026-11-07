@@ -123,7 +123,10 @@ async function mount(role, { url = '/account/portfolio', handle = worker(), know
   const seen = [];
   globalThis.fetch = async (u, init = {}) => {
     let body = null;
-    try { body = init.body && typeof init.body === 'string' ? JSON.parse(init.body) : null; } catch { body = null; }
+    try {
+      if (init.body && typeof init.body === 'string') body = JSON.parse(init.body);
+      else if (init.body && typeof init.body.get === 'function' && init.body.get('fields')) body = JSON.parse(init.body.get('fields')); // D4961: the one save posts the fields as a form part
+    } catch { body = null; }
     seen.push({ call: `${(init.method || 'GET').toUpperCase()} ${new URL(String(u), 'http://x').pathname}`, body });
     return handle(String(u), init);
   };
@@ -632,7 +635,7 @@ test('#4736: General draws Default currency, Not recorded when the company has n
     assert.equal(v.count('company-general-savebar'), 0, 'an unchanged currency is not a change');
     await v.change('general-default-currency', 'GBP');
     await v.submit('company-general-form');
-    assert.deepEqual(v.writes().map((w) => [w.call, w.body]), [['PATCH /api/company/nl', { default_currency: 'GBP' }]]);
+    assert.deepEqual(v.writes().map((w) => [w.call, w.body]), [['POST /api/company/nl/settings', { default_currency: 'GBP' }]]);
   } finally { await v.close(); }
 });
 

@@ -80,6 +80,9 @@ export function formOf(row) {
 const norm = (f, v) => {
   const t = String(v ?? '').trim();
   if (f === 'employee_count') return t === '' ? null : Number(t);
+  // D4961: compared as the Worker stores them, so "northwind.example" and the stored "https://northwind.example" are the same value.
+  if (f === 'website') return t === '' ? null : (normalizeWebsite(t) ?? t);
+  if (f === 'linkedin_url') return t === '' ? null : (normalizeLinkedIn(t) ?? t);
   if (f === 'international_presence') return regionsText(regionsOf(t)) || null;
   if (f === 'default_currency') return t === '' ? null : t.toUpperCase();
   return t === '' ? null : t;
@@ -205,3 +208,71 @@ export function readOnlyReasonLine(row) {
   return readOnlyLine(row?.company_name);
 }
 export const LEAVE_PROMPT = 'Leave without saving? Your changes to General will be lost.';
+
+// ── One Save, one recoverable operation (D4961) ───────────────────────────────
+
+/**
+ * What one click on Save means: the changed fields and the pending logo, together. The Worker takes them as one
+ * request (`POST /company/:uid/settings`) and commits them as one, so a logo can no longer commit while the fields
+ * fail. This is the intent a failed or uncertain save is judged against.
+ */
+export function saveIntent(patch, logo) {
+  return {
+    fields: patch || {},
+    logo: logo?.upload || null,
+    remove: Boolean(logo?.remove),
+  };
+}
+
+export const hasIntent = (intent) => Object.keys(intent?.fields || {}).length > 0 || Boolean(intent?.logo) || Boolean(intent?.remove);
+
+const storedLogo = (uid, url) => typeof url === 'string' && url.startsWith(`/api/company/${encodeURIComponent(uid)}/logo?v=`);
+
+/**
+ * What a re-read of the company says about an intent. `before` is the company as the form last held it. Never
+ * "saved" unless every part of the intent is in the row:
+ *   - each field equals what was asked, compared as the Worker stores it;
+ *   - an upload: the row's logo is a stored one and is not the one that was there before;
+ *   - a removal: the row has no logo.
+ * `none` committed means "not saved" and a retry is safe; `some` is a partial commit, said specifically; `all` is saved.
+ */
+export function reconcile(row, intent, before, uid) {
+  const fields = Object.keys(intent?.fields || {});
+  const fieldDone = fields.filter((f) => norm(f, row?.[f]) === norm(f, intent.fields[f]));
+  let logoDone = null;
+  if (intent?.logo) logoDone = storedLogo(uid, row?.logo_url) && row.logo_url !== (before?.logo_url ?? null);
+  else if (intent?.remove) logoDone = (row?.logo_url ?? null) === null;
+  const parts = fields.length + (logoDone === null ? 0 : 1);
+  const done = fieldDone.length + (logoDone ? 1 : 0);
+  return {
+    outcome: parts === 0 || done === parts ? 'all' : done === 0 ? 'none' : 'some',
+    fieldsSaved: fieldDone,
+    fieldsLeft: fields.filter((f) => !fieldDone.includes(f)),
+    logoSaved: logoDone === true,
+    logoLeft: logoDone === false,
+  };
+}
+
+/** A failure the Worker answered with a 4xx did not write anything (it checks everything first). No answer, or a 5xx, may have. */
+export const failedBeforeWriting = (e) => Number.isInteger(e?.status) && e.status >= 400 && e.status < 500;
+
+const label = (f) => (LABELS[f] || f).toLowerCase();
+
+/**
+ * The sentence for a settled save. `kind`: 'saved' | 'saved_after_check' | 'not_saved' | 'partly' | 'unknown'.
+ * "Not saved" is said only when a re-read (or a 4xx) shows nothing committed; an unconfirmed outcome says so.
+ */
+export function saveLine(kind, { detail = '', result = null } = {}) {
+  const tail = detail ? ` ${detail}` : '';
+  switch (kind) {
+    case 'saved': return 'Saved · just now';
+    case 'saved_after_check': return 'Saved. The answer did not arrive, so we checked: your changes are in.';
+    case 'not_saved': return `Your changes were not saved. Nothing was changed; they are still here to try again.${tail}`;
+    case 'partly': {
+      const done = [...(result?.fieldsSaved || []).map(label), ...(result?.logoSaved ? ['the logo'] : [])];
+      const left = [...(result?.fieldsLeft || []).map(label), ...(result?.logoLeft ? ['the logo'] : [])];
+      return `Part of your changes saved: ${done.join(', ') || 'nothing'}. Not saved yet: ${left.join(', ')}. They are still here to try again.`;
+    }
+    default: return 'We could not confirm whether your changes saved. They are still here; Try again checks first, then saves only what is missing.';
+  }
+}
