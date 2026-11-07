@@ -36,7 +36,7 @@ import {
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import { ensureNetworkStatesSchema } from '../services/networkStatesSchema';
 import {
-  PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate, totalLines,
+  PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate,
 } from '../services/advisorMoney';
 import {
   PayoutAccountNotReady, SettlementDisabled,
@@ -140,6 +140,9 @@ type BookingRow = {
   amount_cents: number | null; billing_state: string;
   created_at: string; updated_at: string;
   session_type_id?: number | null; booking_link_id?: number | null;
+  // #4702: the advisor's answer, kept apart from what happened to the session.
+  advisor_decision?: 'accepted' | 'declined' | null; advisor_decided_at?: string | null;
+  cancelled_by?: 'advisor' | 'client' | 'admin' | 'system' | null;
 };
 
 /**
@@ -709,7 +712,7 @@ advisors.delete('/me/slots/:id', async (c) => {
     // bulk path used to change the status and leave every external copy in
     // the attendees' calendars.
     const cancelled = await c.env.DB.prepare(
-      `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = COALESCE(cancel_reason, 'slot_cancelled'), updated_at = ?
+      `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = COALESCE(cancel_reason, 'slot_cancelled'), cancelled_by = 'system', updated_at = ?
        WHERE slot_id = ? AND status IN ('pending','confirmed') RETURNING id`
     ).bind(nowIso(), id).all<{ id: number }>();
     const ids = (cancelled.results || []).map((r) => Number(r.id));
@@ -853,7 +856,7 @@ advisors.post('/slots/:id/book', async (c) => {
       const after = await takenForSlot(c.env, slotId);
       if (after > slot.capacity) {
         await c.env.DB.prepare(
-          `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = 'capacity_race', updated_at = ?
+          `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = 'capacity_race', cancelled_by = 'system', updated_at = ?
            WHERE id = ?`
         ).bind(nowIso(), (r as any).meta?.last_row_id).run();
         return c.json({ detail: 'Slot full (race)' }, 409);
@@ -957,7 +960,14 @@ advisors.get('/me/bookings', async (c) => {
     const rows = status
       ? await c.env.DB.prepare(sql).bind(m.id, status).all<BookingRow>()
       : await c.env.DB.prepare(sql).bind(m.id).all<BookingRow>();
+    // #4702: the list is the 200 newest; `total` is how many there are, so a
+    // page can say "200 of 340" instead of presenting the window as the whole.
+    const all = status
+      ? await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_bookings WHERE advisor_id = ? AND status = ?').bind(m.id, status).first<{ n: number }>()
+      : await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_bookings WHERE advisor_id = ?').bind(m.id).first<{ n: number }>();
     return c.json({
+      total: Number(all?.n ?? (rows.results || []).length),
+      limit: 200,
       items: (rows.results || []).map((r: any) => bookingDto(r, {
         ...advisorMoney(r),
         founder_name: r.founder_name ?? null,
@@ -967,6 +977,11 @@ advisors.get('/me/bookings', async (c) => {
         client_email: r.founder_email ?? null,
         slot_starts_at: r.slot_starts_at ?? null,
         slot_ends_at: r.slot_ends_at ?? null,
+        // #4702 (D4702): the advisor's own answer, and who cancelled. Null is "not
+        // on record", never a guess; the acceptance rate counts only answers.
+        advisor_decision: r.advisor_decision ?? null,
+        advisor_decided_at: r.advisor_decided_at ?? null,
+        cancelled_by: r.cancelled_by ?? null,
       })),
     });
   } catch (e) { return mapError(c, e); }
@@ -1066,6 +1081,8 @@ function deferCalendarConfirm(c: Context<{ Bindings: Env }>, id: number) {
 async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   allowed: string[]; nextStatus: string; whoCan: 'advisor' | 'founder' | 'either';
   reason?: string | null;
+  /** #4702: the answer this transition records, if it is one. */
+  decision?: 'accepted' | 'declined';
 }) {
   const user = await requireAuth(c);
   const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?').bind(id).first<BookingRow>();
@@ -1085,9 +1102,24 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   // D4703 (#4703): the status read above is the status this write expects.
   // Two presses at once (a cancel and a confirm, or two cancels) used to both
   // pass the check and both write; now the second changes nothing and says so.
+  //
+  // #4702 (D4702): the ANSWER is recorded apart from the status. Confirming is an
+  // accept. A cancel by the advisor of a request still waiting is a decline. A
+  // cancel by anyone of a session already accepted leaves the accept as it was,
+  // and a client withdrawing a request before any answer records no answer, so
+  // neither the client's cancellation nor an admin's changes the advisor's rate.
+  const at = nowIso();
+  const cancelledBy = opts.nextStatus === 'cancelled'
+    ? (isAdvisor && !adm ? 'advisor' : isOwner && !adm ? 'client' : 'admin') : null;
+  const decision = opts.decision
+    ?? (opts.nextStatus === 'cancelled' && b.status === 'pending' && cancelledBy === 'advisor' ? 'declined' : null);
   const wrote = await c.env.DB.prepare(
-    'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ? AND status = ?'
-  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id, b.status).run();
+    `UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason),
+            advisor_decision = COALESCE(?, advisor_decision),
+            advisor_decided_at = CASE WHEN ? IS NOT NULL THEN ? ELSE advisor_decided_at END,
+            cancelled_by = COALESCE(?, cancelled_by), updated_at = ?
+      WHERE id = ? AND status = ?`
+  ).bind(opts.nextStatus, opts.reason ?? null, decision, decision, at, cancelledBy, at, id, b.status).run();
   if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
     return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
   }
@@ -1103,7 +1135,7 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
 }
 
 advisors.post('/bookings/:id/confirm', (c) => transition(c, Number(c.req.param('id')),
-  { allowed: ['pending'], nextStatus: 'confirmed', whoCan: 'advisor' }));
+  { allowed: ['pending'], nextStatus: 'confirmed', whoCan: 'advisor', decision: 'accepted' }));
 advisors.post('/bookings/:id/cancel', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   return transition(c, Number(c.req.param('id')),
@@ -1115,6 +1147,52 @@ advisors.post('/bookings/:id/no-show', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   return transition(c, Number(c.req.param('id')),
     { allowed: ['pending', 'confirmed'], nextStatus: 'no_show', whoCan: 'advisor', reason: body.reason || null });
+});
+
+/**
+ * #4702 (D4702): the advisor's review coverage over EVERY completed session, in
+ * one read.
+ *
+ * The Delivery page read each held session's reviews one request at a time,
+ * stopped at the first 20, and stored a failed read as "no reviews", so a page
+ * with 30 held sessions reported "No review" for the last ten without having
+ * asked, and for any session whose read failed. The counts here are database
+ * aggregates over the whole population; `items` lists the 1,000 newest sessions
+ * with their review count so a row can say reviewed, not reviewed, or (when this
+ * route itself could not be read) nothing at all: the page treats a failed read
+ * as unknown.
+ */
+advisors.get('/me/review-coverage', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const t = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS held,
+              COALESCE(SUM(CASE WHEN x.n > 0 THEN 1 ELSE 0 END), 0) AS reviewed,
+              COALESCE(SUM(x.n), 0) AS reviews,
+              COALESCE(SUM(x.rating_sum), 0) AS rating_sum
+         FROM advisor_bookings b
+         LEFT JOIN (SELECT booking_id, COUNT(*) AS n, SUM(rating) AS rating_sum FROM advisor_reviews GROUP BY booking_id) x ON x.booking_id = b.id
+        WHERE b.advisor_id = ? AND b.status = 'completed'`
+    ).bind(m.id).first<{ held: number; reviewed: number; reviews: number; rating_sum: number }>();
+    const rows = (await c.env.DB.prepare(
+      `SELECT b.id AS booking_id, COALESCE(x.n, 0) AS reviews, COALESCE(x.advisor_filed, 0) AS advisor_filed, x.avg_rating AS avg_rating
+         FROM advisor_bookings b
+         LEFT JOIN (SELECT booking_id, COUNT(*) AS n, AVG(rating) AS avg_rating,
+                           MAX(CASE WHEN reviewer_role = 'advisor' THEN 1 ELSE 0 END) AS advisor_filed
+                      FROM advisor_reviews GROUP BY booking_id) x ON x.booking_id = b.id
+        WHERE b.advisor_id = ? AND b.status = 'completed'
+        ORDER BY b.id DESC LIMIT 1001`
+    ).bind(m.id).all<any>()).results || [];
+    const held = Number(t?.held ?? 0);
+    const reviewed = Number(t?.reviewed ?? 0);
+    return c.json({
+      held, reviewed, awaiting: held - reviewed,
+      ratings: { count: Number(t?.reviews ?? 0), sum: Number(t?.rating_sum ?? 0) },
+      items: rows.slice(0, 1000).map((r: any) => ({ booking_id: Number(r.booking_id), reviews: Number(r.reviews), advisor_filed: Number(r.advisor_filed) === 1, rating: r.avg_rating == null ? null : Number(r.avg_rating) })),
+      items_complete: rows.length <= 1000,
+    });
+  } catch (e) { return mapError(c, e); }
 });
 
 // ---------------------------------------------------------------------------
@@ -2182,6 +2260,92 @@ advisors.get('/me/earnings', async (c) => {
 // says 'none' no surface may render any of this as a receipt. D75.
 // ---------------------------------------------------------------------------
 
+/** The client rows a ledger lists one by one; the rest are summed into `clients_other`. */
+const LEDGER_CLIENT_CAP = 500;
+
+/**
+ * #4702 (D4702): the one definition of an advisor's money over a window, shared
+ * by `GET /me/ledger` and `GET /me/tax-summary` so the table, the export and the
+ * annual summary cannot disagree.
+ *
+ *   · the population is every booking created in the half-open window
+ *     `[from, until)` (absent bounds = unbounded), counted in the database; there
+ *     is no row cap on the totals;
+ *   · a line's cut is the cut it was STAMPED with when it was priced; only a line
+ *     priced before 241 (no stored cut) is derived, at its stored rate or the
+ *     fallback, rounded down, the same rule `cutCents` uses;
+ *   · an unpriced booking has no gross and no cut and is counted apart.
+ *
+ * `clients` is the top `LEDGER_CLIENT_CAP` by gross; `other` sums everyone past
+ * it, so the listed rows plus `other` always reconcile to the totals.
+ */
+export type LedgerLine = { sessions: number; gross_cents: number; cut_cents: number; unpriced: number };
+export async function ledgerAggregate(env: Env, advisorId: number, from: string | null, until: string | null, fallbackBps: number) {
+  const t = await env.DB.prepare(
+    `SELECT COUNT(*) AS sessions,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
+            COALESCE(SUM(b.amount_cents), 0) AS gross,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
+                              WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
+                              ELSE CAST((b.amount_cents * COALESCE(b.take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut,
+            COUNT(DISTINCT b.founder_user_id) AS clients,
+            COUNT(DISTINCT CASE WHEN b.amount_cents IS NOT NULL THEN b.founder_user_id END)
+              + COALESCE(MAX(CASE WHEN b.amount_cents IS NOT NULL AND b.founder_user_id IS NULL THEN 1 ELSE 0 END), 0) AS priced_clients
+       FROM advisor_bookings b
+      WHERE b.advisor_id = ?
+        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+        AND (? IS NULL OR datetime(b.created_at) < datetime(?))`
+  ).bind(fallbackBps, advisorId, from, from, until, until).first<{ sessions: number; unpriced: number; gross: number; cut: number; clients: number; priced_clients: number }>();
+  const rows = (await env.DB.prepare(
+    `SELECT b.founder_user_id AS client_user_id, MAX(u.name) AS client_name,
+            COUNT(*) AS sessions,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
+            COALESCE(SUM(b.amount_cents), 0) AS gross,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
+                              WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
+                              ELSE CAST((b.amount_cents * COALESCE(b.take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut
+       FROM advisor_bookings b
+       LEFT JOIN users u ON u.id = b.founder_user_id
+      WHERE b.advisor_id = ?
+        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+        AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+      GROUP BY b.founder_user_id
+      ORDER BY gross DESC, sessions DESC, b.founder_user_id
+      LIMIT ?`
+  ).bind(fallbackBps, advisorId, from, from, until, until, LEDGER_CLIENT_CAP + 1).all<any>()).results || [];
+  const sessions = Number(t?.sessions ?? 0);
+  const gross = Number(t?.gross ?? 0);
+  const cut = Number(t?.cut ?? 0);
+  const unpriced = Number(t?.unpriced ?? 0);
+  // A "client" row counts the NULL-user group too, and `COUNT(DISTINCT)` does not
+  // count NULL, so the total is the larger of it and the rows actually returned.
+  const listedRows = rows.slice(0, LEDGER_CLIENT_CAP);
+  const clientsTotal = Math.max(Number(t?.clients ?? 0) + (rows.some((r: any) => r.client_user_id == null) ? 1 : 0), rows.length);
+  const clients = listedRows.map((r: any) => ({
+    client_user_id: r.client_user_id == null ? null : Number(r.client_user_id),
+    client_name: r.client_name ?? null,
+    sessions: Number(r.sessions), gross_cents: Number(r.gross), cut_cents: Number(r.cut), unpriced: Number(r.unpriced),
+  }));
+  const listed = clients.reduce((a, r) => ({
+    sessions: a.sessions + r.sessions, gross_cents: a.gross_cents + r.gross_cents,
+    cut_cents: a.cut_cents + r.cut_cents, unpriced: a.unpriced + r.unpriced,
+  }), { sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0 } as LedgerLine);
+  const overflow = rows.length > LEDGER_CLIENT_CAP;
+  return {
+    totals: { sessions, unpriced, priced: sessions - unpriced, gross_cents: gross, cut_cents: cut, net_cents: gross - cut },
+    pricedClients: Number(t?.priced_clients ?? 0),
+    clients,
+    clientsTotal,
+    // Everyone past the cap, as one line; null when every client is listed.
+    other: overflow ? {
+      clients: Math.max(0, clientsTotal - clients.length),
+      sessions: sessions - listed.sessions, gross_cents: gross - listed.gross_cents,
+      cut_cents: cut - listed.cut_cents, net_cents: (gross - listed.gross_cents) - (cut - listed.cut_cents),
+      unpriced_sessions: unpriced - listed.unpriced,
+    } : null,
+  };
+}
+
 /** One row of D4's "By client · Q3" table, reconciling by construction. */
 function clientLineDto(r: {
   client_name: string | null; client_user_id: number | null;
@@ -2223,7 +2387,7 @@ function clientLineDto(r: {
  * total — D4's own note says *"The cut is charged per line, not netted at the
  * bottom"*, and the two arithmetics differ by up to a cent per line. A table
  * whose rows do not add up to its total is the most corrosive thing a ledger
- * can do, so `totalLines` is the only thing that adds here.
+ * can do, so `ledgerAggregate` is the only thing that adds here (#4702).
  *
  * PERIOD IS A HALF-OPEN INTERVAL on `created_at`. Absent means everything,
  * which is what "All time" asks for; the three other views pass explicit
@@ -2235,43 +2399,23 @@ advisors.get('/me/ledger', async (c) => {
     const m = await requireMyAdvisor(c, user);
     const from = trimOrNull(c.req.query('from'), 32);
     const until = trimOrNull(c.req.query('until'), 32);
-
-    // ONE QUERY TEXT, EVERY BOUND ALWAYS BOUND. The obvious shape here is to
-    // push clauses into an array and `join(' AND ')` them into the template —
-    // and `scripts/check-sql-prepare.mjs` refuses it, correctly: a `${…}`
-    // inside `DB.prepare` lands in the query TEXT, and a guard that has to
-    // decide case by case whether the fragments were literals is a guard that
-    // will eventually decide wrong. `? IS NULL OR` makes an absent bound a
-    // no-op with no interpolation at all.
-    const rows = await c.env.DB.prepare(
-      `SELECT b.founder_user_id AS client_user_id, u.name AS client_name,
-              b.amount_cents AS amount_cents, b.platform_cut_cents AS platform_cut_cents,
-              b.take_rate_bps AS take_rate_bps
-         FROM advisor_bookings b
-         LEFT JOIN users u ON u.id = b.founder_user_id
-        WHERE b.advisor_id = ?
-          AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
-          AND (? IS NULL OR datetime(b.created_at) < datetime(?))
-        ORDER BY b.created_at DESC
-        LIMIT 2000`
-    ).bind(m.id, from, from, until, until).all<{
-      client_user_id: number | null; client_name: string | null;
-      amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null;
-    }>();
-
     const rate = await takeRate(c.env);
-    const lines = rows.results || [];
 
-    // Grouped in the worker rather than by SQL, because the cut of a line
-    // recorded before 241 has to be DERIVED from its stored rate (or the
-    // current one) rather than summed from a NULL column — and a SQL SUM over
-    // NULLs would silently report those lines as free.
+    // #4702 (D4702): THE POPULATION IS ALL OF IT. The ledger read the 2,000
+    // newest bookings and summed those, so the 2,001st session silently
+    // dropped out of every total while the page still said "all time". The
+    // totals, the clients and the annual summary now come from ONE aggregate
+    // in the database over every booking in the window (`ledgerAggregate`), and
+    // the response says how complete each part is (`completeness`).
+    const agg = await ledgerAggregate(c.env, m.id, from, until, rate.bps);
+
     // THE RETAINER COLUMN COMES FROM THE ENGAGEMENT, NOT THE BOOKING — 238's
     // header is explicit that it "cannot come from `advisor_bookings.
-    // amount_cents` … the cycle amount has to live here or nowhere". Read as
-    // its own query rather than joined onto the booking rows, because a
-    // client with a retainer and no sessions in this window still belongs in
-    // the table, and an INNER-shaped join would drop exactly that row.
+    // amount_cents` … the cycle amount has to live here or nowhere". It is the
+    // CONTRACT's value per cycle, not revenue earned in the window (sessions
+    // priced in the window are the gross); and only an engagement in effect at
+    // some point in the window counts, so a Q3 table does not show a retainer
+    // that ended in Q1.
     //
     // Tolerated, not required: an advisor whose engagement table cannot be
     // read still gets their session ledger, with the retainer column reading
@@ -2280,13 +2424,21 @@ advisors.get('/me/ledger', async (c) => {
       founder_user_id: number | null; client_name: string | null;
       shape: string; amount_cents: number | null;
     }> = [];
+    let engagementsComplete = true;
+    let engagementsRead = true;
     try {
       const er = await c.env.DB.prepare(
         `SELECT founder_user_id, client_name, shape, amount_cents
-           FROM advisor_engagements WHERE advisor_id = ? AND lane != 'drafting' LIMIT 500`
-      ).bind(m.id).all<any>();
-      engagements = er.results || [];
-    } catch { engagements = []; }
+           FROM advisor_engagements
+          WHERE advisor_id = ? AND lane IN ('signed', 'renewal_due', 'ended')
+            AND (? IS NULL OR started_at IS NULL OR datetime(started_at) < datetime(?))
+            AND (? IS NULL OR (lane != 'ended' AND ended_at IS NULL) OR (ended_at IS NOT NULL AND datetime(ended_at) >= datetime(?)))
+          ORDER BY id LIMIT 501`
+      ).bind(m.id, until, until, from, from).all<any>();
+      const rows = er.results || [];
+      engagementsComplete = rows.length <= 500;
+      engagements = rows.slice(0, 500);
+    } catch { engagements = []; engagementsRead = false; }
 
     const byClient = new Map<string, {
       client_name: string | null; client_user_id: number | null;
@@ -2298,20 +2450,12 @@ advisors.get('/me/ledger', async (c) => {
       sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0,
       retainer_cents: null as number | null, engagement_shape: null as string | null,
     });
-    for (const line of lines) {
-      const key = line.client_user_id == null ? 'none' : String(line.client_user_id);
-      if (!byClient.has(key)) {
-        byClient.set(key, blank(line.client_name ?? null, line.client_user_id ?? null));
-      }
-      const g = byClient.get(key)!;
-      g.sessions += 1;
-      if (line.amount_cents == null) { g.unpriced += 1; continue; }
-      const bps = line.take_rate_bps != null ? Number(line.take_rate_bps) : rate.bps;
-      const cut = line.platform_cut_cents != null
-        ? Number(line.platform_cut_cents)
-        : (cutCents(line.amount_cents, bps) ?? 0);
-      g.gross_cents += Number(line.amount_cents);
-      g.cut_cents += cut;
+    for (const r of agg.clients) {
+      const key = r.client_user_id == null ? 'none' : String(r.client_user_id);
+      byClient.set(key, {
+        ...blank(r.client_name ?? null, r.client_user_id ?? null),
+        sessions: r.sessions, gross_cents: r.gross_cents, cut_cents: r.cut_cents, unpriced: r.unpriced,
+      });
     }
 
     // Fold the engagements in, creating a row for a client who has a contract
@@ -2340,30 +2484,39 @@ advisors.get('/me/ledger', async (c) => {
       }
     }
 
-    const totals = totalLines(
-      lines.map((l) => ({ amount_cents: l.amount_cents, take_rate_bps: l.take_rate_bps })),
-      rate.bps,
-    );
     const clients = [...byClient.values()]
       .sort((a, b) => b.gross_cents - a.gross_cents)
       .map(clientLineDto);
     const top = clients[0];
+    const totals = agg.totals;
 
     return c.json({
       currency: 'USD',
       from: from ?? null,
       until: until ?? null,
       clients,
+      // Clients past the cap are not listed one by one, but they are not lost:
+      // this row is their sum, so `clients` + `clients_other` = `totals`.
+      clients_other: agg.other,
       totals: {
         gross_cents: totals.gross_cents,
         cut_cents: totals.cut_cents,
         net_cents: totals.net_cents,
-        sessions: lines.length,
+        sessions: totals.sessions,
         priced_sessions: totals.priced,
         // Surfaced, never subtracted from view: a total that quietly skipped
         // the sessions nobody priced would be a smaller number presented as a
         // complete one.
         unpriced_sessions: totals.unpriced,
+      },
+      // #4702: what the figures cover, said in the payload so no surface has to
+      // guess. Totals always cover every booking in the window; the client list
+      // is capped and says so.
+      completeness: {
+        basis: 'Every booking created in the window, summed in the database. No row cap applies to the totals.',
+        sessions: totals.sessions,
+        clients: { listed: agg.clients.length, total: agg.clientsTotal, complete: agg.clientsTotal <= agg.clients.length },
+        engagements: { read: engagementsRead, complete: engagementsComplete },
       },
       // NULL WHEN THERE IS NOTHING TO CONCENTRATE. A share of zero gross is
       // not 0% — it is a question with no answer, and 0% reads as "well
@@ -2615,26 +2768,22 @@ advisors.get('/me/tax-summary', async (c) => {
     const year = Number.isInteger(raw) && raw >= 2000 && raw <= 2999
       ? raw
       : Number(nowIso().slice(0, 4));
-    const rows = await c.env.DB.prepare(
-      `SELECT amount_cents, platform_cut_cents, take_rate_bps, founder_user_id
-         FROM advisor_bookings
-        WHERE advisor_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`
-    ).bind(m.id, `${year}-01-01T00:00:00.000Z`, `${year + 1}-01-01T00:00:00.000Z`)
-      .all<{ amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null; founder_user_id: number | null }>();
-    const lines = rows.results || [];
     const rate = await takeRate(c.env);
-    const totals = totalLines(lines, rate.bps);
-    const clients = new Set(lines.filter((l) => l.amount_cents != null).map((l) => l.founder_user_id));
+    // #4702: the same aggregate the ledger uses, over the same population, so the
+    // annual summary equals the ledger for the same window.
+    const agg = await ledgerAggregate(c.env, m.id, `${year}-01-01T00:00:00.000Z`, `${year + 1}-01-01T00:00:00.000Z`, rate.bps);
+    const totals = agg.totals;
     return c.json({
       year,
       currency: 'USD',
       gross_cents: totals.gross_cents,
       platform_cut_cents: totals.cut_cents,
       net_cents: totals.net_cents,
-      sessions: lines.length,
+      sessions: totals.sessions,
       priced_sessions: totals.priced,
       unpriced_sessions: totals.unpriced,
-      clients: clients.size,
+      clients: agg.pricedClients,
+      completeness: { basis: 'Every booking created in the year, summed in the database. No row cap applies.', sessions: totals.sessions },
       basis: 'Calendar year in UTC, by the date each session was booked.',
       document: {
         is_tax_form: false,
@@ -4853,7 +5002,7 @@ advisors.get('/me/slots', async (c) => {
     for (const s of (rows.results || []) as SlotRow[]) {
       items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id)));
     }
-    return c.json({ items, window: { from, until, days } });
+    return c.json({ items, window: { from, until, days }, truncated: (rows.results || []).length >= 500 });
   } catch (e) { return mapError(c, e); }
 });
 
