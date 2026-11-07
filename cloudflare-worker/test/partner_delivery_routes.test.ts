@@ -92,6 +92,12 @@ function freshDb() {
       name TEXT NOT NULL, company TEXT, email TEXT UNIQUE NOT NULL,
       specialization TEXT, status TEXT NOT NULL DEFAULT 'active'
     );
+    -- #4673: an engagement's founder_id is a FOUNDER PROFILE (founders.id), and the client's name is
+    -- read from it. These fixtures keep the founder's id equal to the user's (FOUNDER_USER) on purpose;
+    -- partner_delivery_report_access_4673.test.ts proves the two apart.
+    CREATE TABLE founders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, name TEXT NOT NULL, email TEXT
+    );
     CREATE TABLE founder_needs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       project_id INTEGER NOT NULL, founder_id INTEGER NOT NULL,
@@ -137,6 +143,7 @@ function freshDb() {
   u.run(THEIRS_USER, 'partner', 2, 'Theirs', 'theirs@example.com');
   u.run(THEIR_STAFF, 'partner', 2, 'Robin', 'robin@example.com');
   u.run(FOUNDER_USER, 'founder', null, 'Fran', 'fran@example.com');
+  db.prepare('INSERT INTO founders (id, name, email) VALUES (?, ?, ?)').run(FOUNDER_USER, 'Fran', 'fran@example.com');
 
   const p = db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)');
   p.run(1, 'p-1', 'Ours', 'ours@example.com');
@@ -824,7 +831,7 @@ test('a draft is composed from the record, and blockers are read not stored', as
   // The sentence that makes the editorial call visible to the author.
   assert.match(draft.blocked_note, /without treating it as an excuse|say so plainly/i);
 
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: 'Spec v2 went out.', next_up: 'Cutover.',
   });
   // Nothing about the blocker is copied into the row — a prose copy would go
@@ -836,7 +843,7 @@ test('a draft is composed from the record, and blockers are read not stored', as
 test('a sent report cannot be edited, re-sent or deleted', async () => {
   const e = env(freshDb());
   const p = nowPeriod();
-  const saved = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  const saved = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: 'Spec v2 went out.',
   });
   const sent = await call(e, 'POST', `/status-reports/${saved.body.id}/send`, ours);
@@ -846,7 +853,7 @@ test('a sent report cannot be edited, re-sent or deleted', async () => {
 
   // A record of what a client already received. Editing it in place would make
   // our record disagree with theirs with no trace of the difference.
-  const edit = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  const edit = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: 'Actually something else.',
   });
   assert.equal(edit.status, 409);
@@ -859,11 +866,11 @@ test('a sent report cannot be edited, re-sent or deleted', async () => {
 test('an empty report cannot be sent', async () => {
   const e = env(freshDb());
   const p = nowPeriod();
-  const saved = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  const saved = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: 'x',
   });
   // Clear it back to empty, then try to send.
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: null, next_up: null,
   });
   const r = await call(e, 'POST', `/status-reports/${saved.body.id}/send`, ours);
@@ -872,7 +879,7 @@ test('an empty report cannot be sent', async () => {
 
 test('the reports read says nothing is delivered', async () => {
   const e = env(freshDb());
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, {
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, { engagement_id: OUR_ENGAGEMENT, period: nowPeriod(),
     shipped: 'x',
   });
   const r = (await call(e, 'GET', '/status-reports', ours)).body;
@@ -896,7 +903,7 @@ test('the reports listing carries the cycle and each report’s live blockers', 
   const db = freshDb();
   const e = env(db);
   const p = nowPeriod();
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p, shipped: 'x' });
 
   let r = (await call(e, 'GET', '/status-reports', ours)).body;
   assert.equal(r.period, p, 'the listing does not say which cycle it is');
@@ -926,7 +933,7 @@ test('the reports listing carries the cycle and each report’s live blockers', 
 
   // SENT THIS CYCLE COUNTS THE CYCLE, not every report ever sent — so an
   // earlier period's sent report is in `sent_count` and out of this tile.
-  const older = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/2024-01`, ours, {
+  const older = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/2024-01`, ours, { engagement_id: OUR_ENGAGEMENT, period: '2024-01',
     shipped: 'last year',
   });
   await call(e, 'POST', `/status-reports/${older.body.id}/send`, ours);
@@ -941,7 +948,7 @@ test('the reports listing carries the cycle and each report’s live blockers', 
 
 test('a read time is refused rather than timed from our own send', async () => {
   const e = env(freshDb());
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, {
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, { engagement_id: OUR_ENGAGEMENT, period: nowPeriod(),
     shipped: 'x',
   });
   const r = (await call(e, 'GET', '/status-reports', ours)).body;
@@ -955,7 +962,7 @@ test('another firm’s blockers never reach this firm’s report feed', async ()
   const db = freshDb();
   const e = env(db);
   const p = nowPeriod();
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p, shipped: 'x' });
   await call(e, 'POST', `/engagements/${THEIR_ENGAGEMENT}/blockers`, theirs, {
     side: 'client', summary: 'Theirs, not ours',
   });
@@ -1026,7 +1033,7 @@ test('a read writes nothing', async () => {
   await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/deliverables`, ours, { title: 'z', sent_at: past(2) });
   await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/seats`, ours, { holder_user_id: OUR_STAFF });
   await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${p}`, ours, { hours: 8 });
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p, shipped: 'x' });
 
   const snapshot = () => JSON.stringify([
     db.prepare('SELECT * FROM engagement_milestones ORDER BY id').all(),

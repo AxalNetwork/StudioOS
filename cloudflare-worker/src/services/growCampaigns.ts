@@ -88,10 +88,46 @@ async function uniqueWrite(env: Env, statements: Statement[]) {
     throw e;
   }
 }
+/** D4491: a reporting window is both real YYYY-MM-DD days, from on or before to; absent means lifetime. */
+export type ReportingWindow = { from: string; to: string };
+export function reportingWindow(from: unknown, to: unknown): ReportingWindow | null {
+  const given = (v: unknown) => v !== undefined && v !== null && v !== '';
+  if (!given(from) && !given(to)) return null;
+  if (!given(from) || !given(to)) throw new Refused(400, 'A reporting window needs both from and to', given(from) ? 'to' : 'from');
+  const a = calendarDay(from); const b = calendarDay(to);
+  if (!a) throw new Refused(400, 'from must be a real YYYY-MM-DD date', 'from');
+  if (!b) throw new Refused(400, 'to must be a real YYYY-MM-DD date', 'to');
+  if (a > b) throw new Refused(400, 'from cannot be after to', 'from');
+  return { from: a, to: b };
+}
+/** Demos are qualified through active; customers are active (contacts.ts CONTACT_STATUSES). */
+export const isDemo = (status: string) => status === 'qualified' || status === 'active';
+export const isCustomer = (status: string) => status === 'active';
+/**
+ * D4483/D4491: recorded spend for one venture channel over [start, end] months. Mercury wins a
+ * measured month that also has a manual row; a month with no rows is skipped, never zero.
+ */
+export async function channelSpend(env: Env, pid: number, g: { id: number; uid: string }, start: string, end: string) {
+  const manual = await env.DB.prepare('SELECT month, spend_cents FROM channel_spend WHERE channel_id = ? AND month >= ? AND month <= ?').bind(g.id, start, end).all<{ month: string; spend_cents: number }>();
+  const mercury = await env.DB.prepare("SELECT period, amount_cents FROM mercury_grow_facts WHERE project_id = ? AND module = 'distribution' AND kind = 'channel_spend' AND subject = ? AND period >= ? AND period <= ?").bind(pid, g.uid, start, end).all<{ period: string; amount_cents: number | null }>();
+  const months = new Map<string, { spend_cents: number; source: 'mercury' | 'manual' }>();
+  for (const m of manual.results ?? []) months.set(m.month, { spend_cents: m.spend_cents, source: 'manual' });
+  // Mercury wins only a measured month; missing months are never invented as zero.
+  for (const m of mercury.results ?? []) if (m.amount_cents != null) months.set(m.period, { spend_cents: m.amount_cents, source: 'mercury' });
+  const spend_months: { month: string; spend_cents: number; source: 'mercury' | 'manual' }[] = [];
+  for (const [month, value] of [...months].sort(([a], [b]) => a.localeCompare(b))) spend_months.push({ month, ...value });
+  const spend_cents = spend_months.length ? spend_months.reduce((sum, m) => sum + m.spend_cents, 0) : null;
+  const sources = new Set(spend_months.map((m) => m.source));
+  const spend_source: 'mercury' | 'manual' | 'mixed' | null = sources.size > 1 ? 'mixed' : spend_months[0]?.source ?? null;
+  return { spend_cents, spend_source, spend_months };
+}
 /** One attribution scan per venture/list request, using utmSource's permissive JSON parsing. */
-async function campaignLeads(env: Env, pid: number): Promise<{ counts: Map<string, { leads: number; demos: number; customers: number }> | null; reason: string | null }> {
+async function campaignLeads(env: Env, pid: number, window: ReportingWindow | null = null): Promise<{ counts: Map<string, { leads: number; demos: number; customers: number }> | null; reason: string | null }> {
   try {
-    const contacts = await env.DB.prepare('SELECT utm_json, status FROM contacts WHERE project_id = ? AND utm_json IS NOT NULL').bind(pid).all<{ utm_json: string; status: string }>();
+    // D4491: with a window, only contacts created inside [from, to] count; status stays current.
+    const contacts = window
+      ? await env.DB.prepare('SELECT utm_json, status FROM contacts WHERE project_id = ? AND utm_json IS NOT NULL AND substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ?').bind(pid, window.from, window.to).all<{ utm_json: string; status: string }>()
+      : await env.DB.prepare('SELECT utm_json, status FROM contacts WHERE project_id = ? AND utm_json IS NOT NULL').bind(pid).all<{ utm_json: string; status: string }>();
     const counts = new Map<string, { leads: number; demos: number; customers: number }>();
     for (const row of contacts.results ?? []) {
       try {
@@ -100,8 +136,8 @@ async function campaignLeads(env: Env, pid: number): Promise<{ counts: Map<strin
           const tag = v.trim().toLowerCase();
           const totals = counts.get(tag) ?? { leads: 0, demos: 0, customers: 0 };
           totals.leads++;
-          if (row.status === 'qualified' || row.status === 'active') totals.demos++;
-          if (row.status === 'active') totals.customers++;
+          if (isDemo(row.status)) totals.demos++;
+          if (isCustomer(row.status)) totals.customers++;
           counts.set(tag, totals);
         }
       } catch { /* Same parser as utmSource: malformed attribution is not a match. */ }
@@ -111,7 +147,7 @@ async function campaignLeads(env: Env, pid: number): Promise<{ counts: Map<strin
 }
 
 /** The optional figures fail independently; missing values remain null, including explicitly recorded zero spend. */
-async function readCampaign(env: Env, c: Campaign, attribution?: Awaited<ReturnType<typeof campaignLeads>>) {
+async function readCampaign(env: Env, c: Campaign, attribution?: Awaited<ReturnType<typeof campaignLeads>>, window: ReportingWindow | null = null) {
   const segment = c.segment_id == null ? null : await env.DB.prepare('SELECT id, name FROM customer_segments WHERE id = ? AND project_id = ?').bind(c.segment_id, c.project_id).first();
   const links = await env.DB.prepare('SELECT g.id, g.uid, g.name, l.planned_budget_cents, l.budget_type, l.starts_on, l.ends_on FROM grow_campaign_channels l JOIN growth_channels g ON g.id = l.channel_id WHERE l.campaign_id = ? AND g.project_id = ? ORDER BY g.name, g.uid').bind(c.id, c.project_id).all<{ id: number; uid: string; name: string; planned_budget_cents: number | null; budget_type: string | null; starts_on: string | null; ends_on: string | null }>();
   const channels = await Promise.all((links.results ?? []).map(async (g) => {
@@ -120,18 +156,13 @@ async function readCampaign(env: Env, c: Campaign, attribution?: Awaited<ReturnT
     let spend_source: 'mercury' | 'manual' | 'mixed' | null = null;
     const spend_months: { month: string; spend_cents: number; source: 'mercury' | 'manual' }[] = [];
     if (c.starts_on && c.ends_on) {
-      try {
-        const start = c.starts_on.slice(0, 7); const end = c.ends_on.slice(0, 7);
-        const manual = await env.DB.prepare('SELECT month, spend_cents FROM channel_spend WHERE channel_id = ? AND month >= ? AND month <= ?').bind(g.id, start, end).all<{ month: string; spend_cents: number }>();
-        const mercury = await env.DB.prepare("SELECT period, amount_cents FROM mercury_grow_facts WHERE project_id = ? AND module = 'distribution' AND kind = 'channel_spend' AND subject = ? AND period >= ? AND period <= ?").bind(c.project_id, g.uid, start, end).all<{ period: string; amount_cents: number | null }>();
-        const months = new Map<string, { spend_cents: number; source: 'mercury' | 'manual' }>();
-        for (const m of manual.results ?? []) months.set(m.month, { spend_cents: m.spend_cents, source: 'manual' });
-        // Mercury wins only a measured month; missing months are never invented as zero.
-        for (const m of mercury.results ?? []) if (m.amount_cents != null) months.set(m.period, { spend_cents: m.amount_cents, source: 'mercury' });
-        for (const [month, value] of [...months].sort(([a], [b]) => a.localeCompare(b))) spend_months.push({ month, ...value });
-        spend_cents = spend_months.length ? spend_months.reduce((sum, m) => sum + m.spend_cents, 0) : null;
-        const sources = new Set(spend_months.map((m) => m.source));
-        spend_source = sources.size > 1 ? 'mixed' : spend_months[0]?.source ?? null;
+      // D4491: a window narrows the campaign's own months to the months both share.
+      const start = window && window.from.slice(0, 7) > c.starts_on.slice(0, 7) ? window.from.slice(0, 7) : c.starts_on.slice(0, 7);
+      const end = window && window.to.slice(0, 7) < c.ends_on.slice(0, 7) ? window.to.slice(0, 7) : c.ends_on.slice(0, 7);
+      if (start > end) spend_reason = 'Not recorded: this campaign has no months in this window';
+      else try {
+        const read = await channelSpend(env, c.project_id, g, start, end);
+        spend_cents = read.spend_cents; spend_source = read.spend_source; spend_months.push(...read.spend_months);
         spend_reason = spend_cents == null ? 'Not recorded: no spend entered for these months' : null;
       } catch { spend_reason = 'Unreadable: channel spend could not be read'; }
     }
@@ -142,7 +173,7 @@ async function readCampaign(env: Env, c: Campaign, attribution?: Awaited<ReturnT
   let leads: number | null = null; let demos: number | null = null; let customers: number | null = null;
   let leads_reason: string | null = 'Not recorded: this campaign has no UTM campaign tag';
   if (c.utm_campaign) {
-    const result = attribution ?? await campaignLeads(env, c.project_id);
+    const result = attribution ?? await campaignLeads(env, c.project_id, window);
     const totals = result.counts?.get(c.utm_campaign);
     leads = result.counts ? totals?.leads ?? 0 : null;
     demos = result.counts ? totals?.demos ?? 0 : null;
@@ -158,7 +189,9 @@ async function readCampaign(env: Env, c: Campaign, attribution?: Awaited<ReturnT
     demos, demos_reason: leads_reason, customers, customers_reason: leads_reason,
     budget_reason: c.budget_cents == null ? 'Not recorded: no campaign budget entered' : null, utm_campaign: c.utm_campaign, segment, channels, items: counts, leads, leads_reason };
 }
-export async function campaigns(env: Env, pid: number, filters: { status?: string; q?: string } = {}) {
+/** D4491: `from`/`to` (YYYY-MM-DD, both or neither) narrow leads by contact created_at and spend by shared months. */
+export async function campaigns(env: Env, pid: number, filters: { status?: string; q?: string; from?: unknown; to?: unknown } = {}) {
+  const window = reportingWindow(filters.from, filters.to);
   if (filters.status && filters.status !== 'all' && !Object.prototype.hasOwnProperty.call(transitions, filters.status)) throw new Refused(400, 'Invalid campaign status', 'status');
   const totals = await env.DB.prepare('SELECT status, COUNT(*) AS n FROM grow_campaigns WHERE project_id = ? AND archived_at IS NULL GROUP BY status').bind(pid).all<{ status: string; n: number }>();
   const counts: Record<string, number> = { all: 0, active: 0, draft: 0, paused: 0, ended: 0 };
@@ -167,8 +200,8 @@ export async function campaigns(env: Env, pid: number, filters: { status?: strin
   const rows = await env.DB.prepare("SELECT * FROM grow_campaigns WHERE project_id = ? AND archived_at IS NULL AND (? IS NULL OR status = ?) AND name LIKE ? ESCAPE '\\' COLLATE NOCASE ORDER BY created_at DESC, id DESC")
     .bind(pid, filters.status && filters.status !== 'all' ? filters.status : null, filters.status ?? null, search).all<Campaign>();
   const records = rows.results ?? [];
-  const attribution = records.some((c) => c.utm_campaign) ? await campaignLeads(env, pid) : undefined;
-  return { campaigns: await Promise.all(records.map((c) => readCampaign(env, c, attribution))), counts };
+  const attribution = records.some((c) => c.utm_campaign) ? await campaignLeads(env, pid, window) : undefined;
+  return { campaigns: await Promise.all(records.map((c) => readCampaign(env, c, attribution, window))), counts };
 }
 /** Detail projection has no email/id fallback for a missing creator name. */
 export async function campaign(env: Env, pid: number, uid: string) {

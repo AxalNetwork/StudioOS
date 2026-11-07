@@ -6,13 +6,13 @@ import { companyActionsApi } from '../../../lib/api/companyActions.js';
 import { companyProjectTeamPath, companyTeamPath, scopeFor, usePublishScope } from '../../../lib/settingsScope.js';
 import { ActionDialog } from './LifecycleDialogs.jsx';
 import { moveOutCopy } from '../../team/teamModel.js';
-import { BTN_DANGER, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
+import { BTN_DANGER, BTN_TEXT } from '../../team/teamUi.jsx';
 import SkillsLink from '../../team/SkillsLink.jsx';
 import * as portfolio from './portfolioAdapter.js';
 import {
-  BASE_PATH, companyLegalPath, companyProjectsPath, companySettingsPathFor, legalFacts, stageWord, valueFact,
+  companyLegalPath, companyProjectsPath, companySettingsPathFor, legalFacts, stageWord, valueFact,
 } from './companiesModel';
-import { CompanyMark, EYEBROW, Fact, FactList, Failed, INK, LINK, MUTED, PCard, ProjectMark, Reading } from './portfolioUi.jsx';
+import { CompanyMark, EYEBROW, Fact, FactList, Failed, INK, LINK, MUTED, NotYours, PCard, ProjectMark, Reading } from './portfolioUi.jsx';
 import LegalSheet from './LegalSheet.jsx';
 import ComplianceCard from '../../work/ComplianceCard.jsx';
 
@@ -207,12 +207,7 @@ export default function CompanySettingsTabs({ tab }) {
   const name = String(detail.value?.company_name || '').trim();
   usePublishScope(detail.status === 'ready' ? scopeFor({ company: { uid, name } }) : null);
   if (detail.status === 'notFound') {
-    return (
-      <div className="mx-auto flex max-w-3xl flex-col gap-3 p-6" data-testid="company-settings-not-yours">
-        <p className={`m-0 text-[14px] font-bold ${INK}`}>This company is not yours to open.</p>
-        <Link to={BASE_PATH} className={BTN_SECONDARY}>Back to Portfolio</Link>
-      </div>
-    );
+    return <NotYours />;
   }
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pb-8 pt-6 md:px-7" data-testid={`company-settings-${tab}`}>

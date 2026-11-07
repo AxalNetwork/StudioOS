@@ -27,7 +27,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
-  ensureVerdictHistorySchema, recordVerdictChanges, loadVerdictHistory,
+  changedWithin, ensureVerdictHistorySchema, loadVerdictHistory, observationAt,
+  recordVerdictChanges,
 } from '../src/services/verdictHistory.ts';
 
 const MIGRATION = readFileSync(
@@ -63,6 +64,20 @@ const rows = (db: InstanceType<typeof DatabaseSync>): any[] =>
 
 const state = (id: number, verdict: string | null, lane: string) =>
   ({ hypothesis_id: id, verdict, lane });
+
+function insertObservations(
+  db: InstanceType<typeof DatabaseSync>, projectId: number, count: number,
+  claimOf: (i: number) => number = () => 10,
+) {
+  const put = db.prepare(`INSERT INTO hypothesis_verdict_history
+    (project_id, hypothesis_id, verdict, lane, observed_at) VALUES (?, ?, ?, ?, ?)`);
+  db.exec('BEGIN');
+  for (let i = 1; i <= count; i += 1) {
+    put.run(projectId, claimOf(i), i % 2 ? 'unproven' : 'validated', i % 2 ? 'testing' : 'validated',
+      new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString().replace('T', ' ').slice(0, 19));
+  }
+  db.exec('COMMIT');
+}
 
 test('a verdict change writes exactly one row, and the first observation counts as one', async () => {
   const { env, db } = makeEnv();
@@ -148,6 +163,70 @@ test('the history comes back oldest-first, with the date the record starts', asy
   assert.deepEqual(h.byClaim.get(60)!.map((o) => o.lane), ['none', 'testing', 'validated'],
     'the order is what "as of" reads — a shuffled history answers the wrong verdict');
   assert.ok(h.since, 'the record has rows but reports no start date');
+});
+
+test('D4629: 1999 and 2000 observations are complete; 2001 retains the newest row and its predecessor', async () => {
+  for (const count of [1999, 2000, 2001]) {
+    const { env, db } = makeEnv();
+    await ensureVerdictHistorySchema(env);
+    insertObservations(db, 60 + count, count, (i) => i === 2001 ? 20 : 10);
+    // Another project's newer row must never enter this venture's slice.
+    db.prepare(`INSERT INTO hypothesis_verdict_history
+      (project_id, hypothesis_id, verdict, lane, observed_at) VALUES (999, 999, 'validated', 'validated', '2027-01-01 00:00:00')`).run();
+
+    const h = await loadVerdictHistory(env, 60 + count, { claimIds: [10, 20] });
+    assert.equal(h.coverage.status, count > 2000 ? 'partial' : 'complete', `coverage at ${count}`);
+    assert.equal(h.byClaim.has(999), false, 'project isolation');
+    if (count === 2001) {
+      const raw = await loadVerdictHistory(env, 60 + count);
+      assert.equal(raw.byClaim.get(20)?.[0].id, 2001,
+        'the bounded project read itself includes a claim first observed beyond the former cap');
+      assert.equal(h.byClaim.get(20)?.length, 1, 'a claim first observed beyond the old cap is represented');
+      assert.equal(h.byClaim.get(20)?.[0].id, 2001, 'the newest observation is retained');
+      assert.equal(h.byClaim.get(10)?.[0].id, 1, 'the predecessor of the retained slice is present');
+      const boundary = new Date('2026-01-01T00:00:02Z');
+      assert.equal(changedWithin(h.byClaim.get(10), boundary, 'verdict'), true,
+        'the first retained transition compares with its prior observation');
+      assert.notEqual(h.coverage.recorded_since, h.coverage.since,
+        'partial coverage does not present the first recorded date as a complete loaded slice');
+    }
+  }
+});
+
+test('D4629: an exact as-of state survives a busy 2000-row slice and same-second rows use id order', async () => {
+  const { env, db } = makeEnv();
+  await ensureVerdictHistorySchema(env);
+  const put = db.prepare(`INSERT INTO hypothesis_verdict_history
+    (project_id, hypothesis_id, verdict, lane, observed_at) VALUES (?, ?, ?, ?, ?)`);
+  put.run(70, 77, 'unproven', 'testing', '2026-01-01 00:00:00');
+  insertObservations(db, 70, 2001, () => 10);
+  put.run(70, 77, 'validated', 'validated', '2026-02-01 00:00:00');
+  put.run(70, 88, 'unproven', 'testing', '2026-02-02 00:00:00');
+  put.run(70, 88, 'validated', 'validated', '2026-02-02 00:00:00');
+
+  const at = new Date('2026-01-15T00:00:00Z');
+  const h = await loadVerdictHistory(env, 70, { claimIds: [10, 77, 88], boundaries: [at] });
+  assert.equal(h.coverage.status, 'partial');
+  assert.equal(observationAt(h.byClaim.get(77), at)?.verdict, 'unproven',
+    'the boundary query retains the state in force even when it predates the newest slice');
+  assert.deepEqual(h.byClaim.get(88)?.map((o) => o.verdict), ['unproven', 'validated'],
+    'same-timestamp observations are deterministically ordered by id');
+  assert.equal(observationAt(h.byClaim.get(88), new Date('2026-02-02T00:00:00Z'))?.verdict, 'validated',
+    'the larger id is in force at an equal timestamp');
+});
+
+test('D4629: a failed bounded read reports unavailable coverage, never an empty complete history', async () => {
+  const { env } = makeEnv();
+  await recordVerdictChanges(env, 80, [state(1, 'unproven', 'testing')]);
+  const prepare = env.DB.prepare.bind(env.DB);
+  env.DB.prepare = (sql: string) => {
+    if (sql.includes('SELECT id, hypothesis_id, verdict, lane, observed_at FROM (')) throw new Error('history read failed');
+    return prepare(sql);
+  };
+  const h = await loadVerdictHistory(env, 80, { claimIds: [1] });
+  assert.equal(h.coverage.status, 'unavailable');
+  assert.equal(h.since, null);
+  assert.equal(h.byClaim.size, 0);
 });
 
 test('two databases in one isolate each get their own bootstrap', async () => {

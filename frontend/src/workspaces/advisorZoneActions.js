@@ -41,12 +41,18 @@ import { makeZoneActions } from './zoneActionBuilder';
  * New service, New piece, Block a date range and Download 1099 summary.
  * Opportunities, Engagements, Delivery, the five Cohorts zones, Profile, Proof
  * and Visibility have no live first step, so no primary.
+ *
+ * D4681 (#4681): Profile's `Preview as founder` and Proof's `Public preview`
+ * said "no public profile page exists to preview". One does (`/advisors/:uid`,
+ * D571), so both are the page's `openPublicPreview`, disabled until there is a
+ * saved profile to open. Thinking's `Drafting history` said there was no
+ * revision history; D1406 keeps one per piece, and the shelf opens it.
  */
 
 export const ADVISOR_ZONE_ACTIONS = {
   'expertise/profile': [
     { label: 'Edit profile', unbuilt: 'every field below is editable and saves in place' },
-    { label: 'Preview as founder', unbuilt: 'no public profile page exists to preview' },
+    { label: 'Preview as founder', kind: 'handler', handler: 'openPublicPreview' },
     { label: 'Export', kind: 'export' },
   ],
   'expertise/services': [
@@ -56,12 +62,12 @@ export const ADVISOR_ZONE_ACTIONS = {
   ],
   'expertise/proof': [
     { label: 'Ask for consent', unbuilt: 'consent is requested from each proof’s own row' },
-    { label: 'Public preview', unbuilt: 'no public profile page exists to preview' },
+    { label: 'Public preview', kind: 'handler', handler: 'openPublicPreview' },
     { label: 'Export', kind: 'export' },
   ],
   'expertise/thinking': [
     { label: 'New piece', to: '/articles/draft', primary: true },
-    { label: 'Drafting history', unbuilt: 'only the current draft is stored; there is no revision history' },
+    { label: 'Drafting history', unbuilt: 'each piece’s saved revisions open from its History, on the shelf below' },
     { label: 'Export', kind: 'export' },
   ],
 

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import SkillLifecycle, { BulkBar } from './SkillLifecycle.jsx';
+import { useAuth } from '../../../hooks/useAuthSync';
 import { Overview, Runs, Spend, Audit, Policies } from './Operations.jsx';
 import { adminCompanySkillsApi } from '../../../lib/api/adminCompanySkills';
 import { adminHqSkillsApi } from '../../../lib/api/adminHqSkills';
@@ -8,9 +10,11 @@ import { Card } from '../../../ui';
 import AdminPageHeader, { HeaderTab } from '../../../ui/AdminPageHeader';
 import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
+import { AgentRadar } from '../../team/SkillParts';
+import { radarVector } from '../../team/skillsModel';
 import {
   COMPANY_COLUMNS, NOT_RECORDED, REASON_MIN,
-  ROSTER_COLUMNS, SUBTITLE, areaTiles, notYet, skillRow, viewFor,
+  ROSTER_COLUMNS, SUBTITLE, areaTiles, skillRow, viewFor,
   PERSONA_STATUS, VALUE_KEYS, actionWord, defaultsArmed, filterRoster, fitLabel, historyLine, identityChanges, retireLines,
   rosterCounts, rosterRefusal, rosterRow, saveArmed, statusArmed, teamLine, usd, valueLabel,
 } from './aiAgentsModel';
@@ -24,9 +28,10 @@ import {
  * Policies · Audit).
  *
  * D4522 connects the Super Admin skills library, Overview, Operations and
- * policy reads to their mounted admin APIs. Roster writes and pause/resume
- * require a reason. Skill lifecycle and company review controls retain
- * their separate build status.
+ * policy reads to their mounted admin APIs. Roster writes, pause/resume and
+ * the policy controls require a reason. #4739 adds the From Axal lifecycle
+ * (`SkillLifecycle.jsx`: review, golden cases, evals, diff, retire, and the
+ * library's bulk actions) and the Policies controls (`PolicyControls.jsx`).
  */
 
 const MUTED = 'text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -381,7 +386,10 @@ function Unreadable({ onRetry, what }) {
 
 function FromAxal({ skills, onRetry }) {
   const [q, setQ] = useState('');
-  const rows = useMemo(() => (skills.hq ?? []).map(skillRow).filter((r) => !q || `${r.name} ${r.slug ?? ''}`.toLowerCase().includes(q.toLowerCase())), [skills.hq, q]);
+  const [selected, setSelected] = useState(() => new Set());
+  const all = useMemo(() => (skills.hq ?? []).map(skillRow), [skills.hq]);
+  const rows = useMemo(() => all.filter((r) => !q || `${r.name} ${r.slug ?? ''}`.toLowerCase().includes(q.toLowerCase())), [all, q]);
+  const toggle = (uid) => setSelected((s) => { const n = new Set(s); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   if (skills.status === 'loading') return <p role="status" className={MUTED}>Reading the library…</p>;
   if (skills.status === 'unreadable') return <Unreadable onRetry={onRetry} what="The From Axal skills" />;
   const tiles = areaTiles(skills.hq);
@@ -396,19 +404,17 @@ function FromAxal({ skills, onRetry }) {
         <div className="flex flex-wrap items-center gap-2">
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills" aria-label="Search skills"
             className="h-9 min-w-[220px] flex-1 rounded-lg border border-axal-hairline bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
-          <button type="button" disabled className={BTN} title={notYet('H2')}>Publish…</button>
-          <button type="button" disabled className={BTN} title={notYet('H2')}>Re-run evals</button>
-          <button type="button" disabled className={BTN} title={notYet('H2')}>Retire…</button>
         </div>
-        <p className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="ai-agents-bulk-not-yet">Bulk actions, review and golden cases: {notYet('H2')}</p>
+        <BulkBar rows={all} selected={selected} onDone={() => { setSelected(new Set()); onRetry(); }} />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-[12.5px]" data-testid="ai-agents-skill-table">
-            <thead className={EYEBROW}><tr className="text-left">{['Skill', 'Area · level', 'Version · status', 'Agents', 'Tools', 'Golden cases', 'Last eval'].map((h) => <th key={h} className="py-1.5 pr-3">{h}</th>)}</tr></thead>
+            <thead className={EYEBROW}><tr className="text-left"><th className="py-1.5 pr-2"><span className="sr-only">Select</span></th>{['Skill', 'Area · level', 'Version · status', 'Agents', 'Tools', 'Golden cases', 'Last eval'].map((h) => <th key={h} className="py-1.5 pr-3">{h}</th>)}</tr></thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={7} className="py-6 text-center text-axal-muted dark:text-gray-400">{q ? 'No skill matches.' : 'No From Axal skill yet.'}</td></tr>
+                <tr><td colSpan={8} className="py-6 text-center text-axal-muted dark:text-gray-400">{q ? 'No skill matches.' : 'No From Axal skill yet.'}</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.uid} className="border-t border-axal-hairline/60 align-top dark:border-gray-800" data-testid="ai-agents-skill-row">
+                  <td className="py-2 pr-2"><input type="checkbox" checked={selected.has(r.uid)} onChange={() => toggle(r.uid)} aria-label={`Select ${r.name}`} className="h-4 w-4" data-testid="ai-agents-skill-select" /></td>
                   <td className="py-2 pr-3"><Link to={`/hq/ai-agents/skills/${encodeURIComponent(r.uid)}/edit`} className="font-semibold text-axal-ink hover:underline dark:text-gray-100">{r.name}</Link>{r.slug ? <div className="font-mono text-[11px] text-axal-muted dark:text-gray-500">{r.slug}</div> : null}</td>
                   <td className="py-2 pr-3 text-axal-ink dark:text-gray-200">{r.area} · {r.level}</td>
                   <td className="py-2 pr-3"><span className="mr-1.5 font-mono">{r.version}</span><Chip tone={r.status.tone}>{r.status.label}</Chip></td>
@@ -433,7 +439,8 @@ function SkillRecord({ value }) {
   return <span className="whitespace-pre-wrap break-words">{typeof value === 'boolean' ? value ? 'Yes' : 'No' : String(value)}</span>;
 }
 
-export function Editor({ view }) {
+export function Editor({ view, viewerUid }) {
+  const { user } = useAuth();
   const [result, setResult] = useState({ loading: true });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -456,6 +463,10 @@ export function Editor({ view }) {
       <Card className="space-y-3 px-4 py-4">
         <h2 className={H2}>{row.name}</h2>
         <p className={MUTED}>{row.area} · {row.level} · {row.version} · <Chip tone={row.status.tone}>{row.status.label}</Chip></p>
+        <section className="space-y-2 border-y border-axal-hairline py-3 dark:border-gray-800" data-testid="hq-skill-graph">
+          <h3 className={H2}>Skill graph</h3>
+          <AgentRadar vector={radarVector(data.skill.radar)} radar={data.skill.radar} height={190} label="Computed from this skill’s taxonomy." empty="This skill has no taxonomy levels yet." />
+        </section>
         <h3 className={H2}>Purpose</h3><p className={MUTED}>{data.skill.purpose || 'Not recorded'}</p>
         <h3 className={H2}>Steps</h3>
         {data.skill.steps?.length ? <ol className="list-decimal space-y-2 pl-5">{data.skill.steps.map((step, i) => <li key={i} className="whitespace-pre-wrap">{show(step)}</li>)}</ol> : <p className={MUTED}>No steps recorded.</p>}
@@ -466,7 +477,7 @@ export function Editor({ view }) {
         <h3 className={H2}>{title}</h3>
         <div className={MUTED}><SkillRecord value={value} /></div>
       </Card>)}
-      <p className={MUTED}>Recorded skill details. Editing and lifecycle actions are not connected on this page yet.</p>
+      <SkillLifecycle data={data} viewerUid={viewerUid ?? user?.uid} reload={() => setAttempt(n => n + 1)} />
     </>}
   </div>;
 }
@@ -540,13 +551,22 @@ export default function HqAiAgentsPage() {
   const view = viewFor(pathname);
   const [skills, setSkills] = useState({ status: 'loading', hq: null });
 
-  const load = useCallback(() => {
+  const showLibrary = view.tab === 'skills' && view.sub === 'axal';
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!showLibrary) return;
+    const controller = new AbortController();
     setSkills({ status: 'loading', hq: null });
-    adminHqSkillsApi.listAll()
-      .then((r) => { if (!Array.isArray(r?.skills)) throw new Error('unreadable'); setSkills({ status: 'ready', hq: r.skills }); })
-      .catch(() => setSkills({ status: 'unreadable', hq: null }));
-  }, []);
-  useEffect(() => { load(); }, [load]);
+    adminHqSkillsApi.list({ signal: controller.signal })
+      .then((r) => {
+        if (!Array.isArray(r?.skills)) throw new Error('unreadable');
+        if (!controller.signal.aborted) setSkills({ status: 'ready', hq: r.skills });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSkills({ status: 'unreadable', hq: null });
+      });
+    return () => controller.abort();
+  }, [showLibrary, attempt]);
 
   const hqCount = skills.status === 'ready' ? skills.hq.length : null;
   const tabs = (
@@ -568,10 +588,10 @@ export default function HqAiAgentsPage() {
         data-testid="ai-agents-header"
       />
       <SubTabs view={view} />
-      {view.tab === 'overview' ? <Overview skills={skills} /> : null}
+      {view.tab === 'overview' ? <Overview /> : null}
       {view.tab === 'roster' ? <Roster view={view} /> : null}
-      {view.tab === 'skills' && view.sub === 'axal' ? <FromAxal skills={skills} onRetry={load} /> : null}
-      {view.tab === 'skills' && view.sub === 'editor' ? <Editor view={view} skills={skills} /> : null}
+      {showLibrary ? <FromAxal skills={skills} onRetry={() => setAttempt((n) => n + 1)} /> : null}
+      {view.tab === 'skills' && view.sub === 'editor' ? <Editor view={view} /> : null}
       {view.tab === 'skills' && view.sub === 'companies' ? <CompanySkills /> : null}
       {view.tab === 'operations' && view.sub === 'runs' ? <Runs /> : null}
       {view.tab === 'operations' && view.sub === 'spend' ? <Spend /> : null}

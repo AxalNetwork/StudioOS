@@ -244,7 +244,9 @@ test('solution links and founder risks share the project but not the analyst reg
   assert.equal(module.body.records.rows[0].cells.pain_theme, 'Slow reporting');
   assert.equal(cardView(module.body.card).state, 'ok');
   assert.equal(module.body.records.rows[0].cells.hypothesis, 'Automate the monthly close');
-  assert.equal(module.body.facts.risks[0].title, 'Vendor outage');
+  // #4603 part 2: the module page counts risks (the card's series) and no longer lists them in facts.
+  assert.equal(db.prepare('SELECT title FROM venture_risks WHERE project_id = 101').get()?.title, 'Vendor outage');
+  assert.equal(module.body.facts.risks, undefined);
   assert.equal(module.body.card.series[1].rows[0].parts[0], 1);
   assert.equal(db.prepare("SELECT user_id FROM activity_logs WHERE action = 'build_risk_created'").get()?.user_id, 1);
   const denied = await call(env, '/api/cycles/build/risks?project=101', 2, 'POST', { title: 'Other', severity: 'low' });

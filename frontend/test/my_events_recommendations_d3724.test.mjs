@@ -1,6 +1,7 @@
 // D3724 (#3724 Part D and the NE2 cover step): My events' "Recommended for
-// you" with Why this?, Not for me and Tune, behind the adapter that answers
-// "not switched on yet" until D1487/D1488 land; and the editor's cover step.
+// you" with Why this?, Not for me and Tune, behind the adapter (wired to the
+// routes by #4738, see my_events_recommendations_4738.test.mjs); and the
+// editor's cover step.
 //
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/my_events_recommendations_d3724.test.mjs
 import test from 'node:test';
@@ -14,7 +15,7 @@ import RecommendedRow from '../src/pages/events/RecommendedRow.jsx';
 import EventCoverStep from '../src/pages/events/EventCoverStep.jsx';
 import * as adapter from '../src/pages/events/recommendationsAdapter.js';
 import {
-  EMPTY_LINE, ERROR_LINE, EXPLORER_REASON, FEW_LINE, GOALS_TOO_LONG, NOT_ON, NOT_RECORDED, OFF_LINE, PENDING_OWNER,
+  EMPTY_LINE, ERROR_LINE, EXPLORER_REASON, FEW_LINE, GOALS_TOO_LONG, NOT_ON, NOT_RECORDED, OFF_LINE,
   checkPrefs, explainQuoteLine, reasonsOf, registerState, rowState, signalWord, travelWords,
 } from '../src/pages/events/recommendationsModel.js';
 import { COVER_RULE, TOO_SMALL, WRONG_TYPE, checkCoverFile, coverPrompt } from '../src/pages/events/eventCoverModel.js';
@@ -59,36 +60,26 @@ test('reasons are the stored words; a missing figure is Not recorded, never 0', 
   assert.equal(checkPrefs({ travel_km: 'far' }).field, 'travel_km');
 });
 
-test('the owner\'s five questions stay open: each is listed, none is answered here', () => {
-  assert.deepEqual(PENDING_OWNER.map((q) => q.n), [1, 2, 3, 4, 5]);
+test('the owner\'s five questions are decided (D1487): D3724 points to it, and no screen says "pending owner"', () => {
   const d = read('documentation/architecture/decisions/D3724.md');
   assert.match(d, /^## D3724 — .+ \(#3724\)$/m);
-  for (const q of PENDING_OWNER) assert.match(d, new RegExp(`\\| ${q.n} \\|[^\\n]*Pending owner`), `question ${q.n} is pending owner`);
+  assert.match(d, /### The owner's questions \(decided, D1487\)/);
+  assert.doesNotMatch(d, /Pending owner \|/);
   assert.match(d, /## §gaps/);
+  const model = read('frontend/src/pages/events/recommendationsModel.js');
+  assert.doesNotMatch(model, /PENDING_OWNER|PENDING_WORD|Pending owner/);
+  assert.doesNotMatch(read('frontend/src/pages/events/recommendationsAdapter.js'), /not on main yet/);
+  assert.doesNotMatch(model, /not on main\s+\* yet|not on main yet/);
+  assert.match(read('documentation/architecture/decisions/D1487.md'), /owner confirmed S1's defaults on 2026-11-04/);
 });
 
-test('the adapter calls nothing: every function answers "not switched on yet"', async () => {
-  const real = globalThis.fetch;
-  let fetched = 0;
-  globalThis.fetch = async () => { fetched++; throw new Error('no fetch'); };
-  try {
-    for (const [name, fn] of Object.entries(adapter)) {
-      if (typeof fn !== 'function' || name === 'unavailable') continue;
-      const r = await fn(1, {});
-      assert.equal(r.available, false, name);
-      assert.ok(r.reason, name);
-    }
-  } finally { globalThis.fetch = real; }
-  assert.equal(fetched, 0);
-});
-
-test('not switched on: one line, then today\'s Suggested card, nothing faked', () => {
+test('not available: one line, then today\'s Suggested card, nothing faked', () => {
   const html = renderToStaticMarkup(h(MemoryRouter, null, h(RecommendedRow, {
-    read: { status: 'ready', data: { available: false, reason: adapter.RECS_OFF_REASON } },
+    read: { status: 'ready', data: { available: false, reason: NOT_ON } },
     fallback: h('section', { 'data-testid': 'my-events-suggested' }, 'Suggested for you'),
   })));
   assert.match(html, /data-state="not_on"/);
-  assert.match(html, /Recommendations aren’t switched on yet\./);
+  assert.match(html, /Recommendations aren’t available right now\./);
   assert.match(html, /data-testid="my-events-suggested"/);
   assert.doesNotMatch(html, /my-events-recommended-card/);
 });
@@ -104,8 +95,8 @@ test('ready: cards with Register, Save, Not for me and Why this?; Why this is fr
   const calls = [];
   const act = {
     feedback: async (id, body) => { calls.push(['feedback', id, body]); return { available: true, value: { verdict: body.verdict } }; },
-    explainQuote: async (id) => { calls.push(['quote', id]); return { available: true, value: { microusd: 40000 } }; },
-    explain: async (id) => { calls.push(['explain', id]); return { available: true, value: { text: 'It matches your round.' } }; },
+    explainQuote: async (id) => { calls.push(['quote', id]); return { available: true, value: { microusd: 40000, quote_uid: 'q-1' } }; },
+    explain: async (id, uid) => { calls.push(['explain', id, uid]); return { available: true, value: { text: 'It matches your round.' } }; },
     savePrefs: async (p) => { calls.push(['prefs', p]); return { available: true, value: p }; },
   };
   const ui = await mountForm(h(RecommendedRow, { read: ready(EV), act }), { modal: true });
@@ -123,6 +114,8 @@ test('ready: cards with Register, Save, Not for me and Why this?; Why this is fr
     await ui.click('Ask Eadwyn');
     assert.match(ui.text(), /It matches your round\./);
     assert.deepEqual(calls.map((c) => c[0]), ['quote', 'explain']);
+    assert.deepEqual(calls[1], ['explain', 7, 'q-1'], 'Explain runs with the quote that was shown');
+    assert.doesNotMatch(ui.text(), /question \d on #3724|Pending owner/);
   } finally { await ui.unmount(); }
 });
 
@@ -146,13 +139,13 @@ test('Not for me: a reason chip, hidden with Undo; the host never sees it', asyn
 
 test('Tune: goals over 500 are refused before sending; signals read Not recorded; the adapter\'s refusal is shown', async () => {
   const sent = [];
-  const writes = { savePrefs: async (p) => { sent.push(p); return adapter.unavailable(adapter.RECS_OFF_REASON); } };
+  const writes = { savePrefs: async (p) => { sent.push(p); return adapter.unavailable('Sign in again to save.'); } };
   const ui = await mountForm(h(RecommendedRow, { read: ready(EV), act: writes }), { modal: true });
   try {
     await ui.click('Tune recommendations');
     assert.match(ui.text(), /GoalsNot recorded/);
     assert.match(ui.text(), /Travel rangeCould not be read/);
-    assert.match(ui.text(), /Pending owner: five questions on #3724/);
+    assert.doesNotMatch(ui.text(), /Pending owner|five questions/);
     const goals = ui.nodes().find((n) => n.tagName === 'TEXTAREA');
     await act(async () => ui.props(goals).onChange({ target: { value: 'x'.repeat(501) } }));
     await ui.click('Save preferences');
@@ -161,14 +154,14 @@ test('Tune: goals over 500 are refused before sending; signals read Not recorded
     await act(async () => ui.props(ui.nodes().find((n) => n.tagName === 'TEXTAREA')).onChange({ target: { value: 'Raise a seed round' } }));
     await ui.click('Save preferences');
     assert.equal(sent.length, 1);
-    assert.match(ui.text(), /Recommendations aren’t switched on yet\./);
+    assert.match(ui.text(), /Sign in again to save\./);
   } finally { await ui.unmount(); }
 });
 
 test('the page wires the row through the adapter, keeps Suggested as its fallback, and the tabs import no client', () => {
   const page = read('frontend/src/pages/events/MyEventsPage.jsx');
   assert.match(page, /import \* as recommendations from '\.\/recommendationsAdapter'/);
-  assert.match(page, /recommendations\.recommended\(\{ limit: 8 \}\)/);
+  assert.match(page, /recommendations\.recommended\(8\)/);
   assert.match(page, /<RecommendedRow read=\{recommended\} act=\{RECOMMEND_ACT\} explorer=\{explorer\}\s+fallback=\{<SuggestedCard /);
   assert.match(page, /layout="grid" fallback=\{fallback\}/);
   const tabs = read('frontend/src/pages/events/MyEventsTabs.jsx');
@@ -177,7 +170,7 @@ test('the page wires the row through the adapter, keeps Suggested as its fallbac
   const row = read('frontend/src/pages/events/RecommendedRow.jsx');
   assert.doesNotMatch(row, /lib\/api|eventsApi/, 'the row imports no client');
   const ad = read('frontend/src/pages/events/recommendationsAdapter.js');
-  assert.doesNotMatch(ad, /^import /m, 'the adapter calls no route that does not exist');
+  assert.match(ad, /eventRecommendationsApi/, 'the adapter calls the client the Worker routes sit behind');
 });
 
 test('cover step: JPG or PNG at least 1200 × 675; the prompt is the event\'s own words and draws no one', () => {

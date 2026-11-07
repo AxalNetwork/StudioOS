@@ -17,11 +17,8 @@
  *   slugCheck                                           D1591  `slugsApi`
  *   projectAgents                                       D1496 (#3840), through Team's seam
  *
- * STILL UNAVAILABLE, a one-line body until its route lands. The builder adds
- * the client method in the same PR as the route and replaces only the body:
- *
- *   #3932  defaultCurrency   Company settings › General's "Default currency"
- *                            row reads "Coming later", never "USD" (owner Q4)
+ * NOTHING IS UNAVAILABLE NOW: the last stub (#3932, the default currency) went in #4736, when General read
+ * `default_currency` from the company itself.
  *
  * NO CLIENT METHOD IS ADDED HERE OR IN `lib/api` FOR A ROUTE THAT DOES NOT
  * EXIST: the drift test (`scripts/check-api-drift.mjs`) resolves every one.
@@ -103,9 +100,3 @@ export async function projectAgents(id) {
   const agents = Array.isArray(out.value?.agents) ? out.value.agents : null;
   return agents ? { available: true, value: agents.length } : { available: false, unreadable: true, reason: 'could not be read' };
 }
-
-// ---------------------------------------------------------------- #3932: unavailable
-
-export const CURRENCY_LATER = 'Coming later';
-/** Company settings › General's "Default currency" (owner Q4): no column exists until #3932. */
-export const defaultCurrency = (/* uid */) => Promise.resolve(unavailable(CURRENCY_LATER, '#3932'));

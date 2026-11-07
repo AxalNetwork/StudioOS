@@ -1,6 +1,8 @@
 // D4522: connect HQ reads to the existing Super Admin APIs, independently of rollout.
 import React, { useEffect, useState } from "react";
 import CohortCard from "./CohortCard.jsx";
+import PolicyControls from "./PolicyControls.jsx";
+import { policyRefusal } from "./refusals.js";
 import { adminAiAgentsApi as api } from "../../../lib/api/adminAiAgents";
 const missing = "Not recorded";
 const money = (v) => (v == null ? missing : `$${(v / 1e6).toFixed(2)}`);
@@ -310,18 +312,18 @@ export function Policies() {
   const [reason, setReason] = useState(""),
     [confirm, setConfirm] = useState(""),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(false);
+    [error, setError] = useState("");
   const change = async (paused) => {
     setBusy(true);
-    setError(false);
+    setError("");
     try {
       if (paused) await api.resumeAll(reason);
       else await api.pauseAll(reason, confirm);
       setReason("");
       setConfirm("");
       state.retry();
-    } catch {
-      setError(true);
+    } catch (e) {
+      setError(policyRefusal(e));
     } finally {
       setBusy(false);
     }
@@ -336,26 +338,7 @@ export function Policies() {
           </p>
         ) : (
           <div className="space-y-4">
-            <section className={box}>
-              <h2>Platform AI policy</h2>
-              <h3>Models by area</h3>
-              <p>{text(d.policy.area_models)}</p>
-              <h3>Locked models</h3>
-              <p>{text(d.policy.locks)}</p>
-              <h3>Caps</h3>
-              {[
-                "platform_budget",
-                "default_team_cap",
-                "max_team_cap",
-                "per_run_ceiling",
-              ].map((k) => (
-                <p key={k}>
-                  {k.replaceAll("_", " ")}: {money(d.policy[`${k}_microusd`])}
-                </p>
-              ))}
-              <h3>Allowed read tools</h3>
-              <p>{text(d.policy.read_tools)}</p>
-            </section>
+            <PolicyControls policy={d.policy} reload={state.retry} />
             <section className={box}>
               <h2>Guardrails</h2>
               <Table
@@ -378,7 +361,7 @@ export function Policies() {
                 rollout.
               </p>
               <label>
-                Reason · required
+                Reason to pause or resume · required
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -412,9 +395,8 @@ export function Policies() {
                     : "Pause all AI agents"}
               </button>
               {error && (
-                <p role="alert">
-                  The change could not be saved. Read the current policy before
-                  trying again.{" "}
+                <p role="alert" data-testid="policy-pause-error">
+                  {error}{" "}
                   <button onClick={state.retry}>Refresh policy</button>
                 </p>
               )}

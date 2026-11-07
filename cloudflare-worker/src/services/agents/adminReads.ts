@@ -91,6 +91,27 @@ export async function platformBudget(env: Env): Promise<number | null> {
   } catch { return null; }
 }
 
+/**
+ * D4568 (#4568): ONE agent's area, by the same rule and order as `agentAreas`,
+ * for the run path. `agentAreas` aggregates every agent's links on the
+ * platform, which an agent run paid for to keep one entry (#4567 measured it
+ * as a scan that grows with registered agents); this reads only the agent's
+ * own links, through `UNIQUE (agent_id, skill_id)`.
+ */
+export async function agentArea(env: Env, agentId: number): Promise<string | null> {
+  try {
+    // agentAreas's statement with `WHERE l.agent_id = ?`: written out, so no text is spliced into the query.
+    const rs = await env.DB.prepare(
+      `SELECT l.agent_id, s.category_slug AS area, COUNT(*) AS n
+         FROM agent_skill_links l JOIN agent_skill_tags t ON t.skill_id = l.skill_id JOIN skills s ON s.slug = t.taxonomy_skill_slug
+        WHERE l.agent_id = ?
+        GROUP BY l.agent_id, s.category_slug ORDER BY l.agent_id, n DESC, s.category_slug`,
+    ).bind(agentId).all<any>();
+    for (const r of rs.results ?? []) if (AREA_SLUGS.includes(r.area)) return r.area;
+  } catch { /* no skills tables: the area is unknown */ }
+  return null;
+}
+
 /** Each agent's area: the radar axis most of its linked skills' tags fall in, or null when its skills tag none. */
 export async function agentAreas(env: Env): Promise<Map<number, string>> {
   const out = new Map<number, string>();
@@ -301,7 +322,7 @@ const parse = (s: unknown) => { if (typeof s !== 'string') return null; try { re
 export async function runDetail(env: Env, uid: string) {
   const r = await env.DB.prepare(RUN_QUERY).bind(...runBinds({ uid }, 1)).first<any>();
   if (!r) return null;
-  const [skills, areas] = await Promise.all([skillsOf(env, [Number(r.agent_id)]), agentAreas(env)]);
+  const [skills, area] = await Promise.all([skillsOf(env, [Number(r.agent_id)]), agentArea(env, Number(r.agent_id))]);
   const steps = (Array.isArray(parse(r.steps_json)) ? parse(r.steps_json) : []) as Array<Record<string, unknown>>;
   let hold: number | null = null;
   if (r.reservation_uid) {
@@ -318,7 +339,7 @@ export async function runDetail(env: Env, uid: string) {
     r.task_module ? { kind: 'module', ref: `module:${r.task_module}${r.task_option ? `:${r.task_option}` : ''}` } : null,
     ...(skills.get(Number(r.agent_id)) ?? []).map((s) => ({ kind: 'skill', ref: `skill:${s.uid}@${s.version}`, label: s.name })),
   ].filter(Boolean);
-  const line = runLine(r, skills.get(Number(r.agent_id)) ?? [], areas.get(Number(r.agent_id)) ?? null);
+  const line = runLine(r, skills.get(Number(r.agent_id)) ?? [], area);
   return redactEmails({
     ...line,
     started_at: r.started_at ?? null, ended_at: r.ended_at ?? null, step: r.step ?? null,

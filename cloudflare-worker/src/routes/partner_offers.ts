@@ -283,7 +283,7 @@ partnerOffers.get('/attribution', async (c) => {
               s.id AS surface_id, s.name AS surface_name
          FROM engagements e
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
          LEFT JOIN engagement_sources es ON es.engagement_id = e.id
          LEFT JOIN partner_surfaces s ON s.id = es.surface_id
         WHERE e.partner_id = ?
@@ -387,7 +387,7 @@ partnerOffers.get('/proof', async (c) => {
          FROM partner_proof_items p
          LEFT JOIN engagements e ON e.id = p.engagement_id
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
         WHERE p.partner_id = ?
         ORDER BY p.created_at DESC
         LIMIT 200`,

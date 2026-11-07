@@ -8,17 +8,17 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/companies_moved_d1140.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  MANAGE_LABEL, MOVED_KEY, MOVED_NOTICES, PROFILE_MOVED_STORE, SETTINGS_PATH, SIDEBAR_LABEL,
-  activeUidFrom, companyPathFor, companySettingsPathFor, companyUidFor, forwardTarget, settingsUidFor,
-  BASE_PATH, COMPANIES_MOVED_KEY, TAB_PATHS, movedCompaniesTarget,
+  MANAGE_LABEL, MOVED_NOTICES, PROFILE_MOVED_STORE, SETTINGS_PATH, SIDEBAR_LABEL,
+  companyPathFor, companySettingsPathFor, companyUidFor, settingsUidFor,
+  BASE_PATH, COMPANIES_MOVED_KEY, TAB_PATHS,
 } from '../src/pages/account/companies/companiesModel.js';
-import { CompaniesMovedNotice, CompaniesMovedRedirect, CompanySettingsRedirect, ProfileMovedNotice } from '../src/pages/account/companies/CompaniesMoved.jsx';
+import { CompaniesMovedNotice, ProfileMovedNotice } from '../src/pages/account/companies/CompaniesMoved.jsx';
 import CompanySettingsAt from '../src/pages/account/companies/CompanySettingsAt.jsx';
 import { MANAGE_LABEL as SWITCHER_MANAGE, setReadState } from '../src/ui/CompanySwitcher.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
@@ -50,38 +50,6 @@ async function mount(el, url) {
 }
 
 const ROWS = [{ id: 7, uid: 'acme', company_name: 'Acme' }, { id: 9, uid: 'beta-co', company_name: 'Beta' }];
-
-test('the forward keeps the query and hash, adds the moved notice, and opens the active company', () => {
-  assert.equal(forwardTarget('acme', '?tab=billing&x=1', '#seats'), '/account/portfolio/acme?tab=billing&x=1&moved=company-settings#seats');
-  assert.equal(forwardTarget('beta-co', ''), '/account/portfolio/beta-co?moved=company-settings');
-  assert.equal(forwardTarget(null, '?moved=old'), '/account/portfolio?moved=company-settings', 'a stale moved key is replaced, never doubled');
-  assert.equal(activeUidFrom(ROWS, 9), 'beta-co');
-  assert.equal(activeUidFrom(ROWS, '9'), 'beta-co', 'localStorage hands the id back as text');
-  assert.equal(activeUidFrom(ROWS, 404), 'acme', 'a saved id no longer held falls to the first company');
-  assert.equal(activeUidFrom([], 7), null);
-  assert.equal(activeUidFrom(null, 7), null);
-  assert.equal(MOVED_NOTICES[MOVED_KEY], 'Company Settings has a new address. Update your bookmark.');
-});
-
-test('mounted, /company-settings forwards with the query, to the active company, to the tab with none, and after a failed read', async () => {
-  const restore = installDocument();
-  try {
-    const app = (list, savedId) => h(Routes, null,
-      h(Route, { path: '/company-settings', element: h(CompanySettingsRedirect, { list, savedId }) }),
-      h(Route, { path: '*', element: h(Where) }));
-    const cases = [
-      [async () => ROWS, () => 9, '/account/portfolio/beta-co?tab=team&moved=company-settings#x'],
-      [async () => [], () => null, '/account/portfolio?tab=team&moved=company-settings#x'],
-      [async () => { throw new Error('down'); }, () => 7, '/account/portfolio?tab=team&moved=company-settings#x'],
-    ];
-    for (const [list, savedId, want] of cases) {
-      seen = null;
-      const view = await mount(app(list, savedId), '/company-settings?tab=team#x');
-      assert.equal(seen, want);
-      await view.unmount();
-    }
-  } finally { restore(); }
-});
 
 test('D2319 removes /company-settings from routes and beacon keys', () => {
   assert.equal(REDIRECT_ROUTES.some((r) => r.path === '/company-settings'), false, 'retired by D2319');
@@ -218,52 +186,6 @@ test('D1415 part 4: the constants are /account/portfolio; D1413 (#3696 Q1) names
   assert.equal(MOVED_NOTICES[COMPANIES_MOVED_KEY], 'Companies and projects is now Portfolio, at a new address. Update your bookmark.');
 });
 
-test('D1415 part 4: every old address forwards to the same place, its query and hash kept, moved=companies added', () => {
-  for (const [from, want] of OLD) assert.equal(movedCompaniesTarget(...split(from)), want, from);
-  assert.equal(movedCompaniesTarget('/account/companies/', ''), '/account/portfolio?moved=companies', 'a trailing slash is the section');
-  for (const other of ['/account/companiesx', '/account/portfolio', '/company-settings', '']) assert.equal(movedCompaniesTarget(other), null, other);
-});
-
-test('D1415 part 4: mounted, each old address lands on the new one in one hop', async () => {
-  const restore = installDocument();
-  try {
-    const app = h(Routes, null,
-      ...['/account/companies', '/account/companies/settings', '/account/companies/:uid/settings', '/account/companies/:tab']
-        .map((path) => h(Route, { key: path, path, element: h(CompaniesMovedRedirect) })),
-      h(Route, { path: '*', element: h(Where) }));
-    for (const [from, want] of OLD) {
-      seen = null;
-      const view = await mount(app, from);
-      assert.equal(seen, want, from);
-      await view.unmount();
-    }
-  } finally { restore(); }
-});
-
-test('D1415 part 4: App.jsx routes the new addresses (settings before :tab) and forwards every old one', () => {
-  const app = read('frontend/src/App.jsx');
-  for (const p of ['/account/companies', '/account/companies/settings', '/account/companies/:uid/settings', '/account/companies/:tab']) {
-    const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    assert.equal(Boolean(line), !isRetiredRedirect(p), p);
-    assert.equal(line, undefined);
-  }
-  const at = (p) => app.indexOf(`path="${p}"`);
-  assert.ok(at('/account/portfolio/settings') > 0 && at('/account/portfolio/settings') < at('/account/portfolio/:tab'));
-  assert.ok(at('/account/portfolio/:uid/settings') > 0 && at('/account/portfolio/:uid/settings') < at('/account/portfolio/:tab'));
-  // /partner/operations[/overview] go straight to the new settings address.
-  for (const p of ['/partner/operations', '/partner/operations/overview']) {
-    const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    assert.equal(line, undefined);
-  }
-});
-
-test('D1415 part 4: /company-settings lands under /account/portfolio in one hop, never on an old address', () => {
-  for (const t of [forwardTarget('acme', '?a=1', '#h'), forwardTarget(null, '')]) {
-    assert.ok(t.startsWith('/account/portfolio'), t);
-    assert.equal(redirectPatternFor(split(t)[0]), null, `${t} forwards again`);
-  }
-});
-
 test('D2319: old company aliases no longer count; portfolio destinations remain canonical', () => {
   const paths = REDIRECT_ROUTES.map((r) => r.path);
   const tab = paths.indexOf('/account/companies/:tab');
@@ -275,3 +197,20 @@ test('D2319: old company aliases no longer count; portfolio destinations remain 
   for (const now of ['/account/portfolio', '/account/portfolio/acme', '/account/portfolio/settings']) assert.equal(redirectPatternFor(now), null, now);
 });
 
+
+test('#4736: no file in frontend/src exports a redirect for a retired address, and the rail has no /company-settings key', () => {
+  const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : [`${d}/${e.name}`]));
+  const files = walk('frontend/src').filter((f) => /\.(jsx?|mjs)$/.test(f));
+  for (const f of files) assert.doesNotMatch(read(f).split('\n').filter((l) => /^\s*(export|function|const)\b/.test(l)).join('\n'), /\b(CompaniesMovedRedirect|CompanySettingsRedirect)\b/, f);
+  assert.equal(existsSync('frontend/src/pages/account/companies/CompaniesMoved.jsx'), true, 'the arrival notices stay');
+  assert.doesNotMatch(read('frontend/src/lib/railPages.js'), /['"]\/company-settings['"]/);
+  const model = read('frontend/src/pages/account/companies/companiesModel.js');
+  assert.doesNotMatch(model, /export (function|const) (forwardTarget|movedCompaniesTarget|activeUidFrom|OLD_BASE_PATH)\b/, 'the forwards are gone, so are their helpers');
+});
+
+test('D1415 part 4: the new addresses are routed, the settings ones before :tab', () => {
+  const app = read('frontend/src/App.jsx');
+  const at = (p) => app.indexOf(`path="${p}"`);
+  assert.ok(at('/account/portfolio/settings') > 0 && at('/account/portfolio/settings') < at('/account/portfolio/:tab'));
+  assert.ok(at('/account/portfolio/:uid/settings') > 0 && at('/account/portfolio/:uid/settings') < at('/account/portfolio/:tab'));
+});

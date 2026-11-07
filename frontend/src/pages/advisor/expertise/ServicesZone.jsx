@@ -1,16 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
+  Field, MoreRows, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { FillFormBar, useScopedFill } from '../../../ui/useScopedFill.jsx';
+import { usePagedList } from './pages';
+
+const readServicesPage = (page) => api.listMyAdvisorServices(page);
 import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
+import {
+  SERVICE_BOOKABLE, SERVICE_NOT_PUBLIC, SERVICE_STATES, SESSIONS_PATH, serviceDraftOf, serviceEditBody, serviceStateLabel,
+} from './expertiseModel';
 
 /**
  * Expertise · Services — what you sell, and what you charge for it.
@@ -35,6 +42,12 @@ import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
  * What it covers, from the advisor's recorded outcomes and Eadwyn. The price
  * is never filled. Nothing is written until Add service; then the record step
  * keeps only what still equals each proposal.
+ *
+ * D4681 (#4681): a saved service is edited in place (`PATCH /me/services/:id`,
+ * owner-checked), every field at once, so a change never means delete and
+ * recreate. Active and Inactive are states of the advisor's own record: a
+ * service is never on the public profile and is never booked. What a founder
+ * books is a session type and its public booking link (Practice › Sessions).
  */
 
 const KINDS = [
@@ -46,12 +59,21 @@ const KINDS = [
 const BLANK = { title: '', kind: 'fixed', duration_note: '', price: '', scope: '' };
 
 export default function ServicesZone() {
-  const [state, setState] = useState({ loading: true, error: '', items: [] });
+  // #4689: a page at a time; the tiles read `counts`, the whole list's figures.
+  const list = usePagedList(readServicesPage, { errorText: 'Your services could not be read.' });
+  const state = { loading: list.loading, error: list.error, items: list.rows };
+  const counts = list.res?.counts || null;
+  const load = list.load;
   const [draft, setDraft] = useState(BLANK);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   // D392 — the canvas's chips over `kind`, the column the form above writes.
   const [view, setView] = useState('all');
+  // D4681: the one service being edited, and its form.
+  const [editing, setEditing] = useState(null);
+  const [editDraft, setEditDraft] = useState(() => serviceDraftOf(null));
+  const [editNote, setEditNote] = useState(null);
+  const [saving, setSaving] = useState(false);
   // D1424 (#3700): the header's "New service" scrolls to this form and puts
   // the cursor in Title. The form is the whole of adding one; nothing opens.
   const titleRef = useRef(null);
@@ -63,16 +85,6 @@ export default function ServicesZone() {
     scope: SCOPED_FORMS.service, values: { title: draft.title, scope: draft.scope },
     onValues: (v) => setDraft((d) => ({ ...d, ...v })),
   });
-
-  const load = useCallback(async () => {
-    setState((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorServices();
-      setState({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [] });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your services could not be read.', items: [] });
-    }
-  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -111,6 +123,28 @@ export default function ServicesZone() {
       await load();
     } catch (err) {
       setNote({ ok: false, text: err?.message || 'That could not be changed.' });
+    }
+  };
+
+  const startEdit = (row) => { setEditing(row.id); setEditDraft(serviceDraftOf(row)); setEditNote(null); };
+  const stopEdit = () => { setEditing(null); setEditNote(null); };
+  const saveEdit = async (e, row) => {
+    e.preventDefault();
+    const parsed = dollarsToCents(editDraft.price);
+    if (parsed.error) { setEditNote({ ok: false, text: parsed.error }); return; }
+    const { body, error } = serviceEditBody(row, editDraft, parsed.cents);
+    if (error) { setEditNote({ ok: false, text: error }); return; }
+    if (!Object.keys(body).length) { stopEdit(); return; }
+    setSaving(true);
+    try {
+      await api.updateMyAdvisorService(row.id, body);
+      stopEdit();
+      setNote({ ok: true, text: 'Service saved.' });
+      await load();
+    } catch (err) {
+      setEditNote({ ok: false, text: err?.message || 'The change could not be saved. The service is as it was.' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -174,7 +208,7 @@ export default function ServicesZone() {
       {state.items.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: 'Services', value: String(state.items.length), note: `${priced.length} priced, ${unpriced.length} not` },
+            { label: 'Services', value: String(counts?.total ?? state.items.length), note: counts ? `${counts.priced} priced, ${counts.unpriced} not` : `${priced.length} priced, ${unpriced.length} not` },
             {
               label: 'Booked',
               value: bookedCents == null ? <Unrecorded /> : money(bookedCents),
@@ -185,7 +219,7 @@ export default function ServicesZone() {
               value: mostSold?.title || <Unrecorded />,
               note: mostSold ? `${unitsFor(mostSold)} units` : 'nothing counts sales per service yet',
             },
-            { label: 'Unpriced', value: String(unpriced.length), note: unpriced.length ? 'scope settled, price is not' : 'all priced' },
+            { label: 'Unpriced', value: String(counts?.unpriced ?? unpriced.length), note: (counts?.unpriced ?? unpriced.length) ? 'scope settled, price is not' : 'all priced' },
           ].map((s) => (
             <Card key={s.label} padding="md">
               <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{s.label}</div>
@@ -199,8 +233,12 @@ export default function ServicesZone() {
       <Card padding="lg">
         <ZoneHeading
           title="Add a service"
-          blurb="A price here is what you charge, recorded for your own storefront. No payment runs through this page."
+          blurb="A price here is what you charge, kept in your own records. No payment runs through this page."
         />
+        <p className="-mt-1 mb-3 max-w-2xl text-[12px] leading-relaxed text-axal-muted" data-testid="advisor-services-not-public">
+          {SERVICE_NOT_PUBLIC} {SERVICE_BOOKABLE}{' '}
+          <Link to={SESSIONS_PATH} className="font-semibold text-emerald-700 underline dark:text-emerald-300">Practice › Sessions</Link>
+        </p>
         <FillFormBar fill={fill} />
         <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Title" fill={{ ctl: fill, name: 'title', value: draft.title }}>
@@ -248,7 +286,7 @@ export default function ServicesZone() {
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
-          <p className="text-[12.5px] text-axal-muted">{`No ${view} service is listed. ${state.items.length} in total.`}</p>
+          <p className="text-[12.5px] text-axal-muted">{`No ${view} service is listed. ${counts?.total ?? state.items.length} in total.`}</p>
         )}
         <div className="space-y-3">
           {shown.map((row) => (
@@ -258,7 +296,7 @@ export default function ServicesZone() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[13px] font-extrabold">{row.title}</span>
                     <Pill tone="neutral">{KINDS.find(([k]) => k === row.kind)?.[1] || row.kind}</Pill>
-                    {!row.is_active && <Pill tone="warn">Hidden</Pill>}
+                    {!row.is_active && <Pill tone="neutral">{serviceStateLabel(row)}</Pill>}
                   </div>
                   {row.duration_note && (
                     <div className="mt-0.5 text-[11.5px] text-axal-faint">{row.duration_note}</div>
@@ -272,8 +310,13 @@ export default function ServicesZone() {
                     {money(row.price_cents, row.currency) ?? <Unrecorded />}
                   </div>
                   <div className="mt-2 flex gap-2">
-                    <button type="button" className={ghostButtonClass} onClick={() => toggleActive(row)}>
-                      {row.is_active ? 'Hide' : 'Show'}
+                    <button type="button" className={ghostButtonClass} onClick={() => (editing === row.id ? stopEdit() : startEdit(row))}
+                      data-testid={`advisor-service-edit-${row.id}`}>
+                      {editing === row.id ? 'Close' : 'Edit'}
+                    </button>
+                    <button type="button" className={ghostButtonClass} onClick={() => toggleActive(row)}
+                      data-testid={`advisor-service-state-${row.id}`}>
+                      {row.is_active ? 'Mark inactive' : 'Mark active'}
                     </button>
                     <button type="button" className={ghostButtonClass} onClick={() => remove(row)}
                       aria-label={`Remove ${row.title}`}>
@@ -282,8 +325,56 @@ export default function ServicesZone() {
                   </div>
                 </div>
               </div>
+              {editing === row.id ? (
+                <form onSubmit={(e) => saveEdit(e, row)} className="mt-3 grid grid-cols-1 gap-3 border-t border-axal-hairline pt-3 sm:grid-cols-2 dark:border-gray-700"
+                  data-testid={`advisor-service-form-${row.id}`}>
+                  <Field label="Title">
+                    <input className={inputClass} value={editDraft.title} data-testid="advisor-service-edit-title"
+                      onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} />
+                  </Field>
+                  <Field label="Kind">
+                    <select className={inputClass} value={editDraft.kind} data-testid="advisor-service-edit-kind"
+                      onChange={(e) => setEditDraft({ ...editDraft, kind: e.target.value })}>
+                      {KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Price" hint="Blank reads as “not recorded”, not as free.">
+                    <input className={inputClass} value={editDraft.price} inputMode="decimal" data-testid="advisor-service-edit-price"
+                      onChange={(e) => setEditDraft({ ...editDraft, price: e.target.value })} />
+                  </Field>
+                  <Field label="Currency" hint="Three letters, such as USD.">
+                    <input className={inputClass} value={editDraft.currency} maxLength={3} data-testid="advisor-service-edit-currency"
+                      onChange={(e) => setEditDraft({ ...editDraft, currency: e.target.value })} />
+                  </Field>
+                  <Field label="Duration">
+                    <input className={inputClass} value={editDraft.duration_note} data-testid="advisor-service-edit-duration"
+                      onChange={(e) => setEditDraft({ ...editDraft, duration_note: e.target.value })} />
+                  </Field>
+                  <Field label="State" hint={SERVICE_STATES.find((x) => x.id === editDraft.is_active)?.hint}>
+                    <select className={inputClass} value={editDraft.is_active ? 'active' : 'inactive'} data-testid="advisor-service-edit-state"
+                      onChange={(e) => setEditDraft({ ...editDraft, is_active: e.target.value === 'active' })}>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </Field>
+                  <div className="sm:col-span-2">
+                    <Field label="What it covers">
+                      <textarea rows={2} className={inputClass} value={editDraft.scope} data-testid="advisor-service-edit-scope"
+                        onChange={(e) => setEditDraft({ ...editDraft, scope: e.target.value })} />
+                    </Field>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                    <button type="submit" className={buttonClass} disabled={saving} data-testid="advisor-service-edit-save">
+                      {saving ? 'Saving…' : 'Save changes'}
+                    </button>
+                    <button type="button" className={ghostButtonClass} onClick={stopEdit}>Cancel</button>
+                    <SaveNote note={editNote} />
+                  </div>
+                </form>
+              ) : null}
             </Card>
           ))}
+          <MoreRows line={list.line} onMore={list.more} busy={list.moreBusy} error={list.moreError} testid="advisor-services-more" />
           <p className="text-[11px] leading-relaxed text-axal-faint">
             How many times each service has been delivered is not shown. Nothing in the product links
             a booking to a service — a booking records a free-text topic — so a count here would be a

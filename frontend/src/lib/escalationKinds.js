@@ -66,17 +66,10 @@ export function requestSummary(item) {
 
 const enumWord = (v) => String(v).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
-/**
- * This licence's open requests of the panel's kinds. A request raised on HQ's
- * tier names the licence in `subject_ref` (D799); one raised by a branch is
- * matched by its branch code, when the licence has one.
- */
-export function licenceRequests(items, licenceUid, branchCode = null) {
-  return (items || []).filter((it) =>
-    it.status === 'open'
-    && LICENCE_PANEL_KINDS.includes(it.kind)
-    && (it.subject_ref === licenceUid || (branchCode && it.branch_code === branchCode && it.branch_code !== 'hq')));
-}
+// #4700 — a licence's own requests are matched on the server
+// (`GET /api/admin/licences/:uid/requests`), before the page is cut. The
+// browser-side filter that stood here matched against a capped board and had
+// no deployment code to match a branch's request by, so it was removed.
 
 const DAY = 24 * 3600 * 1000;
 const dayOf = (iso) => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(iso) ? Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) : null);

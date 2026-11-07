@@ -43,6 +43,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Coins } from 'lucide-react';
 import { api } from '../../lib/api';
+import { licenceLedgerApi } from '../../lib/api/licenceLedger';
 import { bpsPercent } from '../../lib/bps';
 import { reportError } from '../../lib/log';
 import { REFUND_REASON_MIN, refundReasonOk } from '../../lib/refundReason';
@@ -716,7 +717,10 @@ export default function RevenuePage() {
   }, []);
   const loadLicences = useCallback(() => {
     setLicences(null);
-    api.licences().then((r) => setLicences(Array.isArray(r?.items) ? r.items : UNAVAILABLE), (e) => {
+    // #4700 — the ledger is paged now; the ceiling and statement pickers need
+    // every licence, so this follows the pages, and a run that stops short of
+    // the end is unreadable rather than a shorter list.
+    licenceLedgerApi.all().then((r) => setLicences(r?.complete ? r.items : UNAVAILABLE), (e) => {
       reportError('hq-revenue-licences', e);
       setLicences(UNAVAILABLE);
     });

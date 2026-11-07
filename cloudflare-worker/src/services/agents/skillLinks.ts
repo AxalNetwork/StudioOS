@@ -27,8 +27,8 @@ import { RADAR_AXES } from '../skillsTaxonomySchema';
 import { roleOf } from './catalogue';
 import { grantsOf } from './agentTools';
 import { missingTools, type Tag } from './skills';
-import type { AgentRow } from './teams';
-import { openModeration } from './skillModeration';
+import { logEvent, type AgentRow } from './teams';
+import { skillRunRefusal } from './skillModeration';
 
 const LEVEL: Record<string, number> = { aware: 1, working: 2, proficient: 3, advanced: 4, expert: 5 };
 
@@ -87,7 +87,9 @@ export async function attachCheck(env: Env, a: AgentPart, s: SkillRow, version: 
   if (!v) return { code: 'version_not_published' };
   if (pinned === version) return null;
   if (s.status === 'retired') return { code: 'skill_retired' };
-  if ((await openModeration(env, s.id))?.action === 'suspend') return { code: 'skill_suspended' };
+  // D4534: the run gate's own rule, so nothing is pinned that would be refused at run: an open suspension,
+  // or an older version a suspension covered when the company republished to lift it.
+  if (await skillRunRefusal(env, s.id, version)) return { code: 'skill_suspended' };
   if (!versionRoles(v).includes(a.role_key)) return { code: 'role_mismatch' };
   const missing = missingTools(versionTools(v), grantsOf(a.tool_grants_json));
   if (missing.length) return { code: 'tool_not_approved', tool: { key: missing[0], label: toolLabel(missing[0]) } };
@@ -158,6 +160,46 @@ export async function agentValues(_env: Env, _a: Pick<AgentRow, 'role_key'>): Pr
 }
 
 export const roleLabel = (key: string) => roleOf(key)?.name ?? key;
+
+/** An agent's links now: skill id → `{ uid, version }`. */
+export async function linksOf(env: Env, agentId: number): Promise<Map<number, { uid: string; version: number }>> {
+  const rows = (await env.DB.prepare(
+    'SELECT l.skill_id, l.version, s.uid FROM agent_skill_links l JOIN agent_skills s ON s.id = l.skill_id WHERE l.agent_id = ?',
+  ).bind(agentId).all<{ skill_id: number; version: number; uid: string }>()).results ?? [];
+  return new Map(rows.map((r) => [Number(r.skill_id), { uid: r.uid, version: Number(r.version) }]));
+}
+
+export type SkillsChange = {
+  added: Array<{ uid: string; version: number }>;
+  repinned: Array<{ uid: string; from: number; to: number }>;
+  removed: Array<{ uid: string; version: number }>;
+};
+
+/** What moved between two link maps (`linksOf` before and after a write). */
+export function skillsChange(before: Map<number, { uid: string; version: number }>, after: Map<number, { uid: string; version: number }>): SkillsChange {
+  const change: SkillsChange = { added: [], repinned: [], removed: [] };
+  for (const [id, a] of after) {
+    const b = before.get(id);
+    if (!b) change.added.push({ uid: a.uid, version: a.version });
+    else if (b.version !== a.version) change.repinned.push({ uid: a.uid, from: b.version, to: a.version });
+  }
+  for (const [id, b] of before) if (!after.has(id)) change.removed.push({ uid: b.uid, version: b.version });
+  return change;
+}
+
+/**
+ * D4534 (#4534, the owner's answer A): an agent's skills changed. One
+ * `team_agent_events` row of kind `skills_changed` names who, and which skills
+ * were added, re-pinned or removed (uids and versions, never a skill's text).
+ * Nothing is written when nothing moved. Like the run path's `refused` rows, a
+ * failed write is logged and never undoes the change it records.
+ */
+export async function logSkillsChanged(env: Env, agentId: number, actor: number, change: SkillsChange): Promise<void> {
+  if (!change.added.length && !change.repinned.length && !change.removed.length) return;
+  try { await logEvent(env, agentId, actor, 'skills_changed', change); } catch (e) {
+    console.warn('[agents] skills_changed event not written', (e as Error).message);
+  }
+}
 
 /** The insert or re-pin of one link. */
 export function linkStatement(env: Env, agentId: number, skillId: number, version: number, by: number) {

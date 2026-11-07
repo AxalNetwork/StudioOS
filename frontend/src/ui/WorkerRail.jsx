@@ -2,7 +2,7 @@ import { Fragment, useCallback, useContext, useEffect, useId, useReducer, useRef
 import { NO_PLAN_LINE, dayCapped, noPlan } from '../lib/planAllowance';
 import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react';
-import { UNSAFE_LocationContext } from 'react-router-dom';
+import { UNSAFE_LocationContext, UNSAFE_NavigationContext } from 'react-router-dom';
 import useAiBudget from '../hooks/useAiBudget';
 import { ADD_TOKENS_PATH, TOPUP_UNAVAILABLE, aiTokenState, microMoney, usageMoney } from '../lib/aiTokens';
 import useAiSpend from '../hooks/useAiSpend';
@@ -18,6 +18,7 @@ import { syncRailPrefs } from './railModelChoice';
 import { useRailCrumbs, useRailPage } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, useAskPanel, useAskRail } from './eadwynPanel.js';
 import AskPanel from './AskPanel.jsx';
+import { PageAsk } from './AskButton.jsx';
 import { askDock, askLayout, askServes } from './askPanelModel.js';
 import HeaderAsk, { useHeaderCarriesAsk } from './HeaderAsk.jsx';
 import { activeSupportSession } from '../lib/supportSession.js';
@@ -115,6 +116,20 @@ function useRailPathname() {
   const ctx = useContext(UNSAFE_LocationContext);
   if (ctx?.location?.pathname != null) return ctx.location.pathname;
   return typeof window !== 'undefined' ? window.location?.pathname || '' : '';
+}
+
+/**
+ * Where the Ask panel sends the member (#4737: a Block card is accepted on the
+ * Sessions page), without requiring a router, as `useRailPathname` does. Inside
+ * the app it pushes onto the router's own history, so the page does not reload;
+ * with no router around it, it falls back to the window.
+ */
+function useRailNavigate() {
+  const nav = useContext(UNSAFE_NavigationContext);
+  return useCallback((to) => {
+    if (typeof nav?.navigator?.push === 'function') nav.navigator.push(to);
+    else if (typeof window !== 'undefined') window.location.assign(to);
+  }, [nav]);
 }
 
 /**
@@ -617,6 +632,7 @@ export default function WorkerRail({
   const askLabel = module ? `${section} · ${module}` : section;
   useAskRail(!founderRecord && askServes({ page: pageKey, supportSession: supportOn, viewer, host: role }), pageKey, askLabel);
   const askState = useAskPanel();
+  const openRailPage = useRailNavigate();
   // D405's phone button stands down while Ask serves here and a page header
   // (not this rail's own fallback) carries it.
   const headerCarriesAsk = useHeaderCarriesAsk();
@@ -632,6 +648,9 @@ export default function WorkerRail({
   const askDocked = askAt === 'dock' || askAt === 'overlay';
   // A detail sheet opening closes Ask (D1317's one-surface rule).
   useEffect(() => { if (sheetOpen) askPanelEvent({ type: 'sheet' }); }, [sheetOpen]);
+  // ...and Ask opening closes the phone sheet (#4737), so pressing the sheet's
+  // own Ask entry leaves the panel, not the sheet, on screen. The Eadwyn panel
+  // a founder gets is closed by `openAskPanel` itself.
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
     const root = document.documentElement;
@@ -707,6 +726,7 @@ export default function WorkerRail({
       aiOn={aiOn}
       layout={askAt}
       onClose={(why) => askPanelEvent({ type: why || 'close' })}
+      onNavigate={openRailPage}
     />
   ) : null;
   useEadwynRailServes(serves && !founderRecord);
@@ -945,6 +965,22 @@ export default function WorkerRail({
   );
 
   // D1463: on a founder's record, who and where, then the one sentence.
+  // #4737 (D1443 decision E: every licence, a bottom sheet below 640px). The
+  // rail's fallback Ask lives in the column, which is hidden below 1024px, and
+  // the phone's floating button opens the sheet (or a founder's Eadwyn panel),
+  // which drew only `body`: a page whose header has no Ask mount (a back-link
+  // stack, an editor, a centred hero) gave a phone no way to open Ask. While
+  // Ask serves the page and no header carries it, the sheet and the panel
+  // lead with Ask, as the column does. A deck rail's Ask is its header's.
+  const phoneAsk = askState.available && !headerCarriesAsk && !groups;
+  const phoneBody = phoneAsk ? (
+    <>
+      <div className="fwr-sheet-ask" data-testid="rail-sheet-ask"><PageAsk testId="rail-sheet-ask-button" /></div>
+      {body}
+    </>
+  ) : body;
+  useEffect(() => { if (askState.open) dispatchSheet({ type: 'close' }); }, [askState.open]);
+
   const shown = founderRecord ? (
     <div className="fwr-body" id={bodyId}>
       <div className="fwr-who">
@@ -1042,7 +1078,7 @@ export default function WorkerRail({
           )}
           {panel.open && (
             <EadwynPanel label={panel.label} style={accentStyle}>
-              {body}
+              {phoneBody}
             </EadwynPanel>
           )}
         </>
@@ -1062,7 +1098,7 @@ export default function WorkerRail({
           />}
           {sheet.open && !d405Retired && (
             <RailSheet id={sheetId} workspace={workspace} onEvent={dispatchSheet} closeRef={sheetCloseRef} style={accentStyle}>
-              {body}
+              {phoneBody}
             </RailSheet>
           )}
         </>

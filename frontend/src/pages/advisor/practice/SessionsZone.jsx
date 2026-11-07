@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
+import { railProposalsApi } from '../../../lib/api/railProposals.js';
+import { BLOCK_QUERY_KEYS, BLOCK_WHOLE_DAYS, parseBlockQuery } from '../../../ui/sessionsBlockHandoff.js';
 import { buildIcs, downloadIcs } from '../../../lib/ics';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
@@ -109,7 +111,7 @@ const EMPTY_RULES = Object.freeze({
 });
 
 /** D1424 / D1596: the Block form's shape, closed. Never null (a ZoneBody child reads it on first render). */
-const CLOSED_BLOCK = Object.freeze({ open: false, from: '', until: '', reason: '', error: '' });
+const CLOSED_BLOCK = Object.freeze({ open: false, from: '', until: '', reason: '', error: '', proposal: '' });
 
 export default function SessionsZone() {
   const [view, setView] = useState('two_weeks');
@@ -208,10 +210,26 @@ export default function SessionsZone() {
 
   // D1424 (#3700) and D1596 (#3869): "Block a date range" opens this page's
   // own Block form instead of three `window.prompt`s. It is where a Block
-  // card accepted in the Ask panel will put its dates (#3706); nothing is
-  // blocked until the advisor presses Block. The reason stays the advisor's
-  // own words and is never filled.
+  // card accepted in the Ask panel puts its dates (#4737, D1596 §4): the panel
+  // sends the advisor here with the card's uid and dates in the address, this
+  // page fills the form from them and takes them out of the address, and the
+  // proposal is decided (`railProposalsApi.decide`) only after `POST
+  // /api/advisors/me/slots/block` succeeds. Cancelling leaves the card
+  // waiting in Ask. Nothing is blocked until the advisor presses Block. The
+  // reason stays the advisor's own words and is never filled.
   const [blockForm, setBlockForm] = useState(() => ({ ...CLOSED_BLOCK }));
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const handoff = parseBlockQuery(searchParams);
+    if (!handoff) return;
+    setBlockNote(null);
+    setBlockForm({ ...CLOSED_BLOCK, open: true, from: handoff.from, until: handoff.until, proposal: handoff.uid });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      BLOCK_QUERY_KEYS.forEach((k) => next.delete(k));
+      return next;
+    }, { replace: true });
+  }, [searchParams, setSearchParams]);
   const blockFromRef = useRef(null);
   const blockRange = useCallback(() => {
     setBlockNote(null);
@@ -221,7 +239,7 @@ export default function SessionsZone() {
 
   const submitBlock = useCallback(async (event) => {
     event?.preventDefault?.();
-    const { from, until, reason } = blockForm;
+    const { from, until, reason, proposal } = blockForm;
     if (!from || !until) { setBlockForm((f) => ({ ...f, error: 'Choose the first day and the day after the last.' })); return; }
     if (until <= from) { setBlockForm((f) => ({ ...f, error: 'The end comes after the start.' })); return; }
     setBlocking(true); setBlockNote(null);
@@ -232,13 +250,19 @@ export default function SessionsZone() {
       // THE SKIPPED COUNT IS REPORTED, NEVER SWALLOWED. A booked hour cannot be
       // blocked — someone holds it — and an advisor who asked for a fortnight
       // and got eleven days needs to know which request was not honoured.
-      setBlockNote({
-        ok: true,
-        text: res.skipped_booked
-          ? `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}. ${res.skipped_booked} `
-            + `already booked and left alone — cancel those from Engagements if you mean to.`
-          : `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}.`,
-      });
+      const done = res.skipped_booked
+        ? `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}. ${res.skipped_booked} `
+          + `already booked and left alone — cancel those from Engagements if you mean to.`
+        : `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}.`;
+      // D1596 §4 step 3: the card is decided only now that Block has written. A
+      // decide that fails leaves the block in place, says so, and leaves the
+      // card waiting in Ask; it never shows the Worker's message.
+      let note = { ok: true, text: done };
+      if (proposal) {
+        try { await railProposalsApi.decide(proposal, 'accept'); }
+        catch { note = { ok: false, text: `${done} Its Ask proposal could not be marked accepted, so it is still waiting in Ask.` }; }
+      }
+      setBlockNote(note);
       setBlockForm({ ...CLOSED_BLOCK });
       loadSlots(view);
     } catch (e) {
@@ -291,6 +315,9 @@ export default function SessionsZone() {
       {blockForm.open && (
         <Card padding="lg">
           <form onSubmit={submitBlock} className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="advisor-block-form">
+            {blockForm.proposal ? (
+              <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted sm:col-span-3" data-testid="advisor-block-from-ask">{BLOCK_WHOLE_DAYS}</p>
+            ) : null}
             <Field label="From">
               <input ref={blockFromRef} type="date" className={inputClass} value={blockForm.from} data-testid="advisor-block-from"
                 onChange={(e) => setBlockForm({ ...blockForm, from: e.target.value, error: '' })} />

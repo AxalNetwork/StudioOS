@@ -12,6 +12,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
+import { grantWriteBar } from './_write_bar_session.mjs';
 import { Hono } from 'hono';
 
 import paymentsRoutes from '../src/routes/admin_payments.ts';
@@ -97,7 +98,10 @@ function freshDb(opts: { without?: string[] } = {}) {
 async function call(app: any, db: any, path: string, opts: { as?: number; env?: Record<string, unknown>; init?: RequestInit; d1?: any } = {}) {
   const headers: Record<string, string> = {};
   if (opts.as !== 0) {
-    const jwt = await new SignJWT({ user_id: opts.as ?? SUPER, role: 'admin' })
+    // D4703: token-pack writes take the write bar; each Super Admin signs with a fresh TOTP session.
+    const who = opts.as ?? SUPER;
+    if (who === SUPER || who === SECOND) grantWriteBar(db, who);
+    const jwt = await new SignJWT({ user_id: who, role: 'admin', ...(who === SUPER || who === SECOND ? { jti: `write-bar-${who}` } : {}) })
       .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
       .sign(new TextEncoder().encode(JWT_SECRET));
     headers.Authorization = `Bearer ${jwt}`;

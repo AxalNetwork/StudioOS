@@ -183,6 +183,12 @@ jobs:
         run: npm ci
       - name: Install root deps
         run: npm ci || npm install --no-audit --no-fund
+      # D4558: dr_second_copy_d4558.test.mjs encrypts and decrypts with the
+      # real `age`, the tool backup-d1.yml installs for the independent copy.
+      # node's --test-shard decides which frontend part runs that file.
+      - name: Install age
+        if: startsWith(matrix.part, 'frontend')
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
       # docs/ is not committed (D529), and part of the suite reads the built
       # SPA (check-docs-assets-closure, the tests that open docs/), so build
       # it first — the same root build the deploy runs.
@@ -312,6 +318,9 @@ jobs:
         run: node scripts/build-profile-routing.mjs --check
       - name: Build the routing docs
         run: node scripts/build-profile-routing.mjs
+      # #4570: the authorization inventory, every route's gate and ownership evidence.
+      - name: Build the authorization inventory
+        run: node scripts/build-auth-inventory.mjs
       - name: Keep the routing docs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -319,6 +328,7 @@ jobs:
           path: |
             documentation/architecture/PROFILE_ROUTING.md
             documentation/architecture/PAGE_INVENTORY.md
+            documentation/architecture/AUTH_INVENTORY.json
           if-no-files-found: error
           retention-days: 30
 

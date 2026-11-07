@@ -1645,7 +1645,7 @@ const DRAFT_SURFACES: Record<string, {
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? AND d.sent_at IS NOT NULL AND d.opened_at IS NULL
           ORDER BY d.sent_at ASC LIMIT 100`
       ).bind(me.partner_id).all<{
@@ -1693,7 +1693,7 @@ const DRAFT_SURFACES: Record<string, {
                   WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? ORDER BY e.created_at DESC LIMIT 100`
       ).bind(me.partner_id).all<{
         scope: string | null; client: string | null; seats: number;
@@ -1744,7 +1744,7 @@ const DRAFT_SURFACES: Record<string, {
            FROM partner_retainers r
            JOIN engagements e ON e.id = r.engagement_id
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? AND r.ended_at IS NULL
           ORDER BY r.renews_at IS NULL, r.renews_at LIMIT 50`
       ).bind(me.partner_id).all<{
@@ -1800,7 +1800,7 @@ const DRAFT_SURFACES: Record<string, {
            FROM quote_negotiations g
            JOIN quotes q ON q.id = g.quote_id
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
           WHERE q.partner_id = ? AND g.stage <> 'closed'
           ORDER BY g.last_moved_at ASC LIMIT 25`
       ).bind(me.partner_id).all<{
@@ -1846,7 +1846,7 @@ const DRAFT_SURFACES: Record<string, {
                 (SELECT COUNT(*) FROM quote_versions v WHERE v.quote_id = q.id) AS versions
            FROM quotes q
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
            LEFT JOIN engagements e ON e.quote_id = q.id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
           WHERE q.partner_id = ?
@@ -1903,7 +1903,7 @@ const DRAFT_SURFACES: Record<string, {
                 n.category AS shape, f.name AS client
            FROM quotes q
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
           WHERE q.partner_id = ? AND q.status IN ('accepted', 'rejected', 'submitted')
           ORDER BY q.decided_at IS NULL, q.decided_at DESC
           LIMIT 200`
@@ -1956,7 +1956,7 @@ const DRAFT_SURFACES: Record<string, {
           `SELECT n.title, n.description, n.category, n.budget_min, n.budget_max, n.timeline,
                   f.name AS client
              FROM founder_needs n
-             LEFT JOIN users f ON f.id = n.founder_id
+             LEFT JOIN founders f ON f.id = n.founder_id
             WHERE n.status = 'open'
               AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
               AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
@@ -2041,7 +2041,7 @@ const DRAFT_SURFACES: Record<string, {
                   WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
            LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
            LEFT JOIN users o ON o.id = h.owner_user_id
@@ -2110,7 +2110,7 @@ const DRAFT_SURFACES: Record<string, {
                   WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side <> 'client') AS our_blocked
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? AND e.cancelled_at IS NULL
           ORDER BY e.created_at DESC LIMIT 50`
       ).bind(me.partner_id).all<{
@@ -2247,7 +2247,7 @@ const DRAFT_SURFACES: Record<string, {
                   ORDER BY s.granted_at DESC LIMIT 1) AS seat_scope
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
            LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
           WHERE e.partner_id = ? AND e.cancelled_at IS NULL
@@ -3302,60 +3302,9 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
-  'grow/customers': {
-    // A5's band: "Segment: platform leads at 50-200 engineer orgs, cold, no
-    // reply in 14 days. + 3-touch sequence, each opening on the
-    // handoff-opacity pain THEIR OWN SEGMENT NAMED in your interviews."
-    //
-    // The italics are the artboard's and they are the whole instruction. A
-    // model asked for outreach copy writes a generic cold email; what makes
-    // this one worth the tokens is that it opens on something the recipient's
-    // own segment said. So the material carries the founder's recorded pains
-    // alongside the signups, and the instruction requires the opening line to
-    // come from one of them or to say that none applies.
-    //
-    // THE FUNNEL HAS FOUR STAGES, NOT THE ARTBOARD'S FIVE. `crm_status` is
-    // new / invited / followed_up / promoted (`routes/progress.ts`), and a
-    // model handed "Demo", "Trial" and "Paid" would place people in stages
-    // this product cannot record them in.
-    instruction: [
-      'Draft one outreach sequence for the signups below who have gone furthest without converting.',
-      'Open each touch on a pain the founder has actually recorded, quoting it. If no recorded pain fits the segment, say so and write no opener rather than inventing one.',
-      'Use only the four stages the record has — new, invited, followed up, promoted. Do not place anyone at a demo, a trial or a paid plan: none of those is recorded.',
-      'Name no company and no person the list below does not name.',
-    ].join(' '),
-    gather: async (c, userId, scope) => {
-      const pid = await founderProject(c, userId, scope);
-      if (pid == null) return [];
-      const stages = await c.env.DB.prepare(
-        `SELECT COALESCE(crm_status, 'new') AS stage, COALESCE(source, 'source not recorded') AS source,
-                COUNT(*) AS n, MAX(created_at) AS latest
-           FROM waitlist_signups WHERE project_id = ?
-          GROUP BY COALESCE(crm_status, 'new'), COALESCE(source, 'source not recorded')
-          ORDER BY n DESC LIMIT 40`
-      ).bind(pid).all<{ stage: string; source: string; n: number; latest: string | null }>();
-      const lines = (stages.results || []).map((r) =>
-        `${r.n} signup${r.n === 1 ? '' : 's'} at stage "${r.stage.replace('_', ' ')}" from ${r.source}; `
-        + `most recent ${r.latest ? String(r.latest).slice(0, 10) : 'not recorded'}`);
-      if (!lines.length) return [];
-      // The founder's OWN pain map: a group's title plus how many distinct
-      // phrases they have filed under it. Grouping is the founder's act — the
-      // Validate desk never names a theme for them — so a title here is
-      // something they wrote, not something a model decided.
-      const pains = await c.env.DB.prepare(
-        `SELECT g.title,
-                (SELECT COUNT(*) FROM pain_group_aliases a WHERE a.group_id = g.id) AS phrases
-           FROM pain_groups g WHERE g.project_id = ?
-          ORDER BY phrases DESC, g.sort_order LIMIT 12`
-      ).bind(pid).all<{ title: string; phrases: number }>();
-      const painLines = (pains.results || []).map((r) =>
-        `Recorded pain: "${r.title}" — ${r.phrases} phrase${r.phrases === 1 ? '' : 's'} grouped under it`);
-      lines.push(painLines.length
-        ? painLines.join('\n')
-        : 'NO PAIN IS RECORDED for this startup — there is nothing a touch can open on.');
-      return lines;
-    },
-  },
+  // D4493 (#4493): 'grow/customers' (A5's outreach-sequence band) is retired. The
+  // Distribution sequence builder's Ask drafts a sequence through D4488's task
+  // (kind `sequence`) and keeps the `draft:grow/customers` rail row's models.
 
   'grow/talent': {
     // A5's band: "Ranked first of 14 on three receipts you can check: shipped
@@ -3599,6 +3548,7 @@ export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'raise/narrative-fix': 'Founder · Raise · Investor narrative',
   'raise/capital': 'Founder · Raise · Cap table',
   'raise/liquidity': 'Founder · Raise · Cap table',
+  // D4493: kept for the moved rail row's page; the surface itself is retired above.
   'grow/customers': 'Founder · Grow · Distribution',
   'grow/talent': 'Founder · Grow · Team expansion',
   'network/re-engagement': 'Founder · Network',

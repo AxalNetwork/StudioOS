@@ -175,13 +175,15 @@ test('2: rule order — no interview, then a session to review, then the next co
     why: 'Validate starts with one interview. Everything else in the venture builds on what it finds.',
     cta: { label: 'Record a session', href: `/validate/record?project=${P}` },
     then: 'Write the claim you most need to be true.',
+    // D4589 (#4589): the shared next-action shape.
+    secondary: [], state: 'ok',
   });
   const iv = interview(db, P);
   session(db, iv, 'transcribed', `${day(-1)} 10:00:00`);
   const review = (await vRead(db)).body.focus;
   assert.equal(review.rule, 'review');
   // D704 (#1783) moved rule 2's href to the interview's record (D-b).
-  assert.equal(review.cta.href, `/validate/customer-research/${iv}?session=1`);
+  assert.equal(review.cta.href, `/validate/customer-research/${iv}?project_id=${P}&session=1`);
   assert.ok(routed(review.cta.href, routesOf()), 'the review href is a route');
   db.exec("UPDATE interview_sessions SET status = 'reviewed'");
   assert.equal((await vRead(db)).body.focus.rule, 'next_interview');
@@ -681,7 +683,12 @@ test('11: a throwing query in one part leaves that part null and the rest of the
     NEEDLE = needle;
     try {
       const x = (await vRead(v)).body;
-      assert.equal(x[nulled], null, `validate ${nulled}`);
+      if (nulled === 'focus') {
+        // D4589 (#4589): the session read failing is said, never a step it did not check.
+        assert.equal(x.focus.rule, 'unavailable');
+        assert.equal(x.focus.cta, null);
+        assert.match(x.focus.why, /could not be read\. This is not a claim that nothing is waiting\./);
+      } else assert.equal(x[nulled], null, `validate ${nulled}`);
       for (const k of ['focus', 'meter', 'index'].filter((y) => y !== nulled)) assert.notEqual(x[k], null, `validate ${k}`);
       assert.deepEqual(x.figures, whole.figures);
       // The demand card reads its bar with the meter's own statement text, so

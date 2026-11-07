@@ -96,6 +96,8 @@ export type OperatorHalf =
     set_by_name: string | null;
     /** SQLite's clock, `YYYY-MM-DD HH:MM:SS`; null while nobody ever has. */
     set_at: string | null;
+    /** D4703: the current activation; a release sends it back. 0 while nobody ever has. */
+    revision: number;
     /** When this reading was taken from the store, ISO. */
     read_at: string;
     /** Set when the latest read failed and this is the last good reading. */
@@ -165,6 +167,7 @@ async function eadwynSwitch(env: Env, kill: AdvisorKillState): Promise<PlatformS
       set_by_user_id: row ? row.set_by_user_id : null,
       set_by_name: row ? await operatorSwitchActorName(env, row.set_by_user_id) : null,
       set_at: row ? row.set_at : null,
+      revision: row ? row.revision : 0,
       read_at: read.read_at,
       ...(read.stale_reason ? { stale_reason: read.stale_reason } : {}),
     };

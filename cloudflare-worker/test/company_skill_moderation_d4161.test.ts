@@ -108,7 +108,8 @@ const inbox = (w: W, userId: number) => {
   try { return w.db.prepare('SELECT type, title, body FROM notifications_inbox WHERE user_id = ? ORDER BY id').all(userId) as any[]; } catch { return []; }
 };
 const audits = (w: W) => {
-  try { return (w.db.prepare('SELECT action, filters_json FROM admin_audit_log ORDER BY id').all() as any[]).map((r) => ({ action: r.action, details: JSON.parse(r.filters_json) })); } catch { return []; }
+  // HQ's moderation rows only: since D4534 a company's own publish and retire are audited too, as `company_skill_*`.
+  try { return (w.db.prepare("SELECT action, filters_json FROM admin_audit_log WHERE action NOT LIKE 'company_skill_%' ORDER BY id").all() as any[]).map((r) => ({ action: r.action, details: JSON.parse(r.filters_json) })); } catch { return []; }
 };
 
 test('D4161: Super Admin only — a plain admin and a company editor are refused', async () => {

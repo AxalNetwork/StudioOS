@@ -50,6 +50,7 @@ import {
   requireOwnEngagement, requirePartnerRole, utilisationFor,
 } from './_partner_workspace_helpers';
 import { logActorAct } from '../services/actorLog';
+import { statusReportAccess } from '../services/statusReportAccess';
 
 const partnerDelivery = new Hono<{ Bindings: Env }>();
 
@@ -146,7 +147,7 @@ partnerDelivery.get('/board', async (c) => {
               r.id AS retainer_id, r.retained_hours
          FROM engagements e
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
          LEFT JOIN partner_retainers r ON r.engagement_id = e.id
         WHERE e.partner_id = ?
         ORDER BY e.created_at DESC
@@ -326,7 +327,7 @@ partnerDelivery.get('/health', async (c) => {
               r.id AS retainer_id, r.retained_hours, r.shape, r.renews_at
          FROM engagements e
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
          LEFT JOIN partner_retainers r ON r.engagement_id = e.id
         WHERE e.partner_id = ?
         ORDER BY e.created_at DESC
@@ -853,7 +854,7 @@ partnerDelivery.get('/deliverables', async (c) => {
          FROM engagement_deliverables d
          JOIN engagements e ON e.id = d.engagement_id
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
         WHERE e.partner_id = ?
         ORDER BY d.sent_at IS NULL, d.sent_at DESC
         LIMIT 300`,
@@ -996,7 +997,7 @@ partnerDelivery.get('/capacity', async (c) => {
          JOIN engagements e ON e.id = s.engagement_id
          LEFT JOIN users u ON u.id = s.holder_user_id
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
         WHERE e.partner_id = ?
         ORDER BY s.revoked_at IS NOT NULL, s.granted_at DESC`,
     ).bind(partnerId).all<any>();
@@ -1425,7 +1426,7 @@ partnerDelivery.get('/capacity/hours', async (c) => {
          JOIN engagements e ON e.id = h.engagement_id
          LEFT JOIN users u ON u.id = h.person_user_id
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
         WHERE e.partner_id = ? AND h.period IN (?, ?, ?)
         ORDER BY f.name, n.title, u.name`,
     ).bind(partnerId, periods[0], periods[1], periods[2]).all<any>();
@@ -1547,7 +1548,7 @@ partnerDelivery.get('/status-reports', async (c) => {
          FROM engagement_status_reports r
          JOIN engagements e ON e.id = r.engagement_id
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
         WHERE e.partner_id = ?
         ORDER BY r.period DESC, r.id DESC
         LIMIT 200`,
@@ -1648,6 +1649,10 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
     ]);
 
     return c.json({
+      // #4673: the composition names what it was composed for, so the page can
+      // drop a response that arrives after the selection moved, and save it
+      // only against this engagement and period.
+      engagement_id: engagementId,
       period: p.period,
       existing: existing ? reportDto(existing) : null,
       shipped_from_log: (deliverables.results || [])
@@ -1679,14 +1684,26 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
     if ('error' in p) return c.json({ detail: p.error }, 400);
     const b = await body<any>(c);
 
+    // #4673: THE DRAFT NAMES ITS TARGET. The page sends the engagement and
+    // period its displayed draft was composed for; a save whose draft belongs
+    // to another engagement or period (a stale composition, a selection that
+    // moved) is refused rather than written into this one.
+    if (Number(b?.engagement_id) !== engagementId || String(b?.period ?? '') !== p.period) {
+      return c.json({
+        detail: 'This draft was composed for another engagement or period. Compose it again for this one; nothing was saved.',
+        code: 'draft_mismatch',
+      }, 409);
+    }
+
     const existing = await c.env.DB.prepare(
       'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
     ).bind(engagementId, p.period).first<any>();
 
     // A SENT REPORT IS FROZEN. It is a thing a client has already read; editing
     // it in place would make the record disagree with what they received, and
-    // there would be no trace of the difference.
-    if (existing && existing.state === 'sent') {
+    // there would be no trace of the difference. The rule is the shared one
+    // (services/statusReportAccess.ts), as Fill with Eadwyn reads it.
+    if (existing && !statusReportAccess(existing, { partner_id: partnerId, founder_id: null }, { partnerId, founderId: null }).write) {
       return c.json({
         detail: 'That report was sent. A sent report is a record of what the client received and is not editable.',
       }, 409);

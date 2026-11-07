@@ -6,8 +6,9 @@ import { askPanelAdapter } from './askPanelAdapter.js';
 import { setAskSlot, useAskPanel } from './eadwynPanel.js';
 import {
   ASK_FOOT, ASK_RUNNING, ASK_SUGGESTED, ASK_PLACEHOLDER, acceptAllLabel, canSend, chargeLine, costLine,
-  panelChips, proposalCard, refusalState, stateBlock,
+  optionCard, panelChips, refusalState, stateBlock,
 } from './askPanelModel.js';
+import { blockHref, needsBlockPage } from './sessionsBlockHandoff.js';
 import { FOUNDER_ASK_CHIPS } from '../lib/railOptions/founder.js';
 import { ADVISOR_ASK_CHIPS } from '../lib/railOptions/advisor.js';
 import './askPanel.css';
@@ -20,11 +21,12 @@ import './askPanel.css';
  * holds nothing the rail holds: the AIRail keeps model choice, consumption and
  * the AI switch (the owner, 2026-10-31); asking happens here.
  *
- * WHERE IT SITS is `WorkerRail`'s call (the `layout` prop, `askLayout`): docked
- * to the rail's left edge inside the rail's own column from 1024px, so it can
- * never pass the header above or the footer below; over the content from 640px;
- * a bottom sheet below that. Docked it is `complementary` and not modal, so the
- * page stays usable; as a sheet it is a modal dialog.
+ * WHERE IT SITS is `WorkerRail`'s call (the `layout` prop, `askLayout`): from
+ * 1024px a portalled, fixed dock (`.ead-ask-dock`, #4260) that `WorkerRail`
+ * places from the rail's measured box (`askDock`), between the header above and
+ * the footer below; over the content from 640px; a bottom sheet below that.
+ * Docked it is `complementary` and not modal, so the page stays usable; as a
+ * sheet it is a modal dialog.
  *
  * WHAT IT DRAWS, top to bottom (AK2 to AK15): the head, the page's suggested
  * chips, the conversation with proposal cards, and the composer with the cost
@@ -36,7 +38,7 @@ import './askPanel.css';
 export const QUOTE_PAUSE_MS = 400;
 const CHIP_ROUTES = Object.fromEntries([...FOUNDER_ASK_CHIPS, ...ADVISOR_ASK_CHIPS].map((c) => [c.key, c.route]));
 
-export default function AskPanel({ page, label, crumb, options = [], aiOn = true, layout = 'dock', onClose }) {
+export default function AskPanel({ page, label, crumb, options = [], aiOn = true, layout = 'dock', onClose, onNavigate }) {
   const intent = useAskPanel().intent;
   const exclusive = !!intent?.exclusive;
   const [convUid, setConvUid] = useState(null);
@@ -66,15 +68,20 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
       try {
         const list = await askPanelAdapter.conversations(page);
         const uid = list.data?.conversations?.[0]?.uid ?? null;
-        if (!live || !uid) return;
-        setConvUid(uid);
-        const one = await askPanelAdapter.conversation(uid);
-        if (live) setMessages(Array.isArray(one.data?.messages) ? one.data.messages : []);
+        if (live && uid) {
+          setConvUid(uid);
+          const one = await askPanelAdapter.conversation(uid);
+          if (live) setMessages(Array.isArray(one.data?.messages) ? one.data.messages : []);
+        }
       } catch { /* an unread thread starts empty; asking starts a new one */ }
+      // #4737: the open cards load whether or not the page has a conversation yet. They
+      // used to be skipped for a page with none, so "N waiting" counted cards the opened
+      // panel did not show (an advisor who ran a chip, left, and came back to Ask).
+      if (!live) return;
       for (const c of chips.filter((x) => x.run)) {
         try {
           const got = await askPanelAdapter.proposals(c.key);
-          if (live) setCards((prev) => [...prev, ...(got.data?.proposals || []).map((r) => ({ ...proposalCard(r), option: c.key }))]);
+          if (live) setCards((prev) => [...prev, ...(got.data?.proposals || []).map((r) => optionCard(r, c.key))]);
         } catch { /* the chip still runs; its old cards are not shown */ }
       }
     })();
@@ -126,7 +133,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
       const events = (await askPanelAdapter.run(page, key)).data || [];
       const done = events.find((e) => e.event === 'done')?.data || {};
       const got = await askPanelAdapter.proposals(key);
-      const fresh = (got.data?.proposals || []).map((r) => ({ ...proposalCard(r), option: key }));
+      const fresh = (got.data?.proposals || []).map((r) => optionCard(r, key));
       setCards((prev) => [...prev.filter((c) => c.option !== key), ...fresh]);
       setRun({ key, charged: done.charged_microusd ?? null, hold: done.hold_microusd ?? null });
       if (!fresh.length) setState('none');
@@ -138,17 +145,30 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
     }
   }, [busy, page, state]);
 
+  // #4737 (D1596 §4): a Block card is accepted on the Sessions page. The panel
+  // sends the advisor there with the card's uid and dates and closes; the
+  // page decides the card only once Block has written. Nothing here decides it.
+  const openBlockPage = useCallback((card) => {
+    const href = blockHref(card.uid, card.block);
+    if (onNavigate) onNavigate(href);
+    else if (typeof window !== 'undefined') window.location.assign(href);
+    onClose?.('route');
+  }, [onClose, onNavigate]);
+
   const decide = useCallback(async (card, decision) => {
+    if (decision === 'accept' && needsBlockPage(card)) { openBlockPage(card); return; }
     try {
       await askPanelAdapter.decide(card.uid, decision);
       setCards((prev) => prev.map((c) => (c.uid === card.uid ? { ...c, status: decision === 'discard' ? 'discarded' : 'accepted' } : c)));
     } catch (err) {
       setState(refusalState(err));
     }
-  }, []);
+  }, [openBlockPage]);
 
   const block = stateBlock(state);
   const open = cards.filter((c) => c.status === 'proposed');
+  // "Accept all" decides in the panel, so it never holds a card that is accepted on its page.
+  const bulk = open.filter((c) => !needsBlockPage(c));
   const all = acceptAllLabel(cards);
   const sendOk = canSend({ text, state, busy });
 
@@ -211,11 +231,11 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
             <div className="ead-ask-cards" data-testid="ask-panel-cards">
               {cards.map((c) => (
                 <AskProposal key={c.uid} proposal={c} onAccept={() => decide(c, 'accept')}
-                  onDiscard={() => decide(c, 'discard')} editHref={CHIP_ROUTES[c.option]} />
+                  onDiscard={() => decide(c, 'discard')} editHref={needsBlockPage(c) ? blockHref(c.uid, c.block) : CHIP_ROUTES[c.option]} />
               ))}
               <span className="ead-ask-all">
                 {all && (
-                  <button type="button" className="ead-ask-btn is-primary" onClick={() => open.slice(0, 50).forEach((c) => decide(c, 'accept'))} data-testid="ask-accept-all">{all}</button>
+                  <button type="button" className="ead-ask-btn is-primary" onClick={() => bulk.slice(0, 50).forEach((c) => decide(c, 'accept'))} data-testid="ask-accept-all">{all}</button>
                 )}
                 {run && <span className="ead-ask-mono" data-testid="ask-charge">{chargeLine(run.charged, run.hold)}</span>}
               </span>

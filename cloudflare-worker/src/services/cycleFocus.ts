@@ -42,6 +42,8 @@ import { canWrite, type ProjectRef } from '../routes/_founder_validate_helpers';
 
 export type FocusRule =
   | 'first_interview' | 'review' | 'next_interview'
+  // D4589 (#4589): Validate's shared next-action policy (`validateNextAction.ts`).
+  | 'stopped' | 'missing_fit' | 'record_result' | 'next_test' | 'decision_ready' | 'plan_build' | 'unavailable'
   | 'first_feature' | 'connect_tools'
   | 'first_readiness' | 'call_for_capital'
   | 'first_kpi' | 'tell_customers'
@@ -54,6 +56,10 @@ export interface Focus {
   why: string | null;
   cta: { label: string; href: string } | null;
   then: string | null;
+  /** D4589: other actions the policy keeps in reach (Record a session, Record a new decision). */
+  secondary?: Array<{ label: string; href: string }>;
+  /** D4589: 'unavailable' when a fact the policy needs could not be read; the cta is then null. */
+  state?: 'ok' | 'unavailable';
 }
 
 export interface Meter {
@@ -217,10 +223,13 @@ function buildIndex(project: BuildProject, reads: BuildRead[], figures: Figure[]
       ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: null, href: `/build/operating-systems?project=${project.id}#tools` }
       : { key: 'tools', title: 'Tools', detail: `${Number(facts.tools_connected)} connected · ${Number(facts.tools_failing)} failing`, value: String(tools), href: `/build/operating-systems?project=${project.id}#tools` };
   // #1693's keys, never the cells: a stored pain theme, and an open filing's date.
-  const linked = (solution?.rows ?? []).filter((r) => r.keys?.linked === 'yes').length;
+  // #4603 part 2: the counts come from the read's facts when it gives them (the overview reads no feature rows).
+  const counted = num(Number(solution?.facts?.features)) && num(Number(solution?.facts?.linked));
+  const features = counted ? Number(solution!.facts!.features) : (solution?.rows ?? []).length;
+  const linked = counted ? Number(solution!.facts!.linked) : (solution?.rows ?? []).filter((r) => r.keys?.linked === 'yes').length;
   const solutionRow: IndexRow = solution?.card.state === 'unreadable'
     ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain', value: UNREADABLE, href: href('solution-design') }
-    : !(solution?.rows ?? []).length
+    : !features
       ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain', value: null, href: href('solution-design') }
       : { key: 'solution-design', title: 'Solution design', detail: plural(linked, 'feature linked to a pain', 'features linked to a pain'), value: '', href: href('solution-design') };
   const due = (company?.rows ?? [])
