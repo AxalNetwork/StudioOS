@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import ActivityLightbox from './ActivityLightbox';
 import CirclesLightbox from './CirclesLightbox';
 import EventsLightbox from './EventsLightbox';
@@ -48,6 +48,7 @@ export default function AdminCommunity() {
   // `as_of`, so Refresh moves days open, waits and Overdue with the rows.
   const now = useMemo(() => clockOf(reads, asOf), [reads, asOf]);
   const phone = usePhoneWidth();
+  const periodRefs = useRef({});
   const box = openFrom(loc.search);
   const Box = box ? BOXES[box] : null;
   // Opening pushes, so Back closes it too; closing replaces, so it is not reopened by Back.
@@ -119,21 +120,26 @@ export default function AdminCommunity() {
             <span title={SCOPE_TITLE} className="cursor-help rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="community-scope-chip">{SCOPE_LABEL}</span>
             <div role="radiogroup" aria-label="Period" className="flex gap-[3px] rounded-[9px] bg-axal-ground p-[3px] dark:bg-gray-800" data-testid="community-period"
               onKeyDown={(e) => {
+                // #4717 package 6: the radio group's keys (WAI-ARIA): arrows move and wrap, Home and End go to
+                // the ends, and focus moves WITH the choice, so the next arrow starts from where it is.
                 const i = PERIODS.findIndex((p) => p.weeks === weeks);
                 const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
-                if (!step) return;
+                const to = e.key === 'Home' ? 0 : e.key === 'End' ? PERIODS.length - 1 : step ? (i + step + PERIODS.length) % PERIODS.length : -1;
+                if (to < 0) return;
                 e.preventDefault();
-                setWeeks(PERIODS[(i + step + PERIODS.length) % PERIODS.length].weeks);
+                setWeeks(PERIODS[to].weeks);
+                periodRefs.current[PERIODS[to].weeks]?.focus();
               }}>
               {PERIODS.map((p) => (
                 <button key={p.weeks} type="button" role="radio" aria-checked={p.weeks === weeks} tabIndex={p.weeks === weeks ? 0 : -1}
+                  ref={(el) => { periodRefs.current[p.weeks] = el; }}
                   onClick={() => setWeeks(p.weeks)} data-testid={`community-period-${p.weeks}`}
-                  className={`whitespace-nowrap rounded-[7px] px-2.5 py-1.5 text-[12px] font-bold ${p.weeks === weeks ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>{p.label}</button>
+                  className={`min-h-[32px] whitespace-nowrap rounded-[7px] px-2.5 py-1.5 text-[12px] font-bold ${p.weeks === weeks ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>{p.label}</button>
               ))}
             </div>
             <span className="ml-auto flex items-center gap-2.5">
               <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="community-asof">{asOf ? `Updated ${asOfLabel(asOf)}` : 'Reading…'}</span>
-              <button type="button" aria-label="Refresh" onClick={reload} className="grid h-8 w-8 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>
+              <button type="button" aria-label="Refresh" onClick={reload} data-testid="community-refresh" className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>
             </span>
           </div>
           <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="community-period-line">{`Period figures cover the last ${weeks} weeks, Monday weeks in UTC, this week so far. Deltas compare with the ${weeks} weeks before.`}</p>

@@ -127,6 +127,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/approvals',      'Admin › Approvals (D1038): the Inbox, Lanes, Decided and the three lane boards that decide (D1046)'],
   ['frontend/src/pages/admin/advisors',       'Advisors & Partners under Community (D972)'],
   ['frontend/src/pages/admin/community',      'the Community overview (D930)'],
+  ['frontend/src/pages/admin/community/model', 'the Community model, one module per domain (#4717 package 6)'],
   ['frontend/src/pages/admin/consoles',       'one file per Admin Console tool (D648)'],
   ['frontend/src/pages/admin/contracts',      'the Contracts desk (D647), its Structure of the Fund sheet and the template editor (D717)'],
   ['frontend/src/pages/admin/events',         'the admin Events desk (D915): its tabs, the event page, the dialogs and the model they read'],

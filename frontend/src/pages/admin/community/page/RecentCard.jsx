@@ -36,7 +36,7 @@ export function RecentCard({ refresh, onOpen }) {
         <div role="group" aria-label="Kind" className="flex flex-wrap gap-1.5" data-testid="community-recent-chips">
           {CHIPS.map((c) => (
             <button key={c.value || 'all'} type="button" aria-pressed={kind === c.value} onClick={() => setKind(c.value)}
-              className={`rounded-full border px-2.5 py-1 text-[12px] font-bold ${kind === c.value ? 'border-axal-violet bg-axal-lavender text-axal-violet dark:border-violet-400 dark:bg-violet-950/40 dark:text-violet-300' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}
+              className={`min-h-[32px] rounded-full border px-2.5 py-1 text-[12px] font-bold ${kind === c.value ? 'border-axal-violet bg-axal-lavender text-axal-violet dark:border-violet-400 dark:bg-violet-950/40 dark:text-violet-300' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}
               data-testid={`community-recent-chip-${c.value || 'all'}`}>{c.label}</button>
           ))}
         </div>

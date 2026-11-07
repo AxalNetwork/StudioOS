@@ -12,7 +12,8 @@ export const DANGER = `${BTN} self-start border border-axal-destructive-edge bg-
 export const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
 export const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 export const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
-export const LINK = 'text-[12px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
+// #4717 package 6: a text link is at least 24px tall (WCAG 2.5.8), whatever its type size.
+export const LINK = 'inline-flex min-h-[24px] items-center text-[12px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
 export const TAG = 'self-start rounded-full border border-dashed border-axal-muted px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400';
 export const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
 export const MONO = 'font-mono tabular-nums';
