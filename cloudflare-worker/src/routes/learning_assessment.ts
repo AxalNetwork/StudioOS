@@ -30,7 +30,7 @@ import { mapError, newUid } from './_t13t14t15_helpers';
 import { canSeeLearning, canReadLearnerWork, canReviewLearning, enrolledSql } from '../services/learningAccess';
 import { completeAssessmentLessons } from '../services/learningCompletion';
 import {
-  deadlineMs, grade, memberQuestion, normaliseAnswers, revealed, shuffled, SUBMIT_GRACE_SECONDS, type StoredQuestion,
+  deadlineMs, explanations, grade, memberQuestion, normaliseAnswers, revealed, shuffled, SUBMIT_GRACE_SECONDS, type StoredQuestion,
 } from '../services/learningAssessment';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -107,7 +107,7 @@ r.post('/exercises/:uid/submissions', async (c) => {
 
 const EXAM_SQL = 'SELECT id, uid, title, intro, pass_mark_percent, time_limit_minutes, max_attempts, shuffle, reveal, visibility, status, published_at, '
   + enrolledSql('exam', 'learning_exams.uid') + ' AS enrolled FROM learning_exams WHERE uid = ?';
-const QUESTIONS_SQL = 'SELECT uid, prompt, kind, options_json, correct_json, position FROM learning_exam_questions WHERE exam_id = ? ORDER BY position, id';
+const QUESTIONS_SQL = 'SELECT uid, prompt, kind, options_json, correct_json, position, explanation, revision_json FROM learning_exam_questions WHERE exam_id = ? ORDER BY position, id';
 
 function examIntro(x: any, questionCount: number) {
   return {
@@ -218,7 +218,8 @@ function attemptView(a: any, exam: any, questions: StoredQuestion[]) {
   let answers: Record<string, number[]> = {};
   try { answers = a.answers_json ? JSON.parse(a.answers_json) : {}; } catch { answers = {}; }
   const shown = inOrder(questions, a.question_order_json);
-  return { ...base, answers_revealed: true, answers, correct: revealed(shown) };
+  // D4650 (#4650, part 3): the explanations travel only with the answers they explain.
+  return { ...base, answers_revealed: true, answers, correct: revealed(shown), explanations: explanations(shown) };
 }
 
 r.post('/exams/:uid/attempts/:attempt/submit', async (c) => {

@@ -48,12 +48,11 @@ export const EXPLORER_LINE = 'Creating a company opens once your profile is set.
 export const ADVISOR_LINE = 'Practice and Expertise are not yet separated by company.';
 
 /**
- * D1415 part 4 (#3856): the section's address is `/account/portfolio`. Every
- * old `/account/companies…` address forwards here (`CompaniesMovedRedirect`,
- * `movedCompaniesTarget`). D1413: the owner named it "Portfolio" (#3696 Q1).
+ * D1415 part 4 (#3856): the section's address is `/account/portfolio`. The old
+ * `/account/companies…` addresses are retired (D2319), not forwarded. D1413: the
+ * owner named it "Portfolio" (#3696 Q1).
  */
 export const BASE_PATH = '/account/portfolio';
-export const OLD_BASE_PATH = '/account/companies';
 
 /** Every tab, each at its own address. Which a profile sees is `tabsFor`. */
 export const TAB_PATHS = {
@@ -110,9 +109,8 @@ export const companyPathFor = (uid) => `${BASE_PATH}/${encodeURIComponent(uid)}`
  * ------------------------------------------------------------------ */
 
 /**
- * The full company settings (what `/company-settings` drew) live under this
- * section now. They read the company active on this device, so they are
- * `/account/companies/<uid>/settings` for that company; `/account/companies/settings`
+ * The full company settings (what `/company-settings` drew, retired D2319) live under this
+ * section now: `/account/portfolio/<uid>/settings` for a company; `/account/portfolio/settings`
  * opens the active company's, or, with none, a partner's Firm Settings, an
  * advisor's Practice Settings and the way to create or join a company.
  * `settings` is reserved: it is never read as a company's uid.
@@ -142,45 +140,6 @@ export const MOVED_NOTICES = Object.freeze({
 /** Profile and identity's one-line notice (CMP19b), shown until dismissed on this device. */
 export const PROFILE_MOVED_TEXT = 'Your companies is now Portfolio, under Account.';
 export const PROFILE_MOVED_STORE = 'moved:your-companies';
-
-/**
- * Where `/company-settings` forwards (owner question 2, A): the company page of
- * the company active on this device, or the Companies tab when there is none.
- * The query and the hash are kept, and `moved=company-settings` names the notice.
- */
-export function forwardTarget(uid, search = '', hash = '') {
-  const q = new URLSearchParams(String(search).replace(/^\?/, ''));
-  q.set('moved', MOVED_KEY);
-  return `${uid ? companyPathFor(uid) : TAB_PATHS.companies}?${q.toString()}${hash || ''}`;
-}
-
-/**
- * D1415 part 4 (#3856): where an old `/account/companies…` address forwards.
- * The same rest of the path under `/account/portfolio` (a tab, a company's
- * lightbox, `settings`, `<uid>/settings`), the query and the hash kept, and
- * `moved=companies` naming the notice. An address outside the old section is
- * null.
- */
-export function movedCompaniesTarget(pathname = '', search = '', hash = '') {
-  const p = String(pathname);
-  if (p !== OLD_BASE_PATH && !p.startsWith(`${OLD_BASE_PATH}/`)) return null;
-  const rest = p.slice(OLD_BASE_PATH.length).replace(/\/+$/, '');
-  const q = new URLSearchParams(String(search).replace(/^\?/, ''));
-  q.set('moved', COMPANIES_MOVED_KEY);
-  return `${BASE_PATH}${rest}?${q.toString()}${hash || ''}`;
-}
-
-/**
- * The company `/company-settings` meant: the one this device last made active,
- * when it is still a membership, else the first membership, as the switcher
- * restores it. Null when there is none.
- */
-export function activeUidFrom(list, savedId) {
-  const arr = Array.isArray(list) ? list : [];
-  // The saved id comes back from localStorage as text.
-  const saved = savedId != null ? arr.find((c) => String(c.id) === String(savedId)) : null;
-  return (saved || arr[0])?.uid ?? null;
-}
 
 /** Whether a profile may create a company (D1135: an Explorer may not). */
 export const canCreate = (profile) => profile !== 'explorer';

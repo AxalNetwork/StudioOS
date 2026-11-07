@@ -9,7 +9,7 @@ write a bordered white box with a title, it already exists here.
 | `Pill.jsx` | Status and tag chips. |
 | `Stat.jsx` | A labelled figure. |
 | `SectionLabel.jsx` | The small uppercase section heading. |
-| `SidebarNav.jsx` | The app sidebar, lifted out of `App.jsx`. Its pinned footer is Companies and projects, at `/account/companies` (D1140; it was Company Settings). |
+| `SidebarNav.jsx` | The app sidebar, lifted out of `App.jsx`. It renders, in order: `CompanySwitcher`, the search filter, the role groups, then Settings (D4152). Portfolio is not in the sidebar: D4416 moved it to the Account menu and the phone `AccountSheet`. (The pinned footer of D1140 and its `/account/companies` address are gone; D2319 retired the address.) |
 | `CompanySwitcher.jsx` | **The only place active-company context changes.** Its menu ends with "Manage companies and projects ›", to `/account/companies` (D1140, CMP19a). |
 | `phone/` | D699 phone bars, rows, sheets and one width hook; see its README. |
 | `AssistRail.jsx` | The older per-feature AI rail, still on the Spin-Out Lab pages and a few founder tools (Advisory, Brand builder, Deck reviewer). New pages mount `WorkerRail`. |

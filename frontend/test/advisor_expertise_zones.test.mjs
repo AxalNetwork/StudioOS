@@ -200,8 +200,9 @@ test('a failed read is not rendered as an empty store', () => {
     assert.match(src, /catch \(e\) \{/, `${page} must catch its own read failure`);
   }
   const pages = codeOnly(read('frontend/src/pages/advisor/expertise/pages.js'));
-  assert.match(pages, /catch \(e\) \{\s*latest\.current = null;\s*setState\(\{ loading: false, error: e\?\.message \|\| errorText, rows: \[\]/,
+  assert.match(pages, /catch \(e\) \{\s*reportError\('expertise:list', e\);\s*latest\.current = null;\s*setState\(\{ loading: false, error: errorText, rows: \[\]/,
     'a failed first page is an error with no rows, never an empty list');
+  assert.doesNotMatch(pages, /e\?\.message/, '#4697: the helper never prints a thrown error\'s text');
   for (const page of ['ServicesZone.jsx', 'ProofZone.jsx']) {
     assert.match(codeOnly(read(`frontend/src/pages/advisor/expertise/${page}`)), /error: list\.error/, `${page} passes the paged read's error to ZoneBody`);
   }
@@ -216,7 +217,7 @@ test('no zone holds `loading` true past its own error', () => {
   assertLoadingNeverOutlivesError('frontend/src/pages/advisor', 10);
 });
 
-test('confirmation is the attester’s to give, and the token is shown once', () => {
+test('confirmation is the attester’s to give, and the link survives a refresh (D4670)', () => {
   const proof = codeOnly(read('frontend/src/pages/advisor/expertise/ProofZone.jsx'));
   // `attested` comes off the worker's row; nothing here computes it from the
   // advisor's own input, and nothing lets them set it.
@@ -225,11 +226,13 @@ test('confirmation is the attester’s to give, and the token is shown once', ()
     'the page must never assert attestation itself');
   assert.match(proof, /Self-stated/, 'an unconfirmed claim says so');
 
-  // The link is state on the response, not something re-read later — the
-  // worker returns request_token once and never again.
-  assert.match(proof, /res\?\.request_token/);
-  assert.doesNotMatch(proof, /row\.consents\[0\]\.request_token/);
-  assert.match(proof, /shown once/i);
+  // D4670: the link is drawn from each pending consent on the list, so a
+  // refresh never loses it; it can be, because the link no longer answers
+  // anything (a code mailed to the named address does). The old one-shot
+  // `request_token` on the response is gone, and so is "shown once".
+  assert.match(proof, /c\.invite_token/);
+  assert.doesNotMatch(proof, /request_token/);
+  assert.doesNotMatch(proof, /shown once/i);
 });
 
 test('the attester can answer without an account', () => {

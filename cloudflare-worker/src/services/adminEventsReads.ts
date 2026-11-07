@@ -139,24 +139,37 @@ function formatOf(kind: unknown): 'online' | 'in_person' | 'hybrid' | 'not_recor
 
 // ── The event rows several reads share ─────────────────────────────────────
 
-const EVENT_ROWS_SQL = `
-  SELECT e.*,
-         COALESCE(NULLIF(TRIM(u.display_name), ''), u.name) AS host_name, u.role AS host_role,
-         p.name AS venture_name,
-         COALESCE(r.seats_taken, 0) AS seats_taken, COALESCE(r.confirmed, 0) AS confirmed, COALESCE(r.attended, 0) AS attended,
-         COALESCE(r.waitlisted, 0) AS waitlisted, COALESCE(r.paid, 0) AS paid_tickets
-    FROM events e
-    LEFT JOIN users u ON u.id = e.host_user_id
-    LEFT JOIN projects p ON p.id = e.project_id
-    LEFT JOIN (
-      SELECT event_id,
+const SEAT_SUMS = `
              SUM(CASE WHEN status IN ('registered','confirmed','attended') THEN 1 ELSE 0 END) AS seats_taken,
              SUM(CASE WHEN status IN ('confirmed','attended') THEN 1 ELSE 0 END) AS confirmed,
              SUM(CASE WHEN status = 'attended' THEN 1 ELSE 0 END) AS attended,
              SUM(CASE WHEN status = 'waitlisted' THEN 1 ELSE 0 END) AS waitlisted,
-             SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) AS paid
+             SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) AS paid`;
+
+const EVENT_COLUMNS = `
+  SELECT e.*,
+         COALESCE(NULLIF(TRIM(u.display_name), ''), u.name) AS host_name, u.role AS host_role,
+         p.name AS venture_name`;
+const EVENT_FROM = `
+    FROM events e
+    LEFT JOIN users u ON u.id = e.host_user_id
+    LEFT JOIN projects p ON p.id = e.project_id`;
+
+const EVENT_ROWS_SQL = EVENT_COLUMNS + `,
+         COALESCE(r.seats_taken, 0) AS seats_taken, COALESCE(r.confirmed, 0) AS confirmed, COALESCE(r.attended, 0) AS attended,
+         COALESCE(r.waitlisted, 0) AS waitlisted, COALESCE(r.paid, 0) AS paid_tickets` + EVENT_FROM + `
+    LEFT JOIN (
+      SELECT event_id,` + SEAT_SUMS + `
         FROM event_registrations GROUP BY event_id
     ) r ON r.event_id = e.id`;
+
+/** #4717 package 5: the events alone, and the seats of the events named in one bound JSON list. */
+const EVENT_ONLY_SQL = EVENT_COLUMNS + EVENT_FROM;
+const SEATS_FOR_SQL = `
+  SELECT event_id,` + SEAT_SUMS + `
+    FROM event_registrations
+   WHERE event_id IN (SELECT value FROM json_each(?))
+   GROUP BY event_id`;
 
 export interface EventRow {
   [k: string]: any;
@@ -171,7 +184,31 @@ export interface EventRow {
   paid_tickets: number;
 }
 
-async function readEventRows(env: Env): Promise<EventRow[]> {
+/**
+ * Every event, with its seats. Given `seatsFor`, only the events it picks are
+ * given their seats (one statement, the ids bound as one JSON list); every
+ * other event's seats are 0, so `seatsFor` must pick every event whose seats
+ * the caller reads (#4717 package 5: the overview no longer groups every
+ * registration ever made to read the seats of this period's events).
+ */
+async function readEventRows(env: Env, seatsFor?: (e: EventRow) => boolean): Promise<EventRow[]> {
+  if (seatsFor) {
+    const events = (await all(env, EVENT_ONLY_SQL)).map((r) => ({ ...r, id: Number(r.id) })) as EventRow[];
+    const ids = events.filter(seatsFor).map((e) => e.id);
+    const seats = ids.length ? await all(env, SEATS_FOR_SQL, [JSON.stringify(ids)]) : [];
+    const by = new Map(seats.map((r) => [Number(r.event_id), r]));
+    return events.map((e) => {
+      const r = by.get(e.id);
+      return {
+        ...e,
+        seats_taken: Number(r?.seats_taken || 0),
+        confirmed: Number(r?.confirmed || 0),
+        attended: Number(r?.attended || 0),
+        waitlisted: Number(r?.waitlisted || 0),
+        paid_tickets: Number(r?.paid || 0),
+      };
+    });
+  }
   const rows = await all(env, EVENT_ROWS_SQL);
   return rows.map((r) => ({
     ...r,
@@ -222,20 +259,35 @@ const waitingHours = (e: EventRow, now: number) => {
 
 // ── GET /overview ──────────────────────────────────────────────────────────
 
-export async function readOverview(env: Env, weeks: number, now = Date.now()) {
+/**
+ * #4717 package 5 — the events whose seats the overview reads: not ended yet
+ * (the next 30 days, the waitlists, Next up, full and low sign-ups), starting
+ * from now (so an `ends_at` before its start still counts), ended in the
+ * period (show-up), and cancelled (paid tickets on a cancelled event, in the
+ * period and all time). `community_reads_4717.test.ts` holds the overview read
+ * this way equal to the overview read with every event's seats.
+ */
+export function overviewSeatsFor(now: number, inPeriod: (ms: number) => boolean) {
+  return (e: EventRow) => !hasEnded(e, now) || timestamp(e.starts_at) >= now || inPeriod(endedAt(e)) || e.status === 'cancelled';
+}
+
+export async function readOverview(env: Env, weeks: number, now = Date.now(), opts: { allSeats?: boolean } = {}) {
   const currentMonday = mondayOf(now);
   const start = currentMonday - (weeks - 1) * WEEK;
   const end = currentMonday + WEEK;
   const previousStart = start - weeks * WEEK;
   const inPeriod = (ms: number) => ms >= start && ms < end;
-  // A loose bound on the stored text, a day early; the exact cut is made on the parsed time.
-  const since = isoDay(previousStart - DAY);
+  // A loose bound on the day, a day early; the exact cut is made on the parsed time. #4717 package 5:
+  // the rows read are this period's only. The period before is one count, made in SQL from the index.
+  const since = isoDay(start - DAY);
 
-  const events = once(() => readEventRows(env));
+  // `allSeats` is the reference read the test compares with; the page never asks for it.
+  const events = once(() => readEventRows(env, opts.allSeats ? undefined : overviewSeatsFor(now, inPeriod)));
+  // #4717 package 5: `date(registered_at)`, which the day index answers; still a day early, the exact cut below.
   const registrations = once(() => all(env,
     `SELECT r.status, r.comp, r.invitation_id, r.payment_status, r.amount_cents, r.registered_at, e.currency
        FROM event_registrations r LEFT JOIN events e ON e.id = r.event_id
-      WHERE r.registered_at >= ?`, [since]));
+      WHERE date(r.registered_at) >= ?`, [since]));
   const inThisPeriod = async () => (await registrations()).filter((r) => inPeriod(timestamp(r.registered_at)));
 
   const [queue, upcoming_30d, waitlisted, weekly, show_up, by_status, by_type, by_format, by_role, by_source,
@@ -271,17 +323,21 @@ export async function readOverview(env: Env, weeks: number, now = Date.now()) {
     }),
     block('The weekly registrations and check-ins', async () => {
       const regs = await registrations();
-      const checkins = await all(env, `SELECT checked_in_at FROM event_checkins WHERE checked_in_at >= ?`, [since]);
+      // The period before, counted where the rows are (the day index, covering): exactly `previousStart <= at < start`.
+      const before = await all(env,
+        `SELECT COUNT(*) AS n FROM event_registrations
+          WHERE date(registered_at) >= ? AND date(registered_at) <= ?
+            AND datetime(registered_at) >= datetime(?) AND datetime(registered_at) < datetime(?)`,
+        [isoDay(previousStart), isoDay(start), iso(previousStart), iso(start)]);
+      const checkins = await all(env, `SELECT checked_in_at FROM event_checkins WHERE date(checked_in_at) >= ?`, [since]);
       const buckets = Array.from({ length: weeks }, (_, i) => ({
         week_start: isoDay(start + i * WEEK), registrations: 0, checkins: 0, ...(i === weeks - 1 ? { to_date: true } : {}),
       }));
       const slot = (ms: number) => (inPeriod(ms) ? Math.floor((ms - start) / WEEK) : -1);
-      let previous = 0;
+      const previous = Number(before[0]?.n || 0);
       for (const r of regs) {
-        const at = timestamp(r.registered_at);
-        const i = slot(at);
+        const i = slot(timestamp(r.registered_at));
         if (i >= 0) buckets[i].registrations++;
-        else if (at >= previousStart && at < start) previous++;
       }
       for (const r of checkins) { const i = slot(timestamp(r.checked_in_at)); if (i >= 0) buckets[i].checkins++; }
       return {
@@ -336,7 +392,7 @@ export async function readOverview(env: Env, weeks: number, now = Date.now()) {
       const rows = await all(env,
         `SELECT r.user_id, r.registered_at, u.role
            FROM event_registrations r LEFT JOIN users u ON u.id = r.user_id
-          WHERE r.status IN ('registered','confirmed','attended') AND r.registered_at >= ?`, [since]);
+          WHERE r.status IN ('registered','confirmed','attended') AND date(r.registered_at) >= ?`, [since]);
       const counts = { ...zeroes(ROLES), guest: 0, not_recorded: 0 };
       for (const r of rows) if (inPeriod(timestamp(r.registered_at))) counts[roleOf(r) as keyof typeof counts]++;
       return { counts };

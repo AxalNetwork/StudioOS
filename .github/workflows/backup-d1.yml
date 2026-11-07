@@ -208,6 +208,45 @@ jobs:
             --content-type 'application/json' \
             --remote
 
+      - name: Independent encrypted copy (D4558)
+        # Off until the owner provisions the independent account (runbook:
+        # documentation/operations/D1_RECOVERY.md §7). The export is encrypted
+        # on this runner to the owner's age public key and put, write-once, in
+        # a bucket outside the production Cloudflare account. The credential is
+        # write-only; the private key never reaches CI, and this step has no
+        # Cloudflare credential. A copy that cannot be made fails this job,
+        # which pages.
+        id: second_copy
+        if: vars.DR_SECOND_COPY_ENABLED == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.DR_COPY_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.DR_COPY_SECRET_ACCESS_KEY }}
+          DR_COPY_ENDPOINT: ${{ vars.DR_COPY_ENDPOINT }}
+          DR_COPY_BUCKET: ${{ vars.DR_COPY_BUCKET }}
+          DR_COPY_REGION: ${{ vars.DR_COPY_REGION }}
+          DR_AGE_RECIPIENT: ${{ vars.DR_AGE_RECIPIENT }}
+          BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
+        run: |
+          sudo apt-get install -y age >/dev/null
+          bash scripts/dr-second-copy.sh upload "${BACKUP_FILENAME}" manifest.json | tee second-copy.log
+          echo "point=$(tail -1 second-copy.log)" >> "$GITHUB_OUTPUT"
+
+      - name: Write the independent copy's heartbeat
+        # Read by the monthly drill, which fails when the copy is missing or stale.
+        if: vars.DR_SECOND_COPY_ENABLED == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POINT: ${{ steps.second_copy.outputs.point }}
+        run: |
+          jq -n --arg at "$(date -u +%FT%TZ)" --arg key "${POINT}" --arg exported_at "$(jq -r '.exported_at' manifest.json)" \
+            '{at: $at, source: "gha", kind: "d1_independent", key: $key, exported_at: $exported_at}' > heartbeat-d1-independent.json
+          wrangler r2 object put \
+            "${BACKUP_BUCKET}/heartbeat-d1-independent.json" \
+            --file heartbeat-d1-independent.json \
+            --content-type 'application/json' \
+            --remote
+
       - name: Notify on failure
         if: failure() && env.PAGER_CONFIGURED == 'true'
         env:

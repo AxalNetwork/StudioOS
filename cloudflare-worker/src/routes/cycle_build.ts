@@ -52,7 +52,9 @@ type Sort = NonNullable<BuildRecords['sorts']>[number];
  * sort by their list and never by the alphabet.
  */
 type ListSpec = { filters: Filter[]; sort: Sort; orders?: Record<string, readonly string[]> };
-type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; list?: ListSpec; facts?: Record<string, unknown>; add?: BuildRecords['add']; parts?: Record<string, unknown> };
+type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; list?: ListSpec; facts?: Record<string, unknown>; add?: BuildRecords['add']; parts?: Record<string, unknown>;
+  /** #4603 part 2: set when the reader paged its rows in SQL; `rows` is then that page. */
+  paged?: { total: number; page: number; page_size: number } };
 type Query = { q?: string; filter?: string; sort?: string; page?: string };
 /**
  * #4603 (D4603): what a module read is for. A module page needs everything,
@@ -62,9 +64,16 @@ type Query = { q?: string; filter?: string; sort?: string; page?: string };
  * without the parts: that was 31 of its 52 statements, every one of them a
  * read the overview never showed.
  */
-type ReadOpts = { parts: boolean };
-const FULL: ReadOpts = Object.freeze({ parts: true });
-const OVERVIEW: ReadOpts = Object.freeze({ parts: false });
+type ReadOpts = { parts: boolean; rows: boolean; query?: Query };
+const FULL: ReadOpts = Object.freeze({ parts: true, rows: true });
+/** #4603 part 2: the overview needs no record rows from a module that says its counts in facts. */
+const OVERVIEW: ReadOpts = Object.freeze({ parts: false, rows: false });
+const PAGE_SIZE = 25;
+/** The page number exactly as `pageBuildRows` reads it. */
+function pageOf(raw: unknown): number {
+  const n = Number(raw ?? 1);
+  return Number.isSafeInteger(n) && n > 0 ? Math.min(n, 100000) : 1;
+}
 
 function number(v: unknown): number { return Number(v ?? 0); }
 function rows<T>(r: { results?: T[] | null }): T[] { return r.results ?? []; }
@@ -197,41 +206,110 @@ function reconnect(providerKey: string, failedAt: unknown, projectId: number, fa
   return { text: `Reconnect ${name}${since ? ` · failing since ${since}` : ''}`, href: connectHref(providerKey, projectId) };
 }
 
-async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
-  const features = rows(await env.DB.prepare(
+const FEATURE_FROM = `FROM mvp_features f
+       LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
+       LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
+      WHERE f.project_id = ?`;
+const FEATURE_COLS = `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
+            pg.title AS pain_theme, h.claim AS hypothesis`;
+/**
+ * #4603 part 2 (D4603): Solution design's list keys as SQL, each the exact
+ * stored-value mapping the row's `keys` use (`LEVEL`, `IMPACT_KEY`, `EFFORT_KEY`).
+ * A key that is not one of these, a search, or a sort on a text column reads
+ * every feature and pages in memory, as before.
+ */
+const FEATURE_KEY_SQL: Record<string, string> = {
+  linked: "(CASE WHEN pg.title IS NOT NULL THEN 'yes' ELSE 'no' END)",
+  impact: "(CASE f.added_value WHEN 'High' THEN 'high' WHEN 'Medium' THEN 'medium' WHEN 'Low' THEN 'low' END)",
+  effort: "(CASE f.effort WHEN 'S' THEN 'low' WHEN 'M' THEN 'medium' WHEN 'L' THEN 'high' WHEN 'XL' THEN 'high' END)",
+};
+const FEATURE_ORDERS = { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } as const;
+
+/** The SQL that answers this query's page, or null when it must be paged in memory. */
+function featurePageSql(query: Query): { where: string; binds: string[]; order: string; page: number } | null {
+  if ((query.q ?? '').trim()) return null;
+  const where: string[] = []; const binds: string[] = [];
+  for (const part of (query.filter ?? '').split(',').filter(Boolean)) {
+    const at = part.indexOf(':');
+    if (at <= 0) continue;
+    const key = part.slice(0, at);
+    if (!Object.hasOwn(FEATURE_KEY_SQL, key)) return null;
+    where.push(`COALESCE(${FEATURE_KEY_SQL[key]}, '') = ?`);
+    binds.push(part.slice(at + 1).toLocaleLowerCase());
+  }
+  const sort = query.sort || 'impact';
+  const desc = sort.startsWith('-'); const key = desc ? sort.slice(1) : sort;
+  if (!Object.hasOwn(FEATURE_ORDERS, key)) return null;
+  const rank = `(CASE ${FEATURE_KEY_SQL[key]} ${FEATURE_ORDERS[key as keyof typeof FEATURE_ORDERS].map((v, i) => `WHEN '${v}' THEN ${i}`).join(' ')} END)`;
+  // Unknown values last either way; ties in read order (sort_order, then id), as `pageBuildRows` keeps them.
+  return { where: where.map(w => ` AND ${w}`).join(''), binds, order: `(${rank} IS NULL), ${rank} ${desc ? 'DESC' : 'ASC'}, f.sort_order, f.id`, page: pageOf(query.page) };
+}
+
+function featureRow(f: any): RecordRow {
+  const impact = known(IMPACT_KEY, f.added_value), effort = known(EFFORT_KEY, f.effort);
+  // A feature with neither a pain theme nor a hypothesis links to nothing.
+  // keys.linked is the chart's linked count: a stored pain theme.
+  return record(f.id, {
+    feature: f.title, pain_theme: f.pain_theme ?? (f.hypothesis == null ? { text: 'Links to nothing', tone: 'bad' } : null), hypothesis: f.hypothesis,
+    impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null,
+  }, { linked: f.pain_theme != null ? 'yes' : 'no', impact, effort },
+  { title: f.title, description: f.description ?? null, pain_group_id: f.pain_group_id ?? null, hypothesis_id: f.hypothesis_id ?? null,
+    added_value: f.added_value ?? null, effort: f.effort ?? null, scope: f.scope ?? null });
+}
+
+/** Every feature, in read order. The in-memory path, and what part 2's tests compare the SQL page against. */
+export async function solutionFeatureRows(env: Env, projectId: number): Promise<RecordRow[]> {
+  // A literal, so the schema guard reads its columns (the paged reads below are built and are not read by it).
+  return rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
             pg.title AS pain_theme, h.claim AS hypothesis
        FROM mvp_features f
        LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
        LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
       WHERE f.project_id = ? ORDER BY f.sort_order, f.id`,
-  ).bind(p.id).all<any>());
-  const risks = rows(await env.DB.prepare(
-    'SELECT id, title, severity, owner_user_id, mitigation, state FROM venture_risks WHERE project_id = ? ORDER BY id',
-  ).bind(p.id).all<any>());
-  const linked = features.filter(f => f.pain_theme != null).length;
-  const unlinked = features.length - linked;
-  const severity = ['high', 'medium', 'low'].map(s => risks.filter(r => r.severity === s).length);
+  ).bind(projectId).all<any>()).map(featureRow);
+}
+
+async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+  // #4603 part 2: the card's counts are aggregates; neither the overview nor the card reads a feature row.
+  const counts = await env.DB.prepare(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN pg.title IS NOT NULL THEN 1 ELSE 0 END), 0) AS linked
+       FROM mvp_features f LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
+      WHERE f.project_id = ?`,
+  ).bind(p.id).first<{ n: number; linked: number }>();
+  const featureCount = number(counts?.n), linked = number(counts?.linked);
+  const unlinked = featureCount - linked;
+  // Risks are counted, never listed: the owner dropped the module page's `facts.risks` list (#4603 part 2, 2026-11-07).
+  const bySeverity = new Map(rows(await env.DB.prepare(
+    'SELECT severity, COUNT(*) AS n FROM venture_risks WHERE project_id = ? GROUP BY severity',
+  ).bind(p.id).all<{ severity: string | null; n: number }>()).map(r => [r.severity, number(r.n)]));
+  const severity = ['high', 'medium', 'low'].map(s => bySeverity.get(s) ?? 0);
+  const riskCount = [...bySeverity.values()].reduce((a, b) => a + b, 0);
   const series: ChartSpec[] = [];
-  if (features.length) series.push({ kind: 'stack', rows: [{ label: 'Features', parts: [linked, unlinked] }], tones: ['v1', 'grey'], legend: [{ label: 'Linked', tone: 'v1' }, { label: 'Unlinked', tone: 'grey' }] });
-  if (risks.length) series.push({ kind: 'stack', rows: [{ label: 'Risks', parts: severity }], tones: ['bad', 'warn', 'grey'], legend: ['High', 'Medium', 'Low'].map((label, i) => ({ label, tone: ['bad', 'warn', 'grey'][i] })) });
-  // A feature with neither a pain theme nor a hypothesis links to nothing.
-  // keys.linked is the chart's linked count: a stored pain theme.
-  const featureRows = features.map(f => {
-    const impact = known(IMPACT_KEY, f.added_value), effort = known(EFFORT_KEY, f.effort);
-    return record(f.id, {
-      feature: f.title, pain_theme: f.pain_theme ?? (f.hypothesis == null ? { text: 'Links to nothing', tone: 'bad' } : null), hypothesis: f.hypothesis,
-      impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null,
-    }, { linked: f.pain_theme != null ? 'yes' : 'no', impact, effort },
-    { title: f.title, description: f.description ?? null, pain_group_id: f.pain_group_id ?? null, hypothesis_id: f.hypothesis_id ?? null,
-      added_value: f.added_value ?? null, effort: f.effort ?? null, scope: f.scope ?? null });
-  });
+  if (featureCount) series.push({ kind: 'stack', rows: [{ label: 'Features', parts: [linked, unlinked] }], tones: ['v1', 'grey'], legend: [{ label: 'Linked', tone: 'v1' }, { label: 'Unlinked', tone: 'grey' }] });
+  if (riskCount) series.push({ kind: 'stack', rows: [{ label: 'Risks', parts: severity }], tones: ['bad', 'warn', 'grey'], legend: ['High', 'Medium', 'Low'].map((label, i) => ({ label, tone: ['bad', 'warn', 'grey'][i] })) });
+  let featureRows: RecordRow[] = [];
+  let paged: ModuleRead['paged'];
+  if (opts.rows) {
+    const sql = opts.query ? featurePageSql(opts.query) : null;
+    if (sql) {
+      // Built from fixed fragments and FEATURE_KEY_SQL only; every value is bound.
+      const countSql = 'SELECT COUNT(*) AS n ' + FEATURE_FROM + sql.where;
+      const pageSql = `${FEATURE_COLS} ${FEATURE_FROM}${sql.where} ORDER BY ${sql.order} LIMIT ? OFFSET ?`;
+      const total = sql.where ? number((await env.DB.prepare(countSql).bind(p.id, ...sql.binds).first<{ n: number }>())?.n) : featureCount;
+      featureRows = rows(await env.DB.prepare(pageSql)
+        .bind(p.id, ...sql.binds, PAGE_SIZE, (sql.page - 1) * PAGE_SIZE).all<any>()).map(featureRow);
+      paged = { total, page: sql.page, page_size: PAGE_SIZE };
+    } else featureRows = await solutionFeatureRows(env, p.id);
+  }
   const levels = options([['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]);
-  return { card: card('solution-design', features.length || risks.length ? 'ok' : 'empty', series, 'Now', features.length || risks.length ? null : 'No features yet. Linked and unlinked features appear here.', features.length || risks.length ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme` : null) : next(p, 'solution-design', 'Add feature', true)),
+  const any = featureCount || riskCount;
+  return { card: card('solution-design', any ? 'ok' : 'empty', series, 'Now', any ? null : 'No features yet. Linked and unlinked features appear here.', any ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme` : null) : next(p, 'solution-design', 'Add feature', true)),
     cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
     list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
-      sort: { key: 'impact', label: 'Impact' }, orders: { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } },
-    facts: { features: features.length, risks }, ...(opts.parts ? { parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } } : {}) };
+      sort: { key: 'impact', label: 'Impact' }, orders: { impact: [...FEATURE_ORDERS.impact], effort: [...FEATURE_ORDERS.effort] } },
+    ...(paged ? { paged } : {}),
+    facts: { features: featureCount, linked }, ...(opts.parts ? { parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } } : {}) };
 }
 
 /** D1097 (#2962): Solution design's "Runs on" from Vercel (VC4a). Its own read, Unreadable on its own. */
@@ -877,9 +955,9 @@ app.get('/modules/:slug', async c => {
   if (!Object.hasOwn(READS, slug)) return c.json({ detail: 'Module not found' }, 404);
   const project = await context(c);
   if (project instanceof Response) return project;
-  const result = await safeRead(slug, c.env, project, await requireAuth(c));
-  const spec = MODULES.find(m => m[0] === slug)!;
   const query: Query = { q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: c.req.query('page') };
+  const result = await safeRead(slug, c.env, project, await requireAuth(c), { ...FULL, query });
+  const spec = MODULES.find(m => m[0] === slug)!;
   // The canvas's filters, then its default sort first (the page shows
   // sorts[0] as the current one), then each column both ways.
   const list = result.cols.length ? result.list : undefined;
@@ -887,7 +965,7 @@ app.get('/modules/:slug', async c => {
   const bySort = result.cols.flatMap(col => [{ key: col.key, label: col.label }, { key: `-${col.key}`, label: `${col.label} descending` }]);
   const sorts = list ? [list.sort, ...bySort.filter(s => s.key !== list.sort.key).map(s => s.label === list.sort.label ? { ...s, label: `${s.label} ascending` } : s)] : bySort;
   return c.json({ module: { slug, name: spec[1], records_title: spec[4] }, card: result.card, records: { cols: result.cols,
-    ...pageBuildRows(result.rows, query, 25, { orders: list?.orders, defaultSort: list?.sort.key }), filters, sorts,
+    ...(result.paged ? { rows: result.rows, ...result.paged } : pageBuildRows(result.rows, query, PAGE_SIZE, { orders: list?.orders, defaultSort: list?.sort.key })), filters, sorts,
     ...(result.add ? { add: result.add } : {}), linkable: hasRecords('build') }, ...(result.facts ? { facts: result.facts } : {}), ...(result.parts ? { parts: result.parts } : {}) });
 });
 

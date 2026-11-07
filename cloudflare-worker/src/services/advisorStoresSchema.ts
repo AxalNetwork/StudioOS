@@ -1,6 +1,7 @@
 /**
  * Lazy schema bootstrap for the advisor's own stores — migrations 201–206,
- * with 367's notice ledger and opt-outs and 565's assignment history.
+ * with 367's notice ledger and opt-outs, 565's assignment history, and
+ * 202611062216's attestation codes, answer history and pinned claim (D4670).
  *
  * WHY THIS EXISTS, and it is a rule rather than a precaution.
  * `documentation/architecture/GOTCHAS.md` states it directly: an `ALTER` file
@@ -24,6 +25,7 @@
  * test after the first run against tables nobody created.
  */
 import type { Env } from '../types';
+import { tableColumns } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
@@ -200,21 +202,63 @@ const TABLES = [
      ON advisor_cohort_assignment_events(assignment_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_advisor_cohort_assignment_events_cycle
      ON advisor_cohort_assignment_events(cohort_cycle_id, created_at)`,
+  // 202611062216 (D4670) — the attester's one-time codes and the answer history.
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_codes (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     consent_id INTEGER NOT NULL REFERENCES advisor_proof_consents(id),
+     code_hash TEXT NOT NULL,
+     expires_at TEXT NOT NULL,
+     attempts INTEGER NOT NULL DEFAULT 0,
+     used_at TEXT,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_proof_consent_codes_consent
+     ON advisor_proof_consent_codes(consent_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     consent_id INTEGER NOT NULL,
+     kind TEXT NOT NULL CHECK (kind IN ('asked', 'confirmed', 'declined', 'withdrawn', 'reconfirmed')),
+     claim_sha256 TEXT,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_proof_consent_events_consent
+     ON advisor_proof_consent_events(consent_id, id)`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_events_block_update
+   BEFORE UPDATE ON advisor_proof_consent_events
+   BEGIN
+       SELECT RAISE(ABORT, 'advisor_proof_consent_events is append-only (D4670).');
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_events_block_delete
+   BEFORE DELETE ON advisor_proof_consent_events
+   BEGIN
+       SELECT RAISE(ABORT, 'advisor_proof_consent_events is append-only (D4670).');
+   END`,
+];
+
+/** 202611062216 (D4670) — the claim a confirmation was asked about. */
+const CONSENT_COLUMNS: Array<[string, string]> = [
+  ['claim_sha256', 'ALTER TABLE advisor_proof_consents ADD COLUMN claim_sha256 TEXT'],
+  ['claim_json', 'ALTER TABLE advisor_proof_consents ADD COLUMN claim_json TEXT'],
 ];
 
 async function addMissingColumns(
-  env: Env, pragma: string, wanted: Array<[string, string]>,
+  env: Env, table: string, wanted: Array<[string, string]>,
 ): Promise<void> {
   // A table this bootstrap does not create — `advisors` and `advisor_bookings`
-  // both come from `sql/t13_t14_t15.sql`. An empty PRAGMA means the table is
-  // absent, and inventing a shape for a table that already has two definitions
-  // in this repository is exactly the hazard migration 201 declines to add to.
-  const info = await env.DB.prepare(pragma).all<{ name: string }>();
-  const have = new Set((info.results || []).map((r) => r.name));
+  // both come from `sql/t13_t14_t15.sql`. An empty column set means the table
+  // is absent, and inventing a shape for a table that already has two
+  // definitions in this repository is exactly the hazard migration 201
+  // declines to add to.
+  //
+  // Asks first through `tableColumns` (#4568 R2-04), the shared per-binding
+  // read in util/schemaBootstrap.ts, so a database that already has a column
+  // issues no ALTER for it. The set is the cached one, so a column added here
+  // is recorded in it and a later call on the same table does not ask again.
+  const have = await tableColumns(env, table);
   if (!have.size) return;
   for (const [name, alter] of wanted) {
     if (have.has(name)) continue;
-    try { await env.DB.prepare(alter).run(); }
+    try { await env.DB.prepare(alter).run(); have.add(name); }
     catch (e) { console.warn('[advisorStoresSchema] ALTER failed (likely a race):', alter, e); }
   }
 }
@@ -327,27 +371,28 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     // Before the column adds below: those read `PRAGMA table_info` too, and a
     // half-renamed table would make them reason about the wrong shape.
     await renameLegacySlotOwnerColumn(env);
-    await addMissingColumns(env, 'PRAGMA table_info(advisors)', PROFILE_COLUMNS);
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_bookings)', BOOKING_COLUMNS);
+    await addMissingColumns(env, 'advisors', PROFILE_COLUMNS);
+    await addMissingColumns(env, 'advisor_bookings', BOOKING_COLUMNS);
+    await addMissingColumns(env, 'advisor_proof_consents', CONSENT_COLUMNS);
     // D573 / migration 394: nullable facts, including databases adopted by baseline.
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_deliverables)', [
+    await addMissingColumns(env, 'advisor_deliverables', [
       ['due_date', 'ALTER TABLE advisor_deliverables ADD COLUMN due_date TEXT'],
       ['manual_status', 'ALTER TABLE advisor_deliverables ADD COLUMN manual_status TEXT'],
     ]);
     // #4684 / migration 202611062152: who a version went to and who recorded its receipts.
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_deliverable_versions)', [
+    await addMissingColumns(env, 'advisor_deliverable_versions', [
       ['recipient_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN recipient_user_id INTEGER'],
       ['opened_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN opened_by_user_id INTEGER'],
       ['signed_off_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN signed_off_by_user_id INTEGER'],
     ]);
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_session_types)', [
+    await addMissingColumns(env, 'advisor_session_types', [
       ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
     ]);
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_bookings)', [
+    await addMissingColumns(env, 'advisor_bookings', [
       ['session_type_id', 'ALTER TABLE advisor_bookings ADD COLUMN session_type_id INTEGER'],
       ['booking_link_id', 'ALTER TABLE advisor_bookings ADD COLUMN booking_link_id INTEGER'],
     ]);
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_booking_links)', [
+    await addMissingColumns(env, 'advisor_booking_links', [
       ['opens_count', 'ALTER TABLE advisor_booking_links ADD COLUMN opens_count INTEGER'],
     ]);
     READY.set(key, true);
@@ -362,3 +407,4 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
 /** Exported so a test can hold these against the migration files. */
 export const ADVISOR_PROFILE_COLUMNS = PROFILE_COLUMNS.map(([n]) => n);
 export const ADVISOR_BOOKING_COLUMNS = BOOKING_COLUMNS.map(([n]) => n);
+export const ADVISOR_CONSENT_COLUMNS = CONSENT_COLUMNS.map(([n]) => n);

@@ -202,7 +202,8 @@ test('the fixtures are what D559 sends, and the studio\'s frozen line is the rou
     'return c.json({ attempt: attemptView(after, exam, all), correct_count: g.correct, question_count: g.total, lesson_progress });',
     // D4643: what a submitted attempt reveals is read from the attempt's own policy.
     "if (!a.submitted_at || policyOf(a, exam).reveal !== 'score_and_answers') return { ...base, answers_revealed: false };",
-    'return { ...base, answers_revealed: true, answers, correct: revealed(shown) };',
+    // D4650: the explanations travel with the revealed answers, and only with them.
+    'return { ...base, answers_revealed: true, answers, correct: revealed(shown), explanations: explanations(shown) };',
     'attempts_left: exam.max_attempts == null ? null : Math.max(0, Number(exam.max_attempts) - used),',
     'return c.json({ exercise: { uid: ex.uid, title: ex.title }, submissions: out });',
     'return c.json({ exam: { uid: exam.uid, title: exam.title }, attempts: out });',

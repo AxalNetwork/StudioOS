@@ -14,10 +14,12 @@ file map and the owner's answers are in
 | `studioLayoutModel.js` | The pure rules: sizes and spans, move / add / remove / resize, the cap of 12, Recommended, search, dropped lines, how a refusal is read, the cycle module keys. |
 | `studioFallback.js` | The Worker's defaults and titles, for a layout read that failed (SM8a) only. A test holds it equal to `cloudflare-worker/src/services/studioModules.ts`. |
 | `useStudioLayout.js` | The two reads, edit mode and the one save (`deriveStudio` is its pure half; `studioFromReads` draws a home from fixed reads in a test). |
-| `StudioModules.jsx` | What a home mounts: the notices, "Your modules", the grid or the empty box, the edit bar, the module map, the locked sheet, the reset confirm. |
+| `useLeaveGuard.js` | D4621 (#4621): leaving a Studio with unsaved edits asks first: `beforeunload`, a same-origin link click caught before the router sees it, and the browser's Back; Discard or Save then re-sends the same way out. |
+| `StudioModules.jsx` | What a home mounts: the notices, "Your modules", the grid or the empty box, the edit bar, the Artifact map, the locked sheet, the reset confirm. |
 | `StudioModuleGrid.jsx` | The placed modules in order and size; drag, keyboard and press-and-hold moves. |
 | `StudioModuleTile.jsx` | One module's frame and its states (SM7), and the edit chrome. |
-| `ModuleMapLightbox.jsx` | The module map (SM6). |
+| `ModuleMapLightbox.jsx` | The Artifact map (SM6; renamed by #4551). |
+| `StudioArtifactMark.jsx` | One group's mark (an icon by group, `FileText` for an unknown one), drawn on a module's tile and in the Artifact map. |
 | `StudioParts.jsx` | The fixed lock, Customise, the notices (SM8), SM12a, the locked sheet (SM12b), the edit bar and the reset confirm (SM5). |
 | `studioProposalsAdapter.js` | The seam for Eadwyn's layout proposals (SM9, SM10), unavailable until #3864. |
 | `studioModules.css` | The canvas's light and dark tokens and the grid. |

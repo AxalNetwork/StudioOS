@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { communityModelSource, communityPageSource } from './_community_source.mjs';
 
 import {
   glancesFromStudioGlance, hqAccountsView, hqApprovalsView, hqInsightsView, LANE_CONSOLES, NO_QUEUE_CONSOLES, ACTIVE_BEFORE_LOG,
@@ -187,8 +188,8 @@ test('the held pages read the glance and no longer say "none counted here"', () 
   assert.match(read('frontend/src/pages/admin/insights/AdminInsights.jsx'), /insightsApi\.adminInsights\(/);
   // D930 (#2367): Community is rebuilt at pages/admin/community/. #4717 package 2: its queue figures are its own
   // read's (the Community overview's queue), one snapshot with every other figure, not the glance's lanes.
-  assert.doesNotMatch(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /loadStudioGlance\(\)/);
-  assert.match(read('frontend/src/pages/admin/community/communityModel.js'), /blockOf\(overview, 'queue\.events'\)/);
+  assert.doesNotMatch(communityPageSource(), /loadStudioGlance\(\)/);
+  assert.match(communityModelSource(), /blockOf\(overview, 'queue\.events'\)/);
   // D953 (#2371): Programs is rebuilt at pages/admin/programs/; its cohort and
   // referrals figures still come from the glance's lanes, never "none counted".
   assert.match(read('frontend/src/pages/admin/programs/useProgramReads.js'), /api\.adminStudioGlance\(\)/);

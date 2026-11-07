@@ -28,6 +28,7 @@
  * from YouTube, Vimeo or Cloudflare Stream. An upload (`video_source = 'r2'`)
  * has no upload path yet and is refused rather than stored without a file.
  */
+import { COURSE_META_COLUMNS, courseMetaFields, courseMetaView, MetaInvalid } from '../services/learningCourseMeta';
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
@@ -145,7 +146,25 @@ function courseFields(b: any, creating: boolean) {
     estimated_minutes: wholeOrNull(b?.estimated_minutes, 'estimated_minutes'),
     resources_json,
     visibility: oneOf(b?.visibility, LEARNING_VISIBILITIES, 'visibility'),
+    // D4650 (#4650, part 2): audience, stage, outcomes, prerequisites, author, reviewer, review date, practical output.
+    ...metaFields(b),
   };
+}
+
+function metaFields(b: any) {
+  try { return courseMetaFields(b); } catch (e) {
+    if (e instanceof MetaInvalid) bad(e.code, e.reason);
+    throw e;
+  }
+}
+
+/** A course row as the authoring routes answer it: the stored JSON columns read into `resources` and `meta`. */
+function courseOut(row: any) {
+  const { id: _id, resources_json, audience_json: _a, outcomes_json: _o, prerequisites_json: _p, stage: _s, author_name: _au,
+    reviewer_name: _r, reviewed_on: _d, practical_output: _po, ...rest } = row;
+  let resources: unknown = [];
+  try { resources = JSON.parse(resources_json || '[]'); } catch { resources = []; }
+  return { ...rest, resources, meta: courseMetaView(row) };
 }
 
 /** Run a handler body, turning a validation throw into its 400. */
@@ -160,17 +179,50 @@ const now = () => new Date().toISOString();
 
 // Fixed column lists: an UPDATE names only columns from these, never a key from the body.
 const ITEM_COLUMNS = ['title', 'summary', 'body', 'video_url', 'duration_seconds', 'thumbnail_url', 'transcript', 'topic', 'level', 'visibility', 'chapters_json'] as const;
-const COURSE_COLUMNS = ['slug', 'title', 'summary', 'cover_url', 'level', 'estimated_minutes', 'resources_json', 'visibility'] as const;
+const COURSE_COLUMNS = ['slug', 'title', 'summary', 'cover_url', 'level', 'estimated_minutes', 'resources_json', 'visibility', ...COURSE_META_COLUMNS] as const;
 
-const ITEM_SELECT = 'SELECT uid, kind, title, summary, body, video_source, video_url, duration_seconds, thumbnail_url, transcript, topic, level, visibility, status, created_by, created_at, updated_at, published_at FROM learning_items';
-const COURSE_SELECT = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at, published_at FROM learning_courses';
+const ITEM_SELECT_BASE = 'SELECT uid, kind, title, summary, body, video_source, video_url, duration_seconds, thumbnail_url, transcript, topic, level, visibility, status, created_by, created_at, updated_at, published_at FROM learning_items';
+// #4742 — `stream_uid` is read here too: the Studio's content table needs it to draw "Stream · Ready"
+// (videoColumn in frontend/src/pages/learning/videoUpload.js), and without it every Stream video read
+// through this route as `null`. Every production schema carries the column (migration
+// 202611022159_learning_stream.sql, #4176), but a test fixture that snapshots an older schema state
+// (`loadSchema(db, { below })`, e.g. learning_programs_d558.test.ts, learning_video_d561.test.ts)
+// predates it — the same case `PATCH /items/:uid` below already guards for this exact column.
+// `selectItem`/`selectItems` fall back to `ITEM_SELECT_BASE` on that one error, so an older snapshot
+// reads the row with `stream_uid` simply absent, which the frontend already reads as "Not recorded",
+// never a 500.
+const ITEM_SELECT = ITEM_SELECT_BASE.replace('status,', 'status, stream_uid,');
+// D4650 (#4650, part 2): the course read includes the metadata columns.
+const COURSE_SELECT = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at, published_at, '
+  + 'audience_json, stage, outcomes_json, prerequisites_json, author_name, reviewer_name, reviewed_on, practical_output FROM learning_courses';
+
+const MISSING_COLUMN = /no such column|has no column/i;
+
+/** One item by uid, `stream_uid` included where the schema carries it. */
+async function selectItem(env: Env, uid: string): Promise<any> {
+  try {
+    return await env.DB.prepare(ITEM_SELECT + ' WHERE uid = ?').bind(uid).first();
+  } catch (e) {
+    if (!MISSING_COLUMN.test(String((e as Error)?.message))) throw e;
+    return await env.DB.prepare(ITEM_SELECT_BASE + ' WHERE uid = ?').bind(uid).first();
+  }
+}
+
+/** Every item, newest edit first, `stream_uid` included where the schema carries it. */
+async function selectItems(env: Env): Promise<any[]> {
+  try {
+    return (await env.DB.prepare(ITEM_SELECT + ' ORDER BY updated_at DESC, id DESC LIMIT 500').all<any>()).results || [];
+  } catch (e) {
+    if (!MISSING_COLUMN.test(String((e as Error)?.message))) throw e;
+    return (await env.DB.prepare(ITEM_SELECT_BASE + ' ORDER BY updated_at DESC, id DESC LIMIT 500').all<any>()).results || [];
+  }
+}
 
 // ---- items ---------------------------------------------------------------------
 
 r.get('/items', async (c) => {
   const admin = await gate(c); if (admin instanceof Response) return admin;
-  const res = await c.env.DB.prepare(ITEM_SELECT + ' ORDER BY updated_at DESC, id DESC LIMIT 500').all<any>();
-  const items = res.results || [];
+  const items = await selectItems(c.env);
   // D4179 (#4179): each uploaded file's copy to Stream, as the content table draws it (Copy to Stream,
   // Copying…, Verified, Copy failed). Read on its own; the bucket key itself is never sent.
   const keys = new Map(((await c.env.DB.prepare(`SELECT uid, r2_key FROM learning_items WHERE video_source = 'r2' AND r2_key IS NOT NULL`)
@@ -193,13 +245,13 @@ r.post('/items', async (c) => {
       f.duration_seconds ?? null, f.thumbnail_url ?? null, f.transcript ?? null, f.topic ?? null, f.level ?? null,
       f.visibility ?? 'open', admin.id, t, t).run();
     await record(c, admin, 'learning.item.create', { uid, kind: f.kind });
-    return c.json({ item: await c.env.DB.prepare(ITEM_SELECT + ' WHERE uid = ?').bind(uid).first() }, 201);
+    return c.json({ item: await selectItem(c.env, uid) }, 201);
   });
 });
 
 r.get('/items/:uid', async (c) => {
   const admin = await gate(c); if (admin instanceof Response) return admin;
-  const item = await c.env.DB.prepare(ITEM_SELECT + ' WHERE uid = ?').bind(c.req.param('uid')).first();
+  const item = await selectItem(c.env, c.req.param('uid'));
   return item ? c.json({ item }) : refuse(c, 404, { code: 'not_found', message: 'No such item.' });
 });
 
@@ -279,7 +331,7 @@ r.patch('/items/:uid', async (c) => {
     }
     await record(c, admin, 'learning.item.update', { uid, fields: [...ITEM_COLUMNS.filter((k) => (f as any)[k] !== undefined), ...(chapters !== undefined ? ['chapters'] : [])] });
     void changed;
-    return c.json({ item: await c.env.DB.prepare(ITEM_SELECT + ' WHERE uid = ?').bind(uid).first() });
+    return c.json({ item: await selectItem(c.env, uid) });
   });
 });
 
@@ -304,7 +356,7 @@ async function setItemStatus(c: Context<{ Bindings: Env }>, action: 'publish' | 
     `UPDATE learning_items SET status = ?, updated_at = ?, published_at = CASE WHEN ? = 'published' THEN COALESCE(published_at, ?) ELSE published_at END WHERE uid = ?`,
   ).bind(NEXT_STATUS[action], t, NEXT_STATUS[action], t, uid).run();
   await record(c, admin, `learning.item.${action}`, { uid });
-  return c.json({ item: await c.env.DB.prepare(ITEM_SELECT + ' WHERE uid = ?').bind(uid).first() });
+  return c.json({ item: await selectItem(c.env, uid) });
 }
 r.post('/items/:uid/publish', (c) => setItemStatus(c, 'publish'));
 r.post('/items/:uid/unpublish', (c) => setItemStatus(c, 'unpublish'));
@@ -315,7 +367,7 @@ r.post('/items/:uid/archive', (c) => setItemStatus(c, 'archive'));
 r.get('/courses', async (c) => {
   const admin = await gate(c); if (admin instanceof Response) return admin;
   const res = await c.env.DB.prepare(COURSE_SELECT + ' ORDER BY updated_at DESC, id DESC LIMIT 500').all<any>();
-  return c.json({ courses: (res.results || []).map(({ id: _id, ...x }) => x) });
+  return c.json({ courses: (res.results || []).map(courseOut) });
 });
 
 async function slugTaken(env: Env, slug: string, exceptUid: string | null) {
@@ -331,10 +383,13 @@ r.post('/courses', async (c) => {
     const uid = newUid();
     const t = now();
     await c.env.DB.prepare(
-      `INSERT INTO learning_courses (uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
+      `INSERT INTO learning_courses (uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at,
+         audience_json, stage, outcomes_json, prerequisites_json, author_name, reviewer_name, reviewed_on, practical_output)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(uid, f.slug, f.title, f.summary ?? null, f.cover_url ?? null, f.level ?? null, f.estimated_minutes ?? null,
-      f.resources_json ?? '[]', f.visibility ?? 'open', admin.id, t, t).run();
+      f.resources_json ?? '[]', f.visibility ?? 'open', admin.id, t, t,
+      f.audience_json ?? '[]', f.stage ?? null, f.outcomes_json ?? '[]', f.prerequisites_json ?? '[]',
+      f.author_name ?? null, f.reviewer_name ?? null, f.reviewed_on ?? null, f.practical_output ?? null).run();
     await record(c, admin, 'learning.course.create', { uid, slug: f.slug });
     return c.json({ course: await courseTree(c.env, uid) }, 201);
   });
@@ -348,11 +403,8 @@ async function courseTree(env: Env, uid: string) {
     env.DB.prepare(`SELECT l.uid, l.module_id, l.title, l.position, l.kind, l.ref_uid, l.required FROM learning_lessons l
                       JOIN learning_course_modules m ON m.id = l.module_id WHERE m.course_id = ? ORDER BY l.position, l.id`).bind(course.id).all<any>(),
   ]);
-  const { id: _id, resources_json, ...rest } = course;
-  let resources: unknown = [];
-  try { resources = JSON.parse(resources_json || '[]'); } catch { resources = []; }
   return {
-    ...rest, resources,
+    ...courseOut(course),
     modules: (mods.results || []).map((m) => ({
       uid: m.uid, title: m.title, position: m.position,
       lessons: (lessons.results || []).filter((l) => l.module_id === m.id)

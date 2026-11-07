@@ -111,6 +111,8 @@ export const adminLearningApi = {
   archiveExam: (uid) => request(`/admin/learning/exams/${enc(uid)}/archive`, { method: 'POST' }),
   addQuestion: (examUid, b) => request(`/admin/learning/exams/${enc(examUid)}/questions`, { method: 'POST', body: body(b) }),
   updateQuestion: (uid, b) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  // D4650 (#4650, part 3): a question's explanation and revision links, allowed after the first attempt.
+  explainQuestion: (uid, b) => request(`/admin/learning/questions/${enc(uid)}/explanation`, { method: 'PUT', body: body(b) }),
   deleteQuestion: (uid) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'DELETE' }),
 
   // D558 — programs: contents, assigned admins and enrolments.

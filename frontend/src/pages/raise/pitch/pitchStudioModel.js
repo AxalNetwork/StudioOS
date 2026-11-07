@@ -36,14 +36,13 @@ export const EDIT_PATH = '/raise/pitch/edit';
  */
 export const BUILDER_PATH = '/raise/pitch/builder';
 export const REVIEW_PATH = '/raise/pitch/review';
-export const ANALYTICS_PATH = '/raise/pitch/analytics';
 export const NOTES_PATH = '/raise/pitch/notes';
 
 /** The old `?mode=workspace` address now redirects to the editor with this key. */
 export const MOVED_KEY = 'pitch-workspace';
 export const MOVED_NOTICE = 'Pitch deck has a new address. Update your bookmark.';
 export const BUILDER_MOVED_KEY = 'pitch-builder';
-export const BUILDER_MOVED_NOTICE = 'The template builder is now part of the studio: Ask Eadwyn to draft from project and Branding are on Decks, and templates are in New deck.';
+export const BUILDER_MOVED_NOTICE = 'The template builder is now part of the studio: drafting goes through the deck\'s Ask in the editor, Branding is under the editor\'s \u22ef \u203a Brand kit, and templates are in New deck.';
 /** Every moved notice the studio's pages draw, by its `?moved=` key. */
 export const MOVED_NOTICES = Object.freeze({ [MOVED_KEY]: MOVED_NOTICE, [BUILDER_MOVED_KEY]: BUILDER_MOVED_NOTICE });
 
@@ -56,7 +55,7 @@ export const READ_ONLY = 'Read only. Notes are visible to the founder.';
 
 /**
  * D4254 (#4254): the tile row. The Overview (`STUDIO_PATH`) is not a tile; it
- * lights none. Share & analytics lives at /share; /analytics redirects there.
+ * lights none. Share & analytics lives at /share (the old /analytics address was retired by D2319).
  */
 export const DECKS_PATH = '/raise/pitch/decks';
 export const SCRIPT_PATH = '/raise/pitch/script';

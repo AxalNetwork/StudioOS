@@ -12,6 +12,7 @@
  *     --test cloudflare-worker/test/advisor_expertise_pages_4689.test.ts
  */
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -109,6 +110,10 @@ test('proof: 201 claims, the only confirmed one on page 2, still counted on page
   const consent = db.prepare('INSERT INTO advisor_proof_consents(uid,proof_item_id,attester_name,consent_given,withdrawn_at) VALUES (?,?,?,?,?)');
   // Item 1 is the oldest by id, so the last row of page 2. Item 2 had a consent withdrawn, item 3 one never given.
   consent.run('c-1', 1, 'Named Person', 1, null);
+  // D4670: a confirmation counts while it is pinned to the claim as it reads.
+  const pinned = JSON.stringify({ kind: 'engagement', title: 'Claim 1', organization: null, period_note: null, detail: null });
+  db.prepare('UPDATE advisor_proof_consents SET claim_json = ?, claim_sha256 = ? WHERE uid = ?')
+    .run(pinned, createHash('sha256').update(pinned).digest('hex'), 'c-1');
   consent.run('c-2', 2, 'Withdrew', 1, ago(1));
   consent.run('c-3', 3, 'Never gave', 0, null);
   const [one, two] = await allPages(get, '/me/proof');
