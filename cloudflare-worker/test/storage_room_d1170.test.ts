@@ -299,6 +299,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'services/mercury/investorFeeds.ts': 'a GP\'s Mercury statements: fund documents, never counted',
   'services/coverDraws.ts': 'a drawn event or course cover (#3935): generated, not uploaded, and not a measured D1169 store',
   'services/meetingBotDiagnose.ts': 'an HQ owner\'s bot diagnostic record and screenshot (#3708), never counted',
+  'routes/admin_governance.ts': 'the Axal entities\' governance documents (D4563): HQ records, never counted',
   'routes/deck_rehearsals.ts': 'a deck rehearsal\'s recording (D1580): held an hour for transcription, then deleted unless the founder keeps it; kept audio is not yet a measured D1169 store',
 };
 

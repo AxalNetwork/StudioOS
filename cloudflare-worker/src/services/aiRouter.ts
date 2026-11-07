@@ -1555,6 +1555,26 @@ export function deckGatewayOptionFor(env: Env, opts: Pick<RunOptions, 'task' | '
   return { gateway: { id: slug, metadata, skipCache: true, collectLog: false } };
 }
 
+/**
+ * D4556 (#4556): the option for a third-party model through AI Gateway
+ * (`aiProviders.ts` `runGatewayTextModel`), built here as every gateway option
+ * is. Its own gateway (`CF_AI_GATEWAY_SLUG_PROVIDERS`, checked by the caller),
+ * with:
+ *   - `collectLog: false` — no prompt or answer in the gateway's logs;
+ *   - `skipCache: true` — every answer is the model's, never a cached one;
+ *   - `retries: { maxAttempts: 1 }` — the caller counts and bounds every attempt;
+ *   - metadata, at most five entries: branch, account, task, execution.
+ */
+export type ProviderGatewayOption = { gateway: { id: string; metadata: Record<string, string>; skipCache: true; collectLog: false; retries: { maxAttempts: 1 }; requestTimeoutMs: number } };
+export function providerGatewayOptionFor(slug: string, env: Env, opts: { task: TaskClass; userId: number; executionId: string }, requestTimeoutMs: number): ProviderGatewayOption {
+  const branch = branchOf(env) ?? 'hq';
+  const metadata: Record<string, string> = { branch };
+  if (Number.isInteger(opts.userId) && opts.userId > 0) metadata.account = `${branch}:${opts.userId}`;
+  metadata.task = opts.task;
+  metadata.execution = String(opts.executionId).slice(0, 64);
+  return { gateway: { id: slug, metadata, skipCache: true, collectLog: false, retries: { maxAttempts: 1 }, requestTimeoutMs } };
+}
+
 // True when this task would normally route through the advisor AI Gateway
 // AND a slug is configured — i.e. there's a gateway hop that could fail
 // independently of the underlying Workers AI model.
@@ -1795,7 +1815,7 @@ const GUARD_MAX_TOKENS = 16;
 // for a Super Admin's review, like any other overrun (D640).
 const GUARD_TEMPLATE_TOKENS = 1_024;
 const GUARD_QUOTE_OUT_TOKENS = 4 * GUARD_MAX_TOKENS;
-const GUARD_CHARS_PER_OUTPUT_TOKEN = 8;
+export const GUARD_CHARS_PER_OUTPUT_TOKEN = 8;
 // A transcript's length bound, for the quote of a transcription's output check.
 export const TRANSCRIPT_CHARS_PER_MINUTE = 2_000;
 // How many slices are checked at once.
@@ -1909,13 +1929,15 @@ async function recordGuardCalls(env: Env, opts: RunOptions, calls: GuardCall[], 
  * writes the guard rows once the stream's own row exists, each naming it in
  * `guard_for`, charged under `reservationUid` at `multiplier`.
  */
-export async function guardFinalText(env: Env, who: { userId: number; surface?: string | null }, text: string, multiplier = 1): Promise<{
+export async function guardFinalText(env: Env, who: { userId: number; surface?: string | null }, text: string, multiplier = 1,
+  // D4556 (#4556): 'input' checks a member's text before a model outside `run()` reads it (`aiProviders.ts`).
+  side: 'input' | 'output' = 'output'): Promise<{
   decision: guard.GuardDecision; calls: number; micro: number; usd: number;
   record: (runRowId: number | null, reservationUid: string | null) => Promise<void>;
 }> {
   const opts = { task: 'transcribe', userId: who.userId, surface: who.surface ?? undefined } as RunOptions;
   const calls: GuardCall[] = [];
-  const decision = text.trim() ? await guardCheck(env, opts, text, 'output', calls) : ({ action: 'pass' } as guard.GuardDecision);
+  const decision = text.trim() ? await guardCheck(env, opts, text, side, calls) : ({ action: 'pass' } as guard.GuardDecision);
   const charge = (c: GuardCall) => (c.micro > 0 ? aiBudget.billedUsdToMicro(c.usage.est_cost_usd, multiplier) : 0);
   return {
     decision, calls: calls.length,

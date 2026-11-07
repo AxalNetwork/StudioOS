@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
@@ -124,6 +124,15 @@ export default function ProfileZone() {
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [view, setView] = useState('all');
   const [saving, setSaving] = useState(false);
+  const navigate = useNavigate();
+  // D4681: Preview as founder opens the public profile (`/advisors/:uid`),
+  // once there is a saved profile to open.
+  const previewPath = state.profile?.uid ? `/advisors/${encodeURIComponent(state.profile.uid)}` : null;
+  const preview = {
+    onClick: () => previewPath && navigate(previewPath),
+    disabled: !previewPath,
+    title: previewPath ? 'Your public profile, as a founder sees it' : 'Save your profile first: there is no public page yet',
+  };
   const [note, setNote] = useState(null);
 
   const load = useCallback(async () => {
@@ -212,7 +221,7 @@ export default function ProfileZone() {
       className="mb-3"
       role="advisor"
       filters={advisorZoneFilters('expertise/profile', { value: view, onChange: setView })}
-      actions={advisorZoneActions('expertise/profile', { view: { header: ['Display name', 'Headline', 'Bio', 'Expertise', 'Sectors', 'Stages', 'Country', 'Timezone', 'Languages', 'LinkedIn', 'Availability'], rows: draft ? [draft] : [], cells: (d) => [d.display_name, d.headline, d.bio, d.expertise, d.sectors, d.stages, d.country, d.timezone, d.languages, d.linkedin_url, d.availability_note] } })}
+      actions={advisorZoneActions('expertise/profile', { handlers: { openPublicPreview: preview }, view: { header: ['Display name', 'Headline', 'Bio', 'Expertise', 'Sectors', 'Stages', 'Country', 'Timezone', 'Languages', 'LinkedIn', 'Availability'], rows: draft ? [draft] : [], cells: (d) => [d.display_name, d.headline, d.bio, d.expertise, d.sectors, d.stages, d.country, d.timezone, d.languages, d.linkedin_url, d.availability_note] } })}
     />
     <ZoneBody
       loading={state.loading || (!draft && !state.error)}

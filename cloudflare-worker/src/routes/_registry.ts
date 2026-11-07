@@ -17,6 +17,7 @@ import { mount as admin_deck_generationMount } from './admin_deck_generation';
 import { mount as admin_deck_gridMount } from './admin_deck_grid';
 import { mount as admin_deck_imagesMount } from './admin_deck_images';
 import { mount as admin_deck_stage_normsMount } from './admin_deck_stage_norms';
+import { mount as admin_governanceMount } from './admin_governance';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as admin_influencersMount } from './admin_influencers';
 import { mount as admin_persona_segment_scopesMount } from './admin_persona_segment_scopes';
@@ -73,6 +74,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_deck_grid', mount: admin_deck_gridMount },
   { file: 'admin_deck_images', mount: admin_deck_imagesMount },
   { file: 'admin_deck_stage_norms', mount: admin_deck_stage_normsMount },
+  { file: 'admin_governance', mount: admin_governanceMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'admin_influencers', mount: admin_influencersMount },
   { file: 'admin_persona_segment_scopes', mount: admin_persona_segment_scopesMount },
