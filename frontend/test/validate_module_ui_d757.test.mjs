@@ -152,10 +152,11 @@ test('2: Accept sends the id; Edit then Save and accept sends the edited payload
     assert.deepEqual(calls.at(-1), ['accept', 41, undefined]);
 
     await press(m, rowButton(m, 42, 'validate-suggestion-edit'));
-    const draft = m.by('validate-suggestion-draft');
-    assert.ok(draft, 'Edit opens the payload');
-    assert.deepEqual(JSON.parse(propsOf(draft).value), S2.payload);
-    await act(async () => propsOf(draft).onChange({ target: { value: '{"attribute":"company_size","value":"200–500"}' } }));
+    // D4590 (#4590): Edit opens labelled fields, never the payload as JSON.
+    assert.equal(propsOf(m.by('validate-suggestion-input-attribute')).value, 'company_size');
+    const value = m.by('validate-suggestion-input-value');
+    assert.equal(propsOf(value).value, S2.payload.value);
+    await act(async () => propsOf(value).onChange({ target: { value: '200–500' } }));
     assert.equal(textOf(rowButton(m, 42, 'validate-suggestion-accept')), 'Save and accept');
     await press(m, rowButton(m, 42, 'validate-suggestion-accept'));
     assert.deepEqual(calls.at(-1), ['accept', 42, { attribute: 'company_size', value: '200–500' }]);
@@ -166,7 +167,7 @@ test('2: Accept sends the id; Edit then Save and accept sends the edited payload
   } finally { await m.unmount(); }
 });
 
-test('2: an edit that is not JSON accepts nothing; a refused Accept says it is still suggested', async () => {
+test('2: an edit that breaks a rule accepts nothing; a refused Accept says it is still suggested', async () => {
   const calls = [];
   const m = await mountForm(h(FromYourInterviews, {
     parts: WRITER,
@@ -175,10 +176,11 @@ test('2: an edit that is not JSON accepts nothing; a refused Accept says it is s
   }));
   try {
     await press(m, rowButton(m, 41, 'validate-suggestion-edit'));
-    await act(async () => propsOf(m.by('validate-suggestion-draft')).onChange({ target: { value: '{ not json' } }));
+    await act(async () => propsOf(m.by('validate-suggestion-input-job')).onChange({ target: { value: '   ' } }));
     await press(m, rowButton(m, 41, 'validate-suggestion-accept'));
     assert.deepEqual(calls, [], 'nothing was sent');
-    assert.ok(m.text().includes('The edit is not valid JSON. Nothing was accepted.'));
+    assert.ok(m.text().includes('One field needs a change. Nothing was accepted.'));
+    assert.ok(m.text().includes('Job to be done is needed.'));
     await press(m, rowButton(m, 42, 'validate-suggestion-accept'));
     assert.deepEqual(calls, [42]);
     assert.ok(m.text().includes('That module refused it. It is still suggested.'));

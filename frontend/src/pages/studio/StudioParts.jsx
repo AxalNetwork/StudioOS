@@ -150,6 +150,33 @@ export function ResetDialog({ studio }) {
   );
 }
 
+/** D4621: asked when a link or Back would drop unsaved edits. Stay keeps them; Discard leaves without; Save keeps them, then leaves. */
+export function LeaveDialog({ studio }) {
+  const leave = studio.leave;
+  if (!leave?.asking) return null;
+  const saving = studio.saving === 'saving';
+  return (
+    <Lightbox
+      label="Leave without saving?"
+      title="Leave without saving?"
+      width={520}
+      onClose={leave.stay}
+      testId="studio-leave-dialog"
+      footer={(
+        <div className="flex w-full justify-end gap-2">
+          <button type="button" className="sm-btn sm-btn-s" onClick={leave.stay} data-testid="button-leave-stay">Stay</button>
+          <button type="button" className="sm-btn sm-btn-s" onClick={() => leave.proceed()} data-testid="button-leave-discard">Discard changes</button>
+          <button type="button" className="sm-btn sm-btn-p" aria-disabled={saving ? 'true' : undefined} onClick={() => { if (!saving) leave.saveAndLeave(); }} data-testid="button-leave-save">Save and leave</button>
+        </div>
+      )}
+    >
+      <p className="text-[13.5px] text-axal-muted dark:text-gray-400">
+        Your changes to this Studio&rsquo;s layout have not been saved.
+      </p>
+    </Lightbox>
+  );
+}
+
 /** The sticky bar in Customise: the count, Add, Reset, and Done as the only save. */
 export function StudioEditBar({ studio }) {
   const saving = studio.saving === 'saving';

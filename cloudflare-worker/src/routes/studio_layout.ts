@@ -10,7 +10,9 @@
  * - `PUT /layout`: replace it. Unknown, removed, fixed, other-profile and
  *   locked keys, duplicates, bad sizes and more than 12 entries are refused,
  *   and nothing is written.
- * - `POST /layout/reset`: delete the row; the read answers the default again.
+ * - `POST /layout/reset`: the read answers the default again. D4621: the row
+ *   is kept as a tombstone (`reset_at`, an empty layout, its revision raised
+ *   by one) so a later save cannot reuse a revision a stale tab still holds.
  *
  * D1594 (#3863): every read carries the row's `revision` (migration 750), and
  * a `PUT` names the one it was made from (`expected_revision`, null for no
@@ -19,6 +21,14 @@
  * leaves `layout` for `dropped`, with its title and why, so it never blocks
  * Done and the page never shows a key. A read never rewrites the row: after an
  * upgrade the module comes back until the member saves without it.
+ *
+ * D4621 (#4621): THE REVISION OUTLIVES A RESET. A reset used to delete the
+ * row, and the next save inserted a new one at revision 1, so a tab that read
+ * revision 1 before the reset could save over a layout made after it. The
+ * reset now raises the revision and keeps the row; a read of it answers the
+ * default and carries that revision (`source: 'default'`, `revision: N`), and
+ * the save that follows updates it at N. `expected_revision: null` still
+ * means "no row has ever existed", and only then inserts.
  *
  * The member is always the session's; an admin names the profile they preview
  * with `?profile=`. A display preference: no activity_logs row (migration 687).
@@ -46,9 +56,9 @@ async function who(c: Context<{ Bindings: Env }>): Promise<Who | Response> {
   return { user, profile: answer.profile };
 }
 
-type Row = { layout: string; updated_at: string; revision: number };
+type Row = { layout: string; updated_at: string; revision: number; reset_at?: string | null };
 export async function savedRow(env: Env, userId: number, profile: StudioProfile): Promise<Row | null> {
-  return await env.DB.prepare('SELECT layout, updated_at, revision FROM studio_layouts WHERE user_id = ?1 AND profile = ?2')
+  return await env.DB.prepare('SELECT layout, updated_at, revision, reset_at FROM studio_layouts WHERE user_id = ?1 AND profile = ?2')
     .bind(userId, profile).first<Row>();
 }
 
@@ -73,8 +83,10 @@ type Dropped = { key: string; title: string | null; reason: 'not_offered' | 'pla
  */
 export function layoutView(user: User, profile: StudioProfile, row: Row | null) {
   const catalogue = new Map(catalogueOf(profile, user).map((m) => [m.key, m]));
-  const source = row ? 'saved' as const : 'default' as const;
-  const entries: Array<{ key: string; size: StudioSize }> = row ? JSON.parse(row.layout) : STUDIO_DEFAULTS[profile].map((e) => ({ ...e }));
+  // D4621: a reset row is a tombstone: the default, at the row's revision.
+  const live = !!row && !row.reset_at;
+  const source = live ? 'saved' as const : 'default' as const;
+  const entries: Array<{ key: string; size: StudioSize }> = live ? JSON.parse(row!.layout) : STUDIO_DEFAULTS[profile].map((e) => ({ ...e }));
   if (!Array.isArray(entries)) throw new Error('layout_not_array');
   const dropped: Dropped[] = [];
   const layout: Array<{ key: string; size: StudioSize }> = [];
@@ -86,7 +98,7 @@ export function layoutView(user: User, profile: StudioProfile, row: Row | null) 
     if (plan) { dropped.push({ key, title: mod.title, reason: 'plan', plan }); continue; }
     layout.push({ key: mod.key, size: e.size });
   }
-  return { profile, source, layout, revision: row ? Number(row.revision) : null, updated_at: row?.updated_at ?? null, dropped: row ? dropped : [] };
+  return { profile, source, layout, revision: row ? Number(row.revision) : null, updated_at: live ? row!.updated_at : null, dropped: live ? dropped : [] };
 }
 
 async function readLayout(c: Context<{ Bindings: Env }>, w: Who) {
@@ -163,7 +175,7 @@ r.put('/layout', async (c) => {
        ON CONFLICT (user_id, profile) DO NOTHING`,
     ).bind(w.user.id, w.profile, json).run()
     : await c.env.DB.prepare(
-      `UPDATE studio_layouts SET layout = ?3, revision = revision + 1, updated_at = datetime('now')
+      `UPDATE studio_layouts SET layout = ?3, revision = revision + 1, reset_at = NULL, updated_at = datetime('now')
         WHERE user_id = ?1 AND profile = ?2 AND revision = ?4`,
     ).bind(w.user.id, w.profile, json, expected).run();
   if (!Number(res.meta?.changes ?? 0)) {
@@ -176,7 +188,14 @@ r.put('/layout', async (c) => {
 r.post('/layout/reset', async (c) => {
   const w = await who(c);
   if (w instanceof Response) return w;
-  await c.env.DB.prepare('DELETE FROM studio_layouts WHERE user_id = ?1 AND profile = ?2').bind(w.user.id, w.profile).run();
+  // D4621: keep the row so the revision keeps counting. Only a live layout is
+  // reset (and raises the revision); resetting a default again changes nothing,
+  // so repeated presses, or two tabs resetting, do not invalidate a draft made
+  // from the default.
+  await c.env.DB.prepare(
+    `UPDATE studio_layouts SET layout = '[]', reset_at = datetime('now'), revision = revision + 1, updated_at = datetime('now')
+      WHERE user_id = ?1 AND profile = ?2 AND reset_at IS NULL`,
+  ).bind(w.user.id, w.profile).run();
   return readLayout(c, w);
 });
 

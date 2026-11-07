@@ -24,6 +24,10 @@ import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
+import { __setPublicResolverForTest } from '../src/services/webFetch.ts';
+// #4572 follow-up: a member-given URL's host is resolved before any fetch or socket; these tests answer DNS
+// with a public address (the private cases are refused by name, before DNS, as before).
+__setPublicResolverForTest(async () => ['93.184.216.34']);
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const SECRET = 'synthetic-deck-watermark-secret-d898'.repeat(2);
