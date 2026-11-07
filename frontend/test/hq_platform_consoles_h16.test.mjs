@@ -274,7 +274,8 @@ test('P2: an unreadable window or list says why; an empty list says it is empty,
 const PAYMENTS = {
   publishable: { configured: true, masked: 'pk_live_••••mnop', mode: 'live' },
   catalog: {
-    available: true, products: { all: 4, active: 3 }, prices: { all: 3, active: 2 },
+    available: true, stripe_mode: 'live', products: { all: 4, active: 3 }, prices: { all: 3, active: 2 },
+    other_mode: { mode: 'test', products: 5 }, unknown_mode: { products: 1 }, sync_state: 'not_recorded',
     unreadable_price_rows: 2, last_written_at: '2026-01-05 11:00:00', sync_basis: 'Nothing schedules a sync of this mirror.',
   },
   webhook: {
@@ -292,6 +293,11 @@ test('P3: the key checkout is served, the mirror counts, and the webhook\'s day'
   assert.match(t, /2 active of 3/);
   assert.match(t, /2 products have a price list that could not be read, and are not counted/);
   assert.match(t, /Mirror last written 2026-01-05 11:00/);
+  // D4856: the mode the counts are of, and the rows that are not in them.
+  assert.match(t, /Mirror mode Live/);
+  assert.match(t, /Other mode 5 test-mode products, not counted/);
+  assert.match(t, /Unknown mode 1 product with no recognised mode, not counted/);
+  assert.match(t, /Sync Not recorded/);
   assert.match(t, /HTTP 200 in 41ms · 2026-01-05 12:00/);
   assert.match(t, /3 in 24h · 1 not 2xx/);
   assert.match(t, /Nothing schedules a sync/);
@@ -308,7 +314,8 @@ test('P3: no key, an unknown mode, a missing status and no delivery each say wha
     },
   }));
   assert.match(t, /Not configured: checkout is served no key/);
-  assert.match(t, /never written/);
+  assert.match(t, /Mirror last written Not recorded/);
+  assert.ok(!/never written/.test(t), 'a missing time was drawn as a claim');
   assert.match(t, /no delivery recorded/);
   assert.ok(!/could not be read/.test(t), 'a readable price list was said to be unreadable');
   const odd = render(PaymentsCatalogPanel, {
@@ -321,6 +328,17 @@ test('P3: no key, an unknown mode, a missing status and no delivery each say wha
   assert.match(text(odd), /mode unknown/);
   assert.match(text(odd), /status not recorded · 2026-01-05 12:00/);
   assert.ok(!text(odd).includes('HTTP ?'), 'a missing status was drawn as a placeholder');
+});
+
+test('P3 (D4856): the mirror mode is the reply\'s, and a reply without the new fields reads Not recorded, never 0', () => {
+  // Mutation checked: the mode drawn as a literal "Live" → a test-mode reply says Live.
+  const t = (catalog) => text(render(PaymentsCatalogPanel, { payments: { ...PAYMENTS, catalog: { ...PAYMENTS.catalog, ...catalog } } }));
+  assert.match(t({ stripe_mode: 'test', other_mode: { mode: 'live', products: 1 } }), /Mirror mode Test.*Other mode 1 live-mode product, not counted/);
+  assert.match(t({ stripe_mode: 'unconfigured', other_mode: { mode: null, products: 2 } }), /Mirror mode No Stripe key.*2 products, not counted/);
+  const old = t({ stripe_mode: undefined, other_mode: undefined, unknown_mode: undefined, sync_state: undefined });
+  assert.match(old, /Mirror mode Not recorded/);
+  assert.match(old, /Other mode Not recorded/);
+  assert.match(old, /Unknown mode Not recorded/);
 });
 
 test('P3: a refused delivery is red; an unreadable log is red and says why, never a count', () => {
