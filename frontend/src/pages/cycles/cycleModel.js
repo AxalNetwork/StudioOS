@@ -22,6 +22,8 @@
  */
 
 /** The four cycles, in the sidebar's order. `question` and `outcome` are the canvas's words. */
+import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
+
 export const CYCLES = {
   validate: { key: 'validate', name: 'Validate', question: 'Is this worth building?', outcome: 'Research → Insights → Evidence', action: 'Record a session' },
   build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
@@ -257,7 +259,8 @@ export function cellView(cell) {
 
 /** Only in-app paths are linked from a read; anything else is drawn as text. */
 export function safeHref(href) {
-  return typeof href === 'string' && /^\/(?!\/)/.test(href) ? href : null;
+  // #4853: a legacy Pitch address a read still names is linked at its canonical one.
+  return typeof href === 'string' && /^\/(?!\/)/.test(href) ? canonicalPitchHref(href) : null;
 }
 
 /**
@@ -273,7 +276,8 @@ export function cycleTabs(cycle, cards, active = null, search = '', { back = nul
   // D696: on a record, `back` relabels the active module's tab ("‹ Back to
   // <Module>") and marks it `back: true`; it still links the module page.
   const cardTabs = (cards || []).filter((c) => c?.slug).map((c) => {
-    const tab = { key: c.slug, name: c.name || c.slug, href: `${base}/${c.slug}${s}`, active: active === c.slug };
+    // #4853: the Raise "Pitch" tab opens the Studio at its own address, not a module address that redirects there.
+    const tab = { key: c.slug, name: c.name || c.slug, href: canonicalPitchHref(`${base}/${c.slug}${s}`), active: active === c.slug };
     return back && tab.active ? { ...tab, name: back, back: true } : tab;
   });
   const hist = CYCLES[cycle]?.history;
