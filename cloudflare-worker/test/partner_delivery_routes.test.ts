@@ -129,6 +129,7 @@ function freshDb() {
     );
   `);
   db.exec(migration('208_partner_delivery_stores'));
+  db.exec(migration('202611072115_delivery_revisions'));
   // APPLIED, NOT MIRRORED. The two capacity stores are read by `/capacity` and
   // written by its two `PUT`s, so the harness runs their migration files for
   // the same reason it runs 208's: a hand-copied DDL that drifts from the file
@@ -869,8 +870,12 @@ test('a sent report cannot be edited, re-sent or deleted', async () => {
     shipped: 'Actually something else.',
   });
   assert.equal(edit.status, 409);
+  // D4682: the same person retrying gets the record that exists, unchanged;
+  // it is not a second send and it does not move the time.
   const resend = await call(e, 'POST', `/status-reports/${saved.body.id}/send`, ours);
-  assert.equal(resend.status, 409);
+  assert.equal(resend.status, 200);
+  assert.equal(resend.body.already_sent, true);
+  assert.equal(resend.body.sent_at, sent.body.sent_at);
   const gone = await call(e, 'DELETE', `/status-reports/${saved.body.id}`, ours);
   assert.equal(gone.status, 409);
 });
