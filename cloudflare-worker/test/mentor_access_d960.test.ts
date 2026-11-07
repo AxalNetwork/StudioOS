@@ -412,7 +412,7 @@ test('O-FND A counts distinct activated founders per cycle from Week 1, on every
   assert.equal(r.status, 200);
   assert.equal(r.body.items.length, 3);
   assert.deepEqual(Object.keys(r.body.items[0]).sort(), [
-    'advisor_email', 'advisor_is_active', 'advisor_name', 'advisor_role', 'advisor_user_id',
+    'advisor_eligible', 'advisor_email', 'advisor_is_active', 'advisor_name', 'advisor_role', 'advisor_user_id',
     'assigned_at', 'cohort_cycle_id', 'founders_hidden', 'founders_in_cohort', 'id', 'is_active',
     'note', 'uid', 'unassigned_at',
   ]);
