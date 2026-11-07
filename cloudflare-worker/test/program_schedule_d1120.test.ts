@@ -166,7 +166,7 @@ test('the signature is recorded once, and a grant waiting only on it comes into 
   const uuid = r.body.grant.schedule.contract_uid as string;
   const DB = d1Over(db);
   const first = await onProgramScheduleEnvelopeCompleted({ DB } as any, uuid, '2026-10-25T12:00:00Z');
-  assert.deepEqual(first, { changed: true, licence_id: 1, program_key: 'learning' });
+  assert.deepEqual(first, { changed: true, stale: false, licence_id: 1, program_key: 'learning' });
   const second = await onProgramScheduleEnvelopeCompleted({ DB } as any, uuid, '2026-10-26T12:00:00Z');
   assert.equal(second!.changed, false, 'a second completion changes nothing');
   assert.equal(grantRow(db, 1, 'learning').schedule_signed_at, '2026-10-25T12:00:00Z', 'the first signature stands');
@@ -198,9 +198,13 @@ test('the schedule text: Not recorded for a blank term, no merge slot, and the s
   assert.equal(termLine('hq_share_bps', 1000, {}), '10%');
   assert.equal(termLine('requires_signed_schedule', 1, {}), 'Yes');
   const doc = scheduleDocument({ id: 1, uid: 'u', licence_ref: 'AXL-9', brand_name: 'Studio {{x}}', kind: null, status: 'active', renews_on: null },
-    { program_key: 'perks', note: null }, '2026-10-25');
+    { program_key: 'perks', note: null }, '2026-10-25', { number: 3, hash: 'ab'.repeat(32) });
   assert.ok(!doc.body.includes('{{'), 'no merge slot survives');
+  // D4805: the schedule prints the revision and the terms fingerprint it is built from.
+  assert.match(doc.body, /Revision 3 · terms fingerprint abababababababab\./);
   assert.equal(scheduleStatus({}), 'not_sent');
   assert.equal(scheduleStatus({ schedule_contract_uid: 'e' }), 'sent');
   assert.equal(scheduleStatus({ schedule_contract_uid: 'e', schedule_signed_at: 't' }), 'signed');
+  assert.equal(scheduleStatus({ signed_revision: 1 }), 'amendment_needed', 'D4805: signed once, the terms moved on');
+  assert.equal(scheduleStatus({ signed_revision: 1, schedule_contract_uid: 'e' }), 'sent', 'and the amended schedule is out');
 });

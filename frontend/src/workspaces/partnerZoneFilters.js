@@ -254,7 +254,8 @@ export const PARTNER_ZONE_FILTERS = {
 
   // ALL FOUR RUN, AND THE TWO REASONS THAT STOOD HERE MISREAD THEIR OWN
   // ARTBOARD. They said: "no lead is scored against these rules — the worker
-  // answers `enforcement: 'none'` — so nothing here is qualified or not", and
+  // answers `enforcement: 'none'` — so nothing here is qualified or not" (true
+  // when it was written; the worker now answers `score_and_rank`), and
   // "the same absent score from the other end; a rule records who the firm is
   // for, and no row anywhere marks a lead as weak against one."
   //
@@ -266,9 +267,11 @@ export const PARTNER_ZONE_FILTERS = {
   // product founders read as weak intent rather than declined, because the
   // honest answer is 'not yet'".
   //
-  // Migration 229 stores that judgement as `partner_fit_rules.signal`, and
-  // `enforcement: 'none'` is exactly as true after it as before: nothing scores
-  // a founder, and the zone still says so.
+  // Migration 229 stores that judgement as `partner_fit_rules.signal`. The chip
+  // selects over PROFILES and the one definition of its row set is
+  // `lib/fitRuleView.js` (#4696), so the profile table, the list and the export
+  // agree. Pipeline reads best fit and weak intent as receipts on a lead's
+  // score; this zone computes no score about anybody.
   'offers/audience-fit': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Best fit', key: 'best_fit' },
