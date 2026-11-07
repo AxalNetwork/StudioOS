@@ -147,5 +147,7 @@ test('the calls go to the Worker\'s routes, and the licence console draws the ta
   assert.match(readFileSync(new URL('../src/lib/apiModules.generated.js', import.meta.url), 'utf8'), /export \* from '\.\/api\/licenceFeeInvoices\.js';/);
   const page = readFileSync(new URL('../src/pages/admin/AdminLicences.jsx', import.meta.url), 'utf8');
   assert.match(page, /\{step === FEE_INVOICES_STEP && <LicenceFeeInvoices licence=\{d\} \/>\}/);
-  assert.match(page, /data-testid="licence-fee-invoices-tab"/);
+  // D4707: the tab bar is drawn from licenceNavModel's list, test ids and all.
+  assert.match(readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8'), /testId: 'licence-fee-invoices-tab'/);
+  assert.match(page, /data-testid=\{t\.testId\}/);
 });

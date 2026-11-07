@@ -62,7 +62,10 @@ function licenceEventsDdl(): string {
     if (at < 0) continue;
     const end = sql.indexOf(');', at);
     assert.ok(end > at, `${file}: the licence_events CREATE does not terminate`);
-    return sql.slice(at, end + 2).replace('licence_events_266', 'licence_events');
+    // D4707 — plus the columns 202611062240 adds, from the migration itself.
+    const changes = read('202611062240_licence_event_changes.sql')
+      .split('\n').filter((l) => /^ALTER TABLE licence_events ADD COLUMN/.test(l)).join('\n');
+    return `${sql.slice(at, end + 2).replace('licence_events_266', 'licence_events')}\n${changes}`;
   }
   throw new Error('neither 187 nor 266 declares licence_events — re-point this fixture');
 }
