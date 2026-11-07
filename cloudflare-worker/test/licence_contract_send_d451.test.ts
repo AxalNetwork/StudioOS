@@ -55,7 +55,7 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, jti TEXT, factor TEXT,
       assurance_level TEXT, created_at TEXT DEFAULT (datetime('now'))
     );
-    CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+    CREATE TABLE territory_licences ( revision INTEGER NOT NULL DEFAULT 0,id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
       licence_ref TEXT UNIQUE NOT NULL, entity_id INTEGER, legal_entity_name TEXT NOT NULL,
       brand_name TEXT NOT NULL, registered_address TEXT, signatory_name TEXT, signatory_title TEXT,
       status TEXT NOT NULL DEFAULT 'draft', term_years INTEGER, annual_fee_cents INTEGER,

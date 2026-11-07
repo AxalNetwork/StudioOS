@@ -126,6 +126,7 @@ function freshDb() {
       assigned_by_user_id INTEGER, assigned_at TEXT, updated_at TEXT
     );
     CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
       legal_entity_name TEXT, brand_name TEXT, registered_address TEXT,
       signatory_name TEXT, signatory_title TEXT, status TEXT NOT NULL DEFAULT 'active',

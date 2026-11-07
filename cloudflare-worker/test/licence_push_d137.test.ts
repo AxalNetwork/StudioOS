@@ -43,6 +43,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
 
 const SCHEMA = `
   CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
     id INTEGER PRIMARY KEY, uid TEXT, licence_ref TEXT, legal_entity_name TEXT, brand_name TEXT,
     registered_address TEXT, signatory_name TEXT, signatory_title TEXT, status TEXT,
     term_years INTEGER, annual_fee_cents INTEGER, currency TEXT,

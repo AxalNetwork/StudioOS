@@ -276,7 +276,7 @@ export async function freezeOverdueNotices(
     try {
       const r: any = await env.DB.prepare(
         `UPDATE territory_licences
-            SET status = 'suspended', status_note = ?, suspended_at = ?, updated_at = ?
+            SET status = 'suspended', status_note = ?, suspended_at = ?, revision = revision + 1, updated_at = ?
           WHERE id = ? AND status = 'active'`,
       ).bind(note, stamp, stamp, l.id).run();
       if (Number(r?.meta?.changes ?? 0) !== 1) continue;

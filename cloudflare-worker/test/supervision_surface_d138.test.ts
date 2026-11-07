@@ -109,6 +109,7 @@ function freshDb({ withNotices = true } = {}) {
       last_step_up_at TEXT, created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, legal_entity_name TEXT,
       brand_name TEXT, status TEXT NOT NULL DEFAULT 'active', renews_on TEXT, seats_total INTEGER,
       annual_fee_cents INTEGER, currency TEXT, revenue_share_bps INTEGER, token_split_bps INTEGER,

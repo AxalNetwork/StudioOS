@@ -112,7 +112,7 @@ function freshDb({ terms = true }: { terms?: boolean } = {}) {
       user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));
     CREATE TABLE admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER, action TEXT,
       viewed_user_id INTEGER, filters_json TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));
-    CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
+    CREATE TABLE territory_licences ( revision INTEGER NOT NULL DEFAULT 0,id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
       legal_entity_name TEXT, brand_name TEXT, registered_address TEXT, signatory_name TEXT, signatory_title TEXT,
       status TEXT NOT NULL DEFAULT 'active', term_years INTEGER, annual_fee_cents INTEGER, currency TEXT,
       revenue_share_bps INTEGER, token_split_bps INTEGER, starts_on TEXT, renews_on TEXT, suspended_at TEXT,

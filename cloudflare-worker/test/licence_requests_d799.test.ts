@@ -81,7 +81,7 @@ function hqDb(opts: { frKind?: string; frStatus?: string } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(USERS);
   db.exec(`
-    CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+    CREATE TABLE territory_licences ( revision INTEGER NOT NULL DEFAULT 0,id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
       kind TEXT NOT NULL DEFAULT 'subsidiary', status TEXT NOT NULL DEFAULT 'active');
     CREATE TABLE licence_admins (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL UNIQUE, admin_role TEXT NOT NULL DEFAULT 'principal');

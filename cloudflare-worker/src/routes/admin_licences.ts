@@ -72,6 +72,7 @@ import { refuse } from '../util/refusal';
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
 import { pushLicenceToBranch } from '../services/licencePush';
+import { APPOINTABLE, appliedGuard, staleBody, transition } from '../services/licenceTransitions';
 import { DEFAULT_TERM_SECTIONS, readLicenceTerms, termsDiff, validateTermsBody, type LicenceTerms, type LicenceTermsRecord } from '../services/licenceTerms';
 // D262 — termination reaches the branch's own administrators too.
 import { branchByCode } from '../services/branches';
@@ -108,6 +109,8 @@ export type LicenceRow = {
   revenue_share_bps: number | null; token_split_bps: number | null;
   starts_on: string | null; renews_on: string | null; suspended_at: string | null;
   terminated_at: string | null; status_note: string | null; created_at: string;
+  /** #4678: bumped by every lifecycle move and every edit that activation depends on; the compare-and-swap token. */
+  revision: number;
   /** 'subsidiary' | 'white_label' — migration 279. `byUid` is SELECT *, so this
    *  arrives without a query change; before 279 it was undefined on every row. */
   kind: string;
@@ -233,12 +236,29 @@ async function countriesOf(env: Env, licenceId: number): Promise<string[]> {
  * what HQ's Team table and the addressee's own page read as "frozen since".
  * Silently restarting that clock is worse than refusing to.
  */
+/**
+ * #4678 — an `expected_revision` in the query is a caller saying "I
+ * decided this on revision N". A different current revision is a 409 before
+ * any write. Without one, the revision read by this very handler is the
+ * token, which is what closes the race between two requests in flight.
+ */
+function staleRequest(c: any, licence: LicenceRow): Response | null {
+  const raw = c.req.query('expected_revision');
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) return c.json({ error: 'bad_revision', message: 'expected_revision is a whole number.' }, 400);
+  return n === Number(licence.revision) ? null : c.json(staleBody({ status: licence.status, revision: Number(licence.revision) }), 409);
+}
+
 function transitionRefusal(
   status: string | null | undefined, verb: 'suspend' | 'renew' | 'terminate',
 ): string | null {
   const now = String(status || '');
   if (now === 'terminated') {
     return `This licence is terminated — it is over and its territory has been released, so it cannot be ${verb === 'renew' ? 'renewed' : `${verb}d`}.`;
+  }
+  if (verb === 'suspend' && now !== 'suspended' && now !== 'active') {
+    return 'Only an active licence can be suspended. A licence that has not been activated has not started, so there is nothing to suspend; activate it once its prerequisites are met.';
   }
   if (verb === 'suspend' && now === 'suspended') {
     return 'This licence is already suspended. Suspending it again would restart the "suspended since" clock its administrators are measured against; reinstate it first, or edit the note on the licence.';
@@ -373,10 +393,10 @@ export async function hydrate(env: Env, rows: LicenceRow[]) {
  * the operator needs to know WHICH thing. Mirrors the canvas's step 5: a
  * territory conflict blocks, a pending signature does not.
  */
-async function activationBlockers(env: Env, licence: LicenceRow): Promise<string[]> {
+async function activationBlockers(env: Env, licence: LicenceRow, opts: { reinstating?: boolean } = {}): Promise<string[]> {
   const out: string[] = [];
   if (licence.status === 'terminated') out.push('This licence is terminated.');
-  if (licence.status === 'active') out.push('This licence is already active.');
+  if (licence.status === 'active' && !opts.reinstating) out.push('This licence is already active.');
   const terr = await env.DB.prepare(
     'SELECT COUNT(*) AS n FROM licence_territories WHERE licence_id = ?',
   ).bind(licence.id).first<{ n: number }>();
@@ -599,11 +619,14 @@ r.put('/:uid/territories', async (c) => {
 
     const beforeCountries = await countriesOf(c.env, licence.id);
     const stmts = [
-      c.env.DB.prepare('DELETE FROM licence_territories WHERE licence_id = ?').bind(licence.id),
+      // #4678: a licence terminated since the read above releases its territory
+      // for good; neither statement may take it back.
+      c.env.DB.prepare(`DELETE FROM licence_territories WHERE licence_id = ? AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`).bind(licence.id, licence.id),
       ...wanted.map((code) => c.env.DB.prepare(
-        'INSERT INTO licence_territories (licence_id, country_code, created_at) VALUES (?,?,?)',
-      ).bind(licence.id, code, nowIso())),
-      c.env.DB.prepare('UPDATE territory_licences SET updated_at = ? WHERE id = ?')
+        `INSERT INTO licence_territories (licence_id, country_code, created_at)
+         SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`,
+      ).bind(licence.id, code, nowIso(), licence.id)),
+      c.env.DB.prepare('UPDATE territory_licences SET revision = revision + 1, updated_at = ? WHERE id = ?')
         .bind(nowIso(), licence.id),
     ];
     // The unique index on country_code is the real guard: if another request
@@ -634,11 +657,12 @@ r.put('/:uid/seats', async (c) => {
     }
     const beforeSeats = await seatsOf(c.env, licence.id);
     await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM licence_seats WHERE licence_id = ?').bind(licence.id),
+      c.env.DB.prepare(`DELETE FROM licence_seats WHERE licence_id = ? AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`).bind(licence.id, licence.id),
       ...SEAT_TYPES.map((t) => c.env.DB.prepare(
-        'INSERT INTO licence_seats (licence_id, seat_type, seats_licensed, created_at) VALUES (?,?,?,?)',
-      ).bind(licence.id, t, seats[t], nowIso())),
-      c.env.DB.prepare('UPDATE territory_licences SET updated_at = ? WHERE id = ?')
+        `INSERT INTO licence_seats (licence_id, seat_type, seats_licensed, created_at)
+         SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`,
+      ).bind(licence.id, t, seats[t], nowIso(), licence.id)),
+      c.env.DB.prepare('UPDATE territory_licences SET revision = revision + 1, updated_at = ? WHERE id = ?')
         .bind(nowIso(), licence.id),
     ]);
     // D272 — this changes what the branch's copy holds, so it pushes like
@@ -677,7 +701,7 @@ r.patch('/:uid/terms', async (c) => {
     await c.env.DB.prepare(
       `UPDATE territory_licences
           SET term_years = ?, annual_fee_cents = ?, currency = ?, revenue_share_bps = ?,
-              token_split_bps = ?, starts_on = ?, renews_on = ?, updated_at = ?
+              token_split_bps = ?, starts_on = ?, renews_on = ?, revision = revision + 1, updated_at = ?
         WHERE id = ?`,
     ).bind(
       terms.term_years, terms.annual_fee_cents, terms.currency, terms.revenue_share_bps,
@@ -819,11 +843,16 @@ r.post('/:uid/activate', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
     const blockers = await activationBlockers(c.env, licence);
     if (blockers.length) return c.json({ error: 'blocked', blockers }, 409);
-    await c.env.DB.prepare(
-      "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
-    ).bind(nowIso(), licence.id).run();
+    // #4678: the revision read above is the one the prerequisites were checked
+    // on; an edit to territory, seats or terms since then loses this write.
+    const moved = await transition(c.env, licence, 'activate', { now: nowIso() });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'bad_transition', message: 'Only a draft or pending licence can be activated.' }, 409)
+      : c.json(staleBody(moved.current), 409);
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     await logEvent(c.env, licence.id, 'activated', admin.id, undefined, null,
       { before: { status: licence.status }, after: { status: 'active' } }, pushOutcome(pushed));
@@ -843,9 +872,12 @@ r.post('/:uid/suspend', async (c) => {
     if (!note) return c.json({ error: 'a suspension must record why' }, 400);
     // Territory rows are untouched on purpose: a suspended licence still holds
     // its countries. Releasing them is a termination, not a lapse.
-    await c.env.DB.prepare(
-      "UPDATE territory_licences SET status = 'suspended', status_note = ?, suspended_at = ?, updated_at = ? WHERE id = ?",
-    ).bind(note, nowIso(), nowIso(), licence.id).run();
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
+    const moved = await transition(c.env, licence, 'suspend', { note, now: nowIso() });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'bad_transition', message: 'Only an active licence can be suspended.' }, 409)
+      : c.json(staleBody(moved.current), 409);
     // D135 — THIS FILE HAD ZERO `notify()` CALLS. Suspending a licence changed
     // four columns in HQ's ledger and told the holder nothing: they found out by
     // hitting a 423. "First admins get notified" is the ladder's first sentence,
@@ -874,9 +906,17 @@ r.post('/:uid/reinstate', async (c) => {
     if (licence.status !== 'suspended') {
       return c.json({ error: 'only a suspended licence can be reinstated' }, 409);
     }
-    await c.env.DB.prepare(
-      "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
-    ).bind(nowIso(), licence.id).run();
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
+    // #4678: reinstating is a way into `active`, so it meets the same
+    // prerequisites activation does. A licence suspended before it was ever
+    // complete cannot be reinstated into a state activation would refuse.
+    const blockers = await activationBlockers(c.env, licence, { reinstating: true });
+    if (blockers.length) return c.json({ error: 'blocked', blockers }, 409);
+    const moved = await transition(c.env, licence, 'reinstate', { now: nowIso() });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'only a suspended licence can be reinstated' }, 409)
+      : c.json(staleBody(moved.current), 409);
     await notifyLicenceAdmins(c.env, licence.id, {
       type: 'licence_reinstated',
       title: 'Your licence is active again',
@@ -910,9 +950,12 @@ r.post('/:uid/renew', async (c) => {
       base.setFullYear(base.getFullYear() + years);
       next = base.toISOString().slice(0, 10);
     }
-    await c.env.DB.prepare(
-      'UPDATE territory_licences SET renews_on = ?, updated_at = ? WHERE id = ?',
-    ).bind(next, nowIso(), licence.id).run();
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
+    const moved = await transition(c.env, licence, 'renew', { renewsOn: next, now: nowIso() });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'bad_transition', message: 'This licence can no longer be renewed.' }, 409)
+      : c.json(staleBody(moved.current), 409);
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next }, null,
       { before: { renews_on: licence.renews_on ?? null }, after: { renews_on: next } }, pushOutcome(pushed));
@@ -1136,13 +1179,20 @@ r.post('/:uid/terminate', async (c) => {
       'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
     ).bind(licence.id).all<{ country_code: string }>();
     const codes = (released.results || []).map((x) => x.country_code);
-    // Termination is the ONLY thing that releases territory.
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM licence_territories WHERE licence_id = ?').bind(licence.id),
-      c.env.DB.prepare(
-        "UPDATE territory_licences SET status = 'terminated', status_note = ?, terminated_at = ?, updated_at = ? WHERE id = ?",
-      ).bind(note, nowIso(), nowIso(), licence.id),
-    ]);
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
+    // Termination is the ONLY thing that releases territory, and #4678 makes
+    // the release depend on the termination: the DELETE runs only if the
+    // compare-and-swap applied, so a stale terminate neither releases the
+    // territory of a licence that is still active nor leaves a half-done move.
+    const guard = appliedGuard(licence.id, licence.revision + 1, 'terminated');
+    const moved = await transition(c.env, licence, 'terminate', {
+      note, now: nowIso(),
+      after: [c.env.DB.prepare(`DELETE FROM licence_territories WHERE licence_id = ? AND ${guard.sql}`).bind(licence.id, ...guard.binds)],
+    });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'bad_transition', message: 'This licence is already terminated.' }, 409)
+      : c.json(staleBody(moved.current), 409);
     await logEvent(c.env, licence.id, 'terminated', admin.id, { released: codes }, note,
       { before: { status: licence.status, countries: codes }, after: { status: 'terminated', countries: [] } });
 
@@ -1292,6 +1342,14 @@ r.post('/:uid/admins', async (c) => {
     const u = await c.env.DB.prepare('SELECT id, email, role FROM users WHERE LOWER(email) = ?')
       .bind(email).first<{ id: number; email: string; role: string }>();
     if (!u) return c.json({ error: 'no account with that address' }, 404);
+    // #4678: a licence in a state that cannot administer users gets no
+    // administrator: neither the role nor the binding changes.
+    if (!APPOINTABLE.includes(String(licence.status))) {
+      return c.json({
+        error: 'licence_cannot_administer',
+        message: `A ${licence.status} licence cannot have an administrator appointed. Nothing was changed.`,
+      }, 409);
+    }
 
     // licence_admins is UNIQUE on user_id alone — see migration 190. Report
     // the conflict rather than letting the insert fail opaquely.
@@ -1309,36 +1367,58 @@ r.post('/:uid/admins', async (c) => {
     const previousRole = String(u.role || '');
     const actorHash = await hashEmail(admin.email);
     const targetHash = await hashEmail(u.email);
+    // #4678: every statement carries the same guard: the licence can still
+    // administer users, and the account is not bound to another licence. It
+    // is decided inside the batch, so an appointment racing a termination or
+    // another appointment either applies whole or not at all.
+    const can = `EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status IN (${APPOINTABLE.map((x) => `'${x}'`).join(', ')}))
+      AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?)`;
+    const canBinds = [licence.id, u.id, licence.id];
+    const guard = { sql: `(${can})`, binds: canBinds };
+    const bindStatement = c.env.DB.prepare(`INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
+        SELECT ?, ?, ?, ? WHERE ${can}
+        ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role WHERE licence_admins.licence_id = excluded.licence_id`)
+      .bind(licence.id, u.id, role, admin.id, ...canBinds);
     const appointmentStatements = [
-      c.env.DB.prepare(`INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
-        VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role`)
-        .bind(licence.id, u.id, role, admin.id),
+      bindStatement,
       c.env.DB.prepare(`INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
-        VALUES (?, 'terms_changed', ?, ?, ?, ?)`)
-        .bind(licence.id, JSON.stringify({ administrator_added: u.email, admin_role: role, promoted_from: previousRole }), reason, admin.id, nowIso()),
-      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
-        .bind('role_changed', `Super admin ${admin.name} made ${u.email} an administrator of ${licence.licence_ref} (was ${previousRole || 'unrecorded'}). Reason: ${reason}`, actorHash, admin.id),
-      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
-        .bind('your_role_changed', `You were made an administrator of ${licence.licence_ref} by ${admin.name}`, targetHash, u.id),
+        SELECT ?, 'terms_changed', ?, ?, ?, ? WHERE ${can}`)
+        .bind(licence.id, JSON.stringify({ administrator_added: u.email, admin_role: role, promoted_from: previousRole }), reason, admin.id, nowIso(), ...canBinds),
+      c.env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?,?,?,? WHERE ${can}`)
+        .bind('role_changed', `Super admin ${admin.name} made ${u.email} an administrator of ${licence.licence_ref} (was ${previousRole || 'unrecorded'}). Reason: ${reason}`, actorHash, admin.id, ...canBinds),
+      c.env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?,?,?,? WHERE ${can}`)
+        .bind('your_role_changed', `You were made an administrator of ${licence.licence_ref} by ${admin.name}`, targetHash, u.id, ...canBinds),
     ];
     const retainedLicence = previousRole.toLowerCase();
     if (isLicence(retainedLicence)) {
       await grantLicence(c.env.DB, { userId: u.id, licence: retainedLicence, actorId: admin.id,
-        source: 'admin_appointment', retainPrimary: true, appointmentStatements });
+        source: 'admin_appointment', retainPrimary: true, appointmentStatements, appointmentGuard: guard });
     } else {
       // Existing admins and non-licence holding states have no primary
-      // licence to retain. Their existing atomic appointment is unchanged.
+      // licence to retain. Their existing atomic appointment is unchanged,
+      // with the role write guarded like the rest.
       await c.env.DB.batch([
-        c.env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ?").bind(u.id),
+        c.env.DB.prepare(`UPDATE users SET role = 'admin' WHERE id = ? AND ${can}`).bind(u.id, ...canBinds),
         ...appointmentStatements,
       ]);
     }
+    // Whatever the batch did, the outcome must be a valid pair. A binding that
+    // is not this licence's means the guard refused: the role was not changed.
+    const bound = await c.env.DB.prepare('SELECT 1 AS ok FROM licence_admins WHERE licence_id = ? AND user_id = ?')
+      .bind(licence.id, u.id).first();
+    if (!bound) {
+      return c.json({
+        error: 'licence_cannot_administer',
+        message: 'This licence can no longer take an administrator, or the account now administers another licence. Nothing was changed.',
+      }, 409);
+    }
     return c.json({ ok: true, user_id: u.id, admin_role: role, role: 'admin', promoted_from: previousRole });
   } catch (e) {
-    if (e instanceof LicenceRefusal) return refuse(c, e.status, { code: e.code, message: 'The appointment could not retain this licence.' });
+    if (e instanceof LicenceRefusal) return refuse(c, e.status, { code: e.code, message: e.code === 'licence_cannot_administer' ? 'This licence can no longer take an administrator, or the account now administers another licence. Nothing was changed.' : 'The appointment could not retain this licence.' });
     if (e instanceof Response) return e;
     // Preserve named auth refusals; provider/storage exception text stays in logs.
     const message = e instanceof Error ? e.message : '';
+    if (/licence_terminated/.test(message)) return c.json({ error: 'licence_cannot_administer', message: 'This licence was terminated. Nothing was changed.' }, 409);
     if (AUTH_ERROR_STATUSES[message]) return mapError(c, e);
     return refuse(c, 503, { code: 'admin_appointment_failed', message: 'The appointment could not be recorded. Please retry.', raw: e });
   }
@@ -1372,8 +1452,19 @@ r.delete('/:uid/admins/:userId{[0-9]+}', async (c) => {
         code: 'still_an_admin',
       }, 409);
     }
-    await c.env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?')
-      .bind(licence.id, userId).run();
+    // #4678: the role was read above and may have been granted since. The
+    // detach states the same condition in the DELETE, so an appointment that
+    // won the race leaves a bound admin, never an unbound one.
+    const detached = await c.env.DB.prepare(
+      `DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?
+          AND NOT EXISTS (SELECT 1 FROM users WHERE id = ? AND LOWER(role) = 'admin')`,
+    ).bind(licence.id, userId, userId).run();
+    if (Number(detached?.meta?.changes ?? 0) !== 1) {
+      const still = await c.env.DB.prepare('SELECT 1 AS ok FROM licence_admins WHERE licence_id = ? AND user_id = ?').bind(licence.id, userId).first();
+      return still
+        ? c.json({ error: 'still_an_admin', code: 'still_an_admin', message: 'The account was made an administrator while this was being handled. Demote it first. Nothing was changed.' }, 409)
+        : c.json({ error: 'not_found' }, 404);
+    }
     await logEvent(c.env, licence.id, 'terms_changed', admin.id,
       { administrator_removed: gone.email });
     return c.json({ ok: true });
@@ -1574,11 +1665,13 @@ r.post('/:uid/notices/:noticeUid/review', async (c) => {
     let reinstated = false;
     const holders = await freezeHoldersForLicence(c.env, licence.id);
     if (next === 'accepted' && holders === 0 && licence.status === 'suspended') {
-      await c.env.DB.prepare(
-        "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ? AND status = 'suspended'",
-      ).bind(nowIso(), licence.id).run();
-      await logEvent(c.env, licence.id, 'reinstated', admin.id, { notice_uid: notice.uid }, note || null);
-      reinstated = true;
+      // #4678: the same move, and the same prerequisites, as POST /reinstate.
+      const blockers = await activationBlockers(c.env, licence, { reinstating: true });
+      const moved = blockers.length ? null : await transition(c.env, licence, 'reinstate', { now: nowIso() });
+      if (moved?.ok) {
+        await logEvent(c.env, licence.id, 'reinstated', admin.id, { notice_uid: notice.uid }, note || null);
+        reinstated = true;
+      }
     }
     // D272 — a reinstatement changes the copy's status, like the /reinstate
     // route, which already pushes. A review that does not reinstate changes

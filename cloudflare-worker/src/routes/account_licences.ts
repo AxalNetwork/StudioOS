@@ -13,6 +13,7 @@ const messages = {
   invalid_retention: 'This operation cannot retain a primary licence.',
   not_found: 'Account not found.',
   primary_licence: 'The primary licence cannot be revoked here.',
+  licence_cannot_administer: 'This licence can no longer take an administrator.',
 };
 r.onError((error, c) => {
   if (error instanceof LicenceRefusal) return refuse(c, error.status, { code: error.code, message: messages[error.code] });

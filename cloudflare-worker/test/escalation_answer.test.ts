@@ -80,7 +80,7 @@ const DEPLOYMENTS = `
     status TEXT NOT NULL DEFAULT 'live', rpc_secret_hash TEXT);
   -- D206 — a content escalation makes HQ read the licence's kind, and a read
   -- it cannot make is a refusal (fail closed). Migration 279's column as it is.
-  CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+  CREATE TABLE territory_licences ( revision INTEGER NOT NULL DEFAULT 0,id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
     kind TEXT NOT NULL DEFAULT 'subsidiary' CHECK (kind IN ('subsidiary', 'white_label')));
 `;
 

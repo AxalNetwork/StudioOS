@@ -37,7 +37,7 @@ export function holdsOnlyLicence(user: { role?: string | null; licences?: readon
 }
 
 export class LicenceRefusal extends Error {
-  code: 'invalid_licence' | 'invalid_retention' | 'not_found' | 'primary_licence';
+  code: 'invalid_licence' | 'invalid_retention' | 'not_found' | 'primary_licence' | 'licence_cannot_administer';
   status: 400 | 404 | 409;
   constructor(code: LicenceRefusal['code'], status: LicenceRefusal['status']) {
     super(code);
@@ -45,7 +45,9 @@ export class LicenceRefusal extends Error {
   }
 }
 type Change = { userId: number; licence: unknown; actorId: number; source: string;
-  retainPrimary?: boolean; appointmentStatements?: D1PreparedStatement[] };
+  retainPrimary?: boolean; appointmentStatements?: D1PreparedStatement[];
+  /** #4678: an extra predicate on the appointment's role write. When it is false the role does not change and the grant refuses with 409 `licence_cannot_administer`. */
+  appointmentGuard?: { sql: string; binds: unknown[] } };
 async function subject(db: D1Database, change: Change): Promise<User> {
   if (!isLicence(change.licence)) throw new LicenceRefusal('invalid_licence', 400);
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(change.userId).first<User>();
@@ -83,11 +85,11 @@ export async function grantLicence(db: D1Database, change: Change): Promise<'gra
   // atomically. No route is allowed to run a second, separate role write.
   if (change.retainPrimary) statements.push(db.prepare(`UPDATE users SET role = 'admin'
     WHERE id = ? AND lower(role) = ? AND EXISTS (SELECT 1 FROM account_licences
-      WHERE user_id = ? AND licence = ? AND revoked_at IS NULL)`)
-    .bind(userId, licence, userId, licence));
+      WHERE user_id = ? AND licence = ? AND revoked_at IS NULL)${change.appointmentGuard ? ` AND ${change.appointmentGuard.sql}` : ''}`)
+    .bind(userId, licence, userId, licence, ...(change.appointmentGuard?.binds ?? [])));
   statements.push(...(change.appointmentStatements || []));
   const result = await db.batch(statements);
-  if (change.retainPrimary && !result[2].meta.changes) throw new LicenceRefusal('primary_licence', 409);
+  if (change.retainPrimary && !result[2].meta.changes) throw new LicenceRefusal(change.appointmentGuard ? 'licence_cannot_administer' : 'primary_licence', 409);
   if (!result[0].meta.changes && !change.retainPrimary) return 'already_held';
   const env = { DB: db } as Env;
   await ensureRoleProfile(env, { ...user, role: licence } as User);
