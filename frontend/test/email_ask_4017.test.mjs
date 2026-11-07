@@ -56,7 +56,7 @@ function fakeApi() {
   const ok = (name, value) => (...args) => { calls.push([name, ...args]); return Promise.resolve(value); };
   return {
     calls,
-    estimate: ok('estimate', { estimate: { hold_microusd: 20_000 } }),
+    estimate: ok('estimate', { estimate: { hold_microusd: 20_000, quote: 'q1.synthetic.signature', expires_at: '2099-01-01T00:00:00.000Z' } }),
     draft: ok('draft', { draft: { uid: 'dr-1', subject: 'Thank you for the interview', body: 'Dear Ada,\nThank you.', sources: [{ label: 'Interview' }] } }),
     revise: ok('revise', {}),
     confirmSend: ok('confirmSend', { nonce: 'n-1' }),

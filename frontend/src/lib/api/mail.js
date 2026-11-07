@@ -17,9 +17,11 @@ import { request } from '../api.js';
 // cloudflare-worker/src/routes/mail_drafts.ts (migration 648).
 //   context(person, project?)      GET    /mail/context?person=<kind:id>&project= → { person, intents, items }
 //   block(body)                    POST   /mail/blocks { kind, ref?, project? } → { block | null }
-//   estimate(body)                 POST   /mail/drafts { …, estimate: true } → { estimate: { hold_microusd, model }, sources, blocks }
-//   draft(body)                    POST   /mail/drafts { person, intent, tone, length, refs, blocks, project? } → 201 { draft }
-//   revise(uid, body)              POST   /mail/drafts/:uid/revise { instruction, project?, estimate? } → 201 { draft }
+//   estimate(body)                 POST   /mail/drafts { …, estimate: true } → { estimate: { hold_microusd, model, kind, quote, expires_at }, sources, blocks }
+//   draft(body)                    POST   /mail/drafts { person, intent, tone, length, refs, blocks, project?, quote } → 201 { draft }
+//   revise(uid, body)              POST   /mail/drafts/:uid/revise { instruction, base?: { subject, body }, project?, estimate?, quote? } → 201 { draft }
+// D4666: a run carries the `quote` of the estimate of THAT operation. Without a valid one it is 409 `estimate_required`
+// with a fresh `estimate` in the body, and nothing is run or held. A revision has its own estimate (`estimate: true`).
 //   drafts(person?)                GET    /mail/drafts?person= → { drafts }
 //   get(uid)                       GET    /mail/drafts/:uid → { draft }
 //   remove(uid)                    DELETE /mail/drafts/:uid → { ok }
