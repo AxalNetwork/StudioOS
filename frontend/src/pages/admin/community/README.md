@@ -27,8 +27,11 @@ keeps the query and hash and adds `?moved=held-community` for CM13's notice.
   - `JobsLightbox.jsx` — CM4.
   - `CirclesLightbox.jsx` — CM5.
   - `ActivityLightbox.jsx` — CM6, D932's activity read.
-  - `lightboxModel.js` — pure. The addresses, the search, filters, sorts and
-    25-row pages, and the Events and activity queries.
+  - `lightboxModel.js` — pure. The addresses, the filters and sorts each
+    lightbox offers, and the query each one sends. Since #4717 package 4 every
+    lightbox reads one 25-row page from the Worker (Jobs and Circles from
+    `GET /api/admin/community/jobs|circles`), and a search waits for the
+    typing to stop.
 
 The charts are D893's (`../../../ui/Charts.jsx`): one palette, and
 only violet changes in dark mode.
