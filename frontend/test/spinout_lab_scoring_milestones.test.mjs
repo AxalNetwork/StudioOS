@@ -87,6 +87,9 @@ test('the contract this defends is real, and is where the reporting happens', ()
   // catching, the wraps above become load-bearing rather than defensive, and
   // this assertion is what says so.
   assert.match(HOOKS, /export async function markMilestone/, 'markMilestone moved');
-  assert.match(HOOKS, /\} catch \(e\) \{\s*\n\s*reportError\(`spinoutLabHooks:\$\{key\}`, e\);/,
+  // D4657: the catch first returns on the server's expected refusals (no saved
+  // work yet, a locked week), then reports every other failure itself.
+  assert.match(HOOKS, /\} catch \(e\) \{[\s\S]{0,600}?reportError\(`spinoutLabHooks:\$\{key\}`, e\);/,
     'markMilestone no longer reports its own failures, so the callers above are now load-bearing');
+  assert.match(HOOKS, /if \(EXPECTED_REFUSALS\.has\(e\?\.code\)\) return;/);
 });

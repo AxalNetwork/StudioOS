@@ -234,12 +234,19 @@ export async function materializeCurrentCycles(env: Env, nowMs: number): Promise
 type ParticipantRow = { id: number; spinout_lab_week: number | null; email: string; name: string | null };
 
 async function cycleParticipants(env: Env, cycle: CycleRow): Promise<ParticipantRow[]> {
+  // D4657: a cycle's participants are the founders enrolled in it (the
+  // newest enrollment per founder), not whoever's start instant falls in its
+  // dates. A founder with no enrollment row keeps the old date rule.
   const r = await env.DB.prepare(
-    `SELECT id, spinout_lab_week, email, name FROM users
-      WHERE spinout_lab_active = 1
-        AND spinout_lab_started_at IS NOT NULL
-        AND spinout_lab_started_at >= ? AND spinout_lab_started_at < ?`,
-  ).bind(cycle.start_at, cycle.end_at).all<ParticipantRow>();
+    `SELECT u.id, u.spinout_lab_week, u.email, u.name FROM users u
+      WHERE u.spinout_lab_active = 1
+        AND (
+          (SELECT e.cohort_cycle_id FROM spinout_lab_enrollments e WHERE e.user_id = u.id ORDER BY e.id DESC LIMIT 1) = ?
+          OR (NOT EXISTS (SELECT 1 FROM spinout_lab_enrollments e WHERE e.user_id = u.id)
+              AND u.spinout_lab_started_at IS NOT NULL
+              AND u.spinout_lab_started_at >= ? AND u.spinout_lab_started_at < ?)
+        )`,
+  ).bind(cycle.id, cycle.start_at, cycle.end_at).all<ParticipantRow>();
   return r.results || [];
 }
 
@@ -681,10 +688,25 @@ export async function getCohortGate(env: Env, userId: number, nowMs = Date.now()
   const u = await env.DB.prepare(
     `SELECT spinout_lab_active, spinout_lab_started_at FROM users WHERE id = ?`,
   ).bind(userId).first<{ spinout_lab_active: number | null; spinout_lab_started_at: string | null }>();
-  if (!u || Number(u.spinout_lab_active) !== 1 || !u.spinout_lab_started_at) return null;
-  const cycle = await env.DB.prepare(
-    `SELECT * FROM cohort_cycles WHERE start_at <= ? AND end_at > ? ORDER BY id DESC LIMIT 1`,
-  ).bind(u.spinout_lab_started_at, u.spinout_lab_started_at).first<CycleRow>();
+  if (!u || Number(u.spinout_lab_active) !== 1) return null;
+  // D4657: the cycle is the founder's enrollment's — the cycle they were
+  // assigned, or for a legacy founder the one migration 202611071700 found
+  // their start in. An enrollment with no cycle is a legacy founder whose
+  // sprint predates the calendar: not calendar-gated. Only a founder with no
+  // enrollment row at all (not reachable after the migration) falls back to
+  // the start instant. A read that fails throws, and every caller refuses.
+  const enrollment = await env.DB.prepare(
+    `SELECT cohort_cycle_id FROM spinout_lab_enrollments WHERE user_id = ? ORDER BY id DESC LIMIT 1`,
+  ).bind(userId).first<{ cohort_cycle_id: number | null }>();
+  let cycle: CycleRow | null = null;
+  if (enrollment) {
+    if (enrollment.cohort_cycle_id === null || enrollment.cohort_cycle_id === undefined) return null;
+    cycle = await env.DB.prepare(`SELECT * FROM cohort_cycles WHERE id = ?`).bind(enrollment.cohort_cycle_id).first<CycleRow>();
+  } else if (u.spinout_lab_started_at) {
+    cycle = await env.DB.prepare(
+      `SELECT * FROM cohort_cycles WHERE start_at <= ? AND end_at > ? ORDER BY id DESC LIMIT 1`,
+    ).bind(u.spinout_lab_started_at, u.spinout_lab_started_at).first<CycleRow>();
+  }
   if (!cycle) return null; // legacy founder — not calendar-gated
   const windows = await env.DB.prepare(
     `SELECT * FROM week_windows WHERE cohort_cycle_id = ? ORDER BY week_number ASC`,

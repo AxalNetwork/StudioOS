@@ -61,6 +61,7 @@ and citations by number keep working.
 | `D4496.md` | Distribution cross-tab states and responsive layouts (#4496). |
 | `D4592.md` | Fair eligible-work discovery, bounded sweep progress and isolated resend capacity (#4592). |
 | `D4576.md` | Adds 32 specialist agent skills and synthetic golden cases through the existing library contract. |
+| `D4587.md` | Validate review queue ordering, venture-aware links and selected-session request identity. |
 | `D4707.md` | Licence navigation in the URL with filter reconciliation, accessible tabs and reason dialogs, and attributable paginated history (#4707). |
 | `D4555.md` | Cloudflare Agent Skills SDK as a loading adapter behind D1-authorized skills (#4555). |
 | `D4706.md` | Deployment identity kept apart from its attempts, a compare-and-set retry, reconcile for an unknown dispatch, and the shared mutation outcome (#4706). |

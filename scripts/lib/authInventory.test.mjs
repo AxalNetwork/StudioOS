@@ -6,7 +6,7 @@
 // version of it read a gated route as public, or a public one as gated.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,6 +43,19 @@ test('reach follows calls and handed-on names, never a method that shares a name
   assert.doesNotMatch(reach('const row = db.get(1);', src, file, 2), /requireAdmin/);
   assert.match(reach('const u = gateOf(c);', src, file, 2), /requireAuth/);
   assert.match(reach("r.get('/x', gateOf);", src, file, 2), /requireAuth/, 'a handler handed on by name is read');
+});
+
+test('reach: the auth module\'s own `user_id = ?` is the caller\'s row, never ownership evidence for a route', () => {
+  const root = mkdtempSync(join(tmpdir(), 'auth-inventory-'));
+  const body = 'async function getCurrentUser(c) { return db.prepare(\'SELECT * FROM users WHERE user_id = ?\').bind(1).first(); }\n';
+  const at = (rel) => { const f = join(root, rel); mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, body); return f; };
+  const authFile = at('cloudflare-worker/src/auth.ts');
+  const routeFile = at('cloudflare-worker/src/routes/x.ts');
+  // Mutation checked: the strip removed → the gate's own query reaches the route and it reads as owner-bound.
+  assert.doesNotMatch(reach('await getCurrentUser(c);', body, authFile, 2), /user_id\s*=\s*\?/);
+  // The same query in any other module is still evidence: an ownership check written in a route's own helper counts.
+  assert.match(reach('await getCurrentUser(c);', body, routeFile, 2), /user_id\s*=\s*\?/);
+  assert.deepEqual(classify({ path: '/api/x/:id', text: reach('await requireAuth(c); await getCurrentUser(c);', body, authFile, 2) }).evidence, []);
 });
 
 test('swallowedGates: a sign-in check whose failure is swallowed is an optional sign-in, not a gate', () => {
