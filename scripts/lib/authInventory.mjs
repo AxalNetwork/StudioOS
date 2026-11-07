@@ -56,12 +56,39 @@ export const EVIDENCE_TOKENS = [
   'assertOwner', 'requireOwner', 'ownsProject', 'isCompanyMember', 'companyRoleOf', 'memberRole', 'scopeAccess',
 ];
 const EVIDENCE_RE = new RegExp(`\\b(${EVIDENCE_TOKENS.join('|')})\\s*\\(`, 'g');
+// A domain helper named for an access check: requireCaseWriter, canReadFund, assertDealParticipant, ensureVentureMember…
+const NAMED_CHECK_RE = /\b((?:require|assert|ensure|check|can|may|userMay)[A-Z]\w*?(?:Access|Owner|Member|Writer|Reader|Editor|Manager|Party|Participant|Read|Write|Edit|View|Scope|Gp|Lp|Founder|Advisor)\w*)\s*\(/g;
 // A query that binds the caller's own id is evidence too: `founder_id = ?` … `.bind(user.id`.
 const OWNER_SQL_RE = /\b(?:founder_id|user_id|owner_id|created_by|sponsor_user_id|investor_user_id)\s*=\s*\?/;
 
 // ── Source reading ──────────────────────────────────────────────────────────
 
-/** The index just past the bracket that closes the one at `open`; strings, templates and comments skipped. */
+/** Whether the `/` at `i` opens a regex literal: it follows an operator, a bracket or a keyword, not a value. */
+function regexStarts(src, i) {
+  let j = i - 1;
+  while (j >= 0 && /\s/.test(src[j])) j -= 1;
+  if (j < 0) return true;
+  if ('(,=:[!&|?{};+-*%<>~^'.includes(src[j])) return true;
+  return /\b(?:return|typeof|case|in|of|void|delete|throw|new)$/.test(src.slice(Math.max(0, j - 7), j + 1));
+}
+/** The index just past the regex literal that opens at `i` (and its flags). */
+function regexEnd(src, i) {
+  let j = i + 1;
+  let inClass = false;
+  while (j < src.length && src[j] !== '\n') {
+    const ch = src[j];
+    if (ch === '\\') { j += 2; continue; }
+    if (ch === '[') inClass = true;
+    else if (ch === ']') inClass = false;
+    else if (ch === '/' && !inClass) break;
+    j += 1;
+  }
+  j += 1;
+  while (j < src.length && /[a-z]/i.test(src[j])) j += 1;
+  return j;
+}
+
+/** The index just past the bracket that closes the one at `open`; strings, templates, regex literals and comments skipped. */
 export function closeOf(src, open) {
   const pairs = { '(': ')', '[': ']', '{': '}' };
   const stack = [pairs[src[open]]];
@@ -70,6 +97,7 @@ export function closeOf(src, open) {
     const ch = src[i];
     if (ch === '/' && src[i + 1] === '/') { const nl = src.indexOf('\n', i); i = nl < 0 ? src.length : nl; continue; }
     if (ch === '/' && src[i + 1] === '*') { const end = src.indexOf('*/', i + 2); i = end < 0 ? src.length : end + 2; continue; }
+    if (ch === '/' && regexStarts(src, i)) { i = regexEnd(src, i); continue; }
     if (ch === '"' || ch === "'") {
       i += 1;
       while (i < src.length && src[i] !== ch && src[i] !== '\n') i += src[i] === '\\' ? 2 : 1;
@@ -132,8 +160,9 @@ const declared = new Map();
 function declarationsOf(src) {
   if (declared.has(src)) return declared.get(src);
   const fns = new Map(), vars = new Map();
-  for (const m of src.matchAll(/(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*[<(]/g)) if (!fns.has(m[1])) fns.set(m[1], m);
-  for (const m of src.matchAll(/(?:^|\n)\s*(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=\s*(?:async\s*)?/g)) if (!vars.has(m[1])) vars.set(m[1], m);
+  // Top level only (no indent): a local `const user = await requireAuth(c)` inside some handler is not a function to reach.
+  for (const m of src.matchAll(/(?:^|\n)(?:export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*[<(]/g)) if (!fns.has(m[1])) fns.set(m[1], m);
+  for (const m of src.matchAll(/(?:^|\n)(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=\s*(?:async\s*)?/g)) if (!vars.has(m[1])) vars.set(m[1], m);
   const out = { fns, vars };
   declared.set(src, out);
   return out;
@@ -181,12 +210,13 @@ export function functionBody(src, name) {
 }
 
 /** `text` plus the bodies of the functions it calls, from its file or a relative import, `depth` levels down. */
-function reach(text, src, file, depth) {
+export function reach(text, src, file, depth) {
   if (depth <= 0) return text;
   if (!importsOf.has(file)) importsOf.set(file, importMap(src, dirname(file)));
   const imports = importsOf.get(file);
   // Functions called, and functions handed on by name (`r.post('/x', handler)`, `gate(c, requireAdmin)`).
-  const called = [...text.matchAll(/\b([A-Za-z_$][\w$]*)\s*(?:<[^>()]*>)?\s*\(/g)].map((m) => m[1]);
+  // Not a method (`.get(`, `db.run(`): a method is never the same-named function of this file or an import.
+  const called = [...text.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*(?:<[^>()]*>)?\s*\(/g)].map((m) => m[1]);
   const handed = [...text.matchAll(/[(,]\s*([A-Za-z_$][\w$]*)\s*(?=[,)])/g)].map((m) => m[1]);
   const parts = [text];
   for (const name of new Set([...called, ...handed])) {
@@ -327,13 +357,22 @@ export function stripComments(src) {
   return out;
 }
 
+/**
+ * A sign-in check whose failure is swallowed — `try { u = await requireAuth(c) } catch {}` — gates
+ * nothing: the request goes on without a caller. It reads as an optional sign-in.
+ */
+export function swallowedGates(text) {
+  return text.replace(/\btry\s*\{([^{}]*)\}\s*catch\s*(?:\([^)]*\))?\s*\{\s*\}/g, (all, body) =>
+    /\brequire\w*\s*\(/.test(body) ? `getCurrentUser(${body.replace(/\brequire\w*\s*\(/g, '(')})` : all);
+}
+
 export function classify(route) {
-  const text = stripComments(route.text);
+  const text = swallowedGates(stripComments(route.text));
   let gate = 'public';
   for (const [g, re] of GATE_TOKENS) {
     if (re.test(text) && GATES.indexOf(g) > GATES.indexOf(gate)) gate = g;
   }
-  const evidence = [...new Set([...text.matchAll(EVIDENCE_RE)].map((m) => m[1]))].sort();
+  const evidence = [...new Set([...text.matchAll(EVIDENCE_RE), ...text.matchAll(NAMED_CHECK_RE)].map((m) => m[1]))].sort();
   if (OWNER_SQL_RE.test(text)) evidence.push('owner_bound_sql');
   const params = [...route.path.matchAll(/:([A-Za-z_]\w*)/g)].map((m) => m[1]);
   return { gate, evidence, params };

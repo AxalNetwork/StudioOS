@@ -61,7 +61,7 @@
       "state": "unreviewed"
     },
     "GET /api/auth/google/callback": {
-      "review": "optional_auth",
+      "review": "no_gate_found",
       "kind": "oauth_callback",
       "state": "unreviewed"
     },
@@ -125,6 +125,16 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
+    "GET /api/calendar/google/callback": {
+      "review": "no_gate_found",
+      "kind": "oauth_callback",
+      "state": "unreviewed"
+    },
+    "GET /api/calendar/microsoft/callback": {
+      "review": "no_gate_found",
+      "kind": "oauth_callback",
+      "state": "unreviewed"
+    },
     "GET /api/captable/access/shared/:token": {
       "review": "no_gate_found",
       "kind": "link_token",
@@ -138,6 +148,11 @@
     "GET /api/cofounder/matches": {
       "review": "forwarded",
       "kind": "alias",
+      "state": "unreviewed"
+    },
+    "GET /api/connectors/public/calendly/:userId": {
+      "review": "no_gate_found",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "GET /api/deals/:id/market": {
@@ -155,8 +170,8 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "GET /api/decks/share/:token/context": {
-      "review": "record_without_ownership_check",
+    "GET /api/decks/print-export/:token": {
+      "review": "no_gate_found",
       "kind": "link_token",
       "state": "unreviewed"
     },
@@ -165,23 +180,18 @@
       "kind": "alias",
       "state": "unreviewed"
     },
+    "GET /api/events/:id/cover/:filename": {
+      "review": "optional_auth",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "GET /api/follows/status": {
+      "review": "optional_auth",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "GET /api/founder/cadence/starters": {
       "review": "no_gate_found",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "GET /api/fund-fees/:fundId": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "GET /api/fund-fees/:fundId/periods/:quarter": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "GET /api/fund-fees/:fundId/periods/:quarter/statements/:lpId": {
-      "review": "record_without_ownership_check",
       "kind": "unclassified",
       "state": "unreviewed"
     },
@@ -208,6 +218,11 @@
     "GET /api/influencer/tiers": {
       "review": "no_gate_found",
       "kind": "public_content",
+      "state": "unreviewed"
+    },
+    "GET /api/integrations/public/calendly/:userId": {
+      "review": "no_gate_found",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "GET /api/items": {
@@ -243,6 +258,11 @@
     "GET /api/legal/esign/sign/:token/paper": {
       "review": "no_gate_found",
       "kind": "link_token",
+      "state": "unreviewed"
+    },
+    "GET /api/linkedin/oauth/callback": {
+      "review": "no_gate_found",
+      "kind": "oauth_callback",
       "state": "unreviewed"
     },
     "GET /api/mail/accounts/oauth/callback": {
@@ -435,12 +455,22 @@
       "kind": "public_content",
       "state": "unreviewed"
     },
+    "GET /api/public/roadmap/votes": {
+      "review": "optional_auth",
+      "kind": "public_content",
+      "state": "unreviewed"
+    },
     "GET /api/public/startup/:handle": {
       "review": "optional_auth",
       "kind": "public_content",
       "state": "unreviewed"
     },
     "GET /api/public/stats": {
+      "review": "no_gate_found",
+      "kind": "public_content",
+      "state": "unreviewed"
+    },
+    "GET /api/public/status": {
       "review": "no_gate_found",
       "kind": "public_content",
       "state": "unreviewed"
@@ -530,16 +560,6 @@
       "kind": "alias",
       "state": "unreviewed"
     },
-    "PATCH /api/dd/cases/:uid/items/:itemId": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "PATCH /api/dd/cases/:uid/requests/:id": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "POST /api/advisors/:uid/book": {
       "review": "forwarded",
       "kind": "alias",
@@ -561,7 +581,7 @@
       "state": "unreviewed"
     },
     "POST /api/auth/google/popup": {
-      "review": "optional_auth",
+      "review": "no_gate_found",
       "kind": "sign_in",
       "state": "unreviewed"
     },
@@ -693,7 +713,9 @@
     "POST /api/channels/whatsapp/link/:uid/confirm": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
-      "state": "unreviewed"
+      "state": "verified",
+      "test": "cloudflare-worker/test/authz_cross_tenant_d4570.test.ts",
+      "note": "Scoped in its service by the caller's id; a member who is not a party is refused 404 and nothing changes."
     },
     "POST /api/channels/zoom/webhook": {
       "review": "no_gate_found",
@@ -737,16 +759,6 @@
     },
     "POST /api/cycles/grow/google/sync": {
       "review": "no_gate_found",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "POST /api/dd/cases/:uid/recompute": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "POST /api/dd/cases/:uid/requests/:id/withdraw": {
-      "review": "record_without_ownership_check",
       "kind": "unclassified",
       "state": "unreviewed"
     },
@@ -810,6 +822,11 @@
       "kind": "public_content",
       "state": "unreviewed"
     },
+    "POST /api/newsletter/subscribe": {
+      "review": "no_gate_found",
+      "kind": "public_content",
+      "state": "unreviewed"
+    },
     "POST /api/notifications/unsubscribe": {
       "review": "no_gate_found",
       "kind": "link_token",
@@ -818,6 +835,11 @@
     "POST /api/partner-office-hours/:uid/book": {
       "review": "forwarded",
       "kind": "alias",
+      "state": "unreviewed"
+    },
+    "POST /api/partner-onboard/:token/finalize": {
+      "review": "no_gate_found",
+      "kind": "link_token",
       "state": "unreviewed"
     },
     "POST /api/partner-onboard/:token/profile": {
@@ -870,6 +892,11 @@
       "kind": "public_content",
       "state": "unreviewed"
     },
+    "POST /api/public/trust/subprocessors/subscribe": {
+      "review": "no_gate_found",
+      "kind": "public_content",
+      "state": "unreviewed"
+    },
     "POST /api/references/:id/recording": {
       "review": "no_gate_found",
       "kind": "public_content",
@@ -888,12 +915,16 @@
     "POST /api/relationships/intro-requests/:uid/drafts/follow-up": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
-      "state": "unreviewed"
+      "state": "verified",
+      "test": "cloudflare-worker/test/authz_cross_tenant_d4570.test.ts",
+      "note": "Scoped in its service by the caller's id; a member who is not a party is refused 404 and nothing changes."
     },
     "POST /api/relationships/intro-requests/:uid/drafts/intro": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
-      "state": "unreviewed"
+      "state": "verified",
+      "test": "cloudflare-worker/test/authz_cross_tenant_d4570.test.ts",
+      "note": "Scoped in its service by the caller's id; a member who is not a party is refused 404 and nothing changes."
     },
     "POST /api/settings/email-change/confirm": {
       "review": "no_gate_found",

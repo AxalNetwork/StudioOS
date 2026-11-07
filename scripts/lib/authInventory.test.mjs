@@ -6,9 +6,11 @@
 // version of it read a gated route as public, or a public one as gated.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classify, closeOf, covers, functionBody, inventory, stripComments } from './authInventory.mjs';
+import { classify, closeOf, covers, functionBody, inventory, reach, stripComments, swallowedGates } from './authInventory.mjs';
 import { kindOf, ledgerProblems } from '../build-auth-inventory.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -17,6 +19,44 @@ const gateOf = (text) => classify({ path: '/api/x', text }).gate;
 test('closeOf steps over strings, templates and comments', () => {
   const src = "f(a, ')', `x ${g(')')} y`, /* ) */ b) // )\nrest";
   assert.equal(src.slice(0, closeOf(src, 1)), "f(a, ')', `x ${g(')')} y`, /* ) */ b)");
+});
+
+test('closeOf steps over regex literals, so a bracket or quote inside one does not run on', () => {
+  // Mutation checked: regex literals read as code → the `)` and `'` inside run the scan past the call and this fails.
+  const src = "h(/^deck:(\\d+)\\)'$/.exec(x), y / 2) tail";
+  assert.equal(src.slice(0, closeOf(src, 1)), "h(/^deck:(\\d+)\\)'$/.exec(x), y / 2)");
+});
+
+test('functionBody indexes top-level declarations only: a local `const` inside a handler is not a function', () => {
+  const src = "function handler(c) {\n  const user = await requireAuth(c);\n}\nconst top = (c) => { return 1; };";
+  // Mutation checked: indented declarations indexed → `user` resolves to `await requireAuth(c)` and this fails.
+  assert.equal(functionBody(src, 'user'), null);
+  assert.match(functionBody(src, 'top'), /return 1/);
+});
+
+test('reach follows calls and handed-on names, never a method that shares a name with a function', () => {
+  // reach re-reads a callee's own file, so the fixture is a file.
+  const file = join(mkdtempSync(join(tmpdir(), 'auth-inventory-')), 'fixture.ts');
+  const src = 'function get(c) { return requireAdmin(c); }\nfunction gateOf(c) { return requireAuth(c); }\n';
+  writeFileSync(file, src);
+  // Mutation checked: methods resolved as calls → `db.get(` reaches the local get() and its requireAdmin, and this fails.
+  assert.doesNotMatch(reach('const row = db.get(1);', src, file, 2), /requireAdmin/);
+  assert.match(reach('const u = gateOf(c);', src, file, 2), /requireAuth/);
+  assert.match(reach("r.get('/x', gateOf);", src, file, 2), /requireAuth/, 'a handler handed on by name is read');
+});
+
+test('swallowedGates: a sign-in check whose failure is swallowed is an optional sign-in, not a gate', () => {
+  const optional = "let id = null;\ntry {\n  const u = await requireAuth(c);\n  id = u.id;\n} catch {  }\nreturn c.json({ id });";
+  // Mutation checked: swallowedGates skipped in classify → this reads authenticated and fails.
+  assert.equal(gateOf(optional), 'optional_auth');
+  assert.equal(gateOf("try { await requireAuth(c); } catch (e) { return c.json({}, 401); }"), 'authenticated', 'a catch that refuses keeps the gate');
+  assert.equal(swallowedGates('no try here'), 'no try here');
+});
+
+test('classify: a domain helper named for an access check is ownership evidence', () => {
+  const e = classify({ path: '/api/dd/cases/:uid', text: 'await requireAuth(c); await requireCaseWriter(c, cs); await requireFundGp(c, id);' });
+  // Mutation checked: only the fixed token list read → evidence is empty and this fails.
+  assert.deepEqual(e.evidence, ['requireCaseWriter', 'requireFundGp']);
 });
 
 test('functionBody reads past a return type with braces, and through a curried arrow', () => {
@@ -121,6 +161,12 @@ test('the real Worker: routes an earlier reader misread are read right, and ever
   assert.equal(at('GET', '/api/publish/destinations')?.gate, 'authenticated');
   // A relay to another router is named for what it is.
   assert.equal(at('GET', '/api/metrics/:projectId')?.gate, 'forwarded');
+  // The status page: its helpers' local `const`s and regexes no longer pull a requireAuth in.
+  assert.equal(at('GET', '/api/public/status')?.gate, 'public');
+  // A signed share link's token check is its gate.
+  assert.equal(at('POST', '/api/decks/share/:token/heartbeat')?.gate, 'service');
+  // requireAuth in `try { … } catch {}`: the votes read is an optional sign-in.
+  assert.equal(at('GET', '/api/public/roadmap/votes')?.gate, 'optional_auth');
   // App middleware on every /api/* request gates nothing: a published article still reads as public.
   // Mutation checked: '/api/*' middleware counted → this reads optional_auth and fails.
   assert.equal(at('GET', '/api/articles')?.gate, 'public');
