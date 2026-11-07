@@ -133,6 +133,7 @@ function freshDb() {
   db.exec(migration('369_advisor_client_notes'));
   db.exec(migration('238_advisor_engagements'));
   db.exec(migration('239_advisor_deliverables'));
+  db.exec(migration('202611062152_advisor_deliverable_recipients'));
   db.exec(migration('240_advisor_sessions_config'));
   db.exec(migration('218_advisor_client_grants'));
   db.exec(migration('394_advisor_practice'));
@@ -350,7 +351,8 @@ test('D573: only the client accepts a sent version, first acceptance wins and an
     const e = env(db);
     db.prepare("INSERT INTO advisor_engagements (id, uid, advisor_id, founder_user_id, client_name, lane) VALUES (1, 'eng-one', 1, ?, 'Synthetic client', 'signed')").run(FOUNDER_USER);
     db.exec("INSERT INTO advisor_deliverables (id, uid, advisor_id, engagement_id, client_name, title) VALUES (1, 'work-one', 1, 1, 'Synthetic client', 'Plan')");
-    db.exec("INSERT INTO advisor_deliverable_versions (id, uid, deliverable_id, version, sent_at) VALUES (1, 'version-one', 1, 1, '2026-10-01T10:00:00Z'), (2, 'version-two', 1, 2, NULL)");
+    // #4684: a sent version carries the recipient its send recorded.
+    db.prepare("INSERT INTO advisor_deliverable_versions (id, uid, deliverable_id, version, sent_at, recipient_user_id) VALUES (1, 'version-one', 1, 1, '2026-10-01T10:00:00Z', ?), (2, 'version-two', 1, 2, NULL, NULL)").run(FOUNDER_USER);
     const outsider = await call(e, 'POST', '/received/deliverables/version-one/accept', otto);
     const advisor = await call(e, 'POST', '/received/deliverables/version-one/accept', ada);
     const draft = await call(e, 'POST', '/received/deliverables/version-two/accept', fran);

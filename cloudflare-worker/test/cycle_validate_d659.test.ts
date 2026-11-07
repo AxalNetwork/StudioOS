@@ -682,6 +682,8 @@ test('D685 §5.12: no interview → "Record your first conversation." word for w
     why: 'Validate starts with one interview. Everything else in the venture builds on what it finds.',
     cta: { label: 'Record a session', href: `/validate/record?project=${P}` },
     then: 'Write the claim you most need to be true.',
+    // D4589 (#4589): the shared next-action shape.
+    secondary: [], state: 'ok',
   });
 });
 

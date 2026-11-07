@@ -256,3 +256,46 @@ test('the reads: /me says there is no day, HQ cannot type a member plan, and eac
   assert.ok(!pub.plans.some((p: any) => p.plan_name === 'Registered Agent'), 'Registered Agent is not a member plan');
   db.close();
 });
+
+// ---------------------------------------------------------------------------
+// D4703 (#4703) part 2: the allowance is figured on what the member pays.
+// ---------------------------------------------------------------------------
+
+const hookAt = (env: any, type: string, object: Record<string, unknown>, created: number) =>
+  call(env, 'POST', '/api/billing/stripe/webhook', { id: `evt_${crypto.randomUUID()}`, livemode: false, created, type, data: { object } });
+
+test('D4703: a coupon comes off before the allowance is figured, and an unreadable one records nothing', async () => {
+  // Mutation checked: afterDiscounts skipped (list price) → 50% off records 5900, not 2950.
+  const one = (c: Record<string, unknown>) => chargeOf({ items: { data: [{ quantity: 1, price: { unit_amount: 5900, currency: 'usd', recurring: { interval: 'month' } } }] }, ...c });
+  assert.equal(one({ discount: { id: 'di_1', coupon: { percent_off: 50 } } })?.amount_cents, 2950);
+  assert.equal(one({ discount: { id: 'di_1', coupon: { amount_off: 1000, currency: 'usd' } } })?.amount_cents, 4900);
+  assert.equal(one({ discount: { id: 'di_1', coupon: { amount_off: 9000, currency: 'usd' } } })?.amount_cents, 0, 'never below zero');
+  assert.equal(one({ discounts: [{ id: 'di_a', coupon: { percent_off: 10 } }, { id: 'di_b', coupon: { amount_off: 100, currency: 'USD' } }] })?.amount_cents, 5210,
+    'a percentage first, then a fixed amount');
+  assert.equal(one({ discount: { id: 'di_1', coupon: { percent_off: 50 } }, discounts: ['di_1'] })?.amount_cents, 2950, 'the id of the discount in hand is readable');
+  assert.equal(one({ discounts: ['di_unexpanded'] }), null, 'an id alone cannot be read');
+  assert.equal(one({ discount: { id: 'di_1', coupon: { amount_off: 1000, currency: 'eur' } } }), null, 'another currency cannot be subtracted');
+  assert.equal(one({})?.amount_cents, 5900, 'no discount: the price');
+
+  const { db, env } = fixture();
+  db.exec(`UPDATE users SET stripe_customer_id = 'cus_f' WHERE id = 2`);
+  await hook(env, 'customer.subscription.created', sub('sub_f', { kind: 'tier', tier: 'growth' }, 5900, 'month',
+    { customer: 'cus_f', discount: { id: 'di_1', coupon: { percent_off: 50 } } }));
+  assert.equal(rows(db)[0].amount_cents, 2950);
+  await hook(env, 'customer.subscription.updated', sub('sub_f', { kind: 'tier', tier: 'growth' }, 5900, 'month',
+    { customer: 'cus_f', discounts: ['di_unexpanded'] }));
+  assert.equal(rows(db)[0].amount_cents, 2950, 'an unreadable discount leaves the known amount, never the list price');
+  db.close();
+});
+
+test('D4703: a late older subscription event cannot overwrite a newer amount', async () => {
+  // Mutation checked: the event_created guard removed → the older 7900 overwrites 19900.
+  const { db, env } = fixture();
+  db.exec(`UPDATE users SET stripe_customer_id = 'cus_f' WHERE id = 2`);
+  await hookAt(env, 'customer.subscription.updated', sub('sub_f', { kind: 'tier', tier: 'studio' }, 19900, 'month', { customer: 'cus_f' }), 1_800_000_200);
+  await hookAt(env, 'customer.subscription.created', sub('sub_f', { kind: 'tier', tier: 'growth' }, 7900, 'month', { customer: 'cus_f' }), 1_800_000_100);
+  assert.equal(rows(db)[0].amount_cents, 19900, 'the newer event stands');
+  await hookAt(env, 'customer.subscription.updated', sub('sub_f', { kind: 'tier', tier: 'growth' }, 7900, 'month', { customer: 'cus_f' }), 1_800_000_300);
+  assert.equal(rows(db)[0].amount_cents, 7900, 'a newer event still writes');
+  db.close();
+});

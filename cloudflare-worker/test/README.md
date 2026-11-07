@@ -197,6 +197,10 @@ D1231 concurrency tests cover displayed If-Match tokens, source edits during a r
 | `deal_insights_d1151.test.ts` | Real SQLite tests of D1151 deal access, NDA masks, publication, aggregates and sourced sharing. |
 | `messages_retirement_d1345.test.ts` | Phase 1: real mounted 410s and own-LP / own-advisor Email recipient scopes on migrated SQLite. |
 | `messages_drop_d1345.test.ts` | Post-rollout phase: migration `202611022352_retire_messages` asserts all four retired Messages stores are empty before dropping them, preserving Email. Release only after the retirement Worker is confirmed live. |
+#4567 (D4567): `_d1_bench.ts` is the D1 contention benchmark's harness. It meters every statement the Worker's own services issue over `_storage_schema.ts`'s migrated template, seeded with #4566's synthetic fixtures and with inference stubbed. It drives mixes A–E, closed loop or ramp, and checks the invariants afterwards. `d1_benchmark_4567.test.ts` is its tiny, deterministic CI case; `npm run bench:d1` runs it at scale.
+
+#4568 (D4568): `usage_indexes_4568.test.ts` holds migration 202611070806's two partial indexes and `agentArea` to what they must not change: plans before and after, `chargedFor` against a reference model, identical money across a whole mix with and without the indexes, and the dependency matrix. `_d1_bench.ts`'s `indexControl` and `withoutCandidates` are its before-and-after measurements.
+
 D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.
 
 | File | Purpose |
@@ -230,3 +234,5 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 
 `redirect_links_d2319.test.ts` exercises canonical checklist, calendar, promo,
 advisor CTA and stored search-result URLs after redirect retirement (#4415).
+
+`ai_gateway_slice_4556.test.ts` (D4556) runs one third-party model through AI Gateway on a stubbed binding over the real AI budget migrations: every switch, config, task, data-class and Advisor refusal makes no call, success settles once from the exact reported usage, missing usage is never zero, retries honour `retry-after` within a bound, a timeout is unknown completion and is not retried, payload logging is off on every call, and no Advisor module can import the provider path.

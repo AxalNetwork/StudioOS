@@ -3,18 +3,18 @@
  * pure rules and words. `RecommendedRow.jsx` draws them; the reads come
  * through `recommendationsAdapter.js` and nowhere else.
  *
- * The read's shape is D1487's (`GET /api/events/recommended`, not on main
- * yet): `{ enabled, profile, signals: { <name>: 'read'|'not_recorded'|'unreadable' },
+ * The read's shape is D1487's (`GET /api/events/recommended`): `{ enabled, profile, signals: { <name>: 'read'|'not_recorded'|'unreadable' },
  * events: [{ ...event, saved, registration_eligible, reasons: [{ code, text }] }] }`.
  * A missing figure reads "Not recorded", never 0. Attendance never appears in
- * a reason (owner question 3 is open; the board draws none).
+ * a reason: the owner decided that on 2026-11-04 (D1487), and the Worker
+ * quotes no attendee.
  */
 import { NOT_RECORDED } from '../../lib/absence.js';
 
 export { NOT_RECORDED };
 export const ROW_TITLE = 'Recommended for you';
 export const RANK_LINE = 'Ranked from your own profile. Ranking runs nothing and charges nothing.';
-export const NOT_ON = 'Recommendations aren’t switched on yet. Until they are, the suggestions below come from your track and event types.';
+export const NOT_ON = 'Recommendations aren’t available right now. The suggestions below come from your track and event types.';
 export const ERROR_LINE = 'Recommendations could not be read. That is not the same as having none.';
 export const EMPTY_LINE = 'Nothing to recommend right now.';
 export const FEW_LINE = 'Set your goals to get picks.';
@@ -37,7 +37,7 @@ export const NOT_FOR_ME_REASONS = Object.freeze([
 
 /** ME6's choices. Formats and event types are the editor's own words. */
 export const FORMATS = Object.freeze([
-  { key: 'online', label: 'Online' },
+  { key: 'virtual', label: 'Online' },
   { key: 'in_person', label: 'In person' },
   { key: 'hybrid', label: 'Hybrid' },
 ]);
@@ -53,18 +53,49 @@ export const SIGNALS = Object.freeze([
 ]);
 
 /**
- * The owner's questions on #3724, open until the owner answers them on the
- * thread. The page draws each as "pending owner", and nothing here picks an
- * answer: S1's proposed defaults are kept beside them, unadopted.
+ * ME6's interests: the Worker's own vocabulary (`EVENT_TOPICS`, D1487), as
+ * chips. The Worker refuses any other word, so the screen offers no free text.
  */
-export const PENDING_OWNER = Object.freeze([
-  { n: 1, key: 'external', question: 'Recommend events from outside Axal?', proposed: 'Axal events only', where: 'ME5: External events, "Not enabled"' },
-  { n: 2, key: 'cost', question: 'What does a recommendation cost?', proposed: 'Ranking free; Explain charged', where: 'ME1, ME3: ranking, "Why this event?"' },
-  { n: 3, key: 'attendance', question: 'May reasons mention who else attends?', proposed: 'Never', where: 'ME3, ME8: reasons' },
-  { n: 4, key: 'people_met', question: 'Use the people a member has met?', proposed: 'Off', where: 'ME6: signals' },
-  { n: 5, key: 'explorers', question: 'Do Explorers get recommendations?', proposed: 'On', where: 'ME2: "Popular with new members"' },
+export const TOPICS = Object.freeze([
+  { key: 'fundraising', label: 'Fundraising' },
+  { key: 'ai', label: 'AI' },
+  { key: 'go_to_market', label: 'Go to market' },
+  { key: 'hiring', label: 'Hiring' },
+  { key: 'climate', label: 'Climate' },
+  { key: 'product', label: 'Product' },
+  { key: 'finance', label: 'Finance' },
+  { key: 'legal', label: 'Legal' },
+  { key: 'leadership', label: 'Leadership' },
+  { key: 'networking', label: 'Networking' },
 ]);
-export const PENDING_WORD = 'Pending owner';
+export const TOPICS_MAX = 10;
+
+/** The Worker's prefs (`GET …/recommendation-prefs`) as Tune's form. A null stays blank, never 0. */
+export function prefsToForm(prefs = {}) {
+  const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+  return {
+    enabled: prefs.enabled !== false,
+    interests: list(prefs.interests),
+    goals: typeof prefs.goals_90d === 'string' ? prefs.goals_90d : '',
+    formats: list(prefs.formats),
+    home_city: typeof prefs.home_city === 'string' ? prefs.home_city : '',
+    travel_km: Number.isInteger(prefs.travel_km) ? String(prefs.travel_km) : '',
+  };
+}
+
+/** Tune's form as the Worker's prefs (`PUT …/recommendation-prefs`). A blank is null, not 0. */
+export function formToPrefs(form = {}) {
+  const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const km = form.travel_km;
+  return {
+    enabled: form.enabled !== false,
+    interests: Array.isArray(form.interests) ? form.interests : [],
+    goals_90d: text(form.goals),
+    formats: Array.isArray(form.formats) ? form.formats : [],
+    home_city: text(form.home_city),
+    travel_km: km == null || km === '' ? null : Number(km),
+  };
+}
 
 /**
  * The row's state, from the adapter's answer (`{ available, value, reason }`)

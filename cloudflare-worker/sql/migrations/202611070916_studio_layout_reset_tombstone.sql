@@ -1,0 +1,16 @@
+-- D4621 (#4621): a reset no longer deletes the layout row, so its revision
+-- keeps counting across reset and recreate.
+--
+-- Reset used to DELETE the row, and a layout saved after it was a new row at
+-- revision 1 again. A tab that had read revision 1 before the reset could then
+-- save its old draft over the new layout, because "revision 1" was true twice.
+-- Now a reset marks the row (`reset_at`), empties its layout and raises its
+-- revision by one; the next save updates that same row to a live layout at the
+-- following revision. A read of a reset row answers the profile's default,
+-- exactly as a missing row does, and carries the row's revision so the next
+-- save can name it.
+--
+-- NULL on every existing row: a live layout. Retention is unchanged: a row
+-- goes with the account (ON DELETE CASCADE), and a reset leaves a row holding
+-- only the profile, a revision and the time of the reset (its layout is '[]').
+ALTER TABLE studio_layouts ADD COLUMN reset_at TEXT;

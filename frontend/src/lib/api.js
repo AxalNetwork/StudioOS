@@ -776,6 +776,16 @@ async function _analyticsRead(path) {
 /** D1300 — the filters, sort and scope `adminListUsers` passes through to `GET /api/admin/users`. */
 const ADMIN_USER_FILTERS = ['profile', 'sub', 'status', 'email', 'identity', 'limited', 'plan', 'country', 'persona', 'program', 'trust', 'joined', 'joined_from', 'joined_to', 'active', 'sort', 'scope'];
 
+/** #4689 — `?offset=&limit=` for an Expertise list page, after any other query it carries. */
+function expertisePage(page, extra = {}) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(extra)) if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+  if (page?.offset) q.set('offset', String(page.offset));
+  if (page?.limit) q.set('limit', String(page.limit));
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
 export const api = {
   // Task #19 — Best-Fit consultations + admin report.
   bookConsultation: (data) =>
@@ -3524,10 +3534,12 @@ export const api = {
   // D1170 — HQ › Platform › Storage: every member's stored bytes as totals by
   // kind, plan and state; no name, email, id or file name. Super admin.
   hqPlatformStorage: () => request('/admin/platform/storage'),
-  hqSetPlatformSwitch: (key, action, reason) =>
+  // D4703: a release names the throw it ends (`revision`, from the switch's
+  // stored half), so an old tab cannot release a newer throw.
+  hqSetPlatformSwitch: (key, action, reason, revision) =>
     request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
       method: 'POST',
-      body: JSON.stringify({ action, reason }),
+      body: JSON.stringify(action === 'release' ? { action, reason, revision } : { action, reason }),
     }),
   // HQ · Security. The overview is read-only; force re-auth signs every
   // active account out everywhere (the caller included) and needs a TOTP
@@ -4194,7 +4206,9 @@ export const api = {
   // ---------- The advisor's own stores (migrations 203-206) ----------
   // Every one of these is scoped server-side on the signed-in user; none takes
   // an advisor id, because there is nowhere to put someone else's.
-  listMyAdvisorServices: () => request('/advisors/me/services'),
+  // #4689: the Expertise lists page. `page` is `{ offset, limit }`; each answer
+  // carries `page.next_offset` and counts over the whole list.
+  listMyAdvisorServices: (page) => request(`/advisors/me/services${expertisePage(page)}`),
   createMyAdvisorService: (data) =>
     request('/advisors/me/services', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorService: (id, data) =>
@@ -4202,7 +4216,7 @@ export const api = {
   deleteMyAdvisorService: (id) =>
     request(`/advisors/me/services/${id}`, { method: 'DELETE' }),
 
-  listMyAdvisorProof: () => request('/advisors/me/proof'),
+  listMyAdvisorProof: (page) => request(`/advisors/me/proof${expertisePage(page)}`),
   createMyAdvisorProof: (data) =>
     request('/advisors/me/proof', { method: 'POST', body: JSON.stringify(data) }),
   deleteMyAdvisorProof: (id) => request(`/advisors/me/proof/${id}`, { method: 'DELETE' }),
@@ -4333,7 +4347,7 @@ export const api = {
     request(`/advisors/me/session-types/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   listMyAdvisorBookingLinks: () => request('/advisors/me/booking-links'),
   // D1597 (#3870): Advisor › Expertise › Visibility — requests per booking link, opens of your writing; views and engagements are not recorded.
-  getMyAdvisorVisibility: (days) => request(`/advisors/me/visibility${days ? `?days=${encodeURIComponent(days)}` : ''}`),
+  getMyAdvisorVisibility: (days, page) => request(`/advisors/me/visibility${expertisePage(page, days ? { days } : {})}`),
   // 409 on a slug another advisor already holds — the slug resolves from the
   // URL alone, so it is unique across the table rather than per advisor.
   createMyAdvisorBookingLink: (data) =>
@@ -4607,7 +4621,7 @@ export const api = {
   postMyAdvisorCohortGuidance: (cycleId, data) => request(`/advisors/me/cohort/${cycleId}/guidance`, { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorGuidance: (uid, data) => request(`/advisors/me/guidance/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
   listMyAdvisorCohortCalendar: (cycleId) => request(`/advisors/me/cohort/${cycleId}/calendar`),
-  listMyAdvisorThinking: () => request('/advisors/me/thinking'),
+  listMyAdvisorThinking: (page) => request(`/advisors/me/thinking${expertisePage(page)}`),
 
   // ---------- Unified calendar (Task #56) ----------
   listCalendarEvents: (opts = {}) => {

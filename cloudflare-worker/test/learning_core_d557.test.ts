@@ -232,10 +232,12 @@ test('progress is the caller\'s own: the session decides whose row, and another 
   const { course, lesson, reading } = await publishedCourse(db);
   const w = await member(db, MEMBER, '/progress', { method: 'POST', body: { subject_kind: 'lesson', subject_uid: lesson.uid, status: 'completed', user_id: OTHER } });
   assert.equal(w.status, 200, JSON.stringify(w.body));
-  const rows = db.prepare('SELECT user_id FROM learning_progress').all() as any[];
-  assert.deepEqual(rows.map((x) => x.user_id), [MEMBER], 'the body named whose progress it was');
+  const rows = db.prepare('SELECT user_id, subject_kind FROM learning_progress ORDER BY subject_kind').all() as any[];
+  // D4643: the lesson's row, and its course's row derived by the server from it; every row the caller's own.
+  assert.deepEqual(rows.map((x) => [x.user_id, x.subject_kind]), [[MEMBER, 'course'], [MEMBER, 'lesson']], 'the body named whose progress it was');
   assert.equal((await member(db, OTHER, '/me')).body.completed.length, 0);
-  assert.equal((await member(db, MEMBER, '/me')).body.completed[0].title, 'Read the terms');
+  // D4643: the lesson, and the course its one required lesson completes, derived by the server.
+  assert.deepEqual((await member(db, MEMBER, '/me')).body.completed.map((x: any) => x.title).sort(), ['Fundraising 101', 'Read the terms']);
   const page = await member(db, MEMBER, `/courses/${course.slug}`);
   assert.deepEqual(page.body.progress, { required: 1, completed: 1, percent: 100 });
   assert.equal(page.body.modules[0].lessons[0].progress.status, 'completed');

@@ -59,5 +59,11 @@ and citations by number keep working.
 | `D4494.md` | Distribution Inbox source scope, personal unread receipts, honest missing bodies/counts and the explicit Send boundary. |
 | `D4486.md` | #4486: Distribution Channels, compatible kinds and read-only connection cards. |
 | `D4496.md` | Distribution cross-tab states and responsive layouts (#4496). |
+| `D4592.md` | Fair eligible-work discovery, bounded sweep progress and isolated resend capacity (#4592). |
 | `D4576.md` | Adds 32 specialist agent skills and synthetic golden cases through the existing library contract. |
 | `D4587.md` | Validate review queue ordering, venture-aware links and selected-session request identity. |
+| `D4555.md` | Cloudflare Agent Skills SDK as a loading adapter behind D1-authorized skills (#4555). |
+| `D4706.md` | Deployment identity kept apart from its attempts, a compare-and-set retry, reconcile for an unknown dispatch, and the shared mutation outcome (#4706). |
+| `D4589.md` | Validate next-action policy shared by the desktop overview and the phone root (#4589). |
+| `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
+| `D4569.md` | #4569 (proposed, gated on #4567/#4568): conditional D1 partitioning options A–D, authority boundaries, payer shard key and the financial-consistency protocol. No migration. |

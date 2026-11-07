@@ -258,7 +258,7 @@ test('the defaults: engine off, autonomy manual, runtime do; sdk without its bin
   } finally { w.close(); }
 });
 
-test('the import guard: nothing outside src/agents/sdkRuntime.ts imports the `agents` package', () => {
+test('the import guard: nothing outside src/agents/sdkRuntime.ts imports the `agents` package (D4555: services/agents/skillsSdk.ts, `agents/skills` only)', () => {
   const root = fileURLToPath(new URL('../src/', import.meta.url));
   const offenders: string[] = [];
   const walk = (dir: string) => {
@@ -271,6 +271,12 @@ test('the import guard: nothing outside src/agents/sdkRuntime.ts imports the `ag
       const rel = p.slice(root.length);
       if (rel === 'agents/sdkRuntime.ts') continue;
       const src = readFileSync(p, 'utf8');
+      // D4555 (#4555): the skills adapter may import the `agents/skills` entry and nothing else of the package.
+      if (rel === 'services/agents/skillsSdk.ts') {
+        const specs = [...src.matchAll(/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](agents(?:\/[^'"]*)?)['"]/g)].map((m) => m[1]);
+        if (!specs.length || specs.some((x) => x !== 'agents/skills') || /(?:import\s*\(|require\s*\()\s*['"]agents/.test(src)) offenders.push(rel);
+        continue;
+      }
       if (/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"]agents(?:\/[^'"]*)?['"]/.test(src)) offenders.push(rel);
     }
   };

@@ -69,11 +69,12 @@ const TABLES = ['users', 'super_admins', 'user_sessions', 'projects', 'job_posti
  *   week 10-19: the founder on 101 (10-20), the explorer on 102 (10-21)  → 2 (to date)
  * The period before (2026-08-31 to 2026-09-28): one, the explorer on 101 (09-10).
  */
-function seeded(pulseMembers = 8) {
+function seeded(pulseMembers = 8, otherPulses = 0) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of TABLES) db.exec(ddl(t));
   db.exec(readFileSync(resolve(SQL, 'migrations/550_job_postings_submitted_at.sql'), 'utf8'));
   db.exec(readFileSync(resolve(SQL, 'migrations/609_job_postings_published_at.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(SQL, 'migrations/551_network_profiles_roster.sql'), 'utf8'));
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   // users.role admits no `mentor` (its CHECK); participationRole's own test covers it.
@@ -115,6 +116,8 @@ function seeded(pulseMembers = 8) {
   nwk.run('Advisor Private', 'advisor', 1);
   nwk.run('Partner Private', 'partner', 0);
   nwk.run('Investor Private', 'investor', 1);
+  // #4717: an archived row is off the roster and is never counted in it.
+  db.prepare("INSERT INTO network_profiles (name, kind, is_active, archived_at) VALUES ('Archived Private', 'advisor', 0, '2026-10-01 10:00:00')").run();
 
   const e = db.prepare('INSERT INTO experts (id, uid, name, verified, is_active, hidden_by_admin) VALUES (?, ?, ?, ?, ?, ?)');
   e.run(1, 'real-1', 'Expert1 Private', 1, 1, 0);
@@ -129,6 +132,13 @@ function seeded(pulseMembers = 8) {
   b.run(1, 4, '2026-09-15 10:00:00'); // the period before
 
   const w = db.prepare('INSERT INTO wellbeing_daily_pulses (user_id, day, mood_enc) VALUES (?, ?, ?)');
+  // #4717: the band counts founders. Pulse members 100+ are founders; 200+ hold other roles.
+  for (let i = 0; i < pulseMembers; i++) u.run(100 + i, 'founder', `Pulse${i} Private`, `pulse${i}@secret.example`);
+  const others = ['investor', 'advisor', 'partner', 'admin'];
+  for (let i = 0; i < otherPulses; i++) {
+    u.run(200 + i, others[i % others.length], `Other${i} Private`, `other${i}@secret.example`);
+    w.run(200 + i, '2026-10-07', 'ciphertext-not-to-be-read');
+  }
   for (let i = 0; i < pulseMembers; i++) {
     w.run(100 + i, '2026-10-05', 'ciphertext-not-to-be-read');
     w.run(100 + i, '2026-10-06', 'ciphertext-not-to-be-read'); // the same member twice is one member
@@ -156,7 +166,23 @@ test('queue: the jobs waiting, Overdue after 72 hours from submission, and a wai
   assert.deepEqual(q.jobs, {
     available: true, pending: 3, overdue: 1, wait_not_recorded: 1,
     oldest_submitted_at: at(NOW - 100 * HOUR), oldest_wait_hours: 100,
+    // #4717: the rows behind `pending`, oldest first; the one submitted before migration 550 last, undated.
+    review: [
+      { posting_id: 103, title: 'Ops Lead', company: null, waiting_since: new Date(NOW - 100 * HOUR).toISOString(), waiting_hours: 100, overdue: true },
+      { posting_id: 104, title: 'PM', company: null, waiting_since: new Date(NOW - 10 * HOUR).toISOString(), waiting_hours: 10, overdue: false },
+      { posting_id: 105, title: 'Analyst', company: null, waiting_since: null, waiting_hours: null, overdue: false },
+    ],
   });
+});
+
+test('#4717 jobs: the five postings with most applications of all time, each with its days open', async () => {
+  const j = (await read()).blocks.jobs as any;
+  // All time, not the window: 101 five (one in the period before), 102 three (one before both), 103 one.
+  assert.deepEqual(j.most_applied.map((m: any) => [m.posting_id, m.title, m.company, m.applications]), [
+    [101, 'Staff Engineer', 'Acme Robotics', 5], [102, 'Designer', null, 3], [103, 'Ops Lead', null, 1],
+  ]);
+  assert.equal(j.most_applied[0].days_open, 10);
+  assert.deepEqual(j.most_applied[1].days_open, { recorded: false, reason: DAYS_OPEN_REASON });
 });
 
 test('jobs: applications in the window and before, weekly with the current week to date, postings by status, the top five', async () => {
@@ -199,9 +225,13 @@ test('circles: totals by state, type and access, and the members as entered, typ
   });
 });
 
-test('network: by kind with mentor as advisor, active and inactive', async () => {
+test('network: by kind with mentor as advisor, active and hidden; an archived row is counted only as archived', async () => {
+  // Mutation checked (#4717): drop the archived branch and advisor reads 3, inactive 2.
   assert.deepEqual((await read()).blocks.network, {
-    available: true, by_kind: { advisor: 2, partner: 1, investor: 1 }, active: 3, inactive: 1,
+    available: true,
+    by_kind: { advisor: 2, partner: 1, investor: 1 },
+    by_kind_state: { advisor: { active: 2, hidden: 0 }, partner: { active: 0, hidden: 1 }, investor: { active: 1, hidden: 0 } },
+    active: 3, inactive: 1, archived: 1,
   });
 });
 
@@ -226,6 +256,16 @@ test('wellbeing: a cohort under seven withholds the band', async () => {
   assert.deepEqual(six.checkins, { available: true, withheld: true, min_cohort: 7, band: null });
   const seven = (await read(seeded(7))).blocks.wellbeing as any;
   assert.deepEqual(seven.checkins.band, { at_least: 5, under: 10 });
+});
+
+test('#4717 wellbeing: other roles never lift a founder cohort over the floor', async () => {
+  // Five founders and six investors, advisors, partners and admins checked in: the band is withheld.
+  // Mutation checked: count every user_id and eleven members show a band.
+  const mixed = (await read(seeded(5, 6))).blocks.wellbeing as any;
+  assert.deepEqual(mixed.checkins, { available: true, withheld: true, min_cohort: 7, band: null });
+  // Eight founders and twenty others: the band is the founders' alone.
+  const many = (await read(seeded(8, 20))).blocks.wellbeing as any;
+  assert.deepEqual(many.checkins.band, { at_least: 5, under: 10 });
 });
 
 test('the check-in band never reads an answer column', () => {
@@ -259,6 +299,22 @@ function withEvents(db = seeded()) {
     INSERT INTO event_checkins (event_id, registration_id, code, checked_in_at) VALUES (502, 1, 'c1', '2026-10-10 10:01:00');`);
   return db;
 }
+
+test('#4717 the rows behind the counts: next up is the soonest of Upcoming, waiting is the oldest of the queue', async () => {
+  const b = (await read(withEvents())).blocks as any;
+  // Upcoming counts published AND waiting events in the next 30 days; its rows are those same events, soonest first.
+  // Mutation checked: list published events only and the waiting one (501) drops out while Upcoming still counts it.
+  assert.equal(b.events.next_up.total, b.events.upcoming.events);
+  assert.deepEqual(b.events.next_up.rows.map((r: any) => [r.event_id, r.status, r.seats_taken, r.capacity]), [
+    [503, 'published', 1, 1], [501, 'pending_review', 0, 10],
+  ]);
+  // The queue's oldest waiting event, from its submission, Overdue past 72 hours.
+  assert.equal(b.queue.event_rows.total, b.queue.events.count);
+  assert.deepEqual(b.queue.event_rows.rows.map((r: any) => [r.event_id, r.from_created, r.overdue]), [[501, false, true]]);
+  // Every event by status, for the page's empty rule, from the same rows.
+  assert.equal(b.events.by_status.counts.published, 2);
+  assert.equal(b.events.by_status.counts.pending_review, 1);
+});
 
 test('the events parts are D918\'s own blocks, in Community\'s keys, and nothing is recomputed', async () => {
   const db = withEvents();
@@ -338,8 +394,12 @@ test('a failed store fails its own blocks only, never as a zero', async () => {
 
 test('counts only: no name, email or account id anywhere in the answer', async () => {
   for (const r of [await read(), await read(withEvents())]) {
-    const text = JSON.stringify(r);
-    assert.doesNotMatch(text, /@|Private|secret|fixture/, 'no person, and no event title');
+    // #4717: an event's title travels only in the rows behind a count (next up, waiting for review).
+    const b = (r as any).blocks;
+    const titled = { next: b.events?.next_up, review: b.queue?.event_rows };
+    const rest = { ...r, blocks: { ...b, events: { ...b.events, next_up: null }, queue: { ...b.queue, event_rows: null } } };
+    assert.doesNotMatch(JSON.stringify(rest), /@|Private|secret|fixture/, 'no person, and no event title outside its rows');
+    assert.doesNotMatch(JSON.stringify(titled), /@|Private|secret/, 'no person in the event rows');
     const walk = (v: unknown, path: string) => {
       if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${path}[${i}]`));
       if (v && typeof v === 'object') {

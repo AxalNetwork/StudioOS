@@ -336,9 +336,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Grow · Product improvement', key: 'fill:feedback_theme', route: '/grow/product-improvement', label: 'Propose themes', kind: 'synth', handler: 'form',
     at: [[CYCLE, "'feedback_theme'"]],
   },
+  // D4493: the retired 'Draft a sequence' band moved, key and models kept (agents propose it too):
+  // the sequence builder's 'Ask Eadwyn for a sequence' runs D4488's drafting task with kind `sequence`.
   {
-    page: 'Founder · Grow · Distribution', key: 'draft:grow/customers', route: '/grow/distribution', label: 'Draft a sequence', kind: 'write', handler: 'draft',
-    at: [[CYCLE, "surface: 'grow/customers'"]],
+    page: 'Founder · Grow · Distribution', key: 'draft:grow/customers', route: '/grow/distribution/prospects', label: 'Ask Eadwyn for a sequence', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/cycles/distribution/SequenceBuilder.jsx', 'askApi.run(']],
   },
   // D4488: campaign drafts run in the Ask intent; models and usage remain in AIRail.
   {

@@ -13,7 +13,7 @@ its `ZONE` map.
 | `OpportunitiesZone.jsx` | PR1 · Opportunities | `/practice/opportunities` | FEED | `advisor_bookings` |
 | `EngagementsZone.jsx` | PR2 · Engagements | `/practice/engagements` | WORK BOARD | `advisor_engagements` (migration 238) |
 | `DeliveryZone.jsx` | PR3 · Delivery | `/practice/delivery` | COLLECTION | `advisor_deliverables` + `advisor_deliverable_versions` (migration 239) |
-| `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205). Its emerald header primary "Block a date range" opens the page's own Block form (D1424, replacing D1596's three prompts) |
+| `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205). Its emerald header primary "Block a date range" opens the page's own Block form (D1424, replacing D1596's three prompts). A Block card accepted in the Ask panel lands in the same form, filled from the address (`?block=<uid>&from=&until=`, #4737, `../../../ui/sessionsBlockHandoff.js`); the proposal is decided only after Block writes |
 | `EarningsZone.jsx` | **D4** · Earnings | `/practice/earnings` | LEDGER | the take rate, payout account, payouts and per-line cut (241) + the period note (242) + `advisor_bookings` amounts (205) + `advisor_engagements` retainers (238) |
 
 **THE OPS CANVAS'S FOUR PRACTICE SCREENS ARE SECTIONS OF THESE ZONES, NOT
@@ -80,6 +80,13 @@ because the relationship carrying a deliverable is the engagement and no grant i
 involved. A work product can only be SENT to an engagement whose client has an
 Axal account, and `EngagementsZone.jsx` is where that account is linked — from the
 people who have booked this advisor, never by typing an id. D73.
+
+**A sent version keeps the person it was sent to** (D4684, #4684). The send
+records `recipient_user_id`, and the client's reads and receipts are authorised
+against it, never against the engagement's current client. Relinking an
+engagement or a work product moves nothing already sent: new sends go to the
+account linked now, and the trail says who each version went to. Each receipt
+records the account that made it (`opened_by_user_id`, `signed_off_by_user_id`).
 
 **What a replaced tab could do that its artboard does not draw moves with it.**
 Delivery's post-session review loop — sessions held, which have a review, your

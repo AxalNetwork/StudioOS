@@ -175,6 +175,8 @@ test('2: rule order — no interview, then a session to review, then the next co
     why: 'Validate starts with one interview. Everything else in the venture builds on what it finds.',
     cta: { label: 'Record a session', href: `/validate/record?project=${P}` },
     then: 'Write the claim you most need to be true.',
+    // D4589 (#4589): the shared next-action shape.
+    secondary: [], state: 'ok',
   });
   const iv = interview(db, P);
   session(db, iv, 'transcribed', `${day(-1)} 10:00:00`);
@@ -698,7 +700,12 @@ test('11: a throwing query in one part leaves that part null and the rest of the
     NEEDLE = needle;
     try {
       const x = (await vRead(v)).body;
-      assert.equal(x[nulled], null, `validate ${nulled}`);
+      if (nulled === 'focus') {
+        // D4589 (#4589): the session read failing is said, never a step it did not check.
+        assert.equal(x.focus.rule, 'unavailable');
+        assert.equal(x.focus.cta, null);
+        assert.match(x.focus.why, /could not be read\. This is not a claim that nothing is waiting\./);
+      } else assert.equal(x[nulled], null, `validate ${nulled}`);
       for (const k of ['focus', 'meter', 'index'].filter((y) => y !== nulled)) assert.notEqual(x[k], null, `validate ${k}`);
       assert.deepEqual(x.figures, whole.figures);
       // The demand card reads its bar with the meter's own statement text, so

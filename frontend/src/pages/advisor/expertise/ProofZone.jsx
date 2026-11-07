@@ -1,14 +1,21 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Check, Copy, Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
+  Field, MoreRows, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import {
+  PROOF_DELETE_FAILED, PROOF_NOT_PUBLIC, proofDeleteLines, proofDeleteTitle, proofDeletedLine,
+} from './expertiseModel';
+import { usePagedList } from './pages';
+
+const readProofPage = (page) => api.listMyAdvisorProof(page);
 
 /**
  * Expertise · Proof — what you claim, and who has confirmed it.
@@ -32,6 +39,17 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
  * NOTHING IS SENT FROM HERE. Recording the ask and delivering it are separate,
  * and a page that quietly emailed an address someone typed would be deciding
  * the second one on its own.
+ *
+ * D4681 (#4681): DELETING IS DELIBERATE AND WHOLE. The trash button asks
+ * first and says what goes with the claim (every consent record, names and
+ * statements, and any link still out), that it cannot be undone and that no
+ * copy is kept. The Worker deletes the claim and its consents in one batch,
+ * so a failure leaves both as they were, and the page says so.
+ *
+ * NOTHING HERE IS PUBLIC. `is_public` is stored, but no page shows a proof item
+ * to anyone else; publishing waits on the attestation rules (P1). The header's
+ * Public preview opens the public profile as a founder sees it, which is how
+ * the advisor can check that for themselves.
  */
 
 const KINDS = [
@@ -132,22 +150,29 @@ function AskForm({ item, onDone }) {
 }
 
 export default function ProofZone() {
-  const [state, setState] = useState({ loading: true, error: '', items: [] });
+  // #4689: a page at a time; the tiles read `counts`, the whole record's figures.
+  const list = usePagedList(readProofPage, { errorText: 'Your proof record could not be read.' });
+  const state = { loading: list.loading, error: list.error, items: list.rows };
+  const counts = list.res?.counts || null;
+  const load = list.load;
   const [draft, setDraft] = useState(BLANK);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [asking, setAsking] = useState(null);
   const [view, setView] = useState('all');
+  const [confirming, setConfirming] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [uid, setUid] = useState(null);
+  const navigate = useNavigate();
 
-  const load = useCallback(async () => {
-    setState((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorProof();
-      setState({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [] });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your proof record could not be read.', items: [] });
-    }
+  // The public profile's address, for Public preview. A read that fails leaves
+  // the preview disabled rather than guessing a link.
+  useEffect(() => {
+    let live = true;
+    api.getMyAdvisor?.().then((p) => { if (live) setUid(p?.uid || null); }, () => {});
+    return () => { live = false; };
   }, []);
+
 
   useEffect(() => { load(); }, [load]);
 
@@ -176,12 +201,26 @@ export default function ProofZone() {
 
   const remove = async (row) => {
     setNote(null);
+    setDeleting(true);
     try {
-      await api.deleteMyAdvisorProof(row.id);
+      const res = await api.deleteMyAdvisorProof(row.id);
+      setConfirming(null);
+      setNote({ ok: true, text: proofDeletedLine(Number(res?.consents_removed) || 0) });
       await load();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be removed.' });
+      setNote({ ok: false, text: `${PROOF_DELETE_FAILED}${err?.message ? ` (${err.message})` : ''}` });
+    } finally {
+      setDeleting(false);
     }
+  };
+
+  // Public preview: the public profile, as a founder sees it. Disabled until a
+  // saved profile gives it an address.
+  const previewPath = uid ? `/advisors/${encodeURIComponent(uid)}` : null;
+  const preview = {
+    onClick: () => previewPath && navigate(previewPath),
+    disabled: !previewPath,
+    title: previewPath ? 'Your public profile, as a founder sees it' : 'Save your profile first: there is no public page yet',
   };
 
   const attested = state.items.filter((p) => p.attested);
@@ -204,9 +243,9 @@ export default function ProofZone() {
       {state.items.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: 'Attested', value: String(attested.length), note: 'named client, dated' },
-            { label: 'Awaiting consent', value: String(awaiting.length), note: 'asked, no answer yet' },
-            { label: 'Self-stated', value: String(selfStated.length), note: 'no external attestation' },
+            { label: 'Attested', value: String(counts?.attested ?? attested.length), note: 'named client, dated' },
+            { label: 'Awaiting consent', value: String(counts?.awaiting ?? awaiting.length), note: 'asked, no answer yet' },
+            { label: 'Self-stated', value: String(counts?.self_stated ?? selfStated.length), note: 'no external attestation' },
             // No verifying body is connected, so this is absent — never a dash
             // that reads like a value somebody chose (D392).
             { label: 'Credential verified', value: null, note: 'no verifying body connected' },
@@ -225,6 +264,7 @@ export default function ProofZone() {
           title="Add a claim"
           blurb="Your own statement of your work. It renders as self-stated until a named person confirms it through their own link."
         />
+        <p className="-mt-1 mb-3 max-w-2xl text-[12px] leading-relaxed text-axal-muted" data-testid="advisor-proof-not-public">{PROOF_NOT_PUBLIC}</p>
         <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="What">
             <input className={inputClass} value={draft.title}
@@ -265,12 +305,12 @@ export default function ProofZone() {
         className="mb-3"
         role="advisor"
         filters={advisorZoneFilters('expertise/proof', { value: view, onChange: setView })}
-        actions={advisorZoneActions('expertise/proof', { view: { header: ['Proof', 'Kind', 'Detail', 'Attested', 'Consents recorded'], rows: shown, cells: (r) => [r.title, r.kind, r.detail, r.attested ? 'yes' : 'no', (r.consents || []).length] } })}
+        actions={advisorZoneActions('expertise/proof', { handlers: { openPublicPreview: preview }, view: { header: ['Proof', 'Kind', 'Detail', 'Attested', 'Consents recorded'], rows: shown, cells: (r) => [r.title, r.kind, r.detail, r.attested ? 'yes' : 'no', (r.consents || []).length] } })}
       />
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
-          <p className="text-[12.5px] text-axal-muted">{`No claim is in this state. ${state.items.length} in total.`}</p>
+          <p className="text-[12.5px] text-axal-muted">{`No claim is in this state. ${counts?.total ?? state.items.length} in total.`}</p>
         )}
         <div className="space-y-3">
           {shown.map((row) => {
@@ -303,12 +343,29 @@ export default function ProofZone() {
                       onClick={() => setAsking(asking === row.id ? null : row.id)}>
                       {asking === row.id ? 'Close' : 'Ask someone to confirm'}
                     </button>
-                    <button type="button" className={ghostButtonClass} onClick={() => remove(row)}
-                      aria-label={`Remove ${row.title}`}>
+                    <button type="button" className={ghostButtonClass} onClick={() => setConfirming(confirming === row.id ? null : row.id)}
+                      aria-label={`Delete ${row.title}`} data-testid={`advisor-proof-delete-${row.id}`}>
                       <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
+
+                {confirming === row.id && (
+                  <div role="alertdialog" aria-label={proofDeleteTitle(row)} data-testid={`advisor-proof-confirm-${row.id}`}
+                    className="mt-3 rounded-[10px] border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
+                    <div className="text-[12.5px] font-bold">{proofDeleteTitle(row)}</div>
+                    <ul className="m-0 mt-1 list-disc pl-5 text-[12px] leading-relaxed text-axal-muted">
+                      {proofDeleteLines(row).map((l) => <li key={l}>{l}</li>)}
+                    </ul>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" className={ghostButtonClass} onClick={() => setConfirming(null)} data-testid={`advisor-proof-keep-${row.id}`}>Keep it</button>
+                      <button type="button" disabled={deleting} onClick={() => remove(row)} data-testid={`advisor-proof-delete-confirm-${row.id}`}
+                        className="inline-flex min-h-[32px] items-center rounded-lg bg-axal-destructive px-3 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-50">
+                        {deleting ? 'Deleting…' : 'Delete for good'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {live.map((c) => (
                   <blockquote key={c.id} className="mt-3 border-l-2 border-emerald-400 pl-3">
@@ -341,6 +398,7 @@ export default function ProofZone() {
             );
           })}
         </div>
+        <MoreRows line={list.line} onMore={list.more} busy={list.moreBusy} error={list.moreError} testid="advisor-proof-more" />
       </ZoneBody>
     </div>
   );

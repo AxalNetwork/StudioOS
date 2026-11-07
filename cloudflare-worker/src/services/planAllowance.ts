@@ -8,7 +8,16 @@
  *
  * THE PRICE THAT COUNTS IS THE MEMBER'S OWN. `member_subscription_amounts`
  * (migration 505) records each member plan's amount from the subscription
- * webhook, so a discounted or grandfathered price counts as paid. A
+ * webhook, so a discounted or grandfathered price counts as paid.
+ *
+ * D4703 (#4703): "discounted" was true of a grandfathered PRICE and false of
+ * a COUPON. The amount was Σ unit_amount × quantity, the list price, so a
+ * member on 50% off was given the allowance of the full price. A coupon on the
+ * subscription (`discount`, or expanded entries of `discounts`) now comes off
+ * first. A discount the event names only by id cannot be read, so that charge
+ * is unreadable and nothing is recorded, rather than the list price. Amounts
+ * are also ordered by the event's `created`, so a late older event cannot
+ * overwrite a newer amount. A
  * subscriber with no recorded row yet (subscribed before migration 505) falls
  * back to the catalogue's current price for the plan the mirrors say they
  * hold, and says so (`source: 'catalogue'`).
@@ -95,7 +104,49 @@ export function chargeOf(obj: Record<string, unknown>): { amount_cents: number; 
     amount += unit * qty;
   }
   const priceId = typeof first.price?.id === 'string' && /^price_[A-Za-z0-9]+$/.test(first.price.id) ? first.price.id : null;
-  return Number.isSafeInteger(amount) ? { amount_cents: amount, currency: first.price?.currency ?? null, interval, interval_count: count, price_id: priceId } : null;
+  const currency = first.price?.currency ?? null;
+  const paid = Number.isSafeInteger(amount) ? afterDiscounts(amount, currency, obj) : null;
+  return paid != null ? { amount_cents: paid, currency, interval, interval_count: count, price_id: priceId } : null;
+}
+
+interface Coupon { percent_off?: number | null; amount_off?: number | null; currency?: string | null }
+interface Discount { id?: string; coupon?: Coupon | null }
+
+/**
+ * D4703: the amount after the subscription's own coupons, or null when a
+ * discount cannot be read. A percentage comes off first, then a fixed amount
+ * in the charge's currency, never below zero. Rounded down, so an allowance
+ * is never figured on more than was paid.
+ */
+export function afterDiscounts(amountCents: number, currency: string | null, obj: Record<string, unknown>): number | null {
+  const found: Discount[] = [];
+  const single = obj.discount as Discount | null | undefined;
+  if (single && typeof single === 'object') found.push(single);
+  const many = Array.isArray(obj.discounts) ? obj.discounts : [];
+  for (const d of many) {
+    if (typeof d === 'string') {
+      // An id only: readable just when it is the single discount already in hand.
+      if (!found.some((f) => f.id === d)) return null;
+    } else if (d && typeof d === 'object' && !found.some((f) => f.id && f.id === (d as Discount).id)) {
+      found.push(d as Discount);
+    }
+  }
+  const coupons = found.map((d) => d.coupon);
+  if (coupons.some((c) => !c || typeof c !== 'object')) return null;
+  let paid = amountCents;
+  for (const c of coupons as Coupon[]) {
+    if (typeof c.percent_off === 'number') {
+      if (!(c.percent_off >= 0 && c.percent_off <= 100)) return null;
+      paid = Math.floor((paid * (100 - c.percent_off)) / 100);
+    }
+  }
+  for (const c of coupons as Coupon[]) {
+    if (typeof c.percent_off === 'number') continue;
+    if (typeof c.amount_off !== 'number' || !Number.isSafeInteger(c.amount_off) || c.amount_off < 0) return null;
+    if (!currency || String(c.currency || '').toLowerCase() !== String(currency).toLowerCase()) return null;
+    paid = Math.max(0, paid - c.amount_off);
+  }
+  return paid;
 }
 
 /**
@@ -141,7 +192,7 @@ export async function subscriptionOwner(env: Env, obj: Record<string, unknown>,
  * subscription, so an out-of-order older event cannot revive one.
  */
 export async function recordSubscriptionAmount(env: Env, obj: Record<string, unknown>,
-  kind: { isPlan: boolean; isTier: boolean; isInvestor: boolean }): Promise<'recorded' | 'skipped'> {
+  kind: { isPlan: boolean; isTier: boolean; isInvestor: boolean }, eventCreated: number | null = null): Promise<'recorded' | 'skipped'> {
   if (typeof obj.id !== 'string' || !obj.id) return 'skipped';
   const owner = await subscriptionOwner(env, obj, kind);
   const charge = chargeOf(obj);
@@ -149,14 +200,18 @@ export async function recordSubscriptionAmount(env: Env, obj: Record<string, unk
   const status = typeof obj.status === 'string' ? obj.status : 'active';
   const periodEnd = typeof obj.current_period_end === 'number' ? new Date(obj.current_period_end * 1000).toISOString() : null;
   await env.DB.prepare(`INSERT INTO member_subscription_amounts
-      (subscription_id, user_id, plan_family, amount_cents, currency, interval, interval_count, status, period_end, price_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (subscription_id, user_id, plan_family, amount_cents, currency, interval, interval_count, status, period_end, price_id, event_created)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(subscription_id) DO UPDATE SET user_id = excluded.user_id, plan_family = excluded.plan_family,
       amount_cents = excluded.amount_cents, currency = excluded.currency, interval = excluded.interval,
       interval_count = excluded.interval_count, status = excluded.status, period_end = excluded.period_end,
-      price_id = COALESCE(excluded.price_id, member_subscription_amounts.price_id), updated_at = datetime('now')
-    WHERE member_subscription_amounts.status <> 'canceled'`)
-    .bind(obj.id, owner.userId, owner.family, charge.amount_cents, charge.currency, charge.interval, charge.interval_count, status, periodEnd, charge.price_id).run();
+      price_id = COALESCE(excluded.price_id, member_subscription_amounts.price_id),
+      event_created = COALESCE(excluded.event_created, member_subscription_amounts.event_created), updated_at = datetime('now')
+    WHERE member_subscription_amounts.status <> 'canceled'
+      AND (excluded.event_created IS NULL OR member_subscription_amounts.event_created IS NULL
+           OR excluded.event_created >= member_subscription_amounts.event_created)`)
+    .bind(obj.id, owner.userId, owner.family, charge.amount_cents, charge.currency, charge.interval, charge.interval_count, status, periodEnd, charge.price_id,
+      typeof eventCreated === 'number' && Number.isSafeInteger(eventCreated) ? eventCreated : null).run();
   return 'recorded';
 }
 

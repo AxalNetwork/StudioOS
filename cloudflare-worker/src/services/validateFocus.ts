@@ -6,9 +6,8 @@
  *
  * THE FOCUS is the first rule that holds:
  *   1. the venture has no interview: record the first conversation;
- *   2. the newest actionable session needs review (transcribed, or structured
- *      with pending placements) and the caller can write: review it. Completed,
- *      draft and already-cleared sessions do not hide older pending work. The why line
+ *   2. the newest session needs review (transcribed, or structured with
+ *      pending placements) and the caller can write: review it. The why line
  *      counts what its placements would move, in pain themes (phrases resolved
  *      through the pain-group model, so two wordings of one theme count once)
  *      and hypotheses, never in placements. A pain that names one of the
@@ -17,6 +16,10 @@
  *      meter's count in the why and the first other card's `next` as Then;
  *   4. anyone else: the first card's own `next`, or no focus. A reader who
  *      cannot write is never sent to a write.
+ * D4589 (#4589) put these rules, and the Stop, missing fit, unrecorded
+ * result, mixed evidence, decision-ready and Plan the build cases between 2
+ * and 3, in one pure policy, `validateNextAction.ts`; `focusOf` reads its
+ * facts. Desktop and phone draw the same result.
  *
  * THE METER is interviews this month against `metric_targets` key
  * `interviews_month_target`; with no target it carries the count and no bar.
@@ -31,6 +34,8 @@ import { loadPainGroupModel, normPhrase, resolvePhrase } from './painGroups';
 import { INTERVIEWS_TARGET_KEY } from './validateWriters';
 import { canReadDecision, type ProjectRef } from '../routes/_founder_validate_helpers';
 import { currentDecision } from './verdict';
+import { claimsOf, loadHypotheses, loadInterviews } from './cycleValidate';
+import { nextAction, UNREAD, type ClaimFact, type ResultFact, type ReviewFact } from './validateNextAction';
 import {
   cardFocus, dayMonth, plural, sentence, usdShort, UNREADABLE,
   type Focus, type IndexRow, type Meter,
@@ -38,9 +43,6 @@ import {
 
 export type { Focus };
 
-const recordHref = (projectId: number) => `/validate/record?project=${projectId}`;
-export const reviewHref = (projectId: number, interviewId: number, sessionId: number) =>
-  `/validate/customer-research/${interviewId}?project_id=${projectId}&session=${sessionId}`;
 
 /** What a session's pending placements would move: distinct themes and hypotheses. */
 export async function pendingMoves(env: Env, projectId: number, sessionId: number) {
@@ -71,65 +73,113 @@ export async function pendingMoves(env: Env, projectId: number, sessionId: numbe
   return { placements: list.length, themes: themes.size, hypotheses: hypotheses.size };
 }
 
-export async function focusOf(
-  env: Env, projectId: number, canWriteVenture: boolean, cards: Card[], figures: Figure[] = [], meter?: Meter | null,
-): Promise<Focus | null> {
-  const any = await env.DB.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
-    .bind(projectId).first<{ n: number }>();
-  if (Number(any?.n ?? 0) === 0) {
+/** Who is asking, for the policy's decision and Plan the build gates (D4589). */
+export type FocusViewer = { canReadDecision?: boolean; ownsVenture?: boolean };
+
+/** One fact, or `UNREAD` when its read failed: a failed read is never an empty one. */
+async function fact<T>(name: string, f: () => Promise<T>): Promise<T | typeof UNREAD> {
+  try {
+    return await f();
+  } catch (e) {
+    console.warn('[validateFocus] next-action fact unreadable:', name, (e as Error)?.message);
+    return UNREAD;
+  }
+}
+
+/**
+ * The session waiting for review, as the policy's review fact (rule 2). Stable
+ * queue order (D4587): newest recorded activity, then id. Every potentially
+ * actionable row is inspected, so a newer completed or draft session, or a
+ * structured one with nothing pending, never hides older review work.
+ */
+async function reviewFact(env: Env, projectId: number): Promise<ReviewFact | null> {
+  const candidates = (await env.DB.prepare(
+    `SELECT s.id, s.interview_id, s.status, COALESCE(s.stopped_at, s.updated_at, s.created_at) AS at, i.interviewee_name
+       FROM interview_sessions s JOIN discovery_interviews i ON i.id = s.interview_id
+      WHERE s.project_id = ? AND s.status IN ('transcribed', 'structured')
+      ORDER BY COALESCE(s.stopped_at, s.updated_at, s.created_at) DESC, s.id DESC`,
+  ).bind(projectId).all<{ id: number; interview_id: number; status: string; at: string | null; interviewee_name: string | null }>()).results ?? [];
+  for (const s of candidates) {
+    const moves = s.status === 'structured' ? await pendingMoves(env, projectId, s.id) : null;
+    if (s.status !== 'transcribed' && !(moves && moves.placements > 0)) continue;
+    const who = s.interviewee_name?.trim() || 'your interviewee';
+    const when = dayMonth(s.at);
+    const parts = moves ? [moves.themes && plural(moves.themes, 'pain theme', 'pain themes'), moves.hypotheses && plural(moves.hypotheses, 'hypothesis', 'hypotheses')].filter(Boolean) : [];
     return {
-      rule: 'first_interview', eyebrow: 'Validate · Next', headline: 'Record your first conversation.',
-      why: 'Validate starts with one interview. Everything else in the venture builds on what it finds.',
-      cta: { label: 'Record a session', href: recordHref(projectId) },
-      then: 'Write the claim you most need to be true.',
+      interviewId: Number(s.interview_id), sessionId: Number(s.id),
+      headline: `Review the interview with ${who}${when ? ` from ${when}` : ''}.`,
+      why: s.status === 'transcribed' ? 'It is transcribed but not yet placed.'
+        : parts.length ? `Its findings would move ${parts.join(' and ')}.` : 'Its findings are waiting for you to accept or discard them.',
     };
   }
-  if (canWriteVenture) {
-    // Stable queue order: newest recorded activity, then id. We inspect every
-    // potentially actionable row; a newer completed/draft session must not
-    // hide an older transcript or a structured session with pending findings.
-    const candidates = (await env.DB.prepare(
-      `SELECT s.id, s.interview_id, s.status, COALESCE(s.stopped_at, s.updated_at, s.created_at) AS at, i.interviewee_name
-         FROM interview_sessions s JOIN discovery_interviews i ON i.id = s.interview_id
-        WHERE s.project_id = ? AND s.status IN ('transcribed', 'structured')
-        ORDER BY COALESCE(s.stopped_at, s.updated_at, s.created_at) DESC, s.id DESC`,
-    ).bind(projectId).all<{ id: number; interview_id: number; status: string; at: string | null; interviewee_name: string | null }>()).results ?? [];
-    for (const s of candidates) {
-      const moves = s.status === 'structured' ? await pendingMoves(env, projectId, s.id) : null;
-      if (s.status === 'transcribed' || (moves && moves.placements > 0)) {
-        const who = s.interviewee_name?.trim() || 'your interviewee';
-        const when = dayMonth(s.at);
-        const parts = moves ? [moves.themes && plural(moves.themes, 'pain theme', 'pain themes'), moves.hypotheses && plural(moves.hypotheses, 'hypothesis', 'hypotheses')].filter(Boolean) : [];
-        return {
-          rule: 'review', eyebrow: 'Validate · Next',
-          headline: `Review the interview with ${who}${when ? ` from ${when}` : ''}.`,
-          why: s.status === 'transcribed' ? 'It is transcribed but not yet placed.'
-            : parts.length ? `Its findings would move ${parts.join(' and ')}.` : 'Its findings are waiting for you to accept or discard them.',
-          // D704 decision 9: the interview's record, opened on this session.
-          cta: { label: 'Review the interview', href: reviewHref(projectId, s.interview_id, s.id) },
-          then: null,
-        };
-      }
-    }
-  }
-  if (!canWriteVenture) return cardFocus('validate', cards);
+  return null;
+}
 
-  // Rule 3: a writer records the next conversation. The why's count and
-  // target are the meter's, read once, so the two never disagree.
-  const m = meter === undefined ? await meterOf(env, projectId, figures) : meter;
-  const count = m?.count;
-  const tail = count == null ? ''
-    : m!.target != null ? ` You are at ${count} of ${m!.target} this month.`
-      : ` Interviews this month: ${count}.`;
-  // Then: the first other card's next. Customer research's ("Log <n> more
-  // interviews") would only repeat the CTA.
-  const other = cards.find((c) => c.slug !== 'customer-research' && c.next?.text);
-  return {
-    rule: 'next_interview', eyebrow: 'Validate · Next', headline: 'Record your next customer conversation.',
-    why: `Every interview feeds the pain themes, the hypotheses and the verdict.${tail}`,
-    cta: { label: 'Record a session', href: recordHref(projectId) },
-    then: other ? sentence(other.next!.text) || null : null,
-  };
+/** The open claims with their interview evidence, as the Experiments card computes them. */
+async function claimFacts(env: Env, projectId: number): Promise<ClaimFact[]> {
+  const ctx = { env, projectId, today: new Date().toISOString().slice(0, 10) };
+  const [{ hyps, links }, interviews, model] = await Promise.all([loadHypotheses(ctx), loadInterviews(ctx), loadPainGroupModel(env, projectId, { strict: true })]);
+  return claimsOf(hyps, links, interviews, model).map((c) => ({
+    id: c.id, code: c.code, status: c.status, supporting: c.supporting, contradicting: c.contradicting, fit_unrecorded: c.fit_unrecorded,
+  }));
+}
+
+/** Experiments marked done whose observed result is empty, on open claims, oldest first. */
+async function resultFacts(env: Env, projectId: number): Promise<ResultFact[]> {
+  const rows = await env.DB.prepare(
+    `SELECT e.hypothesis_id, h.code, e.title FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id
+      WHERE e.project_id = ? AND h.project_id = ? AND h.retired_at IS NULL AND e.status = 'done'
+        AND (e.result IS NULL OR TRIM(e.result) = '')
+      ORDER BY e.updated_at, e.id LIMIT 5`,
+  ).bind(projectId, projectId).all<{ hypothesis_id: number; code: string; title: string }>();
+  return (rows.results || []).map((r) => ({ hypothesisId: Number(r.hypothesis_id), code: r.code, title: r.title }));
+}
+
+/**
+ * The overview's `focus`: D4589's next-action policy (`validateNextAction.ts`)
+ * over the facts read here. Each fact fails on its own and the policy then
+ * says the step could not be worked out, never a step it did not check.
+ */
+export async function focusOf(
+  env: Env, projectId: number, canWriteVenture: boolean, cards: Card[], figures: Figure[] = [], meter?: Meter | null,
+  viewer: FocusViewer = {},
+): Promise<Focus | null> {
+  const canRead = viewer.canReadDecision ?? canWriteVenture;
+  const interviews = await fact('interviews', async () => Number((await env.DB.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
+    .bind(projectId).first<{ n: number }>())?.n ?? 0));
+  const writer = canWriteVenture && interviews !== UNREAD && interviews > 0;
+  const none = { review: null, decision: null, claims: [] as ClaimFact[], results: [] as ResultFact[] };
+  const read = writer
+    ? {
+      review: await fact('review', () => reviewFact(env, projectId)),
+      decision: canRead ? await fact('decision', async () => {
+        const d = await currentDecision(env, projectId, 'venture');
+        return d ? { id: Number(d.id), decision: d.decision, decided_at: d.decided_at ?? null } : null;
+      }) : null,
+      claims: await fact('claims', () => claimFacts(env, projectId)),
+      results: await fact('results', () => resultFacts(env, projectId)),
+    }
+    : none;
+
+  // Rule 9's why: the meter's count and target, read once, so the two never disagree.
+  let meterTail = '';
+  let then: string | null = null;
+  if (writer) {
+    const m = meter === undefined ? await meterOf(env, projectId, figures) : meter;
+    const count = m?.count;
+    meterTail = count == null ? ''
+      : m!.target != null ? ` You are at ${count} of ${m!.target} this month.`
+        : ` Interviews this month: ${count}.`;
+    // Then: the first other card's next. Customer research's ("Log <n> more
+    // interviews") would only repeat the CTA.
+    const other = cards.find((c) => c.slug !== 'customer-research' && c.next?.text);
+    then = other ? sentence(other.next!.text) || null : null;
+  }
+  return nextAction({
+    projectId, canWrite: canWriteVenture, ownsVenture: viewer.ownsVenture ?? false, canReadDecision: canRead,
+    interviews, ...read, meterTail, then,
+    readerFocus: canWriteVenture ? null : cardFocus('validate', cards), dayMonth,
+  });
 }
 
 /** Interviews this month against the stored target. Null count when the figure is unreadable. */
