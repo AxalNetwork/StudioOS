@@ -83,7 +83,7 @@ test('asking needs their email, and a refusal is a fixed sentence keyed on its c
 function mountAttest() {
   return mountContracts(React.createElement(Routes, null, React.createElement(Route, { path: '/attest/:token', element: React.createElement(AttestConsentPage) })), '/attest/tok-123');
 }
-const attestRead = (o = {}) => ({ advisor_name: 'Ada', attester_name: 'Sam', email_hint: 's***@example.com', claim: { kind: 'engagement', title: 'Led the payments rebuild', organization: 'Acme', period_note: '2024', detail: 'Rebuilt it.' }, claim_sha256: 'abc', claim_changed: false, state: 'pending', statement: null, history: [{ kind: 'requested', created_at: '2026-11-06T10:00:00Z' }], ...o });
+const attestRead = (o = {}) => ({ advisor_name: 'Ada', attester_name: 'Sam', email_hint: 's***@example.com', claim: { kind: 'engagement', title: 'Led the payments rebuild', organization: 'Acme', period_note: '2024', detail: 'Rebuilt it.' }, claim_sha256: 'abc', claim_changed: false, state: 'pending', statement: null, history: [{ kind: 'asked', created_at: '2026-11-06T10:00:00Z' }], ...o });
 
 test('the attester sees the exact claim and answers only with the emailed code', async () => {
   const calls = stub({
@@ -123,7 +123,7 @@ test('a changed claim cannot be confirmed, and a confirmed one offers withdrawal
     assert.match(view.text(), /changed this claim since asking you/);
     assert.equal(view.nodes().some((n) => n.tagName === 'BUTTON' && walk(n).trim() === 'Email me a code'), false);
   } finally { await view.unmount(); restore(); }
-  stub({ getAdvisorProofConsentClaim: async () => attestRead({ state: 'confirmed', history: [{ kind: 'requested', created_at: 'x' }, { kind: 'confirmed', created_at: 'y' }] }) });
+  stub({ getAdvisorProofConsentClaim: async () => attestRead({ state: 'confirmed', history: [{ kind: 'asked', created_at: 'x' }, { kind: 'confirmed', created_at: 'y' }] }) });
   view = await mountAttest();
   try {
     await view.flush();

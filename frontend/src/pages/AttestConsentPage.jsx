@@ -60,7 +60,7 @@ const STATE_LABELS = {
   withdrawn: 'You withdrew your confirmation',
   needs_reconfirmation: 'Your earlier confirmation needs confirming again',
 };
-const EVENT_LABELS = { requested: 'Asked', confirmed: 'Confirmed', declined: 'Declined', withdrawn: 'Withdrawn', reconfirmed: 'Confirmed again' };
+const EVENT_LABELS = { asked: 'Asked', confirmed: 'Confirmed', declined: 'Declined', withdrawn: 'Withdrawn', reconfirmed: 'Confirmed again' };
 const when = (iso) => { const t = Date.parse(iso || ''); return Number.isNaN(t) ? null : new Date(t).toLocaleString(); };
 
 const inputClass =

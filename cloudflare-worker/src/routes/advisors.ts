@@ -1557,7 +1557,7 @@ advisors.post('/me/proof/:id/consent-request', async (c) => {
            trimOrNull(body.attester_role, 200), trimOrNull(body.relationship, 200),
            now, user.id, token, sha, pinned, now, now).run();
     const id = Number((r as any).meta?.last_row_id);
-    await proofEvent(c.env, id, 'requested', sha, now);
+    await proofEvent(c.env, id, 'asked', sha, now);
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE id = ?').bind(id).first<ConsentRow>();
     return c.json({ ...consentDto(fresh!, sha), delivered: false });
   } catch (e) { return mapError(c, e); }

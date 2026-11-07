@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS advisor_proof_consent_events (
   -- No REFERENCES: the history outlives a claim its advisor deletes, and it
   -- holds no name or address, only what happened and when.
   consent_id    INTEGER NOT NULL,
-  kind          TEXT NOT NULL CHECK (kind IN ('requested', 'confirmed', 'declined', 'withdrawn', 'reconfirmed')),
+  kind          TEXT NOT NULL CHECK (kind IN ('asked', 'confirmed', 'declined', 'withdrawn', 'reconfirmed')),
   claim_sha256  TEXT,
   created_at    TEXT NOT NULL
 );

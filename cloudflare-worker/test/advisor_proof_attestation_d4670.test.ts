@@ -145,7 +145,7 @@ test('a withdrawal cannot be silently reversed with what the requester holds; th
   const again = await call(env, 'POST', `/proof-consents/${tok}/respond`, null, { consent_text: 'Yes again', code: await codeFor(env, tok) });
   assert.equal(again.body.state, 'confirmed');
   const view = await call(env, 'GET', `/proof-consents/${tok}/claim`, null);
-  assert.deepEqual(view.body.history.map((h: any) => h.kind), ['requested', 'confirmed', 'withdrawn', 'reconfirmed']);
+  assert.deepEqual(view.body.history.map((h: any) => h.kind), ['asked', 'confirmed', 'withdrawn', 'reconfirmed']);
   assert.throws(() => db.prepare("UPDATE advisor_proof_consent_events SET kind = 'confirmed'").run(), /append-only/);
   assert.throws(() => db.prepare('DELETE FROM advisor_proof_consent_events').run(), /append-only/);
   list = await call(env, 'GET', '/me/proof', ada);
