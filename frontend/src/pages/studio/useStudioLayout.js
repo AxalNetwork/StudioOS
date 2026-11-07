@@ -2,6 +2,11 @@
  * D1419 (#3698) — one Studio's catalogue, its layout, and edit mode, over the
  * Worker's `/api/studio` (`studioLayoutApi`: D1421, D1418, D1594).
  *
+ * - D4622: the two reads start together and each commits on its own. The
+ *   saved layout draws its tiles (a module the catalogue has not named yet
+ *   shows its fallback title) while the catalogue is still loading, and the
+ *   catalogue failing leaves the layout as read. Each has its own retry:
+ *   `reload` re-reads the layout only, `reloadModules` the catalogue only.
  * - The two reads settle on their own. A failed layout read draws the
  *   profile's default with SM8a's note (`studioFallback.js`); a 403
  *   `no_studio_profile` draws SM12a; a 500 `layout_unreadable` draws the
@@ -47,6 +52,7 @@ export function deriveStudio({ profile, viewer, readOnly = false, modules, layou
   const admin = viewer?.role === 'admin';
   const noProfile = !!(layout?.failed && layout.kind === 'no_profile');
   const layoutRead = layout === undefined ? 'loading' : layout.failed ? 'failed' : 'ready';
+  const modulesRead = modules === undefined ? 'loading' : modules.failed ? 'failed' : 'ready';
   const catalogue = modules && !modules.failed && Array.isArray(modules.modules) ? modules.modules : null;
   let placed = [];
   if (layoutRead === 'failed' && !noProfile) placed = fallbackLayout(profile);
@@ -61,6 +67,7 @@ export function deriveStudio({ profile, viewer, readOnly = false, modules, layou
     groups: catalogue && Array.isArray(modules.groups) ? modules.groups : [],
     layout,
     layoutRead,
+    modulesRead,
     noProfile,
     placed,
     shown: editing ? draft : placed,
@@ -77,7 +84,7 @@ export function studioFromReads(args) {
     ...deriveStudio(args),
     saving: args.saving || 'idle',
     saveError: args.saveError || null,
-    dismissDropped: noop, reload: noop, customise: noop, done: noop, reset: noop,
+    dismissDropped: noop, reload: noop, reloadModules: noop, customise: noop, done: noop, reset: noop,
     askReset: false, setAskReset: noop, mapOpen: !!args.mapOpen, setMapOpen: noop, lockedKey: args.lockedKey || null, setLockedKey: noop,
     leave: null,
     edit: NO_EDIT,
@@ -89,6 +96,7 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
   const [modules, setModules] = useState(undefined);
   const [layout, setLayout] = useState(undefined);
   const [n, setN] = useState(0);
+  const [nm, setNm] = useState(0);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState([]);
   const [saving, setSaving] = useState('idle');
@@ -101,6 +109,18 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
   const gen = useRef(0);
   const busy = useRef(false);
 
+  // The catalogue. Its retry leaves the layout, and any save in flight, alone.
+  useEffect(() => {
+    let live = true;
+    setModules(undefined);
+    Promise.resolve().then(() => api.modules(sent)).then(
+      (value) => { if (live) setModules(value); },
+      (reason) => { if (!live) return; reportError('Studio:modules', reason); setModules(failed(reason, readFailureOf(reason))); },
+    );
+    return () => { live = false; };
+  }, [api, sent, nm]);
+
+  // The saved layout. A new read (first, retry, profile change) ends whatever the page was doing with the old one.
   useEffect(() => {
     let live = true;
     gen.current += 1;
@@ -109,15 +129,11 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
     setSaving('idle');
     setSaveError(null);
     setAskReset(false);
-    setModules(undefined);
     setLayout(undefined);
-    Promise.allSettled([api.modules(sent), api.layout(sent)]).then(([m, l]) => {
-      if (!live) return;
-      if (m.status === 'fulfilled') setModules(m.value);
-      else { reportError('Studio:modules', m.reason); setModules(failed(m.reason, readFailureOf(m.reason))); }
-      if (l.status === 'fulfilled') setLayout(l.value);
-      else { reportError('Studio:layout', l.reason); setLayout(failed(l.reason, readFailureOf(l.reason))); }
-    });
+    Promise.resolve().then(() => api.layout(sent)).then(
+      (value) => { if (live) setLayout(value); },
+      (reason) => { if (!live) return; reportError('Studio:layout', reason); setLayout(failed(reason, readFailureOf(reason))); },
+    );
     return () => { live = false; gen.current += 1; busy.current = false; };
   }, [api, sent, n]);
 
@@ -130,6 +146,7 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
   const leave = useLeaveGuard(dirty);
 
   const reload = useCallback(() => { setEditing(false); setSaveError(null); setDismissed(false); setN((x) => x + 1); }, []);
+  const reloadModules = useCallback(() => setNm((x) => x + 1), []);
 
   const customise = useCallback(() => {
     if (!canCustomise || busy.current) return;
@@ -206,6 +223,7 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
     saveError,
     dismissDropped: () => setDismissed(true),
     reload,
+    reloadModules,
     customise,
     done,
     reset,

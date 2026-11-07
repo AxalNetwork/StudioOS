@@ -9,7 +9,7 @@ import { workAdapter } from './workAdapter.js';
 import { NOT_RECORDED as NOT_RECORDED_WORD } from '../../lib/absence';
 import {
   BACKLOG_COLUMNS, BURN_RANGES, BURN_SPLITS, WORK_PURPOSE, WORK_TABS,
-  assigneeLine, backlogRows, boardColumns, burnup, canMove, columnLabel, dueLine, moveTargets, needsYou, runChip, runCost, runOutcome, runSheet,
+  assigneeLine, backlogRows, boardColumns, burnup, canMove, columnLabel, dueLine, moveTargets, needsYou, runChip, runCost, runOutcome, runSheet, refusedOf,
 } from './workModel.js';
 import WorkloadView, { ScheduleBox } from './WorkloadView.jsx';
 import MyTasks from './MyTasks.jsx';
@@ -96,8 +96,10 @@ export default function WorkPage() {
     try {
       const r = await workAdapter.board(id, { filter });
       if (read === boardRead.current) setBoard(r.available ? { status: 'ready', projectId: id, items: r.data?.items || [], viewer: r.data?.viewer || null } : { status: 'off', reason: r.reason });
-    } catch {
-      if (read === boardRead.current) setBoard({ status: 'error' });
+    } catch (e) {
+      // #4735: a 403 not_member will always be refused: the Worker's sentence, no Try again. Anything else is a real failure.
+      const sentence = refusedOf(e);
+      if (read === boardRead.current) setBoard(sentence ? { status: 'refused', sentence } : { status: 'error' });
     }
   }, [id, filter]);
   useEffect(() => { load(); return () => { boardRead.current += 1; }; }, [load]);
@@ -189,6 +191,9 @@ export default function WorkPage() {
           <b>Work could not be read.</b> That is not the same as having nothing to do.
         </HonestBlock>
       ) : null}
+      {board.status === 'refused' ? (
+        <HonestBlock role="alert" testId="work-refused">{board.sentence}</HonestBlock>
+      ) : null}
       {off ? (
         <HonestBlock testId="work-off" action={<Link to={`/projects/${encodeURIComponent(id)}/settings/team`} className={BTN_TEXT}>Open the project’s Team ›</Link>}>
           {board.reason}
@@ -205,7 +210,7 @@ export default function WorkPage() {
         onRetry={() => setBurnReload((v) => v + 1)} /> : null}
       {/* D1614 W8 (#3994): My items is My tasks narrowed to this project. */}
       {tab === 'mine' ? <MyTasks licence="founder" project={id} title="My items" testId="work-mine" /> : null}
-      {tab === 'workload' ? <WorkloadView projectId={id} onOpenItem={openItem} onNotice={setNotice} /> : null}
+      {tab === 'workload' ? <WorkloadView projectId={id} viewer={board.viewer} onOpenItem={openItem} onNotice={setNotice} /> : null}
       {tab === 'goals' ? <GoalsView scope="project" id={id} canManage={!!board.viewer?.can_manage} /> : null}
 
       {itemUid ? <ItemSheet key={itemUid} uid={itemUid} projectId={id} viewer={board.viewer} onClose={closeItem} onRun={setRunUid} onAssigned={refreshAfterSheet} /> : null}
@@ -403,8 +408,8 @@ export function ItemSheet({ uid, projectId = null, viewer = null, onClose, onRun
   const assigned = (task) => { if (task) setState({ status: 'ready', item: task }); setPicking(false); setTimelineVersion((v) => v + 1); onAssigned?.(task); };
   return (
     <Sheet title={it?.title || 'Item'} onClose={onClose} width={560} testId="work-item-sheet"
-      footer={it ? <><button type="button" className={BTN_PRIMARY} onClick={() => setPicking((v) => !v)} disabled={projectId == null} data-testid="work-item-assign">Assign</button><>{canMove(it, viewer) ? <><button type="button" className={BTN_SECONDARY} onClick={() => setMoving(v => !v)} data-testid="work-item-move">Move ▾</button><button type="button" className={BTN_SECONDARY} onClick={() => setSchedule({ item: it, day: '', from: '09:00', to: '11:00' })} data-testid="work-item-schedule">Schedule</button></> : null}</></> : null}>
-      {it && picking && projectId != null ? <AssignPicker projectId={projectId} taskUid={uid} current={it.assignee} onAssigned={assigned} onCancel={() => setPicking(false)} /> : null}
+      footer={it ? <>{viewer?.can_manage ? <button type="button" className={BTN_PRIMARY} onClick={() => setPicking((v) => !v)} disabled={projectId == null} data-testid="work-item-assign">Assign</button> : null}<>{canMove(it, viewer) ? <><button type="button" className={BTN_SECONDARY} onClick={() => setMoving(v => !v)} data-testid="work-item-move">Move ▾</button><button type="button" className={BTN_SECONDARY} onClick={() => setSchedule({ item: it, day: '', from: '09:00', to: '11:00' })} data-testid="work-item-schedule">Schedule</button></> : null}</></> : null}>
+      {it && picking && projectId != null && viewer?.can_manage ? <AssignPicker projectId={projectId} taskUid={uid} current={it.assignee} onAssigned={assigned} onCancel={() => setPicking(false)} /> : null}
       {notice ? <p role="status">{notice}</p> : null}
       {it && moving && canMove(it, viewer) ? <div aria-label="Move item">{moveTargets(it).map(t => <button key={t.key} type="button" className={BTN_TEXT} data-testid={`work-item-move-${t.key}`} onClick={() => doMove(t.key)}>{t.label}</button>)}</div> : null}
       {schedule && canMove(it, viewer) ? <ScheduleBox s={schedule} onChange={setSchedule} onDone={message => { setSchedule(null); setNotice(message); onAssigned?.(); }} /> : null}

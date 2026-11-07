@@ -59,6 +59,7 @@ function builtFromMigrations(): DatabaseSync {
   db.exec(sqlOf('390'));
   // D4643 (#4643): the attempt's own pass mark, time limit and reveal policy.
   db.exec(sqlOf('202611062214'));
+  db.exec(sqlOf('202611071049'));
   // D1124 (#3004): webinars (D560) are program content, so their store is checked.
   db.exec(sqlOf('391'));
   // D954 (#2787): the enrolment events every enrol and removal now writes.

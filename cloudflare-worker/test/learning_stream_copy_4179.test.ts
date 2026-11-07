@@ -198,6 +198,10 @@ test('a copy is verified only when ready with a duration above 0, and the item m
   assert.deepEqual(listed.find((i: any) => i.uid === 'vid-2').stream_copy, { state: 'none' });
   assert.equal('stream_copy' in listed.find((i: any) => i.uid === 'vid-link'), false);
   assert.equal(JSON.stringify(listed).includes(KEY), false, 'the content read never sends the bucket key');
+  // #4742: ITEM_SELECT carries `stream_uid` too, so the Studio draws "Stream · Ready" for a verified copy.
+  // Mutation checked: drop `stream_uid` from ITEM_SELECT → both of these read `undefined` and fail.
+  assert.equal(listed.find((i: any) => i.uid === 'vid-1').stream_uid, COPY, 'the content read carries stream_uid once the item plays it');
+  assert.equal(listed.find((i: any) => i.uid === 'vid-2').stream_uid, null, 'an item with no Stream video carries stream_uid: null, not absent');
 
   // A copy of a file the item has since replaced is verified but plays nothing.
   const g = fixture();
@@ -207,6 +211,34 @@ test('a copy is verified only when ready with a duration above 0, and the item m
   assert.ok(row(g, COPY).verified_at);
   // Mutation checked: drop the "still plays the copied object" check → the item moves to an old file's copy and this fails.
   assert.equal(item(g, 'vid-2').stream_uid, null);
+});
+
+// #4742 — a schema snapshot that predates the Stream migration (`below: 800`, i.e. every
+// numbered migration but none of the 12-digit timestamp ones, D4106) has no `stream_uid`
+// column at all. `GET /items` and `GET /items/:uid` must still answer, with `stream_uid`
+// simply absent, never a 500 — exactly the gap that broke learning_programs_d558.test.ts
+// and learning_video_d561.test.ts (both build a `below`-schema fixture) when `ITEM_SELECT`
+// first grew a hard dependency on the column.
+test('GET /items and GET /items/:uid degrade gracefully on a schema that predates stream_uid', async () => {
+  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
+  loadSchema(db, { below: 800 });
+  db.exec(`
+    INSERT INTO users (id, uid, email, name, role, is_active) VALUES (${SUPER}, 'u-super', 'super@example.test', 'Sam Super', 'admin', 1);
+    INSERT INTO super_admins (user_id) VALUES (${SUPER});
+    INSERT INTO learning_items (uid, kind, title, visibility, status, created_by) VALUES ('vid-old', 'video', 'Pre-Stream video', 'open', 'draft', 1);
+  `);
+  // Mutation checked: query `stream_uid` straight off this db without a fallback → both calls below throw.
+  assert.throws(() => db.prepare('SELECT stream_uid FROM learning_items').all(), /no such column: stream_uid/);
+  const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' };
+  const app = new Hono<any>().route('/api/admin/learning', adminLearning);
+  const f = { db, env, app } as unknown as F;
+  const list = await call(f, SUPER, 'GET', '/api/admin/learning/items');
+  assert.equal(list.status, 200);
+  assert.equal(list.body.items.find((i: any) => i.uid === 'vid-old').title, 'Pre-Stream video');
+  assert.equal('stream_uid' in list.body.items.find((i: any) => i.uid === 'vid-old'), false, 'absent, not null: the schema never answered the question');
+  const single = await call(f, SUPER, 'GET', '/api/admin/learning/items/vid-old');
+  assert.equal(single.status, 200);
+  assert.equal('stream_uid' in single.body.item, false);
 });
 
 test('the content table reads Copying…, Verified and Copy failed with the route’s words', async () => {

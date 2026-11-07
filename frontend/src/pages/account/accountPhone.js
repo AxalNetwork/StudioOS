@@ -108,8 +108,8 @@ export const PATH_TO_SECTION = {
   profile: 'account',
   account: 'account',
   // D1134 (#2422) — Companies and projects. D1415 part 4 (#3856): its address is
-  // `/account/portfolio`; `/account/companies…` forwards there (App.jsx), so
-  // `companies` resolves only for the one render a forward takes.
+  // `/account/portfolio`; `/account/companies…` is retired (D2319), so
+  // `companies` stays only for a section key written before the move.
   portfolio: 'companies',
   companies: 'companies',
   security: 'security-privacy',

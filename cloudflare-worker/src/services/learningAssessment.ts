@@ -51,7 +51,56 @@ export function parseCorrect(kind: string, raw: unknown, optionCount: number): n
   return set;
 }
 
-export type StoredQuestion = { uid: string; prompt: string; kind: string; options_json: string; correct_json: string; position?: number };
+export type StoredQuestion = { uid: string; prompt: string; kind: string; options_json: string; correct_json: string; position?: number;
+  explanation?: string | null; revision_json?: string | null };
+
+// ── D4650 (#4650, part 3): a question's explanation and revision links ──────
+export const EXPLANATION_MAX = 1000;
+export const REVISION_MAX = 5;
+export type RevisionLink = { title: string; url: string };
+/** A path inside Learning: its own page decides who may open it. */
+const LEARNING_PATH = /^\/learning\/[a-z0-9][a-z0-9/_-]{0,200}$/;
+
+/** Up to five {title, url}: an https link or a path inside Learning. Null when invalid. */
+export function parseRevision(v: unknown): RevisionLink[] | null {
+  if (v === null) return [];
+  if (!Array.isArray(v) || v.length > REVISION_MAX) return null;
+  const out: RevisionLink[] = [];
+  for (const x of v) {
+    if (!x || typeof x !== 'object') return null;
+    const title = typeof (x as any).title === 'string' ? (x as any).title.trim() : '';
+    const url = typeof (x as any).url === 'string' ? (x as any).url.trim() : '';
+    if (!title || title.length > 120) return null;
+    let ok = LEARNING_PATH.test(url);
+    if (!ok) { try { ok = new URL(url).protocol === 'https:'; } catch { ok = false; } }
+    if (!ok || url.length > 500) return null;
+    out.push({ title, url });
+  }
+  return out;
+}
+
+function revisionOf(raw: unknown): RevisionLink[] {
+  try { const v = JSON.parse(typeof raw === 'string' ? raw : '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
+/** A question's explanation and revision links, as the authoring view and a reveal answer them. */
+export function teachingOf(q: StoredQuestion): { explanation: string | null; revision: RevisionLink[] } {
+  return { explanation: q.explanation ?? null, revision: revisionOf(q.revision_json) };
+}
+
+/**
+ * The explanations a reveal carries, per question uid: only the questions with
+ * an explanation or a revision link. Called only where the correct answers are
+ * revealed, so an explanation never travels where its answer may not.
+ */
+export function explanations(questions: StoredQuestion[]): Record<string, { explanation: string | null; revision: RevisionLink[] }> {
+  const out: Record<string, { explanation: string | null; revision: RevisionLink[] }> = {};
+  for (const q of questions) {
+    const t = teachingOf(q);
+    if (t.explanation || t.revision.length) out[q.uid] = t;
+  }
+  return out;
+}
 
 /** What a member is shown of a question. Built from an allow-list: never `correct_json`. */
 export function memberQuestion(q: StoredQuestion): { uid: string; prompt: string; kind: string; options: string[] } {
