@@ -61,3 +61,4 @@ and citations by number keep working.
 | `D4496.md` | Distribution cross-tab states and responsive layouts (#4496). |
 | `D4576.md` | Adds 32 specialist agent skills and synthetic golden cases through the existing library contract. |
 | `D4707.md` | Licence navigation in the URL with filter reconciliation, accessible tabs and reason dialogs, and attributable paginated history (#4707). |
+| `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
