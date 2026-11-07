@@ -14,6 +14,7 @@ file map and the owner's answers are in
 | `studioLayoutModel.js` | The pure rules: sizes and spans, move / add / remove / resize, the cap of 12, Recommended, search, dropped lines, how a refusal is read, the cycle module keys. |
 | `studioFallback.js` | The Worker's defaults and titles, for a layout read that failed (SM8a) only. A test holds it equal to `cloudflare-worker/src/services/studioModules.ts`. |
 | `useStudioLayout.js` | The two reads, edit mode and the one save (`deriveStudio` is its pure half; `studioFromReads` draws a home from fixed reads in a test). |
+| `useLeaveGuard.js` | D4621 (#4621): leaving a Studio with unsaved edits asks first: `beforeunload`, a same-origin link click caught before the router sees it, and the browser's Back; Discard or Save then re-sends the same way out. |
 | `StudioModules.jsx` | What a home mounts: the notices, "Your modules", the grid or the empty box, the edit bar, the Artifact map, the locked sheet, the reset confirm. |
 | `StudioModuleGrid.jsx` | The placed modules in order and size; drag, keyboard and press-and-hold moves. |
 | `StudioModuleTile.jsx` | One module's frame and its states (SM7), and the edit chrome. |
