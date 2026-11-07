@@ -138,13 +138,27 @@ export function shownLogo(row, pending) {
   return row?.logo_url || null;
 }
 
-/** Whether this viewer may edit, mirroring the route's `canEdit`, from the row's members. */
+/**
+ * Whether this viewer may edit: the server's own answer (D4960), `row.viewer.can_edit`,
+ * which the company read returns and the write routes enforce. A cached role decides
+ * nothing: an admin is not an editor of a company they hold no seat in. Only a read
+ * that carries no `viewer` (an older Worker) falls back to the seat rule, and then
+ * without any admin pass.
+ */
 export function canEditCompany(row, me) {
-  if (String(me?.role || '') === 'admin') return true;
+  if (row?.viewer && typeof row.viewer.can_edit === 'boolean') return row.viewer.can_edit;
   const mine = (row?.members || []).find((m) => Number(m.user_id) === Number(me?.id));
   return !!(mine && (mine.is_primary_admin || EDIT_ROLES.includes(mine.role_in_company)));
 }
 
 /** ST6c: the one line a member who cannot edit sees. A role is said only where it limits. */
 export const readOnlyLine = (name) => `Only Owners, Admins and Founders of ${name || 'this company'} can edit these settings.`;
+
+/** D4960: the line for each reason the server gives; HQ and a support session are not told to ask an Owner. */
+export function readOnlyReasonLine(row) {
+  const why = row?.viewer?.read_only_reason;
+  if (why === 'hq_access') return 'Read only. HQ reads this company; its members make the changes here.';
+  if (why === 'support_session') return 'Read only. A support session can read this company but cannot change it.';
+  return readOnlyLine(row?.company_name);
+}
 export const LEAVE_PROMPT = 'Leave without saving? Your changes to General will be lost.';

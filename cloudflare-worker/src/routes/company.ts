@@ -19,7 +19,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashInviteToken } from '../services/projectAccess';
 import { refuse } from '../util/refusal';
 // D1592 (#3860): the two company gates live in one place; company_documents.ts imports them too.
-import { canEdit, viewerIsMember } from '../services/companyAccess';
+import { canEdit, companyWriteDenial, denialBody, isSupportSession, viewerCapability, viewerIsMember } from '../services/companyAccess';
 import {
   validatePerson, validateCoverage, validatePlan, personDto,
 } from '../services/companyTeam';
@@ -71,7 +71,7 @@ async function summaryDto(env: Env, c: Company): Promise<any> {
   return out;
 }
 
-async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
+async function detailDto(env: Env, c: Company, viewer: User, support = false): Promise<any> {
   const out: any = {};
   for (const f of PUBLIC_FIELDS) out[f] = (c as any)[f];
   for (const f of PRIVATE_FIELDS) out[f] = (c as any)[f];
@@ -118,11 +118,24 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
   out.members = members;
   out.member_count = members.length;
   out.viewer_is_member = isMember;
+  // D4960: what the server will accept from this viewer, so the page draws that and not a guess from a cached role.
+  out.viewer = await viewerCapability(env, c, viewer, support);
   return out;
 }
 
 async function getCompanyOr404(env: Env, uid: string): Promise<Company | null> {
   return env.DB.prepare('SELECT * FROM company_profiles WHERE uid = ?').bind(uid).first<Company>();
+}
+
+/**
+ * D4960 — the one write gate for this file. A support session and an HQ admin
+ * without a seat are refused with their own code and reason; anyone else who
+ * is not an editor gets the route's own answer, unchanged.
+ */
+async function writeGate(c: any, company: Company, user: User, notEditor: () => Response): Promise<Response | null> {
+  const denial = await companyWriteDenial(c.env, company, user, await isSupportSession(c));
+  if (!denial) return null;
+  return denial.reason === 'not_an_editor' ? notEditor() : c.json(denialBody(denial), 403);
 }
 
 async function getLink(env: Env, companyId: number, userId: number): Promise<Link | null> {
@@ -144,7 +157,7 @@ r.get('/company/me', async (c) => {
     const company = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?')
       .bind(link.company_id).first<Company>();
     if (!company) return c.json(null);
-    const detail = await detailDto(c.env, company, user);
+    const detail = await detailDto(c.env, company, user, await isSupportSession(c));
     return c.json({ ...detail, my_role: link.role_in_company, is_primary_admin: !!link.is_primary_admin });
   } catch (e) { return mapError(c, e); }
 });
@@ -203,7 +216,7 @@ r.get('/company/memberships', async (c) => {
       if (!company) continue;
       if (company.archived_at && !withArchived) continue;
       out.push({
-        ...(await detailDto(c.env, company, user)),
+        ...(await detailDto(c.env, company, user, await isSupportSession(c))),
         my_role: link.role_in_company,
         is_primary_admin: !!link.is_primary_admin,
         cycles_active: await cyclesActive(c.env, user, company.id),
@@ -315,7 +328,7 @@ r.post('/company/create', async (c) => {
       membershipEvent(c.env, { kind: 'join', companyId: newId, actorUserId: user.id, targetUserId: user.id, after: { role_in_company: 'Admin', is_primary_admin: true } }),
     ]);
     const company = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(newId).first<Company>();
-    return c.json(await detailDto(c.env, company!, user));
+    return c.json(await detailDto(c.env, company!, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -325,9 +338,8 @@ r.patch('/company/:uid', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) {
-      return c.json({ detail: 'Not authorized to edit this company' }, 403);
-    }
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to edit this company' }, 403));
+    if (denied) return denied;
     const body = await c.req.json().catch(() => ({} as any));
     if (body.company_name !== undefined) {
       const name = typeof body.company_name === 'string' ? body.company_name.trim() : '';
@@ -366,7 +378,7 @@ r.patch('/company/:uid', async (c) => {
       ]);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
-    return c.json(await detailDto(c.env, fresh!, user));
+    return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -381,7 +393,7 @@ r.get('/company/:uid', async (c) => {
     if (!(await viewerIsMember(c.env, company.id, user))) {
       return c.json({ detail: 'Company not found' }, 404);
     }
-    return c.json(await detailDto(c.env, company, user));
+    return c.json(await detailDto(c.env, company, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -457,9 +469,8 @@ async function logoEditGate(c: any): Promise<{ user: User; company: Company } | 
   const user = await requireAuth(c);
   const company = await getCompanyOr404(c.env, c.req.param('uid'));
   if (!company) return c.json({ detail: 'Company not found' }, 404);
-  if (!(await canEdit(c.env, company, user))) {
-    return c.json({ detail: 'Not authorized to edit this company' }, 403);
-  }
+  const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to edit this company' }, 403));
+  if (denied) return denied;
   return { user, company };
 }
 
@@ -517,7 +528,7 @@ r.post('/company/:uid/logo', async (c) => {
     }
     if (previous && previous.key !== key) await dropStoredLogo(store, previous.key);
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
-    return c.json(await detailDto(c.env, fresh!, user));
+    return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -537,7 +548,7 @@ r.delete('/company/:uid/logo', async (c) => {
     }
     if (previous && store) await dropStoredLogo(store, previous.key);
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
-    return c.json(await detailDto(c.env, fresh!, user));
+    return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -583,7 +594,8 @@ r.patch('/company/:uid/members/:userId', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
     const userId = Number(c.req.param('userId'));
     const link = await getLink(c.env, company.id, userId);
     if (!link) return c.json({ detail: 'Member not found on this company' }, 404);
@@ -661,7 +673,7 @@ r.patch('/company/:uid/members/:userId', async (c) => {
     await c.env.DB.batch(Object.keys(after).length
       ? [update, membershipEvent(c.env, { kind: 'role_change', companyId: company.id, actorUserId: user.id, targetUserId: userId, before, after })]
       : [update]);
-    return c.json(await detailDto(c.env, company, user));
+    return c.json(await detailDto(c.env, company, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -691,7 +703,8 @@ r.delete('/company/:uid/members/:userId', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
     const userId = Number(c.req.param('userId'));
     const link = await getLink(c.env, company.id, userId);
     if (!link) return c.json({ detail: 'Member not found on this company' }, 404);
@@ -844,7 +857,8 @@ r.post('/company/:uid/invitations', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
 
     const body = await c.req.json().catch(() => ({} as any));
     const email = normEmail(body.email);
@@ -896,7 +910,7 @@ r.post('/company/:uid/invitations', async (c) => {
       // than reporting a success nobody can act on.
       accept_path: `/company/invitations/accept?token=${encodeURIComponent(token)}`,
       invitations: await listInvitations(c.env, company.id),
-      company: await detailDto(c.env, company, user),
+      company: await detailDto(c.env, company, user, await isSupportSession(c)),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -909,6 +923,7 @@ r.get('/company/:uid/invitations', async (c) => {
     if (!company) return c.json({ detail: 'Company not found' }, 404);
     // An invitation names a person's email address, so reading the list is
     // gated on the same right as managing one — not on mere membership.
+    // A read: HQ may list them (D4960 changes who WRITES, not who reads).
     if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
     return c.json({ invitations: await listInvitations(c.env, company.id) });
   } catch (e) { return mapError(c, e); }
@@ -922,7 +937,8 @@ r.post('/company/:uid/invitations/:inviteUid/resend', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
     const inv = await c.env.DB.prepare(
       `SELECT * FROM company_invitations WHERE uid = ? AND company_id = ?`,
     ).bind(c.req.param('inviteUid'), company.id).first<any>();
@@ -964,7 +980,8 @@ r.delete('/company/:uid/invitations/:inviteUid', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
     const res = await c.env.DB.prepare(
       `UPDATE company_invitations
           SET status = 'revoked', revoked_at = datetime('now'), updated_at = datetime('now')
@@ -1081,13 +1098,13 @@ async function teamCompanyOr404(c: any): Promise<{ user: User; company: Company;
   return { user, company, editor: await canEdit(c.env, company, user) };
 }
 
-function teamWriteGate(c: any, ctx: { editor: boolean }): Response | null {
-  if (ctx.editor) return null;
-  return refuse(c, 403, {
+// D4960: the team record's writes use the same gate as the rest of settings; its reads keep `editor` (salary is an editor's to read).
+async function teamWriteGate(c: any, ctx: { user: User; company: Company }): Promise<Response | null> {
+  return writeGate(c, ctx.company, ctx.user, () => refuse(c, 403, {
     code: 'not_an_editor',
     message: 'Only an Owner, Admin, Founder or the primary admin can change the team record.',
     raw: null,
-  });
+  }));
 }
 
 r.get('/company/:uid/team', async (c) => {
@@ -1208,7 +1225,7 @@ r.post('/company/:uid/team/people', async (c) => {
   try {
     const ctx = await teamCompanyOr404(c);
     if (ctx instanceof Response) return ctx;
-    const gate = teamWriteGate(c, ctx);
+    const gate = await teamWriteGate(c, ctx);
     if (gate) return gate;
     const { user, company } = ctx;
     const body = await c.req.json().catch(() => ({}));
@@ -1248,7 +1265,7 @@ r.patch('/company/:uid/team/people/:pid', async (c) => {
   try {
     const ctx = await teamCompanyOr404(c);
     if (ctx instanceof Response) return ctx;
-    const gate = teamWriteGate(c, ctx);
+    const gate = await teamWriteGate(c, ctx);
     if (gate) return gate;
     const { user, company } = ctx;
     const existing = await c.env.DB.prepare(
@@ -1285,7 +1302,7 @@ r.put('/company/:uid/team/coverage', async (c) => {
   try {
     const ctx = await teamCompanyOr404(c);
     if (ctx instanceof Response) return ctx;
-    const gate = teamWriteGate(c, ctx);
+    const gate = await teamWriteGate(c, ctx);
     if (gate) return gate;
     const { user, company } = ctx;
     const body = await c.req.json().catch(() => ({}));
@@ -1311,7 +1328,7 @@ r.put('/company/:uid/team/plan', async (c) => {
   try {
     const ctx = await teamCompanyOr404(c);
     if (ctx instanceof Response) return ctx;
-    const gate = teamWriteGate(c, ctx);
+    const gate = await teamWriteGate(c, ctx);
     if (gate) return gate;
     const { user, company } = ctx;
     const body = await c.req.json().catch(() => ({}));

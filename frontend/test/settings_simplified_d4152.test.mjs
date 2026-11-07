@@ -40,10 +40,10 @@ test('the form refuses a blank name and a non-whole employee count; regions are 
   assert.equal(regionsText(['Europe', 'Europe', ' APAC ']), 'Europe, APAC');
 });
 
-test('who may edit mirrors the route: platform admin, primary admin, Owner, Admin or Founder; a title is not a role', () => {
+test('who may edit is the server\'s capability (D4960); without one, the seat rule, never a cached admin role', () => {
   assert.equal(canEditCompany(ROW, { id: 3, role: 'founder' }), true);
   assert.equal(canEditCompany(ROW, { id: 4, role: 'founder' }), false, 'a CTO title edits nothing');
-  assert.equal(canEditCompany(ROW, { id: 9, role: 'admin' }), true);
+  assert.equal(canEditCompany(ROW, { id: 9, role: 'admin' }), false, 'an admin with no seat is not an editor (it was true before D4960)');
   assert.equal(readOnlyLine('Acme'), 'Only Owners, Admins and Founders of Acme can edit these settings.');
   assert.match(LEAVE_PROMPT, /^Leave without saving\?/);
 });

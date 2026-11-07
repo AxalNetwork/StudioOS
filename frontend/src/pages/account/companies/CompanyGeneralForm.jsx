@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../lib/api';
 import { teamsApi } from '../../../lib/api/teams';
 import { companyLogoApi } from '../../../lib/api/companyLogo';
-import { safeReadJSON } from '../../../lib/storage';
+import { useAuth } from '../../../hooks/useAuthSync';
 import { useUpdateCompanyDetails } from '../../../contexts/ActiveCompanyContext';
 import {
-  CURRENCY_CODES, DESCRIPTION_MAX, LABELS, LEAVE_PROMPT, LOGO_HINT, SECTIONS, STAGES, canEditCompany, changes, formOf, logoProblem, problemOf, readOnlyLine, regionsOf, regionsText, shownLogo, unsavedLine,
+  CURRENCY_CODES, DESCRIPTION_MAX, LABELS, LEAVE_PROMPT, LOGO_HINT, SECTIONS, STAGES, canEditCompany, changes, formOf, logoProblem, problemOf, readOnlyReasonLine, regionsOf, regionsText, shownLogo, unsavedLine,
 } from './generalFormModel';
 import { CompanyMark, Failed, INK, MUTED, NotYours, PCard, Reading } from './portfolioUi.jsx';
 import * as portfolio from './portfolioAdapter.js';
@@ -119,6 +119,7 @@ export function LogoTile({ name, row, pending, onPick, onRemove, onUndo, disable
 
 export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi }) {
   const updateCompanyDetails = useUpdateCompanyDetails();
+  const { user: me } = useAuth();
   const [state, setState] = useState({ status: 'loading', row: null });
   const [form, setForm] = useState(null);
   const [save, setSave] = useState({ status: 'idle', message: '' });
@@ -145,7 +146,8 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi }) {
   const row = state.row;
   const patch = useMemo(() => (form && row ? changes(form, row) : {}), [form, row]);
   const dirty = Object.keys(patch).length > 0 || logo !== null;
-  const canEdit = canEditCompany(row, safeReadJSON('user', {}));
+  // D4960: the server's capability on the company read, not the role cached in localStorage.
+  const canEdit = canEditCompany(row, me);
   const problem = form ? problemOf(form) : null;
 
   // ST6d: a reload or a closed tab with unsaved changes asks first.
@@ -189,7 +191,7 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <form className="flex flex-col gap-4" data-testid="company-general-form" onSubmit={(e) => { e.preventDefault(); if (dirty && !problem) onSave(); }}>
-        {!canEdit && <p className={`m-0 ${MUTED}`} data-testid="company-general-read-only">{readOnlyLine(row.company_name)}</p>}
+        {!canEdit && <p className={`m-0 ${MUTED}`} data-testid="company-general-read-only">{readOnlyReasonLine(row)}</p>}
         <LogoTile name={name} row={row} pending={logo} problem={logoError} disabled={!canEdit || save.status === 'saving'}
           onPick={onPickLogo} onRemove={() => { setLogoError(null); holdLogo({ remove: true }); }} onUndo={() => { setLogoError(null); holdLogo(null); }} />
         {SECTIONS.map((sec) => (
