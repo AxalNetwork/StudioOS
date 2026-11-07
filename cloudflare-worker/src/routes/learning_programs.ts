@@ -159,7 +159,7 @@ r.get('/programs/mine/completion', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   const g = mineGate(c, user); if (g instanceof Response) return g;
   const res = await c.env.DB.prepare(
-    `SELECT ${P_COLS} FROM learning_programs p
+    'SELECT ' + P_COLS + ` FROM learning_programs p
       WHERE p.status = 'published' AND (? = 1 OR p.id IN (SELECT program_id FROM learning_program_admins WHERE user_id = ?))
       ORDER BY p.name COLLATE NOCASE, p.id LIMIT ?`,
   ).bind(g.sa ? 1 : 0, user.id, COMPLETION_MAX + 1).all<any>();
