@@ -14,6 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
+import { grantWriteBar } from './_write_bar_session.mjs';
 import { JWT_SECRET, freshDb, makeD1, FOUNDER, FOUNDER_B, PARTNER, ADMIN, INVESTOR, balance } from './_perks_harness.ts';
 import { grantCredits, revokeGrant, monthStart, isBountyRule } from '../src/services/creditGrants.ts';
 import creditRules from '../src/routes/admin_credit_rules.ts';
@@ -29,6 +30,8 @@ function setup() {
            CREATE TABLE push_subscriptions (id INTEGER PRIMARY KEY, user_id INTEGER, endpoint TEXT, p256dh TEXT, auth TEXT);`);
   db.prepare(`INSERT INTO users (id, role, email) VALUES (?, 'admin', 'super@example.test')`).run(SUPER);
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
+  // D4703: credit-rule writes take the write bar; the Super Admin acts from a fresh TOTP session.
+  grantWriteBar(db, SUPER);
   const hooks = { beforeBatch: null };
   const DB: any = makeD1(db, hooks);
   const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB };
@@ -36,7 +39,7 @@ function setup() {
 }
 
 async function tok(id: number, role: string) {
-  return new SignJWT({ user_id: id, role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+  return new SignJWT({ user_id: id, role, ...(id === SUPER ? { jti: `write-bar-${SUPER}` } : {}) }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
 const ROLES: Record<number, string> = { [SUPER]: 'admin', [ADMIN]: 'admin', [FOUNDER]: 'founder', [PARTNER]: 'partner' };
@@ -348,4 +351,13 @@ test('/perks/mine: a balance read that fails is a refusal, never a balance of 0'
   assert.equal(r.status, 500);
   assert.equal('balance' in (r.body || {}), false, 'no balance rides on a failed read');
   assert.doesNotMatch(JSON.stringify(r.body), /disk I\/O/);
+});
+
+test('D4703: a credit-rule edit needs the write bar; the Super Admin without a fresh step-up is refused and nothing changes', async () => {
+  // Mutation checked: requireSuperAdmin restored on PUT /:key → the stale session's edit lands.
+  const { db, env } = setup();
+  db.prepare('UPDATE user_sessions SET last_step_up_at = datetime(\'now\', \'-2 days\'), created_at = datetime(\'now\', \'-2 days\') WHERE user_id = ?').run(SUPER);
+  const r = await call(creditRules, env, 'PUT', '/bug_high', SUPER, { credits: 200, reason: REASON });
+  assert.equal(r.status, 403, JSON.stringify(r.body));
+  assert.equal((db.prepare("SELECT credits FROM credit_reward_rules WHERE key = 'bug_high'").get() as any).credits, 150);
 });

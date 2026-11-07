@@ -239,6 +239,39 @@ export async function onAxalSessionCancelled(
 }
 
 /**
+ * D4703 (#4703): the retry job the cancel path's stamp was waiting for.
+ *
+ * A provider DELETE that failed leaves the mapping with
+ * `last_error = 'calendar_delete_failed'` so the copy can still be found.
+ * Nothing read that stamp, so a cancelled session stayed in the attendee's
+ * calendar for good. This takes the oldest few failed sources and runs the
+ * same `onAxalSessionCancelled` again: a delete that now succeeds drops the
+ * mapping, one that fails again is re-stamped (and its `last_synced_at`
+ * moves it to the back of the queue). Bounded per run; the cron runs it hourly.
+ */
+export async function retryFailedCalendarDeletes(env: Env, limit = 20): Promise<{ tried: number; cleared: number }> {
+  const sql = getSQL(env);
+  const due = await sql`
+    SELECT source_kind, source_id, MIN(last_synced_at) AS oldest
+      FROM calendar_sync_records
+     WHERE last_error = 'calendar_delete_failed'
+     GROUP BY source_kind, source_id
+     ORDER BY oldest ASC
+     LIMIT ${Math.max(1, Math.min(100, Math.floor(limit)))}
+  ` as Array<{ source_kind: AxalKind; source_id: number }>;
+  let cleared = 0;
+  for (const row of due || []) {
+    await onAxalSessionCancelled(env, row.source_kind, Number(row.source_id));
+    const left = await sql`
+      SELECT 1 AS still FROM calendar_sync_records
+       WHERE source_kind = ${row.source_kind} AND source_id = ${Number(row.source_id)} LIMIT 1
+    ` as Array<{ still: number }>;
+    if (!left || left.length === 0) cleared += 1;
+  }
+  return { tried: (due || []).length, cleared };
+}
+
+/**
  * Push a single user's single event to their own connected calendar(s).
  * Powers the "Add to my external calendar" button on the /calendar UI for
  * events that pre-date the user's OAuth connection. Returns the set of

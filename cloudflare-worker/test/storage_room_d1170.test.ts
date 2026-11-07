@@ -402,3 +402,14 @@ test('HQ\'s read says what it could not read, and never states a guessed figure'
   assert.deepEqual([plans.by_plan, plans.by_state, plans.totals.members], [null, null, null]);
   assert.equal(plans.by_plan_reason, 'The plans could not be read.');
 });
+
+test('D4703: HQ\'s read says when it was read, and that its byte totals are a floor when anything is unread', async () => {
+  // Mutation checked: measured_is_floor fixed to false → the unreadable read claims exact totals.
+  const f = fixture();
+  const whole = (await f.call(66, 'GET', '/api/admin/platform/storage')).body;
+  assert.match(String(whole.read_at), /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(whole.measured_is_floor, whole.totals.unknown_size_files > 0, 'exact when every area and size was read');
+  f.fail(/FROM research_documents/);
+  const part = (await f.call(66, 'GET', '/api/admin/platform/storage')).body;
+  assert.equal(part.measured_is_floor, true, 'an unread area makes the totals a floor');
+});
