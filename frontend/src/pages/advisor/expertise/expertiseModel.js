@@ -73,7 +73,8 @@ export const PROOF_NOT_PUBLIC = 'Nothing in Proof is on your public profile. Pub
 export function proofDeleteLines(item) {
   const consents = item?.consents || [];
   const names = consents.map((c) => c.attester_name).filter(Boolean);
-  const pending = consents.filter((c) => !c.consent_given && !c.withdrawn_at).length;
+  // D4670: a row carries its `state`; an earlier confirmation that needs reconfirming has no link out.
+  const pending = consents.filter((c) => (c.state ? c.state === 'pending' : !c.consent_given && !c.withdrawn_at)).length;
   const lines = [
     consents.length
       ? `It also deletes ${consents.length === 1 ? 'the consent record' : `all ${consents.length} consent records`} behind it (${names.join(', ')}): names, emails and statements.`
