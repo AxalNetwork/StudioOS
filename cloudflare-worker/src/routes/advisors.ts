@@ -680,12 +680,18 @@ advisors.delete('/me/slots/:id', async (c) => {
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(id).first<SlotRow>();
     if (!slot || slot.advisor_id !== m.id) return c.json({ detail: 'Slot not found' }, 404);
     await c.env.DB.prepare('UPDATE advisor_office_hour_slots SET is_cancelled = 1 WHERE id = ?').bind(id).run();
-    // Cancel any open bookings on this slot.
-    await c.env.DB.prepare(
+    // Cancel any open bookings on this slot. D4703 (#4703): RETURNING names
+    // exactly the bookings this statement cancelled, and each gets the same
+    // calendar cleanup a one-at-a-time cancel does (`transition` below). The
+    // bulk path used to change the status and leave every external copy in
+    // the attendees' calendars.
+    const cancelled = await c.env.DB.prepare(
       `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = COALESCE(cancel_reason, 'slot_cancelled'), updated_at = ?
-       WHERE slot_id = ? AND status IN ('pending','confirmed')`
-    ).bind(nowIso(), id).run();
-    return c.json({ ok: true });
+       WHERE slot_id = ? AND status IN ('pending','confirmed') RETURNING id`
+    ).bind(nowIso(), id).all<{ id: number }>();
+    const ids = (cancelled.results || []).map((r) => Number(r.id));
+    if (ids.length) deferCalendarCancel(c, ids);
+    return c.json({ ok: true, bookings_cancelled: ids.length });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -872,7 +878,11 @@ advisors.post('/slots/:id/book', async (c) => {
             title: `Advisor session — ${advisorMeta?.display_name || ''}`.trim(),
             start_at: slot.starts_at,
             end_at: slot.ends_at,
-            status: 'confirmed',
+            // D4703 (#4703): the booking is still pending, so the external copy
+            // is tentative until the advisor confirms (`/bookings/:id/confirm`
+            // pushes it again as confirmed). It used to go out as a firm event.
+            status: 'pending',
+            ics_status: 'TENTATIVE' as const,
             location_kind: 'video',
             location_uri: slot.meeting_url || null,
             organizer_email: advisorMeta?.email || null,
@@ -983,6 +993,53 @@ advisors.get('/bookings/me', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D4703 (#4703): the calendar cleanup a cancel owes, for one booking or many,
+ * deferred so the response returns at once. The slot delete and a single
+ * cancel both come here, so the two cannot drift apart again.
+ */
+function deferCalendarCancel(c: Context<{ Bindings: Env }>, ids: number[]) {
+  const p = (async () => {
+    const { onAxalSessionCancelled } = await import('../services/calendar/sync');
+    for (const bookingId of ids) {
+      try { await onAxalSessionCancelled(c.env, 'advisor_booking', bookingId); }
+      catch (e) { console.warn('[advisors] calendar cancel hook failed', e); }
+    }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
+/** D4703: push a confirmed booking's copy again, now firm (`ics_status: CONFIRMED`). */
+function deferCalendarConfirm(c: Context<{ Bindings: Env }>, id: number) {
+  const p = (async () => {
+    try {
+      const row = await c.env.DB.prepare(
+        `SELECT b.id, b.uid, b.topic, b.notes, s.starts_at, s.ends_at, s.meeting_url,
+                a.email AS advisor_email, a.display_name, u.email AS founder_email, u.name AS founder_name
+           FROM advisor_bookings b
+           JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+           JOIN advisors a ON a.id = b.advisor_id
+           LEFT JOIN users u ON u.id = b.founder_user_id
+          WHERE b.id = ? AND b.status = 'confirmed'`
+      ).bind(id).first<any>();
+      if (!row) return;
+      const { onAxalSessionUpdated } = await import('../services/calendar/sync');
+      await onAxalSessionUpdated(c.env, {
+        id: `advisor_booking:${row.id}`, kind: 'advisor_booking', source_id: row.id, source_uid: row.uid,
+        title: `Advisor session — ${row.display_name || ''}`.trim(),
+        start_at: row.starts_at, end_at: row.ends_at, status: 'confirmed', ics_status: 'CONFIRMED',
+        location_kind: 'video', location_uri: row.meeting_url || null, organizer_email: row.advisor_email || null,
+        attendees: [
+          { email: row.advisor_email || null, name: row.display_name || null, role: 'advisor' },
+          { email: row.founder_email || null, name: row.founder_name || null, role: 'mentee' },
+        ],
+        notes: (row.topic || '') + (row.notes ? `\n\n${row.notes}` : ''),
+      } as any);
+    } catch (e) { console.warn('[advisors] calendar confirm hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
 async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   allowed: string[]; nextStatus: string; whoCan: 'advisor' | 'founder' | 'either';
   reason?: string | null;
@@ -1002,21 +1059,21 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   if (!opts.allowed.includes(b.status)) {
     return c.json({ detail: `Cannot transition from ${b.status}` }, 409);
   }
-  await c.env.DB.prepare(
-    'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ?'
-  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id).run();
+  // D4703 (#4703): the status read above is the status this write expects.
+  // Two presses at once (a cancel and a confirm, or two cancels) used to both
+  // pass the check and both write; now the second changes nothing and says so.
+  const wrote = await c.env.DB.prepare(
+    'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ? AND status = ?'
+  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id, b.status).run();
+  if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
+    return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
+  }
   // Task #52 — remove from external calendars on cancel/no-show.
   // Defer the dynamic import + provider DELETE work via waitUntil so
   // the cancel response returns immediately.
-  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') {
-    const p = (async () => {
-      try {
-        const { onAxalSessionCancelled } = await import('../services/calendar/sync');
-        await onAxalSessionCancelled(c.env, 'advisor_booking', id);
-      } catch (e) { console.warn('[advisors] calendar cancel hook failed', e); }
-    })();
-    if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
-  }
+  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') deferCalendarCancel(c, [id]);
+  // D4703: a confirmed booking's external copy stops being tentative.
+  if (opts.nextStatus === 'confirmed') deferCalendarConfirm(c, id);
   const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
     .bind(id).first<BookingRow>();
   return c.json(bookingDto(fresh!));
@@ -1246,6 +1303,18 @@ function parsePriceCents(v: unknown): number | null {
   return n;
 }
 
+/**
+ * D4681 (#4681): a currency is three letters (ISO 4217's shape), or the write
+ * is refused. It used to be cut to eight characters and upper-cased, so a
+ * typo was stored and shown beside the price as if it were a currency.
+ */
+function parseCurrency(v: unknown, fallback: string): string {
+  if (v == null || v === '') return fallback;
+  const code = String(v).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) throw new Error('currency must be a three-letter code, such as USD');
+  return code;
+}
+
 advisors.get('/me/services', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -1287,7 +1356,7 @@ advisors.post('/me/services', async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(uid, m.id, title, kind,
            trimOrNull(body.duration_note, 200), price_cents,
-           String(body.currency || 'USD').trim().slice(0, 8).toUpperCase(),
+           parseCurrency(body.currency, 'USD'),
            trimOrNull(body.scope, 2000),
            body.is_active === false ? 0 : 1, now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_services WHERE id = ?')
@@ -1310,18 +1379,23 @@ advisors.patch('/me/services/:id', async (c) => {
     if (!SERVICE_KINDS.includes(kind)) {
       return c.json({ detail: 'kind must be one of: fixed, package, retainer' }, 400);
     }
-    // Merge, not replace: the Services zone edits one field at a time.
+    // D4681: a title sent blank is refused rather than quietly kept, so an edit
+    // that clears it says so instead of reporting a save that changed nothing.
+    if (body.title != null && !String(body.title).trim()) {
+      return c.json({ detail: 'A service needs a title' }, 400);
+    }
+    // Merge, not replace: an unmentioned field keeps its value.
     const price_cents = 'price_cents' in body ? parsePriceCents(body.price_cents) : row.price_cents;
     await c.env.DB.prepare(
       `UPDATE advisor_services SET title = ?, kind = ?, duration_note = ?,
          price_cents = ?, currency = ?, scope = ?, is_active = ?, updated_at = ?
        WHERE id = ?`
     ).bind(
-      body.title == null ? row.title : String(body.title).trim().slice(0, 200) || row.title,
+      body.title == null ? row.title : String(body.title).trim().slice(0, 200),
       kind,
       'duration_note' in body ? trimOrNull(body.duration_note, 200) : row.duration_note,
       price_cents,
-      body.currency == null ? row.currency : String(body.currency).trim().slice(0, 8).toUpperCase(),
+      parseCurrency(body.currency, row.currency),
       'scope' in body ? trimOrNull(body.scope, 2000) : row.scope,
       body.is_active == null ? row.is_active : (body.is_active ? 1 : 0),
       nowIso(), row.id,
@@ -1473,10 +1547,19 @@ advisors.delete('/me/proof/:id', async (c) => {
     // The consents go with the item they attest to. A consent row whose subject
     // no longer exists attests to nothing, and leaving it would leave a
     // stranger's name and email in the database with no claim attached to it.
-    await c.env.DB.prepare('DELETE FROM advisor_proof_consents WHERE proof_item_id = ?')
-      .bind(row.id).run();
-    await c.env.DB.prepare('DELETE FROM advisor_proof_items WHERE id = ?').bind(row.id).run();
-    return c.json({ ok: true, id: row.id });
+    //
+    // D4681 (#4681): ONE BATCH, so both go or neither does. These were two
+    // awaited statements, and a failure between them left the claim standing
+    // with every consent behind it gone: an attested item turned self-stated
+    // with nothing to say why. D1 runs a batch as one transaction. The item's
+    // DELETE re-checks the owner, and the consent DELETE names only that item.
+    const consents = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_proof_consents WHERE proof_item_id = ?')
+      .bind(row.id).first<{ n: number }>();
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM advisor_proof_consents WHERE proof_item_id = ?').bind(row.id),
+      c.env.DB.prepare('DELETE FROM advisor_proof_items WHERE id = ? AND advisor_id = ?').bind(row.id, m.id),
+    ]);
+    return c.json({ ok: true, id: row.id, consents_removed: Number(consents?.n ?? 0) });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1679,6 +1762,13 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
  * any kind. The `catch` below still maps `SettlementDisabled`, because a guard
  * a caller can reorder is not a guard.
  */
+/**
+ * D4703 (#4703): the booking statuses a founder may pay. The cancellation-fee
+ * policy is that there is none: `cancelled` and `no_show` are not payable.
+ * A fee would be a new policy, and it would be added here by name.
+ */
+export const BOOKING_PAYABLE_STATUSES: readonly string[] = Object.freeze(['pending', 'confirmed', 'completed']);
+
 advisors.post('/bookings/:id/pay', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -1689,6 +1779,19 @@ advisors.post('/bookings/:id/pay', async (c) => {
     // other people's sessions. The two answers are deliberately identical.
     if (!row || row.founder_user_id !== user.id) {
       return c.json({ detail: 'Booking not found' }, 404);
+    }
+
+    // D4703 (#4703): A CANCELLED SESSION IS NOT PAYABLE. There is no
+    // cancellation-fee policy, so a booking that was cancelled or missed owes
+    // nothing, whatever price was recorded on it before. Checked before
+    // anything else so the answer is the same whether charging is on or off.
+    if (!BOOKING_PAYABLE_STATUSES.includes(row.status)) {
+      return c.json({
+        detail: row.status === 'cancelled'
+          ? 'This session was cancelled, so there is nothing to pay. No cancellation fee applies.'
+          : 'This session did not take place, so there is nothing to pay.',
+        status: row.status,
+      }, 409);
     }
 
     const mode = settlementMode(c.env);
@@ -2957,7 +3060,7 @@ advisors.get('/me/thinking', async (c) => {
       return c.json({ detail: 'Only an advisor has a thinking shelf' }, 403);
     }
     const rows = await c.env.DB.prepare(
-      `SELECT id, slug, title, subtitle, status, published_at, word_count,
+      `SELECT id, slug, title, subtitle, status, published_at, publish_at, word_count,
               read_minutes, views, sector, created_at, updated_at
          FROM articles
         WHERE author_user_id = ?
@@ -2965,7 +3068,7 @@ advisors.get('/me/thinking', async (c) => {
         LIMIT 100`
     ).bind(user.id).all<{
       id: number; slug: string; title: string; subtitle: string | null;
-      status: string; published_at: string | null; word_count: number;
+      status: string; published_at: string | null; publish_at: string | null; word_count: number;
       read_minutes: number; views: number; sector: string | null;
     }>();
     const items = rows.results || [];
@@ -3735,6 +3838,8 @@ type VersionRow = {
   id: number; uid: string; deliverable_id: number; version: number;
   label: string | null; summary: string | null; link_url: string | null;
   sent_at: string | null; opened_at: string | null; signed_off_at: string | null;
+  // #4684: who it was sent to and who recorded each receipt, each written once.
+  recipient_user_id?: number | null; opened_by_user_id?: number | null; signed_off_by_user_id?: number | null;
   created_at: string; updated_at: string;
 };
 
@@ -3752,6 +3857,18 @@ function versionDto(r: VersionRow): any {
     // All three are null until they happen. Never coalesced to a date.
     sent_at: r.sent_at, opened_at: r.opened_at, signed_off_at: r.signed_off_at,
     created_at: r.created_at, updated_at: r.updated_at,
+  };
+}
+
+/**
+ * #4684: the advisor's view of a version adds who it was sent to. The client's
+ * own read keeps `versionDto`: it never needs another account's name.
+ */
+function sentVersionDto(r: VersionRow & { recipient_name?: string | null }): any {
+  return {
+    ...versionDto(r),
+    recipient_user_id: r.recipient_user_id ?? null,
+    recipient_name: r.recipient_user_id == null ? null : (r.recipient_name ?? null),
   };
 }
 
@@ -3810,12 +3927,16 @@ advisors.get('/me/deliverables', async (c) => {
       ).bind(m.id).all<DeliverableRow & {
         client_user_id: number | null; client_user_name: string | null; client_user_email: string | null;
       }>(),
+      // #4684: each sent version names the account it went to, which may not be
+      // the engagement's client today: a relink moves nothing already sent.
       c.env.DB.prepare(
-        `SELECT v.* FROM advisor_deliverable_versions v
+        `SELECT v.*, r.name AS recipient_name, r.email AS recipient_email
+           FROM advisor_deliverable_versions v
            JOIN advisor_deliverables d ON d.id = v.deliverable_id
+           LEFT JOIN users r ON r.id = v.recipient_user_id
           WHERE d.advisor_id = ?
           ORDER BY v.deliverable_id, v.version DESC`
-      ).bind(m.id).all<VersionRow>(),
+      ).bind(m.id).all<VersionRow & { recipient_name?: string | null; recipient_email?: string | null }>(),
     ]);
 
     const byDeliverable = new Map<number, VersionRow[]>();
@@ -3840,8 +3961,11 @@ advisors.get('/me/deliverables', async (c) => {
         client_user_email: d.client_user_email ?? null,
         state: deliverableState(vs),
         version_count: vs.length,
-        latest_version: latest ? versionDto(latest) : null,
-        versions: vs.map(versionDto),
+        latest_version: latest ? sentVersionDto(latest) : null,
+        versions: vs.map(sentVersionDto),
+        // The address a nudge about unread work reaches: the latest sent
+        // version's recipient, not whoever the engagement names now.
+        recipient_email: (vs.find((v) => v.sent_at) as any)?.recipient_email ?? null,
         created_at: d.created_at, updated_at: d.updated_at,
       };
     });
@@ -3880,7 +4004,7 @@ advisors.get('/me/deliverables', async (c) => {
         oldest_never_opened: neverOpened[0] || null,
         // How many rows a nudge could actually reach. The zone reports the gap
         // rather than skipping rows quietly.
-        addressable: unopened.filter((i) => i.client_user_email).length,
+        addressable: unopened.filter((i) => i.recipient_email).length,
       },
     });
   } catch (e) { return mapError(c, e); }
@@ -4035,9 +4159,17 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
     }
 
     const now = nowIso();
-    await c.env.DB.prepare(
-      'UPDATE advisor_deliverable_versions SET sent_at = ?, updated_at = ? WHERE id = ?'
-    ).bind(now, now, v.id).run();
+    // #4684: THE RECIPIENT IS FIXED HERE, in the same UPDATE as `sent_at`. The
+    // client routes authorise against it, never against the engagement's current
+    // client, so a later relink can neither take this version from the person it
+    // went to nor hand it to someone else. `sent_at IS NULL` in the WHERE makes
+    // two concurrent sends one send.
+    await ensureAdvisorStoresSchema(c.env);
+    const sent: any = await c.env.DB.prepare(
+      `UPDATE advisor_deliverable_versions SET sent_at = ?, recipient_user_id = ?, updated_at = ?
+        WHERE id = ? AND sent_at IS NULL`
+    ).bind(now, client.id, now, v.id).run();
+    if (!sent.meta?.changes) return c.json({ detail: 'That version has already been sent' }, 409);
     await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
       .bind(now, row.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
@@ -4079,14 +4211,16 @@ advisors.get('/received/deliverables', async (c) => {
     const user = await requireAuth(c);
     await ensureAdvisorStoresSchema(c.env);
     const rows = await c.env.DB.prepare(
+      // #4684: BY RECIPIENT, NOT BY THE ENGAGEMENT'S CURRENT CLIENT. A version
+      // belongs to the account it was sent to, so relinking the engagement (or
+      // the work product) moves nothing that was already sent.
       `SELECT d.id, d.uid, d.title, d.client_name, d.created_at, d.updated_at,
               a.display_name AS advisor_name, a.uid AS advisor_uid
          FROM advisor_deliverables d
-         JOIN advisor_engagements e ON e.id = d.engagement_id
          JOIN advisors a ON a.id = d.advisor_id
-        WHERE e.founder_user_id = ?
-          AND EXISTS (SELECT 1 FROM advisor_deliverable_versions v
-                       WHERE v.deliverable_id = d.id AND v.sent_at IS NOT NULL)
+        WHERE EXISTS (SELECT 1 FROM advisor_deliverable_versions v
+                       WHERE v.deliverable_id = d.id AND v.sent_at IS NOT NULL
+                         AND v.recipient_user_id = ?)
         ORDER BY d.updated_at DESC LIMIT 200`
     ).bind(user.id).all<any>();
 
@@ -4094,9 +4228,9 @@ advisors.get('/received/deliverables', async (c) => {
     for (const d of rows.results || []) {
       const vs = await c.env.DB.prepare(
         `SELECT * FROM advisor_deliverable_versions
-          WHERE deliverable_id = ? AND sent_at IS NOT NULL
+          WHERE deliverable_id = ? AND sent_at IS NOT NULL AND recipient_user_id = ?
           ORDER BY version DESC`
-      ).bind(d.id).all<VersionRow>();
+      ).bind(d.id, user.id).all<VersionRow>();
       const versions = (vs.results || []).map(versionDto);
       items.push({
         uid: d.uid, title: d.title,
@@ -4148,16 +4282,17 @@ advisors.post('/received/deliverables/:uid/open', async (c) => {
     await ensureAdvisorStoresSchema(c.env);
     const v = await c.env.DB.prepare(
       `SELECT v.* FROM advisor_deliverable_versions v
-         JOIN advisor_deliverables d ON d.id = v.deliverable_id
-         JOIN advisor_engagements e ON e.id = d.engagement_id
-        WHERE v.uid = ? AND e.founder_user_id = ? AND v.sent_at IS NOT NULL`
+        WHERE v.uid = ? AND v.recipient_user_id = ? AND v.sent_at IS NOT NULL`
     ).bind(c.req.param('uid'), user.id).first<VersionRow>();
     if (!v) return c.json({ detail: 'Work product not found' }, 404);
 
     const now = nowIso();
+    // #4684: the receipt records who made it, and only the recipient can: the
+    // WHERE repeats the recipient so no other account's open can land here.
     await c.env.DB.prepare(
-      'UPDATE advisor_deliverable_versions SET opened_at = ?, updated_at = ? WHERE id = ? AND opened_at IS NULL'
-    ).bind(now, now, v.id).run();
+      `UPDATE advisor_deliverable_versions SET opened_at = ?, opened_by_user_id = ?, updated_at = ?
+        WHERE id = ? AND opened_at IS NULL AND recipient_user_id = ?`
+    ).bind(now, user.id, now, v.id, user.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
       .bind(v.id).first<VersionRow>();
     return c.json(versionDto(fresh!));
@@ -4168,18 +4303,20 @@ advisors.post('/received/deliverables/:uid/open', async (c) => {
 advisors.post('/received/deliverables/:uid/accept', async (c) => {
   try {
     const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
     const v = await c.env.DB.prepare(
       `SELECT v.* FROM advisor_deliverable_versions v
-         JOIN advisor_deliverables d ON d.id = v.deliverable_id
-         JOIN advisor_engagements e ON e.id = d.engagement_id
-        WHERE v.uid = ? AND e.founder_user_id = ? AND v.sent_at IS NOT NULL`
+        WHERE v.uid = ? AND v.recipient_user_id = ? AND v.sent_at IS NOT NULL`
     ).bind(c.req.param('uid'), user.id).first<VersionRow>();
     if (!v) return c.json({ detail: 'Work product not found' }, 404);
     const now = nowIso();
     const accepted: any = await c.env.DB.prepare(
-      `UPDATE advisor_deliverable_versions SET signed_off_at = ?, opened_at = COALESCE(opened_at, ?), updated_at = ?
-        WHERE id = ? AND signed_off_at IS NULL`
-    ).bind(now, now, now, v.id).run();
+      `UPDATE advisor_deliverable_versions
+          SET signed_off_at = ?, signed_off_by_user_id = ?,
+              opened_by_user_id = CASE WHEN opened_at IS NULL THEN ? ELSE opened_by_user_id END,
+              opened_at = COALESCE(opened_at, ?), updated_at = ?
+        WHERE id = ? AND signed_off_at IS NULL AND recipient_user_id = ?`
+    ).bind(now, user.id, user.id, now, now, v.id, user.id).run();
     if (accepted.meta?.changes) {
       await logAdminAction(c.env, user.id, user.email, 'advisor_deliverable_accepted', { version_id: v.id });
     }

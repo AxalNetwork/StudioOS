@@ -334,6 +334,12 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
       ['due_date', 'ALTER TABLE advisor_deliverables ADD COLUMN due_date TEXT'],
       ['manual_status', 'ALTER TABLE advisor_deliverables ADD COLUMN manual_status TEXT'],
     ]);
+    // #4684 / migration 202611062152: who a version went to and who recorded its receipts.
+    await addMissingColumns(env, 'PRAGMA table_info(advisor_deliverable_versions)', [
+      ['recipient_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN recipient_user_id INTEGER'],
+      ['opened_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN opened_by_user_id INTEGER'],
+      ['signed_off_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN signed_off_by_user_id INTEGER'],
+    ]);
     await addMissingColumns(env, 'PRAGMA table_info(advisor_session_types)', [
       ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
     ]);
