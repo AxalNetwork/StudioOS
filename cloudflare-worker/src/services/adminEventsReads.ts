@@ -45,6 +45,9 @@ const REGISTRATION_STATUSES = ['registered', 'confirmed', 'attended', 'waitliste
 const PAYMENT_STATUSES = ['none', 'free', 'pending', 'paid', 'refunded'] as const;
 const ROLES = ['founder', 'partner', 'exploring', 'advisor', 'investor', 'admin'] as const;
 export const OVERVIEW_WEEKS = [4, 12, 52] as const;
+/** #4717: how many of the next events and of the oldest waiting ones the overview lists. */
+export const NEXT_UP_ROWS = 3;
+export const REVIEW_ROWS = 6;
 
 const unreadable = (what: string, e: unknown): Unreadable => {
   console.error('[admin-events-reads]', what, typeof e === 'string' ? e : (e as Error)?.message);
@@ -358,10 +361,50 @@ export async function readOverview(env: Env, weeks: number, now = Date.now()) {
     block('What needs attention', async () => needsAttention(await events(), now)),
   ]);
 
+  // #4717 — THE ROWS BEHIND TWO OF THE COUNTS, from the same event rows, so a
+  // list can never disagree with its number. `next_up` is the soonest of the
+  // events `upcoming_30d` counts (published or waiting, starting in the next 30
+  // days); `review` is the oldest of the events `queue` counts. Titles, times,
+  // capacity and seats only: no host, no member.
+  const [next_up, review] = await Promise.all([
+    block('The next events', async () => {
+      const rows = (await events())
+        .filter((e) => { const s = timestamp(e.starts_at); return LIVE.has(e.status) && s >= now && s <= now + 30 * DAY; })
+        .sort((a, b) => timestamp(a.starts_at) - timestamp(b.starts_at) || a.id - b.id);
+      return {
+        total: rows.length,
+        rows: rows.slice(0, NEXT_UP_ROWS).map((e) => ({
+          event_id: e.id, title: String(e.title ?? ''), status: e.status, starts_at: iso(timestamp(e.starts_at)),
+          timezone: typeof e.timezone === 'string' && e.timezone ? e.timezone : null,
+          capacity: e.capacity == null ? null : Number(e.capacity), seats_taken: e.seats_taken,
+        })),
+      };
+    }),
+    block('The events waiting for review', async () => {
+      const waiting = (await events()).filter((e) => e.status === 'pending_review');
+      const since = (e: EventRow) => waitingSince(e);
+      waiting.sort((a, b) => {
+        const x = since(a); const y = since(b);
+        if (!Number.isFinite(x)) return Number.isFinite(y) ? 1 : a.id - b.id;
+        if (!Number.isFinite(y)) return -1;
+        return x - y || a.id - b.id;
+      });
+      return {
+        total: waiting.length,
+        rows: waiting.slice(0, REVIEW_ROWS).map((e) => ({
+          event_id: e.id, title: String(e.title ?? ''), waiting_since: iso(since(e)),
+          // Queued before submission was stamped: its wait counts from creation (D917).
+          from_created: !Number.isFinite(timestamp(e.submitted_at)),
+          waiting_hours: waitingHours(e, now), overdue: isOverdue(e, now),
+        })),
+      };
+    }),
+  ]);
+
   return {
     weeks,
     period: { start: iso(start), end: iso(end), current_week_to_date: true },
-    queue, upcoming_30d, waitlisted, weekly, show_up, by_status, by_type, by_format, by_role, by_source,
+    queue, upcoming_30d, next_up, review, waitlisted, weekly, show_up, by_status, by_type, by_format, by_role, by_source,
     paid, payment_pending, free_seats, cancelled, needs_attention,
     views: { recorded: false, reason: 'No store counts views of an event page, so the funnel starts at registration.' } as NotRecorded,
     feedback: { recorded: false, reason: 'Events have no feedback form yet.' } as NotRecorded,
