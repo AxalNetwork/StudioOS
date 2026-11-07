@@ -37,7 +37,7 @@ import {
   termsInDialog, termsSentence,
 } from '../src/pages/admin/programs/referralPartnersModel.js';
 import {
-  INVESTOR_REFUSALS, NDA_TEMPLATE_LINE, giveBody, investorTiles,
+  GIVEN_DONE, INVESTOR_REFUSALS, NDA_LINE, NDA_TEMPLATE_LINE, NDA_WORD, giveBody, investorTiles, ndaAction,
 } from '../src/pages/admin/programs/investorCohortsModel.js';
 import { investorsFigure, partnersFigure } from '../src/pages/admin/programs/catalogueModel.js';
 
@@ -290,7 +290,7 @@ function worker(o = {}) {
     if (method !== 'GET') {
       const w = Object.entries({
         draft: /^\/api\/admin\/referral-partners\/terms$/, edit: /^\/api\/admin\/referral-partners\/terms\/[^/]+$/, submit: /\/submit$/, approve: /\/approve$/,
-        preview: /\/terms\/[^/]+\/preview$/, send: /\/terms\/[^/]+\/send$/, endTerms: /\/terms\/[^/]+\/end$/, give: /^\/api\/admin\/investor-cohorts$/, endAccess: /^\/api\/admin\/investor-cohorts\/[^/]+\/end$/,
+        preview: /\/terms\/[^/]+\/preview$/, send: /\/terms\/[^/]+\/send$/, endTerms: /\/terms\/[^/]+\/end$/, give: /^\/api\/admin\/investor-cohorts$/, endAccess: /^\/api\/admin\/investor-cohorts\/[^/]+\/end$/, nda: /^\/api\/admin\/investor-cohorts\/[^/]+\/nda$/,
       }).find(([, re]) => re.test(path));
       if (w && writes[w[0]]) return writes[w[0]](options, path);
       if (w?.[0] === 'draft' || w?.[0] === 'edit') return response(terms('t-new', 'draft'));
@@ -519,4 +519,39 @@ test('wiring: the new sub-paths are routed under today’s guard, are tabs of th
   for (const p of ['/admin/programs/referral-partners/queue', '/admin/programs/investor-cohorts/activity']) assert.equal(pageKeyFor(p, 'admin'), 'Admin · Programs');
   const api = read('frontend/src/lib/apiModules.generated.js');
   assert.ok(api.includes("export * from './api/investorCohorts.js';") && api.includes("export * from './api/referralPartners.js';"));
+});
+
+test('D4809: each grant offers its one NDA action; the dialog says where the NDA stands; Void and resend posts void_previous; a failed delivery says so', async () => {
+  // Model: the action follows the state.
+  assert.deepEqual(ndaAction(GRANT('a')), { kind: 'send', label: 'Send NDA' });
+  for (const s of ['delivery_failed', 'declined', 'voided']) assert.deepEqual(ndaAction(GRANT('a', { nda_state: s })), { kind: 'send', label: 'Send NDA again' }, s);
+  assert.deepEqual(ndaAction(GRANT('a', { nda_state: 'sent' })), { kind: 'resend', label: 'Void and resend' });
+  assert.equal(ndaAction(GRANT('a', { nda_state: 'signed', state: 'active' })), null);
+  assert.equal(ndaAction(GRANT('a', { state: 'ended' })), null);
+  assert.equal(ndaAction(GRANT('a', { verified_now: false })), null, 'nothing is sent to an unverified investor');
+  assert.equal(NDA_WORD.delivery_failed, 'Delivery failed');
+  assert.doesNotMatch(GIVEN_DONE, /sends|is sent to/, 'giving access never claims an NDA went');
+  let nda = () => response({ grant: GRANT('g1', { nda_state: 'delivery_failed' }), envelope: { uuid: 'e1', email_sent: false } });
+  const grants = { items: [GRANT('g1'), GRANT('g3', { nda_state: 'sent' }), GRANT('g4', { nda_state: 'signed', state: 'active' })], total: 3 };
+  const view = await mounted('/admin/programs/investor-cohorts', worker({ grants, writes: { nda: () => nda() } }));
+  try {
+    assert.equal(view.textOf('programs-investor-row-g1-nda-action'), 'Send NDA');
+    assert.equal(view.textOf('programs-investor-row-g3-nda-action'), 'Void and resend');
+    assert.ok(!view.has('programs-investor-row-g4-nda-action'), 'a signed NDA offers nothing');
+    await view.click('programs-investor-row-g1-nda-action');
+    assert.equal(view.textOf('programs-investor-nda-line'), NDA_LINE.not_sent);
+    assert.equal(sent(view, /\/nda$/).length, 0, 'nothing is sent before the dialog is confirmed');
+    await view.click('programs-investor-nda-go');
+    assert.deepEqual(JSON.parse(sent(view, /\/investor-cohorts\/g1\/nda$/)[0].body), {});
+    assert.match(view.textOf('programs-investor-nda-go-done'), /its email did not go/);
+  } finally { await view.close(); }
+  nda = () => refusal(409, 'signature_in_progress');
+  const resend = await mounted('/admin/programs/investor-cohorts', worker({ grants, writes: { nda: () => nda() } }));
+  try {
+    await resend.click('programs-investor-row-g3-nda-action');
+    assert.equal(resend.textOf('programs-investor-nda-line'), NDA_LINE.sent);
+    await resend.click('programs-investor-nda-go');
+    assert.deepEqual(JSON.parse(sent(resend, /\/investor-cohorts\/g3\/nda$/)[0].body), { void_previous: true });
+    assert.equal(resend.textOf('programs-investor-nda-go-refusal'), INVESTOR_REFUSALS.signature_in_progress);
+  } finally { await resend.close(); }
 });

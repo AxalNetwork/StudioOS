@@ -107,10 +107,9 @@ function mentions(haystack: string, phrase: string | null): boolean {
  *
  * THE RULES ARE ALREADY THERE. `partner_fit_rules` (209/229) is the firm's own
  * register of what it takes and what it passes on, and `service_offerings` is
- * what it sells. Nothing was ever scored against either — `/offers/fit-rules`
- * has answered `enforcement: 'none'` since it was written, with the accurate
- * note that "these rules are a record a person reads before passing on a lead."
- * This is the reader.
+ * what it sells. `/offers/fit-rules` answered `enforcement: 'none'` while
+ * nothing read them; this is the reader, and since #4696 that response says so
+ * (`enforcement: 'score_and_rank'`, `auto_decline: false`).
  *
  * A SCORE WITH NO RULES BEHIND IT IS NULL, NOT FIFTY. A firm that has stated no
  * fit rule and listed no offering has told this product nothing to judge a lead
@@ -331,7 +330,7 @@ partnerPipeline.get('/leads', async (c) => {
       // imply a model where there is a substring match.
       scoring: ruleRows.length || offeringRows.length ? 'fit_rules' : 'none',
       scoring_note: ruleRows.length || offeringRows.length
-        ? 'A score is a count of your own stated rules this lead meets, over the ones it was measured against. Every receipt on the row names the rule it came from. Nothing here is a model.'
+        ? 'A score is a count of your own stated rules this lead meets, over the ones it was measured against. Every receipt on the row names the rule it came from. A lead that matches a declined sector or an absent capability is marked excluded: it carries your sentence and no score, and it is left out of the ranking, but it stays on this list and is never declined for you. Nothing here is a model.'
         : 'This firm has stated no fit rule and listed no service, so there is nothing to score a lead against. Nothing is scored, and nothing is guessed.',
     });
   } catch (e) { return mapError(c, e); }
