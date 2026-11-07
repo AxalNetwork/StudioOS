@@ -11,6 +11,7 @@ import { LensNavLink } from '../../workspaces/lens';
 import { useRailOption } from '../../ui/railCrumbs';
 import { railPressHeaders } from '../../lib/railPage.js';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import { RETRIEVAL_UNAVAILABLE } from '../research/askOutcome.js';
 
 export const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const firstText = (...values) => values.find((value) => value !== null && value !== undefined && String(value).trim() !== '');
@@ -244,6 +245,7 @@ function AskResult({ asked, error }) {
   if (!asked) return null;
   const citations = Array.isArray(asked.citations) ? asked.citations : [];
   const said = asked.reason === 'answered' ? asked.answer
+    : asked.reason === 'retrieval_unavailable' ? RETRIEVAL_UNAVAILABLE
     : asked.reason === 'no_source' ? (Number(asked.indexed_documents) === 0 ? 'Your research library holds no indexed document yet, so there is nothing to answer from.' : 'Nothing in your research library answers this question closely enough to cite.')
       : 'The passages below were found, but no answer could be written from them just now.';
   return <div className="a7-answer" data-testid="card-research-answer">

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, Pill, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
@@ -8,6 +8,7 @@ import { NotRecorded } from '../../workspaces/canvasKit';
 import { StatedLimit } from '../advisor/expertise/kit';
 import useRecordCrumb from '../admin/useRecordCrumb';
 import { AGE_AT, STALE_AT, ageBand, daysSince } from './MarketZone';
+import { createRecordGate } from './recordGate.js';
 import {
   ATTACH_COPY,
   ageingAttachmentNote,
@@ -518,11 +519,22 @@ export default function MarketReading({ role = 'founder' }) {
   const [draftEdit, setDraftEdit] = useState('');
   const [kept, setKept] = useState('');
 
+  // D4607: a read that answers after the route has moved on, or after the
+  // page has left, is dropped with its result, its error and its loading state.
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
+  useEffect(() => () => gate.current.invalidate(), []);
+
   const load = useCallback(async () => {
+    const fresh = gate.current.begin();
     setLoading(true);
     setError(null);
+    // The previous reading goes with it, so nothing of A is saved or attached on B.
+    setPayload(null);
+    setForm(null);
     try {
       const full = await api.research.marketReadingGet(uid);
+      if (!fresh()) return;
       setPayload(full);
       setForm(readingFields(full.item));
       // The picker offers only the proposals this reading is not on yet.
@@ -531,13 +543,14 @@ export default function MarketReading({ role = 'founder' }) {
       setDraftEdit('');
       setKept('');
     } catch (e) {
+      if (!fresh()) return;
       setPayload(null);
       setForm(null);
       setError(e?.status === 404
         ? 'This reading is not on your list.'
         : (e?.message || 'The reading did not load.'));
     } finally {
-      setLoading(false);
+      if (fresh()) setLoading(false);
     }
   }, [uid]);
 
@@ -550,7 +563,8 @@ export default function MarketReading({ role = 'founder' }) {
 
   const save = async (e) => {
     e.preventDefault();
-    if (!item || !form || busy) return;
+    // D4607: only the reading the route names, never one still on screen from before.
+    if (!item || !form || busy || String(item.uid) !== String(uid)) return;
     const submission = readingSubmission(item, form);
     if (submission.error) {
       setNotice({ ok: false, text: submission.error });
@@ -582,7 +596,7 @@ export default function MarketReading({ role = 'founder' }) {
   };
 
   const attach = async () => {
-    if (!item || stale || busy || !quoteId) return;
+    if (!item || stale || busy || !quoteId || String(item.uid) !== String(uid)) return;
     setBusy(true);
     setNotice(null);
     try {
