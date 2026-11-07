@@ -328,6 +328,9 @@ export function toggleCard(cards, key) {
   return SCOPE_KEYS.filter((k) => k === key || cards.includes(k));
 }
 
+/** D4635 (#4635): the one place a thesis is set (the My thesis card, D1424); every Fit and empty-state action opens it. */
+export const THESIS_PATH = '/account/security-privacy';
+
 export const PAGE_SIZE = 25;
 export const pageOf = (rows, page) => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 export const pagesFor = (n) => Math.max(1, Math.ceil(n / PAGE_SIZE));
