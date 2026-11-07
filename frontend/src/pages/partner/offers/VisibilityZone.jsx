@@ -6,7 +6,7 @@ import {
   // own composition now, and `VisTile` below is the tile that can render `Not
   // recorded` as a chip rather than as an em dash a reader reads as zero.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, SaveNote, NotComputable, NoPartnerProfile,
+  Section, Field, NotComputable, NoPartnerProfile,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -14,6 +14,7 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
 
 /**
  * Offers · Visibility — `/offers/visibility`.
@@ -107,7 +108,7 @@ function SurfaceRow({ row, onSave, onDelete, busy, note }) {
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={buttonClass} disabled={busy}
-              onClick={async () => { await onSave(row, draft); setEdit(false); }}>Save</button>
+              onClick={() => onSave(row, draft, () => setEdit(false))}>Save</button>
             <button
               type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
               disabled={busy}
@@ -117,7 +118,7 @@ function SurfaceRow({ row, onSave, onDelete, busy, note }) {
               Delete
             </button>
           </div>
-          <SaveNote note={note?.scope === `surface:${row.id}` ? note : null} />
+          <WriteNote note={scopedNote(note, `surface:${row.id}`)} busy={busy} />
         </div>
       )}
     </div>
@@ -153,8 +154,6 @@ function AttributionRow({ row, surfaces, onSet, onClear, busy }) {
 
 export default function PartnerVisibilityZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null, attribution: null });
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
   const [newSurface, setNewSurface] = useState({ name: '', kind: 'directory' });
 
@@ -171,6 +170,7 @@ export default function PartnerVisibilityZone() {
         data: v || {},
         attribution: Array.isArray(a?.items) ? a.items : [],
       });
+      return true;
     } catch (e) {
       setState({
         loading: false,
@@ -178,23 +178,20 @@ export default function PartnerVisibilityZone() {
         data: null,
         attribution: null,
       });
+      return false;
     }
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
-    }
-  }, [load]);
+  // #4688: one write mechanism. A failed write keeps its form and offers Retry;
+  // cleanup runs only once the write persisted; a refresh that fails after a
+  // persisted write says so and offers only a reload of the read.
+  const { busy, note, save, reload, clearNote } = useGuardedWrite(load);
+  const run = useCallback(
+    (write, saved, scope, onSaved) => save(write, { saved, scope, onSaved }),
+    [save],
+  );
+  const toggleAdding = (open) => { clearNote(); setAdding(open); };
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -272,10 +269,46 @@ export default function PartnerVisibilityZone() {
         filters={unlinked ? [] : partnerZoneFilters('offers/visibility', { value: view })}
         actions={rowActions}
       />
+      {/* THE EDITOR IS NOT A CHILD OF `ZoneBody` (#4688). `ZoneBody` draws only
+          its empty state while there are no rows, so a form placed among its
+          children was never mounted for the very partner who needed it: the
+          first-record button set `adding` and nothing appeared. Here it is
+          mounted by `adding` alone, so it exists for an empty store, during a
+          refresh, and beside an unreadable list. */}
+      {adding && (
+        <div className="mb-6 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700" data-testid="surface-editor">
+          <div className="grid gap-3 md:grid-cols-3">
+            <Field label="Name" hint="What a person would call it — “Axal directory”, “Acme referral”.">
+              <input className={inputClass} value={newSurface.name} maxLength={160}
+                onChange={(e) => setNewSurface({ ...newSurface, name: e.target.value })} />
+            </Field>
+            <Field label="Kind">
+              <select className={inputClass} value={newSurface.kind}
+                onChange={(e) => setNewSurface({ ...newSurface, kind: e.target.value })}>
+                {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </Field>
+            <div className="flex items-end">
+              <button
+                type="button" className={buttonClass}
+                disabled={busy || !newSurface.name.trim()}
+                onClick={() => run(
+                  () => api.createPartnerSurface(newSurface), 'Surface added.', 'new',
+                  () => { setNewSurface({ name: '', kind: 'directory' }); setAdding(false); },
+                )}
+              >
+                Add surface
+              </button>
+            </div>
+          </div>
+          <WriteNote note={scopedNote(note, 'new')} busy={busy} />
+        </div>
+      )}
+      <WriteNote note={zoneNote(note)} busy={busy} onReload={reload} />
       <ZoneBody
         loading={state.loading}
         error={unlinked ? null : state.error}
-        onRetry={load}
+        onRetry={reload}
         notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || (items.length === 0)}
         empty={(
@@ -288,7 +321,7 @@ export default function PartnerVisibilityZone() {
               + 'came from, which is the only way this zone can compare them.'
             }
             action={(
-              <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
+              <button type="button" className={buttonClass} onClick={() => toggleAdding(true)}>
                 Add a surface
               </button>
             )}
@@ -304,7 +337,7 @@ export default function PartnerVisibilityZone() {
               + 'is the point of the zone.'
             }
             action={(
-              <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
+              <button type="button" className={ghostButtonClass} onClick={() => toggleAdding(!adding)}>
                 {adding ? 'Cancel' : 'Add a surface'}
               </button>
             )}
@@ -392,37 +425,6 @@ export default function PartnerVisibilityZone() {
             </p>
           )}
 
-          {adding && (
-            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-              <div className="grid gap-3 md:grid-cols-3">
-                <Field label="Name" hint="What a person would call it — “Axal directory”, “Acme referral”.">
-                  <input className={inputClass} value={newSurface.name} maxLength={160}
-                    onChange={(e) => setNewSurface({ ...newSurface, name: e.target.value })} />
-                </Field>
-                <Field label="Kind">
-                  <select className={inputClass} value={newSurface.kind}
-                    onChange={(e) => setNewSurface({ ...newSurface, kind: e.target.value })}>
-                    {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                </Field>
-                <div className="flex items-end">
-                  <button
-                    type="button" className={buttonClass}
-                    disabled={busy || !newSurface.name.trim()}
-                    onClick={async () => {
-                      await run(() => api.createPartnerSurface(newSurface), 'Surface added.', 'new');
-                      setNewSurface({ name: '', kind: 'directory' });
-                      setAdding(false);
-                    }}
-                  >
-                    Add surface
-                  </button>
-                </div>
-              </div>
-              <SaveNote note={note?.scope === 'new' ? note : null} />
-            </div>
-          )}
-
           <Section title="Surfaces">
             <div>
               {visible.map((row) => (
@@ -431,11 +433,11 @@ export default function PartnerVisibilityZone() {
                   row={row}
                   busy={busy}
                   note={note}
-                  onSave={(r, draft) => run(
+                  onSave={(r, draft, onSaved) => run(
                     () => api.updatePartnerSurface(r.id, {
                       name: draft.name, kind: draft.kind, is_active: draft.is_active,
                     }),
-                    'Saved.', `surface:${r.id}`,
+                    'Saved.', `surface:${r.id}`, onSaved,
                   )}
                   onDelete={(r) => run(
                     () => api.deletePartnerSurface(r.id),
@@ -499,7 +501,7 @@ export default function PartnerVisibilityZone() {
                 sequences, so `scope === row.id` would eventually show a surface's
                 "Saved." under an unrelated engagement row — a message about a
                 write that did not happen there. */}
-            <SaveNote note={String(note?.scope || '').startsWith('attr:') ? note : null} />
+            <WriteNote note={String(note?.scope || '').startsWith('attr:') && !note.refreshFailed ? note : null} busy={busy} />
           </Section>
 
           <StatedLimit title="What this zone does not claim">

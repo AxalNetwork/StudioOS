@@ -4,8 +4,8 @@ import { Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, MoreRows, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
+  Field, MoreRows, NothingYet, Pill, SaveNote, StaleNote, Unrecorded, ZoneBody, ZoneHeading,
+  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money, refusalText,
 } from './kit';
 import { SERVICE_LIMITS, SUPPORTED_CURRENCIES } from '../../../lib/advisorLimits';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -17,7 +17,8 @@ import { usePagedList } from './pages';
 const readServicesPage = (page) => api.listMyAdvisorServices(page);
 import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 import {
-  SERVICE_BOOKABLE, SERVICE_NOT_PUBLIC, SERVICE_STATES, SESSIONS_PATH, serviceDraftOf, serviceEditBody, serviceStateLabel,
+  SERVICE_BOOKABLE, SERVICE_FAILED, SERVICE_NOT_PUBLIC, SERVICE_STATES, SESSIONS_PATH, serviceDraftOf, serviceEditBody,
+  serviceRemoveLines, serviceStateLabel,
 } from './expertiseModel';
 
 /**
@@ -49,6 +50,13 @@ import {
  * recreate. Active and Inactive are states of the advisor's own record: a
  * service is never on the public profile and is never booked. What a founder
  * books is a session type and its public booking link (Practice › Sessions).
+ *
+ * D4711 (#4711, Expertise P3): Remove asks first, as Proof's delete does, and
+ * says what it removed. A row has one write in flight at a time, so a second
+ * press cannot send a second request. Every failure is a fixed sentence keyed
+ * on the Worker's refusal code (`refusalText`), never the error's own text.
+ * Opening a row's edit form moves focus to its Title; closing it returns focus
+ * to the button that opened it.
  */
 
 const KINDS = [
@@ -75,6 +83,23 @@ export default function ServicesZone() {
   const [editDraft, setEditDraft] = useState(() => serviceDraftOf(null));
   const [editNote, setEditNote] = useState(null);
   const [saving, setSaving] = useState(false);
+  // D4711: the row asking "Remove …?", and the rows with a write in flight.
+  const [confirming, setConfirming] = useState(null);
+  const [pending, setPending] = useState(() => new Set());
+  const pendingRef = useRef(new Set());
+  const editTitleRef = useRef(null);
+  const rowButtons = useRef({});
+  const [returnFocus, setReturnFocus] = useState(null);
+  const claim = (id) => {
+    if (pendingRef.current.has(id)) return false;
+    pendingRef.current.add(id);
+    setPending(new Set(pendingRef.current));
+    return true;
+  };
+  const release = (id) => {
+    pendingRef.current.delete(id);
+    setPending(new Set(pendingRef.current));
+  };
   // D1424 (#3700): the header's "New service" scrolls to this form and puts
   // the cursor in Title. The form is the whole of adding one; nothing opens.
   const titleRef = useRef(null);
@@ -88,6 +113,14 @@ export default function ServicesZone() {
   });
 
   useEffect(() => { load(); }, [load]);
+  // D4711: an opened edit form takes focus at its Title; a closed one, or a
+  // closed "Remove …?", hands it back to the row's own button.
+  useEffect(() => { if (editing != null) editTitleRef.current?.focus?.(); }, [editing]);
+  useEffect(() => {
+    if (!returnFocus) return;
+    rowButtons.current[returnFocus]?.focus?.();
+    setReturnFocus(null);
+  }, [returnFocus]);
 
   const add = async (e) => {
     e.preventDefault();
@@ -110,26 +143,33 @@ export default function ServicesZone() {
       await fill.afterSave(created?.id);
       setDraft(BLANK);
       setNote({ ok: true, text: 'Service added.' });
-      await load();
+      await list.refresh();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'The service could not be saved. Nothing was added.' });
+      setNote({ ok: false, text: refusalText(err, SERVICE_FAILED.add) });
     } finally {
       setBusy(false);
     }
   };
 
   const toggleActive = async (row) => {
+    if (!claim(row.id)) return;
     setNote(null);
     try {
       await api.updateMyAdvisorService(row.id, { is_active: !row.is_active });
-      await load();
+      setNote({ ok: true, text: `“${row.title}” is now ${row.is_active ? 'inactive' : 'active'}.` });
+      await list.refresh();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be changed.' });
+      setNote({ ok: false, text: refusalText(err, SERVICE_FAILED.state) });
+    } finally {
+      release(row.id);
     }
   };
 
   const startEdit = (row) => { setEditing(row.id); setEditDraft(serviceDraftOf(row)); setEditNote(null); };
-  const stopEdit = () => { setEditing(null); setEditNote(null); };
+  const stopEdit = () => {
+    if (editing != null) setReturnFocus(`edit-${editing}`);
+    setEditing(null); setEditNote(null);
+  };
   const saveEdit = async (e, row) => {
     e.preventDefault();
     const parsed = dollarsToCents(editDraft.price);
@@ -147,7 +187,7 @@ export default function ServicesZone() {
       setEditDraft(serviceDraftOf(saved));
       stopEdit();
       setNote({ ok: true, text: 'Service saved.' });
-      await load();
+      await list.refresh();
     } catch (err) {
       if (err?.code === 'revision_conflict' || err?.status === 409) {
         // Show the row as it now stands, and keep what the person typed visible
@@ -155,22 +195,35 @@ export default function ServicesZone() {
         const current = err?.data?.current;
         if (current) setEditDraft(serviceDraftOf(current));
         setEditNote({ ok: false, text: err?.message || 'This service was changed somewhere else. It is shown as it now stands; your change was not saved.' });
-        await load();
+        await list.refresh();
       } else {
-        setEditNote({ ok: false, text: err?.message || 'The change could not be saved. The service is as it was.' });
+        setEditNote({ ok: false, text: refusalText(err, SERVICE_FAILED.edit) });
       }
     } finally {
       setSaving(false);
     }
   };
 
+  const keep = (row) => { setConfirming(null); setReturnFocus(`remove-${row.id}`); };
   const remove = async (row) => {
+    if (!claim(row.id)) return;
     setNote(null);
     try {
       await api.deleteMyAdvisorService(row.id);
-      await load();
+      setConfirming(null);
+      setNote({ ok: true, text: `Removed “${row.title}”.` });
+      await list.refresh();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be removed.' });
+      if (err?.status === 404) {
+        // Another tab, or an earlier press, already removed it: say so, and redraw.
+        setConfirming(null);
+        setNote({ ok: true, text: `“${row.title}” was already removed.` });
+        await list.refresh();
+      } else {
+        setNote({ ok: false, text: refusalText(err, SERVICE_FAILED.remove) });
+      }
+    } finally {
+      release(row.id);
     }
   };
 
@@ -256,7 +309,7 @@ export default function ServicesZone() {
           <Link to={SESSIONS_PATH} className="font-semibold text-emerald-700 underline dark:text-emerald-300">Practice › Sessions</Link>
         </p>
         <FillFormBar fill={fill} />
-        <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="advisor-service-add">
           <Field label="Title" fill={{ ctl: fill, name: 'title', value: draft.title }}>
             <input ref={titleRef} className={inputClass} value={draft.title} data-testid="advisor-service-title" maxLength={SERVICE_LIMITS.title}
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
@@ -269,7 +322,7 @@ export default function ServicesZone() {
             </select>
           </Field>
           <Field label="Price" hint="Leave blank if you have not set one — blank reads as “not recorded”, not as free.">
-            <input className={inputClass} value={draft.price} inputMode="decimal"
+            <input className={inputClass} value={draft.price} inputMode="decimal" data-testid="advisor-service-price"
               onChange={(e) => setDraft({ ...draft, price: e.target.value })}
               placeholder="2500" />
           </Field>
@@ -294,7 +347,7 @@ export default function ServicesZone() {
             <button type="submit" className={buttonClass} disabled={busy}>
               {busy ? 'Adding…' : 'Add service'}
             </button>
-            <SaveNote note={note} />
+            <SaveNote note={note} testid="advisor-services-note" />
           </div>
         </form>
       </Card>
@@ -306,6 +359,7 @@ export default function ServicesZone() {
         actions={advisorZoneActions('expertise/services', { handlers: { focusAddForm }, view: { header: ['Service', 'Kind', 'Active', 'Price (minor units)', 'Currency', 'Units sold'], rows: shown, cells: (r) => [r.title, r.kind, r.is_active, r.price_cents, r.currency, r.units_sold] } })}
       />
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
+        notice={<StaleNote error={list.refreshError} onRetry={list.refresh} testid="advisor-services-stale" />}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
           <p className="text-[12.5px] text-axal-muted">{`No ${view} service is listed. ${counts?.total ?? state.items.length} in total.`}</p>
@@ -333,25 +387,33 @@ export default function ServicesZone() {
                   </div>
                   <div className="mt-2 flex gap-2">
                     <button type="button" className={ghostButtonClass} onClick={() => (editing === row.id ? stopEdit() : startEdit(row))}
+                      ref={(n) => { rowButtons.current[`edit-${row.id}`] = n; }}
+                      aria-expanded={editing === row.id} aria-label={`${editing === row.id ? 'Close' : 'Edit'} ${row.title}`}
                       data-testid={`advisor-service-edit-${row.id}`}>
                       {editing === row.id ? 'Close' : 'Edit'}
                     </button>
                     <button type="button" className={ghostButtonClass} onClick={() => toggleActive(row)}
+                      disabled={pending.has(row.id)} aria-label={`${row.is_active ? 'Mark inactive' : 'Mark active'}: ${row.title}`}
                       data-testid={`advisor-service-state-${row.id}`}>
                       {row.is_active ? 'Mark inactive' : 'Mark active'}
                     </button>
-                    <button type="button" className={ghostButtonClass} onClick={() => remove(row)}
-                      aria-label={`Remove ${row.title}`}>
+                    <button type="button" className={ghostButtonClass} onClick={() => setConfirming(confirming === row.id ? null : row.id)}
+                      ref={(n) => { rowButtons.current[`remove-${row.id}`] = n; }}
+                      aria-expanded={confirming === row.id}
+                      aria-label={`Remove ${row.title}`} data-testid={`advisor-service-remove-${row.id}`}>
                       <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
               </div>
+              {confirming === row.id ? (
+                <ConfirmRemove row={row} busy={pending.has(row.id)} onKeep={() => keep(row)} onRemove={() => remove(row)} />
+              ) : null}
               {editing === row.id ? (
-                <form onSubmit={(e) => saveEdit(e, row)} className="mt-3 grid grid-cols-1 gap-3 border-t border-axal-hairline pt-3 sm:grid-cols-2 dark:border-gray-700"
+                <form onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault?.(); stopEdit(); } }} onSubmit={(e) => saveEdit(e, row)} className="mt-3 grid grid-cols-1 gap-3 border-t border-axal-hairline pt-3 sm:grid-cols-2 dark:border-gray-700"
                   data-testid={`advisor-service-form-${row.id}`}>
                   <Field label="Title">
-                    <input className={inputClass} value={editDraft.title} data-testid="advisor-service-edit-title" maxLength={SERVICE_LIMITS.title}
+                    <input ref={editTitleRef} className={inputClass} value={editDraft.title} data-testid="advisor-service-edit-title" maxLength={SERVICE_LIMITS.title}
                       onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} />
                   </Field>
                   <Field label="Kind">
@@ -393,7 +455,7 @@ export default function ServicesZone() {
                       {saving ? 'Saving…' : 'Save changes'}
                     </button>
                     <button type="button" className={ghostButtonClass} onClick={stopEdit}>Cancel</button>
-                    <SaveNote note={editNote} />
+                    <SaveNote note={editNote} testid={`advisor-service-edit-note-${row.id}`} />
                   </div>
                 </form>
               ) : null}
@@ -407,6 +469,34 @@ export default function ServicesZone() {
           </p>
         </div>
       </ZoneBody>
+    </div>
+  );
+}
+
+/**
+ * D4711: "Remove …?" asked in place, on the row, the way Proof asks before a
+ * delete. Focus starts on the safe answer; Escape is "Keep it".
+ */
+function ConfirmRemove({ row, busy, onKeep, onRemove }) {
+  const keepRef = useRef(null);
+  const titleId = React.useId();
+  const bodyId = React.useId();
+  useEffect(() => { keepRef.current?.focus?.(); }, []);
+  return (
+    <div role="alertdialog" aria-labelledby={titleId} aria-describedby={bodyId} data-testid={`advisor-service-confirm-${row.id}`}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault?.(); onKeep(); } }}
+      className="mt-3 rounded-[10px] border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
+      <div id={titleId} className="text-[12.5px] font-bold">{`Remove “${row.title}”?`}</div>
+      <ul id={bodyId} className="m-0 mt-1 list-disc pl-5 text-[12px] leading-relaxed text-axal-muted">
+        {serviceRemoveLines(row).map((l) => <li key={l}>{l}</li>)}
+      </ul>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" ref={keepRef} className={ghostButtonClass} onClick={onKeep} data-testid={`advisor-service-keep-${row.id}`}>Keep it</button>
+        <button type="button" disabled={busy} onClick={onRemove} data-testid={`advisor-service-remove-confirm-${row.id}`}
+          className="inline-flex min-h-[32px] items-center rounded-lg bg-axal-destructive px-3 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-50">
+          {busy ? 'Removing…' : 'Remove'}
+        </button>
+      </div>
     </div>
   );
 }

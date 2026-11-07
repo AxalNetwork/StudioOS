@@ -6,7 +6,7 @@ import {
   // own composition now, and `FitTile` below carries the artboard's note under
   // each figure and can draw an absence as a chip rather than an em dash.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
+  Section, Field, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyCents, dollarsToCents,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -14,6 +14,8 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
+import { fitView } from '../../../lib/fitRuleView.js';
 
 /**
  * Offers · Audience fit — `/offers/audience-fit`.
@@ -33,12 +35,15 @@ import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit'
  * `referred_to` IS PART OF THE RULE, not a note on it. A rule that cannot carry
  * the alternative cannot produce the sentence above.
  *
- * NOTHING RUNS THESE. No lead is scored, filtered or auto-declined against a
- * rule here, and the worker says so in its own response (`enforcement: 'none'`)
- * rather than leaving the page to imply whatever it likes. The rules are a
- * record a person reads before deciding — which is the honest description of
- * what they are today, and the one the rail's "no lead is passed or pursued
- * except on your click" already promises.
+ * PIPELINE READS THESE, AND DECLINES NOTHING. `Pipeline · Leads` reads the
+ * active rules to score a lead (a budget floor, a best-fit profile and its
+ * signal), and a lead that matches a declined sector or an absent capability is
+ * marked excluded there: it carries the firm's sentence and no number, and it
+ * is left out of the AI ranking. The worker says so in its own response
+ * (`enforcement: 'score_and_rank'`, `auto_decline: false`) rather than leaving
+ * the page to imply whatever it likes. Scoring and ranking are not rejection:
+ * an excluded lead stays on Leads and passing on it is still the firm's click
+ * (#4696).
  */
 
 const KINDS = [
@@ -55,9 +60,10 @@ const KIND_TONE = {
 /**
  * How strong a fit a PROFILE is (migration 229), in the firm's own words.
  *
- * NOT A SCORE ABOUT ANYBODY. The zone still runs nothing: the worker answers
- * `enforcement: 'none'` and this file does not compute a number against a
- * founder's need. A firm writing "pre-product founders with a deck — weak
+ * NOT A SCORE ABOUT ANYBODY HERE. This file computes no number against a
+ * founder's need; Pipeline does that, and reads `best_fit` and `weak_intent`
+ * as receipts on the score while `qualified` is a note the firm keeps. A firm
+ * writing "pre-product founders with a deck — weak
  * intent" is writing a sentence about a KIND of client, which is the same act
  * as writing the reason beside it.
  *
@@ -229,7 +235,7 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
             busy={busy}
             submitLabel="Save rule"
             onCancel={() => setEdit(false)}
-            onSubmit={async (data) => { await onSave(rule, data); setEdit(false); }}
+            onSubmit={(data) => onSave(rule, data, () => setEdit(false))}
           />
           <div className="mt-2 flex">
             <button
@@ -239,7 +245,7 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
               Delete rule
             </button>
           </div>
-          <SaveNote note={note?.scope === `rule:${rule.id}` ? note : null} />
+          <WriteNote note={scopedNote(note, `rule:${rule.id}`)} busy={busy} />
         </div>
       )}
     </div>
@@ -324,8 +330,6 @@ function PassReasons({ rules, onClose }) {
 
 export default function PartnerAudienceFitZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null });
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
   const [showingPasses, setShowingPasses] = useState(false);
   const [view, setView] = useState('all');
@@ -335,37 +339,33 @@ export default function PartnerAudienceFitZone() {
     try {
       const r = await api.listPartnerFitRules();
       setState({ loading: false, error: '', data: r || {} });
+      return true;
     } catch (e) {
       setState({ loading: false, error: e?.message || 'The fit rules did not load.', data: null });
+      return false;
     }
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
-    }
-  }, [load]);
+  // #4688: one write mechanism, shared with Visibility and Proof. See
+  // `useGuardedWrite.jsx` for what "saved" means and what Retry repeats.
+  const { busy, note, save, reload, clearNote } = useGuardedWrite(load);
+  const run = useCallback(
+    (write, saved, scope, onSaved) => save(write, { saved, scope, onSaved }),
+    [save],
+  );
+  const toggleAdding = (open) => { clearNote(); setAdding(open); };
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
   const floor = items.find((r) => r.is_active && r.kind === 'budget_floor') || null;
   // The artboard's `Fit profiles` table is who the firm IS for; its `Who we are
   // not for` card below is the other three kinds. One split, two compositions.
-  const profiles = items.filter((r) => r.kind === 'best_fit');
-  // ALL THREE STRENGTH CHIPS SELECT ON THE STORED `signal` (migration 229), and
-  // they select over the PROFILES rather than over every rule: a chip that
-  // returned a declined sector under `Weak` would be answering a different
-  // question from the one it asks.
-  const visible = view === 'all' ? items : profiles.filter((r) => r.signal === view);
+  // ONE ROW SET PER CHIP, for the principal table, the editable list and the
+  // export (`lib/fitRuleView.js`, #4696). The chip narrowed the list and the
+  // export and left the table showing the whole library.
+  // `visible` IS the editable list AND the export: `fitView` returns one set for both.
+  const { profiles, profileRows, ruleRows: visible, narrowed } = fitView(items, view);
 
   // ══ THE ARTBOARD'S FOUR TILES ════════════════════════════════════════════
   // `Best fit · Budget floor · Sectors declined · Capabilities absent`, counted
@@ -400,7 +400,7 @@ export default function PartnerAudienceFitZone() {
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
   const handlers = {
-    passReasons: () => { setNote(null); setShowingPasses(true); },
+    passReasons: () => { clearNote(); setShowingPasses(true); },
   };
   const rowActions = partnerZoneActions('offers/audience-fit', { handlers, view: { header: ['Profile or exclusion', 'Kind', 'Signal', 'Why', 'Referred to', 'In use'], rows: visible, cells: (r) => [r.kind === 'budget_floor' && r.floor_cents != null ? moneyCents(r.floor_cents) : r.value, r.kind, r.signal, r.statement, r.referred_to, r.is_active] } });
 
@@ -418,7 +418,7 @@ export default function PartnerAudienceFitZone() {
 
   return (
     <>
-      {/* Hoisted out of `ZoneBody`, and the export takes `visible`: a file that
+      {/* Hoisted out of `ZoneBody`, and the export takes `visible`, the rows the chip selects: a file that
           did not match the chip on screen would be its own small untruth. */}
       {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
           An action states what the zone DOES and an export over nothing
@@ -433,10 +433,29 @@ export default function PartnerAudienceFitZone() {
         filters={unlinked ? [] : partnerZoneFilters('offers/audience-fit', { value: view, onChange: setView })}
         actions={rowActions}
       />
+      {/* THE EDITOR IS NOT A CHILD OF `ZoneBody` (#4688): with no rows `ZoneBody`
+          draws only its empty state, so "Write the first rule" set `adding`
+          and no form ever mounted. Mounted by `adding` alone, it also survives
+          a refresh and an unreadable list. */}
+      {adding && (
+        <div className="mb-6" data-testid="rule-editor">
+          <RuleForm
+            busy={busy}
+            submitLabel="Add rule"
+            onCancel={() => toggleAdding(false)}
+            onSubmit={(data) => run(
+              () => api.createPartnerFitRule(data), 'Rule added.', 'new',
+              () => setAdding(false),
+            )}
+          />
+          <WriteNote note={scopedNote(note, 'new')} busy={busy} />
+        </div>
+      )}
+      <WriteNote note={zoneNote(note)} busy={busy} onReload={reload} />
       <ZoneBody
         loading={state.loading}
         error={unlinked ? null : state.error}
-        onRetry={load}
+        onRetry={reload}
         notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || (items.length === 0)}
         empty={(
@@ -449,7 +468,7 @@ export default function PartnerAudienceFitZone() {
               + 'do not do, and who to send them to instead.'
             }
             action={(
-              <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
+              <button type="button" className={buttonClass} onClick={() => toggleAdding(true)}>
                 Write the first rule
               </button>
             )}
@@ -464,7 +483,7 @@ export default function PartnerAudienceFitZone() {
               + 'quotes, so a founder hears a reason rather than nothing.'
             }
             action={(
-              <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
+              <button type="button" className={ghostButtonClass} onClick={() => toggleAdding(!adding)}>
                 {adding ? 'Cancel' : 'Add a rule'}
               </button>
             )}
@@ -491,6 +510,14 @@ export default function PartnerAudienceFitZone() {
             <FitTile label="Capabilities absent" value={String(absent.length)} note="stated, not stretched" />
           </div>
 
+          {/* WHOLE LIBRARY, NOT THE CHIP. The four tiles above and the card
+              below count every rule whatever the signal filter shows; the
+              profile table and the rule list count what the filter selects. */}
+          <p className="-mt-3 text-[11px] text-gray-600 dark:text-gray-400" data-testid="fit-library-note">
+            Tiles and the “who we are not for” card count the whole library
+            ({items.length} rule{items.length === 1 ? '' : 's'}), whatever the signal filter shows.
+          </p>
+
           {/* THE ARTBOARD'S LINKAGE NOTE, minus a number it has no store for.
               Its own reads "… produced four explained passes last quarter" —
               that is its sample, and nothing in this product logs a pass, so
@@ -498,10 +525,17 @@ export default function PartnerAudienceFitZone() {
               record stops. */}
           <div className="rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[11.5px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300">
             <strong className="text-cyan-700 dark:text-cyan-300">Reads through to Pipeline:</strong>{' '}
-            Pipeline · Leads quotes these sentences to pass a lead with a named reason — “under floor,
-            referred to Ostara Studio” rather than silence. Nothing counts how often: no pass is
-            logged anywhere, so the number of explained passes is not a figure this page can show.
+            Pipeline · Leads scores each lead against the rules in use. It quotes these sentences to pass a lead with a named reason —
+            “under floor, referred to Ostara Studio” rather than silence. Nothing counts how often: no pass is logged anywhere, so the number of explained
+            passes is not a figure this page can show.
           </div>
+
+          {narrowed && (
+            <p className="-mb-3 text-[11px] text-gray-600 dark:text-gray-400" data-testid="fit-profiles-shown">
+              Showing {profileRows.length} of {profiles.length} profile{profiles.length === 1 ? '' : 's'},
+              the same rows as the list and the export below.
+            </p>
+          )}
 
           <Instrument
             testid="fit-profiles"
@@ -509,7 +543,7 @@ export default function PartnerAudienceFitZone() {
             meta="Signals feed lead scoring"
             cols="1.9fr 1fr 2.4fr"
             head={['Profile', 'Signal', 'Why']}
-            rows={profiles.map((r) => ({
+            rows={profileRows.map((r) => ({
               key: r.id,
               cells: [
                 {
@@ -527,7 +561,7 @@ export default function PartnerAudienceFitZone() {
                 r.statement ? { text: r.statement } : { nr: true },
               ],
             }))}
-            note={'A profile graded weak intent is not a decline, and keeping the two apart is what this table is for: the honest answer to a pre-product founder is “not yet”, and a match engine that cannot say “not yet” ends up saying “no” to the same founder twice. The meta line above is the artboard\u2019s and it describes an intention rather than this product: nothing scores a lead against these rows, the worker says so in its own response, and your click is still what passes on anybody. A profile with no sentence reads absent in Why because a pass citing it would have nothing to quote \u2014 which is the silence this whole zone exists to replace.'}
+            note={'A profile graded weak intent is not a decline, and keeping the two apart is what this table is for: the honest answer to a pre-product founder is “not yet”, and a match engine that cannot say “not yet” ends up saying “no” to the same founder twice. Pipeline reads the signals in this table when it scores a lead: best fit and weak intent each add a receipt to the score, and qualified is a note you keep that scoring does not read. Scoring is not rejection, and your click is still what passes on anybody. A profile with no sentence reads absent in Why because a pass citing it would have nothing to quote \u2014 which is the silence this whole zone exists to replace.'}
           />
 
           {/* ══ THE ARTBOARD'S `Who we are not for` CARD ════════════════════
@@ -580,21 +614,6 @@ export default function PartnerAudienceFitZone() {
             </p>
           )}
 
-          {adding && (
-            <div>
-              <RuleForm
-                busy={busy}
-                submitLabel="Add rule"
-                onCancel={() => setAdding(false)}
-                onSubmit={async (data) => {
-                  await run(() => api.createPartnerFitRule(data), 'Rule added.', 'new');
-                  setAdding(false);
-                }}
-              />
-              <SaveNote note={note?.scope === 'new' ? note : null} />
-            </div>
-          )}
-
           <Section title="Rules">
             {/* A narrowed view that finds nothing says which view it is: a bare
                 empty list under a selected chip reads as "you have written no
@@ -613,9 +632,9 @@ export default function PartnerAudienceFitZone() {
                   rule={rule}
                   busy={busy}
                   note={note}
-                  onSave={(r, data) => run(
+                  onSave={(r, data, onSaved) => run(
                     () => api.updatePartnerFitRule(r.id, data),
-                    'Saved.', `rule:${r.id}`,
+                    'Saved.', `rule:${r.id}`, onSaved,
                   )}
                   onDelete={(r) => run(
                     () => api.deletePartnerFitRule(r.id),
@@ -639,16 +658,26 @@ export default function PartnerAudienceFitZone() {
               onClose={() => setShowingPasses(false)} />
           )}
 
-          <StatedLimit title="What these rules do, and do not">
+          <StatedLimit title="What these rules are used for, and what they are not">
             <p>
-              <strong>Nothing runs these rules.</strong>{' '}
+              <strong>Pipeline scores and ranks leads with these rules; it never declines one for you.</strong>{' '}
               {d?.enforcement_note
-                || 'They are a record a person reads before passing on a lead. Nothing scores, filters or auto-declines against them.'}{' '}
-              A lead below your floor still appears on{' '}
+                || 'Pipeline reads your active rules to score leads and to leave a lead that matches a declined sector or an absent capability out of its ranking. Nothing is auto-declined: an excluded lead stays on Leads, and passing on it is still your click.'}{' '}
+              A lead below your floor, or one that matches a declined sector, still appears on{' '}
               <Link to="/pipeline/leads" className="text-amber-700 underline">Leads</Link>{' '}
               and it is still your click that passes on it — which is what the
               workspace rail promises, and this zone does not quietly break.
             </p>
+            {Array.isArray(d?.used_for) && d.used_for.length > 0 && (
+              <ul className="mt-2 list-disc pl-5">
+                {d.used_for.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            )}
+            {Array.isArray(d?.not_used_for) && d.not_used_for.length > 0 && (
+              <ul className="mt-2 list-disc pl-5">
+                {d.not_used_for.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            )}
           </StatedLimit>
         </div>
       </ZoneBody>

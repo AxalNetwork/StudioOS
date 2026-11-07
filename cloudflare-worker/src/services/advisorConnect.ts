@@ -35,7 +35,7 @@
  */
 import type { Env } from '../types';
 import { stripeCall } from '../routes/billing';
-import { cutCents, derivePayoutState, settlementMode, takeRate } from './advisorMoney';
+import { derivePayoutState, settlementMode } from './advisorMoney';
 
 export interface PayoutAccountRow {
   id: number;
@@ -215,10 +215,9 @@ export async function refreshAccount(
  *
  * A DESTINATION CHARGE with an application fee: the platform takes the fee and
  * `transfer_data[destination]` routes the rest to the advisor's connected
- * account. The fee comes from `takeRate()` — the admin-configurable setting —
- * through `cutCents`, which is the SAME function the ledger totals with. Two
- * functions computing a platform fee is how a client is charged one number and
- * an advisor is shown another.
+ * account. The fee comes from the booking's STORED snapshot (#4679), the same figures the ledger totals
+ * with. A second computation of the platform fee is how a client is charged one
+ * number and an advisor is shown another.
  *
  * THREE REFUSALS, ALL LOUD, and the order matters:
  *
@@ -232,6 +231,11 @@ export async function refreshAccount(
  *      and not an error to swallow; a caller that reaches here with one has a
  *      bug upstream.
  */
+/** The booking has no usable fee snapshot, so a charge would have to guess one. */
+export class FeeSnapshotMissing extends Error {
+  constructor() { super('advisory_charge_fee_snapshot_missing'); this.name = 'FeeSnapshotMissing'; }
+}
+
 export async function chargeSession(
   env: Env,
   args: {
@@ -243,6 +247,13 @@ export async function chargeSession(
     currency?: string;
     description?: string;
     customerId: string;
+    /**
+     * #4679 — THE FEE THE ADVISOR PRICED THE LINE WITH, from the booking's own
+     * stored snapshot (`take_rate_bps`, `platform_cut_cents`). Required: a
+     * charge that recomputed the fee from today's setting would take a
+     * different cut than the line the advisor and the ledger already show.
+     */
+    feeSnapshot: { bps: number | null; cutCents: number | null };
   },
 ): Promise<{
   client_secret: string; payment_intent_id: string;
@@ -260,9 +271,15 @@ export async function chargeSession(
     throw new Error('advisory_charge_amount_missing');
   }
 
-  const rate = await takeRate(env);
-  const fee = cutCents(gross, rate.bps);
-  if (fee == null) throw new Error('advisory_charge_fee_uncomputable');
+  // THE STORED SNAPSHOT, NEVER THE CURRENT SETTING (#4679). A missing or
+  // impossible snapshot is refused, not repaired from today's rate.
+  const snap = args.feeSnapshot;
+  const fee = snap?.cutCents;
+  const bps = snap?.bps;
+  if (fee == null || bps == null || !Number.isInteger(fee) || !Number.isInteger(bps)
+    || fee < 0 || fee > gross || bps < 0) {
+    throw new FeeSnapshotMissing();
+  }
 
   const intent = await stripeCall<{ id: string; client_secret: string }>(
     env, '/payment_intents',
@@ -281,7 +298,7 @@ export async function chargeSession(
       // THE RATE THAT WAS APPLIED, on the intent itself. A dispute six months
       // later is settled by what Stripe recorded, not by what the setting says
       // then — the same reason 241 stamps it on the line.
-      'metadata[take_rate_bps]': String(rate.bps),
+      'metadata[take_rate_bps]': String(bps),
       'metadata[axal_product]': 'advisory',
     },
     // One intent per booking, replayed rather than duplicated. A double-submit
@@ -294,7 +311,7 @@ export async function chargeSession(
     client_secret: intent.client_secret,
     payment_intent_id: intent.id,
     application_fee_cents: fee,
-    take_rate_bps: rate.bps,
+    take_rate_bps: bps,
     mode,
   };
 }

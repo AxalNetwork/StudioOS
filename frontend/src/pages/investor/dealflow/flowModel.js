@@ -370,6 +370,21 @@ export const namesSettings = (search = '') => {
     || SCOPE_KEYS.some((k) => q.has(`min_${k}`));
 };
 
+/**
+ * D4634 (#4634): where a saved default takes the page. The default applies only to what the address does not
+ * name: an explicit `view` or `scope` stays as the address has it, so `/deals?view=table` is the table even when
+ * the default is a board, and the bare `/deals` root still opens on the default. Null when the address already
+ * names a setting of its own (the default does not apply at all) or there is no default.
+ */
+export function defaultHref(search = '', def = null) {
+  if (!def || namesSettings(search)) return null;
+  const q = new URLSearchParams(String(search));
+  const saved = settingsOfSpec(def.spec);
+  const view = q.has('view') ? (q.get('view') === 'table' ? 'table' : 'board') : saved.view;
+  const scope = q.has('scope') ? (['all', 'new'].includes(q.get('scope')) ? q.get('scope') : 'mine') : saved.scope;
+  return settingsHref({ ...saved, view, scope, viewUid: def.uid });
+}
+
 /** The address of a view: the defaults are left out, so a plain `/deals` is Board, Mine, sorted by Team. */
 export function settingsHref({ view = 'board', scope = 'mine', settings = defaultSettings(), viewUid = null } = {}) {
   const q = new URLSearchParams();

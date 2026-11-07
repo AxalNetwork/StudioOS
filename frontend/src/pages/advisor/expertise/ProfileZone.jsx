@@ -87,6 +87,12 @@ function profileCompleteness(profile) {
   return { pct: Math.round((complete / fields.length) * 100), gaps, complete, total: fields.length };
 }
 
+/** D4711: the meter as a sentence — what a screen reader reads for the progressbar. */
+export function completenessText({ complete = 0, total = 0, gaps = [] } = {}) {
+  const head = `${complete} of ${total} match fields filled`;
+  return gaps.length ? `${head}; missing ${gaps.join(', ')}` : `${head}; nothing missing`;
+}
+
 /**
  * The draft's shape, in one place, so the seed above and the read below cannot
  * drift into a field that exists in one and not the other — a field present at
@@ -263,7 +269,12 @@ export default function ProfileZone() {
                 {profileCompleteness(state.profile).pct}%
               </span>
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-axal-hairline">
+            {/* D4711: a progressbar, so the figure and its gaps are one thing a screen reader reads. */}
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-axal-hairline"
+              role="progressbar" aria-label="Profile completeness"
+              aria-valuemin={0} aria-valuemax={100} aria-valuenow={profileCompleteness(state.profile).pct}
+              aria-valuetext={completenessText(profileCompleteness(state.profile))}
+              data-testid="advisor-profile-completeness">
               <div
                 className="h-full rounded-full bg-emerald-700 transition-all"
                 style={{ width: `${profileCompleteness(state.profile).pct}%` }}
@@ -369,7 +380,7 @@ export default function ProfileZone() {
                 <button type="submit" className={buttonClass} disabled={saving}>
                   {saving ? 'Saving…' : 'Save profile'}
                 </button>
-                <SaveNote note={note} />
+                <SaveNote note={note} testid="advisor-profile-note" />
               </div>
             </form>
           </Card>

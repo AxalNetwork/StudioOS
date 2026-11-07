@@ -8,7 +8,8 @@ import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { DEFAULT_RESPOND_DAYS, MAX_RESPOND_DAYS, MIN_RESPOND_DAYS, NOTICE_KINDS, freezeHoldersForLicence, notifyLicenceAdmins } from '../services/complianceLadder';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { pushLicenceToBranch } from '../services/licencePush';
-import { KIND_LABELS, str, byUid, logEvent } from '../services/licenceLedgerCore';
+import { KIND_LABELS, str, byUid, logEvent, activationBlockers } from '../services/licenceLedgerCore';
+import { transition } from '../services/licenceTransitions';
 import type { Env } from '../types';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -207,11 +208,13 @@ r.post('/:uid/notices/:noticeUid/review', async (c) => {
     let reinstated = false;
     const holders = await freezeHoldersForLicence(c.env, licence.id);
     if (next === 'accepted' && holders === 0 && licence.status === 'suspended') {
-      await c.env.DB.prepare(
-        "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ? AND status = 'suspended'",
-      ).bind(nowIso(), licence.id).run();
-      await logEvent(c.env, licence.id, 'reinstated', admin.id, { notice_uid: notice.uid }, note || null);
-      reinstated = true;
+      // #4678: the same move, and the same prerequisites, as POST /reinstate.
+      const blockers = await activationBlockers(c.env, licence, { reinstating: true });
+      const moved = blockers.length ? null : await transition(c.env, licence, 'reinstate', { now: nowIso() });
+      if (moved?.ok) {
+        await logEvent(c.env, licence.id, 'reinstated', admin.id, { notice_uid: notice.uid }, note || null);
+        reinstated = true;
+      }
     }
     // D272 — a reinstatement changes the copy's status, like the /reinstate
     // route, which already pushes. A review that does not reinstate changes

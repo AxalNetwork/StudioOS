@@ -17,6 +17,7 @@ import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../workspaces/canvasKit';
 import { useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions';
+import { requestTotals, requestedNote, rowRequests } from '../lib/serviceMeasures.js';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAT_LABEL = {
@@ -335,8 +336,12 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const priced = rows.filter((o) => o.price_cents != null);
   const drafts = rows.filter((o) => o.price_cents == null);
   const live = rows.filter((o) => catalogState(o) === 'Live');
-  const units = rows.reduce((a, o) => a + (o.sold || 0), 0);
-  const booked = rows.reduce((a, o) => a + (o.price_cents || 0) * (o.sold || 0), 0);
+  // REQUESTS ARE COUNTED, NEVER PRICED (#4696). This multiplied each entry's
+  // CURRENT price by its non-cancelled requests and called the sum "Booked to
+  // date": a pending request read as a sale, and repricing an entry restated
+  // the apparent history. A request stores no amount, so no historical value
+  // is stated until one is snapshotted (`lib/serviceMeasures.js`).
+  const requests = requestTotals(rows);
   const dearest = priced.reduce((best, o) => (best && best.price_cents >= o.price_cents ? best : o), null);
   // The artboard's fourth tile is the RETAINER's price, and it is `Not
   // recorded` there because that is the row sitting in draft. Here it is the
@@ -393,7 +398,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
           label="Live services" value={String(live.length)}
           note={drafts.length ? `${drafts.length} draft, unpriced` : 'none unpriced'}
         />
-        <CatalogTile label="Booked to date" value={usd(booked)} note={`from ${units} unit${units === 1 ? '' : 's'}`} />
+        <CatalogTile label="Requested" value={String(requests.requested)} note={requestedNote(requests)} />
         {dearest
           ? <CatalogTile label="Highest price" value={usd(dearest.price_cents)} note={dearest.title} />
           : <CatalogTile label="Highest price" nr note="nothing in the catalog carries a price yet" />}
@@ -426,7 +431,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
           title="Services"
           meta="Prices stored as integers, formatted once"
           cols="1.5fr .8fr 1fr .6fr 2fr"
-          head={['Service', 'Model', 'Price', 'Sold', 'What’s included']}
+          head={['Service', 'Model', 'Price', 'Requested', 'What’s included']}
           rows={visible.map((o) => {
             const state = catalogState(o);
             return {
@@ -460,12 +465,12 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
                 o.price_cents == null
                   ? { nr: true }
                   : { text: usd(o.price_cents) + (o.engagement_model === 'retainer' || o.engagement_model === 'seat' ? ' / mo' : '') },
-                { text: o.sold ? String(o.sold) : '—' },
+                { text: rowRequests(o)?.requested ? String(rowRequests(o).requested) : '—' },
                 { text: o.summary },
               ],
             };
           })}
-          note={`${drafts.length ? `${drafts.length === 1 ? 'One entry sits' : `${drafts.length} entries sit`} in draft with ${drafts.length === 1 ? 'its price' : 'their prices'} reading "Not recorded" rather than a placeholder figure — an invented number here would propagate straight into lead scoring and into every proposal generated from the catalog.` : 'Every entry carries a price, so none of them reads as a placeholder.'} Seat services price monthly and carry a granted scope; fixed services price once. That distinction is the same one Delivery reports progress against. Sold is counted from engagements booked against each entry, so a service nobody has linked reads "—" rather than zero.`}
+          note={`${drafts.length ? `${drafts.length === 1 ? 'One entry sits' : `${drafts.length} entries sit`} in draft with ${drafts.length === 1 ? 'its price' : 'their prices'} reading "Not recorded" rather than a placeholder figure — an invented number here would propagate straight into lead scoring and into every proposal generated from the catalog.` : 'Every entry carries a price, so none of them reads as a placeholder.'} Seat services price monthly and carry a granted scope; fixed services price once. That distinction is the same one Delivery reports progress against. Requested counts the service requests made against each entry, whatever became of them, so an entry nobody has requested reads "—" rather than zero. A request is not a sale, and it stores no amount, so no booked revenue is stated: the tile counts what was booked and what is pending, and the value reads "Not recorded" until requests record one.`}
         />
       )}
 
@@ -482,7 +487,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
         accept="Accept draft"
         run="Read the catalog"
         foot="Figures read from catalog rows."
-        empty="Where revenue concentrates across the catalog, and which entries have sold nothing. Points to any unpriced draft as the gap: demand shaped like it appears in the lead feed with nothing priced to match against."
+        empty="Where requests concentrate across the catalog, and which entries nobody has requested or booked. Points to any unpriced draft as the gap: demand shaped like it appears in the lead feed with nothing priced to match against."
         nothingToDraft="The catalog is empty, so there is nothing to read across."
       />
 

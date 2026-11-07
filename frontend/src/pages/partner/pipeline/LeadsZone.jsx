@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllLeadPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
 import RankByFit from '../../../ui/RankByFit';
 import { applyRank } from '../../../lib/rankByFit';
 import {
@@ -206,7 +208,7 @@ function LeadCard({ row, busy, onPass, note }) {
 
 export default function PartnerLeadsZone() {
   const { state, load, run, busy, note } = usePipelineZone(
-    () => api.listPartnerLeads(), 'The lead list did not load.',
+    () => readAllLeadPages((cur, pcur) => api.listPartnerLeads(cur, pcur)), 'The lead list did not load.',
   );
   const [view, setView] = useState('open');
   // #3938 (IN10): Rank by fit orders the open leads against the firm's own audience fit, as a view.
@@ -279,6 +281,7 @@ export default function PartnerLeadsZone() {
         )}
       >
         <div className="space-y-6">
+          <PartialRead data={state.data} noun="leads" onRetry={load} />
           <ZoneHeading
             title="Leads"
             blurb={

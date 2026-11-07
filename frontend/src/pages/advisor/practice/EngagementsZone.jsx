@@ -142,10 +142,12 @@ export default function EngagementsZone() {
       await load();
     } catch (error) {
       setNote({ ok: false, text: error?.message || failure });
+      // D4695: the row moved since the board drew it. Show it as it now stands, so the next press starts from it.
+      if (error?.code === 'lane_changed' || error?.code === 'cycles_changed' || error?.code === 'term_decided') await load();
     } finally { setBusy(''); }
   };
 
-  const advance = (e, lane) => act(e.id, () => api.advanceMyAdvisorEngagement(e.id, lane),
+  const advance = (e, lane) => act(e.id, () => api.advanceMyAdvisorEngagement(e.id, lane, e.lane),
     'That lane could not be recorded.');
 
   /**
@@ -171,6 +173,8 @@ export default function EngagementsZone() {
   const recordRenewal = (e) => act(e.id, async () => {
     await api.recordMyAdvisorEngagementRenewal(e.id, {
       decision: decision.decision,
+      // The term being decided: the cycle count this row showed. A retry of the same press is one cycle.
+      expected_cycles: Number(e.cycles || 0),
       note: decision.note.trim() || null,
       term_ends_at: decision.term_ends_at || null,
     });
