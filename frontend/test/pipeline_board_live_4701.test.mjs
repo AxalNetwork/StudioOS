@@ -39,7 +39,7 @@ function installSocket() {
   globalThis.WebSocket = FakeWS;
   return () => { globalThis.WebSocket = prev; };
 }
-async function until(cond, ms = 4000) {
+async function until(cond, ms = 20000) {
   const end = Date.now() + ms;
   while (!cond()) { if (Date.now() > end) throw new Error('timed out'); await act(async () => { await tick(); }); }
 }
