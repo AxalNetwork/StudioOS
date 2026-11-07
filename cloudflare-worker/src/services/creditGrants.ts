@@ -135,15 +135,36 @@ const usd = (cents: number) => `US$${(cents / 100).toLocaleString('en-US', { max
  * INSIDE the insert, so two grants landing together cannot both pass it,
  * and a hit is refused as `superseded`. Each half keeps its own source ref.
  */
-export async function grantCredits(env: Env, args: {
+export interface GrantArgs {
   userId: number; ruleKey: string; sourceRef: string; actor: GrantActor; note?: string | null;
   unlessPaid?: string | null;
-}): Promise<GrantResult> {
+  /**
+   * D4804 (#4804): the grant belongs to a decision in the same batch. The INSERT then
+   * runs only if the statement just before it in the batch changed a row (`changes() = 1`),
+   * so a decision that lost writes no credits. Only `planGrant` honours it; `grantCredits`
+   * runs alone and ignores it.
+   */
+  afterWin?: boolean;
+}
+
+/** What `planGrant` decided before any write: an answer already, or the INSERT and how to read its outcome. */
+export type GrantPlan =
+  | { done: true; result: GrantResult }
+  | { done: false; statement: D1PreparedStatement; settle: (ins: { changes: number; lastRowId: number }) => Promise<GrantResult> };
+
+/**
+ * THE GRANT IN TWO STEPS (D4804). `planGrant` does every read and refusal and returns the one INSERT;
+ * `settle` reads that INSERT's outcome and, only when it landed, writes the audit line and the notice.
+ * `grantCredits` runs the two back to back. A decision that must commit with its reward (a referral
+ * moving to Converted) puts the INSERT in its own batch after the guarded move, with `afterWin`,
+ * and calls `settle` once the batch commits.
+ */
+export async function planGrant(env: Env, args: GrantArgs): Promise<GrantPlan> {
   const ruleKey = clean(args.ruleKey, 80);
   const sourceRef = clean(args.sourceRef, SOURCE_MAX);
   const userId = Number(args.userId);
   if (!Number.isInteger(userId) || userId <= 0 || !ruleKey || !sourceRef || ruleKey === CAP_RULE_KEY) {
-    return { status: 'refused', code: 'invalid_request', message: 'A grant needs a user, a reward rule and a source.' };
+    return { done: true, result: { status: 'refused', code: 'invalid_request', message: 'A grant needs a user, a reward rule and a source.' } };
   }
 
   // A SOURCE ALREADY PAID IS ANSWERED FIRST. Whether the rule is still on,
@@ -153,22 +174,22 @@ export async function grantCredits(env: Env, args: {
   const paid = await env.DB.prepare(
     `SELECT id FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
   ).bind(userId, sourceRef).first<{ id: number }>();
-  if (paid) return { status: 'already_granted', ledger_id: Number(paid.id), rule_key: ruleKey };
+  if (paid) return { done: true, result: { status: 'already_granted', ledger_id: Number(paid.id), rule_key: ruleKey } };
 
   const rule = await env.DB.prepare(
     'SELECT key, credits, usd_value_cents, active FROM credit_reward_rules WHERE key = ?',
   ).bind(ruleKey).first<{ key: string; credits: number; usd_value_cents: number; active: number }>();
-  if (!rule) return { status: 'refused', code: 'rule_unknown', message: `No reward rule is named ${ruleKey}.` };
+  if (!rule) return { done: true, result: { status: 'refused', code: 'rule_unknown', message: `No reward rule is named ${ruleKey}.` } };
   const credits = Number(rule.credits);
   if (Number(rule.active) !== 1 || !(credits > 0)) {
-    return { status: 'refused', code: 'rule_inactive', message: `The ${ruleKey} reward is switched off, so nothing was granted.` };
+    return { done: true, result: { status: 'refused', code: 'rule_inactive', message: `The ${ruleKey} reward is switched off, so nothing was granted.` } };
   }
 
   const user = await env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
     .bind(userId).first<{ id: number; role: string }>();
-  if (!user) return { status: 'refused', code: 'user_not_found', message: 'No such account.' };
+  if (!user) return { done: true, result: { status: 'refused', code: 'user_not_found', message: 'No such account.' } };
   if (INELIGIBLE_ROLES.has(String(user.role || '').toLowerCase())) {
-    return { status: 'refused', code: 'not_eligible', message: 'Staff and admin accounts do not earn credits.' };
+    return { done: true, result: { status: 'refused', code: 'not_eligible', message: 'Staff and admin accounts do not earn credits.' } };
   }
 
   const bounty = isBountyRule(ruleKey);
@@ -187,8 +208,8 @@ export async function grantCredits(env: Env, args: {
   const unlessPaid = clean(args.unlessPaid, SOURCE_MAX) || null;
 
   // THE CAP IS INSIDE THE INSERT. A read-then-write would let two grants
-  // landing together both see room under it.
-  const ins = await env.DB.prepare(
+  // landing together both see room under it. D4804: with `afterWin`, so is the decision it belongs to.
+  const statement = env.DB.prepare(
     `INSERT OR IGNORE INTO perk_credit_ledger (user_id, delta, kind, source_ref, note, created_at, rule_key)
      SELECT ?, ?, 'grant', ?, ?, ?, ?
       WHERE (? = 0 OR (SELECT COALESCE(SUM(g.delta), 0) AS used FROM perk_credit_ledger g
@@ -198,39 +219,50 @@ export async function grantCredits(env: Env, args: {
                       WHERE r.user_id = g.user_id AND r.kind = 'admin_adjust'
                         AND r.source_ref = 'revoke:' || g.id)) + ? <= ?)
       AND (? IS NULL OR NOT EXISTS (SELECT 1 FROM perk_credit_ledger x
-                                     WHERE x.user_id = ? AND x.kind = 'grant' AND x.source_ref = ?))`,
+                                     WHERE x.user_id = ? AND x.kind = 'grant' AND x.source_ref = ?))
+      AND (? = 0 OR changes() = 1)`,
   ).bind(userId, credits, sourceRef, note, new Date().toISOString(), ruleKey,
-    capped ? 1 : 0, userId, since, credits, cap, unlessPaid, userId, unlessPaid).run();
+    capped ? 1 : 0, userId, since, credits, cap, unlessPaid, userId, unlessPaid, args.afterWin ? 1 : 0);
 
-  if (Number(ins?.meta?.changes ?? 0) !== 1) {
-    const prior = await env.DB.prepare(
-      `SELECT id, rule_key FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
-    ).bind(userId, sourceRef).first<{ id: number; rule_key: string | null }>();
-    if (prior) return { status: 'already_granted', ledger_id: Number(prior.id), rule_key: ruleKey };
-    if (unlessPaid) {
-      const other = await env.DB.prepare(
-        `SELECT id FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
-      ).bind(userId, unlessPaid).first<{ id: number }>();
-      if (other) return { status: 'refused', code: 'superseded', message: 'The other half of this pair was already paid, so nothing was granted.' };
+  const settle = async (ins: { changes: number; lastRowId: number }): Promise<GrantResult> => {
+    if (ins.changes !== 1) {
+      const prior = await env.DB.prepare(
+        `SELECT id, rule_key FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
+      ).bind(userId, sourceRef).first<{ id: number; rule_key: string | null }>();
+      if (prior) return { status: 'already_granted', ledger_id: Number(prior.id), rule_key: ruleKey };
+      if (unlessPaid) {
+        const other = await env.DB.prepare(
+          `SELECT id FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' AND source_ref = ?`,
+        ).bind(userId, unlessPaid).first<{ id: number }>();
+        if (other) return { status: 'refused', code: 'superseded', message: 'The other half of this pair was already paid, so nothing was granted.' };
+      }
+      const used = await env.DB.prepare(CAP_USED_SQL).bind(userId, since).first<{ used: number }>();
+      const usedN = Number(used?.used) || 0;
+      return {
+        status: 'refused', code: 'cap_reached',
+        message: `This would take the account past its ${plural(cap)} bounty limit for the month (${plural(usedN)} granted so far), so nothing was granted.`,
+        cap: { limit: cap, used: usedN },
+      };
     }
-    const used = await env.DB.prepare(CAP_USED_SQL).bind(userId, since).first<{ used: number }>();
-    const usedN = Number(used?.used) || 0;
-    return {
-      status: 'refused', code: 'cap_reached',
-      message: `This would take the account past its ${plural(cap)} bounty limit for the month (${plural(usedN)} granted so far), so nothing was granted.`,
-      cap: { limit: cap, used: usedN },
-    };
-  }
 
-  const ledgerId = Number(ins.meta.last_row_id);
-  const usdCents = Number(rule.usd_value_cents) || 0;
-  await recordActor(env, args.actor, 'credit_grant', {
-    target_user_id: userId, rule_key: ruleKey, credits, usd_value_cents: usdCents, source_ref: sourceRef, ledger_id: ledgerId,
-  }, userId);
-  const notified = await tell(env, userId, 'credit_grant', `You earned ${plural(credits)} (${usd(usdCents)})`,
-    `${note}. Spend them on Perks. Credits have no cash value and cannot be transferred.`,
-    { ledger_id: ledgerId, rule_key: ruleKey, credits });
-  return { status: 'granted', ledger_id: ledgerId, rule_key: ruleKey, credits, usd_value_cents: usdCents, notified };
+    const ledgerId = ins.lastRowId;
+    const usdCents = Number(rule.usd_value_cents) || 0;
+    await recordActor(env, args.actor, 'credit_grant', {
+      target_user_id: userId, rule_key: ruleKey, credits, usd_value_cents: usdCents, source_ref: sourceRef, ledger_id: ledgerId,
+    }, userId);
+    const notified = await tell(env, userId, 'credit_grant', `You earned ${plural(credits)} (${usd(usdCents)})`,
+      `${note}. Spend them on Perks. Credits have no cash value and cannot be transferred.`,
+      { ledger_id: ledgerId, rule_key: ruleKey, credits });
+    return { status: 'granted', ledger_id: ledgerId, rule_key: ruleKey, credits, usd_value_cents: usdCents, notified };
+  };
+  return { done: false, statement, settle };
+}
+
+export async function grantCredits(env: Env, args: GrantArgs): Promise<GrantResult> {
+  const plan = await planGrant(env, { ...args, afterWin: false });
+  if (plan.done) return plan.result;
+  const ins = await plan.statement.run();
+  return plan.settle({ changes: Number(ins?.meta?.changes ?? 0), lastRowId: Number(ins?.meta?.last_row_id ?? 0) });
 }
 
 export type RevokeResult =
