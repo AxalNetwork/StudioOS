@@ -22,7 +22,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { act } from 'react';
 import { h, mountForm, mutationCheck, propsOf, textOf } from './_form_d695.mjs';
 import * as realModel from '../src/pages/cycles/buildProgressModel.js';
 import * as realForms from '../src/pages/cycles/forms.js';
