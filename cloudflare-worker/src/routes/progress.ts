@@ -382,7 +382,7 @@ progress.post('/discovery/:projectId', async (c) => {
   ensureCanEdit(project, user);
 
   // Task #6 — free-tier discovery interview cap.
-  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+  if (holdsLicence(user, 'founder') && !userMeetsTier(user, 'growth')) {
     await ensureTierSchema(c.env);
     const existing = await c.env.DB.prepare(
       'SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?',
@@ -750,7 +750,7 @@ progress.post('/discovery/:projectId/waitlist/:signupId/promote', async (c) => {
   }
 
   // Task #6 free-tier discovery-interview cap (mirrors create_interview).
-  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+  if (holdsLicence(user, 'founder') && !userMeetsTier(user, 'growth')) {
     await ensureTierSchema(c.env);
     const existing = await c.env.DB.prepare(
       'SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?',
@@ -1177,7 +1177,7 @@ export async function roadmapCreateChecks(env: Env, user: User, projectId: numbe
   | { error: { detail: string } }
   | { objective: string; kanbanStatus: string; keyResults: KeyResult[]; quarter: string | null; sortOrder: number }> {
   // Task #6 — free-tier OKR cap.
-  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+  if (holdsLicence(user, 'founder') && !userMeetsTier(user, 'growth')) {
     await ensureTierSchema(env);
     const existing = await env.DB.prepare(
       'SELECT COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ?',

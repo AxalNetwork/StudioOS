@@ -285,7 +285,7 @@ test('the writers are reachable, scoped, and the units are named', () => {
   assert.ok(/price_cents: v\.price_cents == null \? null : Number\(v\.price_cents\),/.test(read),
     'the version price stopped naming its unit');
   const form = between(zone, 'Record a version, or why one was lost', '</Section>');
-  assert.ok(/Math\.round\(Number\(draft\.price\) \* 100\)/.test(form),
+  assert.ok(/Math\.round\(Number\(sent\.price\) \* 100\)/.test(form),
     'the version form stopped converting the dollars a person types into cents');
   assert.ok(/moneyDollars\(Math\.round\(v\.price_cents \/ 100\)\)/.test(zone),
     'the version panel stopped converting cents back to dollars to display them');

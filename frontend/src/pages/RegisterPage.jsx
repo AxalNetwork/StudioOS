@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { safeReadJSON } from '../lib/storage';
-import { storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
+import { clearPendingPricingNext, storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
 import { Link } from 'react-router-dom';
 import { Copy, Check, Mail, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
@@ -10,6 +10,9 @@ import { loadTurnstile } from '../lib/turnstile';
 import AxalLogo from '../components/AxalLogo';
 import AuthShell, { AuthCard } from '../components/auth/AuthShell';
 import { normaliseRef, readRefCookie } from '../lib/referralRef';
+import { planIntentFrom } from '../lib/planIntent';
+import { LANES, LANE_ROLE, registerHeading } from '../lib/registerCopy';
+import { RegistrationPlanBlock } from '../components/auth/RegistrationPlan';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -34,6 +37,9 @@ export default function RegisterPage() {
   const [refCode, setRefCode] = useState('');
   const [lane, setLane] = useState(null); // 'partner' | 'investor' | 'lp' | 'founder' | null
   const [productIntent, setProductIntent] = useState(null); // 'spinout-lab' | null
+  // #4651: the plan and interval chosen on /pricing (`?plan=&interval=`); RegistrationPlanBlock reads and draws it.
+  const [planIntent] = useState(() => planIntentFrom(typeof window !== 'undefined' ? window.location.search : ''));
+  const [selection, setSelection] = useState(null);
   // Task #1 — validated `?next=` return path (e.g. a startup-team invitation
   // that bounced a brand-new user here). Also persisted to localStorage so it
   // survives the email/OAuth round-trip; RequireAuth consumes it post-auth.
@@ -80,7 +86,7 @@ export default function RegisterPage() {
     const r = params.get('ref') || readRefCookie();
     if (r) setRefCode(normaliseRef(r) || r.toUpperCase());
     const l = params.get('lane');
-    if (l && ['partner', 'investor', 'lp', 'founder'].includes(l)) {
+    if (l && LANES.includes(l)) {
       setLane(l);
       try { localStorage.setItem('gvpn:intent', JSON.stringify({ lane: l, ts: Date.now() })); } catch {}
     } else {
@@ -97,6 +103,8 @@ export default function RegisterPage() {
     if (nx) {
       setNextPath(nx);
       storePendingNext(nx);
+    } else {
+      clearPendingPricingNext();
     }
     // Prefill the email when arriving from a flow that already captured it
     // (e.g. the public job-board apply → register hand-off passes ?email=,
@@ -119,35 +127,11 @@ export default function RegisterPage() {
     track('register_form_start');
   };
 
-  // Task #10 — audit copy fix: no more "We use TOTP…" jargon in subheads.
-  const laneCopy = {
-    partner: {
-      title: 'Join the Partner Network',
-      desc: "Get matched with deals before they go public. Free to join — no password to remember, we'll email you a secure sign-in link.",
-    },
-    lp: {
-      title: 'Open your LP Account',
-      desc: "Track commitments, calls, and distributions. Free to join — no password to remember, we'll email you a secure sign-in link.",
-    },
-    founder: {
-      title: 'Submit your pitch',
-      // Founder-journey audit — this used to promise a fixed scoring
-      // turnaround measured in hours. Nothing enforces any such SLA: a fresh
-      // signup holds in the exploring review queue until an admin sends the
-      // binding agreement, and scoring is SELF-SERVE (the founder runs it from
-      // /scoring / the Lab) once the workspace opens — nobody scores the
-      // venture for them, on any clock. Promise what the system actually does.
-      // The guard test (founder_journey_guards.test.mjs) greps this file for
-      // timed-SLA copy, which is why the old wording isn't quoted here.
-      desc: "Free to join — after a short profile review, your workspace opens with self-serve venture scoring and the Spin-Out Lab tools. No password to remember; we'll email you a secure sign-in link.",
-    },
-  };
-  const activeLane = lane && laneCopy[lane] ? laneCopy[lane] : null;
+  const heading = registerHeading(lane, planIntent ? selection : null);
 
   // Task #1 — lane → account role. The marketing site's audience lanes map
   // onto the worker's CHECK-constrained roles (`lp` folds into investor, so
   // LP signups get the investor portal instead of the partner default).
-  const LANE_ROLE = { partner: 'partner', investor: 'investor', lp: 'investor', founder: 'founder' };
   const laneRole = lane ? LANE_ROLE[lane] : undefined;
 
   const turnstileRef = useRef(null);
@@ -340,9 +324,11 @@ export default function RegisterPage() {
 
           {step === 1 && (
             <>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">{activeLane?.title || 'Create Your Account'}</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{heading.title}</h2>
               {/* Task #10 — audit's exact subhead copy (fix 10). */}
-              <p className="text-sm text-gray-600 mb-6">{activeLane?.desc || "Free to join. No password to remember — we'll email you a secure sign-in link."}</p>
+              <p className="text-sm text-gray-600 mb-4">{heading.desc}</p>
+
+              <RegistrationPlanBlock intent={planIntent} lane={lane} onSelection={setSelection} />
 
               {productIntent === 'spinout-lab' && (
                 <div className="bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 mb-4 text-xs text-amber-800">
