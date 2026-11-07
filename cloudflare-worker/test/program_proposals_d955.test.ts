@@ -333,7 +333,8 @@ test('New program: HQ\'s own proposed row and its draft, for every studio, audit
   assert.deepEqual((await call(db, SUPER, 'GET', '/operator-fellowship/activity')).body.rows.map((x: any) => x.kind), ['program.registry.create']);
   // Its draft is edited and published with part 1's routes.
   assert.equal((await call(db, SUPER, 'PUT', '/operator-fellowship/playbook/sections/rewards', { body: 'Credits.' })).status, 200);
-  assert.equal((await call(db, SUPER, 'POST', '/operator-fellowship/playbook/publish')).body.playbook.version, 1);
+  const hash = (await call(db, SUPER, 'GET', '/operator-fellowship')).body.draft.hash;
+  assert.equal((await call(db, SUPER, 'POST', '/operator-fellowship/playbook/publish', { expected_hash: hash })).body.playbook.version, 1);
   assert.equal((await call(db, SUPER, 'POST', '/', { name: 'Operator Fellowship', group: 'Access' })).body.code, 'program_key_taken');
 });
 

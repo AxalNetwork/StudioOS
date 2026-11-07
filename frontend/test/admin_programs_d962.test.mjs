@@ -36,7 +36,7 @@ import { HQ_READS_MONEY, NOT_READ_YET, PAGES, routeFor } from '../src/pages/admi
 import {
   ACTIVE_PAIR, ASSIGNED_DONE, CREDITS_FOOT, ENDED_DONE, LEARNER_FOOT, MENTOR_ACTIVITY_GAP, REFUSALS,
   REVIEW_MOVES, REVIEW_SAVED, REVIEW_TOLD, VISIBLE_DASH, CSV_DONE, CSV_PROGRAMS, NOT_RECORDED, FUNNEL_WINDOW, referFunnelChart, referrerLine, queueParams, activityText, completionRows, cohortPlace, endedInWindow,
-  episodesOf, finishedTotal, hasFinished, hiddenFrom, isDone, listingActions, listingBody, mentorsPerCohort, peopleRows,
+  episodesOf, finishedTotal, hasFinished, hiddenFrom, isDone, isFeatureAction, listingActions, listingBody, mentorsPerCohort, peopleRows,
   playbookFrom, refusalSentence, reviewPatch, sectionEdit, statusChoices, versionLine,
 } from '../src/pages/admin/programs/programPagesModel.js';
 
@@ -208,16 +208,22 @@ test('Activity: every kind is a sentence, a mentor row names its cohort and neve
   assert.equal(activityText({ kind: 'something.new', by: 'admin', concerns: {} }), 'A change was recorded by an admin');
 });
 
-test('Perks: the actions per state, Reject final with its note, Approve keeping the stored note, the feature switch an approve on live', () => {
+test('Perks: the actions per state, Reject final with its note, Approve keeping the stored note, the feature switch its own operation on live', () => {
   assert.deepEqual(listingActions(listing('a', 'in_review')), ['approve', 'reject']);
   assert.deepEqual(listingActions(listing('a', 'live')), ['pause', 'feature']);
   assert.deepEqual(listingActions(listing('a', 'live', { featured: 1 })), ['pause', 'unfeature']);
   assert.deepEqual(listingActions(listing('a', 'paused')), ['approve']);
   assert.deepEqual(listingActions(listing('a', 'rejected')), [], 'a rejection is final');
-  assert.deepEqual(listingBody('approve', listing('a', 'in_review', { review_note: 'Seeded by HQ' })), { action: 'approve', review_note: 'Seeded by HQ' });
-  assert.deepEqual(listingBody('reject', listing('a', 'in_review'), { note: ' Not a fit ' }), { action: 'reject', review_note: 'Not a fit' });
-  assert.deepEqual(listingBody('unfeature', listing('a', 'live', { featured: 1 })), { action: 'approve', featured: false });
-  assert.deepEqual(listingBody('pause', listing('a', 'live')), { action: 'pause' });
+  // D4806: every body names the revision the reviewer saw (the row's `updated_at`).
+  const expected_revision = listing('a', 'in_review').updated_at;
+  assert.deepEqual(listingBody('approve', listing('a', 'in_review', { review_note: 'Seeded by HQ' })), { action: 'approve', review_note: 'Seeded by HQ', expected_revision });
+  assert.deepEqual(listingBody('reject', listing('a', 'in_review'), { note: ' Not a fit ' }), { action: 'reject', review_note: 'Not a fit', expected_revision });
+  // Feature and Stop featuring are their own operation, never an approve that could republish a paused listing.
+  assert.deepEqual(listingBody('unfeature', listing('a', 'live', { featured: 1 })), { featured: false, expected_revision });
+  assert.deepEqual(listingBody('feature', listing('a', 'live'), { editorial: ' Our pick ' }), { featured: true, editorial_note: 'Our pick', expected_revision });
+  assert.deepEqual([isFeatureAction('feature'), isFeatureAction('unfeature'), isFeatureAction('approve')], [true, true, false]);
+  assert.deepEqual(listingBody('pause', listing('a', 'live')), { action: 'pause', expected_revision });
+  assert.equal(listingBody('pause', { uid: 'x', status: 'live' }).expected_revision, null, 'no revision read, none claimed');
 });
 
 test('refusals are one sentence keyed on the code; a codeless 400 reads the Worker’s own sentence', () => {
@@ -305,6 +311,7 @@ function worker(o = {}) {
       if (/^\/api\/refer-earn\/admin\/submissions\/[^/]+$/.test(path)) return writes.referral ? writes.referral(options) : response({ ...referral('u1', 'under_review', 80), history: [{ label: 'Updated', status: null, note: 'Thanks', created_at: d1(NOW) }] });
       if (/^\/api\/refer-earn\/admin\/strategic-access\/\d+\/decision$/.test(path)) return writes.strategic ? writes.strategic(options) : response({ status: 'granted' });
       if (/^\/api\/perks\/admin\/[^/]+\/review$/.test(path)) return writes.perk ? writes.perk(options) : response({ ok: true, status: 'live' });
+      if (/^\/api\/perks\/admin\/[^/]+\/feature$/.test(path)) return writes.feature ? writes.feature(options) : response({ ok: true, status: 'live', featured: true });
       if (/^\/api\/admin\/programs\/[^/]+\/playbook\/sections\/[^/]+$/.test(path)) return writes.section ? writes.section(options) : response(PLAYBOOK);
       if (/^\/api\/admin\/programs\/[^/]+\/playbook\/publish$/.test(path)) return writes.publish ? writes.publish(options) : response(PLAYBOOK);
       if (/^\/api\/admin\/programs\/[^/]+\/export$/.test(path)) return writes.export ? writes.export(options, path) : response({ download_url: 'data:text/csv;base64,eA==', expires_in_seconds: 86400, format: 'csv', rows: 3 });
@@ -509,7 +516,8 @@ test('Mentor · How it runs: part 1’s published playbook for an Admin, with th
     assert.ok(view.has('programs-mentor-terms-none'));
     assert.ok(!view.has('programs-mentor-how-publish'), 'an Admin cannot publish');
   } finally { await view.close(); }
-  const draft = { ...PLAYBOOK, draft: { sections: PLAYBOOK.playbook.sections, edited_at: null, differs: false } };
+  const HASH = 'ab'.repeat(32);
+  const draft = { ...PLAYBOOK, draft: { sections: PLAYBOOK.playbook.sections, edited_at: null, differs: false, hash: HASH } };
   let publish = () => refusal(409, 'nothing_to_publish', 'The draft is the same as the published playbook.');
   const sup = await mounted('/admin/programs/mentor-cohorts/how-it-runs', MentorCohortAccess,
     worker({ user: SUPER, detail: draft, writes: { section: () => response({ ...draft, draft: { ...draft.draft, differs: true, edited_at: d1(NOW) } }), publish: () => publish() } }), { user: SUPER });
@@ -523,6 +531,8 @@ test('Mentor · How it runs: part 1’s published playbook for an Admin, with th
     await sup.click('programs-mentor-how-publish');
     await sup.click('programs-playbook-publish-go');
     assert.equal(sup.textOf('programs-playbook-publish-go-refusal'), REFUSALS.nothing_to_publish);
+    // D4806: Publish names the revision of the draft that was on screen.
+    assert.deepEqual(JSON.parse(writesTo(sup, /playbook\/publish$/, 'POST')[0].body), { expected_hash: HASH });
   } finally { await sup.close(); }
 });
 
@@ -622,9 +632,15 @@ test('Perks · Queue: every state paged with its total; Reject needs its reason,
     await view.click('programs-perks-row-p1-approve');
     assert.match(view.textOf('programs-listing-stored'), /Seeded by HQ/);
     await view.click('programs-listing-go');
-    assert.deepEqual(JSON.parse(writesTo(view, /perks\/admin\/p1\/review$/, 'POST').at(-1).body), { action: 'approve', review_note: 'Seeded by HQ' });
+    assert.deepEqual(JSON.parse(writesTo(view, /perks\/admin\/p1\/review$/, 'POST').at(-1).body), { action: 'approve', review_note: 'Seeded by HQ', expected_revision: d1(NOW - 30 * H) });
     assert.match(view.textOf('programs-listing-go-done'), /^Approved\./);
     assert.ok(view.has('programs-perks-row-p2-pause') && view.has('programs-perks-row-p2-feature'), 'a live listing pauses and features');
+    // D4806: Feature is its own operation on the Worker, naming the revision it read; it is never sent as an approve.
+    await view.press('Close', 'programs-listing-dialog');
+    await view.click('programs-perks-row-p2-feature');
+    await view.click('programs-listing-go');
+    assert.deepEqual(JSON.parse(writesTo(view, /perks\/admin\/p2\/feature$/, 'POST').at(-1).body), { featured: true, expected_revision: d1(NOW - 30 * H) });
+    assert.equal(writesTo(view, /perks\/admin\/p2\/review$/, 'POST').length, 0, 'no review was sent for the feature switch');
   } finally { await view.close(); }
 });
 
