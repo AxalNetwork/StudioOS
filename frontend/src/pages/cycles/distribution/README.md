@@ -52,9 +52,13 @@ starting ads.
 | `distributionStates.css` | D4496: shared state theme, phone/tablet targets and responsive Overview treatment. |
 | `useDistributionLayout.js` | D4496: reactive phone/tablet layout using the shared media hook. |
 | `useDistributionAccess.js` | D4496: existing form-options writer permission, fail closed while unknown. |
+| `SequenceBuilder.jsx` | D4493: the sequence card under Prospects: steps, blocked steps with fixed reasons, the founder's own voice note, due drafts sent only by the composer's confirmed press, enrolment, the sequence Ask, the Needs-you row and the shared due read. |
+| `ConsentByStep.jsx` | D4493: MK7b's per-prospect, per-step recorded consent table and its caption. |
+| `sequenceModel.js` | D4493: pure pills, fixed blocked reasons, 'There is no SMS step.', AI voice Not offered, subtitles, due counts and the hold line. |
+| `sequences.css` | D4493: sequence layout on the shared Distribution tokens, phone stacking. |
 
 CycleRoute still owns the module page. Overview retains its charts,
-outreach draft, This week calendar summary, update-ask replies, Mercury, Notion and tool
+This week calendar summary (with D4493's STEP items), update-ask replies, Mercury, Notion and tool
 doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
 mounted D4486 tab; its table replaces Overview’s legacy channel records.
 Calendar is the D4489 tab, using the same scoped read as This week.

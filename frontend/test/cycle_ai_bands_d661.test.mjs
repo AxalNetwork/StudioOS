@@ -69,7 +69,8 @@ const BANDS = {
     ['fundraising-readiness', 'raise/data-room'], ['fundraising-readiness', 'raise/legal'],
     ['investor-narrative', 'raise/narrative-fix'],
   ],
-  grow: [['team-expansion', 'grow/talent'], ['distribution', 'grow/customers']],
+  // D4493: Distribution's outreach-sequence band is retired; the sequence builder's Ask replaces it.
+  grow: [['team-expansion', 'grow/talent']],
   build: [
     ['product-roadmap', 'build/roadmap'],
     ['operating-systems', 'build/this-week'], ['operating-systems', 'build/retro'], ['operating-systems', 'build/kpi'],
@@ -120,7 +121,8 @@ test('a band is drawn only with the switch on and a venture chosen, and spends n
   }).join('\n');
   for (const field of ['label', 'run', 'accept', 'empty', 'nothingToDraft', 'foot']) {
     const n = (drafts.match(new RegExp(`\\b${field}: '`, 'g')) || []).length;
-    assert.equal(n, 11, `${n} of the eleven bands carry ${field}`);
+    // D4493: ten, since Distribution's outreach-sequence band was retired.
+    assert.equal(n, 10, `${n} of the ten bands carry ${field}`);
   }
   // D424's voice rule, kept from the desks: Eadwyn's output is never advice.
   assert.doesNotMatch(drafts, /\b(advice|recommend\w*)\b/i, 'a band calls what Eadwyn produces advice');

@@ -50,6 +50,7 @@ import { mount as grow_channelsMount } from './grow_channels';
 import { mount as grow_distribution_askMount } from './grow_distribution_ask';
 import { mount as grow_inboxMount } from './grow_inbox';
 import { mount as grow_prospectsMount } from './grow_prospects';
+import { mount as grow_sequencesMount } from './grow_sequences';
 import { mount as influencerMount } from './influencer';
 import { mount as influencer_analyticsMount } from './influencer_analytics';
 import { mount as influencer_offersMount } from './influencer_offers';
@@ -107,6 +108,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'grow_distribution_ask', mount: grow_distribution_askMount },
   { file: 'grow_inbox', mount: grow_inboxMount },
   { file: 'grow_prospects', mount: grow_prospectsMount },
+  { file: 'grow_sequences', mount: grow_sequencesMount },
   { file: 'influencer', mount: influencerMount },
   { file: 'influencer_analytics', mount: influencer_analyticsMount },
   { file: 'influencer_offers', mount: influencer_offersMount },
