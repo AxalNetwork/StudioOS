@@ -40,9 +40,13 @@ function isEligible(user: any): boolean {
   if (role === 'admin' || role === 'advisor') return true;
   // Partners get chat regardless of subscription tier (they're paying via partner contract).
   if (role === 'partner') return true;
+  if (role === 'investor') {
+    // A held Founder licence is read on its own Founder plan too (D4729).
+    if (holds(user, 'founder') && ALLOWED_FOUNDER_TIERS.has(String(founderPlanTier(user)))) return true;
+    return ALLOWED_INVESTOR_TIERS.has(String(investorPlanTier(user)));
+  }
+  // Founder default, and a held Investor licence on its own Investor plan.
   if (holds(user, 'investor') && ALLOWED_INVESTOR_TIERS.has(String(investorPlanTier(user)))) return true;
-  // Founder default: an Investor-primary member is read on a Founder plan only when they hold Founder.
-  if (role === 'investor' && !holds(user, 'founder')) return false;
   return ALLOWED_FOUNDER_TIERS.has(String(founderPlanTier(user)));
 }
 
