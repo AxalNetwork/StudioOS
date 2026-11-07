@@ -22,7 +22,8 @@
 
 export const PATH = '/admin/approvals';
 export const TITLE = 'Approvals';
-export const LINE = 'Everything that waits on an admin, oldest first. Decide here, or open the page that decides it.';
+// D4814: the intro copy, as the issue words it.
+export const LINE = 'Review every waiting decision here. Continue to the relevant review surface when required.';
 export const LANES_LINE = 'Each lane is one kind of decision. Most are decided on their own page.';
 export const DECIDED_LINE = 'Decisions made here and on each lane’s own page, newest first.';
 export const RAIL_NOTE = 'Eadwyn reads what is waiting here. Nothing is decided until you decide it.';

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { isSuperAdminUser } from '../../../lib/shellRole';
+import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
 import { adminApprovalsApi } from '../../../lib/api/adminApprovals';
 import { licenceRequestsApi } from '../../../lib/api/licenceRequests';
 import {
@@ -12,13 +12,14 @@ import { useHeldGlance } from '../heldFigures';
 import {
   DECIDED_LINE, GROUPS, HQ_LANES, HQ_ONLY_LINE, HQ_ONLY_TITLE, LANES, LANES_LINE, LANE_FAILED, LINE, MOVED_KEY, MOVED_NOTICE,
   NOT_A_QUEUE, NOT_YET, RAIL_NOTE, TITLE,
-  isHqLane, laneViews, oldestLine, tabOf,
+  isHqLane, laneViews, tabOf,
 } from './approvalsModel';
 import {
-  AGE_FILTERS, BAND_PARTS, OUTCOME_FILTERS, SEARCH_MIN, SORTS,
-  assignChoices, assignItems, assignTitle, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef,
-  hasNextPage, hqBandLine, hqLaneViews, inboxGroupCounts, inboxGroups, inboxQueryOf, inboxRows, inboxTiles, itemOfPath,
-  itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart, cardAge, filterCount, sortLabel,
+  AGE_FILTERS, ATTENTION_LINE, BAND_PARTS, OUTCOME_FILTERS, SEARCH_MIN, SORTS, WORK_VIEWS,
+  assignChoices, assignItems, assignTitle, bandedRows, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef,
+  filterChips, hasNextPage, hqBandLine, hqLaneViews, inboxGroupCounts, inboxGroups, inboxQueryOf, inboxRows, itemOfPath,
+  itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, reviewDestination, summaryStrip, urgencyPill, viewPatch,
+  waitingFigure, waitingOnHq, weekChart, weeklyTile, workViewCounts, workViewOf, cardAge, filterCount,
 } from './inboxModel';
 import { FOOT, PhoneBack } from './boardParts';
 import Sheet from '../../../ui/Sheet.jsx';
@@ -55,6 +56,7 @@ const CHIP = 'inline-flex min-h-[44px] items-center gap-1.5 sm:min-h-[36px] roun
 const CHIP_ON = 'border-axal-violet bg-axal-lavender text-axal-ink dark:bg-violet-950/40 dark:text-gray-100';
 const CHIP_OFF = 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400';
 const BTN = 'inline-flex min-h-[44px] items-center justify-center rounded-[8px] sm:min-h-[36px] border border-axal-hairline px-3 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
+const BTN_SM = 'inline-flex min-h-[44px] items-center justify-center rounded-[7px] border border-axal-hairline bg-white px-2.5 text-[12px] font-bold text-axal-ink hover:bg-gray-50 sm:min-h-[30px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const BTN_PRIMARY = 'inline-flex min-h-[44px] items-center justify-center rounded-[8px] sm:min-h-[36px] bg-axal-violet px-3 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50';
 const SELECT = 'min-h-[44px] rounded-[7px] sm:min-h-[36px] border border-axal-hairline bg-white px-2 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
@@ -71,13 +73,20 @@ export function BandPill({ band }) {
   return <span className={`ml-1.5 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[band.tone]}`}>{band.label}</span>;
 }
 
+/** D4814: the Waiting column's pill, in words (never colour alone): "! Overdue", "◷ Due soon". */
+export function UrgencyPill({ sla }) {
+  const p = urgencyPill(sla);
+  if (!p) return null;
+  return <span className={`ml-1.5 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[p.tone]}`}>{p.text}</span>;
+}
+
 /** The page that decides a lane, as a literal link (see the header comment). */
 export function LaneDoor({ k }) {
   switch (k) {
     case 'kyc': case 'kyb': return <Link to="/admin/kyc" className={LINK}>KYC & KYB</Link>;
     case 'partner_profiles': return <Link to="/admin/partner-profiles" className={LINK}>Partner profiles</Link>;
     case 'exploring': return <Link to="/admin/exploring" className={LINK}>Exploring board</Link>;
-    case 'product_testers': return <Link to="/admin/approvals/product-testers" className={LINK}>Here</Link>;
+    case 'product_testers': return <Link to="/admin/approvals/product-testers" className={LINK}>Product testers</Link>;
     case 'lp': return <Link to="/admin/lp-applications" className={LINK}>LP applications</Link>;
     case 'cohort': return <Link to="/admin/programs/spinout-lab/applications" className={LINK}>Spin-Out Lab</Link>;
     case 'lab_hosts': return <Link to="/admin/programs/spinout-lab/hosts" className={LINK}>Spin-Out Lab › Hosts</Link>;
@@ -85,11 +94,11 @@ export function LaneDoor({ k }) {
     case 'referrals': return <Link to="/admin/programs/refer-and-earn/queue" className={LINK}>Refer & Earn › Queue</Link>;
     case 'strategic_access': return <Link to="/admin/programs/refer-and-earn" className={LINK}>Refer & Earn</Link>;
     case 'perk_listings': return <Link to="/admin/programs/perks" className={LINK}>Perks</Link>;
-    case 'best_fit': return <span className={SUB}>Here</span>;
+    case 'best_fit': return <span className={SUB}>Best-Fit · no review page yet</span>;
     case 'events': return <Link to="/admin/events/review" className={LINK}>Events › Review</Link>;
     case 'jobs': return <Link to="/admin/jobs" className={LINK}>Jobs</Link>;
-    case 'wellbeing_experts': return <Link to="/admin/approvals/wellbeing-experts" className={LINK}>Here</Link>;
-    case 'comarketing': return <Link to="/admin/approvals/co-marketing" className={LINK}>Here</Link>;
+    case 'wellbeing_experts': return <Link to="/admin/approvals/wellbeing-experts" className={LINK}>Wellbeing experts</Link>;
+    case 'comarketing': return <Link to="/admin/approvals/co-marketing" className={LINK}>Co-marketing</Link>;
     case 'articles': return <Link to="/admin/articles" className={LINK}>Content queue</Link>;
     case 'due_diligence': return <Link to="/admin/due-diligence" className={LINK}>Due diligence</Link>;
     case 'score_flags': return <Link to="/monitoring" className={LINK}>Monitoring</Link>;
@@ -363,7 +372,7 @@ function RowCard({ row, search, onMore }) {
         <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{row.what}</span>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[age.tone] || PILL.plain}`} data-testid={`approvals-card-age-${row.key}`}>{age.text}</span>
-          <span className="text-[12px] text-axal-ink dark:text-gray-100">Decided on <DoorFor lane={row.lane} /> ›</span>
+          <span className="text-[12px] text-axal-ink dark:text-gray-100">Review in <DoorFor lane={row.lane} /> ›</span>
         </div>
       </div>
       <button type="button" aria-label={`More for ${row.who}`} onClick={() => onMore(row)}
@@ -387,27 +396,28 @@ function RowSheet({ row, search, onAssign, onCopy, onClose }) {
   );
 }
 
-/** D1047 (APR15): the phone's filters and order as one bottom sheet, each choice applied as it is made. */
-function FiltersSheet({ q, superAdmin, reviewers, n, typed, onType, setParams, total, onClose, onClear }) {
+/**
+ * D4814: the one Filters control, as a panel (a bottom sheet on a phone). Each
+ * choice lands in the address as it is made, so the view can be shared. The
+ * order is the toolbar's one Sort, and the work views are their own control,
+ * so neither is here.
+ */
+function FiltersPanel({ q, superAdmin, reviewers, n, setParams, total, onClose, onClear }) {
   const lanes = superAdmin ? [...LANES, ...HQ_LANES] : LANES;
+  const owner = /^[1-9]\d*$/.test(q.filters.assigned || '') ? q.filters.assigned : '';
   return (
-    <Lightbox label="Filters and sort" title="Filters and sort" phone="sheet" onClose={onClose} testId="approvals-filters-sheet" width={460}
+    <Lightbox label="Filters" title="Filters" sub="Saved in the address, so this view can be shared." phone="sheet" onClose={onClose} testId="approvals-filters-sheet" width={460}
       footer={(
         <div className={FOOT}>
-          <button type="button" className={BTN} onClick={onClear} data-testid="approvals-filters-clear">Clear</button>
+          <button type="button" className={BTN} onClick={onClear} data-testid="approvals-filters-clear">Clear all</button>
           <button type="button" className={`${BTN_PRIMARY} flex-[1.4]`} onClick={onClose} data-testid="approvals-filters-done">{total == null ? 'Done' : `Show ${Number(total).toLocaleString('en-US')}`}</button>
         </div>
       )}>
       <div className="flex flex-col gap-4 px-5 py-4">
-        <label className="flex flex-col gap-1">
-          <span className={EYE}>Search</span>
-          <input type="search" value={typed} placeholder="Search who and what" onChange={(e) => onType(e.target.value)}
-            className="min-h-[44px] rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="approvals-sheet-search" />
-        </label>
         <div className="flex flex-col gap-1.5">
           <span className={EYE}>Group</span>
           <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Group">
-            <button type="button" aria-pressed={!q.filters.group} className={`${CHIP} ${!q.filters.group ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ group: null })}>All <span className={MONO}>{n('all')}</span></button>
+            <button type="button" aria-pressed={!q.filters.group} className={`${CHIP} ${!q.filters.group ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ group: null })} data-testid="approvals-sheet-group-any">Any group</button>
             {inboxGroups(superAdmin).map((g) => (
               <button key={g.key} type="button" aria-pressed={q.filters.group === g.key} className={`${CHIP} ${q.filters.group === g.key ? CHIP_ON : CHIP_OFF}`}
                 onClick={() => setParams({ group: g.key })} data-testid={`approvals-sheet-group-${g.key}`}>{g.label} <span className={MONO}>{n(g.key)}</span></button>
@@ -431,33 +441,67 @@ function FiltersSheet({ q, superAdmin, reviewers, n, typed, onType, setParams, t
           </div>
         </div>
         <label className="flex flex-col gap-1">
-          <span className={EYE}>Assigned</span>
-          <select className={SELECT} value={q.filters.assigned || ''} onChange={(e) => setParams({ assigned: e.target.value || null })} data-testid="approvals-sheet-assigned">
+          <span className={EYE}>Owner</span>
+          <select className={SELECT} value={owner} onChange={(e) => setParams({ assigned: e.target.value || null, view: e.target.value ? 'all' : null })} data-testid="approvals-sheet-owner">
             <option value="">Anyone</option>
-            <option value="me">Me</option>
-            <option value="none">Unassigned</option>
             {reviewers.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
           </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className={EYE}>Sort</span>
-          <select className={SELECT} value={q.filters.sort || 'oldest'} onChange={(e) => setParams({ sort: e.target.value === 'oldest' ? null : e.target.value })} data-testid="approvals-sheet-sort">
-            {SORTS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
-          </select>
+          <span className={SUB}>Assigned to me and Unassigned are views above the queue.</span>
         </label>
       </div>
     </Lightbox>
   );
 }
 
-/** The Inbox (APR1, APR11–APR14). */
-function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, toast }) {
+/** D4814 (AP-01): one cell of the urgency strip — its figure, "Could not be read" with why, or a skeleton. */
+function StripCell({ label, testId, t, tone, children }) {
+  const value = tone === 'bad' ? 'text-axal-destructive dark:text-red-300' : tone === 'warn' ? 'text-axal-amber-deep dark:text-amber-200' : 'text-axal-ink dark:text-gray-100';
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 border-axal-hairline px-4 py-3 dark:border-gray-700 max-lg:[&:nth-child(-n+2)]:border-b max-lg:odd:border-r lg:[&:not(:last-child)]:border-r" data-testid={testId}>
+      <span className={EYE}>{label}</span>
+      {t.state === 'loading' ? <Skeleton h={22} w="40%" />
+        : t.state === 'unreadable' ? <span title={t.reason} className="cursor-help text-[13px] font-bold text-axal-destructive dark:text-red-300">{LANE_FAILED}</span>
+          : <span className={`text-[22px] font-extrabold tracking-[-.02em] ${MONO} ${value}`} data-testid={`${testId}-value`}>{t.value}</span>}
+      {t.state === 'unreadable' ? <span className={SUB}>{t.reason}</span> : t.sub ? <span className={SUB}>{t.sub}{children}</span> : null}
+    </div>
+  );
+}
+
+/** D4814: who holds a row. Unassigned is amber with Assign beside it; an unread record is "Not read", never "Unassigned". */
+function OwnerCell({ row, callerId, onAssign }) {
+  const a = row.assignee;
+  if (a.kind === 'unread') return <span title="The assignment record could not be read for this item." className={`cursor-help ${SUB}`} data-testid={`approvals-owner-${row.key}`}>Not read</span>;
+  if (a.kind === 'none') {
+    return (
+      <span className="flex flex-wrap items-center gap-2" data-testid={`approvals-owner-${row.key}`}>
+        <span className="font-bold text-axal-amber-deep dark:text-amber-200">Unassigned</span>
+        <button type="button" className={BTN_SM} onClick={() => onAssign([row])} data-testid={`approvals-owner-assign-${row.key}`}>Assign</button>
+      </span>
+    );
+  }
+  const you = callerId != null && Number(a.id) === Number(callerId);
+  return <span data-testid={`approvals-owner-${row.key}`}>{a.text}{you ? <span className={SUB}> · you</span> : null}</span>;
+}
+
+/** D4814: Review opens the item here; the line under it says where review continues. */
+function ReviewCell({ row, search }) {
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className={BTN_SM} data-testid={`approvals-review-${row.key}`}>Review</Link>
+      <span className="text-[11px] text-axal-muted dark:text-gray-400" data-testid={`approvals-review-in-${row.key}`}>in {reviewDestination(row.lane)}</span>
+    </div>
+  );
+}
+
+/** The Inbox (D4814, AP-01 to AP-05): the strip, the work views, the queue, then Workload. */
+function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign, toast }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const q = inboxQueryOf(loc.search, superAdmin);
+  const view = workViewOf(loc.search);
   const [selected, setSelected] = useState(() => new Set());
   const [typed, setTyped] = useState(q.typed);
-  // D1047 (APR15): the phone's bottom sheets — the filters, or one card's ⋯.
+  // D1047 (APR15): the bottom sheets — the filters, or one card's ⋯.
   const [sheet, setSheet] = useState(null);
   const setParams = (patch) => {
     const p = new URLSearchParams(loc.search);
@@ -465,6 +509,10 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
     if (!('page' in patch)) p.delete('page');
     const s = p.toString();
     navigate({ pathname: '/admin/approvals', search: s ? `?${s}` : '' }, { replace: true });
+  };
+  const clearFilters = () => {
+    setTyped('');
+    setParams({ q: null, group: null, lane: null, age: null, ...(/^[1-9]\d*$/.test(q.filters.assigned || '') ? { assigned: null } : {}) });
   };
   useEffect(() => { setSelected(new Set()); }, [loc.search]);
 
@@ -480,202 +528,245 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
 
   const ready = inbox.status === 'ready';
   const reply = ready ? inbox.reply : null;
-  const tiles = inboxTiles(inbox, weekly);
+  const strip = summaryStrip(inbox);
+  const viewCounts = workViewCounts(inbox);
   const rows = inboxRows(reply);
+  const lines = bandedRows(rows, q.filters.sort);
   const counts = inboxGroupCounts(reply, superAdmin);
   const n = (k) => (counts[k] === null || counts[k] === undefined ? '—' : counts[k].toLocaleString('en-US'));
   const lanesChart = ready ? laneAgeChart(reply) : null;
   const weeks = weekly.status === 'ready' ? weekChart(weekly.reply) : null;
+  const decidedWeek = weeklyTile(weekly);
   const unread = reply?.unreadable || [];
   const lanesRead = (reply?.lanes || []).length - unread.length;
-  const filtered = Object.keys(q.filters).some((k) => k !== 'sort');
+  const nFilters = filterCount(q.filters);
+  const reviewers = Array.isArray(reply?.reviewers) ? reply.reviewers : [];
+  const chips = filterChips(q.filters, { superAdmin, reviewers });
   const picked = rows.filter((r) => selected.has(r.key));
+  const allPicked = rows.length > 0 && picked.length === rows.length;
   const toggle = (key) => setSelected((s) => { const next = new Set(s); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   const copy = (row) => {
     const url = `${globalThis.location?.origin || ''}${row.href}`;
     Promise.resolve(globalThis.navigator?.clipboard?.writeText(url)).then(() => toast('Link copied.'), () => toast('The link could not be copied.'));
   };
-  const hqDecides = glance.hq?.approvals?.hqDecides ?? null;
-  const reviewers = Array.isArray(reply?.reviewers) ? reply.reviewers : [];
+  const chooseView = (key) => setParams(viewPatch(key));
+  const onViewKey = (e) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const i = WORK_VIEWS.findIndex((v) => v.key === view);
+    chooseView(WORK_VIEWS[(i + step + WORK_VIEWS.length) % WORK_VIEWS.length].key);
+  };
+  const onType = (v) => { setTyped(v); const t = v.trim(); if (t.length >= SEARCH_MIN || !t) setParams({ q: t || null }); };
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4" data-testid="approvals-tiles">
-        <Tile label="Waiting" testId="approvals-tile-waiting" t={tiles.waiting} />
-        <Tile label="Over 72 hours" testId="approvals-tile-over72" t={tiles.over72} sub={tiles.over72.state === 'ready' ? (oldestLine(views) || tiles.over72.sub) : undefined} />
-        <Tile label="Assigned to you" testId="approvals-tile-assigned" t={tiles.mine} />
-        <Tile label="Decided this week" testId="approvals-tile-decided" t={tiles.decided} />
-      </div>
+    <div className="flex flex-col gap-4">
+      <section aria-label="Urgency summary" className={`${CARD} grid grid-cols-2 lg:grid-cols-4`} data-testid="approvals-strip">
+        <StripCell label="Waiting" testId="approvals-strip-waiting" t={strip.waiting} />
+        <StripCell label="Overdue" testId="approvals-strip-overdue" t={strip.overdue} tone={strip.overdue.n > 0 ? 'bad' : null} />
+        <StripCell label="Unassigned" testId="approvals-strip-unassigned" t={strip.unassigned} tone={strip.unassigned.n > 0 ? 'warn' : null}>
+          {strip.unassigned.show && view !== 'unassigned' ? <> · <button type="button" className="font-bold text-axal-violet underline dark:text-violet-300" onClick={() => chooseView('unassigned')} data-testid="approvals-strip-show-unassigned">Show</button></> : null}
+        </StripCell>
+        <StripCell label="Oldest" testId="approvals-strip-oldest" t={strip.oldest} />
+      </section>
 
-      {superAdmin && hqDecides ? (
-        <p className={`m-0 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[12.5px] font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300`} data-testid="approvals-hq-band">
-          {hqBandLine(hqDecides)}
-        </p>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div role="radiogroup" aria-label="Work view" className="flex flex-wrap gap-[7px]" onKeyDown={onViewKey} data-testid="approvals-views">
+          {WORK_VIEWS.map((v) => {
+            const on = v.key === view;
+            const c = viewCounts[v.key];
+            return (
+              <button key={v.key} type="button" role="radio" aria-checked={on} tabIndex={on ? 0 : -1} className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
+                onClick={() => chooseView(v.key)} data-testid={`approvals-view-${v.key}`}>
+                {v.label}{c != null ? <span className={`${MONO} ${v.key === 'attention' ? 'text-axal-destructive dark:text-red-300' : ''}`}>{c}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+        {view === 'attention' ? <span className={SUB} data-testid="approvals-attention-line">{ATTENTION_LINE}</span> : null}
+      </div>
 
       {inbox.status === 'error' ? (
         <FailedCard title="We could not load Approvals." line="The rest of the admin still works. Try again in a moment." error={inbox.error} onRetry={inbox.reload} testId="approvals-failed" />
       ) : (
         <>
-          <div className="grid gap-3.5 lg:grid-cols-2">
-            {lanesChart ? (
-              <ChartCard title="Waiting by lane" testId="approvals-chart-lanes" chart={lanesChart.rows.length ? lanesChart : null} alt={lanesChart.sum}
-                legend={<Legend items={BAND_PARTS.map((p) => (p.key === 'unknown' ? { label: p.label, tone: 'dash' } : { label: p.label, tone: p.tone }))} />}>
-                {lanesChart.rows.length ? <Chart chart={{ ...lanesChart, testIdPrefix: 'approvals-bar' }} /> : <p className={`m-0 ${SUB}`}>{lanesChart.sum}</p>}
-              </ChartCard>
-            ) : (
-              <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-chart-lanes"><h2 className={H2}>Waiting by lane</h2><Skeleton h={140} /></section>
-            )}
-            {weeks?.drawable ? (
-              <ChartCard title="Arrived and decided, last 8 weeks" testId="approvals-chart-weeks" chart={weeks.chart} alt={weeks.sum} foot={weeks.foot}
-                legend={<Legend items={[{ label: 'Arrived', tone: 'violet', mark: 'line' }, { label: 'Decided', tone: 'sky', mark: 'line' }, { label: 'This week, to date', tone: 'hollow' }]} />}>
-                <Chart chart={weeks.chart} />
-              </ChartCard>
-            ) : (
-              <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-chart-weeks">
-                <h2 className={H2}>Arrived and decided, last 8 weeks</h2>
-                {weekly.status === 'loading' ? <Skeleton h={140} />
-                  : weekly.status === 'error' ? <p className={`m-0 text-[13px] text-axal-destructive dark:text-red-300`}>{LANE_FAILED}: the weekly series did not answer. <button type="button" className="underline" onClick={weekly.reload}>Try again</button></p>
-                    : <p className={`m-0 ${SUB}`}>{weeks?.reason}</p>}
-              </section>
-            )}
-          </div>
-
-          {/* D1047 (APR15): on a phone, Filters with its count and Sort open one bottom sheet. */}
-          <div className="flex gap-2 sm:hidden" data-testid="approvals-phone-filters">
-            <button type="button" className={`${BTN} flex-1`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-filters-open">
-              Filters · <span className={`ml-1 ${MONO}`} data-testid="approvals-filters-count">{filterCount(q.filters)}</span>
-            </button>
-            <button type="button" className={`${BTN} flex-[1.2]`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-sort-open">{`Sort: ${sortLabel(q.filters.sort)} ▾`}</button>
-          </div>
-
-          <div className="hidden flex-col gap-2.5 sm:flex" data-testid="approvals-filters">
-            <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Group">
-              <button type="button" aria-pressed={!q.filters.group} className={`${CHIP} ${!q.filters.group ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ group: null })}>All <span className={MONO}>{n('all')}</span></button>
-              {inboxGroups(superAdmin).map((g) => (
-                <button key={g.key} type="button" aria-pressed={q.filters.group === g.key} data-testid={`approvals-group-${g.key}`}
-                  className={`${CHIP} ${q.filters.group === g.key ? CHIP_ON : CHIP_OFF}`}
-                  onClick={() => setParams({ group: g.key })}>{g.label} <span className={MONO}>{n(g.key)}</span></button>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="flex min-w-[220px] flex-1 flex-col gap-1 sm:max-w-[320px]">
-                <span className="sr-only">Search who and what</span>
-                <input type="search" value={typed} placeholder="Search who and what"
-                  onChange={(e) => { setTyped(e.target.value); const t = e.target.value.trim(); if (t.length >= SEARCH_MIN || !t) setParams({ q: t || null }); }}
-                  className="min-h-[40px] rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" data-testid="approvals-search" />
+          <section className={`${CARD} min-w-0`} aria-labelledby="approvals-queue-h" data-testid="approvals-inbox">
+            <h2 id="approvals-queue-h" className="sr-only">Approval queue</h2>
+            <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid="approvals-toolbar">
+              <label className="flex min-w-0 flex-1 basis-[220px] sm:max-w-[360px]">
+                <span className="sr-only">Search person, company or item</span>
+                <input type="search" value={typed} placeholder="Search person, company or item" onChange={(e) => onType(e.target.value)}
+                  className="min-h-[44px] w-full rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] sm:min-h-[36px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="approvals-search" />
               </label>
-              <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Age" data-testid="approvals-age">
-                {AGE_FILTERS.map((a) => (
-                  <button key={a.label} type="button" aria-pressed={(q.filters.age || null) === a.key} className={`${CHIP} ${(q.filters.age || null) === a.key ? CHIP_ON : CHIP_OFF}`}
-                    onClick={() => setParams({ age: a.key })}>{a.label}</button>
-                ))}
+              <div className="ml-auto flex gap-2 max-sm:w-full max-sm:*:flex-1">
+                <button type="button" aria-expanded={sheet?.kind === 'filters'} className={`${BTN} ${nFilters ? CHIP_ON : ''}`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-filters-open">
+                  {nFilters ? <>Filters · <span className={`ml-1 ${MONO}`} data-testid="approvals-filters-count">{nFilters}</span></> : 'Filters'}
+                </button>
+                <label className="flex">
+                  <span className="sr-only">Sort</span>
+                  <select className={SELECT} value={q.filters.sort || 'oldest'} data-testid="approvals-sort"
+                    onChange={(e) => { const s = e.target.value === 'oldest' ? null : e.target.value; setParams(view === 'attention' && s ? { sort: s, view: 'all' } : { sort: s }); }}>
+                    {SORTS.map((s) => <option key={s.key} value={s.key}>{`Sort: ${s.label}`}</option>)}
+                  </select>
+                </label>
               </div>
-              <label className="flex flex-col gap-1">
-                <span className={EYE}>Assigned</span>
-                <select className={SELECT} value={q.filters.assigned || ''} onChange={(e) => setParams({ assigned: e.target.value || null })} data-testid="approvals-assigned">
-                  <option value="">Anyone</option>
-                  <option value="me">Me</option>
-                  <option value="none">Unassigned</option>
-                  {reviewers.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className={EYE}>Sort</span>
-                <select className={SELECT} value={q.filters.sort || 'oldest'} onChange={(e) => setParams({ sort: e.target.value === 'oldest' ? null : e.target.value })} data-testid="approvals-sort">
-                  {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
-              </label>
             </div>
-          </div>
-
-          <div className="grid gap-3.5 lg:grid-cols-[1fr_280px]">
-            <section className={`${CARD} min-w-0 overflow-x-auto`} data-testid="approvals-inbox">
-              {unread.length ? (
-                <p className="m-0 border-b border-axal-hairline px-3 py-2 text-[12.5px] text-axal-destructive dark:border-gray-700 dark:text-red-300" data-testid="approvals-partial">
-                  {unread.join(', ')} could not be read, so {unread.length === 1 ? 'its items are' : 'their items are'} missing below.
-                  {' '}The other {lanesRead.toLocaleString('en-US')} lanes are complete.
-                  {' '}<button type="button" className="underline" onClick={inbox.reload}>Try again</button>
-                </p>
-              ) : null}
-              {reply?.capped ? <p className={`m-0 border-b border-axal-hairline px-3 py-2 dark:border-gray-700 ${SUB}`}>A lane holds more than the inbox reads at once; its oldest items are listed.</p> : null}
-              {picked.length ? (
-                <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline bg-axal-lavender px-3 py-2 dark:border-gray-700 dark:bg-violet-950/40" data-testid="approvals-bulk">
-                  <span className="text-[12.5px] font-bold">{picked.length.toLocaleString('en-US')} selected</span>
-                  <button type="button" className={BTN} onClick={() => onAssign(picked)} data-testid="approvals-bulk-assign">Assign…</button>
-                  <button type="button" className={BTN} onClick={() => setSelected(new Set())} data-testid="approvals-bulk-clear">Clear</button>
-                </div>
-              ) : null}
-              {inbox.status === 'loading' ? <div className="px-3 py-3" data-testid="approvals-skeleton"><Skeleton.Table rows={6} cols={6} /></div>
-                : rows.length ? (
-                  <>
+            {chips.length ? (
+              <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-3 py-2 dark:border-gray-700" aria-label="Active filters" role="group" data-testid="approvals-chips">
+                {chips.map((c) => (
+                  <span key={c.key} className="inline-flex items-center gap-1 rounded-full border border-axal-violet bg-axal-lavender py-0.5 pl-2.5 pr-1 text-[12px] font-bold text-axal-ink dark:bg-violet-950/40 dark:text-gray-100" data-testid={`approvals-chip-${c.key}`}>
+                    {c.text}
+                    <button type="button" aria-label={`Remove ${c.text}`} className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-white/60 dark:hover:bg-gray-800"
+                      onClick={() => { if (c.key === 'q') setTyped(''); setParams(c.key === 'assigned' ? { assigned: null } : { [c.key]: null }); }} data-testid={`approvals-chip-remove-${c.key}`}>✕</button>
+                  </span>
+                ))}
+                <button type="button" className={LINK} onClick={clearFilters} data-testid="approvals-chips-clear">Clear all</button>
+                {reply?.total != null ? <span className={`ml-auto ${SUB} ${MONO}`}>{`${Number(reply.total).toLocaleString('en-US')} ${reply.total === 1 ? 'result' : 'results'}`}</span> : null}
+              </div>
+            ) : null}
+            {unread.length ? (
+              <p className="m-0 border-b border-axal-hairline px-3 py-2 text-[12.5px] text-axal-destructive dark:border-gray-700 dark:text-red-300" data-testid="approvals-partial">
+                {unread.join(', ')} could not be read, so {unread.length === 1 ? 'its items are' : 'their items are'} missing below.
+                {' '}The other {lanesRead.toLocaleString('en-US')} lanes are complete.
+                {' '}<button type="button" className="underline" onClick={inbox.reload}>Try again</button>
+              </p>
+            ) : null}
+            {reply?.capped ? <p className={`m-0 border-b border-axal-hairline px-3 py-2 dark:border-gray-700 ${SUB}`}>A lane holds more than the inbox reads at once; its oldest items are listed.</p> : null}
+            {picked.length ? (
+              <div className="sticky top-0 z-[1] flex flex-wrap items-center gap-2 border-b border-axal-hairline bg-axal-lavender px-3 py-2 dark:border-gray-700 dark:bg-violet-950/40" data-testid="approvals-bulk">
+                <span className="text-[12.5px] font-bold">{picked.length.toLocaleString('en-US')} selected</span>
+                <button type="button" className={BTN} onClick={() => onAssign(picked)} data-testid="approvals-bulk-assign">Assign…</button>
+                <button type="button" className={BTN} onClick={() => setSelected(new Set())} data-testid="approvals-bulk-clear">Clear</button>
+              </div>
+            ) : null}
+            {inbox.status === 'loading' ? <div className="px-3 py-3" data-testid="approvals-skeleton"><Skeleton.Table rows={6} cols={5} /></div>
+              : rows.length ? (
+                <>
                   <ul className="m-0 list-none p-0 md:hidden" data-testid="approvals-cards">
                     {rows.map((r) => <RowCard key={r.key} row={r} search={loc.search} onMore={(row) => setSheet({ kind: 'row', row })} />)}
                   </ul>
-                  <table className="hidden w-full min-w-[820px] md:table">
-                    <thead>
-                      <tr className="border-b border-axal-hairline dark:border-gray-700">
-                        <th className={TH}><span className="sr-only">Select</span></th>
-                        <th className={TH}>Waiting</th><th className={TH}>Lane</th><th className={TH}>Who</th><th className={TH}>What</th><th className={TH}>Assigned</th><th className={TH}>Decided on</th>
-                        <th className={TH}><span className="sr-only">More</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((r) => (
-                        <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-row-${r.key}`}>
-                          <td className={TD}><input type="checkbox" aria-label={`Select ${r.who}`} checked={selected.has(r.key)} onChange={() => toggle(r.key)} data-testid={`approvals-pick-${r.key}`} /></td>
-                          <td className={TD}><span className={MONO}>{r.age}</span><BandPill band={r.band} /></td>
-                          <td className={TD}>{r.laneLabel}{r.group ? <div className={SUB}>{r.group}</div> : null}</td>
-                          <td className={TD}><Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`} className="font-bold text-axal-ink hover:underline dark:text-gray-100" data-testid={`approvals-open-${r.key}`}>{r.who}</Link></td>
-                          <td className={TD}>{r.what}</td>
-                          <td className={TD}><span className={r.assignee.kind === 'person' ? '' : SUB}>{r.assignee.text}</span></td>
-                          <td className={TD}><DoorFor lane={r.lane} /></td>
-                          <td className={TD}><RowMenu row={r} search={loc.search} onAssign={onAssign} onCopy={copy} /></td>
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="w-full min-w-[760px]" data-testid="approvals-table">
+                      <thead>
+                        <tr className="border-b border-axal-hairline dark:border-gray-700">
+                          <th scope="col" className={`${TH} w-10`}>
+                            <input type="checkbox" aria-label="Select all on this page" checked={allPicked}
+                              onChange={() => setSelected(allPicked ? new Set() : new Set(rows.map((r) => r.key)))} data-testid="approvals-pick-all" />
+                          </th>
+                          <th scope="col" className={TH}>Request</th><th scope="col" className={TH}>Waiting</th><th scope="col" className={TH}>Owner</th><th scope="col" className={TH}>Review</th>
+                          <th scope="col" className={`${TH} w-12`}><span className="sr-only">More</span></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-start gap-1.5 px-4 py-5" data-testid="approvals-empty">
-                    {filtered ? (
-                      <>
-                        <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing matches these filters.</span>
-                        <button type="button" className={LINK} onClick={() => { setTyped(''); navigate('/admin/approvals', { replace: true }); }}>Clear filters</button>
-                      </>
-                    ) : unread.length ? (
-                      <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing else is waiting in the lanes that answered.</span>
-                    ) : (
-                      <>
-                        <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing is waiting on you.</span>
-                        <span className={SUB}>New items arrive here as members apply, submit and ask.</span>
-                        <Link to="/admin/approvals/decided" className={LINK}>See what was decided</Link>
-                      </>
-                    )}
+                      </thead>
+                      <tbody>
+                        {lines.map((l) => {
+                          if (l.kind === 'band') return (
+                            <tr key={`band-${l.band.key}`} className="border-b border-axal-hairline bg-gray-50 dark:border-gray-700 dark:bg-gray-800/60" data-testid={`approvals-band-${l.band.key}`}>
+                              <th colSpan={6} scope="rowgroup" className={`px-3 py-1.5 text-left text-[11px] font-bold uppercase tracking-[.06em] ${l.band.tone === 'bad' ? 'text-axal-destructive dark:text-red-300' : l.band.tone === 'warn' ? 'text-axal-amber-deep dark:text-amber-200' : 'text-axal-muted dark:text-gray-400'}`}>{l.band.text}</th>
+                            </tr>
+                          );
+                          const r = l.row;
+                          return (
+                            <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-row-${r.key}`}>
+                              <td className={TD}><input type="checkbox" aria-label={`Select ${r.who}`} checked={selected.has(r.key)} onChange={() => toggle(r.key)} data-testid={`approvals-pick-${r.key}`} /></td>
+                              <td className={TD}>
+                                <Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`} className="font-bold text-axal-ink hover:underline dark:text-gray-100" data-testid={`approvals-open-${r.key}`}>{r.who}</Link>
+                                <div className="text-[12.5px] text-axal-ink dark:text-gray-100">{r.what}</div>
+                                <div className={SUB}>{r.laneLabel}{r.group ? ` · ${r.group}` : ''}</div>
+                              </td>
+                              <td className={TD}><span className={MONO}>{r.age}</span><UrgencyPill sla={r.sla} /></td>
+                              <td className={TD}><OwnerCell row={r} callerId={callerId} onAssign={onAssign} /></td>
+                              <td className={TD}><ReviewCell row={r} search={loc.search} /></td>
+                              <td className={TD}><RowMenu row={r} search={loc.search} onAssign={onAssign} onCopy={copy} /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              {rows.length ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-3 py-2 dark:border-gray-700">
-                  <span className={`${SUB} ${MONO}`} data-testid="approvals-count">{pageLine(reply)}</span>
-                  <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
-                    <button type="button" className={BTN} disabled={q.page <= 1} onClick={() => setParams({ page: q.page > 2 ? String(q.page - 1) : null })}>Previous</button>
-                    <button type="button" className={BTN} disabled={!hasNextPage(reply)} onClick={() => setParams({ page: String(q.page + 1) })} data-testid="approvals-next">Next</button>
-                  </div>
+                </>
+              ) : (
+                <div role="status" className="flex flex-col items-start gap-1.5 px-4 py-5" data-testid="approvals-empty">
+                  {nFilters ? (
+                    <>
+                      <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing matches these filters.</span>
+                      <button type="button" className={LINK} onClick={clearFilters}>Clear filters</button>
+                    </>
+                  ) : view === 'mine' ? (
+                    <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing waiting is assigned to you.</span>
+                  ) : view === 'unassigned' ? (
+                    <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Every waiting item has an owner.</span>
+                  ) : unread.length ? (
+                    <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing else is waiting in the lanes that answered.</span>
+                  ) : (
+                    <>
+                      <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing needs approval.</span>
+                      <span className={SUB}>All approval queues currently read as clear. New items arrive here as members apply, submit and ask.</span>
+                      <Link to="/admin/approvals/decided" className={LINK}>See what was decided</Link>
+                    </>
+                  )}
                 </div>
-              ) : null}
-            </section>
-            <WaitingOnHq read={requests} />
-          </div>
+              )}
+            {rows.length ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-3 py-2 dark:border-gray-700">
+                <span className={`${SUB} ${MONO}`} data-testid="approvals-count">{pageLine(reply)}</span>
+                <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
+                  <button type="button" className={BTN} disabled={q.page <= 1} onClick={() => setParams({ page: q.page > 2 ? String(q.page - 1) : null })}>Previous</button>
+                  <button type="button" className={BTN} disabled={!hasNextPage(reply)} onClick={() => setParams({ page: String(q.page + 1) })} data-testid="approvals-next">Next</button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section aria-labelledby="approvals-workload-h" className="flex flex-col gap-2.5" data-testid="approvals-workload">
+            <div className="flex flex-wrap items-baseline gap-x-3">
+              <h2 id="approvals-workload-h" className={H2}>Workload</h2>
+              <span className={SUB}>Secondary. The queue above is the work.</span>
+            </div>
+            <div className="grid gap-3.5 lg:grid-cols-2">
+              {lanesChart ? (
+                <ChartCard title="Waiting by lane" testId="approvals-chart-lanes" chart={lanesChart.rows.length ? lanesChart : null} alt={lanesChart.sum}
+                  legend={<Legend items={BAND_PARTS.map((p) => (p.key === 'unknown' ? { label: p.label, tone: 'dash' } : { label: p.label, tone: p.tone }))} />}>
+                  {lanesChart.rows.length ? <Chart chart={{ ...lanesChart, testIdPrefix: 'approvals-bar' }} /> : <p className={`m-0 ${SUB}`}>{lanesChart.sum}</p>}
+                </ChartCard>
+              ) : (
+                <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-chart-lanes"><h2 className={H2}>Waiting by lane</h2><Skeleton h={140} /></section>
+              )}
+              {weeks?.drawable ? (
+                <ChartCard title="Arrived and decided, last 8 weeks" testId="approvals-chart-weeks" chart={weeks.chart} alt={weeks.sum} foot={weeks.foot}
+                  legend={<><DecidedWeek t={decidedWeek} /><Legend items={[{ label: 'Arrived', tone: 'violet', mark: 'line' }, { label: 'Decided', tone: 'sky', mark: 'line' }, { label: 'This week, to date', tone: 'hollow' }]} /></>}>
+                  <Chart chart={weeks.chart} />
+                </ChartCard>
+              ) : (
+                <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-chart-weeks">
+                  <h2 className={H2}>Arrived and decided, last 8 weeks</h2>
+                  <DecidedWeek t={decidedWeek} />
+                  {weekly.status === 'loading' ? <Skeleton h={140} />
+                    : weekly.status === 'error' ? <p className={`m-0 text-[13px] text-axal-destructive dark:text-red-300`}>{LANE_FAILED}: the weekly series did not answer. <button type="button" className="underline" onClick={weekly.reload}>Try again</button></p>
+                      : <p className={`m-0 ${SUB}`}>{weeks?.reason}</p>}
+                </section>
+              )}
+            </div>
+            {/* D4814: Waiting on HQ is outbound tracking, so only a studio shell, which can wait on HQ, draws it. */}
+            {studio ? <WaitingOnHq read={requests} /> : null}
+          </section>
         </>
       )}
       {sheet?.kind === 'filters' ? (
-        <FiltersSheet q={q} superAdmin={superAdmin} reviewers={reviewers} n={n} typed={typed}
-          onType={(v) => { setTyped(v); const t = v.trim(); if (t.length >= SEARCH_MIN || !t) setParams({ q: t || null }); }}
-          setParams={setParams} total={reply?.total ?? null} onClose={() => setSheet(null)}
-          onClear={() => { setTyped(''); navigate('/admin/approvals', { replace: true }); }} />
+        <FiltersPanel q={q} superAdmin={superAdmin} reviewers={reviewers} n={n}
+          setParams={setParams} total={reply?.total ?? null} onClose={() => setSheet(null)} onClear={clearFilters} />
       ) : null}
       {sheet?.kind === 'row' ? <RowSheet row={sheet.row} search={loc.search} onAssign={onAssign} onCopy={copy} onClose={() => setSheet(null)} /> : null}
     </div>
+  );
+}
+
+/** The weekly decisions line in Workload: "Decided this week · 12 · median wait 1 d 9 h". */
+function DecidedWeek({ t }) {
+  if (t.state === 'loading') return null;
+  return (
+    <p className={`m-0 ${SUB}`} data-testid="approvals-decided-week">
+      {t.state === 'ready' ? <>Decided this week · <span className={MONO}>{t.value}</span> · {t.sub}</> : <>Decided this week: {t.reason}</>}
+    </p>
   );
 }
 
@@ -685,7 +776,7 @@ function LaneTable({ group, views, glanceLanes, onRetry }) {
     <section className={`${CARD} overflow-x-auto`} data-testid={`approvals-lanes-${group.key}`}>
       <h2 className={`${H2} px-3 pt-3`}>{group.label}</h2>
       <table className="w-full min-w-[760px]">
-        <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Lane</th><th className={TH}>Waiting</th><th className={TH}>Oldest</th><th className={TH}>Decided on</th><th className={TH}>Who decides</th><th className={TH}>Notifies</th></tr></thead>
+        <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Lane</th><th className={TH}>Waiting</th><th className={TH}>Oldest</th><th className={TH}>Reviewed in</th><th className={TH}>Who decides</th><th className={TH}>Notifies</th></tr></thead>
         <tbody>
           {rows.map((v) => {
             const notifies = notifiesOf(glanceLanes.find((l) => l.key === v.glance));
@@ -723,7 +814,7 @@ function Lanes({ views, glance, superAdmin }) {
           <h2 className={`${H2} px-3 pt-3`}>HQ decides</h2>
           <p className={`m-0 px-3 ${SUB}`}>{hqBandLine(ap?.hqDecides ?? null) || 'Only Super Admins see this group.'}</p>
           <table className="w-full min-w-[640px]">
-            <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Lane</th><th className={TH}>Waiting</th><th className={TH}>Oldest</th><th className={TH}>Decided on</th><th className={TH}>Who decides</th></tr></thead>
+            <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Lane</th><th className={TH}>Waiting</th><th className={TH}>Oldest</th><th className={TH}>Reviewed in</th><th className={TH}>Who decides</th></tr></thead>
             <tbody>
               {hq.map((l) => (
                 <tr key={l.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-hq-${l.key}`}>
@@ -853,7 +944,9 @@ export function ApprovalsPage({ viewer = null }) {
   const iq = inboxQueryOf(loc.search, superAdmin);
   const inbox = useRead(() => adminApprovalsApi.inbox(iq.page, iq.filters), JSON.stringify(iq.filters) + iq.page, onInbox);
   const weekly = useRead(() => adminApprovalsApi.weekly(), 'weekly', onInbox);
-  const requests = useRead(() => licenceRequestsApi.list(), 'requests', onInbox);
+  // D4814: Waiting on HQ is a studio's outbound list; the HQ-held shell neither draws nor reads it.
+  const studio = Boolean(branchOfUser(user));
+  const requests = useRead(() => licenceRequestsApi.list(), 'requests', onInbox && studio);
   const dq = decidedQueryOf(loc.search);
   const { page: dPage, ...dFilters } = dq;
   const decided = useRead(() => adminApprovalsApi.decided(dPage, dFilters), JSON.stringify(dq), tab === 'decided');
@@ -875,11 +968,22 @@ export function ApprovalsPage({ viewer = null }) {
   };
   const closeItem = () => navigate({ pathname: '/admin/approvals', search: loc.search });
 
+  // D4814 (P0): on the Inbox the tab reads `waitingFigure`, the same number as
+  // Waiting and All. It used to read `unfiltered_total`, which the Worker sends
+  // only for a filtered read, so an unfiltered Inbox fell back to the glance's
+  // studio lanes and left HQ's own lanes out (Inbox 31 beside Waiting 32,
+  // "1 for HQ"). Off the Inbox the glance stands in, HQ's lanes included for a
+  // Super Admin.
+  const waiting = waitingFigure(inbox);
   const counted = views.filter((v) => v.glance);
-  const inboxCount = onInbox && inbox.status === 'ready' && inbox.reply.unfiltered_total != null
-    ? { kind: 'num', value: `${Number(inbox.reply.unfiltered_total).toLocaleString('en-US')}${inbox.reply.unreadable?.length ? ' +' : ''}` }
+  const hqPending = glance.hq?.approvals?.hqDecides?.pending_total;
+  const hqShare = superAdmin ? hqPending : 0;
+  const inboxCount = onInbox
+    ? (waiting.state === 'ready' ? { kind: 'num', value: waiting.value }
+      : waiting.state === 'loading' ? { kind: 'load' }
+        : { kind: 'dash', tip: waiting.reason })
     : counted.some((v) => v.state === 'loading') ? { kind: 'load' }
-      : counted.every((v) => v.state === 'ready') ? { kind: 'num', value: counted.reduce((t, v) => t + v.count, 0).toLocaleString('en-US') }
+      : counted.every((v) => v.state === 'ready') && hqShare != null ? { kind: 'num', value: (counted.reduce((t, v) => t + v.count, 0) + hqShare).toLocaleString('en-US') }
         : { kind: 'dash', tip: 'A lane could not be read, so there is no total.' };
   const decidedCount = tab === 'decided' && decided.status === 'ready' && decided.reply.total != null
     ? { kind: 'num', value: Number(decided.reply.total).toLocaleString('en-US') }
@@ -894,7 +998,7 @@ export function ApprovalsPage({ viewer = null }) {
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="admin-approvals">
       <AdminPageHeader title={TITLE} line={LINE} scope notice={{ text: notice.text, onDismiss: notice.dismiss }} tabs={tabs} data-testid="approvals-header" />
-      {onInbox ? <Inbox inbox={inbox} weekly={weekly} requests={requests} views={views} glance={glance} superAdmin={superAdmin} onAssign={openAssign} toast={setToastText} /> : null}
+      {onInbox ? <Inbox inbox={inbox} weekly={weekly} requests={requests} superAdmin={superAdmin} studio={studio} callerId={user?.id ?? null} onAssign={openAssign} toast={setToastText} /> : null}
       {tab === 'lanes' ? <Lanes views={views} glance={glance} superAdmin={superAdmin} /> : null}
       {tab === 'decided' ? <Decided decided={decided} /> : null}
       {item ? <ItemDrawer key={`${item.lane}-${item.id}`} at={item} onClose={closeItem} onAssign={openAssign} /> : null}
