@@ -21,7 +21,7 @@ import './sequences.css';
 
 const BTN = 'inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-lg border border-axal-lavender-edge px-3 text-sm font-semibold text-axal-violet disabled:opacity-50 dark:border-violet-900 dark:text-violet-300';
 const PRIMARY = 'inline-flex min-h-[44px] items-center justify-center rounded-lg bg-axal-violet px-4 text-sm font-semibold text-white disabled:opacity-50 dark:bg-violet-600 dark:text-white';
-const FIELD = 'w-full min-h-[44px] rounded-lg border border-axal-line bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const FIELD = 'w-full min-h-[44px] rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 /** The header's Waiting count refreshes; a page without events still works. */
 const notify = (project) => { try { notifyDistribution(project); } catch { /* no event target */ } };
 const seconds = (n) => Number.isInteger(n) ? `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}` : 'Length not recorded';
