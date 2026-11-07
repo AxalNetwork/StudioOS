@@ -96,12 +96,55 @@ export function changes(form, row) {
   return patch;
 }
 
-/** Why the form cannot be saved yet, or null. The name is required; the count is a whole number. */
+/**
+ * The Worker's contract for these fields (D4962, `services/companyProfileFields.ts`), restated so the form can say
+ * "no" before the request and say the same thing the Worker would. `test/fixtures/company_field_cases.json` is run
+ * by both sides, so the two cannot differ without a case failing.
+ */
+export const EMPLOYEE_MAX = 1_000_000;
+export const LIMITS = { revenue_range: 100, current_products: 1000, expansion_goals: 1000, description: 280, website: 500, linkedin_url: 300 };
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+/** A website the Worker would store (http or https, a dotted host, no credentials), or null. */
+export function normalizeWebsite(raw) {
+  const t = String(raw ?? '').trim();
+  if (!t || /\s/.test(t)) return null;
+  let url;
+  try { url = new URL(HAS_SCHEME.test(t) ? t : `https://${t}`); } catch { return null; }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  if (url.username || url.password) return null;
+  if (!url.hostname.includes('.') || url.hostname.startsWith('.') || url.hostname.endsWith('.')) return null;
+  const path = url.pathname === '/' && !url.search && !url.hash ? '' : url.pathname;
+  return `${url.protocol}//${url.host}${path}${url.search}${url.hash}`;
+}
+
+/** A LinkedIn company, school or showcase page, or null. */
+export function normalizeLinkedIn(raw) {
+  const site = normalizeWebsite(raw);
+  if (!site) return null;
+  const url = new URL(site);
+  const host = url.hostname.toLowerCase();
+  if (host !== 'linkedin.com' && !host.endsWith('.linkedin.com')) return null;
+  const m = url.pathname.match(/^\/(company|school|showcase)\/([^/]+)\/?$/i);
+  return m ? `https://${host === 'linkedin.com' ? 'www.linkedin.com' : host}/${m[1].toLowerCase()}/${m[2]}` : null;
+}
+
+/** Why the form cannot be saved yet, or null. The name is required; every other field follows the Worker's contract. */
 export function problemOf(form) {
   if (!String(form?.company_name ?? '').trim()) return 'Enter a company name.';
   const n = String(form?.employee_count ?? '').trim();
-  if (n && !(Number.isInteger(Number(n)) && Number(n) >= 0)) return 'Employee count is a whole number.';
-  if (String(form?.description ?? '').length > DESCRIPTION_MAX) return `The description is at most ${DESCRIPTION_MAX} characters.`;
+  if (n && !(/^\d{1,7}$/.test(n) && Number(n) <= EMPLOYEE_MAX)) return `Employee count is a whole number from 0 to ${EMPLOYEE_MAX.toLocaleString('en-US')}.`;
+  if (String(form?.description ?? '').trim().length > DESCRIPTION_MAX) return `The description is at most ${DESCRIPTION_MAX} characters.`;
+  for (const f of ['revenue_range', 'current_products', 'expansion_goals', 'description']) {
+    const v = String(form?.[f] ?? '').trim();
+    // eslint-disable-next-line no-control-regex
+    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(v)) return `${LABELS[f]} contains characters that cannot be saved.`;
+    if (f !== 'description' && v.length > LIMITS[f]) return `${LABELS[f]} is at most ${LIMITS[f]} characters.`;
+  }
+  const site = String(form?.website ?? '').trim();
+  if (site && !normalizeWebsite(site)) return 'Enter a web address that starts with http:// or https://.';
+  const linked = String(form?.linkedin_url ?? '').trim();
+  if (linked && !normalizeLinkedIn(linked)) return 'Enter the address of a LinkedIn company, school or showcase page.';
   return null;
 }
 

@@ -19,6 +19,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashInviteToken } from '../services/projectAccess';
 import { refuse } from '../util/refusal';
 // D1592 (#3860): the two company gates live in one place; company_documents.ts imports them too.
+import { GENERAL_FIELDS, validateCompanyFields } from '../services/companyProfileFields';
 import { canEdit, companyWriteDenial, denialBody, isSupportSession, viewerCapability, viewerIsMember } from '../services/companyAccess';
 import {
   validatePerson, validateCoverage, validatePlan, personDto,
@@ -253,9 +254,18 @@ r.post('/company/create', async (c) => {
     const user = await requireAuth(c);
     if (user.role === 'exploring') return c.json({ code: 'explorer_company_create_refused', detail: 'Choose a working profile before creating a company.' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ code: 'body_invalid', detail: 'Send the fields as a JSON object.' }, 400);
     const name = String(body.company_name || '').trim();
     if (!name) return c.json({ detail: 'company_name required' }, 400);
     if (name.length > 200) return c.json({ detail: 'Company names must be at most 200 characters.' }, 400);
+    // D4962: the same contract as PATCH for the General fields it carries. Create also takes a slug and
+    // the legal fields, so only the General keys are checked here and the rest are the legal check's.
+    const general: Record<string, unknown> = {};
+    for (const f of GENERAL_FIELDS) if (f !== 'company_name' && f !== 'default_currency' && f in body) general[f] = body[f];
+    if ('logo_url' in body) general.logo_url = body.logo_url;
+    const checkedGeneral = validateCompanyFields(general);
+    if (!checkedGeneral.ok) return c.json({ code: checkedGeneral.code, field: checkedGeneral.field, detail: checkedGeneral.detail }, 400);
+    const g = checkedGeneral.values;
     const stored = name;
     // Refuse a name this caller already holds.
     //
@@ -311,12 +321,13 @@ r.post('/company/create', async (c) => {
           created_at, updated_at, slug, legal_name, legal_form, jurisdiction, registration_number, incorporation_date)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(uid, stored,
-           body.stage || null, body.revenue_range || null,
-           body.employee_count != null ? Number(body.employee_count) : null,
-           body.current_products || null, body.international_presence || null,
-           body.expansion_goals || null,
-           body.logo_url || null, body.website || null, body.linkedin_url || null,
-           body.description || null, nowIso(), nowIso(),
+           g.stage ?? null, g.revenue_range ?? null,
+           g.employee_count ?? null,
+           g.current_products ?? null, g.international_presence ?? null,
+           g.expansion_goals ?? null,
+           // A new company starts with no logo; it is uploaded through POST /company/:uid/logo.
+           null, g.website ?? null, g.linkedin_url ?? null,
+           g.description ?? null, nowIso(), nowIso(),
            slug, l.legal_name ?? null, l.legal_form ?? null, l.jurisdiction ?? null,
            l.registration_number ?? null, l.incorporation_date ?? null).run();
     const newId = (ins as any).meta?.last_row_id as number;
@@ -341,6 +352,12 @@ r.patch('/company/:uid', async (c) => {
     const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to edit this company' }, 403));
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({} as any));
+    // D4962: the General fields are checked against one contract (`services/companyProfileFields.ts`)
+    // before any write: an unknown field, a link in place of an upload, an unsupported stage, a negative
+    // head count and an over-long string are refused, and URLs and regions are stored canonical.
+    const checked = validateCompanyFields(body);
+    if (!checked.ok) return c.json({ code: checked.code, field: checked.field, detail: checked.detail }, 400);
+    Object.assign(body, checked.values);
     if (body.company_name !== undefined) {
       const name = typeof body.company_name === 'string' ? body.company_name.trim() : '';
       if (!name || name.length > 200) return c.json({ code: 'invalid_company_name', detail: 'Enter a company name between 1 and 200 characters.' }, 400);
@@ -357,11 +374,9 @@ r.patch('/company/:uid', async (c) => {
       if (!code) return c.json({ code: 'currency_invalid', detail: CURRENCY_INVALID_MESSAGE }, 422);
       body.default_currency = code;
     }
-    const updatable = ['company_name', 'stage', 'revenue_range', 'employee_count',
-      'current_products', 'international_presence', 'expansion_goals',
-      'logo_url', 'website', 'linkedin_url', 'description', 'default_currency'] as const;
+    // `logo_url` is not in this list: the logo changes only through POST and DELETE /company/:uid/logo.
     const sets: string[] = []; const params: any[] = [];
-    for (const f of updatable) {
+    for (const f of GENERAL_FIELDS) {
       if (body[f] !== undefined) { sets.push(`${f} = ?`); params.push(body[f]); }
     }
     if (sets.length) {

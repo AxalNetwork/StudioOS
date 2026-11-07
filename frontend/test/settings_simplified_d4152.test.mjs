@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  FIELDS, LEAVE_PROMPT, canEditCompany, changes, formOf, problemOf, readOnlyLine, regionsOf, regionsText, unsavedLine,
+  FIELDS, LEAVE_PROMPT, canEditCompany, changes, formOf, normalizeLinkedIn, normalizeWebsite, problemOf, readOnlyLine, regionsOf, regionsText, unsavedLine,
 } from '../src/pages/account/companies/generalFormModel.js';
 import { SettingsHead } from '../src/pages/account/companies/CompanySettingsTabs.jsx';
 import { scopeFor, settingsEntry } from '../src/lib/settingsScope.js';
@@ -34,7 +34,7 @@ test('one General form: only what changed is saved, trimmed, an empty field as n
 
 test('the form refuses a blank name and a non-whole employee count; regions are chips over one column', () => {
   assert.equal(problemOf({ ...formOf(ROW), company_name: '  ' }), 'Enter a company name.');
-  assert.equal(problemOf({ ...formOf(ROW), employee_count: '2.5' }), 'Employee count is a whole number.');
+  assert.equal(problemOf({ ...formOf(ROW), employee_count: '2.5' }), 'Employee count is a whole number from 0 to 1,000,000.');
   assert.equal(problemOf(formOf(ROW)), null);
   assert.deepEqual(regionsOf('Europe, North America,,'), ['Europe', 'North America']);
   assert.equal(regionsText(['Europe', 'Europe', ' APAC ']), 'Europe, APAC');
@@ -75,4 +75,21 @@ test('a standalone project has no Legal anywhere; the Settings entry opens Proje
   assert.equal(settingsEntry(solo).path, '/projects/9/settings');
   assert.doesNotMatch(JSON.stringify(solo.entries), /Legal|legal/);
   assert.doesNotMatch(codeOnly(read('pages/team/ProjectSettingsPage.jsx')), /companyLegalPath|>Legal</);
+});
+
+// D4962: the form says "no" to what the Worker would refuse, from the same golden cases.
+test('the form model agrees with the Worker\'s contract on every golden case (D4962)', () => {
+  const { cases } = JSON.parse(readFileSync(new URL('../../cloudflare-worker/test/fixtures/company_field_cases.json', import.meta.url), 'utf8'));
+  const base = formOf({ company_name: 'Acme' });
+  for (const c of cases) {
+    const input = c.repeat ? String(c.input).repeat(c.repeat) : c.input;
+    // Only the fields the form edits as text; stage is a closed select and regions are chips, covered by the Worker.
+    if (!['employee_count', 'description', 'revenue_range', 'website', 'linkedin_url'].includes(c.field)) continue;
+    // The form holds text: a number or a list in a text field is the Worker's to refuse (employee_count may be a number).
+    if (typeof input !== 'string' && !(c.field === 'employee_count' && typeof input === 'number')) continue;
+    const problem = problemOf({ ...base, [c.field]: String(input) });
+    assert.equal(problem == null, !c.code, `${c.field} ← ${JSON.stringify(String(input).slice(0, 30))}: ${problem}`);
+    if (c.field === 'website' && !c.code && input) assert.equal(normalizeWebsite(String(input)), c.ok);
+    if (c.field === 'linkedin_url' && !c.code && input) assert.equal(normalizeLinkedIn(String(input)), c.ok);
+  }
 });
