@@ -28,6 +28,7 @@ starting ads.
 | `WaitingForYou.jsx` | D4488: venture-scoped header count, loading/empty/error states and individual or safe bulk decisions. |
 | `distributionAskModel.js` | D4488: labels, actual listed counts, exact safe kinds and recorded hold/charge copy. |
 | `InboxTab.jsx` | D4494: scoped reply threads, personal unread read, Needs-you row and the composer; only final confirmation sends. |
+| `NewsletterTab.jsx` | D4495: the Newsletter tab's not-connected state only (Connect Beehiiv disabled, 'Not offered yet'; Opens, Clicks and Unsubscribes Not recorded); makes no request until the Beehiiv connector (#2407) exists. |
 | `inboxModel.js` | D4494: recorded reply labels, local proposal text, Calendar link and existing mail confirmation/send boundary. |
 | `inbox.css` | D4494: DS8 thread columns, phone stacking and directional message bubbles using shared tokens. |
 | `ChannelsTab.jsx` | D4486: venture channel readings, existing Add/Edit forms and Ask, read-only connection cards, settings confirmation and existing tool doors. |
