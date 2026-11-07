@@ -334,7 +334,8 @@ test('a failed ledger read is unreadable, not an empty ledger', () => {
   assert.match(code, /const UNAVAILABLE = Symbol\('unavailable'\)/);
   assert.match(code, /setData\(UNAVAILABLE\)/, 'a failed licences read must not become { items: [] }');
   assert.match(code, /<Unreadable what="The licence ledger"/);
-  assert.match(code, /items\.length === 0 \?/, 'the empty state is gated on a successful read with zero rows');
+  // #4700: zero rows on the server's own count, with no search or kind narrowing it.
+  assert.match(code, /!filtered && total === 0 \?/, 'the empty state is gated on a successful read with zero rows');
 });
 
 test('the empty ledger explains itself', () => {

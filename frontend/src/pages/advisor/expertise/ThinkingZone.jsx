@@ -1,12 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, Pill } from '../../../ui';
-import { api } from '../../../lib/api';
+import { api, articles as articlesApi } from '../../../lib/api';
 import { MoreRows, NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from './kit';
 import { usePagedList } from './pages';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import { articleStage, revisionLine } from './expertiseModel';
+
+/**
+ * D4681 (#4681): one piece's saved revisions (D1406's author read), opened on
+ * demand. A failed read says so; it is never drawn as "no revisions".
+ */
+function History({ id }) {
+  const [read, setRead] = useState({ status: 'loading', rows: [] });
+  useEffect(() => {
+    let live = true;
+    articlesApi.revisions(id).then(
+      (r) => { if (live) setRead(Array.isArray(r?.revisions) ? { status: 'ok', rows: r.revisions } : { status: 'error', rows: [] }); },
+      () => { if (live) setRead({ status: 'error', rows: [] }); },
+    );
+    return () => { live = false; };
+  }, [id]);
+  if (read.status === 'loading') return <p className="mt-2 text-[11.5px] text-axal-faint">Reading its history…</p>;
+  if (read.status === 'error') return <p className="mt-2 text-[11.5px] text-axal-faint" data-testid={`advisor-thinking-history-error-${id}`}>Its history could not be read.</p>;
+  if (!read.rows.length) return <p className="mt-2 text-[11.5px] text-axal-faint">No revision is saved yet.</p>;
+  return (
+    <ul className="mt-2 space-y-1 text-[11.5px] text-axal-muted" data-testid={`advisor-thinking-history-${id}`}>
+      {read.rows.map(revisionLine).map((r) => <li key={r.key}><span className="font-semibold">{r.title}</span> · {r.line}</li>)}
+    </ul>
+  );
+}
 
 /**
  * Expertise · Thinking — what you have published, and how far it reached.
@@ -33,6 +58,13 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
  * than the public `/articles/by-author/:user_id`. That one filters to published
  * because it serves a public profile; an advisor looking at their own shelf
  * needs the drafts, and only their own.
+ *
+ * D4681 (#4681): EVERY STATE IS ITS OWN. The shelf used to draw "Draft" for
+ * anything not published, so a piece an editor had approved, scheduled or
+ * sent back read the same as one nobody had seen. Each row now carries its
+ * real state (draft, submitted, in review, changes requested, not accepted,
+ * approved, scheduled, published), who can read it, and one next step that
+ * opens the editor or the published piece. History lists its saved revisions.
  */
 const readThinkingPage = (page) => api.listMyAdvisorThinking(page);
 
@@ -46,6 +78,7 @@ export default function ThinkingZone() {
   const list = usePagedList(readThinkingPage, { errorText: 'Your published thinking could not be read.' });
   const state = { loading: list.loading, error: list.error };
   const [view, setView] = useState('all');
+  const [history, setHistory] = useState(null);
   const load = list.load;
   useEffect(() => { load(); }, [load]);
 
@@ -89,7 +122,7 @@ export default function ThinkingZone() {
         <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
           {[
             { label: 'Published', value: counts?.published, note: 'live on the hub' },
-            { label: 'In draft', value: counts?.drafts, note: 'not yet visible to anyone' },
+            { label: 'Not public yet', value: counts?.drafts, note: 'drafts, and pieces with the editors' },
             { label: 'Best reach', value: counts?.best_reach, note: 'opens of your most-opened piece' },
             // The one true claim on the old card: nothing records an external
             // publication or a talk, so this is absent rather than zero.
@@ -114,13 +147,11 @@ export default function ThinkingZone() {
             <p className="text-[12.5px] text-axal-muted">{`No piece is in this state. ${total} in total.`}</p>
           )}
           <ul className="divide-y divide-axal-hairline">
-            {shown.map((a) => (
-              <li key={a.id} className="flex items-start justify-between gap-4 py-2.5">
+            {shown.map((a) => { const stage = articleStage(a); return (
+              <li key={a.id} className="flex items-start justify-between gap-4 py-2.5" data-testid={`advisor-thinking-${a.id}`} data-stage={stage.key}>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Pill tone={a.status === 'published' ? 'ok' : 'neutral'}>
-                      {a.status === 'published' ? 'Published' : 'Draft'}
-                    </Pill>
+                    <Pill tone={stage.tone}>{stage.label}</Pill>
                     {a.sector && <span className="text-[11px] text-axal-faint">{a.sector}</span>}
                   </div>
                   <div className="mt-1 text-[12.5px] font-semibold leading-snug">
@@ -131,6 +162,15 @@ export default function ThinkingZone() {
                   {a.subtitle && (
                     <div className="mt-0.5 truncate text-[11px] text-axal-faint">{a.subtitle}</div>
                   )}
+                  <div className="mt-1 text-[11.5px] text-axal-muted" data-testid={`advisor-thinking-audience-${a.id}`}>{stage.audience}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-[11.5px]">
+                    <Link to={stage.next.to} className="font-semibold text-emerald-700 underline dark:text-emerald-300" data-testid={`advisor-thinking-next-${a.id}`}>{stage.next.label}</Link>
+                    <button type="button" className="font-semibold text-axal-muted underline" onClick={() => setHistory(history === a.id ? null : a.id)}
+                      aria-expanded={history === a.id} data-testid={`advisor-thinking-history-toggle-${a.id}`}>
+                      {history === a.id ? 'Hide history' : 'History'}
+                    </button>
+                  </div>
+                  {history === a.id ? <History id={a.id} /> : null}
                 </div>
                 <div className="shrink-0 text-right text-[11px] tabular-nums text-axal-faint">
                   {/* A draft has no views because nobody can open it, so it shows
@@ -149,7 +189,7 @@ export default function ThinkingZone() {
                   {a.published_at && <div>{String(a.published_at).slice(0, 10)}</div>}
                 </div>
               </li>
-            ))}
+            ); })}
           </ul>
           <MoreRows line={list.line} onMore={list.more} busy={list.moreBusy} error={list.moreError} testid="advisor-thinking-more" />
         </Card>

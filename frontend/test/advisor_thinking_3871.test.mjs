@@ -5,6 +5,8 @@ import { h, mountForm, sourceModule, mutationCheck } from './_form_d695.mjs';
 
 const page = readFileSync(new URL('../src/pages/advisor/expertise/ThinkingZone.jsx', import.meta.url), 'utf8');
 const kit = readFileSync(new URL('../src/pages/advisor/expertise/kit.jsx', import.meta.url), 'utf8');
+// D4681: the shelf draws each state from expertiseModel.js, inlined the same way.
+const model = readFileSync(new URL('../src/pages/advisor/expertise/expertiseModel.js', import.meta.url), 'utf8').replace(/^export /gm, '');
 const body = kit.slice(kit.indexOf('export function ZoneBody('), kit.indexOf('/** An empty store'));
 // #4689: the zone reads its shelf through the paged-list hook, inlined here as it ships.
 const pages = readFileSync(new URL('../src/pages/advisor/expertise/pages.js', import.meta.url), 'utf8');
@@ -24,7 +26,8 @@ const StatedLimit = ({children}) => <aside>{children}</aside>;
 const Unrecorded = () => <span>Not recorded</span>;
 export const control = {error: new Error('The shelf could not be read.'), payload:null};
 const api = {async listMyAdvisorThinking() {if(control.error) throw control.error; return control.payload;}};
-` + body + pages.replace(/^import .*;\n/gm, '') + page.replace(/^import .*;\n/gm, '');
+const articlesApi = {async revisions() { return { revisions: [] }; }};
+` + model + body + pages.replace(/^import .*;\n/gm, '') + page.replace(/^import .*;\n/gm, '');
 
 async function unreadable(module) {
   const f = await mountForm(h(module.default));

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { contractsApi } from '../../../lib/api/contracts';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
@@ -15,13 +15,21 @@ import EnvelopeWizard from './EnvelopeWizard';
 import { BankAccountsLink, FundStructureDoor } from './FundStructureSheet';
 import { useRead, ReadState, Missing, button, card } from './parts';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
+import GovernanceTab from './GovernanceTab';
 
 const tabs = [['agreements', 'Agreements'], ['ndas', 'NDAs'], ['partner-deals', 'Partner deals'], ['templates', 'Templates'], ['forms', 'Forms'], ['document-types', 'Document types']];
 const filterKeys = ['status', 'q', 'doc_type', 'party_role', 'provider', 'sort', 'direction', 'offset', 'template', 'signed_recent'];
-export default function ContractsDesk() {
+/**
+ * `section="governance"` (D4563, #4563) draws Corporate Governance, the tab at its own
+ * address `/admin/contracts/governance` (tabs are paths), after Templates. HQ only.
+ */
+export default function ContractsDesk({ section = null }) {
   const { user } = useAuth() || {};
   const superAdmin = isSuperAdminUser(user);
   const [params, setParams] = useSearchParams();
+  const go = useNavigate();
+  const governance = section === 'governance';
+  const hqDesk = !branchOfUser(user);
   const tab = params.get('tab') || 'agreements';
   const allowed = tabs.some(([id]) => id === tab) && (superAdmin || tab !== 'document-types');
   const [selected, setSelected] = useState(null);
@@ -33,7 +41,9 @@ export default function ContractsDesk() {
     if (nextTab !== 'agreements') next.set('tab', nextTab);
     if (params.get('moved') === 'legal') next.set('moved', 'legal');
     for (const [key, value] of Object.entries(nextFilters)) if (value !== '' && value != null) next.set(key, String(value));
-    setParams(next); setSelected(null);
+    // From the governance address, a query tab is back on the desk's own path.
+    if (governance) go(`/admin/contracts${next.toString() ? `?${next}` : ''}`); else setParams(next);
+    setSelected(null);
   }
   const cards = [
     ['Total', stats.data?.total, {}],
@@ -48,10 +58,12 @@ export default function ContractsDesk() {
     <header className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">{superAdmin ? 'HQ' : 'Admin'} · Contracts</p><h1 className="text-2xl font-extrabold tracking-tight">Contracts</h1><p className="mt-1 text-[12.5px] text-axal-muted">Every agreement the platform sends, signs or keeps, and the templates behind them.</p></div><div className="flex flex-wrap items-center gap-2">{!branchOfUser(user) && <FundStructureDoor />}{superAdmin && !branchOfUser(user) && <BankAccountsLink />}<button type="button" className={`${button} bg-violet-600 text-white`} onClick={() => { const next = new URLSearchParams(params); next.set('new', ''); setParams(next); }}>New envelope</button><HeaderAsk /></div></header>
     {params.get('moved') === 'legal' && <p role="status">{CONTRACTS_MOVED_NOTICE}</p>}
     <ReadState read={stats} what="Contract counts"><div className="grid grid-cols-2 gap-3 lg:grid-cols-5">{cards.map(([label, value, target]) => <button key={label} type="button" className={`${card} p-3 text-left`} onClick={() => navigate('agreements', target)}><span className="block text-[11px] text-axal-muted">{label}</span><span className="mt-1 block text-2xl font-bold">{value == null ? <Missing reason={label === 'Average days to sign' ? 'No signed agreement has both a recorded sent and signed date.' : 'This count was not returned.'} /> : value}</span></button>)}</div></ReadState>
-    <nav aria-label="Contracts tabs" className="flex gap-1 overflow-x-auto border-b border-axal-hairline">{tabs.filter(([id]) => superAdmin || id !== 'document-types').map(([id, label]) => <button key={id} type="button" className={`whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold ${id === tab ? 'border-violet-600 text-axal-ink dark:text-white' : 'border-transparent text-axal-muted'}`} aria-current={id === tab ? 'page' : undefined} onClick={() => navigate(id)}>{label}</button>)}
+    <nav aria-label="Contracts tabs" className="flex gap-1 overflow-x-auto border-b border-axal-hairline">{tabs.filter(([id]) => superAdmin || id !== 'document-types').map(([id, label]) => <React.Fragment key={id}><button type="button" className={`whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold ${!governance && id === tab ? 'border-violet-600 text-axal-ink dark:text-white' : 'border-transparent text-axal-muted'}`} aria-current={!governance && id === tab ? 'page' : undefined} onClick={() => navigate(id)}>{label}</button>
+        {/* D4563 (#4563): Corporate Governance sits beside the template library, at its own path. HQ only. */}
+        {id === 'templates' && hqDesk && <Link to="/admin/contracts/governance" className={`whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold ${governance ? 'border-violet-600 text-axal-ink dark:text-white' : 'border-transparent text-axal-muted'}`} aria-current={governance ? 'page' : undefined} data-testid="contracts-tab-governance">Corporate Governance</Link>}</React.Fragment>)}
       {/* D1219 (#3216): Closings is its own page (D1213), reached from the tab row. */}
       <Link to="/admin/contracts/closings" className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-[13px] font-semibold text-axal-muted" data-testid="contracts-tab-closings">Closings</Link></nav>
-    {!allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} revision={revision} />
+    {governance ? (hqDesk ? <GovernanceTab /> : <p>Corporate Governance is HQ's alone.</p>) : !allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} revision={revision} />
       : tab === 'ndas' || tab === 'partner-deals' ? <RelatedLists key={tab} kind={tab} onOpen={setSelected} superAdmin={superAdmin} />
         : tab === 'templates' ? <AdminTemplates recordedPublication onOpenUsage={slug => navigate('agreements', { template: slug })} />
           : tab === 'forms' ? <AdminForms /> : <ContractRegistryTab />}
