@@ -4,6 +4,7 @@ import { ArrowLeft, ShieldCheck, Building2 } from 'lucide-react';
 import { Card } from '../../ui';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import SectorProfile from './SectorProfile';
+import { useResearchLinks } from './researchLinks.js';
 
 const missing = (v) => v === null || v === undefined || v === '';
 const fact = (v) => (missing(v) ? 'Not recorded' : v);
@@ -35,7 +36,7 @@ function Fact({ label, value, note }) {
  * and is labelled so; the directory count is the companies the crosswalk maps
  * here. Growth and risk are not drawn: no store records either per market.
  */
-export function LegacyMarketView({ market }) {
+export function LegacyMarketView({ market, links = { companies: true, funds: true } }) {
   const item = market?.item || {};
   const companies = market?.companies || [];
   const funds = market?.funds || [];
@@ -62,9 +63,14 @@ export function LegacyMarketView({ market }) {
       {!companies.length
         ? <p className="mt-4 rounded-lg border border-dashed border-axal-hairline px-3 py-4 text-[12px] leading-relaxed text-axal-muted" data-testid="legacy-market-no-companies">No directory company maps to this market. That is the directory&rsquo;s coverage, not a claim about the market.</p>
         : <>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{companies.map((c) => <Link key={c.uid} to={`/research/companies/company/${encodeURIComponent(c.uid)}`} className="rounded-lg border border-axal-hairline p-3 transition hover:border-violet-300 hover:bg-violet-50/40 dark:border-gray-800 dark:hover:border-violet-700 dark:hover:bg-violet-950/10">
-            <div className="text-[13px] font-bold text-axal-violet dark:text-violet-300">{c.name}</div>
-            <div className="mt-1 text-[11px] text-axal-muted">{c.sector || 'Sector not recorded'}{c.country ? ` · ${c.country}` : ''}</div></Link>)}</div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{companies.map((c) => {
+            const body = <><div className="text-[13px] font-bold text-axal-violet dark:text-violet-300">{c.name}</div>
+            <div className="mt-1 text-[11px] text-axal-muted">{c.sector || 'Sector not recorded'}{c.country ? ` · ${c.country}` : ''}</div></>;
+            // D4612: a company profile this reader may not open is named, not linked.
+            return links.companies
+              ? <Link key={c.uid} to={`/research/companies/company/${encodeURIComponent(c.uid)}`} className="rounded-lg border border-axal-hairline p-3 transition hover:border-violet-300 hover:bg-violet-50/40 dark:border-gray-800 dark:hover:border-violet-700 dark:hover:bg-violet-950/10">{body}</Link>
+              : <div key={c.uid} className="rounded-lg border border-axal-hairline p-3 dark:border-gray-800">{body}</div>;
+          })}</div>
           <p className="mt-3 text-[12px] text-axal-muted" data-testid="legacy-market-company-count">Showing {companies.length} of {market.company_count}.</p>
           {countries.length ? <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px]">{countries.map((k) => <li key={k.code || 'none'}>
             {k.code ? <Link to={`/research/geographies/${k.code}`} className="underline">{k.name || k.code}</Link> : 'Country not recorded'} · {k.count}</li>)}</ul> : null}
@@ -75,7 +81,7 @@ export function LegacyMarketView({ market }) {
       <h2 className="text-sm font-extrabold tracking-tight">Funds focused on this market</h2>
       {!funds.length
         ? <p className="mt-3 text-[12px] text-axal-muted" data-testid="legacy-market-no-funds">No fund&rsquo;s stated focus maps to this market.</p>
-        : <><ul className="mt-3 space-y-1 text-[12.5px]">{funds.map((f) => <li key={f.uid}><Link to={`/research/funds/catalog/${encodeURIComponent(f.uid)}`} className="underline">{f.name}</Link>
+        : <><ul className="mt-3 space-y-1 text-[12.5px]">{funds.map((f) => <li key={f.uid}>{links.funds ? <Link to={`/research/funds/catalog/${encodeURIComponent(f.uid)}`} className="underline">{f.name}</Link> : <span>{f.name}</span>}
           <span className="text-axal-muted"> · {fact(f.hq)}</span></li>)}</ul>
           <p className="mt-2 text-[12px] text-axal-muted">Showing {funds.length} of {market.fund_count}.</p></>}
     </Card>
@@ -95,7 +101,8 @@ export function LegacyMarketView({ market }) {
 
 /** The legacy page inside the Research shell, from the resolver's own read. */
 function LegacyMarketProfile({ role = 'founder', market }) {
-  return <WorkspaceShell role={role} title={market?.item?.name || 'Market'} activeSlug="markets"><LegacyMarketView market={market} /></WorkspaceShell>;
+  const links = useResearchLinks(role);
+  return <WorkspaceShell role={role} title={market?.item?.name || 'Market'} activeSlug="markets"><LegacyMarketView market={market} links={links} /></WorkspaceShell>;
 }
 
 export default function MarketSectorProfile({ role = 'founder' }) {
