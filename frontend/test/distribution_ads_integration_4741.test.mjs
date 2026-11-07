@@ -116,29 +116,33 @@ test('every tab in DISTRIBUTION_TABS is either mounted or on the explicit not-bu
   assert.match(src, /distributionTab === 'overview' \|\| projectStatus !== 'ready' \? body/);
   assert.match(src, /distributionTab === 'campaigns' \? <CampaignsTab/);
   mounted.add('overview'); mounted.add('campaigns');
-  // D4484/D4489/D4490/D4492/D4494/D4486: these tabs have a built screen. Newsletter and Results
-  // (also listed in distributionModel.js) do not, and legitimately still show "Coming in this
-  // module soon" (distribution/README.md) until a task builds them.
-  const NOT_BUILT_YET = new Set(['newsletter', 'results']);
+  // Newsletter (D4495, #4777) and Results (D4491, #4778) are mounted as their own branches of the
+  // same switch: `distributionTab === 'results' ? <ResultsTab …/>`, each before the <ComingSoon /> tail.
+  const switchLine = src.split('\n').find((line) => line.includes("].includes(distributionTab) && projectStatus === 'ready' ? body"));
+  for (const [, key] of switchLine.matchAll(/distributionTab === '([a-z]+)' \? <[A-Z][A-Za-z]+Tab\b/g)) mounted.add(key);
+  assert.match(src, /distributionTab === 'results' \? <ResultsTab key=\{projectId\} projectId=\{projectId\} \/>/);
+  assert.match(src, /distributionTab === 'newsletter' \? <NewsletterTab \/> : <ComingSoon \/>/);
+  // D4484/D4489/D4490/D4492/D4494/D4486/D4491/D4495: every tab now has a built screen. A tab added
+  // to distributionModel.js without one goes here, and keeps showing "Coming in this module soon".
+  const NOT_BUILT_YET = new Set([]);
   for (const { key } of DISTRIBUTION_TABS) {
     if (NOT_BUILT_YET.has(key)) assert.ok(!mounted.has(key), `${key} has no screen yet; it must keep showing Coming in this module soon, not be added to the mounted set without a screen`);
     else assert.ok(mounted.has(key), `${key} has a built screen but falls through to <ComingSoon /> — mount it in CycleRoute.jsx's distribution switch`);
   }
-  for (const key of NOT_BUILT_YET) {
+  for (const { key } of DISTRIBUTION_TABS) {
     const guess = key[0].toUpperCase() + key.slice(1);
-    assert.ok(!existsSync(new URL(`../src/pages/cycles/distribution/${guess}Tab.jsx`, import.meta.url)), `${key} now has a screen (${guess}Tab.jsx) — mount it and move it off the allowlist above`);
+    if (existsSync(new URL(`../src/pages/cycles/distribution/${guess}Tab.jsx`, import.meta.url))) {
+      assert.ok(!NOT_BUILT_YET.has(key), `${key} now has a screen (${guess}Tab.jsx) — mount it and move it off the allowlist above`);
+      assert.ok(mounted.has(key), `${guess}Tab.jsx exists but CycleRoute.jsx does not mount it`);
+    }
   }
 });
 
 // ---- optional item-3 coverage: every built-screen Distribution route has a route-map row ----
 test('every mounted Distribution screen route (routes/growDistribution.jsx) appears in the route map', () => {
   const map = readRouteMap();
-  for (const path of ['/grow/distribution/channels', '/grow/distribution/campaigns', '/grow/distribution/campaigns/new', '/grow/distribution/campaigns/:uid', '/grow/distribution/calendar', '/grow/distribution/ads', '/grow/distribution/prospects', '/grow/distribution/inbox']) {
+  for (const path of ['/grow/distribution/channels', '/grow/distribution/campaigns', '/grow/distribution/campaigns/new', '/grow/distribution/campaigns/:uid', '/grow/distribution/calendar', '/grow/distribution/ads', '/grow/distribution/newsletter', '/grow/distribution/prospects', '/grow/distribution/inbox', '/grow/distribution/results']) {
     assert.ok(map.includes(path), `${path} has no route-map row`);
   }
-  // Newsletter and Results are routed (routes/growDistribution.jsx) but have no screen yet
-  // (distribution/README.md) — they are deliberately absent, not a gap this guard should close.
-  assert.ok(!map.includes('/grow/distribution/newsletter'));
-  assert.ok(!map.includes('/grow/distribution/results'));
   assert.ok(map.includes('/api/grow/distribution/ask'), 'the Distribution Ask has no route-map row');
 });
