@@ -3,12 +3,15 @@
  * integrated screens drew as "Not switched on yet". Mounted at /api/learning
  * by the route registry, beside `learning.ts` and `learning_assessment.ts`.
  *
- *   GET /exercises?limit&offset    lr2a: title, the course or programme that holds it, your status, updated
- *   GET /exams?limit&offset        lr2b: questions, time limit, pass mark, attempts left, your best score
+ *   GET /exercises?limit&offset&q  lr2a: title, the course or programme that holds it, your status, updated
+ *   GET /exams?limit&offset&q      lr2b: questions, time limit, pass mark, attempts left, your best score
+ *                                  #4648: `q` keeps the accessible rows whose TITLE contains it (case-insensitive, `%`
+ *                                  and `_` literal); the total counts the same rows, and `q` is echoed back
  *   GET /me/submissions            lr12: your exercise submissions, newest first
  *   GET /me/attempts               lr12: your exam attempts, newest first
  *   GET /me/stats                  lr1: courses in progress, lessons completed this month,
- *                                  watch time this month, exams passed of exams sat
+ *                                  videos played this month (#4648: it was "watch time", a sum of resume positions, which is
+ *                                  not time watched), exams passed of exams sat
  *
  * VISIBILITY IS `canSeeLearning`. The lists are member lists: published only,
  * `open` or `program` content the caller is enrolled in (the SQL narrows with
@@ -48,10 +51,18 @@ const whereOf = (row: { course_title: string | null; program_title: string | nul
   row.course_title ? { kind: 'course' as const, title: row.course_title }
     : row.program_title ? { kind: 'program' as const, title: row.program_title } : null;
 
+/** The search a list read takes (#4648): trimmed, bounded, and as a LIKE pattern in which `%`, `_` and `\` mean themselves. */
+export const MAX_QUERY = 100;
+export function searchOf(raw: unknown): { q: string; pattern: string } {
+  const q = typeof raw === 'string' ? raw.trim().slice(0, MAX_QUERY) : '';
+  return { q, pattern: `%${q.replace(/[\\%_]/g, '\\$&')}%` };
+}
+
 r.get('/exercises', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   const limit = clampLimit(c.req.query('limit'), 24, 100);
   const offset = parseOffset(c.req.query('offset'));
+  const { q, pattern } = searchOf(c.req.query('q'));
   try {
     const [rows, n] = await Promise.all([
       c.env.DB.prepare(
@@ -77,8 +88,9 @@ r.get('/exercises', async (c) => {
       JOIN learning_course_modules hm ON hm.course_id = hc.id
       JOIN learning_lessons hl ON hl.module_id = hm.id
      WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exercise')))))))
+  AND (? = '' OR x.title LIKE ? ESCAPE '\\')
   ORDER BY COALESCE(x.published_at, x.updated_at) DESC, x.id DESC LIMIT ? OFFSET ?`,
-      ).bind(user.id, user.id, user.id, user.id, limit, offset).all<any>(),
+      ).bind(user.id, user.id, user.id, user.id, q, pattern, limit, offset).all<any>(),
       c.env.DB.prepare(
         `SELECT COUNT(*) AS n FROM learning_exercises x WHERE x.status = 'published' AND (x.visibility = 'open' OR (x.visibility = 'program' AND EXISTS (SELECT 1 FROM learning_program_contents pc
       JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
@@ -86,8 +98,9 @@ r.get('/exercises', async (c) => {
      WHERE ((pc.subject_kind = 'exercise' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
       JOIN learning_course_modules hm ON hm.course_id = hc.id
       JOIN learning_lessons hl ON hl.module_id = hm.id
-     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exercise')))))))`,
-      ).bind(user.id).first<{ n: number }>(),
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exercise')))))))
+  AND (? = '' OR x.title LIKE ? ESCAPE '\\')`,
+      ).bind(user.id, q, pattern).first<{ n: number }>(),
     ]);
     const items = (rows.results || []).filter((x) => canSeeLearning(user, x)).map((x) => ({
       uid: x.uid, title: x.title, submission_kind: x.submission_kind, where: whereOf(x),
@@ -95,7 +108,7 @@ r.get('/exercises', async (c) => {
       status: x.my_status ?? null, submitted_at: x.my_submitted_at ?? null,
       updated_at: x.updated_at ?? null, href: `/learning/exercises/${x.uid}`,
     }));
-    return c.json({ items, total: Number(n?.n ?? 0), limit, offset });
+    return c.json({ items, total: Number(n?.n ?? 0), limit, offset, q });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -103,6 +116,7 @@ r.get('/exams', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   const limit = clampLimit(c.req.query('limit'), 24, 100);
   const offset = parseOffset(c.req.query('offset'));
+  const { q, pattern } = searchOf(c.req.query('q'));
   try {
     const [rows, n] = await Promise.all([
       c.env.DB.prepare(
@@ -130,8 +144,9 @@ r.get('/exams', async (c) => {
       JOIN learning_course_modules hm ON hm.course_id = hc.id
       JOIN learning_lessons hl ON hl.module_id = hm.id
      WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exam')))))))
+  AND (? = '' OR x.title LIKE ? ESCAPE '\\')
   ORDER BY COALESCE(x.published_at, x.updated_at) DESC, x.id DESC LIMIT ? OFFSET ?`,
-      ).bind(user.id, user.id, user.id, user.id, user.id, limit, offset).all<any>(),
+      ).bind(user.id, user.id, user.id, user.id, user.id, q, pattern, limit, offset).all<any>(),
       c.env.DB.prepare(
         `SELECT COUNT(*) AS n FROM learning_exams x WHERE x.status = 'published' AND (x.visibility = 'open' OR (x.visibility = 'program' AND EXISTS (SELECT 1 FROM learning_program_contents pc
       JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
@@ -139,8 +154,9 @@ r.get('/exams', async (c) => {
      WHERE ((pc.subject_kind = 'exam' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
       JOIN learning_course_modules hm ON hm.course_id = hc.id
       JOIN learning_lessons hl ON hl.module_id = hm.id
-     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exam')))))))`,
-      ).bind(user.id).first<{ n: number }>(),
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exam')))))))
+  AND (? = '' OR x.title LIKE ? ESCAPE '\\')`,
+      ).bind(user.id, q, pattern).first<{ n: number }>(),
     ]);
     const items = (rows.results || []).filter((x) => canSeeLearning(user, x)).map((x) => ({
       uid: x.uid, title: x.title, where: whereOf(x),
@@ -155,7 +171,7 @@ r.get('/exams', async (c) => {
       passed: x.my_passed == null ? null : Number(x.my_passed) === 1,
       updated_at: x.updated_at ?? null, href: `/learning/exams/${x.uid}`,
     }));
-    return c.json({ items, total: Number(n?.n ?? 0), limit, offset });
+    return c.json({ items, total: Number(n?.n ?? 0), limit, offset, q });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -225,7 +241,7 @@ r.get('/me/stats', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   const month = monthOf(new Date());
   const DB = c.env.DB;
-  const [courses, lessons, watch, exams] = await Promise.all([
+  const [courses, lessons, videos, exams] = await Promise.all([
     figure(async () => Number((await DB.prepare(
       `SELECT COUNT(*) AS n FROM learning_progress WHERE user_id = ? AND subject_kind = 'course' AND status = 'started'`,
     ).bind(user.id).first<{ n: number }>())?.n ?? 0)),
@@ -233,14 +249,15 @@ r.get('/me/stats', async (c) => {
       `SELECT COUNT(*) AS n FROM learning_progress WHERE user_id = ? AND subject_kind = 'lesson' AND status = 'completed'
           AND completed_at IS NOT NULL AND substr(completed_at, 1, 7) = ?`,
     ).bind(user.id, month).first<{ n: number }>())?.n ?? 0)),
-    // Watch time: the positions D3726's player writes. No position recorded this month is null, never 0.
-    figure(async () => {
-      const w = await DB.prepare(
-        `SELECT COUNT(position_seconds) AS recorded, SUM(position_seconds) AS seconds FROM learning_progress
-          WHERE user_id = ? AND subject_kind IN ('item', 'lesson') AND position_seconds IS NOT NULL AND substr(updated_at, 1, 7) = ?`,
-      ).bind(user.id, month).first<{ recorded: number; seconds: number | null }>();
-      return Number(w?.recorded ?? 0) > 0 ? Number(w?.seconds ?? 0) : null;
-    }),
+    // #4648: videos played this month. The player saves a RESUME POSITION (where it stopped; it moves back when the
+    // member rewinds, and says nothing of pauses, seeks or replays), so a sum of positions is not time watched and is not
+    // reported as such. What the store does record is that a video's position was saved this month: that count is the
+    // figure. A readable store with none is a real 0; an unreadable one is null. Duration would need the player to
+    // send bounded playback intervals (deduplicated, attributed to a month): not collected, so not claimed (D4648).
+    figure(async () => Number((await DB.prepare(
+      `SELECT COUNT(*) AS n FROM learning_progress
+        WHERE user_id = ? AND subject_kind = 'item' AND position_seconds IS NOT NULL AND position_seconds > 0 AND substr(updated_at, 1, 7) = ?`,
+    ).bind(user.id, month).first<{ n: number }>())?.n ?? 0)),
     figure(async () => {
       const e = await DB.prepare(
         `SELECT COUNT(DISTINCT exam_id) AS sat, COUNT(DISTINCT CASE WHEN passed = 1 THEN exam_id END) AS passed
@@ -253,7 +270,7 @@ r.get('/me/stats', async (c) => {
     month,
     courses_in_progress: courses,
     lessons_completed_this_month: lessons,
-    watch_seconds_this_month: watch,
+    videos_played_this_month: videos,
     exams,
   });
 });

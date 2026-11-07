@@ -10,6 +10,7 @@
  * `GET /api/public/ai/models`. Part 2 draws both to the "Pricing" canvas.
  */
 import { useViewMode } from '../contexts/ViewModeContext';
+import { planKeyOfSpec, registerPathFor } from './planIntent';
 
 /** The switch's tabs, in the canvas's order: `key` is `?for=`, `family` the plans' family (`aiCredits.planOf`). */
 export const PRICING_TABS = Object.freeze([
@@ -169,7 +170,7 @@ export function checkoutRefusal(err) {
   return `Checkout could not start. ${NOT_CHARGED} Try again.`;
 }
 
-const REGISTER = (lane) => (lane ? `/register?lane=${lane}` : '/register');
+const REGISTER = (lane, plan = {}) => registerPathFor({ lane, ...plan });
 
 /**
  * A role tab's cards: `{ cards, saving }`, or `{ unreadable: true }` when the
@@ -177,7 +178,7 @@ const REGISTER = (lane) => (lane ? `/register?lane=${lane}` : '/register');
  * `monthly` | `yearly`, `held` the card id the member holds, `signedIn` whether
  * anyone is.
  */
-export function planCards(read, specs, { billing = 'monthly', held = null, signedIn = false } = {}) {
+export function planCards(read, specs, { billing = 'monthly', held = null, signedIn = false, tab = null } = {}) {
   if (!read || !Array.isArray(read.plans)) return { unreadable: true };
   const yearly = billing === 'yearly';
   const sold = [];
@@ -215,7 +216,8 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
     if (current) card.button = { label: 'Current plan', to: null, disabled: true };
     else if (!offered) card.button = { label: 'Not offered yet', to: null, disabled: true };
     else if (spec.custom) card.button = { label: spec.cta || 'Contact Axal VC', to: '/contact', disabled: false };
-    else if (!signedIn) card.button = { label: spec.cta || 'Get started', to: REGISTER(spec.lane), disabled: false };
+    // #4651: a paid card carries its plan and interval to registration (`planIntent.js`); a free card keeps `?lane=` only.
+    else if (!signedIn) card.button = { label: spec.cta || 'Get started', to: REGISTER(spec.lane, plan && !spec.free ? { tab, planKey: planKeyOfSpec(spec), interval: yearly && year ? 'yearly' : 'monthly', seen: (yearly && year ? year : month ?? year)?.unit_amount ?? null } : {}), disabled: false };
     else if (spec.free) card.button = { label: held ? 'Manage plan' : 'Get started', to: held ? '/account/billing' : REGISTER(spec.lane), disabled: false };
     // D1048 (#2451): a signed-in member's paid card opens the checkout sheet in place,
     // never a second pricing page; `plan` is what the sheet reads.

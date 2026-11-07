@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
@@ -145,6 +146,7 @@ export default function OpportunitiesZone() {
       empty={<NothingYet
         title="No request has ever arrived"
         body="This log fills as founders book your published office-hour slots. It is empty because nothing has been requested, not because anything was lost — and with no availability published there is nothing to request."
+        action={<Link to="/practice/sessions#publish-availability" className="text-emerald-700 underline dark:text-emerald-300">Publish availability →</Link>}
       />}
     >
       <ZoneToolbar

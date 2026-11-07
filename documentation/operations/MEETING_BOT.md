@@ -207,8 +207,11 @@ consent, AI tokens, notice or recording. It works with `MEETING_BOT = "off"`.
   stopping point is stored in `FILES` and shown only to the Super Admin who
   started the check; never post it, the link or anything it shows on #1008.
 - **On #1008,** post the platform, the row it stops at and its code, and the
-  owner step its fix names. A container that goes quiet shows its rows as
-  `never_reported` after ten minutes.
+  owner step its fix names. A report that never arrives shows its rows as
+  **Not recorded** (code `never_reported`) after ten minutes. That is a
+  reporting gap, not a failed check: the container sends every stage again with
+  each later report and once more after the check ends (D4857), so press Try
+  again, and read the host's log for `diagnose_delivery_failed`.
 
 ## 5. Failure codes and operator response
 

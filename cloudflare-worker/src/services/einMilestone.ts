@@ -15,13 +15,12 @@
  * number is saved.
  */
 import type { Env } from '../types';
-import { getSQL } from '../db';
 
 export const EIN_MILESTONE = 'ein_received';
 
 export type EinMilestoneOutcome =
   | { user_id: number; recorded: true; milestone_credit: unknown }
-  | { user_id: number; recorded: false; reason: 'already_recorded' | 'week_locked' | 'frozen' | 'lab_inactive' | 'error' };
+  | { user_id: number; recorded: false; reason: 'already_recorded' | 'week_locked' | 'frozen' | 'lab_inactive' | 'ineligible' | 'unavailable' | 'not_paid' | 'error' };
 
 const OWNERS = "SELECT id FROM users WHERE founder_id = ? AND role = 'founder' ORDER BY id";
 const HAS_MILESTONE = 'SELECT 1 AS x FROM spinout_lab_milestones WHERE user_id = ? AND milestone_key = ?';
@@ -31,19 +30,12 @@ async function markFor(env: Env, userId: number): Promise<EinMilestoneOutcome> {
     if (await env.DB.prepare(HAS_MILESTONE).bind(userId, EIN_MILESTONE).first()) {
       return { user_id: userId, recorded: false, reason: 'already_recorded' };
     }
-    try {
-      const { getCohortGate } = await import('./cohortTiming');
-      const gate = await getCohortGate(env, userId);
-      if (gate?.frozen) return { user_id: userId, recorded: false, reason: 'frozen' };
-      if (gate && gate.max_week < 4) return { user_id: userId, recorded: false, reason: 'week_locked' };
-    } catch { /* gate tables not yet migrated: legacy behaviour, no gate */ }
-    const { recordMilestone } = await import('../routes/spinout_lab');
-    const sql = getSQL(env);
-    const r = await recordMilestone(sql, userId, EIN_MILESTONE);
-    await sql.end();
-    if (!r.ok) return { user_id: userId, recorded: false, reason: r.status === 409 ? 'lab_inactive' : 'error' };
-    const { creditLabMilestone } = await import('./labMilestoneCredits');
-    return { user_id: userId, recorded: true, milestone_credit: await creditLabMilestone(env, userId, EIN_MILESTONE) };
+    // D4657: one recorder, one policy; the saved EIN is the evidence.
+    const { recordLabMilestone, outcomeReason } = await import('./labProgress');
+    const r = await recordLabMilestone(env, userId, EIN_MILESTONE, 'ein');
+    if (!r.ok) return { user_id: userId, recorded: false, reason: outcomeReason(r) };
+    if (!r.inserted) return { user_id: userId, recorded: false, reason: 'already_recorded' };
+    return { user_id: userId, recorded: true, milestone_credit: r.milestone_credit };
   } catch (e) {
     console.warn('[lab] ein_received not recorded', (e as Error).message);
     return { user_id: userId, recorded: false, reason: 'error' };

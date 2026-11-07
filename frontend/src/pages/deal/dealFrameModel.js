@@ -14,7 +14,7 @@
  * NEVER A ZERO FOR A MISSING VALUE. Every figure the deal read lacks is
  * "Not recorded" with its reason; a read that failed is "Unreadable".
  */
-import { dealMoney } from '../../components/deals/dealMoney.js';
+import { dealMoney, roundAsk } from '../../components/deals/dealMoney.js';
 
 export const STEPS = ['Invited', 'Reviewing', 'Diligence', 'IC', 'Terms', 'Committed', 'Signed', 'Funded'];
 export const YOU_PASSED = 'You passed';
@@ -77,7 +77,7 @@ const notRecorded = (reason) => ({ value: 'Not recorded', missing: true, reason 
  */
 export function keyStrip(deal, mine, role) {
   const cur = deal?.currency || 'USD';
-  const target = dealMoney(deal?.target_raise ?? deal?.amount, cur);
+  const target = dealMoney(roundAsk(deal), cur);
   const committed = dealMoney(deal?.capital_committed, cur);
   const pct = Number.isFinite(Number(deal?.progress_pct)) && deal?.progress_pct != null ? Math.max(0, Math.min(100, Number(deal.progress_pct))) : null;
   const tiles = [
@@ -85,7 +85,8 @@ export function keyStrip(deal, mine, role) {
     { key: 'committed', label: 'Committed', ...(committed ? { value: committed } : notRecorded('No committed total is recorded.')), sub: pct == null ? 'Share of the round not recorded' : `${pct}% of the round`, bar: pct },
   ];
   if (role === 'investor') {
-    const own = Array.isArray(mine?.items) ? mine.items.find((c) => c.status === 'pending' || c.status === 'confirmed') : null;
+    // D4633: your live commitment in the firm the read was for, as the Commitment tab reads it.
+    const own = Array.isArray(mine?.items) ? mine.items.find((c) => (c.status === 'pending' || c.status === 'confirmed') && c.in_context !== false) : null;
     tiles.push(mine?.status === 'unreadable'
       ? { key: 'mine', label: 'Your commitment', value: 'Unreadable', missing: true, reason: 'Your commitment could not be read. That is not a claim that you have none.' }
       : mine?.status !== 'ready' ? { key: 'mine', label: 'Your commitment', value: '', loading: true, sub: 'Reading…' }

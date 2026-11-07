@@ -173,6 +173,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
 | `dealPassTaxonomy.ts` | The five pass reasons and the stage-event recorder. |
 | `dealStudioLens.ts` | D1242 (#3255): Deal flow's Studio lens read (`GET /api/deals/studio`), who may move a round (an admin any, an Operating Partner only the rounds they lead), and who set a Not raising round so: a person, intake scoring before #2643, or not recorded. |
+| `dealTransitions.ts` | D4632 (#4632): a studio deal's birth (a founder's is `applied`; an admin drafts a pipeline stage; nobody drafts a pass) and its moves: each move's history row and its UPDATE are one batch, both conditional on the stage and `stage_changed_at` read, so a move that lost a race writes nothing (409 `deal_moved`). |
 | `backup.ts` | The nightly D1 export to R2. |
 | `fundSheets.ts` | Super Admin fund research ↔ Google Sheets. Dedicated OAuth, never calendar tokens. Founders cannot Connect. |
 | `researchFundRead.ts` | The dossier overlap sentence. A missing cheque end stays open; a missing raise is not an overlap of zero. |
@@ -332,6 +333,10 @@ source into that one card's `unreadable`. Build, Raise and Grow import it.
 `cycleFocus.ts` (D692, #1701) is the phone root's shape every overview read returns (`focus`, `meter`, `index`), its helpers (`part`, `sentence`, `cardFocus`, `cardValue`, `usdShort`), and Build's, Raise's and Grow's parts (`buildPhone`, `raisePhone`, `growPhone`).
 `validateFocus.ts` (D685 §5.12, #1584; D692, #1701) is what Validate's overview leads with on a phone, in `cycleFocus.ts`'s shape: the focus (record the first conversation; for a writer, review the newest session, counting the pain themes and hypotheses its pending placements would move, else record the next conversation with the meter in the why; for anyone else, the first card's next), the interviews meter against `interviews_month_target` with its `display`, and the index rows, Verdict only for a decision reader. `indexCountsOf` stays as Customer research's two counts, which `../routes/founder_profile.ts` also reads.
 
+D4587 (#4587) makes that review choice the newest *actionable* session by
+activity time then id, across the full transcribed/structured candidate set.
+Its record CTA carries both `project_id` and `session`; completed, draft or
+cleared newer sessions no longer hide older pending review work.
 D4589 (#4589): `validateNextAction.ts` is that focus's one policy, pure over the facts `validateFocus.ts` reads (review, Stop, missing fit, unrecorded results, mixed evidence, decision ready, Plan the build, next conversation, and `unavailable` when a fact cannot be read). The desktop overview and the phone root both draw its result.
 `cycleValidate.ts` computes Validate's figures, cards and records from records
 at read time and stores nothing. `validateWriters.ts` has one writer per
