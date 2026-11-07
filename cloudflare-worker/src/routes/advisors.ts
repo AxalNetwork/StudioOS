@@ -4073,6 +4073,11 @@ export function deliverableState(versions: Pick<VersionRow, 'sent_at' | 'opened_
   return 'not_started';
 }
 
+/** An absolute https web address: the one shape a version's content link may take. */
+function isHttpsLink(raw: string): boolean {
+  try { const u = new URL(raw); return u.protocol === 'https:' && !u.username && !u.password && !!u.hostname; } catch { return false; }
+}
+
 function versionDto(r: VersionRow): any {
   return {
     uid: r.uid, version: Number(r.version), label: r.label, summary: r.summary,
@@ -4330,6 +4335,17 @@ advisors.post('/me/deliverables/:id/versions', async (c) => {
     const m = await requireMyAdvisor(c, user);
     const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
     const body = await c.req.json().catch(() => ({} as any));
+    // #4712 (D4712): A REVISION IS NEVER EMPTY. A new version carries a change
+    // note (what is different from the last one) and the content, a web link;
+    // "Add a version" used to POST `{}` and record a v3 that said nothing and
+    // pointed nowhere. Older versions stay as recorded: there is no route that
+    // edits one.
+    const note = trimOrNull(body.summary, 2000);
+    const link = trimOrNull(body.link_url, 2000);
+    if (!note) return c.json({ detail: 'Say what changed in this version.', code: 'empty_version' }, 422);
+    if (!link || !isHttpsLink(link)) {
+      return c.json({ detail: 'Add the content as a web link that starts with https://', code: 'empty_version' }, 422);
+    }
     const top = await c.env.DB.prepare(
       'SELECT MAX(version) AS v FROM advisor_deliverable_versions WHERE deliverable_id = ?'
     ).bind(row.id).first<{ v: number | null }>();
@@ -4379,6 +4395,13 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
       return c.json({
         detail: 'Link this work product to an engagement whose client has an Axal account before sending — nothing an unlinked client is sent can ever be recorded as opened',
       }, 409);
+    }
+
+    // #4712: nothing is sent that has nothing in it. A version with no link has
+    // no content for the client to open (an empty v1 from a title-only work
+    // product, or an empty revision recorded before this rule).
+    if (!v.link_url || !isHttpsLink(v.link_url)) {
+      return c.json({ detail: 'This version has no content to send. Add a version with a link, then send that one.', code: 'empty_version' }, 422);
     }
 
     const now = nowIso();

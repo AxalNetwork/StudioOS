@@ -191,10 +191,10 @@ const otto = { user: OTHER_FOUNDER, role: 'founder' };
 
 /** One work product on one engagement, with `n` versions, `sent` of them sent. */
 async function seed(e: any, engagementId: number, title: string, versions = 1, send = 1) {
-  const d = await call(e, 'POST', '/me/deliverables', ada, { title, engagement_id: engagementId });
+  const d = await call(e, 'POST', '/me/deliverables', ada, { title, engagement_id: engagementId, summary: 'First pass', link_url: 'https://docs.example/work' });
   assert.equal(d.status, 201, JSON.stringify(d.body));
   for (let i = 2; i <= versions; i += 1) {
-    const v = await call(e, 'POST', `/me/deliverables/${d.body.id}/versions`, ada, {});
+    const v = await call(e, 'POST', `/me/deliverables/${d.body.id}/versions`, ada, { summary: 'Revised', link_url: 'https://docs.example/work-v2' });
     assert.equal(v.status, 201, JSON.stringify(v.body));
   }
   for (let i = 1; i <= send; i += 1) {
@@ -372,7 +372,7 @@ test('a version sent after an earlier one was opened leaves the row opened and l
   const uid = (await received(e)).items[0].versions[0].uid;
   await call(e, 'POST', `/received/deliverables/${uid}/open`, fran);
 
-  const v2 = await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada, {});
+  const v2 = await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada, { summary: 'Revised', link_url: 'https://docs.example/work-v2' });
   assert.equal(v2.status, 201);
   await call(e, 'POST', `/me/deliverables/${d.id}/versions/2/send`, ada);
 

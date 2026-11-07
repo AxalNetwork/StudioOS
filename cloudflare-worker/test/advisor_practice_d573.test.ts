@@ -400,3 +400,74 @@ test('D573: public link opens are capped on both mounts and a limiter outage fai
     }
   } finally { Date.now = previousNow; }
 });
+
+test('#4712: a new advisor with no Practice records can run the whole core workflow, and reviews do not wait on a deliverable', async () => {
+  // Mutation checked: the worker accepting an empty version → the empty revision below answers 201 instead of 422.
+  const db = freshDb(); try {
+    const e = env(db);
+    const none = async (path: string) => (await call(e, 'GET', path, ada)).body?.items ?? [];
+    assert.deepEqual([(await none('/me/engagements')).length, (await none('/me/deliverables')).length, (await none('/me/bookings')).length], [0, 0, 0], 'starts empty');
+
+    // 1. the first engagement, from nothing
+    db.prepare("INSERT INTO advisor_engagements (id, uid, advisor_id, founder_user_id, client_name, lane, shape) VALUES (1, 'eng-first', 1, ?, 'Fran Labs', 'signed', 'retainer')").run(FOUNDER_USER);
+    const eng = await call(e, 'POST', '/me/engagements', ada, { client_name: 'Meridian Labs', shape: 'retainer' });
+    assert.equal(eng.status, 201, JSON.stringify(eng.body));
+
+    // 2. publish a slot, 3. a founder books it, 4. the advisor confirms it
+    const start = new Date(Date.now() + 3 * 86400000).toISOString();
+    const end = new Date(Date.now() + 3 * 86400000 + 3600000).toISOString();
+    const slot = await call(e, 'POST', '/me/slots', ada, { starts_at: start, ends_at: end, capacity: 1, meeting_url: 'https://meet.example/ada' });
+    assert.equal(slot.status, 200, JSON.stringify(slot.body));
+    const slotId = slot.body.id;
+    const booked = await call(e, 'POST', `/slots/${slotId}/book`, fran, { topic: 'First session' });
+    assert.ok([200, 201].includes(booked.status), JSON.stringify(booked.body));
+    const bookingId = booked.body.id ?? booked.body.booking?.id ?? (db.prepare('SELECT id FROM advisor_bookings ORDER BY id DESC LIMIT 1').get() as any).id;
+    assert.equal((await call(e, 'POST', `/bookings/${bookingId}/confirm`, ada)).status, 200);
+
+    // 5. the advisor ends it from the mounted page's routes: held, and a second booking cancelled with a reason, a third no-show
+    assert.equal((await call(e, 'POST', `/bookings/${bookingId}/complete`, ada)).status, 200);
+    const second = db.prepare("INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id, topic, status) VALUES ('b2', ?, 1, ?, 'Second', 'confirmed')").run(slotId, OUTSIDER_USER);
+    const cancelled = await call(e, 'POST', `/bookings/${Number(second.lastInsertRowid)}/cancel`, ada, { reason: 'Travel' });
+    assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
+    assert.equal((db.prepare('SELECT status, cancel_reason FROM advisor_bookings WHERE id = ?').get(Number(second.lastInsertRowid)) as any).status, 'cancelled');
+    const third = db.prepare("INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id, topic, status) VALUES ('b3', 3, 1, ?, 'Third', 'confirmed')").run(FOUNDER_USER);
+    assert.equal((await call(e, 'POST', `/bookings/${Number(third.lastInsertRowid)}/no-show`, ada, { reason: 'Did not join' })).status, 200);
+
+    // 9. the held session is reviewable while there are ZERO deliverables
+    assert.equal((await none('/me/deliverables')).length, 0);
+    assert.deepEqual((await none('/me/bookings?status=completed')).map((b: any) => b.id), [bookingId]);
+    const review = await call(e, 'POST', `/bookings/${bookingId}/review`, ada, { rating: 5, comment: 'Prepared and sharp' });
+    assert.ok([200, 201].includes(review.status), JSON.stringify(review.body));
+    assert.equal((await call(e, 'GET', `/bookings/${bookingId}/reviews`, ada)).body.items.length, 1);
+
+    // 6. the first deliverable, on the engagement; v1 has content so it can go out
+    const d = await call(e, 'POST', '/me/deliverables', ada, { title: 'Q4 review', engagement_id: 1, summary: 'First pass', link_url: 'https://docs.example/q4' });
+    assert.equal(d.status, 201, JSON.stringify(d.body));
+    // 7. a revision with nothing in it is refused; a meaningful one is recorded; older versions are untouched
+    for (const empty of [{}, { summary: 'Only a note' }, { link_url: 'https://docs.example/q4-v2' }, { summary: 'Note', link_url: 'http://insecure.example' }, { summary: '  ', link_url: 'https://docs.example/q4-v2' }]) {
+      const r = await call(e, 'POST', `/me/deliverables/${d.body.id}/versions`, ada, empty);
+      assert.deepEqual([r.status, r.body?.code], [422, 'empty_version'], JSON.stringify(empty));
+    }
+    const v1 = db.prepare('SELECT summary, link_url FROM advisor_deliverable_versions WHERE deliverable_id = ? AND version = 1').get(d.body.id) as any;
+    const v2 = await call(e, 'POST', `/me/deliverables/${d.body.id}/versions`, ada, { summary: 'Added the cohort table', link_url: 'https://docs.example/q4-v2' });
+    assert.equal(v2.status, 201, JSON.stringify(v2.body));
+    assert.deepEqual({ ...(db.prepare('SELECT summary, link_url FROM advisor_deliverable_versions WHERE deliverable_id = ? AND version = 1').get(d.body.id) as any) }, { ...v1 }, 'v1 is as recorded');
+    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM advisor_deliverable_versions WHERE deliverable_id = ?').get(d.body.id) as any).n, 2, 'no empty version was written');
+
+    // a version with nothing to open is not sent, whatever its number
+    db.prepare("INSERT INTO advisor_deliverable_versions (uid, deliverable_id, version) VALUES ('legacy-empty', ?, 3)").run(d.body.id);
+    const emptySend = await call(e, 'POST', `/me/deliverables/${d.body.id}/versions/3/send`, ada);
+    assert.deepEqual([emptySend.status, emptySend.body.code], [422, 'empty_version']);
+    db.prepare("DELETE FROM advisor_deliverable_versions WHERE uid = 'legacy-empty'").run();
+
+    // send v2, the client opens and accepts it
+    const sent = await call(e, 'POST', `/me/deliverables/${d.body.id}/versions/2/send`, ada);
+    assert.equal(sent.status, 200, JSON.stringify(sent.body));
+    const received = await call(e, 'GET', '/received/deliverables', fran);
+    const uid = received.body.items[0].versions[0].uid;
+    assert.equal((await call(e, 'POST', `/received/deliverables/${uid}/open`, fran)).status, 200);
+    const accepted = await call(e, 'POST', `/received/deliverables/${uid}/accept`, fran);
+    assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+    assert.ok(accepted.body.signed_off_at);
+  } finally { db.close(); }
+});

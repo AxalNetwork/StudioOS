@@ -178,10 +178,10 @@ const otto = { user: OTHER_FOUNDER, role: 'founder' };
 
 /** One work product on one engagement, with `n` versions, `sent` of them sent. */
 async function seed(e: any, engagementId: number, title: string, versions = 1, send = 1) {
-  const d = await call(e, 'POST', '/me/deliverables', ada, { title, engagement_id: engagementId });
+  const d = await call(e, 'POST', '/me/deliverables', ada, { title, engagement_id: engagementId, summary: 'First pass', link_url: 'https://docs.example/work' });
   assert.equal(d.status, 201, JSON.stringify(d.body));
   for (let i = 2; i <= versions; i += 1) {
-    const v = await call(e, 'POST', `/me/deliverables/${d.body.id}/versions`, ada, {});
+    const v = await call(e, 'POST', `/me/deliverables/${d.body.id}/versions`, ada, { summary: 'Revised', link_url: 'https://docs.example/work-v2' });
     assert.equal(v.status, 201, JSON.stringify(v.body));
   }
   for (let i = 1; i <= send; i += 1) {
@@ -217,7 +217,7 @@ test('a version sent after the relink goes to B, and only that version', async (
   const e = env(freshDb());
   const d = await seed(e, 1, 'Pricing memo');
   await relink(e, OTHER_FOUNDER);
-  assert.equal((await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada, {})).status, 201);
+  assert.equal((await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada, { summary: 'Revised', link_url: 'https://docs.example/work-v2' })).status, 201);
   assert.equal((await call(e, 'POST', `/me/deliverables/${d.id}/versions/2/send`, ada)).status, 200);
   const a = await received(e, fran);
   const b = await received(e, otto);
@@ -293,7 +293,7 @@ test('a relink racing a receipt cannot move either: the recipient and the receip
 test('a send racing another send is one send: the loser is 409 and the winner keeps its recipient', async () => {
   const db = freshDb();
   const e: any = env(db);
-  const d = (await call(e, 'POST', '/me/deliverables', ada, { title: 'Memo', engagement_id: 1 })).body;
+  const d = (await call(e, 'POST', '/me/deliverables', ada, { title: 'Memo', engagement_id: 1, summary: 'First pass', link_url: 'https://docs.example/work' })).body;
   // The race, made deterministic: just before this route writes its stamp, a competing send lands
   // (as if another tab had sent first, to the client of that moment).
   const inner = e.DB;

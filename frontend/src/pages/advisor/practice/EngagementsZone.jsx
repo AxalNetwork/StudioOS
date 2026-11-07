@@ -199,6 +199,58 @@ export default function EngagementsZone() {
     }, 'That engagement could not be created.');
   };
 
+  // #4712 (D4712): ONE form, drawn wherever the page is — under the empty state
+  // when nothing is on file yet (the first engagement), and in the Board once
+  // there are some. It used to live only inside the children `ZoneBody` never
+  // draws when `items` is empty, so "Record an engagement" set `adding` and
+  // showed nothing.
+  const newEngagementForm = (
+    <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Client">
+          <input className={inputClass} value={draft.client_name} placeholder="Meridian Labs"
+            onChange={(e) => setDraft({ ...draft, client_name: e.target.value })} />
+        </Field>
+        <Field label="Shape" hint="What the engagement bills as. Equity and per-call clients carry no cycle amount, and Earnings leaves them out of a cash gross for that reason.">
+          <select className={inputClass} value={draft.shape}
+            onChange={(e) => setDraft({ ...draft, shape: e.target.value })}>
+            {SHAPES.map((s) => <option key={s} value={s}>{SHAPE_LABEL[s]}</option>)}
+          </select>
+        </Field>
+        <Field label="Scope, in a line" hint="What the board card shows: “2 sessions/mo”, “Sprint, 6 weeks”.">
+          <input className={inputClass} value={draft.scope_label}
+            onChange={(e) => setDraft({ ...draft, scope_label: e.target.value })} />
+        </Field>
+        <Field label="Term ends" hint="Left blank until there is a date. A blank is not today.">
+          <input className={inputClass} type="date" value={draft.term_ends_at}
+            onChange={(e) => setDraft({ ...draft, term_ends_at: e.target.value })} />
+        </Field>
+        <Field label="In scope">
+          <textarea className={inputClass} rows={2} value={draft.scope_includes}
+            placeholder="Two sessions a month, one written review per cycle."
+            onChange={(e) => setDraft({ ...draft, scope_includes: e.target.value })} />
+        </Field>
+        <Field label="Not in scope" hint="Stored as its own text, not as an absence. This is the sentence that prevents the conversation.">
+          <textarea className={inputClass} rows={2} value={draft.scope_excludes}
+            placeholder="Not in scope: fundraising introductions, board attendance."
+            onChange={(e) => setDraft({ ...draft, scope_excludes: e.target.value })} />
+        </Field>
+        <Field label="Per cycle" hint="Leave blank if there is no cash amount — an equity engagement is the ordinary case. Blank means unrecorded, not free.">
+          <input className={inputClass} value={draft.amount} placeholder="4500"
+            onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
+        </Field>
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+        A new engagement opens in <strong>Drafting</strong>. Signing it is a move on the board,
+        because that is what starts the first term and gives the row a renewal to decide.
+      </p>
+      <button type="button" className={`${buttonClass} mt-2`}
+        disabled={busy === 'new' || !draft.client_name.trim()} onClick={create}>
+        Add to Drafting
+      </button>
+    </div>
+  );
+
   return (
     <>
     {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
@@ -208,11 +260,14 @@ export default function EngagementsZone() {
       error={state.error}
       isEmpty={!state.loading && !state.error && items.length === 0}
       onRetry={load}
-      empty={<NothingYet
+      empty={<><NothingYet
         title="No engagement is on file"
         body="This board fills as you record the contracts behind your sessions — who the client is, what the scope says, and whether each term renewed. It is empty because nothing has been recorded, not because anything was lost."
-        action={<button type="button" className={buttonClass} onClick={() => setAdding(true)}>Record an engagement</button>}
-      />}
+        action={<button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
+          {adding ? 'Close' : 'Record an engagement'}
+        </button>}
+      />
+        {adding && <div className="mt-3">{newEngagementForm}</div>}</>}
     >
       <ZoneToolbar
         className="mb-3"
@@ -265,52 +320,7 @@ export default function EngagementsZone() {
             {adding ? 'Close' : 'New engagement'}
           </button>}
         />
-        {adding && (
-          <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Client">
-                <input className={inputClass} value={draft.client_name} placeholder="Meridian Labs"
-                  onChange={(e) => setDraft({ ...draft, client_name: e.target.value })} />
-              </Field>
-              <Field label="Shape" hint="What the engagement bills as. Equity and per-call clients carry no cycle amount, and Earnings leaves them out of a cash gross for that reason.">
-                <select className={inputClass} value={draft.shape}
-                  onChange={(e) => setDraft({ ...draft, shape: e.target.value })}>
-                  {SHAPES.map((s) => <option key={s} value={s}>{SHAPE_LABEL[s]}</option>)}
-                </select>
-              </Field>
-              <Field label="Scope, in a line" hint="What the board card shows: “2 sessions/mo”, “Sprint, 6 weeks”.">
-                <input className={inputClass} value={draft.scope_label}
-                  onChange={(e) => setDraft({ ...draft, scope_label: e.target.value })} />
-              </Field>
-              <Field label="Term ends" hint="Left blank until there is a date. A blank is not today.">
-                <input className={inputClass} type="date" value={draft.term_ends_at}
-                  onChange={(e) => setDraft({ ...draft, term_ends_at: e.target.value })} />
-              </Field>
-              <Field label="In scope">
-                <textarea className={inputClass} rows={2} value={draft.scope_includes}
-                  placeholder="Two sessions a month, one written review per cycle."
-                  onChange={(e) => setDraft({ ...draft, scope_includes: e.target.value })} />
-              </Field>
-              <Field label="Not in scope" hint="Stored as its own text, not as an absence. This is the sentence that prevents the conversation.">
-                <textarea className={inputClass} rows={2} value={draft.scope_excludes}
-                  placeholder="Not in scope: fundraising introductions, board attendance."
-                  onChange={(e) => setDraft({ ...draft, scope_excludes: e.target.value })} />
-              </Field>
-              <Field label="Per cycle" hint="Leave blank if there is no cash amount — an equity engagement is the ordinary case. Blank means unrecorded, not free.">
-                <input className={inputClass} value={draft.amount} placeholder="4500"
-                  onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
-              </Field>
-            </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-              A new engagement opens in <strong>Drafting</strong>. Signing it is a move on the board,
-              because that is what starts the first term and gives the row a renewal to decide.
-            </p>
-            <button type="button" className={`${buttonClass} mt-2`}
-              disabled={busy === 'new' || !draft.client_name.trim()} onClick={create}>
-              Add to Drafting
-            </button>
-          </div>
-        )}
+        {adding && newEngagementForm}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {BOARD_LANES.map((lane) => {
             const cards = visible.filter((e) => boardLaneOf(e.lane) === lane.key);

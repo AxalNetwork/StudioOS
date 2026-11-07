@@ -162,3 +162,23 @@ export function nudgeBody(item) {
   return `Following up on ${item?.title || 'the work product'}${tag ? ` (${tag})` : ''}`
     + `${day ? `, sent ${day}` : ''}. Let me know if you would like to talk it through.`;
 }
+
+/**
+ * #4712 (D4712): review coverage of the held sessions, with a third answer.
+ *
+ * `reviews[id]` is an array when the session's reviews were read, and `null`
+ * (or absent) when they could not be, or were never requested. An unread
+ * session is UNKNOWN, never "No review": the page reporting "3 without a
+ * review" over sessions it did not read would be claiming something it has not
+ * looked at (D56/D68).
+ */
+export function reviewCoverage(sessions, reviews) {
+  let reviewed = 0; let awaiting = 0; let unknown = 0;
+  for (const b of sessions || []) {
+    const rs = reviews?.[b.id];
+    if (!Array.isArray(rs)) unknown += 1;
+    else if (rs.length > 0) reviewed += 1;
+    else awaiting += 1;
+  }
+  return { reviewed, awaiting, unknown };
+}
