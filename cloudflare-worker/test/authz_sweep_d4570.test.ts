@@ -10,7 +10,7 @@
 //
 // A refusal is any status that is not 2xx or 3xx. Two kinds are pinned as
 // ratchets, so neither can grow unseen and each fix shows up as a list to shrink:
-//   KNOWN_500        refused, but with 500 where 401 belongs (#4570 asks for 401/403/404);
+//   KNOWN_500        refused, but with 500 where 401 belongs (#4570 asks for 401/403/404); empty now;
 //   GATE_NOT_REACHED the feature answers 503 before its gate runs (switched off here),
 //                    so the sweep did not test that gate.
 // A 3xx is a refusal only on an OAuth callback, whose refusal is a redirect to
@@ -40,11 +40,17 @@ const FOUNDER = 10, ADMIN = 20, SUPER = 30, DISABLED = 40;
 const SIGNED_IN = ['authenticated', 'cf_access', 'admin', 'hq_admin', 'super_admin'];
 const STAFF = ['cf_access', 'admin', 'hq_admin', 'super_admin'];
 
-/** Refused with 500 where 401 belongs. Fix the route and take it off; never add to it. */
-const KNOWN_500 = new Set([
+/**
+ * Refused with 500 where 401 belongs. Empty: the seven that were here (a catch-all around requireAuth in
+ * routes/auth.ts `safe` and routes/auth_passkey.ts `err`) now re-throw a gate's refusal, and answer 401.
+ * Fix a route and take it off; never add to it.
+ */
+const KNOWN_500 = new Set<string>([]);
+/** The routes that answered 500 before #4570's fix: each must answer an anonymous caller 401 now. */
+const FIXED_TO_401 = [
   'POST /api/auth/accept-terms', 'DELETE /api/auth/passkey/:id', 'GET /api/auth/passkey/list', 'GET /api/auth/passkey/register-options',
   'POST /api/auth/passkey/register-verify', 'POST /api/auth/sign-out-everywhere', 'POST /api/auth/step-up',
-]);
+];
 /** Switched off here: 503 before the gate runs, so this sweep did not reach the gate. */
 const GATE_NOT_REACHED = new Set([
   'POST /api/auth/sms/confirm-enrollment', 'POST /api/auth/sms/start-enrollment', 'POST /api/calendar/google/meet-transcripts/connect',
@@ -121,6 +127,8 @@ test('every signed-in route refuses a caller with no credentials', async () => {
   assert.deepEqual([...KNOWN_500].filter((k) => !got(500).has(k)), [], 'fixed: take these off KNOWN_500');
   assert.deepEqual([...GATE_NOT_REACHED].filter((k) => !got(503).has(k)), [], 'reached now: take these off GATE_NOT_REACHED');
   assert.ok(results.filter((x) => x.status === 401).length > 3000, 'most refusals are the 401 the gate gives');
+  // Mutation checked: `safe`'s re-throw of a gate's refusal removed → these answer 500 again and this fails.
+  assert.deepEqual(FIXED_TO_401.map((k) => [k, results.find((x) => x.key === k)?.status]), FIXED_TO_401.map((k) => [k, 401]));
 });
 
 test('every admin, HQ and Super Admin route refuses a founder', async () => {
