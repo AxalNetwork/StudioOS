@@ -320,11 +320,13 @@ test('the median time to open is refused outright, with the reason', async () =>
   });
   const r = (await call(e, 'GET', '/deliverables', ours)).body;
   assert.equal(r.sent_count, 1);
-  assert.equal(r.unopened_count, 1);
+  // #4690: NULL, not 1 and not 0 — nothing records opens, so there is no count.
+  assert.equal(r.unopened_count, null);
+  assert.equal(r.read_tracking.available, false);
   // A median over a column nobody writes is a number about our own silence.
   assert.equal(r.median_days_to_open, null);
   assert.match(r.median_days_to_open_note, /client's to set/i);
-  // And the unopened count is framed as OUR gap, not the client's behaviour.
+  // And the unopened note is framed as OUR gap, not the client's behaviour.
   assert.match(r.unopened_note, /we do not know/i);
 });
 
@@ -335,18 +337,23 @@ test('an unsent deliverable is not counted as unopened', async () => {
   assert.equal(r.sent_count, 0);
   // Never sent is a different state from sent-and-unopened, and only the second
   // is the expensive one the zone is about.
-  assert.equal(r.unopened_count, 0);
+  assert.equal(r.unopened_count, null);
   assert.equal(r.items[0].is_unopened, false);
+  assert.equal(r.items[0].read_state, 'not_sent');
 });
 
-test('an unopened deliverable moves health to at risk', async () => {
+test('a sent deliverable with unobservable reads does NOT move health (#4690)', async () => {
   const e = env(freshDb());
   await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/deliverables`, ours, {
     title: 'Spec', sent_at: past(20),
   });
   const row = (await call(e, 'GET', '/health', ours)).body.items[0];
-  assert.equal(row.deliverables_unopened, 1);
-  assert.equal(row.health, 'at_risk');
+  // Not recorded, not 1 and not 0 — and never a reason or a risk.
+  assert.equal(row.deliverables_unopened, null);
+  assert.equal(row.deliverables_sent, 1);
+  assert.equal(row.health, 'on_track');
+  assert.ok(!row.health_reasons.some((x: string) => /opened/.test(x)), 'a read finding came from missing instrumentation');
+  assert.equal(row.health_unavailable_inputs[0].input, 'deliverable_reads');
 });
 
 /**
@@ -551,7 +558,10 @@ test('with no cap stated, nothing is over anything and the response says why', a
 test('a stated cap is the firm’s number, and clearing it restores the refusal', async () => {
   const db = freshDb();
   const e = env(db);
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 44 });
+  // #4690: hours are logged per MONTH and the cap is stated per WEEK, so 200 h
+  // in a month is over 38 h/week (at most 38 x 31 / 7 = 168.3 h) and under
+  // 50 h/week (at least 50 x 28 / 7 = 200 h) in every month of the year.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 200 });
 
   const set = await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 38, note: 'four days, one for internal' });
   assert.equal(set.status, 200);
@@ -613,7 +623,9 @@ test('a cap is refused for a person outside the firm, and for an impossible week
 test('internal hours are stated, not inferred, and they change who is over cap', async () => {
   const db = freshDb();
   const e = env(db);
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 36 });
+  // #4690: monthly hours against a weekly cap scaled to the month — 40 h/week is
+  // between 160 h (February) and 177.15 h (a 31-day month).
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 150 });
   await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 40 });
 
   let r = (await call(e, 'GET', '/capacity', ours)).body;
@@ -621,20 +633,20 @@ test('internal hours are stated, not inferred, and they change who is over cap',
   // spends no time on the firm — the one thing that is certainly false.
   assert.equal(r.people[0].internal_hours, null);
   assert.equal(r.internal_hours_total, null);
-  assert.equal(r.people[0].total_hours, 36);
+  assert.equal(r.people[0].total_hours, 150);
   assert.equal(r.people[0].over_committed, false);
 
   const put = await call(e, 'PUT', '/capacity/internal-hours', ours, {
-    person_user_id: OUR_STAFF, period: nowPeriod(), hours: 7, note: 'recruiting',
+    person_user_id: OUR_STAFF, period: nowPeriod(), hours: 30, note: 'recruiting',
   });
   assert.equal(put.status, 200);
   r = (await call(e, 'GET', '/capacity', ours)).body;
-  assert.equal(r.people[0].internal_hours, 7);
+  assert.equal(r.people[0].internal_hours, 30);
   assert.equal(r.people[0].internal_note, 'recruiting');
-  assert.equal(r.internal_hours_total, 7);
-  // 36 + 7 crosses a cap 36 alone did not. The billable book called this week
-  // safe; the whole week is not.
-  assert.equal(r.people[0].total_hours, 43);
+  assert.equal(r.internal_hours_total, 30);
+  // 150 + 30 crosses a cap 150 alone did not. The billable book called this
+  // month safe; the whole month is not.
+  assert.equal(r.people[0].total_hours, 180);
   assert.equal(r.people[0].over_committed, true);
 
   // ZERO IS A STATEMENT AND SURVIVES AS ONE.

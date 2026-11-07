@@ -44,10 +44,12 @@ function OpenedState({ row }) {
   if (!row.sent_at) return <span className="text-axal-faint">Not sent yet</span>;
   if (row.signed_off_at) return <Pill tone="ok">Signed off {formatDay(row.signed_off_at)}</Pill>;
   if (row.opened_at) return <Pill tone="info">Opened {formatDay(row.opened_at)}</Pill>;
-  // NOT a red "ignored" pill. The absence is ours, not the client's.
+  // NOT a red "ignored" pill. The absence is ours, not the client's — and while
+  // opens cannot be observed (#4690) it is not "unopened" at all.
+  if (row.read_state === 'unopened') return <Pill tone="warn">Unopened</Pill>;
   return (
     <NotComputable why="Nothing in this product records an open — the client sets that, and there is no surface for them to set it on yet.">
-      Unopened
+      Opens not recorded
     </NotComputable>
   );
 }
@@ -198,7 +200,11 @@ export default function PartnerDeliverablesZone() {
   // ══ THE ARTBOARD'S FOUR TILES, COUNTED OVER THE WHOLE LOG ═══════════════
   // Never over `visible`: a figure that changes because a chip was clicked is
   // not reporting what its label claims.
-  const unopened = items.filter((r) => r.sent_at && !r.opened_at);
+  // #4690: UNOPENED IS A CLAIM, so it needs an instrument. `is_unopened` is true
+  // only when opens can be observed; while they cannot it is null, the count is
+  // null and nothing below calls a client's silence ours to chase.
+  const readsUnavailable = d?.read_tracking?.available === false;
+  const unopened = items.filter((r) => r.is_unopened === true);
   const signedOff = items.filter((r) => r.signed_off_at);
   const shippedThisMonth = items.filter((r) => r.days_since_sent != null && r.days_since_sent <= 31);
   const clientCount = new Set(items.map((r) => r.founder_name || r.need_title).filter(Boolean)).size;
@@ -312,9 +318,12 @@ export default function PartnerDeliverablesZone() {
           <ShipTile
             label="Never opened"
             value={String(unopened.length)}
-            note={oldestUnopened
-              ? `oldest ${oldestUnopened.days_since_sent} days out`
-              : 'nothing sent and unopened'}
+            nr={readsUnavailable}
+            note={readsUnavailable
+              ? 'opens are not recorded, so no deliverable can be called unopened'
+              : (oldestUnopened
+                ? `oldest ${oldestUnopened.days_since_sent} days out`
+                : 'nothing sent and unopened')}
           />
           <ShipTile
             label="Signed off"
@@ -389,7 +398,7 @@ export default function PartnerDeliverablesZone() {
           cols="1fr 2.1fr .8fr .9fr 1.1fr"
           head={['Client', 'Deliverable', 'Sent', 'Age', 'Acknowledgment']}
           rows={ordered.map((row) => {
-            const isUnopened = Boolean(row.sent_at && !row.opened_at);
+            const isUnopened = row.is_unopened === true;
             return {
               key: row.id,
               rowClass: isUnopened ? 'bg-red-50/40 dark:bg-red-950/10' : '',
@@ -413,7 +422,9 @@ export default function PartnerDeliverablesZone() {
                   : (row.opened_at
                     ? { pill: 'Opened', pillTone: 'info' }
                     : (row.sent_at
-                      ? { pill: 'Never opened', pillTone: 'danger', sub: 'or opened without telling us' }
+                      ? (row.read_state === 'not_recorded'
+                        ? { pill: 'Opens not recorded', pillTone: 'neutral', sub: 'we cannot see opens — this says nothing about the client' }
+                        : { pill: 'Never opened', pillTone: 'danger', sub: 'or opened without telling us' })
                       : { pill: 'Not sent', pillTone: 'neutral' })),
               ],
             };
@@ -427,9 +438,13 @@ export default function PartnerDeliverablesZone() {
           label="Draft · unopened chase"
           accept="Accept drafts"
           run="Draft the chases"
-          foot={`${unopened.length} note${unopened.length === 1 ? '' : 's'}; a human sends each.`}
+          foot={readsUnavailable
+            ? 'Opens are not recorded.'
+            : `${unopened.length} note${unopened.length === 1 ? '' : 's'}; a human sends each.`}
           empty="A chase note per unopened deliverable — the item, the date it went out, and what the review unblocks, for a person to send from the account that shipped it."
-          nothingToDraft="Nothing is sent and unopened, so there is nothing to chase."
+          nothingToDraft={readsUnavailable
+            ? 'Opens are not recorded, so no deliverable can be called unopened and there is nothing to chase.'
+            : 'Nothing is sent and unopened, so there is nothing to chase.'}
         />
 
         <Section title="Log">
@@ -461,7 +476,7 @@ export default function PartnerDeliverablesZone() {
             <strong>It means we do not know.</strong>{' '}
             {d?.median_days_to_open_note
               || 'Nothing in this product records an open, so every sent deliverable reads unopened.'}{' '}
-            The count above is true and the reason is ours: <code>opened_at</code>{' '}
+            While opens cannot be observed the count above is Not recorded, not a number, and no health rating uses it. The reason is ours: <code>opened_at</code>{' '}
             is the client’s column to set and there is no surface where they can.
             Reading it as “the client ignored it” would turn a gap in our product
             into an accusation about them.

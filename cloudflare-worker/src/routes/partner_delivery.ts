@@ -45,9 +45,11 @@ import { requireAuth } from '../auth';
 import {
   mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
 } from './_t13t14t15_helpers';
+import type { ReadTracking } from './_partner_workspace_helpers';
 import {
-  daysBetween, healthFor, mergePatch, parseHours, parsePeriod,
-  requireOwnEngagement, requirePartnerRole, utilisationFor,
+  currentMonthlyCents, daysBetween, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
+  periodCapHours, periodMonths, readStateFor, retainerPeriodFor, readTrackingFor, requireOwnEngagement,
+  requirePartnerRole, retainerProjection, seatStateFor, unopenedCountFor, daysInPeriod,
 } from './_partner_workspace_helpers';
 import { logActorAct } from '../services/actorLog';
 import { statusReportAccess } from '../services/statusReportAccess';
@@ -138,13 +140,19 @@ function currentPeriod(now = new Date()): string {
 partnerDelivery.get('/board', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
-    const period = currentPeriod();
+    const now = new Date();
+    const period = currentPeriod(now);
+    // Hours are logged by month and a retainer's hours are sold by ITS period
+    // (a month or a quarter), so the read covers the months of this quarter and
+    // each row sums the ones inside its own retainer period (#4690).
+    const quarterMonths = periodMonths(retainerPeriodFor('quarterly', now));
 
     const engagements = await c.env.DB.prepare(
       `SELECT e.id, e.uid, e.status, e.price, e.delivered_at, e.cancelled_at,
               e.invoiced_at, e.invoice_id,
               n.title AS need_title, f.name AS founder_name,
-              r.id AS retainer_id, r.retained_hours
+              r.id AS retainer_id, r.uid AS retainer_uid, r.shape, r.cadence,
+              r.amount_cents, r.retained_hours, r.renews_at, r.ended_at
          FROM engagements e
          LEFT JOIN founder_needs n ON n.id = e.need_id
          LEFT JOIN founders f ON f.id = e.founder_id
@@ -158,7 +166,7 @@ partnerDelivery.get('/board', async (c) => {
     // is interpolated, and no row can come back for another firm's engagement.
     const [seats, milestones, blockers, deliverables, hours, usage] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT s.engagement_id, s.scope, s.granted_at, s.revoked_at, u.name AS holder_name
+        `SELECT s.id, s.engagement_id, s.scope, s.granted_at, s.revoked_at, u.name AS holder_name
            FROM engagement_seats s
            JOIN engagements e ON e.id = s.engagement_id
            LEFT JOIN users u ON u.id = s.holder_user_id
@@ -183,11 +191,11 @@ partnerDelivery.get('/board', async (c) => {
           WHERE e.partner_id = ?`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
-        `SELECT h.engagement_id, h.hours
+        `SELECT h.engagement_id, h.period, h.hours
            FROM engagement_hours h
            JOIN engagements e ON e.id = h.engagement_id
-          WHERE e.partner_id = ? AND h.period = ?`,
-      ).bind(partnerId, period).all<any>(),
+          WHERE e.partner_id = ? AND h.period IN (?, ?, ?)`,
+      ).bind(partnerId, ...quarterMonths).all<any>(),
       c.env.DB.prepare(
         `SELECT u.retainer_id, u.period, u.hours_used
            FROM retainer_usage u
@@ -197,23 +205,18 @@ partnerDelivery.get('/board', async (c) => {
       ).bind(partnerId).all<any>(),
     ]);
 
-    const group = <T extends { engagement_id: number }>(rows: T[]) => {
-      const m = new Map<number, T[]>();
-      for (const r of rows) {
-        const k = Number(r.engagement_id);
-        if (!m.has(k)) m.set(k, []);
-        m.get(k)!.push(r);
-      }
-      return m;
-    };
+    const group = groupByEngagement;
+    const readTracking = readTrackingFor(deliverables.results || []);
     const seatByEng = group(seats.results || []);
     const msByEng = group(milestones.results || []);
     const blByEng = group(blockers.results || []);
     const dlByEng = group(deliverables.results || []);
     const hrByEng = group(hours.results || []);
-    const usageByRetainer = new Map<number, any>();
+    const usageByRetainer = new Map<number, any[]>();
     for (const u of usage.results || []) {
-      if (u.period === period) usageByRetainer.set(Number(u.retainer_id), u);
+      const k = Number(u.retainer_id);
+      if (!usageByRetainer.has(k)) usageByRetainer.set(k, []);
+      usageByRetainer.get(k)!.push(u);
     }
 
     // D394 — THE HOME'S "DUE THIS WEEK", counted from the milestones this
@@ -233,25 +236,35 @@ partnerDelivery.get('/board', async (c) => {
 
     const items = (engagements.results || []).map((e: any) => {
       const id = Number(e.id);
-      // The most recently granted seat is the one the row is about. A seat
-      // regranted after a revocation is a live embedded engagement again.
-      const seat = (seatByEng.get(id) || [])[0] || null;
+      // SEAT STATE IS DERIVED FROM THE WHOLE COLLECTION (#4690), by the one
+      // helper Health and Capacity call. The newest row is not the engagement's
+      // state: a seat revoked while an older one is still open leaves it live.
+      const seats = seatStateFor(seatByEng.get(id) || []);
+      const seat = seats.lead;
       const ms = msByEng.get(id) || [];
       const allBl = blByEng.get(id) || [];
       const bl = allBl.filter((b: any) => !b.cleared_at);
       const dl = dlByEng.get(id) || [];
-      const hrs = (hrByEng.get(id) || []).reduce((a: number, h: any) => a + (Number(h.hours) || 0), 0);
-      const u = utilisationFor(
-        e.retainer_id
-          ? { retained_hours: e.retained_hours === null ? null : Number(e.retained_hours) }
-          : null,
-        usageByRetainer.get(Number(e.retainer_id)) || null,
+      const proj = retainerProjection(
+        e.retainer_id ? e : null,
+        e.retainer_id ? (usageByRetainer.get(Number(e.retainer_id)) || []) : [],
+        now,
       );
+      const u = proj;
+      // Logged hours in the SAME period the retained hours were sold for.
+      const hoursPeriod = proj.retainer ? proj.current_period! : period;
+      const inPeriod = periodMonths(hoursPeriod);
+      const hrs = (hrByEng.get(id) || [])
+        .filter((h: any) => inPeriod.includes(String(h.period)))
+        .reduce((a: number, h: any) => a + (Number(h.hours) || 0), 0);
+      const recurring = currentMonthlyCents(e.retainer_id ? e : null, now);
       const h = healthFor({
         milestones: ms.map((m: any) => ({ due_at: m.due_at, completed_at: m.completed_at })),
         openBlockers: bl.map((b: any) => ({ side: b.side })),
         clearedBlockers: allBl.length - bl.length,
-        unopenedDeliverables: dl.filter((d: any) => d.sent_at && !d.opened_at).length,
+        unopenedDeliverables: unopenedCountFor(dl, readTracking),
+        sentDeliverables: dl.filter((d: any) => d.sent_at).length,
+        readTracking,
         utilisation: u,
       });
       return {
@@ -270,36 +283,67 @@ partnerDelivery.get('/board', async (c) => {
         invoiced_at: e.invoiced_at ?? null,
         invoice_id: e.invoice_id ?? null,
         cancelled_at: e.cancelled_at ?? null,
-        mode: seat ? 'embedded' : 'project',
+        mode: seats.mode,
+        // The collection's state, for Health and Capacity to agree with.
+        seat_state: seats.state,
+        active_seat_count: seats.active_count,
+        revoked_seat_count: seats.revoked_count,
         // What the founder granted, in their own words — `engagement_seats
         // .scope` is free text for exactly that reason.
         grant: seat?.scope ?? null,
         grant_holder: seat?.holder_name ?? null,
-        seat_revoked_at: seat?.revoked_at ?? null,
+        seat_revoked_at: seats.revoked_at,
         milestone_count: ms.length,
         milestones_done: ms.filter((m: any) => m.completed_at).length,
         milestones_due_7d: ms.filter(dueThisWeek).length,
-        hours_this_period: seat ? hrs : null,
+        hours_this_period: seats.mode === 'embedded' ? hrs : null,
+        // THE PERIOD THE HOURS AND THE CAP BOTH COVER: `2026-11` or `2026-Q4`.
+        hours_period: seats.mode === 'embedded' ? hoursPeriod : null,
         // The cap an embedded row measures against is the retainer's retained
         // hours. No retainer means no cap, which the page states rather than
         // filling in a number nobody agreed to.
-        hours_cap: e.retainer_id && e.retained_hours !== null ? Number(e.retained_hours) : null,
+        hours_cap: proj.retainer?.active && e.retained_hours !== null ? Number(e.retained_hours) : null,
+        // THE RECORDED RECURRING CONTRACT, not the one-off quote: `price` above
+        // is what the accepted quote was worth; this is the retainer's own
+        // amount, normalised to a month by the shared rule, null when none is
+        // recorded or the retainer has ended.
+        recurring_monthly_cents: recurring,
+        retainer_cadence: proj.retainer?.cadence ?? null,
+        retainer_active: proj.retainer ? proj.retainer.active : null,
         ...h,
       };
     });
 
-    const live = items.filter((i: any) => !i.seat_revoked_at);
+    const live = items.filter((i: any) => i.seat_state !== 'revoked');
     const money = (rows: any[]) => rows.reduce((a: number, r: any) => a + (Number(r.price) || 0), 0);
+    // EMBEDDED / MONTH IS RECURRING REVENUE: the recorded retainer amount,
+    // normalised to a month, over embedded engagements whose seats are live and
+    // whose retainer has not ended. An embedded engagement with no recorded
+    // recurring amount is NOT in it (and is counted, not zeroed).
+    const embeddedLive = live.filter((i: any) => i.mode === 'embedded' && !i.cancelled_at);
+    const embeddedPriced = embeddedLive.filter((i: any) => i.recurring_monthly_cents !== null);
+    const embeddedCents = embeddedPriced.reduce((a: number, i: any) => a + i.recurring_monthly_cents, 0);
     return c.json({
       items,
       period,
       // The artboard's four tiles, each summed over the whole board rather than
       // any narrowed view, and each named for what it counts.
       project_value: money(live.filter((i: any) => i.mode === 'project')),
-      embedded_monthly: money(live.filter((i: any) => i.mode === 'embedded')),
+      embedded_monthly: embeddedPriced.length ? embeddedCents / 100 : null,
+      embedded_monthly_cents: embeddedPriced.length ? embeddedCents : null,
+      embedded_unpriced_count: embeddedLive.length - embeddedPriced.length,
+      embedded_monthly_note: embeddedPriced.length
+        ? (embeddedLive.length > embeddedPriced.length
+          ? `${embeddedLive.length - embeddedPriced.length} embedded engagement${embeddedLive.length - embeddedPriced.length === 1 ? ' has' : 's have'} no active recurring amount recorded and ${embeddedLive.length - embeddedPriced.length === 1 ? 'is' : 'are'} not in this total.`
+          : null)
+        : 'Not recorded: no embedded engagement has an active retainer with a recorded amount. Accepted quote values are one-off and are not counted as recurring.',
       needs_attention: live.filter((i: any) => i.health === 'at_risk' || i.health === 'blocked').length,
       due_next_7_days: live.reduce((a: number, i: any) => a + i.milestones_due_7d, 0),
-      revoked_seats: items.filter((i: any) => i.seat_revoked_at).length,
+      // SEAT ROWS revoked, the same unit Capacity counts per person — a partly
+      // revoked engagement is still live and still contributes here.
+      revoked_seats: items.reduce((a: number, i: any) => a + i.revoked_seat_count, 0),
+      fully_revoked_engagements: items.filter((i: any) => i.seat_state === 'revoked').length,
+      read_tracking: readTracking,
       // Same honesty the health read reports: an unrated row is not a healthy
       // one, and the strip must not read as a clean board when it is an empty
       // one.
@@ -319,12 +363,14 @@ partnerDelivery.get('/board', async (c) => {
 partnerDelivery.get('/health', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
-    const period = currentPeriod();
+    const now = new Date();
+    const period = currentPeriod(now);
 
     const engagements = await c.env.DB.prepare(
       `SELECT e.id, e.uid, e.status, e.price, e.founder_id, e.delivered_at, e.cancelled_at,
               n.title AS need_title, f.name AS founder_name,
-              r.id AS retainer_id, r.retained_hours, r.shape, r.renews_at
+              r.id AS retainer_id, r.uid AS retainer_uid, r.shape, r.cadence,
+              r.amount_cents, r.retained_hours, r.renews_at, r.ended_at
          FROM engagements e
          LEFT JOIN founder_needs n ON n.id = e.need_id
          LEFT JOIN founders f ON f.id = e.founder_id
@@ -389,57 +435,57 @@ partnerDelivery.get('/health', async (c) => {
     // would be a second place to say it that could disagree with the seat the
     // first time one was revoked.
     const seats = await c.env.DB.prepare(
-      `SELECT s.engagement_id, s.scope, s.revoked_at, u.name AS holder_name
+      `SELECT s.id, s.engagement_id, s.scope, s.granted_at, s.revoked_at, u.name AS holder_name
          FROM engagement_seats s
          JOIN engagements e ON e.id = s.engagement_id
          LEFT JOIN users u ON u.id = s.holder_user_id
         WHERE e.partner_id = ?
-        ORDER BY s.revoked_at IS NOT NULL, s.granted_at DESC`,
+        ORDER BY s.granted_at DESC`,
     ).bind(partnerId).all<any>();
-    const seatByEng = new Map<number, any>();
-    for (const s of seats.results || []) {
-      if (!seatByEng.has(Number(s.engagement_id))) seatByEng.set(Number(s.engagement_id), s);
-    }
+    // THE WHOLE COLLECTION, not the first row (#4690): `seatStateFor` is the one
+    // definition the Board and Capacity use too.
+    const seatsByEng = groupByEngagement(seats.results || []);
+    const readTracking = readTrackingFor(deliverables.results || []);
 
-    const by = <T extends { engagement_id: number }>(rows: T[]) => {
-      const m = new Map<number, T[]>();
-      for (const r of rows) {
-        const k = Number(r.engagement_id);
-        if (!m.has(k)) m.set(k, []);
-        m.get(k)!.push(r);
-      }
-      return m;
-    };
+    const by = groupByEngagement;
     const msByEng = by(milestones.results || []);
     const blByEng = by(blockers.results || []);
     const dlByEng = by(deliverables.results || []);
-    const usageByRetainer = new Map<number, any>();
+    const usageByRetainer = new Map<number, any[]>();
     for (const u of usage.results || []) {
-      if (u.period === period) usageByRetainer.set(Number(u.retainer_id), u);
+      const k = Number(u.retainer_id);
+      if (!usageByRetainer.has(k)) usageByRetainer.set(k, []);
+      usageByRetainer.get(k)!.push(u);
     }
 
     let rated = 0;
     const items = (engagements.results || []).map((e: any) => {
       const st = statedByEng.get(Number(e.id));
-      const seat = seatByEng.get(Number(e.id));
+      const seatState = seatStateFor(seatsByEng.get(Number(e.id)) || []);
+      const seat = seatState.lead;
       const ms = msByEng.get(Number(e.id)) || [];
       const allBl = blByEng.get(Number(e.id)) || [];
       const bl = allBl.filter((b: any) => !b.cleared_at);
       const dl = dlByEng.get(Number(e.id)) || [];
-      // Sent and not opened — the firm's most expensive state.
-      const unopened = dl.filter((d: any) => d.sent_at && !d.opened_at).length;
+      // Sent and not opened — NULL where opens cannot be observed (#4690),
+      // because then it is not a finding about the client at all.
+      const unopened = unopenedCountFor(dl, readTracking);
 
-      const u = utilisationFor(
-        e.retainer_id
-          ? { retained_hours: e.retained_hours === null ? null : Number(e.retained_hours) }
-          : null,
-        usageByRetainer.get(Number(e.retainer_id)) || null,
+      // The same projection Pipeline · Retainers returns: cadence-aware period,
+      // ended retainers excluded.
+      const proj = retainerProjection(
+        e.retainer_id ? e : null,
+        e.retainer_id ? (usageByRetainer.get(Number(e.retainer_id)) || []) : [],
+        now,
       );
+      const u = proj;
       const h = healthFor({
         milestones: ms.map((m: any) => ({ due_at: m.due_at, completed_at: m.completed_at })),
         openBlockers: bl.map((b: any) => ({ side: b.side })),
         clearedBlockers: allBl.length - bl.length,
         unopenedDeliverables: unopened,
+        sentDeliverables: dl.filter((d: any) => d.sent_at).length,
+        readTracking,
         utilisation: u,
       });
       if (h.health) rated += 1;
@@ -481,7 +527,15 @@ partnerDelivery.get('/health', async (c) => {
         // is what the founder actually handed over.
         seat_scope: seat?.scope ?? null,
         seat_holder: seat?.holder_name ?? null,
-        seat_revoked_at: seat?.revoked_at ?? null,
+        seat_revoked_at: seatState.revoked_at,
+        // MODE AND STATE FROM THE COLLECTION (#4690): the same fields the Board
+        // returns, so the pages cannot disagree about one engagement. An
+        // empty-scope seat is still a seat, so the mode no longer hangs on
+        // `seat_scope` being set.
+        mode: seatState.mode,
+        seat_state: seatState.state,
+        active_seat_count: seatState.active_count,
+        revoked_seat_count: seatState.revoked_count,
         scope_state: st?.scope_state ?? null,
         scope_note: st?.scope_note ?? null,
         // A SCORE ALWAYS TRAVELS WITH ITS SOURCE. Migration 232's CHECK makes
@@ -494,7 +548,15 @@ partnerDelivery.get('/health', async (c) => {
         // Marked as a READ on the page, and it is one: the same helper the
         // Retainers zone calls, not a second computation of the same ratio.
         utilisation_source: 'pipeline_retainers',
-        ...u,
+        utilisation_pct: u.utilisation_pct,
+        utilisation_note: u.utilisation_note,
+        hours_used: u.hours_used,
+        retained_hours: u.retained_hours,
+        retainer_cadence: proj.retainer?.cadence ?? null,
+        retainer_active: proj.retainer ? proj.retainer.active : null,
+        retainer_period: proj.current_period,
+        monthly_amount_cents: proj.retainer?.monthly_amount_cents ?? null,
+        current_monthly_cents: proj.retainer?.current_monthly_cents ?? null,
         ...h,
       };
     });
@@ -513,6 +575,7 @@ partnerDelivery.get('/health', async (c) => {
     return c.json({
       items,
       period,
+      read_tracking: readTracking,
       rated_count: rated,
       // Says how much of the book could be rated at all, so a mostly-green
       // strip cannot be read as a mostly-healthy book when it is really a
@@ -826,7 +889,23 @@ partnerDelivery.delete('/blockers/:id', async (c) => {
 // Deliverables
 // ---------------------------------------------------------------------------
 
-function deliverableDto(r: any) {
+/**
+ * Whether opens can be observed for THIS firm's book (#4690): one cheap probe
+ * for any recorded open, so a 300-row page limit or a single-row write cannot
+ * change the answer. See `readTrackingFor`.
+ */
+async function bookReadTracking(env: Env, partnerId: number): Promise<ReadTracking> {
+  const probe = await env.DB.prepare(
+    `SELECT d.opened_at
+       FROM engagement_deliverables d
+       JOIN engagements e ON e.id = d.engagement_id
+      WHERE e.partner_id = ? AND d.opened_at IS NOT NULL
+      LIMIT 1`,
+  ).bind(partnerId).first<any>();
+  return readTrackingFor(probe ? [{ opened_at: probe.opened_at }] : []);
+}
+
+function deliverableDto(r: any, tracking: ReadTracking) {
   return {
     id: Number(r.id),
     uid: r.uid,
@@ -841,8 +920,10 @@ function deliverableDto(r: any) {
     opened_at: r.opened_at ?? null,
     signed_off_at: r.signed_off_at ?? null,
     days_since_sent: r.sent_at ? daysBetween(r.sent_at) : null,
-    // Derived, not stored: sent and not opened. The state the zone exists for.
-    is_unopened: Boolean(r.sent_at) && !r.opened_at,
+    // Derived, not stored: sent and not opened — and NULL, not true, where
+    // opens cannot be observed (#4690): "not recorded" is not "unopened".
+    is_unopened: !r.sent_at ? false : (tracking.available ? !r.opened_at : null),
+    read_state: readStateFor(r, tracking),
   };
 }
 
@@ -859,13 +940,17 @@ partnerDelivery.get('/deliverables', async (c) => {
         ORDER BY d.sent_at IS NULL, d.sent_at DESC
         LIMIT 300`,
     ).bind(partnerId).all<any>();
-    const items = (rows.results || []).map(deliverableDto);
+    const readTracking = await bookReadTracking(c.env, partnerId);
+    const items = (rows.results || []).map((r: any) => deliverableDto(r, readTracking));
     const sent = items.filter((d: any) => d.sent_at);
-    const unopened = items.filter((d: any) => d.is_unopened);
+    const unopened = items.filter((d: any) => d.is_unopened === true);
     return c.json({
       items,
       sent_count: sent.length,
-      unopened_count: unopened.length,
+      // NULL, NOT 0, while opens cannot be observed: zero would claim every
+      // client opened everything, and the true count would claim they ignored it.
+      unopened_count: readTracking.available ? unopened.length : null,
+      read_tracking: readTracking,
       // NULL, not a number, and this is the whole reason the column exists in
       // the response at all. `opened_at` is the client's to set and nothing in
       // this product sets it, so on this build every sent deliverable is
@@ -873,9 +958,11 @@ partnerDelivery.get('/deliverables', async (c) => {
       median_days_to_open: null,
       median_days_to_open_note:
         'No median: `opened_at` is the client\'s to set and no surface in this product sets it yet, so every sent deliverable reads unopened. A median over a column nobody writes would be a number about our own silence.',
-      unopened_note: unopened.length
-        ? `${unopened.length} sent and not marked opened. On this build that is every sent deliverable, because nothing records an open — so read it as "we do not know", not as "the client ignored it".`
-        : null,
+      unopened_note: !readTracking.available
+        ? (sent.length
+          ? `${sent.length} sent. ${readTracking.reason} Read it as "we do not know", not as "the client ignored it".`
+          : null)
+        : (unopened.length ? `${unopened.length} sent and not marked opened.` : null),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -910,7 +997,7 @@ partnerDelivery.post('/engagements/:engagementId/deliverables', async (c) => {
     ).run();
     const row = await c.env.DB.prepare('SELECT * FROM engagement_deliverables WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<any>();
-    return c.json(deliverableDto(row));
+    return c.json(deliverableDto(row, await bookReadTracking(c.env, partnerId)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -934,7 +1021,7 @@ partnerDelivery.patch('/deliverables/:id', async (c) => {
     ).run();
     const out = await c.env.DB.prepare('SELECT * FROM engagement_deliverables WHERE id = ?')
       .bind(id).first<any>();
-    return c.json(deliverableDto(out));
+    return c.json(deliverableDto(out, await bookReadTracking(c.env, partnerId)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -986,7 +1073,14 @@ async function requireOwnHolder(env: Env, partnerId: number, userId: number) {
 partnerDelivery.get('/capacity', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
-    const period = String(c.req.query('period') || currentPeriod());
+    // THE TIME BASIS (#4690). Hours are logged per MONTH (`YYYY-MM`); a cap is
+    // stated per WEEK. They are never compared as written: the cap is scaled to
+    // the days in the month the hours cover (`periodCapHours`). A period that is
+    // not a month is refused, not silently compared against the wrong cap.
+    const periodArg = c.req.query('period');
+    const parsedPeriod = parsePeriod(periodArg || currentPeriod(), 'monthly');
+    if ('error' in parsedPeriod) return c.json({ detail: parsedPeriod.error }, 400);
+    const period = parsedPeriod.period;
 
     const seats = await c.env.DB.prepare(
       `SELECT s.id, s.uid, s.engagement_id, s.holder_user_id, s.scope,
@@ -1114,8 +1208,10 @@ partnerDelivery.get('/capacity', async (c) => {
     const totalOf = (p: any) => (p.hours_recorded ? p.hours : 0) + (p.internal_hours ?? 0);
     const measured = (p: any) => p.hours_recorded || p.internal_hours !== null;
     const capOf = (p: any) => personCap.get(p.user_id)?.hours ?? firmCap;
+    // The weekly cap restated for the period the hours cover.
+    const periodCapOf = (p: any) => periodCapHours(capOf(p), period);
     const overOf = (p: any) => {
-      const cap = capOf(p);
+      const cap = periodCapOf(p);
       // OVER-COMMITTED NEEDS BOTH SIDES. Unrecorded hours are not zero hours,
       // so a person nobody logged against is not under cap either — they are
       // unmeasured, and this stays null for them.
@@ -1153,6 +1249,11 @@ partnerDelivery.get('/capacity', async (c) => {
           // none — and none is not zero. A person with no cap is not over any
           // threshold, because there is no threshold.
           cap_hours: capOf(p),
+          // `cap_hours` is PER WEEK (as stated). `period_cap_hours` is the same
+          // cap over this response's period, the figure `total_hours` and
+          // `over_committed` are compared with.
+          cap_unit: 'hours_per_week',
+          period_cap_hours: periodCapOf(p),
           cap_source: personCap.has(p.user_id) ? 'person' : (firmCap === null ? null : 'firm'),
           cap_note: personCap.get(p.user_id)?.note ?? firmCapNote,
           over_committed: overOf(p),
@@ -1180,6 +1281,14 @@ partnerDelivery.get('/capacity', async (c) => {
       // whatever THIS firm wrote down, and until they write one there is no
       // threshold to be over.
       cap_hours: firmCap,
+      // THE UNITS, stated so no reader has to guess: hours here are per
+      // calendar month, the cap is per week, and the comparison uses the cap
+      // over `period_days / 7` weeks.
+      cap_unit: 'hours_per_week',
+      hours_unit: 'hours_per_month',
+      period_days: daysInPeriod(period),
+      period_weeks: daysInPeriod(period) === null ? null : Math.round((daysInPeriod(period)! / 7) * 100) / 100,
+      period_cap_hours: periodCapHours(firmCap, period),
       cap_source: firmCap === null ? null : 'firm',
       cap_note: firmCap === null
         ? 'No capacity cap is recorded anywhere in this product. Hours are real; a threshold to be over is not, so nothing here is marked over-committed.'
@@ -1199,6 +1308,22 @@ partnerDelivery.get('/capacity', async (c) => {
         ? null
         : [...people.values()].reduce((a, p) => a + (p.internal_hours ?? 0), 0),
       live_seats: (seats.results || []).filter((s: any) => !s.revoked_at).length,
+      // THE SAME SEAT STATE the Board and Health return per engagement (#4690),
+      // from the same helper over the whole collection of that engagement's
+      // seats. A person's `live_seats` is a count of THEIR rows; this is the
+      // engagement's verdict.
+      engagements: [...groupByEngagement(seats.results || []).entries()].map(([id, rows]) => {
+        const st = seatStateFor(rows);
+        return {
+          engagement_id: id,
+          mode: st.mode,
+          seat_state: st.state,
+          has_active_seats: st.has_active_seats,
+          active_seat_count: st.active_count,
+          revoked_seat_count: st.revoked_count,
+          revoked_at: st.revoked_at,
+        };
+      }),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -1602,6 +1727,7 @@ partnerDelivery.get('/status-reports', async (c) => {
       // record one — the same absence `engagement_deliverables.opened_at`
       // has and for the same reason. Refused with the reason rather than
       // timed from the send, which would measure our own silence.
+      read_tracking: { available: false, reason: 'Not recorded: nothing records that a client read a report.' },
       read_time_median_days: null,
       read_time_note: 'Nothing records that a client read a report. There is no client-side surface to record it on, so a read time here would be a number about our own send, not about them.',
       // The report is composed here and delivered by a person. Nothing in this
@@ -1630,6 +1756,7 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
     const p = parsePeriod(c.req.param('period'), 'monthly');
     if ('error' in p) return c.json({ detail: p.error }, 400);
 
+    const readTracking = await bookReadTracking(c.env, partnerId);
     const [deliverables, blockers, milestones, existing] = await Promise.all([
       c.env.DB.prepare(
         `SELECT title, version, sent_at, opened_at FROM engagement_deliverables
@@ -1655,11 +1782,14 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
       engagement_id: engagementId,
       period: p.period,
       existing: existing ? reportDto(existing) : null,
+      read_tracking: readTracking,
       shipped_from_log: (deliverables.results || [])
         .filter((d: any) => String(d.sent_at).startsWith(p.period))
         .map((d: any) => ({
           title: d.title, version: d.version ?? null, sent_at: d.sent_at,
-          opened: Boolean(d.opened_at),
+          // NULL where opens cannot be observed: false would read as "the
+          // client did not open it" in a report going to that client.
+          opened: d.opened_at ? true : (readTracking.available ? false : null),
         })),
       next_from_milestones: (milestones.results || []).map((m: any) => ({
         title: m.title, due_at: m.due_at ?? null,

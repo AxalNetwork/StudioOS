@@ -66,7 +66,7 @@ import { HoursEntries, SeatScopeEditor } from './deliveryEdits';
 
 /**
  * The period label one month on, in the `YYYY-MM` shape `currentPeriod()` on
- * the worker produces. `Next week` reads it; nothing writes it, so a period
+ * the worker produces. `Next month` reads it; nothing writes it, so a period
  * nobody has logged against comes back empty and says so.
  */
 function nextPeriod(now = new Date()) {
@@ -108,10 +108,12 @@ export default function PartnerCapacityZone() {
   const [view, setView] = useState('this_week');
 
   // ══ TWO OF THE `pd3` CHIPS CHANGE THE PERIOD, NOT THE ROWS ═══════════════
-  // Hours are logged per period, so `This week` and `Next week` are two reads
-  // of the same store rather than two views of one read — which is why the
-  // period is part of the load rather than a filter over what came back, and
-  // why next week is usually empty rather than quiet.
+  // Hours are logged per CALENDAR MONTH, so `This month` and `Next month` are
+  // two reads of the same store rather than two views of one read — which is
+  // why the period is part of the load rather than a filter over what came
+  // back, and why next month is usually empty rather than quiet. (#4690: the
+  // chips used to say `week` over a monthly period, and the monthly total was
+  // compared with a weekly cap.)
   const period = view === 'next_week' ? nextPeriod() : undefined;
 
   const load = useCallback(async () => {
@@ -292,7 +294,7 @@ export default function PartnerCapacityZone() {
             title="People"
             meta={d?.cap_hours == null
               ? 'No cap stated · seat hours counted, not estimated'
-              : `Cap ${d.cap_hours} h · seat hours counted, not estimated`}
+              : `Cap ${d.cap_hours} h a week = ${d.period_cap_hours} h in ${d.period} · seat hours counted, not estimated`}
             cols="1.1fr 1.6fr .8fr .8fr .8fr 1.1fr"
             head={['Person', 'Seats held', 'Project h', 'Seat h', 'Internal h', 'Total']}
             rows={visible.map((p) => {
@@ -330,25 +332,26 @@ export default function PartnerCapacityZone() {
                   p.internal_hours == null
                     ? { nr: true }
                     : { text: `${p.internal_hours} h`, sub: p.internal_note || undefined },
-                  // THE TOTAL IS THE WEEK, and it says so when it is only part
-                  // of one. Against a stated cap it reads `N of C h` and
-                  // carries `Over`; with no cap it is a number and says there
-                  // is nothing to be over.
+                  // THE TOTAL IS THE MONTH, and it says so when it is only part
+                  // of one. Against a stated cap it reads `N of C h` where C is
+                  // the weekly cap over THIS month's days (the figure the
+                  // Worker compared with), and carries `Over`; with no cap it
+                  // is a number and says there is nothing to be over.
                   p.total_hours == null
                     ? { nr: true }
                     : {
-                      text: p.cap_hours == null
+                      text: p.period_cap_hours == null
                         ? `${p.total_hours} h`
-                        : `${p.total_hours} of ${p.cap_hours} h`,
+                        : `${p.total_hours} of ${p.period_cap_hours} h`,
                       ...(p.over_committed === true ? { pill: 'Over', pillTone: 'danger' } : {}),
                       sub: p.internal_hours == null
                         ? 'internal hours not stated — a floor, not a measurement'
-                        : (p.cap_hours == null ? 'no cap stated' : undefined),
+                        : (p.period_cap_hours == null ? 'no cap stated' : `${p.cap_hours} h a week over ${d?.period_days} days`),
                     },
                 ],
               };
             })}
-            note={'A person over their cap while holding a granted seat is the row this zone exists for, and it is read differently from the rest: a stretched operator inside a client’s own systems is a trust exposure, because the grant assumes attention the calendar no longer has. Reallocating project work does not fix it; renegotiating the seat does. Seat hours are counted from the hours logged against engagements where that person holds the grant — not estimated, and not moved into the project column when a founder later revokes it, because the work was still done inside their systems. A total with no internal hours behind it is marked a floor: the client book cannot hold admin or recruiting time, and a week assembled from billable rows alone under-reports in the reassuring direction.'}
+            note={'A person over their cap while holding a granted seat is the row this zone exists for, and it is read differently from the rest: a stretched operator inside a client’s own systems is a trust exposure, because the grant assumes attention the calendar no longer has. Reallocating project work does not fix it; renegotiating the seat does. Seat hours are counted from the hours logged against engagements where that person holds the grant — not estimated, and not moved into the project column when a founder later revokes it, because the work was still done inside their systems. A total with no internal hours behind it is marked a floor: the client book cannot hold admin or recruiting time, and a month assembled from billable rows alone under-reports in the reassuring direction.'}
           />
 
           {visible.length === 0 && people.length > 0 && (
@@ -476,7 +479,7 @@ export default function PartnerCapacityZone() {
             <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
               {d?.cap_hours == null
                 ? d?.cap_note
-                : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. A person with their own number overrides it.`}
+                : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. Hours are logged by month, so each month is compared with the cap over its own days (${d.period}: ${d.period_cap_hours} h). A person with their own number overrides it.`}
             </p>
             <SaveNote note={note?.scope === 'cap' ? note : null} />
           </Section>
@@ -631,7 +634,7 @@ export default function PartnerCapacityZone() {
             <p className="mt-2">
               <strong>A total with no internal hours is a floor.</strong> The
               client hours book cannot hold admin, recruiting or the proposal that
-              lost — its rows require an engagement — so a week assembled from it
+              lost — its rows require an engagement — so a month assembled from it
               alone under-reports by exactly the part nobody is billed for, and
               in the reassuring direction. Rows say so rather than quietly
               totalling less.

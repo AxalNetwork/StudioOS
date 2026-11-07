@@ -155,14 +155,17 @@ test('the instrument is the artboard’s six columns, at its own grid', () => {
   const cells = cellsOf(INST);
   assert.equal(cells.length, 6, `the row draws ${cells.length} cells, not six`);
   assert.ok(/r\.founder_name/.test(cells[0]), 'the Client cell stopped naming the client');
-  assert.ok(/r\.seat_scope/.test(cells[1]), 'the Mode cell stopped deriving mode from the seat');
+  assert.ok(/r\.mode === 'embedded'/.test(cells[1]), 'the Mode cell stopped deriving mode from the seat');
   assert.ok(/r\.scope_state/.test(cells[2]), 'the Scope state cell stopped reading the assessment');
   assert.ok(/r\.utilisation_pct/.test(cells[3]), 'the Utilisation cell stopped reading the figure');
   assert.ok(/r\.satisfaction/.test(cells[4]), 'the Satisfaction cell stopped reading the score');
   assert.ok(/r\.health/.test(cells[5]), 'the Health cell stopped reading the rating');
   // MODE IS DERIVED FROM THE SEAT, never stored — the same rule `/board`
   // follows, and a `mode` column would be a second place to say it.
-  assert.ok(!/\bmode\b\s*:/.test(worker.slice(worker.indexOf('seat_scope: seat?.scope'), worker.indexOf('utilisation_source'))),
+  // #4690: it IS returned now, derived from the whole seat collection by the
+  // shared helper — the one spelling allowed is `mode: seatState.mode`.
+  const seatSlice = worker.slice(worker.indexOf('seat_scope: seat?.scope'), worker.indexOf('utilisation_source'));
+  assert.ok(/mode: seatState\.mode,/.test(seatSlice) && !/\bmode\b\s*:(?!\s*seatState\.mode)/.test(seatSlice),
     'the health read now stores a mode beside the seat it is derived from');
 });
 
@@ -230,7 +233,7 @@ test('utilisation is seam-marked as a read, and the legend explains the marks it
   assert.ok(legend.includes("chip: 'Read · Pipeline'"), 'the seam legend entry is gone');
   assert.ok(legend.includes('grant: true'), 'the grant legend entry is gone');
   assert.ok(/items\.some\(\(r\) => r\.utilisation_pct != null\)/.test(zone)
-    && /items\.some\(\(r\) => r\.seat_scope\)/.test(zone),
+    && /items\.some\(\(r\) => r\.mode === 'embedded'\)/.test(zone),
     'the legend is drawn over marks the table may not carry');
 });
 

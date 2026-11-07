@@ -129,7 +129,9 @@ test('the route the Delivery row lands on reads the Delivery stores', () => {
 });
 
 test('mode is derived from the seat, and a revoked seat stays embedded', () => {
-  assert.match(BOARD, /mode: seat \? 'embedded' : 'project',/,
+  // #4690: from the WHOLE COLLECTION of seats via the shared helper, not from
+  // whichever row happened to be first.
+  assert.match(BOARD, /mode: seats\.mode,/,
     'mode is no longer derived from whether a seat was granted');
   // NO COLUMN. A stored mode would be a second place to say what the seat
   // already says, and the two would part company the first time one was
@@ -139,8 +141,8 @@ test('mode is derived from the seat, and a revoked seat stays embedded', () => {
     'the route no longer records why mode is derived');
   // The seat the row is about is the most recent one, so a seat regranted after
   // a revocation is a live embedded engagement again.
-  assert.match(BOARD, /const seat = \(seatByEng\.get\(id\) \|\| \[\]\)\[0\] \|\| null;/,
-    'the row no longer picks the most recent seat');
+  assert.match(BOARD, /const seats = seatStateFor\(seatByEng\.get\(id\) \|\| \[\]\);/,
+    'the row no longer derives its seat state from the whole collection');
   assert.match(BOARD, /ORDER BY s\.granted_at DESC/, 'the seats are no longer read newest first');
   // A revoked seat is still a seat: the row keeps its mode and stays on the
   // board, struck through.
@@ -161,11 +163,11 @@ test('progress is two measures and is never averaged', () => {
   assert.match(progress, /r\.mode === 'project'/, 'the progress cell no longer branches on the mode');
   assert.match(progress, /\$\{r\.milestones_done\} of \$\{r\.milestone_count\} milestones/,
     'a project row no longer counts milestones');
-  assert.match(progress, /\$\{r\.hours_this_period \?\? 0\} of \$\{r\.hours_cap\} h this period/,
+  assert.match(progress, /\$\{r\.hours_this_period \?\? 0\} of \$\{r\.hours_cap\} h/,
     'an embedded row no longer counts hours against the retained-hours cap');
   // An embedded seat with no retainer has NO cap, and the row says so rather
   // than filling in a number nobody agreed to.
-  assert.match(progress, /sub: 'no retained-hours cap agreed'/,
+  assert.match(progress, /no retained-hours cap agreed/,
     'a seat with no retainer is being measured against an invented cap');
   // A project with no milestone recorded reads absent, not 0 of 0.
   assert.match(progress, /r\.milestone_count\s*\n?\s*\? \{ text:/,
@@ -203,13 +205,17 @@ test('the strip is the artboard’s four tiles, counted over the whole board', (
     'the strip is no longer the artboard’s four tiles in its order');
   // COUNTED SERVER-SIDE OVER THE WHOLE BOARD, and the two money tiles exclude
   // revoked seats: a closed seat bills nothing this month.
-  assert.match(BOARD, /const live = items\.filter\(\(i: any\) => !i\.seat_revoked_at\);/,
+  assert.match(BOARD, /const live = items\.filter\(\(i: any\) => i\.seat_state !== 'revoked'\);/,
     'the value tiles are no longer counted over the live board');
   assert.match(BOARD, /project_value: money\(live\.filter\(\(i: any\) => i\.mode === 'project'\)\),/,
     'the project-value tile is no longer summed over project engagements');
-  assert.match(BOARD, /embedded_monthly: money\(live\.filter\(\(i: any\) => i\.mode === 'embedded'\)\),/,
-    'the embedded tile is no longer summed over embedded engagements');
-  assert.match(BOARD, /revoked_seats: items\.filter\(\(i: any\) => i\.seat_revoked_at\)\.length,/,
+  // #4690: Embedded / month is the RECORDED RECURRING AMOUNT (shared retainer
+  // rule), never the one-off quote `money()` sums.
+  assert.match(BOARD, /const embeddedLive = live\.filter\(\(i: any\) => i\.mode === 'embedded' && !i\.cancelled_at\);/,
+    'the embedded tile is no longer summed over live embedded engagements');
+  assert.match(BOARD, /embedded_monthly: embeddedPriced\.length \? embeddedCents \/ 100 : null,/,
+    'the embedded tile is no longer the recorded recurring amount');
+  assert.match(BOARD, /revoked_seats: items\.reduce\(\(a: number, i: any\) => a \+ i\.revoked_seat_count, 0\),/,
     'the revoked tile is no longer counted over the whole board');
 });
 
