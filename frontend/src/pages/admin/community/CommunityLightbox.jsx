@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
-import { filtersOn } from './lightboxModel';
+import { SEARCH_WAIT_MS, filtersOn } from './lightboxModel';
 
 /**
  * D934 (#2718) — the shell the four Community lightboxes share (CM3–CM6).
@@ -32,6 +32,22 @@ export const LINK = 'font-bold text-axal-ink hover:text-axal-violet dark:text-gr
  * `dep` changes (the activity read's query). `{ status: 'loading' | 'ready' |
  * 'error', data }`. `tag` names it in the error log; nothing else is logged.
  */
+/**
+ * #4717 — a search box's text once the typing has stopped for `ms`. A lightbox
+ * builds its query from this, so each keystroke is not a read; and
+ * `useBoxRead`'s `live` flag drops any answer to a query the box has moved
+ * past, so a slow, stale answer is never drawn over the current one.
+ */
+export function useSettled(value, ms = SEARCH_WAIT_MS) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    if (value === settled) return undefined;
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, settled, ms]);
+  return settled;
+}
+
 export function useBoxRead(load, tag, dep = '') {
   const [read, setRead] = useState({ status: 'loading', data: null });
   const [tick, setTick] = useState(0);
