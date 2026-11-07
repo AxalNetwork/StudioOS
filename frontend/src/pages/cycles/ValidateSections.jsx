@@ -242,9 +242,21 @@ export function PainThemesSection({ parts, onExport, onAssign, newThemeHref = nu
  * the first time this board is opened…") is not drawn: opening this page does
  * not start the history until #1666 writes it from the module read.
  */
-export function historyNotes(filter, since, now = new Date()) {
+export function historyNotes(filter, since, now = new Date(), availability = null) {
   const notes = [];
   const f = filter || {};
+  const selected = f.moved === 'recent' || f.history === 'last_week' || f.history === 'this_month';
+  if (selected && availability?.filterAvailable === false) {
+    const coverage = availability?.coverage;
+    if (coverage?.status === 'partial' && coverage?.since) {
+      return [`History is continuous only from ${day(coverage.since)}. This earlier view is unavailable rather than showing an incomplete result.`];
+    }
+    return ['History could not be read. This view is unavailable rather than showing an empty result.'];
+  }
+  // An exact as-of boundary can be available even when the general history
+  // slice is partial. The Worker is authoritative about that bounded read.
+  if (f.history === 'last_week' && availability?.filterAvailable === true
+    && availability?.coverage?.status === 'partial') return notes;
   if (f.moved === 'recent' && !historyReaches(since, daysBefore(now, RECENTLY_MOVED_DAYS))) {
     notes.push(since
       ? `Lane history starts ${day(since)}, so moves before that are not on record.`
@@ -298,7 +310,9 @@ export function HypothesesSection({ parts, projectId, query, openDialog, onLoadL
   const [linkError, setLinkError] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
   const filter = query?.filter || {};
-  const notes = historyNotes(filter, stats.history_since);
+  const notes = historyNotes(filter, stats.history_since, new Date(), {
+    coverage: stats.history_coverage, filterAvailable: stats.history_filter_available,
+  });
 
   // Link to a pain's lists are read when its dialog opens; a failed read says
   // so here and opens nothing.

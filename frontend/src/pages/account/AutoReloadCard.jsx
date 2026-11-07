@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { Pill, Unreadable } from '../../ui';
 import { BTN, INPUT, Outcome, PanelCard, useAccountRead } from './AccountCenter';
@@ -41,15 +41,16 @@ export default function AutoReloadCard({ api = aiBudgetApi }) {
             </div>
           )
           : read.status !== 'ready' ? <div className="px-4 py-3"><Unreadable what="Auto-reload" claim="This is not a claim that it is off." onRetry={read.reload} /></div>
-            : <AutoReloadForm key={JSON.stringify(read.data)} settings={read.data} packs={packs} limit={limit.status === 'ready' ? limit.data : null} api={api} onSaved={read.reload} />}
+            : <AutoReloadForm key={JSON.stringify(read.data)} settings={read.data} packs={packs} packsRead={topUp} limit={limit.status === 'ready' ? limit.data : null} api={api} onSaved={read.reload} onRetryCard={read.reload} />}
       </PanelCard>
     </div>
   );
 }
 
-export function AutoReloadForm({ settings, packs, limit = null, api = aiBudgetApi, onSaved }) {
+export function AutoReloadForm({ settings, packs, packsRead = null, limit = null, api = aiBudgetApi, onSaved, onRetryCard }) {
+  const packsStatus = packsRead?.status ?? 'ready';
   const [enabled, setEnabled] = useState(Boolean(settings.enabled));
-  const [packUid, setPackUid] = useState(settings.pack_uid ?? packs[0]?.uid ?? '');
+  const [packUid, setPackUid] = useState(settings.pack_uid ?? (packsStatus === 'ready' ? packs[0]?.uid : '') ?? '');
   const [threshold, setThreshold] = useState(settings.threshold_usd == null ? '5' : String(settings.threshold_usd));
   const [setupIntentId, setSetupIntentId] = useState(null);
   const [addingCard, setAddingCard] = useState(false);
@@ -60,9 +61,16 @@ export function AutoReloadForm({ settings, packs, limit = null, api = aiBudgetAp
   const skipped = paused ? null : lastSkipped(settings);
   const limitAt = limitLine(limit);
   const card = cardText(settings.card);
+  const cardUnreadable = settings.card_unreadable === true;
   const parsed = parseThreshold(threshold);
   const hasCard = Boolean(card || setupIntentId);
-  const canSave = !busy && parsed !== null && Boolean(packUid) && (!enabled || hasCard);
+  const packKey = packs.map((p) => p.uid).join('|');
+  useEffect(() => {
+    if (packsStatus !== 'ready') return;
+    setPackUid((current) => current || settings.pack_uid || packs[0]?.uid || '');
+  }, [packsStatus, packKey, settings.pack_uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selectedPackAvailable = packs.some((pack) => pack.uid === packUid);
+  const canSave = !busy && packsStatus === 'ready' && parsed !== null && selectedPackAvailable && (!enabled || (hasCard && !cardUnreadable));
 
   const save = async (e) => {
     e.preventDefault();
@@ -88,16 +96,21 @@ export function AutoReloadForm({ settings, packs, limit = null, api = aiBudgetAp
         Reload my AI tokens automatically
       </label>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">
-          Pack charged each time
-          {packs.length === 0
+        <div className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">
+          <span>Pack charged each time</span>
+          {packsStatus === 'loading'
+            ? <span className="text-[12.5px] font-normal text-axal-muted" data-testid="auto-reload-packs-loading">Loading token packs…</span>
+            : packsStatus !== 'ready'
+              ? <span className="font-normal" data-testid="auto-reload-packs-unreadable"><Unreadable what="The token packs" claim="This is not a claim that none is available." onRetry={packsRead?.reload} /></span>
+              : packs.length === 0
             ? <span className="text-[12.5px] font-normal" data-testid="auto-reload-no-packs">No token pack is on sale right now.</span>
             : (
-              <select className={INPUT} value={packUid} onChange={(e) => setPackUid(e.target.value)} data-testid="auto-reload-pack">
+              <select className={INPUT} value={packUid} onChange={(e) => setPackUid(e.target.value)} aria-label="Pack charged each time" data-testid="auto-reload-pack">
+                {packUid && !selectedPackAvailable && <option value={packUid} disabled>Saved pack unavailable</option>}
                 {packs.map((p) => <option key={p.uid} value={p.uid}>{p.label}</option>)}
               </select>
             )}
-        </label>
+        </div>
         <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">
           When my token balance drops below (US$)
           <input className={INPUT} inputMode="decimal" value={threshold} onChange={(e) => setThreshold(e.target.value)} data-testid="auto-reload-threshold" aria-invalid={parsed === null ? 'true' : undefined} />
@@ -105,15 +118,19 @@ export function AutoReloadForm({ settings, packs, limit = null, api = aiBudgetAp
       </div>
       {parsed === null && <p role="alert" className="m-0 text-[12px] text-red-700 dark:text-red-300" data-testid="auto-reload-threshold-error">Enter an amount from $0 to $500, with at most two decimals.</p>}
       <div className="flex flex-wrap items-center gap-2 text-[12.5px]" data-testid="auto-reload-card">
-        <span>{setupIntentId ? 'New card added. Save to use it.' : card ? `Card: ${card}` : 'No card saved for auto-reload.'}</span>
-        {!addingCard && <button type="button" className={BTN.link} onClick={() => setAddingCard(true)} data-testid="auto-reload-add-card">{card ? 'Replace card' : 'Add a card'}</button>}
+        {cardUnreadable && !setupIntentId
+          ? <Unreadable what="The saved auto-reload card" claim="This is not a claim that no card is saved." onRetry={onRetryCard} />
+          : <>
+            <span>{setupIntentId ? 'New card added. Save to use it.' : card ? `Card: ${card}` : 'No card saved for auto-reload.'}</span>
+            {!addingCard && <button type="button" className={BTN.link} onClick={() => setAddingCard(true)} data-testid="auto-reload-add-card">{card ? 'Replace card' : 'Add a card'}</button>}
+          </>}
       </div>
       {addingCard && (
         <Suspense fallback={<p className="m-0 text-[12.5px] text-axal-muted">Loading the secure card form…</p>}>
           <AutoReloadCardSetup api={api} onSaved={(id) => { setSetupIntentId(id); setAddingCard(false); }} onCancel={() => setAddingCard(false)} />
         </Suspense>
       )}
-      {enabled && !hasCard && <p className="m-0 text-[12px] text-axal-muted" data-testid="auto-reload-card-needed">Add a card to turn auto-reload on.</p>}
+      {enabled && !hasCard && !cardUnreadable && <p className="m-0 text-[12px] text-axal-muted" data-testid="auto-reload-card-needed">Add a card to turn auto-reload on.</p>}
       {limitAt && (
         <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-200" data-testid="auto-reload-limit">
           {limitAt.text}{limitAt.link && <> <Link to="/account/usage/limits" className={BTN.link} data-testid="link-open-limits">Open limits</Link></>}
