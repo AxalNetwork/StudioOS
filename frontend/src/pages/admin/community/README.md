@@ -41,12 +41,16 @@ Community landing is retired. It has no pending queue; no count is invented.
   read answers alone; so does each block of the Community read. A block that
   could not be read says so, and one no store records says "Not recorded".
   It is never a zero and never a sample.
-- The check-in band is a range of founders, withheld under seven. No mood or
-  stress figure is drawn here.
+- The check-in band is a range of founders, withheld under seven founders.
+  Other roles' check-ins are not counted toward it (#4717). No mood or stress
+  figure is drawn here.
 - The events analytics read is drawn only under Guard G. Its `summary` is all
   time and never feeds a figure here.
-- Counts only. The roster read carries names; the page keeps the kind and
-  whether a row is active, and drops the rest at the read.
+- Counts only. The roster is the Community read's `network` block, counted on
+  the server over every row with archived rows out (#4717). The page reads no
+  profile list, so no name can reach it and no capped list is counted.
+- One clock. Days open, waits, Overdue and the next 30 days are measured from
+  the Community read's `as_of` (`clockOf`), so Refresh moves them (#4717).
 - Nothing is decided here. "Review" and every door open the console that
   decides, and each door is a literal `Link`, so the reachability walk finds it.
 - The wellbeing aggregate is never called from this page. It decrypts members'

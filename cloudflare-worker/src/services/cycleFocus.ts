@@ -42,6 +42,8 @@ import { canWrite, type ProjectRef } from '../routes/_founder_validate_helpers';
 
 export type FocusRule =
   | 'first_interview' | 'review' | 'next_interview'
+  // D4589 (#4589): Validate's shared next-action policy (`validateNextAction.ts`).
+  | 'stopped' | 'missing_fit' | 'record_result' | 'next_test' | 'decision_ready' | 'plan_build' | 'unavailable'
   | 'first_feature' | 'connect_tools'
   | 'first_readiness' | 'call_for_capital'
   | 'first_kpi' | 'tell_customers'
@@ -54,6 +56,10 @@ export interface Focus {
   why: string | null;
   cta: { label: string; href: string } | null;
   then: string | null;
+  /** D4589: other actions the policy keeps in reach (Record a session, Record a new decision). */
+  secondary?: Array<{ label: string; href: string }>;
+  /** D4589: 'unavailable' when a fact the policy needs could not be read; the cta is then null. */
+  state?: 'ok' | 'unavailable';
 }
 
 export interface Meter {
