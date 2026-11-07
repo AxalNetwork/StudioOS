@@ -200,7 +200,8 @@ test('a failed read is not rendered as an empty store', () => {
     assert.match(src, /catch \(e\) \{/, `${page} must catch its own read failure`);
   }
   const pages = codeOnly(read('frontend/src/pages/advisor/expertise/pages.js'));
-  assert.match(pages, /catch \(e\) \{\s*reportError\('expertise:list', e\);\s*latest\.current = null;\s*setState\(\{ loading: false, error: errorText, rows: \[\]/,
+  // D4711: a newer read may supersede this one (`seq`), and then this one writes nothing.
+  assert.match(pages, /catch \(e\) \{\s*reportError\('expertise:list', e\);\s*(?:if \(mine !== seq\.current\) return;\s*)?latest\.current = null;\s*setState\(\{ loading: false, error: errorText, rows: \[\]/,
     'a failed first page is an error with no rows, never an empty list');
   assert.doesNotMatch(pages, /e\?\.message/, '#4697: the helper never prints a thrown error\'s text');
   for (const page of ['ServicesZone.jsx', 'ProofZone.jsx']) {
