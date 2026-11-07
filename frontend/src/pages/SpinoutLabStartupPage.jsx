@@ -6,7 +6,7 @@
 // mock content (NovaCraft copy, fake documents, fake dates) is NOT reproduced —
 // documents and activity derive from real milestone completions, and a founder
 // without a record gets an explicit create CTA instead of placeholder data.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -27,6 +27,7 @@ import { reportError } from '../lib/log';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import Sheet from '../ui/Sheet.jsx';
+import { Unreadable } from '../ui';
 import { TOOL_INFO, WEEK_DEFS, countDeliverables, milestoneKeySet } from './SpinoutLabWorkspace';
 
 // Past-tense titles for the activity timeline; falls back to the raw key.
@@ -125,9 +126,15 @@ const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-
 export default function SpinoutLabStartupPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [state, setState] = useState(null);
+  // #4661: the Lab state and the founder's startup record are two reads, each with its
+  // own outcome. A failed read is never drawn as an empty one: "No startup record yet"
+  // follows only a successful read that found none, and one failing leaves the other
+  // as it was. Each retries on its own.
+  const [stateRead, setStateRead] = useState({ status: 'loading', data: null }); // loading | ready | unreadable
+  const [projectsRead, setProjectsRead] = useState({ status: 'loading', data: null });
+  const state = stateRead.data;
+  const status = stateRead.status === 'unreadable' ? 'error' : stateRead.status;
   const [project, setProject] = useState(null);
-  const [status, setStatus] = useState('loading'); // loading | ready | error
   const [previewOpen, setPreviewOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -140,26 +147,38 @@ export default function SpinoutLabStartupPage() {
   const [saveError, setSaveError] = useState('');
   const dataRoomRef = useRef(null);
 
-  useEffect(() => {
-    let alive = true;
-    setStatus('loading');
-    Promise.all([
-      spinoutLab.state().catch(() => null),
-      api.listProjects().catch(() => []),
-    ])
-      .then(([s, projects]) => {
-        if (!alive) return;
-        setState(s);
-        setProject(pickLabProject(projects, user));
-        setStatus('ready');
-      })
-      .catch((e) => {
-        if (!alive) return;
-        reportError('SpinoutLabStartupPage:load', e);
-        setStatus('error');
-      });
-    return () => { alive = false; };
+  // A late answer from an older read of the same source never overwrites a newer one.
+  const stateSeq = useRef(0);
+  const projectsSeq = useRef(0);
+  const loadState = useCallback(() => {
+    const seq = ++stateSeq.current;
+    setStateRead((r) => ({ status: 'loading', data: r.data }));
+    spinoutLab.state().then(
+      (s) => { if (seq === stateSeq.current) setStateRead({ status: s ? 'ready' : 'unreadable', data: s || null }); },
+      (e) => {
+        if (seq !== stateSeq.current) return;
+        reportError('SpinoutLabStartupPage:state', e);
+        setStateRead((r) => ({ status: 'unreadable', data: r.data }));
+      },
+    );
   }, []);
+  const loadProjects = useCallback(() => {
+    const seq = ++projectsSeq.current;
+    setProjectsRead((r) => ({ status: 'loading', data: r.data }));
+    api.listProjects().then(
+      (projects) => {
+        if (seq !== projectsSeq.current) return;
+        setProjectsRead({ status: 'ready', data: Array.isArray(projects) ? projects : [] });
+        setProject(pickLabProject(projects, user));
+      },
+      (e) => {
+        if (seq !== projectsSeq.current) return;
+        reportError('SpinoutLabStartupPage:projects', e);
+        setProjectsRead((r) => ({ status: 'unreadable', data: r.data }));
+      },
+    );
+  }, [user]);
+  useEffect(() => { loadState(); loadProjects(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const graduated = Boolean(state?.is_incorporated);
   const currentWeek = graduated ? 4 : Math.min(4, Math.max(1, Number(state?.week) || 1));
@@ -288,7 +307,7 @@ export default function SpinoutLabStartupPage() {
         <button
           type="button"
           data-testid="button-retry-startup"
-          onClick={() => window.location.reload()}
+          onClick={loadState}
           className="h-10 px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold"
         >
           Retry
@@ -512,6 +531,14 @@ export default function SpinoutLabStartupPage() {
                   ))}
                 </div>
               </>
+            ) : projectsRead.status === 'loading' ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-500 dark:text-gray-400" aria-busy="true" data-testid="startup-record-loading">
+                <Loader2 className="animate-spin" size={16} aria-hidden="true" /> Reading your startup record…
+              </div>
+            ) : projectsRead.status === 'unreadable' ? (
+              <div data-testid="startup-record-unreadable">
+                <Unreadable what="Your startup record" claim="This is not a statement that you have none." onRetry={loadProjects} />
+              </div>
             ) : (
               <div className="text-center py-8" data-testid="startup-empty">
                 <div className="w-12 h-12 mx-auto rounded-xl bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300 flex items-center justify-center mb-3">

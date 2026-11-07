@@ -7,7 +7,6 @@ import { findCatalogPriceById, findCatalogProductByPriceId } from '../services/c
 import { isTokenPackPrice } from '../services/aiCredits';
 import { ensureFeatureUnlockSchema, listActiveUnlocks } from '../services/featureUnlocks';
 import {
-  validatePromoForProduct,
   fulfilFreeUnlock,
   computeDiscount,
   normalizeCode,
@@ -16,6 +15,9 @@ import {
   STRIPE_MIN_CHARGE_CENTS,
   type PromoRow,
 } from '../services/promos';
+import {
+  canRedeemPromo, commitPromoReservation, promoRefusalBody, releasePromoReservation, reservePromo, type Allowed,
+} from '../services/promoRedemption';
 import { captureAndResolveAttribution, readRefCookie } from '../services/referralAttribution';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { refuse } from '../util/refusal';
@@ -92,6 +94,10 @@ function promoIdemPart(code?: string): string {
  * the price before the code and what it took off. Stamped at creation, because
  * the PaymentIntent's own amount is already the discounted one.
  */
+function redeemRequest(productId: string, amountCents: number, currency: string, userId: number, interval: string | null, code: string) {
+  return { code, productId, amountCents, currency, buyer: { userId, interval } };
+}
+
 function promoDetailMeta(productId: string, amountBefore: number, discount: number): Record<string, string> {
   return { product_id: productId, promo_amount_before: String(amountBefore), promo_discount: String(discount) };
 }
@@ -131,21 +137,19 @@ payments.post('/intent', async (c) => {
     // allow-list (NEVER trust a client-supplied amount). On failure we return
     // the rejection reason so the SPA can render a precise message.
     const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
+    const idempotencyKey = `pi:${user.id}:${price.id}:${promoIdemPart(promoCode)}:${nonce}`;
     let promo: PromoRow | undefined;
+    let checked: Allowed | undefined;
     if (promoCode) {
       // D1273: the member and, for a subscription, its interval.
-      const v = await validatePromoForProduct(
-        c.env,
-        promoCode,
-        found.product.id,
-        price.unit_amount ?? 0,
-        price.currency,
-        { userId: user.id, interval: price.type === 'recurring' ? price.interval : null },
-      );
-      if (!v.ok) return c.json({ error: 'promo_invalid', reason: v.reason }, 400);
+      // D4855: one rule for every checkout. This asks it; the reservation that
+      // takes the discount out of the licence's ceiling is made below, once
+      // nothing else can refuse the checkout.
+      const v = await canRedeemPromo(c.env, { ...redeemRequest(found.product.id, price.unit_amount ?? 0, price.currency, user.id, price.type === 'recurring' ? price.interval : null, promoCode), reference: idempotencyKey });
+      if (!v.ok) return c.json(promoRefusalBody(v), 400);
       promo = v.promo;
+      checked = v;
     }
-    const idempotencyKey = `pi:${user.id}:${price.id}:${promoIdemPart(promoCode)}:${nonce}`;
 
     // Recurring price → create an incomplete Subscription and hand back the
     // first invoice's PaymentIntent client_secret. The SPA confirms the card
@@ -226,6 +230,15 @@ payments.post('/intent', async (c) => {
       if (reserved && !(await reserveMemberUse(c.env, promo!.id, user.id))) {
         return c.json({ error: 'promo_invalid', reason: 'already_used' }, 400);
       }
+      // D4855: the first invoice's discount leaves the licence's ceiling here, in
+      // one conditional write, and goes back if Stripe makes no subscription.
+      const taken = promo && checked ? await reservePromo(c.env, { ...redeemRequest(found.product.id, price.unit_amount ?? 0, price.currency, user.id, price.interval, promoCode), reference: idempotencyKey }, Date.now(), checked) : null;
+      if (taken && !taken.ok) {
+        if (reserved) await releaseMemberUse(c.env, promo!.id, user.id);
+        return c.json(promoRefusalBody(taken), 400);
+      }
+      const reservationRef = taken?.reservation?.ref ?? null;
+      if (reservationRef) subParams['metadata[promo_reservation_ref]'] = reservationRef;
       try {
         const sub = await stripeCall<{
           id: string;
@@ -238,6 +251,7 @@ payments.post('/intent', async (c) => {
           // PaymentIntent — the subscription is already active/trialing. Treat
           // it as a successful free activation rather than an error.
           if (sub.status === 'active' || sub.status === 'trialing') {
+            await commitPromoReservation(c.env, reservationRef);
             return c.json({
               kind: 'subscription',
               free: true,
@@ -260,6 +274,7 @@ payments.post('/intent', async (c) => {
       } catch (e) {
         // Stripe made no subscription, so the member did not use the code.
         if (reserved) await releaseMemberUse(c.env, promo!.id, user.id);
+        await releasePromoReservation(c.env, reservationRef);
         return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
       }
     }
@@ -268,6 +283,7 @@ payments.post('/intent', async (c) => {
     if (price.unit_amount == null) return c.json({ error: 'price_has_no_amount' }, 400);
     let amount = price.unit_amount * quantity;
     const metadata: Record<string, string> = { price_id: price.id };
+    let reservationRef: string | null = null;
     if (promo) {
       // One-time PaymentIntents can't carry a coupon — recompute the discount
       // from the catalog amount and stamp the promo id so the webhook records
@@ -277,11 +293,17 @@ payments.post('/intent', async (c) => {
       if (discountedAmount < STRIPE_MIN_CHARGE_CENTS) {
         return c.json({ error: 'promo_amount_below_minimum', reason: 'amount_below_minimum' }, 400);
       }
+      // D4855: the discount on the amount actually charged (quantity included)
+      // leaves the licence's ceiling in one conditional write.
+      const taken = await reservePromo(c.env, { ...redeemRequest(found.product.id, amount, price.currency, user.id, null, promoCode), reference: idempotencyKey });
+      if (!taken.ok) return c.json(promoRefusalBody(taken), 400);
+      reservationRef = taken.reservation?.ref ?? null;
+      if (reservationRef) metadata.promo_reservation_ref = reservationRef;
       Object.assign(metadata, promoDetailMeta(found.product.id, amount, discountCents));
       amount = discountedAmount;
       metadata.promo_code_id = promo.id;
     }
-    return createPaymentIntent(c, {
+    const made = await createPaymentIntent(c, {
       customer,
       amount,
       currency: price.currency,
@@ -291,6 +313,9 @@ payments.post('/intent', async (c) => {
       description: body.description,
       moneyKind,
     });
+    // No PaymentIntent was made, so nothing was spent against the ceiling.
+    if (made.status >= 400) await releasePromoReservation(c.env, reservationRef);
+    return made;
   }
 });
 
@@ -374,9 +399,10 @@ payments.post('/promo/validate', async (c) => {
     return c.json({ error: 'invalid_price' }, 400);
   }
   const amount = found.price.unit_amount ?? 0;
-  const v = await validatePromoForProduct(c.env, code, found.product.id, amount, found.price.currency,
-    { userId: user.id, interval: found.price.type === 'recurring' ? found.price.interval : null });
-  if (!v.ok || !v.promo) return c.json({ valid: false, reason: v.reason });
+  // D4855: the preview asks the same rule checkout does, ceiling included.
+  const v = await canRedeemPromo(c.env, redeemRequest(found.product.id, amount, found.price.currency, user.id,
+    found.price.type === 'recurring' ? found.price.interval : null, code));
+  if (!v.ok) return c.json({ valid: false, reason: v.reason, message: v.message, ...(v.remaining_cents !== undefined ? { remaining_cents: v.remaining_cents, currency: v.currency } : {}) });
   return c.json({
     valid: true,
     code: v.promo.code,
@@ -518,20 +544,19 @@ payments.post('/alacarte/intent', async (c) => {
   const unlockDays = Number.isFinite(rawDays) && rawDays > 0 ? String(Math.floor(rawDays)) : '0';
 
   // Optional promo code — validated against THIS product's allow-list.
+  const nonce = safeNonce(body.nonce);
   const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
   let promo: PromoRow | undefined;
   let amount = found.price.unit_amount;
+  let alacarteReservation: string | null = null;
   if (promoCode) {
-    const v = await validatePromoForProduct(
-      c.env,
-      promoCode,
-      found.product.id,
-      found.price.unit_amount,
-      found.price.currency,
-      { userId: user.id, interval: null },
-    );
-    if (!v.ok || !v.promo) return c.json({ error: 'promo_invalid', reason: v.reason }, 400);
+    const v = await reservePromo(c.env, {
+      ...redeemRequest(found.product.id, found.price.unit_amount, found.price.currency, user.id, null, promoCode),
+      reference: `pi:${user.id}:alacarte_${found.price.id}:${promoIdemPart(promoCode)}:${nonce}`,
+    });
+    if (!v.ok) return c.json(promoRefusalBody(v), 400);
     promo = v.promo;
+    alacarteReservation = v.reservation?.ref ?? null;
     if (v.free) {
       // 100%-off / sub-minimum → no PaymentIntent. Grant the unlock directly
       // (idempotent per user, usage-capped). `false` means the global usage
@@ -549,13 +574,16 @@ payments.post('/alacarte/intent', async (c) => {
           currency: found.price.currency,
         },
       });
-      if (!granted) return c.json({ error: 'promo_invalid', reason: 'usage_limit_reached' }, 400);
+      if (!granted) {
+        await releasePromoReservation(c.env, alacarteReservation);
+        return c.json({ error: 'promo_invalid', reason: 'usage_limit_reached' }, 400);
+      }
+      await commitPromoReservation(c.env, alacarteReservation);
       return c.json({ kind: 'payment', free: true, feature_key: featureKey });
     }
     amount = v.discountedAmount!;
   }
 
-  const nonce = safeNonce(body.nonce);
   const customer = await ensurePaymentsCustomer(c.env, user);
   const metadata: Record<string, string> = {
     kind: 'alacarte',
@@ -565,9 +593,10 @@ payments.post('/alacarte/intent', async (c) => {
   };
   if (promo) {
     metadata.promo_code_id = promo.id;
+    if (alacarteReservation) metadata.promo_reservation_ref = alacarteReservation;
     Object.assign(metadata, promoDetailMeta(found.product.id, found.price.unit_amount, found.price.unit_amount - amount));
   }
-  return createPaymentIntent(c, {
+  const made = await createPaymentIntent(c, {
     customer,
     amount,
     currency: found.price.currency,
@@ -577,6 +606,8 @@ payments.post('/alacarte/intent', async (c) => {
     description: `À la carte: ${found.product.name}`.slice(0, 500),
     moneyKind: 'marketplace',
   });
+  if (made.status >= 400) await releasePromoReservation(c.env, alacarteReservation);
+  return made;
 });
 
 payments.get('/alacarte/unlocks', async (c) => {
