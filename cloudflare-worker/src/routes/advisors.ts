@@ -645,6 +645,53 @@ advisors.get('/:uid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D4687 (#4687): the owner's calendar is registered BEFORE `GET /:uid/slots`.
+// Hono matches in registration order, so after it `GET /me/slots` was taken
+// by `/:uid/slots` with uid='me' and answered 404 'Advisor not found'.
+/**
+ * THE OWNER'S VIEW OF A SLOT, and it exists because `GET /:uid/slots` must not
+ * grow these three columns. That route is readable by ANY authenticated user —
+ * it is how a founder browses an advisor's calendar — and `recording_state`,
+ * `payment_state` and `blocked_reason` are the advisor's own operational
+ * facts. A client who could see `held_unpaid` would learn that this advisor's
+ * payout account is unverified, and one who could read `blocked_reason` would
+ * read a private note about why an hour is not for sale. So `slotDto` stays
+ * lean and this one carries the operational half.
+ */
+function ownSlotDto(s: SlotRow & {
+  recording_state?: string; payment_state?: string; blocked_reason?: string | null;
+}, taken = 0): any {
+  return {
+    ...slotDto(s, taken),
+    recording_state: s.recording_state ?? 'none',
+    payment_state: s.payment_state ?? 'not_applicable',
+    blocked_reason: s.blocked_reason ?? null,
+  };
+}
+
+advisors.get('/me/slots', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    // The grid is two weeks forward by default, and the artboard's other three
+    // views (Month, Past sessions, Unpaid held) are narrowings of a window
+    // rather than different queries — so the window is the only parameter.
+    const days = Math.min(370, Math.max(1, Number(c.req.query('days') || 14)));
+    const from = c.req.query('from') || nowIso();
+    const until = new Date(new Date(from).getTime() + days * 86_400_000).toISOString();
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_office_hour_slots
+        WHERE advisor_id = ? AND starts_at >= ? AND starts_at < ?
+        ORDER BY starts_at ASC LIMIT 500`
+    ).bind(m.id, from, until).all<SlotRow>();
+    const items: any[] = [];
+    for (const s of (rows.results || []) as SlotRow[]) {
+      items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id)));
+    }
+    return c.json({ items, window: { from, until, days } });
+  } catch (e) { return mapError(c, e); }
+});
+
 // ---------------------------------------------------------------------------
 // Slots — owned by the advisor (`/me/slots`) or read for any advisor
 // ---------------------------------------------------------------------------
@@ -4815,50 +4862,6 @@ advisors.patch('/me/session-types/:id', async (c) => {
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_session_types WHERE id = ?')
       .bind(row.id).first<SessionTypeRow>();
     return c.json(sessionTypeDto(fresh!));
-  } catch (e) { return mapError(c, e); }
-});
-
-/**
- * THE OWNER'S VIEW OF A SLOT, and it exists because `GET /:uid/slots` must not
- * grow these three columns. That route is readable by ANY authenticated user —
- * it is how a founder browses an advisor's calendar — and `recording_state`,
- * `payment_state` and `blocked_reason` are the advisor's own operational
- * facts. A client who could see `held_unpaid` would learn that this advisor's
- * payout account is unverified, and one who could read `blocked_reason` would
- * read a private note about why an hour is not for sale. So `slotDto` stays
- * lean and this one carries the operational half.
- */
-function ownSlotDto(s: SlotRow & {
-  recording_state?: string; payment_state?: string; blocked_reason?: string | null;
-}, taken = 0): any {
-  return {
-    ...slotDto(s, taken),
-    recording_state: s.recording_state ?? 'none',
-    payment_state: s.payment_state ?? 'not_applicable',
-    blocked_reason: s.blocked_reason ?? null,
-  };
-}
-
-advisors.get('/me/slots', async (c) => {
-  try {
-    const user = await requireAuth(c);
-    const m = await requireMyAdvisor(c, user);
-    // The grid is two weeks forward by default, and the artboard's other three
-    // views (Month, Past sessions, Unpaid held) are narrowings of a window
-    // rather than different queries — so the window is the only parameter.
-    const days = Math.min(370, Math.max(1, Number(c.req.query('days') || 14)));
-    const from = c.req.query('from') || nowIso();
-    const until = new Date(new Date(from).getTime() + days * 86_400_000).toISOString();
-    const rows = await c.env.DB.prepare(
-      `SELECT * FROM advisor_office_hour_slots
-        WHERE advisor_id = ? AND starts_at >= ? AND starts_at < ?
-        ORDER BY starts_at ASC LIMIT 500`
-    ).bind(m.id, from, until).all<SlotRow>();
-    const items: any[] = [];
-    for (const s of (rows.results || []) as SlotRow[]) {
-      items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id)));
-    }
-    return c.json({ items, window: { from, until, days } });
   } catch (e) { return mapError(c, e); }
 });
 

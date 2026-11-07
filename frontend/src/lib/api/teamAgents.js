@@ -122,6 +122,11 @@ export const teamAgentsApi = {
   // through `agentsAdapter.skillLibrary` and `agentsAdapter.skill`.
   skillLibrary: (companyUid) => request(companyUid ? `/teams/skills?company=${enc(companyUid)}` : '/teams/skills'),
   skill: (uid) => request(`/teams/skills/${enc(uid)}`),
+  // #4733: writing a skill. The Worker's routes are `POST /teams/skills` (also takes `skill_md`), `PATCH /teams/skills/:uid` and
+  // `POST /teams/skills/:uid/publish`; there is no import route, an import is `POST /teams/skills` with `skill_md`.
+  createSkill: (body) => request('/teams/skills', { method: 'POST', body: JSON.stringify(body) }),
+  updateSkill: (uid, patch) => request(`/teams/skills/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  publishSkill: (uid) => request(`/teams/skills/${enc(uid)}/publish`, { method: 'POST', body: '{}' }),
   // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
   agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
   setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),

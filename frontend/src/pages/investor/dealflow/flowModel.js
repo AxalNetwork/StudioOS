@@ -21,6 +21,7 @@
 
 import { SCOPES as SCORE_SCOPES } from '../../../components/scoring/scorecard/scorecardModel.js';
 import { BASE, MAX_COMPARE, roundWord } from './dealFlowModel.js';
+import { roundAsk } from '../../../components/deals/dealMoney.js';
 
 /** SCORING's eleven scope keys and labels, in its one order. There is no Overall. */
 export const SCOPE_KEYS = Object.freeze(SCORE_SCOPES.map((s) => s.key));
@@ -154,7 +155,7 @@ export function flowRows(scope, { flow, deals }) {
     sector: f?.sector || d?.project_sector || null,
     roundStatus: f?.round_status || d?.status || null,
     round: roundWord(f?.round_status || d?.status),
-    ask: f ? num(f.ask) : num(d?.target_raise ?? d?.amount),
+    ask: f ? num(f.ask) : roundAsk(d),
     currency: d?.currency || null,
     instrument: d?.instrument || null,
     inFlow: !!f,
@@ -368,6 +369,21 @@ export const namesSettings = (search = '') => {
   return ['q', 'stage', 'round', 'via', 'sector', 'owner', 'conf', 'unscored', 'sort', 'dir', 'mode', 'cols', 'cards', 'v'].some((k) => q.has(k))
     || SCOPE_KEYS.some((k) => q.has(`min_${k}`));
 };
+
+/**
+ * D4634 (#4634): where a saved default takes the page. The default applies only to what the address does not
+ * name: an explicit `view` or `scope` stays as the address has it, so `/deals?view=table` is the table even when
+ * the default is a board, and the bare `/deals` root still opens on the default. Null when the address already
+ * names a setting of its own (the default does not apply at all) or there is no default.
+ */
+export function defaultHref(search = '', def = null) {
+  if (!def || namesSettings(search)) return null;
+  const q = new URLSearchParams(String(search));
+  const saved = settingsOfSpec(def.spec);
+  const view = q.has('view') ? (q.get('view') === 'table' ? 'table' : 'board') : saved.view;
+  const scope = q.has('scope') ? (['all', 'new'].includes(q.get('scope')) ? q.get('scope') : 'mine') : saved.scope;
+  return settingsHref({ ...saved, view, scope, viewUid: def.uid });
+}
 
 /** The address of a view: the defaults are left out, so a plain `/deals` is Board, Mine, sorted by Team. */
 export function settingsHref({ view = 'board', scope = 'mine', settings = defaultSettings(), viewUid = null } = {}) {

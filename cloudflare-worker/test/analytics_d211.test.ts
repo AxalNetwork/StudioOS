@@ -252,9 +252,10 @@ test('the code hq is refused by every copy of the branch-code rule, and hq-prefi
   }
   assert.equal(String(BRANCH_CODE_RE), String(SCRIPT_BRANCH_CODE_RE), 'the worker and the scripts hold one rule');
   // The SPA's copy is read as text: the same literal, not an approximation of it.
-  const licences = src('../../frontend/src/pages/admin/AdminLicences.jsx');
-  assert.ok(licences.includes(`const BRANCH_CODE_RE = ${String(BRANCH_CODE_RE)};`),
-    'AdminLicences.jsx carries the same rule the deploy route enforces');
+  // #4707: the licence page's shared constants moved to licences/licenceShared.jsx.
+  const licences = src('../../frontend/src/pages/admin/licences/licenceShared.jsx');
+  assert.ok(licences.includes(`export const BRANCH_CODE_RE = ${String(BRANCH_CODE_RE)};`),
+    'licenceShared.jsx carries the same rule the deploy route enforces');
 });
 
 test('a Worker deployed with BRANCH_CODE=hq refuses to run as a branch, and BRANCH_HQ is not a branch binding', () => {

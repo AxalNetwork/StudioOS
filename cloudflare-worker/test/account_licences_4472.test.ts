@@ -149,7 +149,8 @@ test('account/me contracts preserve primary, expose ordered held grants and cont
     await grantLicence(f.DB,change('partner'));
     const r=await f.call('/api/account/licences'); assert.equal(r.status,200);
     assert.equal(r.body.primary,'founder'); assert.deepEqual(r.body.held.map((x:any)=>x.licence),['founder','partner']);
-    assert.deepEqual(r.body.held[0],{licence:'founder',label:'Founder',granted_at:null,source:'primary',is_primary:true});
+    assert.deepEqual(r.body.held[0],{licence:'founder',label:'Founder',granted_at:null,source:'primary',is_primary:true,plan:{key:'founder:free',name:'Free'}}); // D4729: the plan it stands on
+    assert.deepEqual(r.body.held[1].plan,{key:'partner:free',name:'Partner Basic'});
     assert.equal(r.body.held[1].label,'Operating Partner'); assert.equal(r.body.held[1].source,'admin'); assert.ok(r.body.held[1].granted_at);
     assert.deepEqual(r.body.addable,[{licence:'investor',label:'Investor',how:'contact'},{licence:'advisor',label:'Advisor',how:'contact'}]);
     const me=await f.call('/api/auth/me'); assert.equal(me.status,200); assert.equal(me.body.role,'founder'); assert.deepEqual(me.body.licences,['founder','partner']);
