@@ -259,7 +259,15 @@ function featureRow(f: any): RecordRow {
 
 /** Every feature, in read order. The in-memory path, and what part 2's tests compare the SQL page against. */
 export async function solutionFeatureRows(env: Env, projectId: number): Promise<RecordRow[]> {
-  return rows(await env.DB.prepare(`${FEATURE_COLS} ${FEATURE_FROM} ORDER BY f.sort_order, f.id`).bind(projectId).all<any>()).map(featureRow);
+  // A literal, so the schema guard reads its columns (the paged reads below are built and are not read by it).
+  return rows(await env.DB.prepare(
+    `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
+            pg.title AS pain_theme, h.claim AS hypothesis
+       FROM mvp_features f
+       LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
+       LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
+      WHERE f.project_id = ? ORDER BY f.sort_order, f.id`,
+  ).bind(projectId).all<any>()).map(featureRow);
 }
 
 async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
@@ -285,8 +293,11 @@ async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
   if (opts.rows) {
     const sql = opts.query ? featurePageSql(opts.query) : null;
     if (sql) {
-      const total = sql.where ? number((await env.DB.prepare(`SELECT COUNT(*) AS n ${FEATURE_FROM}${sql.where}`).bind(p.id, ...sql.binds).first<{ n: number }>())?.n) : featureCount;
-      featureRows = rows(await env.DB.prepare(`${FEATURE_COLS} ${FEATURE_FROM}${sql.where} ORDER BY ${sql.order} LIMIT ? OFFSET ?`)
+      // Built from fixed fragments and FEATURE_KEY_SQL only; every value is bound.
+      const countSql = 'SELECT COUNT(*) AS n ' + FEATURE_FROM + sql.where;
+      const pageSql = `${FEATURE_COLS} ${FEATURE_FROM}${sql.where} ORDER BY ${sql.order} LIMIT ? OFFSET ?`;
+      const total = sql.where ? number((await env.DB.prepare(countSql).bind(p.id, ...sql.binds).first<{ n: number }>())?.n) : featureCount;
+      featureRows = rows(await env.DB.prepare(pageSql)
         .bind(p.id, ...sql.binds, PAGE_SIZE, (sql.page - 1) * PAGE_SIZE).all<any>()).map(featureRow);
       paged = { total, page: sql.page, page_size: PAGE_SIZE };
     } else featureRows = await solutionFeatureRows(env, p.id);
