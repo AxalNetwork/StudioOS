@@ -28,7 +28,7 @@
  * from YouTube, Vimeo or Cloudflare Stream. An upload (`video_source = 'r2'`)
  * has no upload path yet and is refused rather than stored without a file.
  */
-import { COURSE_META_COLUMNS, COURSE_META_SELECT, courseMetaFields, courseMetaView, MetaInvalid } from '../services/learningCourseMeta';
+import { COURSE_META_COLUMNS, courseMetaFields, courseMetaView, MetaInvalid } from '../services/learningCourseMeta';
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
@@ -182,7 +182,8 @@ const ITEM_COLUMNS = ['title', 'summary', 'body', 'video_url', 'duration_seconds
 const COURSE_COLUMNS = ['slug', 'title', 'summary', 'cover_url', 'level', 'estimated_minutes', 'resources_json', 'visibility', ...COURSE_META_COLUMNS] as const;
 
 const ITEM_SELECT = 'SELECT uid, kind, title, summary, body, video_source, video_url, duration_seconds, thumbnail_url, transcript, topic, level, visibility, status, created_by, created_at, updated_at, published_at FROM learning_items';
-const COURSE_SELECT = `SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at, published_at, ${COURSE_META_SELECT} FROM learning_courses`;
+const COURSE_SELECT = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at, published_at, '
+  + 'audience_json, stage, outcomes_json, prerequisites_json, author_name, reviewer_name, reviewed_on, practical_output FROM learning_courses';
 
 // ---- items ---------------------------------------------------------------------
 
@@ -351,7 +352,7 @@ r.post('/courses', async (c) => {
     const t = now();
     await c.env.DB.prepare(
       `INSERT INTO learning_courses (uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at,
-         ${COURSE_META_SELECT})
+         audience_json, stage, outcomes_json, prerequisites_json, author_name, reviewer_name, reviewed_on, practical_output)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(uid, f.slug, f.title, f.summary ?? null, f.cover_url ?? null, f.level ?? null, f.estimated_minutes ?? null,
       f.resources_json ?? '[]', f.visibility ?? 'open', admin.id, t, t,
