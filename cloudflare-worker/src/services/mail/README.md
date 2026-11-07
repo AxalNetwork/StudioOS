@@ -6,7 +6,7 @@ and mail never goes out on Axal's house token: `../email.ts` stays for system ma
 
 | File | Purpose |
 | --- | --- |
-| `accounts.ts` | D1340: `mail_accounts` (migration 647): credentials sealed by `../columnCipher.ts` (the EIN helper) with the row's uid as AAD, the client's view without them, expiry and disconnect; the one-use nonces of a send and an OAuth state (`mail_nonces`). |
+| `accounts.ts` | D1340: `mail_accounts` (migration 647): credentials sealed by `../columnCipher.ts` (the EIN helper) with the row's uid as AAD, the client's view without them, expiry and disconnect; the one-use nonces of a send and an OAuth state (`mail_nonces`). #4654: one state per mailbox: `lifecycle_rev` guards every provider completion (a verify, send or thread read after a disconnect or reconnect changes nothing), a connection is applied only if it started after the last disconnect and not before the one on the row, and a member has one row per provider and normalized address (migration `202611071555_mail_account_lifecycle.sql`, which also merges existing duplicates). |
 | `adapters/` | D1340: one `MailAdapter` per provider: `send`, `verify`, `revoke`, and `listThread` where the account can read. |
 | `intents.ts` | D1341: what a draft is for, by relationship: one table, no imports, read by the Worker and by the composer (#3552). |
 | `contextPack.ts` | D1341: the records a draft may quote for one person (`kind:id`), each read through its module's own read (`../records/read.ts`) or the founder's own engagement rule; a ref the member cannot read is "Record not found." |
