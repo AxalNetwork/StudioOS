@@ -1525,24 +1525,30 @@ function proofDto(r: ProofRow, consents: ConsentRow[], currentClaimSha: string):
   };
 }
 
-async function loadProofConsents(env: Env, itemIds: number[]): Promise<Map<number, ConsentRow[]>> {
+/**
+ * The consents behind a page of proof items, in ONE read (#4697). It was one
+ * statement per item, so a 200-row page cost 201 round trips. The ids travel
+ * as one bound JSON array (`json_each(?)`): no interpolated IN list, which
+ * `check-sql-prepare` rightly refuses. The join re-checks the owner, so a
+ * caller can only ever read consents on its own advisor's items. Rows are
+ * grouped here, in each item's own order (oldest first).
+ */
+async function loadProofConsents(env: Env, advisorId: number, itemIds: number[]): Promise<Map<number, ConsentRow[]>> {
   const out = new Map<number, ConsentRow[]>();
   if (!itemIds.length) return out;
-  // No interpolated IN list: `check-sql-prepare` treats a `${}` inside
-  // DB.prepare as an injection site, and D1 has no array binding. One
-  // statement per item is a handful of round trips over a table that holds a
-  // few rows per advisor.
-  for (const id of itemIds) {
-    const rows = await env.DB.prepare(
-      'SELECT * FROM advisor_proof_consents WHERE proof_item_id = ? ORDER BY created_at ASC'
-    ).bind(id).all<ConsentRow>();
-    out.set(id, rows.results || []);
-  }
+  for (const id of itemIds) out.set(id, []);
+  const rows = await env.DB.prepare(
+    `SELECT c.* FROM advisor_proof_consents c
+       JOIN advisor_proof_items p ON p.id = c.proof_item_id
+      WHERE p.advisor_id = ? AND c.proof_item_id IN (SELECT value FROM json_each(?))
+      ORDER BY c.proof_item_id, c.created_at ASC, c.id ASC`
+  ).bind(advisorId, JSON.stringify(itemIds)).all<ConsentRow>();
+  for (const r of rows.results || []) out.get(Number(r.proof_item_id))?.push(r);
   return out;
 }
 
-async function proofWithConsents(env: Env, items: ProofRow[]): Promise<any[]> {
-  const consents = await loadProofConsents(env, items.map((r) => r.id));
+async function proofWithConsents(env: Env, advisorId: number, items: ProofRow[]): Promise<any[]> {
+  const consents = await loadProofConsents(env, advisorId, items.map((r) => r.id));
   const out = [];
   for (const r of items) out.push(proofDto(r, consents.get(r.id) || [], await claimSha256(r)));
   return out;
@@ -1584,7 +1590,7 @@ advisors.get('/me/proof', async (c) => {
     const total = Number(whole?.total) || 0;
     const attested = Number(whole?.attested) || 0;
     return c.json({
-      items: await proofWithConsents(c.env, items),
+      items: await proofWithConsents(c.env, m.id, items),
       page: pageFacts(w, total, items.length),
       // `awaiting`: a claim with an ask no one has answered or withdrawn.
       counts: { total, attested, self_stated: total - attested, awaiting: Number(whole?.awaiting) || 0 },
