@@ -319,8 +319,8 @@ export async function markSessionCharged(
   const uid = meta.booking_uid;
   if (!uid) return;
   const row = await env.DB.prepare(
-    'SELECT id, billing_state FROM advisor_bookings WHERE uid = ? LIMIT 1',
-  ).bind(uid).first<{ id: number; billing_state: string }>();
+    'SELECT id, billing_state, status FROM advisor_bookings WHERE uid = ? LIMIT 1',
+  ).bind(uid).first<{ id: number; billing_state: string; status: string }>();
   if (!row) return;
   if (row.billing_state === 'collected') return;
 
@@ -340,6 +340,19 @@ export async function markSessionCharged(
             updated_at = ?
       WHERE id = ?`,
   ).bind(amount, fee, bps, nowIso(), row.id).run();
+
+  // D4703 (#4703): a charge that lands on a cancelled or missed booking. The
+  // money was collected, so the booking says so; under the no-cancellation-fee
+  // policy it is owed back, and this row says that where HQ reads it. Nothing
+  // refunds it automatically. A failure here throws: the webhook is retried,
+  // and the INSERT is keyed by booking, so a retry writes one row.
+  if (row.status === 'cancelled' || row.status === 'no_show') {
+    await env.DB.prepare(
+      `INSERT INTO advisory_refunds_due (booking_id, booking_uid, booking_status, payment_intent_id, amount_cents, currency)
+       VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(booking_id) DO NOTHING`,
+    ).bind(row.id, uid, row.status, typeof pi.id === 'string' ? pi.id : null, amount,
+      typeof (pi as any).currency === 'string' ? String((pi as any).currency) : null).run();
+  }
 
   // The slot that was held because nothing could be charged is no longer
   // held. Best-effort and scoped to the booking's own slot: a slot that was

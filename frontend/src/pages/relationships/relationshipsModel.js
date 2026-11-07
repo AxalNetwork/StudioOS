@@ -3,8 +3,8 @@
  * rules, pure: the sharing setting (RI1, RI7), "Who knows them" on a record
  * (RI2), the ask (RI3), the introducer's inbox (RI4), the log (RI5) and
  * follow-ups (RI6). No React and no fetch: `SharingCard.jsx`,
- * `WhoKnowsStrip.jsx` and `IntroductionsDesk.jsx` draw it, over
- * `relationshipsApi` (D1356, D4329).
+ * `WhoKnowsStrip.jsx`, `IntroductionsDesk.jsx` and `DraftFlow.jsx` draw it,
+ * over `relationshipsApi` (D1356, D4329, D4464, D4330).
  *
  * THE RULES (D1357 §2):
  *   · nothing is shared until the member turns it on, one switch per team;
@@ -13,6 +13,13 @@
  *   · Axal never contacts the person: an introduction is asked of the teammate;
  *   · Accept and Made are two steps; Made is recorded when the intro is sent;
  *   · an outcome is what someone recorded; until then "Not recorded".
+ *
+ * D4464: `summaryField` reads the Network canvas's caller-scoped summary
+ * (`relationshipsApi.summary`) one field at a time. A field the read could
+ * not record (`recording[key].recorded === false`) is always "Not recorded",
+ * never 0 — the Worker's own 503 carries the same `recording` map, so a
+ * degraded read and a healthy one holding a zero look identical to this
+ * function and only differ in the one flag it checks.
  */
 import { NOT_RECORDED } from '../../lib/absence';
 
@@ -95,7 +102,10 @@ export const REASON_HELP = (teammate) => `${firstName(teammate)} sees this.`;
 export const CONTEXT_LABEL = (person) => `Context for ${firstName(person)} (optional)`;
 export const CONTEXT_HELP = (teammate) => `A short note ${firstName(teammate)} can forward. Only the two of you read it.`;
 export const ASK_SENDS = (teammate, person) => `Axal sends your request to ${firstName(teammate)} only. Nobody contacts ${firstName(person)} unless ${firstName(teammate)} does.`;
-export const DRAFT_LATER = 'Draft from this record · coming with Eadwyn’s drafts';
+// D4330 (#4330, part 8b, merged): "Ask", never "Fill" — Eadwyn drafts only once asked, and the quote
+// (`estimate: true`) always runs before the draft itself. `useDraftFlow` (`DraftFlow.jsx`) is the shared
+// two-press behaviour; these are only the words on the button.
+export const ASK_DRAFT_FROM_RECORD = 'Ask Eadwyn to draft from this record';
 export const SENT_TITLE = 'Request sent';
 export const SENT_LINE = (teammate) => `${firstName(teammate)} decides. You will see their answer in Network › Introductions.`;
 export const NOTE_MAX = 1000;
@@ -121,8 +131,19 @@ export const INBOX_EMPTY = 'Nobody has asked you for an introduction.';
 export const NOT_NOW = 'Not now';
 export const WRITE_INTRO = 'Write the intro';
 export const SENDS_NOTHING = 'Axal sends nothing itself. The intro goes from your own mailbox, to the address you choose.';
-export const DRAFT_INTRO_LATER = 'Draft with Eadwyn · coming with Eadwyn’s drafts';
-export const DRAFT_FOLLOW_LATER = 'Draft a follow-up · coming with Eadwyn’s drafts';
+export const ASK_DRAFT_INTRO = 'Ask Eadwyn to draft the intro';
+export const ASK_DRAFT_FOLLOW_UP = 'Ask Eadwyn to draft a follow-up';
+// D4329's introLink (`?intro=<uid>`): the one it names may have left the desk
+// (declined elsewhere, or not this caller's to see) by the time it is opened.
+export const INTRO_GONE = 'That introduction request is no longer on your desk.';
+// D4330: the quote line before any draft runs — never $0, and nothing is charged until it is confirmed.
+export const DRAFT_REFUSED = 'Eadwyn could not draft this. Try again.';
+export function draftEstimateLine(estimate) {
+  const n = Number(estimate?.hold_microusd);
+  if (estimate?.hold_microusd == null || !Number.isFinite(n) || n <= 0) return null;
+  const usd = n / 1_000_000;
+  return `Holds up to $${usd.toFixed(usd < 1 ? 4 : 2)} in AI tokens. Nothing is charged until you confirm.`;
+}
 
 /** "Omar Reyes → Lena Hart": who asked, and who was asked. */
 export const whoLine = (r) => `${r?.requester?.name || 'A teammate'} → ${r?.teammate?.name || 'A teammate'}`;
@@ -183,4 +204,21 @@ export function dayAfter(from, n) {
   const d = new Date(`${String(from).slice(0, 10)}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
+}
+
+// ────────────────────────────────────────────────────────────── D4464 summary
+
+export const SUMMARY_UNREAD = 'Your network summary could not be read.';
+export const SUMMARY_TITLE = 'Your network';
+
+/**
+ * One field of `relationshipsApi.summary()`'s body, by its `recording` key
+ * ("sharing.teams_shared", "teammates_sharing", "requests.made_90d", …).
+ * "Not recorded" whenever that key's own read failed, whatever the value is
+ * standing in for it — never the 0 a failed count happens to default to.
+ */
+export function summaryField(data, key, value) {
+  const rec = data?.recording?.[key];
+  if (rec && rec.recorded === false) return NOT_RECORDED;
+  return Number.isFinite(value) ? value : NOT_RECORDED;
 }

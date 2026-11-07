@@ -781,6 +781,67 @@ test('20b · D405 retires where a page header carries Ask; it stays where none d
   } finally { await m.unmount(); }
 });
 
+// ── 20c · Ask on a phone where only the rail's fallback carries it (#4737) ──
+
+test('20c · on a phone, the floating button\'s sheet and a founder\'s Eadwyn panel lead with Ask, and pressing it opens Ask as a sheet', async () => {
+  // Mutations checked: the sheet drawn without the Ask entry (non-founder, then founder); the entry drawn
+  // although a header carries Ask; the sheet left open under the Ask panel.
+  const phone = async (fn) => { const real = globalThis.innerWidth; globalThis.innerWidth = 390; try { await fn(); } finally { globalThis.innerWidth = real; } };
+  const page = (header, shellRole, role, path) => onPage(path, viewing(shellRole, h(React.Fragment, null,
+    header ? h(HeaderAsk, { testId: 'probe-header-ask' }) : null,
+    h(WorkerRail, { workspace: 'Deals', role }))), role);
+  await phone(async () => {
+    // A non-founder (an investor): the rail's column is hidden, the button opens RailSheet.
+    let m = await mount(page(false, 'investor', 'investor', '/deals/commit'));
+    try {
+      assert.equal(m.all('rail-sheet-ask').length, 0, 'closed: nothing yet');
+      await m.click('button-worker-rail-fab');
+      assert.ok(m.by('worker-rail-sheet'), 'the button opens the sheet');
+      assert.ok(m.by('rail-sheet-ask'), 'the sheet leads with Ask');
+      await m.click('rail-sheet-ask-button');
+      assert.ok(m.by('ask-panel'), 'Ask opens');
+      assert.equal(m.pr(m.by('ask-panel'))['data-layout'], 'sheet', 'as the 92% sheet below 640px');
+      assert.equal(m.all('worker-rail-sheet').length, 0, 'the rail sheet closes as Ask opens');
+    } finally { await m.unmount(); }
+    // A founder on a founder page: the button opens the Eadwyn panel, which shares the same body.
+    m = await mount(page(false, 'founder', 'founder', '/validate/problem-discovery'));
+    try {
+      await m.click('button-worker-rail-fab');
+      assert.ok(m.by('eadwyn-panel'), 'a founder\'s button opens the Eadwyn panel');
+      assert.ok(m.by('rail-sheet-ask'), 'the panel leads with Ask');
+      await m.click('rail-sheet-ask-button');
+      assert.ok(m.by('ask-panel'), 'Ask opens');
+      assert.equal(m.pr(m.by('ask-panel'))['data-layout'], 'sheet');
+      assert.equal(m.all('eadwyn-panel').length, 0, 'the Eadwyn panel closes as Ask opens: one surface at a time');
+    } finally { await m.unmount(); }
+  });
+});
+
+test('20c · no Ask entry in the sheet or the panel where a header carries Ask, a deck rail has its own, or Ask does not serve', async () => {
+  await (async () => {
+    const real = globalThis.innerWidth; globalThis.innerWidth = 390;
+    try {
+      const page = (header, shellRole, role, path) => onPage(path, viewing(shellRole, h(React.Fragment, null,
+        header ? h(HeaderAsk, { testId: 'probe-header-ask' }) : null,
+        h(WorkerRail, { workspace: 'Deals', role }))), role);
+      // A founder whose page header carries Ask: the header is on the phone, so the panel does not repeat it.
+      let m = await mount(page(true, 'founder', 'founder', '/validate/problem-discovery'));
+      try {
+        await m.click('button-worker-rail-fab');
+        assert.ok(m.by('eadwyn-panel'));
+        assert.equal(m.all('rail-sheet-ask').length, 0, 'a header carries Ask: no second entry');
+      } finally { await m.unmount(); }
+      // An admin on a founder page: Ask does not serve, and the sheet offers none.
+      m = await mount(page(false, 'admin', 'founder', '/validate/problem-discovery'));
+      try {
+        await m.click('button-worker-rail-fab');
+        assert.ok(m.by('worker-rail-sheet'));
+        assert.equal(m.all('rail-sheet-ask').length, 0, 'Ask does not serve here');
+      } finally { await m.unmount(); }
+    } finally { globalThis.innerWidth = real; }
+  })();
+});
+
 // ── 21 · The preferences client ───────────────────────────────────────
 
 test('21 · syncRailPrefs reads once per load, seeds both caches, and the server row wins', async () => {
