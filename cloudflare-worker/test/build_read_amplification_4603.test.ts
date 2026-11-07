@@ -10,8 +10,8 @@
  *      parts changed no card, figure or phone entry built from them;
  *   3. every module page still answers its integration parts;
  *   4. access is unchanged: another venture's founder is refused both;
- *   5. what is left (recorded, not endorsed): the overview and the module
- *      pages still return every record row, so rows grow with the venture.
+ *   5. what is left (recorded, not endorsed): rows still grow with the venture
+ *      on the overview and on every module page but Solution design's feature list.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/build_read_amplification_4603.test.ts
@@ -84,7 +84,10 @@ test('5. the remaining limit, recorded: rows still grow with the venture (bounde
   const s = await overview(small), l = await overview(large);
   assert.equal(s.statements, l.statements, 'the statement count does not grow with the venture');
   assert.ok(l.rows > 50 * s.rows / 10, `rows returned grow with the venture: ${s.rows} → ${l.rows}`);
+  // Part 2 bounds Solution design (build_bounded_reads_4603.test.ts); the other modules' lists are still read whole.
   const page = await module(large, 'solution-design');
   assert.equal(page.body.records.rows.length, 25, 'a page shows 25 records');
-  assert.ok(page.rows >= 1000, `but reads every one: ${page.rows} rows returned to the Worker`);
+  assert.ok(page.rows < 100, `Solution design is bounded: ${page.rows} rows returned to the Worker`);
+  const roadmapPage = await module(large, 'product-roadmap');
+  assert.ok(roadmapPage.rows >= 1000, `the other modules still read every record: ${roadmapPage.rows} rows returned to the Worker`);
 });

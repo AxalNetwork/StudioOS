@@ -112,9 +112,23 @@ const WIRED = {
 export function adminLinks(user, activeRole, gated) {
   if (gated || activeRole !== 'admin') return [];
   return [
-    { to: '/learning/me', label: 'My learning' },
     { to: '/learning/programs', label: 'Programs assigned to you' },
     ...(isSuperAdminUser(user) ? [{ to: '/learning/studio', label: 'Learning studio' }] : []),
+  ];
+}
+
+/**
+ * #4742 — "My learning" and "My learning plan" for every profile the gate
+ * admits, not only an admin: `/learning/me` and `/learning/plan` are mounted
+ * for every profile in `frontend/src/routes/learning.jsx`, so a founder,
+ * investor, partner or advisor needs a way in too. "Programs assigned to you"
+ * and "Learning studio" stay in `adminLinks`, behind their own conditions.
+ */
+export function learnerLinks(gated) {
+  if (gated) return [];
+  return [
+    { to: '/learning/me', label: 'My learning' },
+    { to: '/learning/plan', label: 'My learning plan' },
   ];
 }
 
@@ -142,6 +156,8 @@ export function LearningSubPage({ view, gated }) {
  */
 export default function LearningPage({ view = 'home', user, activeRole }) {
   const gated = learningComingSoon(user, activeRole ?? user?.role);
-  if (view === 'home') return <LearningHome gated={gated} links={adminLinks(user, activeRole ?? user?.role, gated)} />;
+  if (view === 'home') {
+    return <LearningHome gated={gated} links={adminLinks(user, activeRole ?? user?.role, gated)} learnerLinks={learnerLinks(gated)} />;
+  }
   return <LearningSubPage view={view} gated={gated} />;
 }

@@ -48,6 +48,7 @@ function builtFromMigrations(): DatabaseSync {
   db.exec(sqlOf('390'));
   // D4643 (#4643): the attempt's own pass mark, time limit and reveal policy.
   db.exec(sqlOf('202611062214'));
+  db.exec(sqlOf('202611071049'));
   return db;
 }
 const BUILT = builtFromMigrations();

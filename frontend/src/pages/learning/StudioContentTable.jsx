@@ -20,10 +20,12 @@ export const STUDIO_FILTERS = [
 const GRID = 'sm:grid sm:grid-cols-[6rem_minmax(0,1fr)_6.5rem_6rem_minmax(0,0.8fr)_7.5rem_6.5rem] sm:items-center sm:gap-3';
 
 /**
- * #4177 (lr16): Copy to Stream for one uploaded file, by its copy state
- * (`streamCopyOf`). THE STATE IS A GUESS PENDING L4 (#4179): it is drawn only
- * when the read carries `stream_copy`, and the button and "Try again" only
- * when the page passes `onCopy`, which no page does until L4's route exists.
+ * #4177 (lr16), wired by #4742: Copy to Stream for one uploaded file, by its
+ * copy state (`streamCopyOf`). It is drawn only when the read carries
+ * `stream_copy` (every `r2` item does, since #4179's `GET /items`), and the
+ * button and "Try again" draw because `LearningStudio.jsx` passes `onCopy`
+ * (its `onCopyToStream`, `POST /admin/learning/stream/migrations` through
+ * `adminLearningApi.migrateVideoToStream`).
  */
 function CopyToStream({ row, onCopy }) {
   const state = streamCopyOf(row);

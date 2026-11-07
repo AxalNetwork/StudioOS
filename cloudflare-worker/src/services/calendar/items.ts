@@ -163,7 +163,8 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'contact_task': return '/network?tab=contacts';
     case 'engagement_milestone': return '/delivery/health';
     // D1614 W4: the project's Work board.
-    case 'work_item': return ev.project_id ? `/projects/${ev.project_id}/work` : null;
+    // #4735: the item itself, through WorkPage's `?item=` deep link, when the event names it.
+    case 'work_item': return ev.project_id ? `/projects/${ev.project_id}/work${ev.source_uid ? `?item=${encodeURIComponent(ev.source_uid)}` : ''}` : null;
     case 'agent_session': return typeof ev.url === 'string' && ev.url.startsWith('/calendar') ? ev.url : '/calendar';
     default: return null;
   }

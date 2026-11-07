@@ -2495,7 +2495,7 @@
   {
    "pageKey": "Founder · Grow · Distribution",
    "optionKey": "draft:grow/customers",
-   "optionLabel": "Draft a sequence",
+   "optionLabel": "Ask Eadwyn for a sequence",
    "kind": "write",
    "handler": "draft",
    "routeTask": "rail_write",

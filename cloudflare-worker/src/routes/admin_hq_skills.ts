@@ -6,7 +6,8 @@
  *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
- *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement
+ *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
+ *                                    and `reviewers`: the other active Super Admins who can be asked ({ uid, name }; null when unread)
  *   GET  /:uid/diff?from=vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed
  *   POST /:uid/review                { reviewer_uid }   ask a named Super Admin to review the current draft
  *   POST /:uid/review/approve        { comment? }       the named reviewer approves; never the draft's author
@@ -210,7 +211,7 @@ adminHqSkills.post('/library/seed', async (c) => {
 });
 
 adminHqSkills.get('/:uid', async (c) => {
-  await requireSuperAdmin(c);
+  const admin = await requireSuperAdmin(c);
   const s = await hqSkill(c.env, c.req.param('uid'));
   if (!s) return noSkill(c);
   const d = await draftPartsOf(c.env, s);
@@ -225,7 +226,12 @@ adminHqSkills.get('/:uid', async (c) => {
       FROM agent_skill_retirements r JOIN agent_skills s ON s.id = r.replacement_skill_id WHERE r.skill_id = ?`).bind(s.id)
     .first<{ reason: string; pinned_agents: number; retired_at: string; retired_by: number; replacement_uid: string; replacement_name: string }>();
   const tax = await taxonomyMaps(c.env);
+  // #4739: who can be asked to review this draft: another active Super Admin, never its author. Null when the read failed, never "none".
+  const reviewers = await c.env.DB.prepare(`SELECT u.uid, u.name FROM super_admins sa JOIN users u ON u.id = sa.user_id
+      WHERE LOWER(u.role) = 'admin' AND u.is_active = 1 AND u.id != ? AND u.id != ? ORDER BY u.name, u.id`)
+    .bind(admin.id, s.updated_by ?? 0).all<{ uid: string; name: string | null }>().then((r) => r.results ?? []).catch(() => null);
   return c.json({
+    reviewers,
     skill: {
       uid: s.uid, ...d, ...areaAndLevel(d, tax.category),
       status: lifecycleStatus(s.status, open, hash), version: s.current_version || null, draft_hash: hash,
