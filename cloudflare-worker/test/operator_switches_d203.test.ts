@@ -55,6 +55,8 @@ const T0 = Date.UTC(2026, 8, 23, 12, 0, 0); // a fixed clock for the TTL tests
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const MIGRATION = read('cloudflare-worker/sql/migrations/283_platform_switches.sql');
+// D4703 (#4703): the revision column, applied after 283 as production applies it.
+const REVISION = read('cloudflare-worker/sql/migrations/202611062212_platform_switch_revision.sql');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 function ddl(name: string): string {
   const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
@@ -88,7 +90,22 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { const out = []; for (const st of x || []) out.push(await st.run()); return out; },
+    // ONE TRANSACTION, LIKE D1 (D370, D4703): every statement or none. The
+    // switch write and its audit row are batched, and a fixture that kept the
+    // first when the second failed would prove an atomicity D1 has and this
+    // code relies on.
+    async batch(x: any[]) {
+      db.exec('SAVEPOINT d1_batch');
+      try {
+        const out = [];
+        for (const st of x || []) out.push(await st.run());
+        db.exec('RELEASE d1_batch');
+        return out;
+      } catch (e) {
+        db.exec('ROLLBACK TO d1_batch'); db.exec('RELEASE d1_batch');
+        throw e;
+      }
+    },
   };
 }
 
@@ -107,7 +124,7 @@ function freshDb({ withStore = true } = {}) {
   for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'advisor_messages']) {
     db.exec(ddl(t));
   }
-  if (withStore) db.exec(MIGRATION);
+  if (withStore) { db.exec(MIGRATION); db.exec(REVISION); }
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   u.run(HOLDER, 'admin', 'The Holder', 'holder@example.test');
   u.run(PLAIN_ADMIN, 'admin', 'Plain Admin', 'admin@example.test');
@@ -219,7 +236,7 @@ test('an operator throw refuses Eadwyn on the next request, and a release lets i
   assert.equal(killed.body.reason, 'disabled');
   assert.equal(killed.body.error, ADVISOR_DISABLED_MESSAGE);
 
-  await setOperatorSwitch(env, 'eadwyn_off', false, 'Index rebuilt and checked.', HOLDER);
+  await setOperatorSwitch(env, 'eadwyn_off', false, 'Index rebuilt and checked.', HOLDER, { revision: 1 });
   const after = await askEadwyn(env);
   assert.equal(after.status, 200, 'a release did not let Eadwyn answer again');
   assert.ok(Array.isArray(after.body.tools));
@@ -243,7 +260,7 @@ test("a deploy kill survives an operator release, and is the half that is named"
   const db = freshDb();
   const env = envFor(db, { ADVISOR_DISABLED: '1' });
   await setOperatorSwitch(env, 'eadwyn_off', true, REASON, HOLDER);
-  await setOperatorSwitch(env, 'eadwyn_off', false, 'Operator side released.', HOLDER);
+  await setOperatorSwitch(env, 'eadwyn_off', false, 'Operator side released.', HOLDER, { revision: 1 });
 
   const state = await advisorKillState(env);
   assert.equal(state.off, true, 'releasing the operator half turned off a kill the deployment set');
@@ -358,7 +375,7 @@ test('a failed read keeps the last good reading, is retried after the TTL, and i
 
   // The store comes back — released, now. Inside the TTL of the failed
   // attempt nothing is re-read: an outage costs one failing read per TTL.
-  db.exec(MIGRATION);
+  db.exec(MIGRATION); db.exec(REVISION);
   db.prepare(
     "INSERT INTO platform_switches (switch_key, thrown, reason, set_by_user_id) VALUES ('eadwyn_off', 0, 'Released.', ?)",
   ).run(HOLDER);
@@ -376,7 +393,7 @@ test('a first read that fails is unreadable, and is retried after the TTL', asyn
   const db = freshDb({ withStore: false });
   const env = envFor(db);
   assert.equal((await readOperatorSwitches(env, { now: T0 })).readable, false);
-  db.exec(MIGRATION);
+  db.exec(MIGRATION); db.exec(REVISION);
   assert.equal((await readOperatorSwitches(env, { now: T0 + 1 })).readable, false,
     'a failed first read was retried inside its TTL');
   assert.equal((await readOperatorSwitches(env, { now: T0 + OPERATOR_SWITCH_TTL_MS })).readable, true,
@@ -398,7 +415,7 @@ test('two databases in one isolate keep separate readings', async () => {
   dbB.prepare(
     "INSERT INTO platform_switches (switch_key, thrown, reason, set_by_user_id) VALUES ('eadwyn_off', 1, ?, ?)",
   ).run(REASON, HOLDER);
-  await setOperatorSwitch(A, 'eadwyn_off', false, 'Released on A only.', HOLDER);
+  await setOperatorSwitch(A, 'eadwyn_off', false, 'Released on A only.', HOLDER, { revision: 1 });
   assert.equal((await advisorKillState(B, { now: T0 + 1 })).off, false,
     "a write on one database cleared another's reading");
 });
@@ -408,7 +425,7 @@ test('two databases in one isolate keep separate readings', async () => {
 test('the conditional write reports whether anything changed, and records who and why', async () => {
   const db = freshDb();
   const env = envFor(db);
-  assert.deepEqual(await setOperatorSwitch(env, 'eadwyn_off', false, 'Nothing to release.', HOLDER), { changed: false },
+  assert.deepEqual(await setOperatorSwitch(env, 'eadwyn_off', false, 'Nothing to release.', HOLDER, { revision: 0 }), { changed: false },
     'a release of a switch nobody threw reported a change');
   assert.equal(storeRows(db).length, 0, 'a release of nothing wrote a row');
 
@@ -421,7 +438,8 @@ test('the conditional write reports whether anything changed, and records who an
   assert.equal(row.set_by_user_id, HOLDER);
   assert.match(String(row.set_at), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/, "set_at is not SQLite's clock");
 
-  assert.deepEqual(await setOperatorSwitch(env, 'eadwyn_off', false, 'Index rebuilt.', PLAIN_ADMIN), { changed: true });
+  assert.equal(row.revision, 1, 'the first throw is revision 1');
+  assert.deepEqual(await setOperatorSwitch(env, 'eadwyn_off', false, 'Index rebuilt.', PLAIN_ADMIN, { revision: 1 }), { changed: true });
   [row] = storeRows(db);
   assert.equal(row.thrown, 0);
   assert.equal(row.reason, 'Index rebuilt.');
@@ -443,7 +461,8 @@ test('the route throws and releases, audited once per change, with no user_id ke
   assert.equal(storeRows(db)[0].reason, REASON, 'the stored reason was not trimmed');
   assert.equal((await askEadwyn(env)).status, 503, 'the route wrote a row the gate does not obey');
 
-  const r = await post(env, 'eadwyn_off', { action: 'release', reason: 'Index rebuilt and checked.' });
+  assert.equal(t.body.switch.operator.revision, 1, 'the console reads the revision a release must name');
+  const r = await post(env, 'eadwyn_off', { action: 'release', reason: 'Index rebuilt and checked.', revision: t.body.switch.operator.revision });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.switch.state, 'off');
   assert.equal((await askEadwyn(env)).status, 200);
@@ -476,7 +495,9 @@ test('every refusal answers in order and leaves the store and the audit log unto
     ['an unknown action', () => post(env, 'eadwyn_off', { action: 'toggle', reason: REASON }), 400, 'invalid_action'],
     ['a short reason', () => post(env, 'eadwyn_off', { action: 'throw', reason: 'bad index' }), 400, 'reason_required'],
     ['a padded short reason', () => post(env, 'eadwyn_off', { action: 'throw', reason: '     bad     ' }), 400, 'reason_required'],
-    ['a release of nothing', () => post(env, 'eadwyn_off', { action: 'release', reason: REASON }), 409, 'no_change'],
+    ['a release that names no revision', () => post(env, 'eadwyn_off', { action: 'release', reason: REASON }), 400, 'revision_required'],
+    ['a release with a malformed revision', () => post(env, 'eadwyn_off', { action: 'release', reason: REASON, revision: '1' }), 400, 'revision_required'],
+    ['a release of nothing', () => post(env, 'eadwyn_off', { action: 'release', reason: REASON, revision: 0 }), 409, 'no_change'],
   ];
   for (const [what, call, status, code] of cases) {
     const r = await call();
@@ -491,6 +512,42 @@ test('every refusal answers in order and leaves the store and the audit log unto
   assert.equal(again.status, 409);
   assert.equal(again.body.code, 'no_change');
   assert.equal(auditRows(db).length, 1, 'a refused second throw was audited');
+});
+
+test('D4703: a release from an older revision conflicts instead of clearing a newer throw', async () => {
+  // Mutation checked: the release's `AND revision = ?` removed → the stale release clears C's throw.
+  const db = freshDb();
+  const env = envFor(db);
+  assert.equal((await post(env, 'eadwyn_off', { action: 'throw', reason: REASON })).status, 200);           // A throws: 1
+  assert.equal((await post(env, 'eadwyn_off', { action: 'release', reason: 'Rebuilt, released.', revision: 1 })).status, 200); // B releases
+  const c = await post(env, 'eadwyn_off', { action: 'throw', reason: 'A second bad index; stopping it again.' }); // C throws: 2
+  assert.equal(c.body.switch.operator.revision, 2);
+  // An old tab that read revision 1 presses Release.
+  const stale = await post(env, 'eadwyn_off', { action: 'release', reason: 'From the old tab, pressed late.', revision: 1 });
+  assert.equal(stale.status, 409, JSON.stringify(stale.body));
+  assert.equal(stale.body.code, 'stale_revision');
+  assert.equal(stale.body.current_revision, 2);
+  const [row] = storeRows(db);
+  assert.deepEqual([row.thrown, row.revision, row.reason], [1, 2, 'A second bad index; stopping it again.'], 'the newer throw stands');
+  assert.equal((await askEadwyn(env)).status, 503, 'and Eadwyn is still off');
+  assert.deepEqual(auditRows(db).map((a) => a.action), ['platform_switch_thrown', 'platform_switch_released', 'platform_switch_thrown'],
+    'the refused release left no record of an act');
+});
+
+test('D4703: a switch never changes without its audit row', async () => {
+  // Mutation checked: the audit run after the write instead of in its batch → the switch is thrown with no row.
+  const db = freshDb();
+  const base = envFor(db);
+  const failingAudit = { ...base, DB: { ...base.DB, prepare(sql: string) {
+    const st = base.DB.prepare(sql);
+    if (!/INSERT INTO admin_audit_log/.test(sql)) return st;
+    return { ...st, bind: () => ({ run: async () => { throw new Error('D1_ERROR: synthetic audit failure'); } }) };
+  } } };
+  const r = await post(failingAudit, 'eadwyn_off', { action: 'throw', reason: REASON });
+  assert.equal(r.status, 503, JSON.stringify(r.body));
+  assert.equal(r.body.code, 'store_unavailable');
+  assert.equal(storeRows(db).length, 0, 'the switch was thrown although its audit row was not written');
+  assert.equal((await askEadwyn(base)).status, 200, 'Eadwyn still answers: nothing changed');
 });
 
 test('a branch cannot throw HQ\'s switch, and its own console is HQ-only', async () => {
@@ -543,4 +600,76 @@ test("the refusal is in Eadwyn's voice, and true for both halves", () => {
   assert.doesNotMatch(ADVISOR_DISABLED_MESSAGE, /update|maintenance/i,
     "the message names a cause an operator's kill is not");
   assert.match(ADVISOR_DISABLED_MESSAGE, /^Eadwyn /);
+});
+
+/* ── D4703 (#4703): the take rate is a sensitive write too ─────────────── */
+
+import { parseTakeRateBps } from '../src/routes/admin_platform.ts';
+
+const PLATFORM_SETTINGS = `CREATE TABLE IF NOT EXISTS platform_settings (
+  key TEXT PRIMARY KEY, value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_by TEXT
+);
+INSERT OR IGNORE INTO platform_settings (key, value, updated_by) VALUES ('advisor_take_rate_bps', '1500', 'migration_241');`;
+
+async function putRate(env: any, body: unknown, { jti = 'totp-holder' } = {}) {
+  const res = await platformApp.request('/take-rate', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${await token(HOLDER, 'admin', jti)}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }, env);
+  return { status: res.status, body: await res.json().catch(() => ({})) as any };
+}
+const rateRow = (db: any) => ({ ...(db.prepare("SELECT value, updated_by FROM platform_settings WHERE key = 'advisor_take_rate_bps'").get() as any) });
+const rateAudit = (db: any) => db.prepare("SELECT * FROM admin_audit_log WHERE action = 'advisor_take_rate_update'").all() as any[];
+
+test('D4703: a take rate is whole basis points, or it is refused', () => {
+  // Mutation checked: the old `Number(String(raw ?? '').trim())` parse → null and blank read as 0.
+  for (const bad of [undefined, null, '', '   ', '0x10', '1e3', '12.5', 12.5, true, -1, 5001, '15%', [1500], {}]) {
+    assert.equal(parseTakeRateBps(bad), null, `refused ${JSON.stringify(bad)}`);
+  }
+  assert.equal(parseTakeRateBps(0), 0, 'zero sent as zero is a rate');
+  assert.equal(parseTakeRateBps('0'), 0);
+  assert.equal(parseTakeRateBps(1500), 1500);
+  assert.equal(parseTakeRateBps(' 1200 '), 1200);
+});
+
+test('D4703: an invalid take-rate write changes nothing and records nothing', async () => {
+  const db = freshDb(); db.exec(PLATFORM_SETTINGS);
+  const env = envFor(db);
+  for (const body of [{}, { bps: null }, { bps: '' }, { bps: '  ' }, { bps: '0x10' }, { bps: 12.5 }]) {
+    const r = await putRate(env, body);
+    assert.equal(r.status, 400, `${JSON.stringify(body)}: ${JSON.stringify(r.body)}`);
+  }
+  assert.deepEqual(rateRow(db), { value: '1500', updated_by: 'migration_241' }, 'no invalid request wrote zero');
+  assert.equal(rateAudit(db).length, 0);
+});
+
+test('D4703: the take rate needs the write bar, and is saved with its audit row', async () => {
+  // Mutation checked: requireSuperAdmin restored → the stale session's write lands;
+  // the audit taken out of the batch → the failed audit leaves the new rate in place.
+  const db = freshDb(); db.exec(PLATFORM_SETTINGS);
+  const env = envFor(db);
+  const stale = await putRate(env, { bps: 1200 }, { jti: 'totp-stale-holder' });
+  assert.equal(stale.status, 403);
+  assert.equal(stale.body.code ?? stale.body.detail, 'step_up_required');
+  assert.equal(rateRow(db).value, '1500');
+
+  const ok = await putRate(env, { bps: '1200' });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(rateRow(db).value, '1200');
+  const [audit] = rateAudit(db);
+  assert.deepEqual(JSON.parse(audit.filters_json), { from_bps: 1500, from_source: 'setting', to_bps: 1200 });
+  assert.equal(audit.admin_user_id, HOLDER);
+
+  const base = envFor(db);
+  const failingAudit = { ...base, DB: { ...base.DB, prepare(sql: string) {
+    const st = base.DB.prepare(sql);
+    if (!/INSERT INTO admin_audit_log/.test(sql)) return st;
+    return { ...st, bind: () => ({ run: async () => { throw new Error('D1_ERROR: synthetic audit failure'); } }) };
+  } } };
+  const failed = await putRate(failingAudit, { bps: 900 });
+  assert.equal(failed.status, 503, JSON.stringify(failed.body));
+  assert.equal(rateRow(db).value, '1200', 'the rate did not change without its record');
+  assert.equal(rateAudit(db).length, 1);
 });

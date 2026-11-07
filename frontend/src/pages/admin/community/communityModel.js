@@ -20,8 +20,9 @@
  *                 Community read since D1121, never from these rows;
  *   - `jobs`      GET /api/admin/jobs, every page, every status;
  *   - `circles`   GET /api/admin/circles;
- *   - `roster`    GET /api/admin/network-profiles — counts only, no name;
  *   - `overview`  GET /api/admin/community/overview?weeks= — D931's counts,
+ *                 the roster's among them (#4717: counted on the server over
+ *                 the whole table, archived rows out, never a capped list),
  *                 every period figure and chart (D933). Each block answers
  *                 alone: `{ available: true }`, `{ available: false, reason }`
  *                 or `{ recorded: false, reason }`;
@@ -240,10 +241,56 @@ const CIRCLE_TYPES = { founder: 'Founder', investor: 'Investor', partner: 'Partn
 /** The roster's kinds. A legacy `mentor` row counts as Advisor, as #2369 asks. */
 const ROSTER_KINDS = [['advisor', 'Advisor'], ['partner', 'Partner'], ['investor', 'Investor']];
 const rosterKind = (k) => (k === 'mentor' ? 'advisor' : k);
+const ROSTER_UNREAD = 'The roster could not be read. That is not the same as an empty roster.';
+const count = (v) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
+
+/**
+ * #4717 — the roster, from the Community read's network block: counted on the
+ * server over every row, archived rows out. The page used to count
+ * `GET /api/admin/network-profiles`, which answers 200 rows unless asked for
+ * more, so a larger roster was counted short with nothing said. A count that
+ * is missing or not a whole number makes the roster unreadable, never 0.
+ */
+export function rosterOf(reads) {
+  const nb = blockOf(reads.overview, 'network', ROSTER_UNREAD);
+  if (nb.state === 'loading') return { state: 'loading' };
+  if (nb.state !== 'ready') return { state: 'unreadable', reason: nb.reason || ROSTER_UNREAD };
+  const byKind = nb.block.by_kind_state;
+  if (!byKind || typeof byKind !== 'object') return { state: 'unreadable', reason: ROSTER_UNREAD };
+  const known = new Set(ROSTER_KINDS.map(([k]) => k));
+  const rows = ROSTER_KINDS.map(([key, label]) => ({ key, label, active: 0, inactive: 0 }));
+  const other = { key: 'other', label: 'Other', active: 0, inactive: 0 };
+  for (const [kind, v] of Object.entries(byKind)) {
+    const active = count(v?.active);
+    const hidden = count(v?.hidden);
+    if (active === null || hidden === null) return { state: 'unreadable', reason: ROSTER_UNREAD };
+    const k = rosterKind(kind);
+    const row = known.has(k) ? rows.find((r) => r.key === k) : other;
+    row.active += active;
+    row.inactive += hidden;
+  }
+  if (other.active + other.inactive > 0) rows.push(other);
+  return { state: 'ready', rows: rows.map(({ key: _k, ...r }) => r), active: rows.reduce((t, r) => t + r.active, 0) };
+}
+
+/**
+ * #4717 — THE PAGE'S CLOCK. Days open, waits, Overdue and the next 30 days are
+ * measured from the Community read's own `as_of`, so a Refresh moves them with
+ * the rows it re-reads. Before that read answers, the moment the page's reads
+ * last settled (`asOf`); before anything, now. It used to be frozen at mount.
+ */
+export function clockOf(reads, asOf) {
+  const ov = reads?.overview;
+  if (ov?.status === 'ready') {
+    const t = Date.parse(ov.data?.as_of);
+    if (Number.isFinite(t)) return t;
+  }
+  return Number.isFinite(asOf) ? asOf : Date.now();
+}
 
 /** The page's eight tiles, CM1 rows 1 and 2, in the canvas's order. */
 export function buildTiles(reads, now) {
-  const { glance, circles, roster } = reads;
+  const { glance, circles } = reads;
   const tiles = [];
 
   // Waiting on you — the glance's two lanes, added.
@@ -296,9 +343,9 @@ export function buildTiles(reads, now) {
 
   // Advisors & partners — active on the roster.
   const ro = { key: 'roster', label: 'Advisors & partners' };
-  const rop = pending(roster, 'The roster could not be read. That is not the same as an empty roster.');
-  if (rop) tiles.push({ ...ro, ...rop });
-  else tiles.push({ ...ro, state: 'ready', value: nf(roster.data.filter((p) => p.is_active).length), sub: 'active on the roster' });
+  const roster = rosterOf(reads);
+  if (roster.state !== 'ready') tiles.push({ ...ro, state: roster.state, ...(roster.reason ? { reason: roster.reason } : {}) });
+  else tiles.push({ ...ro, state: 'ready', value: nf(roster.active), sub: 'active on the roster' });
 
   const ex = blockOf(reads.overview, 'wellbeing.experts');
   if (ex.state !== 'ready') tiles.push({ key: 'experts', label: 'Wellbeing experts', ...ex });
@@ -413,18 +460,7 @@ export function buildCircles(reads) {
       membersEntered: list.reduce((t, c) => t + (Number(c.members) || 0), 0),
     };
   }
-  const rp = pending(reads.roster, 'The roster could not be read. That is not the same as an empty roster.');
-  if (rp) out.roster = rp;
-  else {
-    const rows = ROSTER_KINDS.map(([key, label]) => {
-      const of = reads.roster.data.filter((p) => rosterKind(p.kind) === key);
-      return { label, active: of.filter((p) => p.is_active).length, inactive: of.filter((p) => !p.is_active).length };
-    });
-    const known = new Set(ROSTER_KINDS.map(([k]) => k));
-    const other = reads.roster.data.filter((p) => !known.has(rosterKind(p.kind)));
-    if (other.length) rows.push({ label: 'Other', active: other.filter((p) => p.is_active).length, inactive: other.filter((p) => !p.is_active).length });
-    out.roster = { state: 'ready', rows, active: rows.reduce((t, r) => t + r.active, 0) };
-  }
+  out.roster = rosterOf(reads);
   return out;
 }
 
@@ -687,7 +723,10 @@ export function buildConsoles(reads) {
     events: lane('events'),
     jobs: lane('jobs'),
     circles: from(reads.circles, (list) => `${nf(list.filter((c) => !c.published).length)} drafts`),
-    roster: from(reads.roster, (list) => `${nf(list.filter((p) => p.is_active).length)} active`),
+    roster: (() => {
+      const ro = rosterOf(reads);
+      return ro.state === 'ready' ? { state: 'ready', text: `${nf(ro.active)} active` } : { state: ro.state === 'loading' ? 'loading' : 'unreadable' };
+    })(),
     wellbeing: (() => {
       const ex = blockOf(reads.overview, 'wellbeing.experts');
       return ex.state === 'ready' ? { state: 'ready', text: `${nf(ex.block.unverified)} to verify` } : { state: ex.state === 'loading' ? 'loading' : 'unreadable' };
@@ -697,7 +736,7 @@ export function buildConsoles(reads) {
 
 /** CM10 variant B: every read failed. The consoles strip still works. */
 export function pageFailed(reads) {
-  return ['glance', 'events', 'analytics', 'jobs', 'circles', 'roster', 'overview'].every((k) => failed(reads[k]));
+  return ['glance', 'events', 'analytics', 'jobs', 'circles', 'overview'].every((k) => failed(reads[k]));
 }
 
 /**

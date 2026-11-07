@@ -87,6 +87,8 @@ const version = (over = {}) => ({
 const deliverable = (over = {}) => ({
   id: 1, uid: 'd-1', advisor_id: 3, engagement_id: 7, client_name: 'Halverton', title: 'Pricing model',
   client_user_id: 41, client_user_name: 'Ada Client', client_user_email: 'ada@halverton.example',
+  // #4684: the latest sent version's recipient, which a nudge reaches; null until something is sent.
+  recipient_email: null,
   state: 'not_started', due_date: null, manual_status: null, version_count: 1,
   latest_version: version({ sent_at: ['sent', 'opened'].includes(over.state) ? '2026-10-01T10:00:00Z' : null, opened_at: over.state === 'opened' ? '2026-10-01T11:00:00Z' : null }), versions: [version()],
   created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over,
