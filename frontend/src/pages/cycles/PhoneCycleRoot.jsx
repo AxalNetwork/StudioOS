@@ -108,8 +108,9 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
 
   const focus = phoneFocus(raw, search, cycle);
   const first = cycle === 'validate' && focus?.headline === FIRST_FOCUS.headline;
-  // Validate draws no meter under its first-conversation focus, as drawn.
-  const meter = focus && !first ? phoneMeter(raw, cycle) : null;
+  // Validate draws no meter under its first-conversation focus, as drawn, nor
+  // (D4589) under a Stop or a step that could not be worked out: neither asks for more recording.
+  const meter = focus && !first && !focus.unavailable && focus.rule !== 'stopped' ? phoneMeter(raw, cycle) : null;
   const then = thenText(focus?.then);
   const actionHref = ROOT_ACTION_PATHS[cycle] ? `/${cycle}/${ROOT_ACTION_PATHS[cycle]}` : null;
   const opensAction = !!(openAction && actionHref && focus?.href && focus.href.split(/[?#]/)[0] === actionHref);
@@ -155,10 +156,24 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
               )}
             </Meter>
           )}
-          <Link to={focus.href}
-            onClick={opensAction ? (e) => { if (plainTap(e)) { e.preventDefault(); openAction(); } } : undefined}
-            className="mt-6 flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-violet-700 px-4 text-[15px] font-bold text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500"
-            data-testid="phone-focus-cta">{focus.cta}</Link>
+          {/* D4589: a step that could not be worked out has no primary action, only its secondary ones. */}
+          {focus.href && (
+            <Link to={focus.href}
+              onClick={opensAction ? (e) => { if (plainTap(e)) { e.preventDefault(); openAction(); } } : undefined}
+              className="mt-6 flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-violet-700 px-4 text-[15px] font-bold text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500"
+              data-testid="phone-focus-cta">{focus.cta}</Link>
+          )}
+          {focus.secondary?.length > 0 && (
+            <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2" data-testid="phone-focus-secondary">
+              {focus.secondary.map((s) => {
+                const opens = !!(openAction && actionHref && s.href.split(/[?#]/)[0] === actionHref);
+                return (
+                  <Link key={s.href} to={s.href} onClick={opens ? (e) => { if (plainTap(e)) { e.preventDefault(); openAction(); } } : undefined}
+                    className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-violet-700 underline dark:text-violet-300">{s.label}</Link>
+                );
+              })}
+            </div>
+          )}
           {then && (
             <div className="mt-[26px] border-t border-[#f0eff3] pt-[18px] dark:border-gray-800" data-testid="phone-focus-then">
               <p className="m-0 text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-700 dark:text-gray-300">Then</p>
