@@ -83,6 +83,14 @@ async function ensureFounderProject(env: Env, user: User): Promise<{ project_id:
       return null;
     }
   }
+  // D4659: a Lab founder's answers land on their recorded venture; with
+  // several projects and none recorded, nothing is written to a guessed one.
+  try {
+    const { resolveVenture } = await import('../labVenture');
+    const v = await resolveVenture(env, user.id);
+    if (v.status === 'bound') return { project_id: v.project.id, founder_id: Number(founderId) };
+    if (v.status === 'needs_choice' || v.status === 'deleted') return null;
+  } catch { /* not a Lab founder, or enrollments unmigrated: the rule below */ }
   const proj = await env.DB.prepare(
     `SELECT id FROM projects WHERE founder_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1`,
   ).bind(founderId).first<{ id: number }>().catch(() => null);
