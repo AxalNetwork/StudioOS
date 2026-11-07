@@ -15,7 +15,7 @@ import {
   addExamQuestion, deleteExamQuestion, markSubmission, orRefusal, readAttemptsReview, readExam, readExamAttempts,
   readExercise, readStudioExam, readStudioExams, readStudioExercise, readStudioExercises, readSubmissionsReview,
   saveExam, saveExercise, setExamStatus, setExerciseStatus, startExamAttempt, submitExamAttempt,
-  submitExerciseAnswer, updateExamQuestion,
+  explainExamQuestion, submitExerciseAnswer, updateExamQuestion,
 } from './assessmentReads';
 import { AttemptsReview, StudioExamBuilder, StudioExerciseEditor, SubmissionsReview } from './StudioAssessmentEditors';
 
@@ -306,6 +306,7 @@ export function StudioAssessment({ kind, uid = null, onStored }) {
       onStatus: (action) => run('fields', () => setExamStatus(uid, action), (row) => show(row, STATUS_NOTICE[action])),
       onAddQuestion: (form) => run('questions', () => addExamQuestion(uid, form), (row) => show(row)),
       onUpdateQuestion: (questionUid, form) => run('questions', () => updateExamQuestion(questionUid, form), (row) => show(row)),
+      onExplainQuestion: (questionUid, form) => run('questions', () => explainExamQuestion(questionUid, form), (row) => show(row)),
       onDeleteQuestion: (questionUid) => run('questions', () => deleteExamQuestion(questionUid), (row) => show(row)),
     };
     if (!uid) return <StudioExamBuilder key="new-exam" exam={null} handlers={handlers} busy={busy} error={error} notice={notice} />;

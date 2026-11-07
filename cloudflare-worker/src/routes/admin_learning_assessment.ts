@@ -12,6 +12,8 @@
  *   PATCH  /exams/:uid
  *   POST   /exams/:uid/publish | unpublish | archive
  *   POST   /exams/:uid/questions            PATCH /questions/:uid     DELETE /questions/:uid
+ *   PUT    /questions/:uid/explanation      the explanation and revision links (D4650), allowed after the
+ *                                            first attempt; the body replaces both (a key left out clears it)
  *
  * QUESTIONS FREEZE AT THE FIRST ATTEMPT. Once anyone has started an exam, its
  * questions cannot be added, edited or removed: an attempt is graded against
@@ -23,7 +25,7 @@ import type { Env } from '../types';
 import { refuse } from '../util/refusal';
 import { newUid } from './_t13t14t15_helpers';
 import { LEARNING_VISIBILITIES } from '../services/learningAccess';
-import { parseCorrect, parseOptions } from '../services/learningAssessment';
+import { EXPLANATION_MAX, parseCorrect, parseOptions, parseRevision, teachingOf } from '../services/learningAssessment';
 import { completeAssessmentLessons } from '../services/learningCompletion';
 import {
   gate, record, text, bad, oneOf, wholeOrNull, guarded, NEXT_STATUS,
@@ -186,7 +188,7 @@ async function examTree(env: Env, uid: string) {
   const exam = await env.DB.prepare(EXAM_SELECT + ' WHERE uid = ?').bind(uid).first<any>();
   if (!exam) return null;
   const qs = await env.DB.prepare(
-    'SELECT uid, position, prompt, kind, options_json, correct_json FROM learning_exam_questions WHERE exam_id = ? ORDER BY position, id',
+    'SELECT uid, position, prompt, kind, options_json, correct_json, explanation, revision_json FROM learning_exam_questions WHERE exam_id = ? ORDER BY position, id',
   ).bind(exam.id).all<any>();
   const attempts = await env.DB.prepare('SELECT COUNT(*) AS n FROM learning_exam_attempts WHERE exam_id = ?').bind(exam.id).first<{ n: number }>();
   const { id: _id, ...rest } = exam;
@@ -197,6 +199,8 @@ async function examTree(env: Env, uid: string) {
     questions: (qs.results || []).map((q) => ({
       uid: q.uid, position: q.position, prompt: q.prompt, kind: q.kind,
       options: JSON.parse(q.options_json), correct: JSON.parse(q.correct_json),
+      // D4650 (#4650, part 3): what a member sees beside the answer, when the reveal policy shows it.
+      ...teachingOf(q),
     })),
   };
 }
@@ -290,18 +294,40 @@ r.post('/exams/:uid/questions', async (c) => {
     if (!options) bad('bad_options', 'options is a list of 2 to 10 answers, each some text.');
     const correct = parseCorrect(kind as string, b?.correct, (options as string[]).length);
     if (!correct) bad('bad_correct', kind === 'single' ? 'A single-choice question has exactly one correct option.' : 'A multiple-choice question has one or more correct options.');
+    const teaching = teachingFields(b);
     const uid = newUid();
     // Frozen at the first attempt, checked in the insert itself.
     const ins = await c.env.DB.prepare(
-      `INSERT INTO learning_exam_questions (uid, exam_id, position, prompt, kind, options_json, correct_json)
-       SELECT ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM learning_exam_questions WHERE exam_id = ?), ?, ?, ?, ?
+      `INSERT INTO learning_exam_questions (uid, exam_id, position, prompt, kind, options_json, correct_json, explanation, revision_json)
+       SELECT ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM learning_exam_questions WHERE exam_id = ?), ?, ?, ?, ?, ?, ?
         WHERE NOT EXISTS (SELECT 1 FROM learning_exam_attempts WHERE exam_id = ?)`,
-    ).bind(uid, exam.id, exam.id, prompt, kind, JSON.stringify(options), JSON.stringify(correct), exam.id).run();
+    ).bind(uid, exam.id, exam.id, prompt, kind, JSON.stringify(options), JSON.stringify(correct),
+      teaching.explanation ?? null, teaching.revision_json ?? '[]', exam.id).run();
     if (!Number(ins?.meta?.changes ?? 0)) return refuse(c, 409, FROZEN);
     await record(c, admin, 'learning.question.create', { uid, exam_uid: exam.uid });
     return c.json({ exam: await examTree(c.env, exam.uid) }, 201);
   });
 });
+
+/**
+ * D4650 (#4650, part 3): a question's explanation and revision links. A key the
+ * body leaves out is undefined (not written); null clears it.
+ */
+function teachingFields(b: any): { explanation?: string | null; revision_json?: string } {
+  const out: { explanation?: string | null; revision_json?: string } = {};
+  if (b?.explanation !== undefined) {
+    if (b.explanation !== null && typeof b.explanation !== 'string') bad('bad_explanation', `explanation is text, up to ${EXPLANATION_MAX} characters.`);
+    const t = typeof b.explanation === 'string' ? b.explanation.trim() : '';
+    if (t.length > EXPLANATION_MAX) bad('bad_explanation', `explanation is text, up to ${EXPLANATION_MAX} characters.`);
+    out.explanation = t || null;
+  }
+  if (b?.revision !== undefined) {
+    const list = parseRevision(b.revision);
+    if (!list) bad('bad_revision', 'revision is a list of up to 5 {title, url}, each url https or a path inside Learning (/learning/...).');
+    out.revision_json = JSON.stringify(list);
+  }
+  return out;
+}
 
 async function questionOf(env: Env, uid: string) {
   return env.DB.prepare(
@@ -335,6 +361,25 @@ r.patch('/questions/:uid', async (c) => {
     ).bind(prompt ?? null, kind, JSON.stringify(options), correct ? JSON.stringify(correct) : null, now(), q.id, q.exam_id).run();
     if (!Number(upd?.meta?.changes ?? 0)) return refuse(c, 409, FROZEN);
     await record(c, admin, 'learning.question.update', { uid: q.uid, exam_uid: q.exam_uid });
+    return c.json({ exam: await examTree(c.env, q.exam_uid) });
+  });
+});
+
+/**
+ * D4650 (#4650, part 3): a question's explanation and revision links, written on
+ * their own. Allowed after the first attempt: they teach, and grading never
+ * reads them. The prompt, options and answer stay fixed (`PATCH /questions/:uid`).
+ */
+r.put('/questions/:uid/explanation', async (c) => {
+  const admin = await gate(c); if (admin instanceof Response) return admin;
+  return guarded(c, async () => {
+    const q = await questionOf(c.env, c.req.param('uid'));
+    if (!q) return refuse(c, 404, { code: 'not_found', message: 'No such question.' });
+    const t = teachingFields(await c.req.json().catch(() => ({})));
+    await c.env.DB.prepare(
+      'UPDATE learning_exam_questions SET explanation = ?, revision_json = ?, updated_at = ? WHERE id = ?',
+    ).bind(t.explanation ?? null, t.revision_json ?? '[]', now(), q.id).run();
+    await record(c, admin, 'learning.question.explain', { uid: q.uid, exam_uid: q.exam_uid });
     return c.json({ exam: await examTree(c.env, q.exam_uid) });
   });
 });

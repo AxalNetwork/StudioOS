@@ -7,7 +7,7 @@ import {
 } from './studioParts';
 import { SUBMISSION_STATUS, byPosition, formatDay } from './learningModel';
 import {
-  FROZEN_LINE, attemptOutcome, checkedOf, examForm, exerciseForm, optionLetter, questionForm, scoreOf, withoutOption,
+  FROZEN_LINE, attemptOutcome, checkedOf, examForm, exerciseForm, explanationForm, optionLetter, questionForm, scoreOf, withoutOption,
 } from './assessmentModel';
 
 /**
@@ -232,6 +232,7 @@ function QuestionsEditor({ exam, handlers, busy, error }) {
 
 function QuestionLine({ question, index, handlers, busy, frozen }) {
   const [editing, setEditing] = useState(false);
+  const [explaining, setExplaining] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const correct = Array.isArray(question.correct) ? question.correct : [];
   if (editing && !frozen) {
@@ -271,6 +272,28 @@ function QuestionLine({ question, index, handlers, busy, frozen }) {
           );
         })}
       </ul>
+      {/* D4650 (#4650, part 3): editable after the first attempt too; grading never reads it. */}
+      {explaining ? (
+        <ExplanationForm
+          question={question} busy={busy}
+          onSubmit={(form) => handlers.onExplainQuestion(question.uid, form).then((ok) => { if (ok) setExplaining(false); })}
+          onCancel={() => setExplaining(false)}
+        />
+      ) : (
+        <div className="space-y-1 text-[12.5px]" data-testid={`studio-explanation-${question.uid}`}>
+          {question.explanation
+            ? <p className="text-axal-ink dark:text-gray-200"><span className="font-semibold">Explanation:</span> {question.explanation}</p>
+            : <p className="text-axal-faint dark:text-gray-500"><Unrecorded>No explanation yet.</Unrecorded></p>}
+          {(question.revision || []).length > 0 && (
+            <p className="text-axal-muted dark:text-gray-400">Revise: {question.revision.map((l) => l.title).join(' · ')}</p>
+          )}
+          {handlers.onExplainQuestion && (
+            <button type="button" className={SECONDARY} onClick={() => setExplaining(true)} disabled={busy} data-testid={`button-explain-question-${question.uid}`}>
+              {question.explanation || (question.revision || []).length ? 'Edit explanation' : 'Add an explanation'}
+            </button>
+          )}
+        </div>
+      )}
       {confirming && (
         <ConfirmRow
           text="Delete this question?"
@@ -282,6 +305,41 @@ function QuestionLine({ question, index, handlers, busy, frozen }) {
         />
       )}
     </li>
+  );
+}
+
+/**
+ * D4650 (#4650, part 3): a question's explanation and up to 5 revision links,
+ * each a title and an https link or a path inside Learning. A member sees them
+ * beside the revealed answer, only where the reveal policy shows answers.
+ */
+export function ExplanationForm({ question, onSubmit, onCancel, busy }) {
+  const [form, setForm] = useState(() => explanationForm(question));
+  const ids = useId();
+  const setLink = (i, name) => (event) => setForm((f) => ({ ...f, revision: f.revision.map((l, j) => (j === i ? { ...l, [name]: event.target.value } : l)) }));
+  return (
+    <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); onSubmit(form); }} data-testid={`form-explain-question-${question.uid}`}>
+      <Field id={`${ids}-explanation`} label="Explanation" hint="Why the right answer is right, up to 1,000 characters. Shown only where answers are revealed." full>
+        <textarea id={`${ids}-explanation`} rows={3} className={INPUT} value={form.explanation} onChange={(e) => setForm((f) => ({ ...f, explanation: e.target.value }))} data-testid="input-question-explanation" />
+      </Field>
+      <fieldset className="space-y-2">
+        <legend className="text-[12px] font-semibold text-axal-ink dark:text-gray-200">Revise with</legend>
+        {form.revision.map((l, i) => (
+          <div key={i} className="flex flex-col gap-2 sm:flex-row">
+            <input aria-label={`Revision link ${i + 1} title`} className={INPUT} value={l.title} onChange={setLink(i, 'title')} placeholder="Title" />
+            <input aria-label={`Revision link ${i + 1} link`} className={INPUT} value={l.url} onChange={setLink(i, 'url')} placeholder="https://… or /learning/…" />
+            <button type="button" className={SECONDARY} onClick={() => setForm((f) => ({ ...f, revision: f.revision.filter((_, j) => j !== i) }))}>Remove</button>
+          </div>
+        ))}
+        {form.revision.length < 5 && (
+          <button type="button" className={SECONDARY} onClick={() => setForm((f) => ({ ...f, revision: [...f.revision, { title: '', url: '' }] }))}>Add a link</button>
+        )}
+      </fieldset>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className={PRIMARY} disabled={busy} data-testid="button-save-explanation">{busy ? 'Saving…' : 'Save explanation'}</button>
+        <button type="button" className={SECONDARY} onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
   );
 }
 

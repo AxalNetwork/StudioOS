@@ -189,7 +189,7 @@ test('the reads and writes call the routes D557 mounted, in the shapes those rou
   assert.match(lessonSelect, /i\.duration_seconds/);
   const admin = read('cloudflare-worker/src/routes/admin_learning.ts');
   // D4179 (#4179): the items reply keeps its `items` key; an uploaded item adds its `stream_copy`.
-  for (const reply of ["return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: ", "return c.json({ courses: (res.results || []).map", "c.json({ course: await courseTree(", "c.json({ item: await c.env.DB.prepare(ITEM_SELECT"]) {
+  for (const reply of ["return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: ", "return c.json({ courses: (res.results || []).map", "c.json({ course: await courseTree(", "return item ? c.json({ item }) :"]) {
     assert.ok(admin.includes(reply), `admin_learning.ts no longer answers ${reply}`);
   }
   // A webinar lesson names an event by its slug.
