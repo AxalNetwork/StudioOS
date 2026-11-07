@@ -1628,7 +1628,7 @@ billing.post('/stripe/webhook', async (c) => {
 
 async function handleStripeEvent(
   env: Env,
-  event: { id?: string; type: string; data: { object: Record<string, unknown> } },
+  event: { id?: string; type: string; created?: number; data: { object: Record<string, unknown> } },
 ): Promise<void> {
   const obj = event.data.object;
   // Task #6 — `metadata.kind === 'tier'` routes the event into the founder
@@ -1735,7 +1735,8 @@ async function handleStripeEvent(
     case 'customer.subscription.updated':
     case 'customer.subscription.created': {
       // D783: what the member pays for this plan, for its AI allowance. Never fails the webhook.
-      try { await recordSubscriptionAmount(env, obj, { isPlan, isTier, isInvestor }); }
+      // D4703: ordered by the event's own `created`, so a late older event cannot overwrite a newer amount.
+      try { await recordSubscriptionAmount(env, obj, { isPlan, isTier, isInvestor }, typeof event.created === 'number' ? event.created : null); }
       catch (e) { console.warn('[billing] subscription amount not recorded:', (e as Error).message); }
       const customer = obj.customer as string | null;
       const status = (obj.status as string) ?? 'active';
