@@ -43,6 +43,13 @@
  *          because this page has no handler of its own and a test holds it to
  *          that. Flags and Overrides count what that store holds, and an
  *          unreadable store reads as unreadable, never as none thrown.
+ *   v2     (D4860) The canvas's overview leads the page: version context,
+ *          one Platform health state over every signal (not cron alone), the
+ *          Needs attention queue, active controls, capability coverage, core
+ *          systems, operational activity and the consoles grouped by domain.
+ *          It is PlatformOverview.jsx over the same reads, plus one more —
+ *          the build route — and it draws no handler either. The zones below
+ *          stay as the detail every block summarises.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import DeployVersion from '../../components/DeployVersion';
@@ -56,6 +63,9 @@ import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitche
 import { liveChip, residencyLine } from '../../lib/deployTimeline';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import PlatformOverview, { VersionContext } from './PlatformOverview';
+import { channelState, keyLevel, webhookHealth, KEY_LEVEL } from './platformOverviewModel';
+import { platformBuildApi } from '../../lib/api/platformBuild.js';
 
 // Re-exported, not redeclared: Platform → Switches draws the same tones, and
 // the list lives once in lib/platformSwitches.js (D203).
@@ -337,6 +347,12 @@ export function BroadcastConsole({ loading, unreadable, telegram, xStatus }) {
                     : 'nothing sent yet'}
                   {ch.last_test_at ? ` · tested ${day(ch.last_test_at)}` : ''}
                 </div>
+                {ch.state === 'ready' && (
+                  <div className="mt-0.5 text-[10.5px] text-axal-muted" data-testid={`hq-channel-verified-${ch.id}`}>
+                    {/* D4860: configured is not verified. */}
+                    Verification: {channelState(ch, new Date())}
+                  </div>
+                )}
                 {ch.last_error && (
                   <div className="mt-1 text-[11px] text-red-700 dark:text-red-300">{ch.last_error}</div>
                 )}
@@ -530,14 +546,22 @@ export function IntegrationKeysPanel({ loading, unreadable, keys }) {
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${tone}`}>{label}</span>
                 </div>
                 {date && <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{date}</div>}
+                <div className="mt-0.5 text-[10px] font-semibold text-axal-faint" data-testid={`hq-key-level-${k.provider_key}`}>{keyLevel(k.provider_key)}</div>
               </li>
             );
           })}
         </ul>
-        <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{keys.last_set_reason}</p>
-        {keys.notes.map((n) => (
-          <p key={n} className="mt-1 text-[11px] leading-relaxed text-axal-faint">{n}</p>
-        ))}
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[11px] font-bold text-emerald-800 dark:text-emerald-300">How this is measured</summary>
+          <p className="mt-1 text-[11px] leading-relaxed text-axal-faint">{keys.last_set_reason}</p>
+          {keys.notes.map((n) => (
+            <p key={n} className="mt-1 text-[11px] leading-relaxed text-axal-faint">{n}</p>
+          ))}
+          <p className="mt-1 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-keys-levels-basis">
+            Required, Recommended and Optional are D4860&apos;s levels for the {Object.keys(KEY_LEVEL).length} managed keys. An Optional
+            key that is not set is not configured, which is not a problem.
+          </p>
+        </details>
       </>
     );
   }
@@ -564,6 +588,17 @@ export const SYNC_STATE = {
   failed: ['Failed', 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'],
   not_configured: ['Mirror off', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'],
 };
+
+/**
+ * D4860 — the newest of the latest attempts in one state, with its ticket. A
+ * ticket keeps only its latest attempt, so this is the newest such attempt
+ * still standing, never a log of every one.
+ */
+function lastAttempt(items, status) {
+  const hit = (items || []).filter((t) => t.status === status)
+    .sort((a, b) => String(b.attempted_at).localeCompare(String(a.attempted_at)))[0];
+  return hit ? `${day(hit.attempted_at)} · ticket #${hit.ticket_id}` : null;
+}
 
 /** H16 P2 — the ticket mirror: where it writes, its day, and its latest attempts. */
 export function GithubSyncPanel({ loading, unreadable, sync }) {
@@ -601,7 +636,15 @@ export function GithubSyncPanel({ loading, unreadable, sync }) {
         {day24?.available && (
           <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{day24.lag?.reason}</p>
         )}
-        <h3 className="mt-3 text-[12px] font-bold text-axal-ink dark:text-white">Latest attempts</h3>
+        {recent?.available && (
+          <div className="mt-2" data-testid="hq-sync-last">
+            <FieldRow label="Last successful sync">{lastAttempt(recent.items, 'synced') || 'none among the latest attempts'}</FieldRow>
+            <FieldRow label="Last failed sync">{lastAttempt(recent.items, 'failed') || 'none among the latest attempts'}</FieldRow>
+          </div>
+        )}
+        <details className="mt-3" data-testid="hq-sync-history">
+        <summary className="cursor-pointer text-[11.5px] font-bold text-emerald-800 dark:text-emerald-300">View sync history →</summary>
+        <h3 className="mt-2 text-[12px] font-bold text-axal-ink dark:text-white">Latest attempts</h3>
         {!recent?.available ? (
           <Absent reason={recent?.reason || 'The latest attempts were not reported.'} />
         ) : recent.items.length === 0 ? (
@@ -631,6 +674,7 @@ export function GithubSyncPanel({ loading, unreadable, sync }) {
           </ul>
         )}
         <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{sync.recent_note}</p>
+        </details>
       </>
     );
   }
@@ -744,6 +788,10 @@ export function PaymentsCatalogPanel({ loading, unreadable, payments }) {
               {num(w.deliveries)} in {num(w.window_hours)}h · {num(w.not_2xx)} not 2xx
             </span>
           )}
+          {/* D4860: whether that proves health. Silence is not. */}
+          <span className="block text-[10.5px] font-bold" data-testid="hq-pay-webhook-health">
+            Health: {webhookHealth(payments, new Date()).state}
+          </span>
         </FieldRow>
         {catalog?.available && (
           <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{catalog.sync_basis}</p>
@@ -858,11 +906,15 @@ export function PromoCodesPanel({ loading, unreadable, promos }) {
 }
 
 export default function PlatformPage() {
+  // D4860 — when each read answered, so every block can say when it was
+  // observed. The page makes the reads, so that is when it saw them.
+  const [observed, setObserved] = useState({});
+  const seen = useCallback((k) => setObserved((o) => ({ ...o, [k]: new Date() })), []);
   const [data, setData] = useState(null);
   const load = useCallback(() => {
     setData(null);
-    api.hqPlatform().then(setData, (e) => { reportError('hq-platform', e); setData(UNAVAILABLE); });
-  }, []);
+    api.hqPlatform().then((v) => { seen('summary'); setData(v); }, (e) => { reportError('hq-platform', e); setData(UNAVAILABLE); });
+  }, [seen]);
   useEffect(() => { load(); }, [load]);
 
   // D110 — Deployments is its own request: it fans out to every branch Worker
@@ -872,8 +924,8 @@ export default function PlatformPage() {
   const [deps, setDeps] = useState(null);
   const loadDeps = useCallback(() => {
     setDeps(null);
-    api.deployments().then(setDeps, (e) => { reportError('hq-deployments', e); setDeps(UNAVAILABLE); });
-  }, []);
+    api.deployments().then((v) => { seen('deps'); setDeps(v); }, (e) => { reportError('hq-deployments', e); setDeps(UNAVAILABLE); });
+  }, [seen]);
   useEffect(() => { loadDeps(); }, [loadDeps]);
 
   // D161 — traffic by branch, its own read for the same reason `deps` is: it
@@ -884,12 +936,19 @@ export default function PlatformPage() {
   const [traffic, setTraffic] = useState(null);
   const loadTraffic = useCallback(() => {
     setTraffic(null);
-    api.analyticsTrafficByBranch('', '').then(setTraffic, (e) => {
+    api.analyticsTrafficByBranch('', '').then((v) => { seen('traffic'); setTraffic(v); }, (e) => {
       reportError('hq-platform:trafficByBranch', e);
       setTraffic(UNAVAILABLE);
     });
-  }, []);
+  }, [seen]);
   useEffect(() => { loadTraffic(); }, [loadTraffic]);
+
+  // D4860 — the commit and environment for the header. Its own read: a build
+  // route that does not answer empties only the version context.
+  const [build, setBuild] = useState(null);
+  useEffect(() => {
+    platformBuildApi.read().then(setBuild, (e) => { reportError('hq-platform:build', e); setBuild('unavailable'); });
+  }, []);
 
   const ready = data && data !== UNAVAILABLE;
   const integrations = ready ? data.integrations : null;
@@ -966,27 +1025,32 @@ export default function PlatformPage() {
   return (
     <RailFrame rail={rail} data-testid="hq-platform-page">
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#3730a3] px-4 py-2.5 text-white">
-          <span className="text-[12.5px] font-bold">All subsidiaries</span>
-          <span className="text-[11px] opacity-80 tabular-nums">
-            {jobs?.available ? jobsLine(jobs) : '…'}
-          </span>
-        </div>
-
-        <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
+        {/* D4860 — the cron line no longer leads the page: read alone it
+            looked like a platform verdict. Scheduled jobs are one signal of
+            the health state below. */}
+        <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <SlidersHorizontal size={13} /> HQ · Platform
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Platform</h1>
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Keys, the ticket mirror, the payments catalog, promo codes, jobs, deployments, monitoring,
-            broadcast and switches, each read from its own store. Each console is one link from its panel,
-            and changes are made there; the switches HQ can throw are thrown on Switches. No key material and
-            no chat id reaches this page, and nothing on it changes a setting.
+            Control plane for runtime, payments, AI, integrations and emergency controls.
           </p>
+          <details className="mt-1 max-w-2xl">
+            <summary className="cursor-pointer text-[11.5px] font-bold text-emerald-800 dark:text-emerald-300">How this page reads</summary>
+            <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">
+              Keys, the ticket mirror, the payments catalog, promo codes, jobs, deployments, monitoring,
+              broadcast and switches, each read from its own store. Each console is one link from its panel,
+              and changes are made there; the switches HQ can throw are thrown on Switches. No key material and
+              no chat id reaches this page, and nothing on it changes a setting.
+            </p>
+          </details>
           </div>
-          <HeaderAsk />
+          <div className="flex flex-col items-end gap-2">
+            <HeaderAsk />
+            <VersionContext build={build} observedAt={observed.summary} />
+          </div>
         </header>
 
         {data === UNAVAILABLE && (
@@ -999,7 +1063,20 @@ export default function PlatformPage() {
           </div>
         )}
 
-        <div className="mt-4 space-y-4">
+        <div className="mt-4">
+          <PlatformOverview
+            data={data}
+            deps={deps}
+            traffic={traffic}
+            build={build}
+            observed={observed}
+            now={observed.summary || null}
+            UNAVAILABLE={UNAVAILABLE}
+          />
+        </div>
+
+        <h2 className="mt-8 text-[11px] font-extrabold uppercase tracking-[.09em] text-axal-faint" data-testid="hq-platform-detail-h">System detail</h2>
+        <div className="mt-2 space-y-4">
           <Zone title="Keys and connections" sub="counted and stated, never revealed">
             {integrations?.available ? (
               <>
