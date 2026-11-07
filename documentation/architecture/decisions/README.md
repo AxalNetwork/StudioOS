@@ -59,6 +59,7 @@ and citations by number keep working.
 | `D4494.md` | Distribution Inbox source scope, personal unread receipts, honest missing bodies/counts and the explicit Send boundary. |
 | `D4486.md` | #4486: Distribution Channels, compatible kinds and read-only connection cards. |
 | `D4496.md` | Distribution cross-tab states and responsive layouts (#4496). |
+| `D4592.md` | Fair eligible-work discovery, bounded sweep progress and isolated resend capacity (#4592). |
 | `D4576.md` | Adds 32 specialist agent skills and synthetic golden cases through the existing library contract. |
 | `D4589.md` | Validate next-action policy shared by the desktop overview and the phone root (#4589). |
 | `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |

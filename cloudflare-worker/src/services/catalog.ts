@@ -651,7 +651,11 @@ export type CatalogMirrorSummary =
   | {
       available: true;
       products: { all: number; active: number };
-      prices: { all: number; active: number };
+      prices: { all: number; active: number; active_under_inactive_products: number };
+      /** D4703: true when every row's price list parsed, so the counts are the whole mirror. */
+      complete: boolean;
+      /** D4703: when this summary was read; `last_written_at` is when the mirror last changed. */
+      read_at: string;
       /** Rows whose price list does not parse: counted here, never as zero prices. */
       unreadable_price_rows: number;
       last_written_at: string | null;
@@ -688,6 +692,7 @@ export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorS
   let productsActive = 0;
   let pricesAll = 0;
   let pricesActive = 0;
+  let pricesActiveOrphaned = 0;
   let unreadable = 0;
   let last: string | null = null;
   for (const row of rows) {
@@ -704,13 +709,22 @@ export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorS
       continue;
     }
     pricesAll += prices.length;
-    for (const price of prices as CatalogPrice[]) if (price && price.active === true) pricesActive += 1;
+    for (const price of prices as CatalogPrice[]) {
+      if (!price || price.active !== true) continue;
+      pricesActive += 1;
+      // D4703: an active price under an archived product cannot be bought, and
+      // counting it with the rest made the active total read larger than the
+      // catalogue anyone can buy from.
+      if (Number(row.active) !== 1) pricesActiveOrphaned += 1;
+    }
   }
   return {
     available: true,
     products: { all: rows.length, active: productsActive },
-    prices: { all: pricesAll, active: pricesActive },
+    prices: { all: pricesAll, active: pricesActive, active_under_inactive_products: pricesActiveOrphaned },
     unreadable_price_rows: unreadable,
+    complete: unreadable === 0,
+    read_at: new Date().toISOString(),
     last_written_at: last,
     sync_basis: CATALOG_SYNC_BASIS,
   };
