@@ -608,8 +608,20 @@ export function newThisWeek(rows, now = Date.now(), max = 4) {
     .map(({ r }) => r);
 }
 
-/** LR1 "Recommended for you": a marked future block, never rows. */
-export const RECOMMENDED_FUTURE = 'Waits on recommendations (#3724). Nothing is drawn here until then.';
+/** LR1 "Recommended for you" (#4650, D4650): the next learning action and why, from `GET /api/learning/plan/next`. */
+export const RECOMMENDED_TITLE = 'Recommended for you';
+export const NEXT_UNREADABLE_CLAIM = 'This is not a claim that nothing is waiting.';
+/** What a next action's rule says beside its reason, in the member's words. */
+export const NEXT_RULE_LABEL = Object.freeze({ continue_course: 'Continue', program: 'From your program', plan: 'Planned' });
+/** The answer as the card draws it: the action, or the server's own empty state; null while there is nothing to draw. */
+export function nextView(answer) {
+  if (!answer || answer.status !== 'ready') return null;
+  if (answer.next) {
+    const n = answer.next;
+    return { kind: 'action', title: n.title, href: n.href, reason: n.reason, label: NEXT_RULE_LABEL[n.rule] || null, plan: n.plan || null };
+  }
+  return { kind: 'empty', text: answer.empty || 'Nothing is waiting.' };
+}
 
 /** LR4 chapters: the item has none recorded. */
 export const NO_CHAPTERS = 'No chapters';

@@ -673,3 +673,24 @@ test('D4703: the take rate needs the write bar, and is saved with its audit row'
   assert.equal(rateRow(db).value, '1200', 'the rate did not change without its record');
   assert.equal(rateAudit(db).length, 1);
 });
+
+/* ── D4703 (#4703) part 3: refunds due, as HQ reads them ─────────────── */
+
+test('D4703: HQ reads the advisory charges owed back, open first; a plain admin cannot', async () => {
+  const db = freshDb();
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611070915_advisory_refunds_due.sql'), 'utf8'));
+  db.exec(`INSERT INTO advisory_refunds_due (booking_id, booking_uid, booking_status, payment_intent_id, amount_cents, currency, created_at, resolved_at)
+    VALUES (1, 'bk-old', 'cancelled', 'pi_1', 30000, 'usd', '2026-11-01 00:00:00', '2026-11-02 00:00:00'),
+           (2, 'bk-new', 'no_show', 'pi_2', 12000, 'usd', '2026-11-05 00:00:00', NULL)`);
+  const env = envFor(db);
+  const get = async (as: number) => {
+    const res = await platformApp.request('/advisory-refunds-due', { headers: { Authorization: `Bearer ${await token(as, 'admin')}` } }, env);
+    return { status: res.status, body: await res.json().catch(() => ({})) as any };
+  };
+  const ok = await get(HOLDER);
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.open, 1);
+  assert.deepEqual(ok.body.items.map((r: any) => r.booking_uid), ['bk-new', 'bk-old'], 'open first');
+  assert.ok(!JSON.stringify(ok.body).includes('@'), 'no person is named');
+  assert.equal((await get(PLAIN_ADMIN)).status, 403);
+});

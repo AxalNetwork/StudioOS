@@ -4,6 +4,7 @@ import { cyclesWrite } from '../../../lib/api/cycles.js';
 import { GroupedColumns } from '../../../ui/Charts.jsx';
 import { AskButtonView } from '../../../ui/AskButton.jsx';
 import { Card, Chip, StatusNote, Table } from './DistributionParts.jsx';
+import DistributionAskIntent from './DistributionAskIntent.jsx';
 import { AD_MONEY_BANNER, LATER_COPY, PLATFORMS, PLACEMENTS, sliderAmount, amountSlider, budgetTotal, chartMonths } from './adsModel.js';
 import './ads.css';
 const money = value => value == null ? 'Not set' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(value/100);
@@ -55,14 +56,23 @@ export function AdsContent({ data, onSaveBudget, creatives=EMPTY_CREATIVES, onSa
     </Card>
   </div></div>;
 }
+/** D4490 integration (#4484): the creatives Ask reuses #4488/#4512's quote/run/accept contract, scoped to this campaign.
+ * Accepting an ad_creative proposal with target="campaign" writes the creative row itself (distributionDrafts.ts) — the
+ * same store CampaignDraftAsk's manual Save and the wizard's assets Ask already share (D4483) — so there is nothing left
+ * for AdsTab to save; a revision bump just re-reads the now-current rows. */
 export default function AdsTab({ projectId, aiOff=false, onAskCreatives }) {
   const [campaigns,setCampaigns]=useState([]),[uid,setUid]=useState(''),[data,setData]=useState(null),[creatives,setCreatives]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[revision,setRevision]=useState(0);
+  const [askOpen,setAskOpen]=useState(false),[askPlacement,setAskPlacement]=useState(null);
   useEffect(()=>{let live=true;setCampaigns([]);setUid('');setData(null);setError('');if(projectId) cyclesWrite.grow.campaigns(projectId).then(r=>{if(live){setCampaigns(r.campaigns);setUid(r.campaigns[0]?.uid||'');}}).catch(()=>{if(live)setError('Unreadable: campaigns could not be read');});return()=>{live=false;};},[projectId]);
-  useEffect(()=>{let live=true;setData(null);setError('');if(uid&&projectId) Promise.all([growAdsApi.read(projectId,uid),cyclesWrite.grow.campaignCreatives(projectId,uid)]).then(([d,c])=>{if(live){setData(d);setCreatives(c.creatives);}}).catch(()=>{if(live)setError('Unreadable: ads could not be read');});return()=>{live=false;};},[projectId,uid,revision]);
+  useEffect(()=>{let live=true;setData(null);setError('');setAskOpen(false);if(uid&&projectId) Promise.all([growAdsApi.read(projectId,uid),cyclesWrite.grow.campaignCreatives(projectId,uid)]).then(([d,c])=>{if(live){setData(d);setCreatives(c.creatives);}}).catch(()=>{if(live)setError('Unreadable: ads could not be read');});return()=>{live=false;};},[projectId,uid,revision]);
   const save=async run=>{setBusy(true);setError('');try{await run();setRevision(n=>n+1);}catch{setError('The draft could not be saved. Read it again and try once more.');}finally{setBusy(false);}};
+  const askCreatives=placementKey=>{setAskPlacement(placementKey||null);setAskOpen(true);onAskCreatives?.(placementKey);};
+  const askKinds=(askPlacement?PLACEMENTS.filter(p=>p.key===askPlacement):PLACEMENTS).map(p=>({kind:'ad_creative',placement:p.key,field:p.field}));
+  const acceptCreatives=rows=>{setAskOpen(false);setRevision(n=>n+1);};
   return <><StatusNote>{AD_MONEY_BANNER}</StatusNote><label>Campaign<select value={uid} onChange={e=>setUid(e.target.value)} disabled={busy}>{campaigns.map(c=><option key={c.uid} value={c.uid}>{c.name}</option>)}</select></label>
     {error&&<p role="alert">{error}</p>}{!uid&&!error&&<p>Choose or create a campaign to plan its ads.</p>}{uid&&!data&&!error&&<p role="status">Loading ads…</p>}
-    {data&&<AdsContent key={`${projectId}:${uid}`} data={data} creatives={creatives} aiOff={aiOff} onAskCreatives={onAskCreatives} busy={busy}
+    {data&&<AdsContent key={`${projectId}:${uid}`} data={data} creatives={creatives} aiOff={aiOff} onAskCreatives={askCreatives} busy={busy}
       onSaveBudget={c=>save(()=>cyclesWrite.grow.campaignChannel(projectId,uid,c.uid,{planned_budget_cents:c.planned_budget_cents,budget_type:c.budget_type,starts_on:c.starts_on,ends_on:c.ends_on}))}
-      onSaveCreative={(p,text)=>save(()=>cyclesWrite.grow.campaignCreative(projectId,uid,p.key,p.field,text))} />}</>;
+      onSaveCreative={(p,text)=>save(()=>cyclesWrite.grow.campaignCreative(projectId,uid,p.key,p.field,text))} />}
+    {askOpen&&!aiOff&&data?<DistributionAskIntent projectId={projectId} campaignUid={uid} target="campaign" kinds={askKinds} onAccept={acceptCreatives} onClose={()=>setAskOpen(false)} />:null}</>;
 }
