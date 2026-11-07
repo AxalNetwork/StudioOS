@@ -329,7 +329,53 @@ export async function revokeStaleCrossIdentitySession(
   }
 }
 
+/**
+ * #4573 H1 — the caller is resolved once per request.
+ *
+ * Before H1 every `getCurrentUser` / `requireAuth` / `requireAdmin` call ran the
+ * whole resolution again: the user row, licences, MI Pro, recovery state, the
+ * Super Admin elevation and the session check, so a signed-in request read the
+ * caller two to four times (rate limit, then the route, then its helpers). The
+ * answer is now memoized on the request context, keyed on the raw credentials
+ * the request carries (the bearer and the session cookie), so a different token
+ * on the same context can never reuse another's answer.
+ *
+ * - Only a resolved user is kept. A null answer (no credentials, a refused or
+ *   revoked session, or a read that failed inside the resolution) and a throw are
+ *   not, so the next call in the request resolves again, exactly as before H1.
+ * - Each caller gets its own shallow copy, so a handler that edits the user it was
+ *   given (or its licence list) cannot change what another caller sees.
+ * - A route that changes the caller's own user, session or side-table rows and
+ *   then needs the fresh answer IN THE SAME REQUEST calls `forgetCurrentUser(c)`
+ *   first. None does today (audited at H1: no handler writes those rows and then
+ *   resolves the caller again).
+ */
+const requestCallers = new WeakMap<Context<{ Bindings: Env }>, Map<string, Promise<User | null>>>();
+
+/** Drop this request's memoized caller, so the next `getCurrentUser` reads it again. */
+export function forgetCurrentUser(c: Context<{ Bindings: Env }>): void {
+  requestCallers.delete(c);
+}
+
 export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
+  const { bearer, cookie } = extractJwtCandidates(c);
+  const key = `${bearer ?? ''}\u0000${cookie ?? ''}`;
+  let byKey = requestCallers.get(c);
+  if (!byKey) { byKey = new Map(); requestCallers.set(c, byKey); }
+  let pending = byKey.get(key);
+  if (!pending) {
+    const p = resolveCurrentUser(c);
+    pending = p;
+    byKey.set(key, p);
+    const memo = byKey;
+    const drop = () => { if (memo.get(key) === p) memo.delete(key); };
+    p.then((u) => { if (!u) drop(); }, drop);
+  }
+  const u = await pending;
+  return u ? { ...u, licences: u.licences ? [...u.licences] : u.licences } : null;
+}
+
+async function resolveCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
   const sel = await selectJwt(c);
   if (!sel) return null;
   try {

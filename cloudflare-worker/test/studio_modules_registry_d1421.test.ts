@@ -24,6 +24,7 @@ function env() {
   fx.db.exec(readFileSync(new URL('../sql/migrations/687_studio_layouts.sql', import.meta.url), 'utf8'));
   // D1594 (#3863): the layout's revision.
   fx.db.exec(readFileSync(new URL('../sql/migrations/750_studio_layout_revision.sql', import.meta.url), 'utf8'));
+  fx.db.exec(readFileSync(new URL('../sql/migrations/202611070916_studio_layout_reset_tombstone.sql', import.meta.url), 'utf8')); // D4621
   fx.db.prepare("INSERT INTO users(id,name,email,role,is_active,subscription_tier) VALUES(1,'Synthetic','s1@example.test','founder',1,'free')").run();
   fx.db.prepare("INSERT INTO users(id,name,email,role,is_active,investor_tier) VALUES(2,'Synthetic','s2@example.test','investor',1,'free')").run();
   return { fx, env: { DB: fx.DB, JWT_SECRET, ENVIRONMENT: 'development', RATE_LIMITS: memKV(), TOKENS: memKV() } as any };

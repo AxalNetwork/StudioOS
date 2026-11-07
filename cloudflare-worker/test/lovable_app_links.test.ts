@@ -20,6 +20,10 @@ import { checkAppUrl, lovablePart, plainTitle, linkView } from '../src/services/
 import { hostOf, liveLineOwner } from '../src/services/liveHost.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { splitStatements } from './_baseline.mjs';
+import { __setPublicResolverForTest } from '../src/services/webFetch.ts';
+// #4572 follow-up: a member-given URL's host is resolved before any fetch or socket; these tests answer DNS
+// with a public address (the private cases are refused by name, before DNS, as before).
+__setPublicResolverForTest(async () => ['93.184.216.34']);
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const FOUNDER = 1;

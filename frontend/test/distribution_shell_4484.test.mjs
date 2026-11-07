@@ -108,7 +108,9 @@ test('the mounted Overview keeps its tool doors without the moved channel table;
   const m=await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role:'founder'},h(CycleRoute,{cycle:'grow',slug:'distribution'}))),'/grow/distribution?project_id=7',{id:1,role:'founder'});
   try{await m.flush();assert.doesNotMatch(m.text(),/Synthetic existing channel/);assert.equal(m.nodes().some(n=>m.props(n)?.['data-testid']==='cycle-records'),false);assert.match(m.text(),/Open landing-page builder/);assert.match(m.text(),/Open launch calendar/);assert.equal(m.nodes().filter(n=>m.props(n)?.['data-testid']==='distribution-ask').length,1);}finally{await m.unmount();}
   paths.length=0;
-  const other=await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role:'founder'},h(CycleRoute,{cycle:'grow',slug:'distribution',tab:'ads'}))),'/grow/distribution/ads?project_id=7',{id:1,role:'founder'});
+  // #4741: Ads (#4510) was mounted — see distribution_ads_integration_4741.test.mjs — so this
+  // still-unlanded-tab guard now reads Newsletter, not Ads, to keep testing a tab with no screen.
+  const other=await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role:'founder'},h(CycleRoute,{cycle:'grow',slug:'distribution',tab:'newsletter'}))),'/grow/distribution/newsletter?project_id=7',{id:1,role:'founder'});
   try{await other.flush();assert.match(other.text(),/Coming in this module soon/);assert.equal(paths.some(p=>/\/cycles\/grow\/modules\/distribution(?:\?|$)/.test(p)||p.includes('/cycles/grow/campaigns')),false);}finally{await other.unmount();}
  }finally{globalThis.fetch=original;__resetEadwynPanelForTest();}
 });

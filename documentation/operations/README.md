@@ -8,6 +8,7 @@ files say how to act on it.
 | File | Use it to |
 | --- | --- |
 | `STRIPE_RENEWAL_GRACE.md` | Configure failed-payment termination and verify the bounded grace and webhook payload version (D1100). |
+| `USAGE_RETENTION.md` | Retention tiers for the AI usage, reservation, ledger, run and proposal tables, what blocks moving a row today, and the counsel and owner gates before anything is archived or deleted (D4568). |
 | `D1_BENCHMARK.md` | Measure whether the one D1 database limits mixed agent and financial load: the local benchmark (`npm run bench:d1`), the owner's read-only production baseline, the hosted preview run behind #4566's preflight, and what each result may claim (D4567). |
 | `AGENT_EXECUTION_VALIDATION.md` | Test agent execution outside production: the preview isolation matrix, the fail-closed preflight, synthetic fixtures and their cleanup, the owner-only actions and teardown, and how evidence is classed (D4566). |
 | `AGENT_ENGINE_GO_LIVE.md` | Prepare and stage agent rollout, verify the $100 gateway limit, cohort membership, halt and breaker controls (D4423). |
