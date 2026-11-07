@@ -62,7 +62,12 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
+    // D4632: a batch runs, as one transaction, as D1's does (the routes' moves are batches now).
+    async batch(x: any[]) {
+      db.exec('SAVEPOINT b');
+      try { const out: any[] = []; for (const s of x) out.push(await s.run()); db.exec('RELEASE b'); return out; }
+      catch (e) { db.exec('ROLLBACK TO b'); db.exec('RELEASE b'); throw e; }
+    },
   };
 }
 
@@ -97,7 +102,7 @@ function freshDb() {
     CREATE TABLE partners (id INTEGER PRIMARY KEY, name TEXT);
     CREATE TABLE deal_stage_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, deal_id INTEGER NOT NULL,
-      from_stage TEXT, from_stage_changed_at TEXT, to_stage TEXT, kind TEXT,
+      from_stage TEXT, to_stage TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'set', days_in_from INTEGER,
       actor_user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE mi_pro_subscriptions (

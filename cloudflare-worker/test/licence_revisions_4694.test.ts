@@ -47,6 +47,7 @@ const SCHEMA = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admi
   + '\nCREATE TABLE licence_deployments (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_uid TEXT UNIQUE, code TEXT, hostname TEXT, status TEXT);\n'
   + ['513_licence_fee_invoices.sql', '202611062240_licence_event_changes.sql'].map(mig).join('\n')
   + '\n' + mig('512_licence_terms.sql').replace(/ALTER TABLE branch_licence[^;]*;/, '')
+  + '\n' + mig('202611071540_licence_revision.sql')
   + '\n' + licenceRevisionAlters('territory_licences', 'licence_terms', 'licence_fee_invoices');
 const SECRET = ['d4694', 'revisions', 'fixture', 'signing', 'secret'].join('-');
 const SUPER = 1, SUPER_PW = 2, ADMIN = 3, LIC = 'lic_4694';

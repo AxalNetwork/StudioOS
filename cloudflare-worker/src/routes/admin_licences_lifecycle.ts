@@ -12,7 +12,8 @@ import { hashEmail } from '../util/hashEmail';
 import { pushLicenceToBranch } from '../services/licencePush';
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
-import { str, byUid, logEvent, pushOutcome, transitionRefusal, activationBlockers } from '../services/licenceLedgerCore';
+import { str, byUid, logEvent, pushOutcome, transitionRefusal, activationBlockers, staleRequest } from '../services/licenceLedgerCore';
+import { appliedGuard, staleBody, transition } from '../services/licenceTransitions';
 import type { LicenceRenewResult, LicenceSuspendResult, LicenceTransitionResult } from '../services/licenceContracts';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -39,11 +40,16 @@ r.post('/:uid/activate', async (c) => {
     const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
     const blockers = await activationBlockers(c.env, licence);
     if (blockers.length) return c.json({ error: 'blocked', blockers }, 409);
-    await c.env.DB.prepare(
-      "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
-    ).bind(nowIso(), licence.id).run();
+    // #4678: the revision read above is the one the prerequisites were checked
+    // on; an edit to territory, seats or terms since then loses this write.
+    const moved = await transition(c.env, licence, 'activate', { now: nowIso() });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'bad_transition', message: 'Only a draft or pending licence can be activated.' }, 409)
+      : c.json(staleBody(moved.current), 409);
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     await logEvent(c.env, licence.id, 'activated', admin.id, undefined, null,
       { before: { status: licence.status }, after: { status: 'active' } }, pushOutcome(pushed));
@@ -63,9 +69,12 @@ r.post('/:uid/suspend', async (c) => {
     if (!note) return c.json({ error: 'a suspension must record why' }, 400);
     // Territory rows are untouched on purpose: a suspended licence still holds
     // its countries. Releasing them is a termination, not a lapse.
-    await c.env.DB.prepare(
-      "UPDATE territory_licences SET status = 'suspended', status_note = ?, suspended_at = ?, updated_at = ? WHERE id = ?",
-    ).bind(note, nowIso(), nowIso(), licence.id).run();
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
+    const moved = await transition(c.env, licence, 'suspend', { note, now: nowIso() });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'bad_transition', message: 'Only an active licence can be suspended.' }, 409)
+      : c.json(staleBody(moved.current), 409);
     // D135 — THIS FILE HAD ZERO `notify()` CALLS. Suspending a licence changed
     // four columns in HQ's ledger and told the holder nothing: they found out by
     // hitting a 423. "First admins get notified" is the ladder's first sentence,
@@ -94,9 +103,17 @@ r.post('/:uid/reinstate', async (c) => {
     if (licence.status !== 'suspended') {
       return c.json({ error: 'only a suspended licence can be reinstated' }, 409);
     }
-    await c.env.DB.prepare(
-      "UPDATE territory_licences SET status = 'active', status_note = NULL, suspended_at = NULL, updated_at = ? WHERE id = ?",
-    ).bind(nowIso(), licence.id).run();
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
+    // #4678: reinstating is a way into `active`, so it meets the same
+    // prerequisites activation does. A licence suspended before it was ever
+    // complete cannot be reinstated into a state activation would refuse.
+    const blockers = await activationBlockers(c.env, licence, { reinstating: true });
+    if (blockers.length) return c.json({ error: 'blocked', blockers }, 409);
+    const moved = await transition(c.env, licence, 'reinstate', { now: nowIso() });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'only a suspended licence can be reinstated' }, 409)
+      : c.json(staleBody(moved.current), 409);
     await notifyLicenceAdmins(c.env, licence.id, {
       type: 'licence_reinstated',
       title: 'Your licence is active again',
@@ -130,9 +147,14 @@ r.post('/:uid/renew', async (c) => {
       base.setFullYear(base.getFullYear() + years);
       next = base.toISOString().slice(0, 10);
     }
-    await c.env.DB.prepare(
-      'UPDATE territory_licences SET renews_on = ?, terms_revision = terms_revision + 1, updated_at = ? WHERE id = ?',
-    ).bind(next, nowIso(), licence.id).run();
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
+    // `transition` bumps `terms_revision` in the same statement as `renews_on`, so a terms
+    // form opened before this renewal cannot write the old date back (D4694).
+    const moved = await transition(c.env, licence, 'renew', { renewsOn: next, now: nowIso() });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'bad_transition', message: 'This licence can no longer be renewed.' }, 409)
+      : c.json(staleBody(moved.current), 409);
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next }, null,
       { before: { renews_on: licence.renews_on ?? null }, after: { renews_on: next } }, pushOutcome(pushed));
@@ -356,13 +378,20 @@ r.post('/:uid/terminate', async (c) => {
       'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
     ).bind(licence.id).all<{ country_code: string }>();
     const codes = (released.results || []).map((x) => x.country_code);
-    // Termination is the ONLY thing that releases territory.
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM licence_territories WHERE licence_id = ?').bind(licence.id),
-      c.env.DB.prepare(
-        "UPDATE territory_licences SET status = 'terminated', status_note = ?, terminated_at = ?, updated_at = ? WHERE id = ?",
-      ).bind(note, nowIso(), nowIso(), licence.id),
-    ]);
+    const stale = staleRequest(c, licence);
+    if (stale) return stale;
+    // Termination is the ONLY thing that releases territory, and #4678 makes
+    // the release depend on the termination: the DELETE runs only if the
+    // compare-and-swap applied, so a stale terminate neither releases the
+    // territory of a licence that is still active nor leaves a half-done move.
+    const guard = appliedGuard(licence.id, licence.revision + 1, 'terminated');
+    const moved = await transition(c.env, licence, 'terminate', {
+      note, now: nowIso(),
+      after: [c.env.DB.prepare('DELETE FROM licence_territories WHERE licence_id = ? AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND revision = ? AND status = ?)').bind(licence.id, ...guard.binds)],
+    });
+    if (!moved.ok) return moved.code === 'bad_transition'
+      ? c.json({ error: 'bad_transition', message: 'This licence is already terminated.' }, 409)
+      : c.json(staleBody(moved.current), 409);
     await logEvent(c.env, licence.id, 'terminated', admin.id, { released: codes }, note,
       { before: { status: licence.status, countries: codes }, after: { status: 'terminated', countries: [] } });
 

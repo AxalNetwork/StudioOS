@@ -62,11 +62,13 @@ r.put('/:uid/territories', async (c) => {
 
     const beforeCountries = await countriesOf(c.env, licence.id);
     const stmts = [
-      c.env.DB.prepare('DELETE FROM licence_territories WHERE licence_id = ?').bind(licence.id),
+      // #4678: a licence terminated since the read above releases its territory
+      // for good; neither statement may take it back.
+      c.env.DB.prepare("DELETE FROM licence_territories WHERE licence_id = ? AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')").bind(licence.id, licence.id),
       ...wanted.map((code) => c.env.DB.prepare(
-        'INSERT INTO licence_territories (licence_id, country_code, created_at) VALUES (?,?,?)',
-      ).bind(licence.id, code, nowIso())),
-      c.env.DB.prepare('UPDATE territory_licences SET updated_at = ? WHERE id = ?')
+        "INSERT INTO licence_territories (licence_id, country_code, created_at) SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')",
+      ).bind(licence.id, code, nowIso(), licence.id)),
+      c.env.DB.prepare('UPDATE territory_licences SET revision = revision + 1, updated_at = ? WHERE id = ?')
         .bind(nowIso(), licence.id),
     ];
     // The unique index on country_code is the real guard: if another request
@@ -97,11 +99,11 @@ r.put('/:uid/seats', async (c) => {
     }
     const beforeSeats = await seatsOf(c.env, licence.id);
     await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM licence_seats WHERE licence_id = ?').bind(licence.id),
+      c.env.DB.prepare("DELETE FROM licence_seats WHERE licence_id = ? AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')").bind(licence.id, licence.id),
       ...SEAT_TYPES.map((t) => c.env.DB.prepare(
-        'INSERT INTO licence_seats (licence_id, seat_type, seats_licensed, created_at) VALUES (?,?,?,?)',
-      ).bind(licence.id, t, seats[t], nowIso())),
-      c.env.DB.prepare('UPDATE territory_licences SET updated_at = ? WHERE id = ?')
+        "INSERT INTO licence_seats (licence_id, seat_type, seats_licensed, created_at) SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')",
+      ).bind(licence.id, t, seats[t], nowIso(), licence.id)),
+      c.env.DB.prepare('UPDATE territory_licences SET revision = revision + 1, updated_at = ? WHERE id = ?')
         .bind(nowIso(), licence.id),
     ]);
     // D272 — this changes what the branch's copy holds, so it pushes like
@@ -151,7 +153,7 @@ r.patch('/:uid/terms', async (c) => {
     const res = await c.env.DB.prepare(
       `UPDATE territory_licences
           SET term_years = ?, annual_fee_cents = ?, currency = ?, revenue_share_bps = ?, token_split_bps = ?,
-              starts_on = ?, renews_on = ?, terms_revision = terms_revision + 1, updated_at = ?
+              starts_on = ?, renews_on = ?, terms_revision = terms_revision + 1, revision = revision + 1, updated_at = ?
         WHERE id = ? AND terms_revision = ?`,
     ).bind(merged.term_years, merged.annual_fee_cents, merged.currency, merged.revenue_share_bps, merged.token_split_bps,
       merged.starts_on, merged.renews_on, nowIso(), licence.id, rev.value).run();

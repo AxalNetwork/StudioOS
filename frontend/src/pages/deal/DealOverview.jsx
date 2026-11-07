@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
-import { dealMoney } from '../../components/deals/dealMoney';
+import { dealMoney, roundAsk } from '../../components/deals/dealMoney';
 import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3 } from './DealFrame';
 import { DECK_SLOT, termsAtGlance, whatsNewOf } from './dealFrameModel';
@@ -66,7 +66,7 @@ function WhatsNew({ dealId }) {
 export default function DealOverview({ deal, track, investor }) {
   const cur = deal.currency || 'USD';
   const committed = dealMoney(deal.capital_committed, cur);
-  const target = dealMoney(deal.target_raise ?? deal.amount, cur);
+  const target = dealMoney(roundAsk(deal), cur);
   return (
     <div className="grid gap-3.5 lg:grid-cols-3" data-testid="deal-overview">
       <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-2">
