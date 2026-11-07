@@ -1,3 +1,4 @@
+import { withMentorEligible } from './mentorEligibility';
 import { heldLicences } from './accountLicences';
 /**
  * U6 — a cohort's founders are told when an advisor can read them, and can
@@ -72,10 +73,11 @@ export async function syncCohortAdvisorNotices(env: Env, scope: SyncScope = {}):
   let started = 0;
   let ended = 0;
 
-  // STARTED — an active assignment held by a current advisor, over a founder in
+  // STARTED — an active assignment held by an eligible mentor (D4807: the one rule, an additional
+  // Advisor licence included, since that advisor CAN read the cohort), over a founder in
   // that cohort who has not hidden themselves from that advisor, whose notice
   // for this episode has not been sent.
-  const owedStart = await env.DB.prepare(
+  const owedStart = await env.DB.prepare(await withMentorEligible(env,
     `SELECT a.id AS assignment_id, a.assigned_at AS episode_at, a.advisor_user_id AS advisor_user_id,
             u.name AS advisor_name, c.year AS year, c.month AS month, w.user_id AS founder_user_id
        FROM advisor_cohort_assignments a
@@ -83,7 +85,7 @@ export async function syncCohortAdvisorNotices(env: Env, scope: SyncScope = {}):
        LEFT JOIN cohort_cycles c ON c.id = a.cohort_cycle_id
        JOIN (SELECT DISTINCT user_id, cohort_cycle_id FROM company_week_status) w
          ON w.cohort_cycle_id = a.cohort_cycle_id
-      WHERE a.is_active = 1 AND u.role = 'advisor'
+      WHERE a.is_active = 1 AND {ELIGIBLE}
         AND (?1 IS NULL OR a.cohort_cycle_id = ?1)
         AND (?2 IS NULL OR w.user_id = ?2)
         AND (?3 IS NULL OR a.id = ?3)
@@ -94,7 +96,7 @@ export async function syncCohortAdvisorNotices(env: Env, scope: SyncScope = {}):
                          WHERE n.assignment_id = a.id AND n.founder_user_id = w.user_id
                            AND n.kind = 'started' AND n.episode_at = a.assigned_at)
       ORDER BY a.id, w.user_id
-      LIMIT ?4`,
+      LIMIT ?4`),
   ).bind(cycle, founder, assignment, limit).all<{
     assignment_id: number; episode_at: string; advisor_user_id: number; advisor_name: string | null;
     year: number | null; month: number | null; founder_user_id: number;

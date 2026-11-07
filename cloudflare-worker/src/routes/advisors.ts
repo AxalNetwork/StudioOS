@@ -1,3 +1,4 @@
+import { withMentorEligible } from '../services/mentorEligibility';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
 /**
  * T13 — Advisors + office-hour slots + bookings + reviews.
@@ -3336,14 +3337,14 @@ advisors.get('/admin/cohort-assignments/assignable', async (c) => {
   try {
     await requireAdmin(c);
     await ensureAdvisorStoresSchema(c.env);
-    const rows = await c.env.DB.prepare(
+    // D4807: the one mentor-eligibility rule (services/mentorEligibility.ts), shared with the catalogue's counts.
+    const rows = await c.env.DB.prepare(await withMentorEligible(c.env,
       `SELECT u.id AS id, u.name AS name, u.email AS email, a.id AS advisor_profile_id
          FROM users u
          LEFT JOIN advisors a ON a.user_id = u.id
-        WHERE u.is_active = 1 AND (LOWER(u.role) = 'advisor' OR EXISTS (
-          SELECT 1 FROM account_licences l WHERE l.user_id = u.id AND l.licence = 'advisor' AND l.revoked_at IS NULL))
+        WHERE {ELIGIBLE}
         ORDER BY u.name ASC
-        LIMIT 500`
+        LIMIT 500`)
     ).all<{ id: number; name: string | null; email: string | null; advisor_profile_id: number | null }>();
     return c.json({
       items: (rows.results || []).map((r) => ({
@@ -3382,15 +3383,15 @@ async function hiddenFounderCounts(env: Env): Promise<{ byRow: Map<number, numbe
                        WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)
         GROUP BY a.id`
     ).all<{ id: number; n: number }>();
-    const total = await env.DB.prepare(
+    const total = await env.DB.prepare(await withMentorEligible(env,
       `SELECT COUNT(DISTINCT o.founder_user_id) AS n
          FROM advisor_cohort_assignments a
          JOIN users u ON u.id = a.advisor_user_id
          JOIN cohort_advisor_optouts o
            ON o.advisor_user_id = a.advisor_user_id AND o.withdrawn_at IS NULL
-        WHERE a.is_active = 1 AND LOWER(u.role) = 'advisor' AND u.is_active = 1
+        WHERE a.is_active = 1 AND {ELIGIBLE}
           AND EXISTS (SELECT 1 FROM company_week_status w
-                       WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)`
+                       WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)`)
     ).first<{ n: number }>();
     return {
       byRow: new Map((rows.results || []).map((r) => [Number(r.id), Number(r.n) || 0])),
@@ -3433,7 +3434,7 @@ advisors.get('/admin/cohort-assignments', async (c) => {
   try {
     await requireAdmin(c);
     await ensureAdvisorStoresSchema(c.env);
-    const rows = await c.env.DB.prepare(
+    const rows = await c.env.DB.prepare(await withMentorEligible(c.env,
       // `advisor_role` is the target's CURRENT role, not the one they had when
       // the row was written. That is what turns this list from a log into
       // something that can answer "who has access who should not": a still
@@ -3445,16 +3446,18 @@ advisors.get('/admin/cohort-assignments', async (c) => {
               a.cohort_cycle_id AS cohort_cycle_id, a.assigned_at AS assigned_at,
               a.unassigned_at AS unassigned_at, a.is_active AS is_active,
               a.note AS note, u.name AS advisor_name, u.email AS advisor_email,
-              u.role AS advisor_role, u.is_active AS advisor_is_active
+              u.role AS advisor_role, u.is_active AS advisor_is_active,
+              -- D4807: eligibility is the one rule, not the role string: an additional Advisor licence counts, a revoked one does not.
+              COALESCE({ELIGIBLE}, 0) AS advisor_eligible
          FROM advisor_cohort_assignments a
          LEFT JOIN users u ON u.id = a.advisor_user_id
         ORDER BY a.assigned_at DESC
-        LIMIT 500`
+        LIMIT 500`)
     ).all<{
       id: number; uid: string; advisor_user_id: number; cohort_cycle_id: number;
       assigned_at: string; unassigned_at: string | null; is_active: number;
       note: string | null; advisor_name: string | null; advisor_email: string | null;
-      advisor_role: string | null; advisor_is_active: number | null;
+      advisor_role: string | null; advisor_is_active: number | null; advisor_eligible: number;
     }>();
     const hidden = await hiddenFounderCounts(c.env);
     const founders = await activatedFounderCounts(c.env);
@@ -3464,6 +3467,8 @@ advisors.get('/admin/cohort-assignments', async (c) => {
         is_active: !!r.is_active,
         // A deleted user has no account to be active: null, not false.
         advisor_is_active: r.advisor_is_active == null ? null : Number(r.advisor_is_active) === 1,
+        // D4807: the one mentor-eligibility rule, so the page's role-change warning agrees with the counts.
+        advisor_eligible: Number(r.advisor_eligible) === 1,
         founders_hidden: hidden ? hidden.byRow.get(Number(r.id)) ?? 0 : null,
         founders_in_cohort: founders ? founders.get(Number(r.cohort_cycle_id)) ?? 0 : null,
       })),
