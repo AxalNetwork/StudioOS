@@ -1,6 +1,6 @@
 ### The Ask panel's Worker part (D1442, #3991)
 
-`routes/eadwyn.ts` and `routes/ai_rail_proposals.ts`; migration 694. Clients: `eadwynApi.quote` (`lib/api/eadwyn.js`) and `railProposalsApi.list({ page, run })` (`lib/api/railProposals.js`), read by the Ask panel's seam (`ui/askPanelAdapter.js`, D1443) once it is on main.
+`routes/eadwyn.ts` and `routes/ai_rail_proposals.ts`; migration 694. Clients: `eadwynApi.quote` (`lib/api/eadwyn.js`) and `railProposalsApi.list({ page, run })` (`lib/api/railProposals.js`), read by the Ask panel's seam (`ui/askPanelAdapter.js`, D1443). **UPDATE 2026-11-07 (#4737):** `waiting` counts only the rows whose `rail_option` is a run chip, the cards the panel lists, so a page's form and module rows draw no "N waiting"; a `sessions:block` card is accepted on `/practice/sessions` (`POST /api/advisors/me/slots/block`, then `POST /api/ai/rail/proposals/:uid/decide`), never decided by the panel alone.
 
 | Route | Who | What it answers |
 | --- | --- | --- |
