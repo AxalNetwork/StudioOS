@@ -8,7 +8,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Pill } from '../../ui';
-import { learningPlanApi } from '../../lib/api/learningPlan';
+import { nextAction } from './planReads';
 import { LearningLoading, LearningUnreadable, SectionCard } from './LearningStates';
 import { AddToPlan } from './PlanSheet';
 import { NEXT_UNREADABLE_CLAIM, RECOMMENDED_TITLE, nextView } from './learningModel';
@@ -37,6 +37,6 @@ export function NextForYouCard({ state, onRetry }) {
 }
 
 export default function NextForYou() {
-  const [state, retry] = useLearningRead(() => learningPlanApi.next(), [], { scope: 'next' });
+  const [state, retry] = useLearningRead(() => nextAction(), [], { scope: 'next' });
   return <NextForYouCard state={state} onRetry={retry} />;
 }

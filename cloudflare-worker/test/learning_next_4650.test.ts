@@ -24,7 +24,6 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import plan from '../src/routes/learning_plan.ts';
-import { learningEvents, occurrences, sendPlanReminders } from '../src/services/learningPlan.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { splitStatements } from './_baseline.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
