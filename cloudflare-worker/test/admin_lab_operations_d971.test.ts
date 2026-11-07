@@ -38,6 +38,7 @@ const BUILT = beforeM560();
 BUILT.exec(M560);
 // D955 landed while this tab was being built; the registry now selects licence_uid.
 BUILT.exec(readFileSync(resolve(MIGRATIONS, '561_program_proposals.sql'), 'utf8'));
+BUILT.exec(readFileSync(resolve(MIGRATIONS, '202611072010_program_approved_specs.sql'), 'utf8')); // D4808
 
 /** A copy of BUILT, its schema and every row it holds (560's seed and 381's rules included). */
 function fresh(): DatabaseSync {

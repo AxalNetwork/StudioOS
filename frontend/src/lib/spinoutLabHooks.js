@@ -17,6 +17,10 @@
 import { spinoutLab } from './api';
 import { reportError } from './log';
 
+const EXPECTED_REFUSALS = new Set([
+  'milestone_evidence_missing', 'lab_week_locked', 'lab_week_frozen', 'lab_inactive',
+]);
+
 export async function markMilestone(user, key) {
   if (!user || user.spinout_lab_active !== 1) return;
   if (!key) return;
@@ -32,6 +36,10 @@ export async function markMilestone(user, key) {
       // SSR / non-browser — safe to ignore.
     }
   } catch (e) {
+    // D4657: the server records a milestone only once its work is saved, and
+    // only while the week is open. Those refusals are the rule working, not
+    // failures; the reconciler records the step later if the work lands.
+    if (EXPECTED_REFUSALS.has(e?.code)) return;
     reportError(`spinoutLabHooks:${key}`, e);
   }
 }

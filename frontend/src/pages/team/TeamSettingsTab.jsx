@@ -13,7 +13,8 @@ import EngineControl from './EngineControl.jsx';
  * Wired now, because they are rules and not data: who pays (owner Q2 = B, answered) and who may add agents
  * (the owner's authority rule for the scope, with the full list of company
  * editors, which the canvas shortens). Per-agent caps and what each role reads
- * come from the agents read through `agentsAdapter` and are unavailable here.
+ * come from the agents read through `agentsAdapter`; `reads_line` is the Worker's
+ * (#4733: the role's effective `works_in`), and "Not recorded" shows only when it is absent.
  * D4422 wires TM8a to the inherited model/tool lists through agentsAdapter.
  *
  * "Edit cap" opens the agent's profile with its cap editor open (#3840's

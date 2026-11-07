@@ -47,7 +47,7 @@ const VIEWERS: Array<[string, number]> = [['you', YOU], ['colleague', COLLEAGUE]
 
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments', 'ic_decisions', 'user_company_links', 'super_admins', 'partners']) db.exec(ddl(t));
+  for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments', 'ic_decisions', 'user_company_links', 'super_admins', 'partners', 'company_profiles']) db.exec(ddl(t));
   db.exec(ddl('ic_conditions', IC_CONDITIONS));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active, investor_tier) VALUES (?, ?, ?, ?, 1, ?)`);
   for (const [id, role] of Object.entries(ROLE)) u.run(Number(id), role, NAMES[Number(id)], `u${id}@example.test`, 'professional');
@@ -167,7 +167,7 @@ test('DL17a · an open IC condition holds wires: an Admin reads the gate; nobody
 test('the source: the commitments read never selects a note for staff or the founder, and the gate logs no text', () => {
   const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/deals.ts'), 'utf8');
   const read = src.slice(src.indexOf("deals.get('/:id/commitments'"), src.indexOf("deals.post('/:id/commitments'"));
-  const staff = read.slice(read.indexOf("user.role === 'admin' || user.role === 'founder' || user.role === 'partner'"));
+  const staff = read.slice(read.indexOf('if (namesInvestors(audience))'));
   assert.ok(staff.length > 0);
   assert.doesNotMatch(staff.slice(0, staff.indexOf('return c.json(rows);')), /c\.notes/, 'staff and the founder never read a note');
   const gate = src.slice(src.indexOf("deals.get('/:id/transfer-gate'"), src.indexOf("deals.post('/:id/transfers'"));
