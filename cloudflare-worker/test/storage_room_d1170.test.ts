@@ -227,6 +227,8 @@ const SITES: Array<[string, string, string]> = [
   ['services/records/build.ts', 'async function uploadProof', 'await files.put(key, bytes'],
   ['services/growWriters.ts', 'export async function markHeld', 'await env.FILES.put(key, await file.arrayBuffer()'],
   ['services/mercury/raiseFeeds.ts', 'async function acceptStatement', 'await env.FILES.put(key, pdf.bytes'],
+  // D4493 (#4493): a sequence's voice note is the founder's own recording, weighed before it lands.
+  ['routes/grow_sequences.ts', "router.put('/:uid/steps/:position/recording'", 'await c.env.FILES.put(key, await file!.arrayBuffer()'],
   // D1094: a Drive file copied into the data room is the member's, weighed before it lands.
   ['services/google/raise.ts', 'async function copyFile', 'await env.FILES.put(key, bytes'],
   // D903: a deck image is the member's file. Room is checked before either write; the bytes are not in the usage total yet.
