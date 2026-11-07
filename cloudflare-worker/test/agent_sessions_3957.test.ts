@@ -127,7 +127,12 @@ test('a once session is claimed exactly once and nothing runs before its time; a
     const A = agentUid(w);
     const at = inDays(2);
     const once = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'once', run_at: at.toISOString(), zone: 'UTC' })).body.session.uid;
-    const weekly = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'weekly', weekday: 'Monday', time: '08:30', zone: 'Europe/Lisbon' })).body.session.uid;
+    // The weekly session's day is three days after the once session's, so its first due
+    // time always falls after `at`. A fixed Monday fell due before `at` whenever the
+    // suite ran on a Saturday (`at` is then Monday 09:00), and the early sweep ran it.
+    const dayIndex = (at.getUTCDay() + 3) % 7;
+    const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayIndex];
+    const weekly = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'weekly', weekday, time: '08:30', zone: 'Europe/Lisbon' })).body.session.uid;
     // Nothing before its time.
     const early = await sweepDuties(w.env, new Date(at.getTime() - 60_000), deps());
     assert.equal(early.task_created, 0);
@@ -142,13 +147,13 @@ test('a once session is claimed exactly once and nothing runs before its time; a
     const t = tasksFrom(w, once)[0];
     assert.deepEqual([t.assignee_agent_id, t.status, t.source_kind], [AGENT, 'open', 'duty']);
     assert.equal(w.queue.length, 0, 'AGENT_AUTONOMY manual: nothing is admitted until a person presses Start');
-    // The repeat moves to the next Monday 08:30 Lisbon.
+    // The repeat moves to the same weekday's 08:30 Lisbon a week on.
     const r = row(w, weekly) as DutyRow;
     const due = new Date(`${r.next_due_at.replace(' ', 'T')}Z`);
     await claimDuty(w.env, r, due, deps());
     const next = new Date(`${row(w, weekly).next_due_at.replace(' ', 'T')}Z`);
     assert.equal(Math.round((next.getTime() - due.getTime()) / 3_600_000) % 24 === 0 || Math.abs(next.getTime() - due.getTime() - 7 * 86_400_000) <= 3_600_000, true);
-    assert.equal(next.getUTCDay(), 1);
+    assert.equal(next.getUTCDay(), dayIndex);
     assert.equal(row(w, weekly).status, 'active');
   } finally { __setEngineRouteDeps(null); w.close(); }
 });
