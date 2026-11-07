@@ -680,12 +680,18 @@ advisors.delete('/me/slots/:id', async (c) => {
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(id).first<SlotRow>();
     if (!slot || slot.advisor_id !== m.id) return c.json({ detail: 'Slot not found' }, 404);
     await c.env.DB.prepare('UPDATE advisor_office_hour_slots SET is_cancelled = 1 WHERE id = ?').bind(id).run();
-    // Cancel any open bookings on this slot.
-    await c.env.DB.prepare(
+    // Cancel any open bookings on this slot. D4703 (#4703): RETURNING names
+    // exactly the bookings this statement cancelled, and each gets the same
+    // calendar cleanup a one-at-a-time cancel does (`transition` below). The
+    // bulk path used to change the status and leave every external copy in
+    // the attendees' calendars.
+    const cancelled = await c.env.DB.prepare(
       `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = COALESCE(cancel_reason, 'slot_cancelled'), updated_at = ?
-       WHERE slot_id = ? AND status IN ('pending','confirmed')`
-    ).bind(nowIso(), id).run();
-    return c.json({ ok: true });
+       WHERE slot_id = ? AND status IN ('pending','confirmed') RETURNING id`
+    ).bind(nowIso(), id).all<{ id: number }>();
+    const ids = (cancelled.results || []).map((r) => Number(r.id));
+    if (ids.length) deferCalendarCancel(c, ids);
+    return c.json({ ok: true, bookings_cancelled: ids.length });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -872,7 +878,11 @@ advisors.post('/slots/:id/book', async (c) => {
             title: `Advisor session — ${advisorMeta?.display_name || ''}`.trim(),
             start_at: slot.starts_at,
             end_at: slot.ends_at,
-            status: 'confirmed',
+            // D4703 (#4703): the booking is still pending, so the external copy
+            // is tentative until the advisor confirms (`/bookings/:id/confirm`
+            // pushes it again as confirmed). It used to go out as a firm event.
+            status: 'pending',
+            ics_status: 'TENTATIVE' as const,
             location_kind: 'video',
             location_uri: slot.meeting_url || null,
             organizer_email: advisorMeta?.email || null,
@@ -983,6 +993,53 @@ advisors.get('/bookings/me', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D4703 (#4703): the calendar cleanup a cancel owes, for one booking or many,
+ * deferred so the response returns at once. The slot delete and a single
+ * cancel both come here, so the two cannot drift apart again.
+ */
+function deferCalendarCancel(c: Context<{ Bindings: Env }>, ids: number[]) {
+  const p = (async () => {
+    const { onAxalSessionCancelled } = await import('../services/calendar/sync');
+    for (const bookingId of ids) {
+      try { await onAxalSessionCancelled(c.env, 'advisor_booking', bookingId); }
+      catch (e) { console.warn('[advisors] calendar cancel hook failed', e); }
+    }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
+/** D4703: push a confirmed booking's copy again, now firm (`ics_status: CONFIRMED`). */
+function deferCalendarConfirm(c: Context<{ Bindings: Env }>, id: number) {
+  const p = (async () => {
+    try {
+      const row = await c.env.DB.prepare(
+        `SELECT b.id, b.uid, b.topic, b.notes, s.starts_at, s.ends_at, s.meeting_url,
+                a.email AS advisor_email, a.display_name, u.email AS founder_email, u.name AS founder_name
+           FROM advisor_bookings b
+           JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+           JOIN advisors a ON a.id = b.advisor_id
+           LEFT JOIN users u ON u.id = b.founder_user_id
+          WHERE b.id = ? AND b.status = 'confirmed'`
+      ).bind(id).first<any>();
+      if (!row) return;
+      const { onAxalSessionUpdated } = await import('../services/calendar/sync');
+      await onAxalSessionUpdated(c.env, {
+        id: `advisor_booking:${row.id}`, kind: 'advisor_booking', source_id: row.id, source_uid: row.uid,
+        title: `Advisor session — ${row.display_name || ''}`.trim(),
+        start_at: row.starts_at, end_at: row.ends_at, status: 'confirmed', ics_status: 'CONFIRMED',
+        location_kind: 'video', location_uri: row.meeting_url || null, organizer_email: row.advisor_email || null,
+        attendees: [
+          { email: row.advisor_email || null, name: row.display_name || null, role: 'advisor' },
+          { email: row.founder_email || null, name: row.founder_name || null, role: 'mentee' },
+        ],
+        notes: (row.topic || '') + (row.notes ? `\n\n${row.notes}` : ''),
+      } as any);
+    } catch (e) { console.warn('[advisors] calendar confirm hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
 async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   allowed: string[]; nextStatus: string; whoCan: 'advisor' | 'founder' | 'either';
   reason?: string | null;
@@ -1002,21 +1059,21 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   if (!opts.allowed.includes(b.status)) {
     return c.json({ detail: `Cannot transition from ${b.status}` }, 409);
   }
-  await c.env.DB.prepare(
-    'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ?'
-  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id).run();
+  // D4703 (#4703): the status read above is the status this write expects.
+  // Two presses at once (a cancel and a confirm, or two cancels) used to both
+  // pass the check and both write; now the second changes nothing and says so.
+  const wrote = await c.env.DB.prepare(
+    'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ? AND status = ?'
+  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id, b.status).run();
+  if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
+    return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
+  }
   // Task #52 — remove from external calendars on cancel/no-show.
   // Defer the dynamic import + provider DELETE work via waitUntil so
   // the cancel response returns immediately.
-  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') {
-    const p = (async () => {
-      try {
-        const { onAxalSessionCancelled } = await import('../services/calendar/sync');
-        await onAxalSessionCancelled(c.env, 'advisor_booking', id);
-      } catch (e) { console.warn('[advisors] calendar cancel hook failed', e); }
-    })();
-    if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
-  }
+  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') deferCalendarCancel(c, [id]);
+  // D4703: a confirmed booking's external copy stops being tentative.
+  if (opts.nextStatus === 'confirmed') deferCalendarConfirm(c, id);
   const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
     .bind(id).first<BookingRow>();
   return c.json(bookingDto(fresh!));
@@ -1705,6 +1762,13 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
  * any kind. The `catch` below still maps `SettlementDisabled`, because a guard
  * a caller can reorder is not a guard.
  */
+/**
+ * D4703 (#4703): the booking statuses a founder may pay. The cancellation-fee
+ * policy is that there is none: `cancelled` and `no_show` are not payable.
+ * A fee would be a new policy, and it would be added here by name.
+ */
+export const BOOKING_PAYABLE_STATUSES: readonly string[] = Object.freeze(['pending', 'confirmed', 'completed']);
+
 advisors.post('/bookings/:id/pay', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -1715,6 +1779,19 @@ advisors.post('/bookings/:id/pay', async (c) => {
     // other people's sessions. The two answers are deliberately identical.
     if (!row || row.founder_user_id !== user.id) {
       return c.json({ detail: 'Booking not found' }, 404);
+    }
+
+    // D4703 (#4703): A CANCELLED SESSION IS NOT PAYABLE. There is no
+    // cancellation-fee policy, so a booking that was cancelled or missed owes
+    // nothing, whatever price was recorded on it before. Checked before
+    // anything else so the answer is the same whether charging is on or off.
+    if (!BOOKING_PAYABLE_STATUSES.includes(row.status)) {
+      return c.json({
+        detail: row.status === 'cancelled'
+          ? 'This session was cancelled, so there is nothing to pay. No cancellation fee applies.'
+          : 'This session did not take place, so there is nothing to pay.',
+        status: row.status,
+      }, 409);
     }
 
     const mode = settlementMode(c.env);
