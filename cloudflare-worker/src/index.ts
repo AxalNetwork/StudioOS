@@ -2567,6 +2567,16 @@ export default {
         } catch (e) {
           taskFailed('cohort applications tick', e);
         }
+        // D4657 (#4657): Lab progress reconciliation. A few enrolled founders
+        // per tick: record milestones their saved work proves but no request
+        // recorded (a closed tab), and pay grants an interrupted request left
+        // unpaid. Idempotent; bounded by RECONCILE_TICK_LIMIT.
+        try {
+          const { runLabReconcileTick } = await import('./services/labProgress');
+          await runLabReconcileTick(env, { nowMs: now.getTime() });
+        } catch (e) {
+          taskFailed('lab reconcile tick', e);
+        }
         // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
         // HMAC on every approved official snapshot; mismatches get flagged
         // for admin review and disappear from LP/partner views immediately.

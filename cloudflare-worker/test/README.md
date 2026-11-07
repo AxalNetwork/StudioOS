@@ -237,3 +237,15 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 advisor CTA and stored search-result URLs after redirect retirement (#4415).
 
 `ai_gateway_slice_4556.test.ts` (D4556) runs one third-party model through AI Gateway on a stubbed binding over the real AI budget migrations: every switch, config, task, data-class and Advisor refusal makes no call, success settles once from the exact reported usage, missing usage is never zero, retries honour `retry-after` within a bound, a timeout is unknown completion and is not retried, payload logging is off on every call, and no Advisor module can import the provider path.
+
+`lab_admission_evidence_4657.test.ts` (D4657) runs the Lab's real routes and services on `_storage_schema.ts`'s migrated template. It covers:
+- `/start` refusing an account that was never admitted, a sanctioned one, a graduate and one whose cohort opens later;
+- an explicit legacy enrollment;
+- a retryable 503 for a read that fails;
+- milestones that need saved work from the founder's own project, and a replay that pays once;
+- the reconciler catching up a lost grant and unrecorded work;
+- the bounded cron walk;
+- the activation writing the enrollment, and the gate following it;
+- every completion rule run on the real schema.
+
+`_lab_evidence.ts` is its helper, and the helper other Lab tests use: it applies the enrollment migration and writes the invented saved work that proves a milestone.
