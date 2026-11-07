@@ -71,7 +71,7 @@ import { refuse } from '../util/refusal';
 // D137 — every transition below now reaches the branch that runs under the
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
-import { pushLicenceToBranch } from '../services/licencePush';
+import { pushLicenceToBranch, deploymentCodeFor } from '../services/licencePush';
 import { DEFAULT_TERM_SECTIONS, readLicenceTerms, termsDiff, validateTermsBody, type LicenceTerms, type LicenceTermsRecord } from '../services/licenceTerms';
 // D262 — termination reaches the branch's own administrators too.
 import { branchByCode } from '../services/branches';
@@ -1016,29 +1016,26 @@ export async function deprovisionLicenceAdmins(
       });
       continue;
     }
+    // #4686 — THE ROLE CHANGE, THE DETACH AND THE TWO ACTIVITY ROWS ARE ONE
+    // BATCH. The audit rows used to be written after it in a try/catch that only
+    // logged, so a failure between the two left a deactivated administrator with
+    // no record of who removed them, and the binding the retry would have found
+    // them through was already gone. The hashes are computed first so the batch
+    // itself can only fail as a whole.
+    let actorHash: string;
+    let targetHash: string;
     try {
-      await env.DB.batch([
-        env.DB.prepare("UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ?").bind(a.user_id),
-        env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?').bind(licenceId, a.user_id),
-      ]);
-      out.demoted += 1;
-      out.detached += 1;
-      out.deactivated += 1;
+      actorHash = await hashEmail(actor.email);
+      targetHash = await hashEmail(a.email);
     } catch (e) {
       out.ok = false;
       out.skipped.push({ user_id: a.user_id, reason: `Could not be deprovisioned: ${(e as Error).message}` });
       continue;
     }
-    // Best-effort from here: the role is already revoked, and neither of these
-    // failing leaves the account holding a power it should not have.
     try {
-      const { seedObligations } = await import('../services/trust');
-      await seedObligations(env, a.user_id, 'exploring', { pruneStaleForRole: true });
-    } catch (e) { console.error('[licence/terminate] trust re-seed failed', (e as Error).message); }
-    try {
-      const actorHash = await hashEmail(actor.email);
-      const targetHash = await hashEmail(a.email);
       await env.DB.batch([
+        env.DB.prepare("UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ?").bind(a.user_id),
+        env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?').bind(licenceId, a.user_id),
         // `role_changed` / `your_role_changed`, not a new action name: both are
         // already in admin_security.ts's audit allowlist and ActivityPage's
         // label map, and a distinct action would be invisible in every reader.
@@ -1053,7 +1050,22 @@ export async function deprovisionLicenceAdmins(
             + `administered was terminated. Reason: ${note}`,
             targetHash, a.user_id),
       ]);
-    } catch (e) { console.error('[licence/terminate] activity log failed', (e as Error).message); }
+      out.demoted += 1;
+      out.detached += 1;
+      out.deactivated += 1;
+    } catch (e) {
+      out.ok = false;
+      out.skipped.push({ user_id: a.user_id, reason: `Could not be deprovisioned: ${(e as Error).message}` });
+      continue;
+    }
+    // Best-effort from here: the role is already revoked, and this failing
+    // leaves the account holding no power it should not have. It is idempotent
+    // (`pruneStaleForRole`), so a resumed termination does not repeat it only
+    // because the binding it was found through is gone — recorded in D4686.
+    try {
+      const { seedObligations } = await import('../services/trust');
+      await seedObligations(env, a.user_id, 'exploring', { pruneStaleForRole: true });
+    } catch (e) { console.error('[licence/terminate] trust re-seed failed', (e as Error).message); }
   }
   return out;
 }
@@ -1117,6 +1129,273 @@ export async function unbindBranchAdmins(
   }
 }
 
+/**
+ * #4686 — THE DURABLE INTENT OF ONE TERMINATION.
+ *
+ * Terminate used to commit the status and then run five consequences (withdraw
+ * the notices, tell the administrators, deprovision them at HQ, push the branch
+ * its copy, unbind the branch's administrators) in the request, with nothing
+ * recording that they were owed. A failure between the commit and the last of
+ * them left a terminated licence whose administrators were still bound, and a
+ * repeat request was refused because the licence was already terminated.
+ *
+ * Now the status, the territory release, the single `terminated` event, a
+ * revision bump, a pending-push row and `licence_termination_ops` (one row per
+ * licence, one state per consequence) commit in ONE batch. The consequences then
+ * run one at a time, each persisting its own state; a failure is a recorded
+ * state, never a lost one. A repeat request on a terminated licence RESUMES
+ * whatever is not `done`, under a lease so two requests do not interleave, and
+ * writes no second event — the event insert is guarded on the licence not yet
+ * being terminated, so even two requests racing the first commit write one.
+ *
+ * Every consequence is idempotent: the notice update touches only open notices,
+ * the notification runs once (its state is recorded), HQ deprovisioning reads
+ * the bindings still left, the push carries a fresh revision, and the branch
+ * unbind (no target) finds only administrators that are still active.
+ */
+type StepState = 'pending' | 'done' | 'failed';
+type TerminationOps = {
+  licence_id: number; status: string; actor_user_id: number | null; note: string;
+  released_json: string | null; revision: number | null;
+  notices_state: StepState; notify_state: StepState; admins_state: StepState;
+  push_state: StepState; unbind_state: StepState;
+  failure_step: string | null; failure_code: string | null; attempts: number;
+  lease_until: string | null; created_at: string; updated_at: string; completed_at: string | null;
+};
+/** A claim on the operation lasts this long; a crashed run frees it by expiry. */
+const TERMINATION_LEASE_MS = 5 * 60_000;
+
+const isMissingTable = (e: unknown) => /no such table|no such column/i.test(String((e as Error)?.message ?? e));
+
+async function persistTermination(
+  env: Env, licenceId: number, st: Record<string, StepState>,
+  failure: { step: string; code: string } | null,
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE licence_termination_ops
+        SET notices_state = ?, notify_state = ?, admins_state = ?, push_state = ?, unbind_state = ?,
+            failure_step = ?, failure_code = ?, updated_at = ?
+      WHERE licence_id = ?`,
+  ).bind(st.notices, st.notify, st.admins, st.push, st.unbind,
+    failure?.step ?? null, failure?.code ?? null, nowIso(), licenceId).run();
+}
+
+async function finishTermination(env: Env, licenceId: number, complete: boolean): Promise<void> {
+  const at = nowIso();
+  await env.DB.prepare(
+    `UPDATE licence_termination_ops
+        SET status = ?, completed_at = ?, lease_until = NULL, updated_at = ?
+      WHERE licence_id = ?`,
+  ).bind(complete ? 'complete' : 'incomplete', complete ? at : null, at, licenceId).run();
+}
+
+export async function runTerminationConsequences(
+  env: Env,
+  licence: LicenceRow,
+  ops: TerminationOps,
+  actor: { id: number; name?: string | null; email: string },
+): Promise<Record<string, unknown>> {
+  const st: Record<string, StepState> = {
+    notices: ops.notices_state, notify: ops.notify_state, admins: ops.admins_state,
+    push: ops.push_state, unbind: ops.unbind_state,
+  };
+  const note = ops.note;
+  let released: string[] = [];
+  try { released = JSON.parse(ops.released_json || '[]'); } catch { released = []; }
+  const done = { ok: true, already_done: true };
+  let failure: { step: string; code: string } | null = null;
+  const fail = (step: string, code: string) => { if (!failure) failure = { step, code }; };
+  const notYet = { ok: false, not_attempted: true, reason: 'Not attempted yet; resume the termination.' };
+  const out: Record<string, unknown> = {
+    notices_withdrawn: st.notices === 'done' ? done : notYet,
+    admins_deprovisioned: st.admins === 'done' ? done : notYet,
+    pushed: st.push === 'done' ? done : notYet,
+    branch_admins_unbound: st.unbind === 'done' ? done : notYet,
+  };
+  let pushedCode: string | null | undefined;
+
+  try {
+    // D139 — THE LADDER WOULD OTHERWISE GO ON FREEZING PEOPLE OVER A LICENCE
+    // THAT NO LONGER EXISTS. `auth.ts`'s compliance gate reads `admin_notices`
+    // by `user_id` and never consults the licence's status, so an `overdue` or
+    // `rejected` notice keeps an administrator's account frozen after HQ has
+    // terminated the very licence the notice is about — and answering it cannot
+    // help, because there is nothing left to comply with. Migration 264 already
+    // has the word for a notice HQ is no longer pressing: `withdrawn`.
+    //
+    // A DATABASE THAT HAS NOT APPLIED 264 has no `admin_notices` table and no
+    // notices to withdraw, so that is "done" with a stated reason; any other
+    // failure is a recorded, resumable one. `accepted` and `withdrawn` are left
+    // alone — already closed, and rewriting a closed row would lose which way
+    // it closed.
+    if (st.notices !== 'done') {
+      try {
+        const res = await env.DB.prepare(
+          `UPDATE admin_notices
+              SET status = 'withdrawn', updated_at = ?
+            WHERE licence_id = ? AND status IN ('issued', 'overdue', 'responded', 'rejected')`,
+        ).bind(nowIso(), licence.id).run();
+        out.notices_withdrawn = { ok: true, count: Number(res?.meta?.changes) || 0 };
+        st.notices = 'done';
+      } catch (e) {
+        out.notices_withdrawn = {
+          ok: false,
+          reason: 'The compliance notices against this licence could not be withdrawn, so an '
+            + 'administrator frozen by one may still be frozen. The termination itself is recorded: '
+            + (e as Error).message,
+        };
+        if (isMissingTable(e)) st.notices = 'done';
+        else { st.notices = 'failed'; fail('notices', 'notices_unwithdrawn'); }
+      }
+      await persistTermination(env, licence.id, st, failure);
+    }
+
+    // Told BEFORE the administrators are detached, because the lookup finds them
+    // through their binding; deprovisioning first would send the "your licence
+    // has been terminated" mail to nobody. Recorded as done so a resume does not
+    // send it twice.
+    if (st.notify !== 'done') {
+      try {
+        await notifyLicenceAdmins(env, licence.id, {
+          type: 'licence_terminated',
+          title: 'Your licence has been terminated',
+          body: `${note} ${released.length ? `The ${released.length === 1 ? 'territory' : `${released.length} territories`} it held ${released.length === 1 ? 'has' : 'have'} been released.` : ''}`.trim(),
+          payload: { licence_uid: licence.uid, released },
+        });
+        st.notify = 'done';
+      } catch (e) {
+        console.error('[licence/terminate] notify failed', (e as Error).message);
+        st.notify = 'failed'; fail('notify', 'notify_failed');
+      }
+      await persistTermination(env, licence.id, st, failure);
+    }
+
+    // D145 — only once the notification is out (see above). Reported as its own
+    // field, never thrown. "Done" means every administrator that CAN be
+    // deprovisioned was; a Super Admin holder is skipped with its reason and is a
+    // manual act, so it does not hold the operation open for ever.
+    if (st.admins !== 'done' && st.notify === 'done') {
+      const res = await deprovisionLicenceAdmins(env, licence.id, actor, note);
+      out.admins_deprovisioned = res;
+      if (res.ok) st.admins = 'done'; else { st.admins = 'failed'; fail('admins', 'admins_not_deprovisioned'); }
+      await persistTermination(env, licence.id, st, failure);
+    }
+
+    // Pushed AFTER the territory release, so the copy the branch receives
+    // reports the same empty territory the ledger now holds. A push that did not
+    // land has already left its own pending row (bound to its revision).
+    if (st.push !== 'done') {
+      const pushed = await pushLicenceToBranch(env, licence.id);
+      out.pushed = pushed;
+      pushedCode = pushed.code ?? null;
+      if (pushed.ok || pushed.no_deployment) st.push = 'done';
+      else { st.push = 'failed'; fail('push', pushed.failure_code ?? 'push_failed'); }
+      await persistTermination(env, licence.id, st, failure);
+    }
+
+    // D262 — AFTER the push, so the branch already holds `terminated` when its
+    // administrators lose the role. Its own field, never thrown. The branch's
+    // own unbind has no target, so a repeat finds only administrators still
+    // active and unbinding twice is a no-op.
+    if (st.unbind !== 'done') {
+      let code: string | null | undefined = pushedCode;
+      let lookupFailed = false;
+      if (code === undefined) {
+        try { code = await deploymentCodeFor(env, licence.uid); } catch { lookupFailed = true; }
+      }
+      if (lookupFailed) {
+        out.branch_admins_unbound = {
+          ok: false, code: null,
+          reason: 'HQ could not read which branch this licence deploys to, so its administrators were not unbound. Resume the termination to try again.',
+        };
+        st.unbind = 'failed'; fail('unbind', 'deployment_unreadable');
+      } else if (!code) {
+        // Cleanly no deployment: there is no branch administrator to unbind.
+        out.branch_admins_unbound = await unbindBranchAdmins(env, null, '', note);
+        st.unbind = 'done';
+      } else {
+        const res = await unbindBranchAdmins(
+          env, code, String(actor.name || '').trim().slice(0, 200) || 'Axal VC HQ', note,
+        );
+        out.branch_admins_unbound = res;
+        if (res.ok) st.unbind = 'done'; else { st.unbind = 'failed'; fail('unbind', 'unbind_failed'); }
+      }
+      await persistTermination(env, licence.id, st, failure);
+    }
+  } finally {
+    // Whatever happened, the claim is released: an operation that ended early is
+    // resumable at once, not after the lease expires.
+    const complete = Object.values(st).every((v) => v === 'done');
+    try { await finishTermination(env, licence.id, complete); }
+    catch (e) { console.error('[licence/terminate] could not close the operation', (e as Error).message); }
+  }
+  const complete = Object.values(st).every((v) => v === 'done');
+  return {
+    ...out,
+    operation: {
+      status: complete ? 'complete' : 'incomplete',
+      steps: st,
+      failure_step: complete ? null : (failure as { step: string } | null)?.step ?? null,
+      failure_code: complete ? null : (failure as { code: string } | null)?.code ?? null,
+    },
+  };
+}
+
+/** The follow-up broke off after the termination was recorded: say so, and how to finish it. */
+function interruptedTermination(c: any, e: unknown) {
+  console.error('[licence/terminate] follow-up interrupted', (e as Error)?.message);
+  return c.json({
+    error: 'termination_interrupted',
+    message: 'The termination is recorded, but its follow-up was interrupted. Repeat the request to resume it.',
+  }, 503);
+}
+
+async function resumeTermination(
+  c: any, licence: LicenceRow, actor: { id: number; name?: string | null; email: string },
+) {
+  const env = c.env as Env;
+  const refusal = transitionRefusal(licence.status, 'terminate') as string;
+  let ops: TerminationOps | null = null;
+  try {
+    ops = await env.DB.prepare('SELECT * FROM licence_termination_ops WHERE licence_id = ?')
+      .bind(licence.id).first<TerminationOps>();
+  } catch (e) {
+    console.warn('[licence/terminate] termination ledger unreadable', (e as Error).message);
+  }
+  // No ledger row: a licence terminated before this existed, or a database
+  // without the migration. There is nothing recorded to resume, and the old
+  // answer stands.
+  if (!ops) return c.json({ error: 'bad_transition', message: refusal }, 409);
+  if (ops.status === 'complete') {
+    return c.json({
+      error: 'bad_transition',
+      message: `${refusal} Every consequence of the termination has already completed, so there is nothing to resume.`,
+    }, 409);
+  }
+  const now = nowIso();
+  const until = new Date(Date.now() + TERMINATION_LEASE_MS).toISOString();
+  const claim = await env.DB.prepare(
+    `UPDATE licence_termination_ops
+        SET lease_until = ?, attempts = attempts + 1, updated_at = ?
+      WHERE licence_id = ? AND status = 'incomplete' AND (lease_until IS NULL OR lease_until < ?)`,
+  ).bind(until, now, licence.id, now).run();
+  if (Number(claim?.meta?.changes ?? 0) !== 1) {
+    return c.json({
+      error: 'operation_in_progress',
+      message: 'This termination is being completed by another request. Wait a moment and read the licence again.',
+    }, 409);
+  }
+  const fresh = await env.DB.prepare('SELECT * FROM licence_termination_ops WHERE licence_id = ?')
+    .bind(licence.id).first<TerminationOps>();
+  if (!fresh) return c.json({ error: 'bad_transition', message: refusal }, 409);
+  let result: Record<string, unknown>;
+  try { result = await runTerminationConsequences(env, licence, fresh, actor); }
+  catch (e) { return interruptedTermination(c, e); }
+  let released: string[] = [];
+  try { released = JSON.parse(fresh.released_json || '[]'); } catch { released = []; }
+  return c.json({ ok: true, status: 'terminated', resumed: true, released, pushed: result.pushed, ...result });
+}
+
 r.post('/:uid/terminate', async (c) => {
   try {
     // D262 — THE WRITE BAR, where every other lifecycle move keeps the plain
@@ -1127,6 +1406,9 @@ r.post('/:uid/terminate', async (c) => {
     const admin = await requireSuperAdminWriteBar(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    const actor = { id: admin.id, name: (admin as any).name, email: admin.email };
+    // #4686 — a repeat request on a terminated licence resumes what is left.
+    if (licence.status === 'terminated') return await resumeTermination(c, licence, actor);
     // D139 — the state machine, on `reinstate`'s own 409 shape.
     const refusal = transitionRefusal(licence.status, 'terminate');
     if (refusal) return c.json({ error: 'bad_transition', message: refusal }, 409);
@@ -1136,82 +1418,81 @@ r.post('/:uid/terminate', async (c) => {
       'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
     ).bind(licence.id).all<{ country_code: string }>();
     const codes = (released.results || []).map((x) => x.country_code);
+    const at = nowIso();
+    const lease = new Date(Date.now() + TERMINATION_LEASE_MS).toISOString();
+    // ONE BATCH: the transition, its audit event and the durable intent. Every
+    // write that must happen exactly once is guarded on the licence not yet being
+    // terminated (or on no ledger row existing yet), so a second request racing
+    // this one cannot write a second event or a second revision.
     // Termination is the ONLY thing that releases territory.
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM licence_territories WHERE licence_id = ?').bind(licence.id),
-      c.env.DB.prepare(
-        "UPDATE territory_licences SET status = 'terminated', status_note = ?, terminated_at = ?, updated_at = ? WHERE id = ?",
-      ).bind(note, nowIso(), nowIso(), licence.id),
-    ]);
-    await logEvent(c.env, licence.id, 'terminated', admin.id, { released: codes }, note,
-      { before: { status: licence.status, countries: codes }, after: { status: 'terminated', countries: [] } });
-
-    // D139 — THE LADDER WOULD OTHERWISE GO ON FREEZING PEOPLE OVER A LICENCE
-    // THAT NO LONGER EXISTS. `auth.ts`'s compliance gate reads `admin_notices`
-    // by `user_id` and never consults the licence's status, so an `overdue` or
-    // `rejected` notice keeps an administrator's account frozen after HQ has
-    // terminated the very licence the notice is about — and answering it cannot
-    // help, because there is nothing left to comply with. Migration 264 already
-    // has the word for a notice HQ is no longer pressing: `withdrawn`.
-    //
-    // OUTSIDE THE BATCH, ON PURPOSE. A database that has not applied 264 has no
-    // `admin_notices` table and no notices to withdraw; putting this in the
-    // batch would make its absence fail the termination itself. So it is
-    // reported the way `pushed` is (the D111 precedent): the termination is
-    // recorded whatever happens here, and what happened here is its own field.
-    //
-    // `accepted` and `withdrawn` are left alone — they are already closed, and
-    // rewriting a closed row would lose which way it closed.
-    let noticesWithdrawn: { ok: boolean; count?: number; reason?: string };
+    let results: any[];
     try {
-      const res = await c.env.DB.prepare(
-        `UPDATE admin_notices
-            SET status = 'withdrawn', updated_at = ?
-          WHERE licence_id = ? AND status IN ('issued', 'overdue', 'responded', 'rejected')`,
-      ).bind(nowIso(), licence.id).run();
-      noticesWithdrawn = { ok: true, count: Number(res?.meta?.changes) || 0 };
+    results = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at,
+                                     before_json, after_json, outcome)
+         SELECT ?, 'terminated', ?, ?, ?, ?, ?, ?, 'committed'
+          WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`,
+      ).bind(licence.id, JSON.stringify({ released: codes }), note, admin.id, at,
+        JSON.stringify({ status: licence.status, countries: codes }),
+        JSON.stringify({ status: 'terminated', countries: [] }), licence.id),
+      c.env.DB.prepare(
+        `DELETE FROM licence_territories WHERE licence_id = ?
+            AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`,
+      ).bind(licence.id, licence.id),
+      c.env.DB.prepare(
+        "UPDATE territory_licences SET status = 'terminated', status_note = ?, terminated_at = ?, updated_at = ? WHERE id = ? AND status <> 'terminated'",
+      ).bind(note, at, at, licence.id),
+      c.env.DB.prepare(
+        `INSERT INTO licence_sync_state (licence_id, hq_revision)
+         SELECT ?, 1 WHERE NOT EXISTS (SELECT 1 FROM licence_termination_ops WHERE licence_id = ?)
+         ON CONFLICT(licence_id) DO UPDATE SET hq_revision = licence_sync_state.hq_revision + 1,
+                                               updated_at = datetime('now')`,
+      ).bind(licence.id, licence.id),
+      c.env.DB.prepare(
+        `INSERT INTO licence_push_pending
+           (licence_id, code, reason, attempts, first_failed_at, last_attempt_at, revision, failure_code)
+         SELECT ?, COALESCE((SELECT code FROM licence_deployments WHERE licence_uid = ?), ''), NULL, 0, ?, ?,
+                COALESCE((SELECT hq_revision FROM licence_sync_state WHERE licence_id = ?), 0), 'termination'
+          WHERE NOT EXISTS (SELECT 1 FROM licence_termination_ops WHERE licence_id = ?)
+         ON CONFLICT(licence_id) DO UPDATE SET
+           revision = MAX(licence_push_pending.revision, excluded.revision),
+           failure_code = 'termination', last_attempt_at = excluded.last_attempt_at`,
+      ).bind(licence.id, licence.uid, at, at, licence.id, licence.id),
+      c.env.DB.prepare(
+        `INSERT INTO licence_termination_ops
+           (licence_id, status, actor_user_id, note, released_json, revision, lease_until, created_at, updated_at)
+         VALUES (?, 'incomplete', ?, ?, ?, (SELECT hq_revision FROM licence_sync_state WHERE licence_id = ?), ?, ?, ?)
+         ON CONFLICT(licence_id) DO NOTHING`,
+      ).bind(licence.id, admin.id, note, JSON.stringify(codes), licence.id, lease, at, at),
+    ]);
     } catch (e) {
-      noticesWithdrawn = {
-        ok: false,
-        reason: 'The compliance notices against this licence could not be withdrawn, so an '
-          + 'administrator frozen by one may still be frozen. The termination itself is recorded: '
-          + (e as Error).message,
-      };
+      // All or nothing: the batch rolled back, so the licence is exactly as it
+      // was. The cause is logged, never returned.
+      console.error('[licence/terminate] the transition did not commit', (e as Error).message);
+      return c.json({
+        error: 'termination_not_recorded',
+        message: 'The termination could not be recorded, so nothing was changed. Try again.',
+      }, 503);
+    }
+    // Exactly one request changes the status. A loser found the licence already
+    // terminated by the time its batch ran: it wrote nothing, and resumes.
+    if (Number(results?.[2]?.meta?.changes ?? 0) !== 1) {
+      const now = await byUid(c.env, licence.uid);
+      return await resumeTermination(c, (now ?? licence) as LicenceRow, actor);
     }
 
-    // Told LAST, after the batch, because a notification about a termination
-    // that then failed to apply is worse than a late one. The administrators
-    // are still bound at this point — D134's detach is a separate act — so the
-    // lookup still finds them.
-    await notifyLicenceAdmins(c.env, licence.id, {
-      type: 'licence_terminated',
-      title: 'Your licence has been terminated',
-      body: `${note} ${codes.length ? `The ${codes.length === 1 ? 'territory' : `${codes.length} territories`} it held ${codes.length === 1 ? 'has' : 'have'} been released.` : ''}`.trim(),
-      payload: { licence_uid: licence.uid, released: codes },
-    });
-    // D145 — AFTER the notification, and that ordering is load-bearing. The
-    // comment above says the administrators are still bound at that point so
-    // the lookup finds them; deprovisioning first would send the "your licence
-    // has been terminated" mail to nobody. Reported as its own field, never
-    // thrown, exactly as `notices_withdrawn` above.
-    const adminsDeprovisioned = await deprovisionLicenceAdmins(
-      c.env, licence.id, { id: admin.id, name: (admin as any).name, email: admin.email }, note,
-    );
-    // Pushed AFTER the territory release, so the copy the branch receives
-    // reports the same empty territory the ledger now holds.
-    const pushed = await pushLicenceToBranch(c.env, licence.id);
-    // D262 — AFTER the push, so the branch already holds `terminated` when its
-    // administrators lose the role. Its own field, never thrown.
-    const branchAdminsUnbound = await unbindBranchAdmins(
-      c.env, pushed?.code ?? null,
-      String((admin as { name?: string }).name || '').trim().slice(0, 200) || 'Axal VC HQ', note,
-    );
-    return c.json({
-      ok: true, status: 'terminated', released: codes, pushed,
-      notices_withdrawn: noticesWithdrawn,
-      admins_deprovisioned: adminsDeprovisioned,
-      branch_admins_unbound: branchAdminsUnbound,
-    });
+    const ops: TerminationOps = {
+      licence_id: licence.id, status: 'incomplete', actor_user_id: admin.id, note,
+      released_json: JSON.stringify(codes), revision: null,
+      notices_state: 'pending', notify_state: 'pending', admins_state: 'pending',
+      push_state: 'pending', unbind_state: 'pending', failure_step: null, failure_code: null,
+      attempts: 1, lease_until: lease, created_at: at, updated_at: at, completed_at: null,
+    };
+    let result: Record<string, unknown>;
+    try { result = await runTerminationConsequences(c.env, licence, ops, actor); }
+    catch (e) { return interruptedTermination(c, e); }
+    return c.json({ ok: true, status: 'terminated', released: codes, pushed: result.pushed, ...result });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -2486,6 +2767,68 @@ r.get('/:uid/events', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * #4686 — WHAT HQ HOLDS, WHAT THE BRANCH HAS ACKNOWLEDGED, AND WHAT IS OWED.
+ *
+ * `hq_revision` is the last revision HQ numbered for this licence;
+ * `branch_revision` the last one a branch answered for; `last_success_at` when.
+ * `pending` is the retry row (its revision and a short failure CODE, never the
+ * raw error text); `termination` is the durable intent of a termination, with
+ * one state per consequence. Each store is read on its own, so one that cannot
+ * be read says so rather than blanking the rest, and a figure nobody recorded
+ * is null — never 0.
+ */
+async function syncSummary(env: Env, licenceId: number) {
+  const out: {
+    available: boolean; hq_revision: number | null; branch_revision: number | null;
+    last_success_at: string | null;
+    pending: null | { revision: number | null; failure_code: string | null; attempts: number; last_attempt_at: string };
+    pending_available: boolean;
+    termination: null | {
+      status: string; steps: Record<string, string>; failure_step: string | null; failure_code: string | null;
+      attempts: number; created_at: string; completed_at: string | null;
+    };
+    termination_available: boolean;
+  } = {
+    available: true, hq_revision: null, branch_revision: null, last_success_at: null,
+    pending: null, pending_available: true, termination: null, termination_available: true,
+  };
+  try {
+    const row = await env.DB.prepare(
+      'SELECT hq_revision, branch_revision, last_success_at FROM licence_sync_state WHERE licence_id = ?',
+    ).bind(licenceId).first<{ hq_revision: number; branch_revision: number | null; last_success_at: string | null }>();
+    if (row) {
+      out.hq_revision = Number(row.hq_revision) > 0 ? Number(row.hq_revision) : null;
+      out.branch_revision = row.branch_revision === null || row.branch_revision === undefined ? null : Number(row.branch_revision);
+      out.last_success_at = row.last_success_at ?? null;
+    }
+  } catch (e) { console.warn('[licences] licence_sync_state unreadable', (e as Error).message); out.available = false; }
+  try {
+    const p = await env.DB.prepare(
+      'SELECT revision, failure_code, attempts, last_attempt_at FROM licence_push_pending WHERE licence_id = ?',
+    ).bind(licenceId).first<{ revision: number; failure_code: string | null; attempts: number; last_attempt_at: string }>();
+    if (p) {
+      out.pending = {
+        revision: Number(p.revision) > 0 ? Number(p.revision) : null,
+        failure_code: p.failure_code ?? null, attempts: Number(p.attempts) || 0, last_attempt_at: p.last_attempt_at,
+      };
+    }
+  } catch (e) { console.warn('[licences] licence_push_pending unreadable', (e as Error).message); out.pending_available = false; }
+  try {
+    const t = await env.DB.prepare('SELECT * FROM licence_termination_ops WHERE licence_id = ?')
+      .bind(licenceId).first<TerminationOps>();
+    if (t) {
+      out.termination = {
+        status: t.status,
+        steps: { notices: t.notices_state, notify: t.notify_state, admins: t.admins_state, push: t.push_state, unbind: t.unbind_state },
+        failure_step: t.failure_step ?? null, failure_code: t.failure_code ?? null,
+        attempts: Number(t.attempts) || 0, created_at: t.created_at, completed_at: t.completed_at ?? null,
+      };
+    }
+  } catch (e) { console.warn('[licences] licence_termination_ops unreadable', (e as Error).message); out.termination_available = false; }
+  return out;
+}
+
 r.get('/:uid', async (c) => {
   try {
     await requireSuperAdmin(c);
@@ -2520,6 +2863,7 @@ r.get('/:uid', async (c) => {
     return c.json({
       ...full,
       events: events.results || [],
+      sync: await syncSummary(c.env, licence.id),
       blockers: await activationBlockers(c.env, licence),
       holds_territory: HOLDS_TERRITORY.includes(licence.status),
       deployment,

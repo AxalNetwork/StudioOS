@@ -1581,6 +1581,28 @@ function NoticesEditor({ licence, onSaved }) {
  * Detail                                                              *
  * ------------------------------------------------------------------ */
 
+// #4686 — one sentence per failure code the Worker stores; an unknown code gets
+// a plain one. The error's own text never reaches this screen.
+const SYNC_FAILURE_SENTENCES = {
+  not_bound: 'HQ has no connection to this branch yet.',
+  unreachable: 'The branch did not answer.',
+  refused: 'The branch refused the copy.',
+  partial: 'The branch holds the licence but not every section of it.',
+  stale_revision: 'The branch already holds a later revision.',
+  assemble_failed: 'HQ could not assemble the copy.',
+  licence_unreadable: 'HQ could not read the licence to send it.',
+  deployment_unreadable: 'HQ could not tell which branch to send it to.',
+  termination: 'The termination copy has not reached the branch yet.',
+};
+const syncFailureSentence = (code) => (code ? SYNC_FAILURE_SENTENCES[code] || 'It has not landed yet.' : null);
+const TERMINATION_STEP_SENTENCE = {
+  notices: 'compliance notices were not withdrawn',
+  notify: 'the administrators were not told',
+  admins: 'HQ administrators were not deprovisioned',
+  push: 'the branch has not received the terminated licence',
+  unbind: 'the branch administrators were not unbound',
+};
+
 function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB, onTab }) {
   // D4707 — reasons are asked for in a labelled dialog, never window.prompt.
   const [reasonDialog, ask] = useReasonDialog();
@@ -1689,6 +1711,35 @@ function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB, onTab 
           Suspended{d.status_note ? `: ${d.status_note}` : ''}. It still holds{' '}
           {d.territories.length === 1 ? 'its country' : `all ${d.territories.length} of its countries`} —
           releasing them is a termination, not a lapse.
+        </div>
+      )}
+
+      {/* #4686 — BRANCH SYNC AND UNFINISHED TERMINATION. Revisions are HQ's own
+          counter; a figure nobody recorded reads "Not recorded", never 0, and a
+          failure shows a sentence for its code, never the error's text. */}
+      {d.sync && d.sync.available !== false && (
+        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950" data-testid="licence-sync-strip">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-500 dark:text-gray-400">Branch sync</div>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <Field label="HQ revision" value={d.sync.hq_revision == null ? null : String(d.sync.hq_revision)} />
+            <Field label="Branch revision" value={d.sync.branch_revision == null ? null : String(d.sync.branch_revision)} />
+            <Field label="Last successful sync" value={d.sync.last_success_at || null} />
+            <Field label="Pending revision" value={d.sync.pending?.revision == null ? null : String(d.sync.pending.revision)}
+              hint={d.sync.pending ? null : 'Nothing is waiting to be sent.'} />
+            <Field label="Why it has not landed" value={d.sync.pending ? syncFailureSentence(d.sync.pending.failure_code) : null} />
+          </div>
+        </div>
+      )}
+      {d.sync?.termination && d.sync.termination.status !== 'complete' && (
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200" data-testid="licence-termination-incomplete">
+          <div>
+            The termination is recorded, but its follow-up is not finished
+            {d.sync.termination.failure_step ? `: ${TERMINATION_STEP_SENTENCE[d.sync.termination.failure_step] || 'a step did not complete'}` : ''}.
+          </div>
+          <button type="button" disabled={busy} onClick={() => act(api.licenceTerminate, d.uid)}
+            className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-400 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900">
+            <RotateCw size={12} /> Resume the follow-up
+          </button>
         </div>
       )}
 
