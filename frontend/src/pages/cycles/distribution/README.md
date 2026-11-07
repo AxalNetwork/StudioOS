@@ -33,7 +33,7 @@ starting ads.
 | `inbox.css` | D4494: DS8 thread columns, phone stacking and directional message bubbles using shared tokens. |
 | `ChannelsTab.jsx` | D4486: venture channel readings, existing Add/Edit forms and Ask, read-only connection cards, settings confirmation and existing tool doors. |
 | `channelsModel.js` | D4486: columns, category choices, independent state pills, UTC activity labels, safe settings actions and missing readings. |
-| `AdsTab.jsx` | D4490: budget planner, spend gaps, platform availability and creative drafts; shell integration requested from #4484. |
+| `AdsTab.jsx` | D4490: budget planner, spend gaps, platform availability and creative drafts; mounted on the Ads tab by #4741, its own creatives Ask reusing #4488/#4512's quote/run/accept contract. |
 | `adsModel.js` | D4490: slider amounts, totals and monthly chart gaps. |
 | `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
 | `CampaignDraftAsk.jsx` | Assets Ask with explicit formats and ad placements (D4488). |
@@ -61,6 +61,12 @@ outreach draft, This week calendar summary, update-ask replies, Mercury, Notion 
 doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
 mounted D4486 tab; its table replaces Overview’s legacy channel records.
 Calendar is the D4489 tab, using the same scoped read as This week.
+Prospects is the D4492 tab. Ads is the D4490 tab, mounted by #4741; its
+creatives Ask reuses #4488/#4512's quote/run/accept contract, scoped to the
+selected campaign (`target: 'campaign'`), so Accept writes the creative row
+itself — AdsTab only re-reads afterwards. Newsletter and Results have no
+built screen yet and still show Coming in this module soon until their
+tasks land.
 Prospects is the D4492 tab. Results is the D4491 tab: read only, it writes no MRR. Other tabs show Coming in this module soon until
 their tasks land.
 Import `ProspectsTab` for the shell's Prospects slot, with its verified venture
