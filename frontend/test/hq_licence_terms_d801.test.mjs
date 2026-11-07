@@ -113,6 +113,8 @@ test('the save sends exactly what was typed and changed: cents and bps converted
     terms: { late_interest_bps: 150, minimum_guarantee_cents: null, payment_terms_days: 30 },
     sections: { late_interest_bps: '§4.7', exclusive: null, payment_terms_days: '§4.6' },
     reason: 'Renegotiated at renewal',
+    // D4694: a save names the revision the form was read at (STORED carries none: no schedule yet is revision 0).
+    expected_revision: 0,
   });
   // An untouched form sends nothing.
   assert.deepEqual(buildSave(STORED, formWith(), 'A reason'), { ok: false, errors: { form: 'Nothing has changed.' } });

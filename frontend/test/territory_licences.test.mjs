@@ -131,15 +131,22 @@ test('the fee is integer cents and the rates are integer basis points', () => {
   assert.ok(!/\b(REAL|FLOAT|DOUBLE)\b/.test(s), 'no float column in a contract ledger');
 });
 
-test('a share above 100% is clamped, not stored', () => {
-  const s = read(ROUTE);
-  assert.match(s, /Math\.min\(10000, Math\.max\(0, n\)\)/, '10000 bps is 100%');
+test('a share above 100% is refused, not clamped or stored', () => {
+  // D4694: the PATCH used to clamp 12000 to 10000 and store a share nobody typed. It refuses it now.
+  const route = read(ROUTE);
+  assert.doesNotMatch(route, /Math\.min\(10000, Math\.max\(0, n\)\)/, 'no clamping in the route');
+  const rules = read('cloudflare-worker/src/services/licenceTerms.ts');
+  assert.match(rules, /whole\('revenue_share_bps', 0, 10000, 'whole basis points'\)/, '10000 bps is 100%, and the bound is a refusal');
+  assert.match(rules, /whole\('token_split_bps', 0, 10000, 'whole basis points'\)/);
 });
 
 test('the page converts entered currency to cents and shows bps as a percentage', () => {
   const s = read(PAGE);
-  assert.match(s, /Math\.round\(Number\(f\.annual_fee\) \* 100\)/, 'entered units → integer cents');
-  assert.ok(!/parseFloat\(/.test(s), 'no float parsing of money');
+  // D4694: the conversion moved into the form's pure module (lib/licenceCoreTermsForm.js) with the dirty-field logic.
+  const form = read('frontend/src/lib/licenceCoreTermsForm.js');
+  assert.match(form, /Math\.round\(n\.value \* 100\)/, 'entered units → integer cents');
+  assert.match(s, /buildCoreSave\(/, 'the page saves through it');
+  assert.ok(!/parseFloat\(/.test(s) && !/parseFloat\(/.test(form), 'no float parsing of money');
   // D149 MOVED THE PROPERTY AND THIS ASSERTION FOLLOWED IT, INVERTED. It used
   // to read `Number(bps) / 100` here under the comment "bps → percent happens
   // in exactly one place" — which was true of this file and false of the tree:
