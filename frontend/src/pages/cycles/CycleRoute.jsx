@@ -1216,7 +1216,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
       </RecordHeaderProvider>
       </RecordPhoneProvider>
-      {emailing && emailPerson && <RecordEmailSheet person={emailPerson} from={emailFrom} readOnly={Boolean(narrativeAdmin || supportOpen)} onClose={() => setEmailing(false)} />}
+      {emailing && emailPerson && <RecordEmailSheet person={emailPerson} label={recordTitle} from={emailFrom} readOnly={Boolean(narrativeAdmin || supportOpen)} onClose={() => setEmailing(false)} />}
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {

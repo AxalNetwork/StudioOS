@@ -38,6 +38,18 @@ export function personOfRecord(cycle, slug, recordId) {
   return spec.id.test(id) ? `${spec.kind}:${id}` : null;
 }
 
+/**
+ * #4660 (finding 4): the one person-reference contract between a record's
+ * Email action and `RecordEmailSheet`. A person ref is the string
+ * `personOfRecord` returns (`kind:id`, e.g. `interviewee:11`); `EmailAction`,
+ * `emailHref` and the Sheet all take that string, never an object. This says
+ * whether a value is one, so the Sheet never asks the Worker about
+ * `undefined`.
+ */
+export function isPersonRef(value) {
+  return typeof value === 'string' && /^[a-z][a-z_]{0,30}:[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value);
+}
+
 /** `/email` opened on one person, from a record (EM4b): the person and where the composer was opened from. */
 export function emailHref(ref, from = null) {
   const q = new URLSearchParams({ person: ref, compose: '1' });

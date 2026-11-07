@@ -74,7 +74,7 @@ test('a plain click on Email opens the Sheet and does not navigate; a new-tab cl
 test('the Sheet reads what /email reads and opens the composer for the record\'s person', async () => {
   const person = { ref: 'interviewee:11', kind: 'interviewee', name: 'Ada Lovelace', relationship: 'customer', address: 'ada@example.test' };
   const api = fakeApi({ person });
-  const page = await mounted(h(RecordEmailSheet, { person: { ref: 'interviewee:11', name: 'interviewee:11' }, from: 'Ada · Customer research', onClose() {}, api }));
+  const page = await mounted(h(RecordEmailSheet, { person: 'interviewee:11', label: 'Ada Lovelace', from: 'Ada · Customer research', onClose() {}, api }));
   try {
     assert.ok(page.testIds().includes('record-compose'), page.testIds().join(','));
     assert.match(page.text(), /Email to Ada Lovelace/);
@@ -87,7 +87,7 @@ test('the Sheet reads what /email reads and opens the composer for the record\'s
 
 test('no other member\'s address: a member who has not shared one gets a line, never a composer', async () => {
   const member = { ref: 'member:u9', kind: 'member', name: 'Bo Member', relationship: 'member', address: 'leak@example.invalid' };
-  const page = await mounted(h(RecordEmailSheet, { person: { ref: 'member:u9', name: 'Bo' }, onClose() {}, api: fakeApi({ person: member }) }));
+  const page = await mounted(h(RecordEmailSheet, { person: 'member:u9', label: 'Bo', onClose() {}, api: fakeApi({ person: member }) }));
   try {
     assert.match(page.text(), new RegExp(NOT_SHARED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.ok(!page.testIds().includes('record-compose'));
@@ -96,7 +96,7 @@ test('no other member\'s address: a member who has not shared one gets a line, n
 });
 
 test('an unreadable person reads Unreadable in the Sheet, never a blank composer', async () => {
-  const page = await mounted(h(RecordEmailSheet, { person: { ref: 'interviewee:11', name: 'Ada' }, onClose() {}, api: fakeApi({ fail: true }) }));
+  const page = await mounted(h(RecordEmailSheet, { person: 'interviewee:11', label: 'Ada', onClose() {}, api: fakeApi({ fail: true }) }));
   try {
     assert.match(page.text(), /Unreadable: this person’s records could not be read/);
     assert.equal(UNREADABLE.startsWith('Unreadable'), true);
@@ -108,7 +108,7 @@ test('the record route mounts the Sheet; the header, the phone rows and the inte
   const route = read('pages/cycles/CycleRoute.jsx');
   assert.match(route, /<EmailAction person=\{emailPerson\} from=\{emailFrom\} className=\{HEADER_BUTTON\.default\} onOpen=\{openEmail\} \/>/);
   assert.match(route, /onEmail=\{emailPerson \? openEmail : null\}/);
-  assert.match(route, /\{emailing && emailPerson && <RecordEmailSheet person=\{emailPerson\} from=\{emailFrom\} readOnly=\{Boolean\(narrativeAdmin \|\| supportOpen\)\} onClose=\{\(\) => setEmailing\(false\)\} \/>\}/);
+  assert.match(route, /\{emailing && emailPerson && <RecordEmailSheet person=\{emailPerson\} label=\{recordTitle\} from=\{emailFrom\} readOnly=\{Boolean\(narrativeAdmin \|\| supportOpen\)\} onClose=\{\(\) => setEmailing\(false\)\} \/>\}/);
   assert.match(route, /setDialog\(null\); setEmailing\(false\);/, 'a new record closes the Sheet');
   assert.match(read('pages/cycles/RecordView.jsx'), /\{ key: 'email', title: 'Email', \.\.\.\(onEmail \? \{ onClick: onEmail \} : \{ href: emailTo \}\) \}/);
   assert.match(read('pages/founder/InterviewReviewPage.jsx'), /href: header\.emailTo, onSelect: header\.onEmail \|\| undefined/);
