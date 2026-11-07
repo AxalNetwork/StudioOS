@@ -49,6 +49,7 @@ import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { CYCLE_GUTTER, RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
+import ValidateNextAction from './ValidateNextAction';
 import RaiseLead, { RaiseAsk } from './RaiseOverviewLead';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
@@ -1238,7 +1239,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           action={action}
           search={q}
           // D1466 (#3714): Raise's lead row (Next steps, From your tools), drawn from the read's own parts.
-          lead={cycle === 'raise' ? <RaiseLead data={rawOverview} search={q} onRetry={() => setReload((n) => n + 1)} /> : null}
+          // D4589 (#4589): Validate's next action, the same Worker focus the phone root draws.
+          lead={cycle === 'raise' ? <RaiseLead data={rawOverview} search={q} onRetry={() => setReload((n) => n + 1)} />
+            : cycle === 'validate' && rawOverview ? <ValidateNextAction raw={rawOverview} search={q} openAction={openAction} /> : null}
           // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
           // D1321 (#3482): Publish to… from Grow's overview, on part 2's gate (D1333's `publish`).
