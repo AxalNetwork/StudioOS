@@ -256,3 +256,12 @@ advisor CTA and stored search-result URLs after redirect retirement (#4415).
 - the cycle activation interrupted at its batch, then resumed until it converges, completing only when every applicant is done and duplicating nothing on a rerun;
 - approval against withdrawal in both orders, including the race where the approval lands between the withdrawal's read and its write;
 - notification retry: failed and cut-off sends, the conditional re-claim, and abandonment.
+
+`lab_graduation_venture_4659.test.ts` (D4659) runs the Lab's routes and services on the migrated template. It covers:
+- the graduation view pinned to the catalog;
+- incorporation recorded before weeks 1–3, which is not graduation, and the credential issued once the rule is met;
+- several projects needing the founder's choice, and an older project never proving a step;
+- binding the only project, rename, deletion, and a live venture never switched;
+- the public lists naming the venture;
+- the migration's credential, single-project and needs-choice paths;
+- a held credential grandfathered until it is revoked.

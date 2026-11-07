@@ -7,6 +7,7 @@
 // documents and activity derive from real milestone completions, and a founder
 // without a record gets an explicit create CTA instead of placeholder data.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { labVentureId } from '../lib/labVenture';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -107,6 +108,13 @@ export function incorporateRoute(user) {
 
 export function pickLabProject(projects, user) {
   if (!Array.isArray(projects) || projects.length === 0) return null;
+  // D4659: the venture the server recorded for this enrollment wins. Only
+  // without one (not yet read, or not recorded) does the old ranking apply.
+  const recorded = labVentureId();
+  if (recorded !== null) {
+    const hit = projects.find((p) => Number(p?.id) === recorded);
+    if (hit) return hit;
+  }
   const ranked = [...projects].sort((a, b) => {
     const ownA = user?.founder_id != null && a.founder_id === user.founder_id ? 0 : 1;
     const ownB = user?.founder_id != null && b.founder_id === user.founder_id ? 0 : 1;
