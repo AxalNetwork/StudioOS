@@ -1086,12 +1086,27 @@ deals.get('/:id/commitments', async (c) => {
   if (ctx.error) return ctx.error;
   const { sql, user } = ctx;
   if (user.role === 'investor') {
-    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} ORDER BY c.created_at DESC`;
+    // D4633: an investor's own commitments under ONE firm, the one the commit
+    // and withdrawal routes act under (the active firm, else the only one).
+    // Each row names its firm and whether it belongs to that context. A row
+    // recorded before commitments named a firm (company_id NULL) is listed
+    // too, marked `legacy` when a firm is selected: it is the investor's, but
+    // no firm's, so the page shows it and offers no action on it.
+    const firm = await transferFirm(c, user, COMMITMENT_FIRM_REQUIRED);
+    if ('refuse' in firm) { await sql.end(); return firm.refuse; }
+    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.company_id, cp.company_name, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name
+      FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id LEFT JOIN company_profiles cp ON cp.id = c.company_id
+      WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} AND (c.company_id IS ${firm.companyId} OR c.company_id IS NULL) ORDER BY c.created_at DESC`;
     await sql.end();
-    return c.json(rows);
+    return c.json((rows as any[]).map((r) => {
+      const legacy = r.company_id == null && firm.companyId != null;
+      return { ...r, company_name: r.company_name ?? null, firm_context: firm.companyId, in_context: !legacy, legacy };
+    }));
   }
   if (user.role === 'admin' || user.role === 'founder' || user.role === 'partner') {
-    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+    // D4633: each row names the firm it is held for (null: recorded before commitments named one).
+    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.company_id, cp.company_name, c.amount, c.status, c.created_at, u.name AS investor_name
+      FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id LEFT JOIN company_profiles cp ON cp.id = c.company_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
     await sql.end();
     return c.json(rows);
   }
@@ -1244,7 +1259,11 @@ function withFirm(row: any): any {
   };
 }
 
-async function transferFirm(c: any, user: User): Promise<{ companyId: number | null } | { refuse: Response }> {
+const COMMITMENT_FIRM_REQUIRED = {
+  error: 'firm_required',
+  message: 'You belong to more than one firm. Choose the firm in the company switcher to read your commitment to this deal.',
+};
+async function transferFirm(c: any, user: User, refusal?: Record<string, string>): Promise<{ companyId: number | null } | { refuse: Response }> {
   const active = await activeCompanyFor(c, user);
   if (active != null) return { companyId: active };
   const links = await c.env.DB.prepare(
@@ -1253,6 +1272,7 @@ async function transferFirm(c: any, user: User): Promise<{ companyId: number | n
   const ids = ((links?.results || []) as Array<{ company_id: number }>).map((r) => Number(r.company_id));
   if (ids.length === 0) return { companyId: null };
   if (ids.length === 1) return { companyId: ids[0] };
+  if (refusal) return { refuse: c.json(refusal, 400) };
   return {
     refuse: c.json({
       error: 'transfer_firm_required',

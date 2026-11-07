@@ -15,6 +15,7 @@
  * side's evidence: today that is a confirmed commitment (the founder's Mercury
  * match, D752). An investor's own Mercury proposal is not that evidence.
  */
+import { roundAsk } from '../../components/deals/dealMoney.js';
 
 export const DESK_PATH = '/admin/contracts/closings';
 export const FOUNDER_PATH = '/raise/capital-relationships/closing';
@@ -87,7 +88,7 @@ export function deskRows(deals, now = new Date()) {
         name: d.project_name || 'Venture not recorded',
         instrument: d.instrument || null,
         currency: d.currency || 'USD',
-        target: num(d.target_raise ?? d.amount),
+        target: roundAsk(d),
         confirmed: num(d.capital_committed),
         deadline: String(d.closing_deadline).slice(0, 10),
         left,
