@@ -128,9 +128,10 @@ test('a once session is claimed exactly once and nothing runs before its time; a
     const at = inDays(2);
     const once = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'once', run_at: at.toISOString(), zone: 'UTC' })).body.session.uid;
     const weekly = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'weekly', weekday: 'Monday', time: '08:30', zone: 'Europe/Lisbon' })).body.session.uid;
-    // Nothing before its time.
+    // Nothing before its time. The weekly session may itself already be due: run on a Saturday (UTC), `at` is
+    // Monday 09:00 UTC, after Monday 08:30 Lisbon. So the sweep's total is the weekly session's tasks, never the once one's.
     const early = await sweepDuties(w.env, new Date(at.getTime() - 60_000), deps());
-    assert.equal(early.task_created, 0);
+    assert.equal(early.task_created, tasksFrom(w, weekly).length, 'the early sweep made no task but a weekly one already due');
     assert.equal(tasksFrom(w, once).length, 0, 'nothing runs before its time');
     // Two sweeps at its time: one task.
     const d = row(w, once) as DutyRow;
