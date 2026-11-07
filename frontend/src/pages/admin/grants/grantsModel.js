@@ -301,6 +301,8 @@ export function scheduleWord(grant) {
   if (s === 'signed') return `Signed ${dayWord(grant.schedule.signed_at, { year: false }) || ''}`.trim();
   if (s === 'sent') return 'Sent · waiting to be signed';
   if (Number(grant.terms?.requires_signed_schedule) === 0) return 'Not required';
+  // D4805 (#4805): a signature belongs to one revision of the terms; these terms moved on after it.
+  if (s === 'amendment_needed') return 'Terms changed · new signature needed';
   return 'Not sent';
 }
 
@@ -367,7 +369,7 @@ export function actionsOf(program, grant, cell, frozen) {
   if (grant.state === 'paused') out.push({ key: 'resume', label: 'Resume', disabled: frozen });
   out.push({ key: 'end', label: 'End' });
   if (grant.state === 'granted' && grant.schedule?.status !== 'signed' && Number(grant.terms?.requires_signed_schedule) !== 0) {
-    out.push({ key: 'schedule', label: grant.schedule?.status === 'sent' ? 'Send schedule again' : 'Send schedule', disabled: frozen });
+    out.push({ key: 'schedule', label: grant.schedule?.status === 'sent' ? 'Send schedule again' : grant.schedule?.status === 'amendment_needed' ? 'Send amended schedule' : 'Send schedule', disabled: frozen });
   }
   out.push({ key: 'history', label: 'View history' });
   return out;
@@ -401,7 +403,7 @@ export function studioTiles(rows, requests, licenceUid, now) {
 
 const HISTORY_WORDS = {
   granted: 'granted', regranted: 'granted again', terms_changed: 'terms changed', paused: 'paused', resumed: 'resumed', ended: 'ended',
-  schedule_sent: 'schedule sent for signature', schedule_signed: 'schedule signed', draft_opened: 'draft opened',
+  schedule_sent: 'schedule sent for signature', schedule_signed: 'schedule signed', schedule_signed_stale: 'an earlier schedule signed; the new terms are not signed', draft_opened: 'draft opened',
   request_approved: 'request approved', request_declined: 'request declined', deal_types_changed: 'partner deal types changed',
 };
 /** One "Recent changes" row (GR3). */

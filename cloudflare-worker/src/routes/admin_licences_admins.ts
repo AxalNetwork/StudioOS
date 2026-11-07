@@ -11,6 +11,7 @@ import { mapError, nowIso } from './_t13t14t15_helpers';
 import { hashEmail } from '../util/hashEmail';
 import { refuse } from '../util/refusal';
 import { str, byUid, logEvent } from '../services/licenceLedgerCore';
+import { APPOINTABLE } from '../services/licenceTransitions';
 import type { Env } from '../types';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -92,6 +93,14 @@ r.post('/:uid/admins', async (c) => {
     const u = await c.env.DB.prepare('SELECT id, email, role FROM users WHERE LOWER(email) = ?')
       .bind(email).first<{ id: number; email: string; role: string }>();
     if (!u) return c.json({ error: 'no account with that address' }, 404);
+    // #4678: a licence in a state that cannot administer users gets no
+    // administrator: neither the role nor the binding changes.
+    if (!APPOINTABLE.includes(String(licence.status))) {
+      return c.json({
+        error: 'licence_cannot_administer',
+        message: `A ${licence.status} licence cannot have an administrator appointed. Nothing was changed.`,
+      }, 409);
+    }
 
     // licence_admins is UNIQUE on user_id alone — see migration 190. Report
     // the conflict rather than letting the insert fail opaquely.
@@ -109,36 +118,55 @@ r.post('/:uid/admins', async (c) => {
     const previousRole = String(u.role || '');
     const actorHash = await hashEmail(admin.email);
     const targetHash = await hashEmail(u.email);
+    // #4678: every statement carries the same guard: the licence can still
+    // administer users (every status but `terminated`), and the account is not
+    // bound to another licence. It is decided inside the batch, so an
+    // appointment racing a termination or another appointment either applies
+    // whole or not at all. Each statement is written out in full.
+    const canBinds = [licence.id, u.id, licence.id];
+    const guard = { licenceId: licence.id, userId: u.id };
     const appointmentStatements = [
-      c.env.DB.prepare(`INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
-        VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role`)
-        .bind(licence.id, u.id, role, admin.id),
-      c.env.DB.prepare(`INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
-        VALUES (?, 'terms_changed', ?, ?, ?, ?)`)
-        .bind(licence.id, JSON.stringify({ administrator_added: u.email, admin_role: role, promoted_from: previousRole }), reason, admin.id, nowIso()),
-      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
-        .bind('role_changed', `Super admin ${admin.name} made ${u.email} an administrator of ${licence.licence_ref} (was ${previousRole || 'unrecorded'}). Reason: ${reason}`, actorHash, admin.id),
-      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
-        .bind('your_role_changed', `You were made an administrator of ${licence.licence_ref} by ${admin.name}`, targetHash, u.id),
+      c.env.DB.prepare(
+        "INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id) SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated') AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?) ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role WHERE licence_admins.licence_id = excluded.licence_id",
+      ).bind(licence.id, u.id, role, admin.id, ...canBinds),
+      c.env.DB.prepare(
+        "INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at) SELECT ?, 'terms_changed', ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated') AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?)",
+      ).bind(licence.id, JSON.stringify({ administrator_added: u.email, admin_role: role, promoted_from: previousRole }), reason, admin.id, nowIso(), ...canBinds),
+      c.env.DB.prepare("INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated') AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?)")
+        .bind('role_changed', `Super admin ${admin.name} made ${u.email} an administrator of ${licence.licence_ref} (was ${previousRole || 'unrecorded'}). Reason: ${reason}`, actorHash, admin.id, ...canBinds),
+      c.env.DB.prepare("INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated') AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?)")
+        .bind('your_role_changed', `You were made an administrator of ${licence.licence_ref} by ${admin.name}`, targetHash, u.id, ...canBinds),
     ];
     const retainedLicence = previousRole.toLowerCase();
     if (isLicence(retainedLicence)) {
       await grantLicence(c.env.DB, { userId: u.id, licence: retainedLicence, actorId: admin.id,
-        source: 'admin_appointment', retainPrimary: true, appointmentStatements });
+        source: 'admin_appointment', retainPrimary: true, appointmentStatements, appointmentGuard: guard });
     } else {
       // Existing admins and non-licence holding states have no primary
-      // licence to retain. Their existing atomic appointment is unchanged.
+      // licence to retain. Their existing atomic appointment is unchanged,
+      // with the role write guarded like the rest.
       await c.env.DB.batch([
-        c.env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ?").bind(u.id),
+        c.env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ? AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated') AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?)").bind(u.id, ...canBinds),
         ...appointmentStatements,
       ]);
     }
+    // Whatever the batch did, the outcome must be a valid pair. A binding that
+    // is not this licence's means the guard refused: the role was not changed.
+    const bound = await c.env.DB.prepare('SELECT 1 AS ok FROM licence_admins WHERE licence_id = ? AND user_id = ?')
+      .bind(licence.id, u.id).first();
+    if (!bound) {
+      return c.json({
+        error: 'licence_cannot_administer',
+        message: 'This licence can no longer take an administrator, or the account now administers another licence. Nothing was changed.',
+      }, 409);
+    }
     return c.json({ ok: true, user_id: u.id, admin_role: role, role: 'admin', promoted_from: previousRole });
   } catch (e) {
-    if (e instanceof LicenceRefusal) return refuse(c, e.status, { code: e.code, message: 'The appointment could not retain this licence.' });
+    if (e instanceof LicenceRefusal) return refuse(c, e.status, { code: e.code, message: e.code === 'licence_cannot_administer' ? 'This licence can no longer take an administrator, or the account now administers another licence. Nothing was changed.' : 'The appointment could not retain this licence.' });
     if (e instanceof Response) return e;
     // Preserve named auth refusals; provider/storage exception text stays in logs.
     const message = e instanceof Error ? e.message : '';
+    if (/licence_terminated/.test(message)) return c.json({ error: 'licence_cannot_administer', message: 'This licence was terminated. Nothing was changed.' }, 409);
     if (AUTH_ERROR_STATUSES[message]) return mapError(c, e);
     return refuse(c, 503, { code: 'admin_appointment_failed', message: 'The appointment could not be recorded. Please retry.', raw: e });
   }
@@ -172,8 +200,19 @@ r.delete('/:uid/admins/:userId{[0-9]+}', async (c) => {
         code: 'still_an_admin',
       }, 409);
     }
-    await c.env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?')
-      .bind(licence.id, userId).run();
+    // #4678: the role was read above and may have been granted since. The
+    // detach states the same condition in the DELETE, so an appointment that
+    // won the race leaves a bound admin, never an unbound one.
+    const detached = await c.env.DB.prepare(
+      `DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?
+          AND NOT EXISTS (SELECT 1 FROM users WHERE id = ? AND LOWER(role) = 'admin')`,
+    ).bind(licence.id, userId, userId).run();
+    if (Number(detached?.meta?.changes ?? 0) !== 1) {
+      const still = await c.env.DB.prepare('SELECT 1 AS ok FROM licence_admins WHERE licence_id = ? AND user_id = ?').bind(licence.id, userId).first();
+      return still
+        ? c.json({ error: 'still_an_admin', code: 'still_an_admin', message: 'The account was made an administrator while this was being handled. Demote it first. Nothing was changed.' }, 409)
+        : c.json({ error: 'not_found' }, 404);
+    }
     await logEvent(c.env, licence.id, 'terms_changed', admin.id,
       { administrator_removed: gone.email });
     return c.json({ ok: true });

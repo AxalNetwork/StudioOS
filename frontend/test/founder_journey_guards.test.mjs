@@ -68,11 +68,14 @@ test('assigning founder/investor resets the onboarding row so the wizard can fir
 });
 
 test('the founder signup lane promises nothing the system does not enforce', () => {
-  const src = fe('src/pages/RegisterPage.jsx');
-  assert.ok(
-    !/72[\s-]?hours?/i.test(src),
-    'RegisterPage re-promises a 72-hour SLA — nothing in the codebase enforces one',
-  );
+  // #4651: the lane copy lives in registerCopy.js now; both files are held.
+  for (const f of ['src/pages/RegisterPage.jsx', 'src/lib/registerCopy.js']) {
+    assert.ok(
+      !/72[\s-]?hours?/i.test(fe(f)),
+      `${f} re-promises a 72-hour SLA — nothing in the codebase enforces one`,
+    );
+  }
+  assert.match(fe('src/lib/registerCopy.js'), /Submit your pitch/, 'the guard reads the file the founder copy is in');
 });
 
 test('the exploring holding screen offers the founder lane its real next step', () => {

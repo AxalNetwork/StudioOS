@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
+import { licenceRevisionAlters } from './_licence_revisions.mjs';
 import { Hono } from 'hono';
 
 import licences from '../src/routes/admin_licences.ts';
@@ -128,6 +129,7 @@ function freshDb({ withNotices = true, status = 'active' } = {}) {
       user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
       legal_entity_name TEXT, brand_name TEXT, registered_address TEXT,
       signatory_name TEXT, signatory_title TEXT, status TEXT NOT NULL DEFAULT 'active',
@@ -142,11 +144,14 @@ function freshDb({ withNotices = true, status = 'active' } = {}) {
       granted_by_user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE licence_territories (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER, country_code TEXT);
+    CREATE TABLE licence_seats (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER, seat_type TEXT, seats_licensed INTEGER);
     CREATE TABLE licence_deployments (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_uid TEXT, code TEXT, hostname TEXT, status TEXT);
   `);
   db.exec(licenceEventsDdl());
   db.exec(syncLedgerDdl());
   if (withNotices) db.exec(noticesDdl());
+  // D4694 — renewing bumps the terms revision; the column is read from its migration.
+  db.exec(licenceRevisionAlters('territory_licences'));
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(SUPER, 'admin', 'Sue', 'sue@axal.example');
@@ -159,8 +164,8 @@ function freshDb({ withNotices = true, status = 'active' } = {}) {
     ).run(id, `totp-${id}`);
   }
   db.prepare(
-    `INSERT INTO territory_licences (uid, licence_ref, legal_entity_name, brand_name, status, term_years, renews_on, suspended_at, terminated_at)
-     VALUES (?, 'AXL-001', 'Axal VC France SAS', 'Axal VC France', ?, 3, '2027-01-01', ?, ?)`,
+    `INSERT INTO territory_licences (uid, licence_ref, legal_entity_name, brand_name, status, term_years, renews_on, suspended_at, terminated_at, annual_fee_cents, revenue_share_bps)
+     VALUES (?, 'AXL-001', 'Axal VC France SAS', 'Axal VC France', ?, 3, '2027-01-01', ?, ?, 100000, 1000)`,
   ).run(
     LIC, status,
     status === 'suspended' ? '2026-01-05 09:00:00' : null,
@@ -168,6 +173,8 @@ function freshDb({ withNotices = true, status = 'active' } = {}) {
   );
   db.prepare("INSERT INTO licence_admins (licence_id, user_id, admin_role) VALUES (1, ?, 'principal')").run(HOLDER);
   db.prepare("INSERT INTO licence_territories (licence_id, country_code) VALUES (1, 'FR')").run();
+  // #4678: a licence is only ever active, or reinstated, with its prerequisites in place.
+  db.prepare("INSERT INTO licence_seats (licence_id, seat_type, seats_licensed) VALUES (1, 'founder', 5)").run();
   return db;
 }
 

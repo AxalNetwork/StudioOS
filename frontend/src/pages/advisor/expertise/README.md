@@ -18,8 +18,8 @@ The modules they share:
 
 | File | What it holds |
 | --- | --- |
-| `kit.jsx` | The pieces every zone draws: `ZoneBody` (loading, unreadable, empty, populated, in that order, so a failed read is never an empty store), `Unrecorded`, `NothingYet`, `StatedLimit`, `MoreRows`, the form fields and `money`. |
-| `pages.js` | `usePagedList` (D4689): reads a list a page at a time, appends `next_offset` on "Show more", merges rows by key, and draws "Showing N of total" only while rows remain. A failed next page keeps the rows already read. |
+| `kit.jsx` | The pieces every zone draws: `ZoneBody` (loading, unreadable, empty, populated, in that order, so a failed read is never an empty store), `Unrecorded`, `NothingYet`, `StatedLimit`, `MoreRows`, `StaleNote`, the form fields and `money`. `SaveNote` is a live region mounted empty, and a `Field`'s hint describes its control (D4711). |
+| `pages.js` | `usePagedList` (D4689): reads a list a page at a time, appends `next_offset` on "Show more", merges rows by key, and draws "Showing N of total" only while rows remain. A failed next page keeps the rows already read. After a write a zone calls `refresh()`, not `load()`: it re-reads in place, as many rows as are shown, and the newest read wins (D4711). |
 | `expertiseModel.js` | What Services, Proof and Thinking say about themselves, pure (D4681): service states and edits, proof deletion lines, and each article's real state, audience and next step. |
 
 **EVERY FIGURE IS THE WHOLE LIST (D4689).** The list routes answer one page and,
@@ -30,3 +30,9 @@ Opens are times a piece was opened here (`articles.views`), never people.
 **Adding a zone:** one file here, its row in `AdvisorBucketRoutes.jsx`'s `ZONE`
 map, and its row in the first table above. A list that can grow past one page
 reads through `usePagedList`.
+
+**After a write, `refresh()` (D4711).** `load()` is the first read: it draws the
+loading state, which unmounts every row and anything open on one. A write
+re-reads with `refresh()`, and a failed re-read shows `StaleNote` above the rows
+it kept. Opening a form moves focus into it; Escape closes it and focus returns
+to the button that opened it.

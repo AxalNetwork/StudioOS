@@ -309,19 +309,141 @@ test('D4855 currency: a code in another currency than the sale is refused by the
   assert.equal(usd.ok, true, 'currency case does not matter');
 });
 
-test('D4855: a branch with no ceiling for this period reads "not recorded" — not unlimited, not zero', async () => {
+test('D4855 option B: a branch with no ceiling recorded allows the discount on a one-time payment — and the ledger still records it', async () => {
   const none = database(null);
   insertPromo(none, 'TEN', { off: 1000 });
   const res = await intent(none, 'TEN', 'n1');
-  assert.equal(res.status, 400, res.text);
-  assert.equal(res.body.reason, 'ceiling_not_recorded');
-  assert.equal('remaining_cents' in res.body, false, 'no figure is invented');
-  assert.match(res.body.message, /ask HQ to set a ceiling/);
-  assert.equal(posted('/payment_intents').length, 0);
+  assert.equal(res.status, 200, res.text);
+  assert.equal(posted('/payment_intents').length, 1);
+  assert.equal(new URLSearchParams(posted('/payment_intents')[0].body).get('amount'), '4000', 'the member pays the discounted amount');
+  assert.deepEqual(rows(none).map((r) => [r.amount_cents, r.state, r.period, r.currency]), [[1000, 'reserved', PERIOD, 'USD']]);
+  assert.equal(new URLSearchParams(posted('/payment_intents')[0].body).get('metadata[promo_reservation_ref]'), rows(none)[0].ref);
+  // A big one is allowed too: there is nothing to enforce.
+  insertPromo(none, 'HUGE', { off: 4000 });
+  assert.equal((await intent(none, 'HUGE', 'n2', BEA)).status, 200);
+});
+
+test('D4855 option B: a ceiling pushed for another period says nothing about this one — the discount is allowed', async () => {
   const stale = database(1000, { period: '2019-Q1' });
-  insertPromo(stale, 'TEN', { off: 1000 });
-  const old = await intent(stale, 'TEN', 'n1');
-  assert.equal(old.body.reason, 'ceiling_not_recorded', 'last year\'s ceiling says nothing about this period');
+  insertPromo(stale, 'TEN', { off: 4000 });
+  const res = await intent(stale, 'TEN', 'n1');
+  assert.equal(res.status, 200, res.text);
+  assert.deepEqual(rows(stale).map((r) => [r.amount_cents, r.period]), [[4000, PERIOD]], 'recorded under this period, not the old one');
+  const e = env(stale);
+  const answer = await canRedeemPromo(e, ask('TEN'));
+  assert.equal(answer.ok, true);
+  assert.equal((answer as any).ceiling, null, 'no figure is invented for it');
+});
+
+test('D4855 option B: no ceiling allows the subscription, the à la carte purchase and the free unlock, each recording its discount', async () => {
+  const d = database(null);
+  insertPromo(d, 'PCT20', { percent: 20 });
+  insertPromo(d, 'SIX', { off: 600 });
+  insertPromo(d, 'FREE', { percent: 100 });
+  const sub = await post(d, '/api/payments/intent', ADA, { price_id: 'price_growth_m', promo_code: 'PCT20', nonce: 's1' });
+  assert.equal(sub.status, 200, sub.text);
+  assert.equal(new URLSearchParams(posted('/subscriptions')[0].body).get('metadata[promo_reservation_ref]'), rows(d)[0].ref);
+  const paid = await post(d, '/api/payments/alacarte/intent', ADA, { price_id: 'price_report', promo_code: 'SIX', nonce: 'a1' });
+  assert.equal(paid.status, 200, paid.text);
+  const free = await post(d, '/api/payments/alacarte/intent', BEA, { price_id: 'price_other', promo_code: 'FREE', nonce: 'f1' });
+  assert.equal(free.status, 200, free.text);
+  assert.equal(free.body.free, true);
+  assert.deepEqual(rows(d).map((r) => [r.amount_cents, r.state]).sort(), [[1580, 'reserved'], [3000, 'committed'], [600, 'reserved']].sort());
+});
+
+test('D4855 option B: the preview and the cart rule allow with no ceiling, and the cart reserves once', async () => {
+  const d = database(null);
+  insertPromo(d, 'SIX', { off: 600 });
+  const e = env(d);
+  const preview = await post(d, '/api/payments/promo/validate', ADA, { code: 'SIX', price_id: 'price_report' });
+  assert.equal(preview.body.valid, true, preview.text);
+  const cart = { lines: [{ product_id: 'prod_report' }, { product_id: 'prod_other' }], subtotal: 8000, currency: 'usd' } as any;
+  const one = await resolveCartPromo(e, 'SIX', cart, ADA, 'cart:ord_1') as any;
+  const two = await resolveCartPromo(e, 'SIX', cart, ADA, 'cart:ord_1') as any;
+  assert.equal(one.discountCents, 600);
+  assert.equal(one.reservationRef, two.reservationRef);
+  assert.deepEqual(rows(d).map((r) => r.amount_cents), [600]);
+});
+
+test('D4855 option B: a retry with the same checkout reference records the discount once, with no ceiling', async () => {
+  const d = database(null);
+  insertPromo(d, 'SIX', { off: 600 });
+  const e = env(d);
+  const a = await reservePromo(e, { ...ask('SIX'), reference: 'same' }) as any;
+  const b = await reservePromo(e, { ...ask('SIX'), reference: 'same' }) as any;
+  assert.ok(a.ok && b.ok);
+  assert.deepEqual([a.reservation.reused, b.reservation.reused], [false, true]);
+  assert.equal(rows(d).length, 1);
+  const [x, y] = await Promise.all([reservePromo(e, { ...ask('SIX'), reference: 'dup' }), reservePromo(e, { ...ask('SIX'), reference: 'dup' })]);
+  assert.ok(x.ok && y.ok);
+  assert.equal(rows(d).length, 2, 'two at once with one reference is still one row');
+  await releasePromoReservation(e, a.reservation.ref);
+  assert.equal(((await reservePromo(e, { ...ask('SIX'), reference: 'same' })) as any).reservation.reused, false, 'a released row is taken again');
+  assert.deepEqual(rows(d).filter((r) => r.ref.startsWith('same')).map((r) => r.state), ['reserved']);
+});
+
+test('D4855 option B: with no ceiling, a ledger write that fails does not block the sale — it logs a count and nothing else', async () => {
+  const d = database(null);
+  insertPromo(d, 'SIX', { off: 600 });
+  d.exec('DROP TABLE promo_ceiling_reservations');
+  const logged: unknown[][] = [];
+  const saved = [console.warn, console.error];
+  console.warn = (...a) => { logged.push(a); }; console.error = (...a) => { logged.push(a); };
+  let direct: any;
+  try { direct = await reservePromo(env(d), { ...ask('SIX'), reference: 'lost' }); } finally { [console.warn, console.error] = saved; }
+  assert.equal(direct.ok, true, 'the sale goes through');
+  assert.equal(direct.reservation, null, 'and nothing claims a hold that was not written');
+  assert.equal(logged.length, 1);
+  const text = JSON.stringify(logged);
+  assert.match(text, /"failed":1/);
+  assert.doesNotMatch(text, /SIX|ada|lost|600|usd/i, 'a count only: no code, name, reference or figure');
+  const res = await intent(d, 'SIX', 'n1');
+  assert.equal(res.status, 200, res.text);
+  assert.equal(posted('/payment_intents').length, 1);
+});
+
+test('D4855 option B: when HQ later sets a ceiling, what was already recorded in that period counts against it', async () => {
+  const d = database(null);
+  insertPromo(d, 'SIX', { off: 600 });
+  const e = env(d);
+  assert.ok((await reservePromo(e, { ...ask('SIX'), reference: 'early' })).ok);
+  d.prepare('INSERT INTO branch_promo_ceiling (id, period, ceiling_cents, currency, issued_cents, pushed_at) VALUES (1, ?, 1000, ?, 0, ?)').run(PERIOD, 'USD', '2026-11-08T00:00:00.000Z');
+  const next = await canRedeemPromo(e, ask('SIX'));
+  assert.equal(next.ok, false, '600 already given, 400 left, 600 more does not fit');
+  assert.equal((next as any).reason, 'ceiling_exceeded');
+  assert.equal((next as any).remaining_cents, 400);
+  assert.equal((await reservePromo(e, { ...ask('SIX'), reference: 'late' }) as any).reason, 'ceiling_exceeded');
+  d.prepare('UPDATE branch_promo_ceiling SET ceiling_cents = 500').run();
+  assert.equal(((await canRedeemPromo(e, ask('SIX'))) as any).remaining_cents, 0, 'a ceiling below the spend leaves nothing, not a negative');
+  // The next ledger write brings the branch's running figure up to date.
+  d.prepare('UPDATE branch_promo_ceiling SET ceiling_cents = 5000').run();
+  assert.ok((await reservePromo(e, { ...ask('SIX'), reference: 'after' })).ok);
+  assert.equal(issued(d), 1200);
+});
+
+test('D4855 option B: a ceiling in force still refuses at 1,001, still refuses another currency, and an unreadable figure is not "not recorded"', async () => {
+  const d = database(1000);
+  insertPromo(d, 'OVER', { off: 1001 });
+  insertPromo(d, 'EXACT', { off: 1000 });
+  const e = env(d);
+  assert.equal(((await canRedeemPromo(e, ask('OVER'))) as any).reason, 'ceiling_exceeded');
+  assert.equal((await canRedeemPromo(e, ask('EXACT'))).ok, true);
+  assert.equal(((await canRedeemPromo(e, ask('EXACT', 5000, 'eur'))) as any).reason, 'currency_mismatch');
+  d.prepare("UPDATE branch_promo_ceiling SET ceiling_cents = 'a lot'").run();
+  const bad = await canRedeemPromo(e, ask('EXACT'));
+  assert.equal((bad as any).reason, 'ceiling_unreadable', 'a figure that is not an integer is unreadable, not absent');
+  const broken = database(1000);
+  insertPromo(broken, 'EXACT', { off: 1000 });
+  const eb = env(broken);
+  const allowed = await canRedeemPromo(eb, ask('EXACT'));
+  assert.ok(allowed.ok);
+  broken.exec('DROP TABLE promo_ceiling_reservations');
+  const write = await reservePromo(eb, { ...ask('EXACT'), reference: 'w' }, Date.now(), allowed as any);
+  assert.equal((write as any).reason, 'ceiling_unreadable', 'a failed write with a ceiling in force refuses');
+  const none = database(null);
+  insertPromo(none, 'EXACT', { off: 1000 });
+  none.exec('DROP TABLE branch_promo_ceiling');
+  assert.equal(((await canRedeemPromo(env(none), ask('EXACT'))) as any).reason, 'ceiling_unreadable', 'no ceiling table at all cannot be read');
 });
 
 test('D4855: a ceiling that cannot be read refuses the discount rather than waving it through', async () => {
@@ -331,6 +453,7 @@ test('D4855: a ceiling that cannot be read refuses the discount rather than wavi
   const res = await intent(d, 'TEN', 'n1');
   assert.equal(res.status, 400);
   assert.equal(res.body.reason, 'ceiling_unreadable');
+  assert.equal(posted('/payment_intents').length, 0);
 });
 
 test('D4855: HQ has no licence and so no ceiling — its checkouts are decided by the code\'s own terms and write no ledger row', async () => {
@@ -388,9 +511,10 @@ test('D4855: the code\'s own terms still refuse first, with the stable reasons t
   assert.equal(await reason('FULL'), 'usage_limit_reached');
   assert.equal(await reason('ONCE'), 'already_used');
   assert.equal(await reason('FIRST'), 'not_first_purchase');
-  for (const r of ['not_found', 'expired', 'inactive', 'product_not_eligible', 'usage_limit_reached', 'already_used', 'not_first_purchase', 'ceiling_exceeded', 'ceiling_not_recorded', 'ceiling_unreadable', 'currency_mismatch'] as const) {
+  for (const r of ['not_found', 'expired', 'inactive', 'product_not_eligible', 'usage_limit_reached', 'already_used', 'not_first_purchase', 'ceiling_exceeded', 'ceiling_unreadable', 'currency_mismatch'] as const) {
     assert.ok(REFUSAL_MESSAGES[r].length > 20, `${r} has a sentence`);
     assert.doesNotMatch(REFUSAL_MESSAGES[r], /undefined|\bnull\b|\b0\b/);
+    assert.equal('ceiling_not_recorded' in REFUSAL_MESSAGES, false, 'not recorded is not a refusal any more');
   }
 });
 
@@ -569,4 +693,28 @@ test('D4855: payment_intent.succeeded commits the reservation the PaymentIntent 
   assert.equal((after as any).remaining_cents, 400);
   await webhook(e, 'payment_intent.succeeded', { id: 'pi_plain', amount: 5000, currency: 'usd', metadata: { user_id: String(ADA) } });
   assert.equal(rows(d).length, 1, 'a payment with no reservation writes none');
+});
+
+test('D4855 option B: a sale in no currency has nothing to record under, and is still allowed with no ceiling', async () => {
+  const d = database(null);
+  insertPromo(d, 'PCT', { percent: 10 });
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  let r: any;
+  try { r = await reservePromo(env(d), { code: 'PCT', productId: 'prod_report', amountCents: 5000, buyer, reference: 'nocur' }); } finally { [console.warn, console.error] = saved; }
+  assert.equal(r.ok, true);
+  assert.equal(r.reservation, null);
+  assert.deepEqual(rows(d), [], 'no row is invented under a blank currency');
+});
+
+test('D4855 option B: a ceiling that vanishes between the check and the write is "unreadable", not "not recorded" and not "exceeded"', async () => {
+  const d = database(1000);
+  insertPromo(d, 'SIX', { off: 600 });
+  const real = env(d);
+  const allowed = await canRedeemPromo(real, ask('SIX'));
+  assert.ok(allowed.ok);
+  d.exec('DELETE FROM branch_promo_ceiling');
+  const r = await reservePromo(real, { ...ask('SIX'), reference: 'gone' }, Date.now(), allowed as any) as any;
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'ceiling_unreadable');
+  assert.deepEqual(rows(d), []);
 });

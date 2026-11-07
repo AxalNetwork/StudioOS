@@ -338,6 +338,25 @@ async function recordPushOutcome(
   }
 }
 
+/**
+ * D4805 (#4805) — THE PUSH IS OWED FROM THE COMMIT. A transition used to push inline after its write, so a
+ * Worker that died between the two left the branch with an old copy and nothing to retry it. This is the
+ * statement for the transition's own batch: it writes the licence's `licence_push_pending` row (D272) with
+ * the change, dated so the next retry picks it up. The inline push after the commit still runs and clears the
+ * row when it lands; the retry (`retryPendingLicencePushes`) sends the ones that did not, from the licence
+ * as it is then, and never repeats the transition. A licence with no deployment writes nothing: the branch
+ * pulls on its first read. `afterChange` makes it run only when the statement before it changed a row.
+ */
+export function queuePushStatement(env: Env, licenceId: number, afterChange = false): D1PreparedStatement {
+  return env.DB.prepare(
+    `INSERT INTO licence_push_pending (licence_id, code, reason, attempts, first_failed_at, last_attempt_at)
+     SELECT l.id, d.code, 'queued with the change', 0, ?, '1970-01-01T00:00:00.000Z'
+       FROM territory_licences l JOIN licence_deployments d ON d.licence_uid = l.uid
+      WHERE l.id = ? AND (? = 0 OR changes() = 1)
+     ON CONFLICT(licence_id) DO UPDATE SET reason = 'queued with the change', last_attempt_at = '1970-01-01T00:00:00.000Z'`,
+  ).bind(new Date().toISOString(), licenceId, afterChange ? 1 : 0);
+}
+
 /** D272 — a pending push is retried at most once per this window. */
 export const LICENCE_PUSH_RETRY_WINDOW_MINUTES = 60;
 /** D272 — and at most this many per run, so one tick stays bounded. */

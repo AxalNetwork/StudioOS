@@ -1400,7 +1400,8 @@ export const api = {
   // it — the same split RevenuePage made for disputes.
   dealScreening: () => request('/deals/screening'),
   draftDeal: (data) => request('/deals/draft', { method: 'POST', body: JSON.stringify(data) }),
-  advanceDeal: (id) => request(`/deals/${id}/advance`, { method: 'POST' }),
+  // D4632: `from` is the stage the page shows; a retry of a landed advance moves nothing.
+  advanceDeal: (id, from) => request(`/deals/${id}/advance`, { method: 'POST', body: JSON.stringify(from ? { from } : {}) }),
   // Task #127 — the only write path to the terminal stage. `reason` must be a
   // key from lib/dealFlow.js PASS_TAXONOMY; the worker 400s anything else.
   passDeal: (id, { reason, note } = {}) =>
@@ -1433,7 +1434,6 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   dealCommitments: (id) => request(`/deals/${id}/commitments`),
-  dealCommitmentWithdraw: (id, uid) => request(`/deals/${id}/commitments/${encodeURIComponent(uid)}/withdraw`, { method: 'POST' }),
   createCommitment: (id, data) => request(`/deals/${id}/commitments`, { method: 'POST', body: JSON.stringify(data) }),
   dealActivity: (id) => request(`/deals/${id}/activity`),
   dealInvitations: (id) => request(`/deals/${id}/invitations`),
@@ -4290,10 +4290,15 @@ export const api = {
     request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorEngagement: (id, data) =>
     request(`/advisors/me/engagements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  advanceMyAdvisorEngagement: (id, lane) =>
-    request(`/advisors/me/engagements/${id}/advance`, { method: 'POST', body: JSON.stringify({ lane }) }),
+  // D4695: `expectedLane` is the lane the board showed; a row that has moved since is a 409 `lane_changed`.
+  advanceMyAdvisorEngagement: (id, lane, expectedLane) =>
+    request(`/advisors/me/engagements/${id}/advance`, {
+      method: 'POST', body: JSON.stringify({ lane, ...(expectedLane ? { expected_lane: expectedLane } : {}) }),
+    }),
   // `decision` is 'renewed' or 'ended'. Ending a SIGNED engagement goes through
   // here rather than through `advance`, so the loss lands in the denominator.
+  // D4695: `data.expected_cycles` is the cycle count the board showed, i.e. the term being decided. The same
+  // decision sent twice is one cycle (the answer says `replayed`); a term that moved on is a 409 `cycles_changed`.
   recordMyAdvisorEngagementRenewal: (id, data) =>
     request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
 

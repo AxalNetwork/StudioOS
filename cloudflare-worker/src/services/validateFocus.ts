@@ -86,25 +86,33 @@ async function fact<T>(name: string, f: () => Promise<T>): Promise<T | typeof UN
   }
 }
 
-/** The newest session waiting for review, as the policy's review fact (rule 2). */
+/**
+ * The session waiting for review, as the policy's review fact (rule 2). Stable
+ * queue order (D4587): newest recorded activity, then id. Every potentially
+ * actionable row is inspected, so a newer completed or draft session, or a
+ * structured one with nothing pending, never hides older review work.
+ */
 async function reviewFact(env: Env, projectId: number): Promise<ReviewFact | null> {
-  const s = await env.DB.prepare(
+  const candidates = (await env.DB.prepare(
     `SELECT s.id, s.interview_id, s.status, COALESCE(s.stopped_at, s.updated_at, s.created_at) AS at, i.interviewee_name
        FROM interview_sessions s JOIN discovery_interviews i ON i.id = s.interview_id
-      WHERE s.project_id = ? ORDER BY s.id DESC LIMIT 1`,
-  ).bind(projectId).first<{ id: number; interview_id: number; status: string; at: string | null; interviewee_name: string | null }>();
-  if (!s || (s.status !== 'transcribed' && s.status !== 'structured')) return null;
-  const moves = s.status === 'structured' ? await pendingMoves(env, projectId, s.id) : null;
-  if (s.status !== 'transcribed' && !(moves && moves.placements > 0)) return null;
-  const who = s.interviewee_name?.trim() || 'your interviewee';
-  const when = dayMonth(s.at);
-  const parts = moves ? [moves.themes && plural(moves.themes, 'pain theme', 'pain themes'), moves.hypotheses && plural(moves.hypotheses, 'hypothesis', 'hypotheses')].filter(Boolean) : [];
-  return {
-    interviewId: Number(s.interview_id), sessionId: Number(s.id),
-    headline: `Review the interview with ${who}${when ? ` from ${when}` : ''}.`,
-    why: s.status === 'transcribed' ? 'It is transcribed but not yet placed.'
-      : parts.length ? `Its findings would move ${parts.join(' and ')}.` : 'Its findings are waiting for you to accept or discard them.',
-  };
+      WHERE s.project_id = ? AND s.status IN ('transcribed', 'structured')
+      ORDER BY COALESCE(s.stopped_at, s.updated_at, s.created_at) DESC, s.id DESC`,
+  ).bind(projectId).all<{ id: number; interview_id: number; status: string; at: string | null; interviewee_name: string | null }>()).results ?? [];
+  for (const s of candidates) {
+    const moves = s.status === 'structured' ? await pendingMoves(env, projectId, s.id) : null;
+    if (s.status !== 'transcribed' && !(moves && moves.placements > 0)) continue;
+    const who = s.interviewee_name?.trim() || 'your interviewee';
+    const when = dayMonth(s.at);
+    const parts = moves ? [moves.themes && plural(moves.themes, 'pain theme', 'pain themes'), moves.hypotheses && plural(moves.hypotheses, 'hypothesis', 'hypotheses')].filter(Boolean) : [];
+    return {
+      interviewId: Number(s.interview_id), sessionId: Number(s.id),
+      headline: `Review the interview with ${who}${when ? ` from ${when}` : ''}.`,
+      why: s.status === 'transcribed' ? 'It is transcribed but not yet placed.'
+        : parts.length ? `Its findings would move ${parts.join(' and ')}.` : 'Its findings are waiting for you to accept or discard them.',
+    };
+  }
+  return null;
 }
 
 /** The open claims with their interview evidence, as the Experiments card computes them. */

@@ -68,7 +68,7 @@ export const LICENCE_RESPONSE_FIELDS = Object.freeze({
   terminate: Object.freeze(['ok', 'status', 'resumed', 'released', '...result', 'pushed']),
   terminate_operation: Object.freeze(['status', 'steps', 'failure_step', 'failure_code']),
   sync: Object.freeze(['available', 'hq_revision', 'branch_revision', 'last_success_at', 'pending', 'pending_available', 'termination', 'termination_available']),
-  terms: Object.freeze(['ok', 'term_years', 'annual_fee_cents', 'currency', 'revenue_share_bps', 'token_split_bps', 'starts_on', 'renews_on', 'pushed']),
+  terms: Object.freeze(['ok', 'term_years', 'annual_fee_cents', 'currency', 'revenue_share_bps', 'token_split_bps', 'starts_on', 'renews_on', 'terms_revision', 'changed', 'pushed']),
 });
 
 /** A history row's outcome, or null when the value is not one the contract names. */

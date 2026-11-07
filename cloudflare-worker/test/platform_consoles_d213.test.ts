@@ -674,6 +674,8 @@ test('P4: the list stops at its limit, and the counts cover every code', async (
   assert.ok(Array.isArray(p.caveats) && p.caveats.length === 4);
   assert.ok(!p.caveats.some((x: string) => /not checked|nothing enforces/.test(x)), 'D4855: the page no longer says ceilings go unchecked');
   assert.ok(p.caveats.some((x: string) => /refuses a discount that is more than the ceiling/.test(x)), 'D4855: it says what checkout does');
+  assert.ok(p.caveats.some((x: string) => /no ceiling set for the period allows discounts until HQ sets one/.test(x) && /Not recorded/.test(x)), 'D4855 follow-up: a branch with none set allows discounts, and reads Not recorded');
+  assert.ok(!p.caveats.some((x: string) => /refuses every discount/.test(x)), 'D4855 follow-up: it no longer says a branch with none gives no discounts');
 });
 
 test('P4: a missing promo table is unreadable and is not created', async () => {

@@ -33,7 +33,7 @@ import {
   compareHref, opensDeal, viewHref,
 } from './dealFlowModel';
 import {
-  DEFAULT_COLUMNS, STAGE_WORD, emptyFilters, filterCount, fitOf, flowRows, namesSettings, passes, pickToggle, scoresOf, settingsHref, settingsOf,
+  DEFAULT_COLUMNS, STAGE_WORD, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
   settingsOfSpec, sortRows, viewChanged,
 } from './flowModel';
 import { FlowBoard, FlowBoardLoading, PhoneBoard } from './FlowBoard';
@@ -224,9 +224,10 @@ export default function DealFlow({ view, scope, board }) {
   const setSettings = (patch) => go({ settings: { ...settings, ...patch } });
   // A saved default applies only when the address names no setting of its own.
   useEffect(() => {
-    if (views.kind !== 'ok' || namesSettings(location.search)) return;
-    const def = (views.data?.items || []).find((v) => v.uid === views.data?.default_uid);
-    if (def) navigate(settingsHref({ ...settingsOfSpec(def.spec), viewUid: def.uid }), { replace: true });
+    if (views.kind !== 'ok') return;
+    // D4634: an explicit view or scope in the address is kept; the default fills in only what it does not name.
+    const href = defaultHref(location.search, (views.data?.items || []).find((v) => v.uid === views.data?.default_uid));
+    if (href) navigate(href, { replace: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [views.kind]);
 
@@ -326,9 +327,9 @@ export default function DealFlow({ view, scope, board }) {
         {scoresFailed}
         {unshared && <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="dealflow-not-shared-line">Scores and fit show on deals you are invited to or have committed on; the other rounds read Not shared.</p>}
         {nothing || (view === 'board'
-          ? (phone ? <PhoneBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
+          ? (phone ? <PhoneBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
             : <FlowBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />)
-          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
+          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
             : <FlowTable rows={shown} columns={settings.columns} sort={settings.sort} onSort={(sort) => setSettings({ sort })} filters={settings.filters}
               onMin={(key, min) => setSettings({ filters: { ...settings.filters, min: { ...settings.filters.min, [key]: min } } })}
               picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} words={words} onWords={setWords} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />))}

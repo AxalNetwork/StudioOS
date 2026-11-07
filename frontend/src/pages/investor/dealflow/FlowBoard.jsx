@@ -90,13 +90,19 @@ export function FlowBoardLoading() {
   );
 }
 
-/** DLS18b: one stage at a time, its count on each tab, and Move to in place of dragging. */
-export function PhoneBoard({ rows, cards, picked, onPick, onMove, busy, onPeek = null }) {
-  const [stage, setStage] = useState('sourcing');
+/**
+ * DLS18b: one stage at a time, its count on each tab, and Move to in place of dragging.
+ * D4634: the tabs are the desktop board's columns, from the same filter, so Passed is a tab when it is asked for.
+ */
+export function PhoneBoard({ rows, cards, picked, onPick, onMove, busy, showPassed = false, onPeek = null }) {
+  const stages = showPassed ? [...BOARD_STAGES, 'passed'] : BOARD_STAGES;
+  const [chosen, setStage] = useState('sourcing');
+  // A tab that the filter took away (Passed) falls back to the first column rather than an empty page.
+  const stage = stages.includes(chosen) ? chosen : stages[0];
   return (
     <div className="flex flex-col gap-2" data-testid="dealflow-phone-board">
       <nav aria-label="Stage" className="flex gap-1 overflow-x-auto">
-        {BOARD_STAGES.map((s) => (
+        {stages.map((s) => (
           <button key={s} type="button" aria-pressed={stage === s} onClick={() => setStage(s)}
             className={`whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-semibold ${stage === s ? 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
             data-testid={`dealflow-phone-stage-${s}`}>{STAGE_WORD[s]} {rows.filter((r) => r.stage === s).length}</button>

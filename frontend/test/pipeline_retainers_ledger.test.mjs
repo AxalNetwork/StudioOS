@@ -143,7 +143,8 @@ test('the MRR note is a shape breakdown, because a seat is not a retainer', () =
 test('the counts and their own chips narrow the same live book', () => {
   // WORKER: `live` is the base for both consumption counts.
   const readRoute = between(worker, "partnerPipeline.get('/retainers'", 'mrr_basis:');
-  assert.ok(/const live = items\.filter\(\(x: any\) => x\.retainer && !x\.retainer\.ended_at\);/.test(readRoute),
+  // #4690: the predicate is the shared one (`isRetainerActive`, via the projection).
+  assert.ok(/const live = items\.filter\(\(x: any\) => x\.retainer\?\.active\);/.test(readRoute),
     'the worker stopped excluding ended retainers from its counts');
   assert.ok(/const under = live\.filter/.test(readRoute) && /const over = live\.filter/.test(readRoute),
     'a consumption count went back to counting the whole book');
@@ -288,8 +289,12 @@ test('utilisation is the artboard’s bar, capped, and quarterly is divided by t
   // QUARTERLY IS NOT MONTHLY. Dividing is the difference between MRR and a
   // figure three times too big for every quarterly line — and the row and the
   // total have to divide the same way or the column will not add up.
-  assert.ok(/Math\.round\(Number\(r\.amount_cents\) \/ 3\)/.test(worker),
-    'the worker stopped converting a quarterly amount to a monthly one');
+  // #4690: the division lives in the ONE shared helper, and Pipeline calls it.
+  const helpers = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/_partner_workspace_helpers.ts'), 'utf8');
+  assert.ok(/Math\.round\(Number\(retainer\.amount_cents\) \/ months\)/.test(helpers) && /quarterly: 3,/.test(helpers),
+    'the shared helper stopped converting a quarterly amount to a monthly one');
+  assert.ok(/currentMonthlyCents\(r, now\)/.test(worker) && !/\/ 3\b/.test(between(worker, "partnerPipeline.get('/retainers'", 'mrr_basis:')),
+    'the worker stopped calling the shared retainer rule, or divides by three itself');
   assert.ok(/Math\.round\(Number\(r\.retainer\.amount_cents\) \/ 3\)/.test(inst),
     'the ledger row stopped converting a quarterly amount to a monthly one');
   assert.ok(flat(zone).includes('Quarterly amounts are divided by three'),

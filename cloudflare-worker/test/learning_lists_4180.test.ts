@@ -151,13 +151,14 @@ test('me/submissions and me/attempts: the caller\'s own rows, no email, no other
   assert.doesNotMatch(all, /@example|Otto|s-otto|a-otto/, 'no email and nothing of another member\'s');
 });
 
-test('me/stats: recorded figures as numbers; a figure nothing recorded is null, never 0', async () => {
+test('me/stats: recorded figures as numbers; an unreadable figure is null, a readable nothing is 0', async () => {
   const db = fixture();
   const none = (await call(db, OTHER, '/me/stats')).body;
   assert.equal(none.month, MONTH);
   assert.equal(none.courses_in_progress, 0, 'a count over a readable store is a real 0');
-  // Mutation checked: answer 0 when no position is recorded → this reads 0 and fails.
-  assert.equal(none.watch_seconds_this_month, null, 'no recorded position this month is null, never 0');
+  // #4648: a readable store with no video played this month is a known 0, not "not recorded".
+  assert.equal(none.videos_played_this_month, 0, 'nothing played this month is a real 0');
+  assert.equal('watch_seconds_this_month' in none, false, 'a sum of resume positions is no longer reported as watch time');
   assert.deepEqual(none.exams, { passed: 1, sat: 1 });
   db.exec(`
     INSERT INTO learning_progress (user_id, subject_kind, subject_uid, status, position_seconds, started_at, completed_at, updated_at) VALUES
@@ -170,7 +171,7 @@ test('me/stats: recorded figures as numbers; a figure nothing recorded is null, 
   const mia = (await call(db, MEMBER, '/me/stats')).body;
   assert.equal(mia.courses_in_progress, 1);
   assert.equal(mia.lessons_completed_this_month, 1, 'last year\'s lesson is not this month\'s');
-  assert.equal(mia.watch_seconds_this_month, 252, 'only the caller\'s positions');
+  assert.equal(mia.videos_played_this_month, 1, 'only the caller\'s videos, counted once each, not their positions summed');
   assert.deepEqual(mia.exams, { passed: 1, sat: 1 }, 'an open attempt is not a sat exam');
 });
 
