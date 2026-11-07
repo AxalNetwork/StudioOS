@@ -397,7 +397,7 @@ const ADVISOR_LICENCE_REQUIRED = { code: 'advisor_licence_required', message: 'A
  */
 function validationRefusal(c: any, e: unknown) {
   if (!(e instanceof AdvisorValidationError)) return null;
-  return refuse(c, 400, { code: e.code, message: e.message });
+  return refuse(c, 400, { code: e.code, message: e.sentence });
 }
 
 /** D4674: the revision a client read (`updated_at`), or null when it sent none. */

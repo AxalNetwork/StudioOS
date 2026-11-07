@@ -25,11 +25,13 @@ export const SUPPORTED_CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF', 'CAD', 'AUD', '
 
 export class AdvisorValidationError extends Error {
   code: string;
+  /** The sentence written for the person, always ours; routes answer this, never an exception's text. */
+  sentence: string;
   field?: string;
   max?: number;
   constructor(code: string, message: string, field?: string, max?: number) {
     super(message);
-    this.code = code; this.field = field; this.max = max;
+    this.code = code; this.sentence = message; this.field = field; this.max = max;
   }
 }
 
