@@ -95,7 +95,8 @@ const stored = (w: any) => [...w.store.values()].map((o: any) => (typeof o.body 
 const audit = (db: any) => {
   // The table is created by the first export that is logged; none means no row.
   if (!db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'admin_audit_log'").get()) return [];
-  return db.prepare("SELECT admin_user_id, action, report_type, format, filters_json, storage_key FROM admin_audit_log WHERE action = 'insights_export'").all();
+  // In insertion order: without ORDER BY SQLite may return the rows in any order, and the tests read rows[0] as the first export.
+  return db.prepare("SELECT admin_user_id, action, report_type, format, filters_json, storage_key FROM admin_audit_log WHERE action = 'insights_export' ORDER BY id").all();
 };
 
 test('D893 the CSV for a seeded read: the header, every figure by name, and unknown never 0', async () => {
