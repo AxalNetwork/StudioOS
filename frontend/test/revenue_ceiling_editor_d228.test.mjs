@@ -95,7 +95,8 @@ test('the page mounts the editor, saves through promoCeilingSet, and re-reads th
   assert.match(PAGE, /<CeilingEditor\b/);
   assert.match(PAGE, /api\.promoCeilingSet\(uid, body\)/);
   assert.match(PAGE, /const r = await api\.promoCeilingSet\(uid, body\);\s*loadCeilings\(\);/);
-  assert.match(PAGE, /api\.licences\(\)/);
+  // #4700: the ledger is paged; Revenue follows every page, and a cut run is unreadable.
+  assert.match(PAGE, /licenceLedgerApi\.all\(\)\.then\(\(r\) => setLicences\(r\?\.complete \? r\.items : UNAVAILABLE\)/);
   assert.match(PAGE, /setLicences\(UNAVAILABLE\)/);
   assert.match(API, /promoCeilingSet: \(licenceUid, data\) =>\s*request\(`\/admin\/promo-ceilings\/\$\{encodeURIComponent\(licenceUid\)\}`/);
 });
