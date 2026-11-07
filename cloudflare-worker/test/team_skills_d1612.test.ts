@@ -40,7 +40,7 @@ const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const SUPER = 1, ADMIN = 2, EDITOR = 10, MEMBER = 11, STRANGER = 12, OTHER_EDITOR = 13;
 const IN_CO = 7, ALONE = 8;
 
-function world() {
+function world(o: { events?: boolean } = {}) {
   const { DB, db } = makeD1(
     ['users', 'company_profiles', 'user_company_links', 'projects'].map((t) => stripForeignKeys(tableFromBaseline(BASELINE, t))).join('\n')
     + AI_LOG_SCHEMA + sql('migrations/506_ai_rail_proposals.sql'),
@@ -54,6 +54,7 @@ function world() {
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: the attach gate reads it
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
+  if (o.events !== false) db.exec(sql('migrations/202611070826_team_agent_skill_events.sql')); // D4534: the skills_changed kind
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', null);
@@ -204,6 +205,56 @@ test('D4534: only a Super Admin edits or publishes an HQ draft; only a company\'
   assert.equal(put.status, 409, put.text);
   assert.equal(put.body.error, 'skill_suspended');
   assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_links WHERE skill_id = ?').get(id) as any).n, 0);
+});
+
+test('D4534: attaching, re-pinning and removing a skill on an agent is one skills_changed event each; nothing moved, nothing written', async () => {
+  const w = world();
+  const events = () => w.db.prepare("SELECT agent_id, actor_user_id, detail_json FROM team_agent_events WHERE kind = 'skills_changed' ORDER BY id").all() as any[];
+  const uid = await published(w, update());
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] })).status, 200);
+  let e = events();
+  assert.equal(e.length, 1);
+  assert.equal(e[0].actor_user_id, EDITOR);
+  assert.deepEqual(JSON.parse(e[0].detail_json), { added: [{ uid, version: 1 }], repinned: [], removed: [] });
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] })).status, 200);
+  assert.equal(events().length, 1, 'the same list again moves nothing and writes nothing');
+  assert.equal((await call(w, SUPER, 'PATCH', `/skills/${uid}`, { steps: ['Read the metrics', 'Draft'] })).status, 200);
+  await passHqGate(w.db, uid);
+  assert.equal((await call(w, SUPER, 'POST', `/skills/${uid}/publish`)).status, 200);
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid, version: 2 }] })).status, 200);
+  assert.deepEqual(JSON.parse(events()[1].detail_json), { added: [], repinned: [{ uid, from: 1, to: 2 }], removed: [] });
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [] })).status, 200);
+  assert.deepEqual(JSON.parse(events()[2].detail_json), { added: [], repinned: [], removed: [{ uid, version: 2 }] });
+  // Assign: one event per agent it was added to, none for one it refused.
+  const assign = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agent_uids: [CFO, IR] });
+  assert.equal(assign.status, 200, assign.text);
+  e = events().slice(3);
+  assert.equal(assign.body.added, 2);
+  assert.deepEqual(e.map((x) => [x.agent_id, JSON.parse(x.detail_json).added]), [[1, [{ uid, version: 2 }]], [2, [{ uid, version: 2 }]]]);
+  assert.ok(!/@example\.test/.test(JSON.stringify(events())), 'no email in an event');
+});
+
+test('D4534: a company skill\'s publish and retirement are in the admin audit; an HQ publish keeps its own action', async () => {
+  const w = world();
+  const audit = () => w.db.prepare('SELECT admin_user_id, action, filters_json FROM admin_audit_log ORDER BY id').all() as any[];
+  const co = (await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1', name: 'Acme audit skill', roles: ['cfo'] }))).body.skill.uid;
+  assert.equal((await call(w, EDITOR, 'POST', `/skills/${co}/publish`)).status, 200);
+  assert.equal((await call(w, EDITOR, 'PATCH', `/skills/${co}`, { status: 'retired' })).status, 200);
+  const rows = audit().filter((r) => r.action.startsWith('company_skill_'));
+  assert.deepEqual(rows.map((r) => [r.admin_user_id, r.action]), [[EDITOR, 'company_skill_published'], [EDITOR, 'company_skill_retired']]);
+  assert.equal(JSON.parse(rows[0].filters_json).skill_uid, co);
+  assert.equal(JSON.parse(rows[0].filters_json).company_id, 1);
+  assert.deepEqual(JSON.parse(rows[1].filters_json).after, { status: 'retired' });
+  await published(w, update({ name: 'HQ audit skill' }));
+  assert.ok(audit().some((r) => r.action === 'agent_skill_published'), 'HQ publish keeps agent_skill_published');
+});
+
+test('D4534: an event that cannot be written never undoes the attach it records', async () => {
+  const w = world({ events: false }); // the old CHECK, without skills_changed
+  const uid = await published(w, update());
+  const put = await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] });
+  assert.equal(put.status, 200, put.text);
+  assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_links').get() as any).n, 1);
 });
 
 test('D1612: a published version is immutable; a pinned agent stays on it until "Update to v2"', async () => {

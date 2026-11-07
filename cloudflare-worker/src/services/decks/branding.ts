@@ -10,6 +10,7 @@ import { holdsLicence } from '../accountLicences';
 import type { Env, User } from '../../types';
 import { tierCovers } from '../../middleware/requireTier';
 import { bindingKey } from '../../util/schemaBootstrap';
+import { publicHostRefusal } from '../webFetch';
 
 export type DeckBrand = {
   /** Render a footer? (false on Growth+ unless studio uploaded one). */
@@ -79,6 +80,9 @@ export async function setStudioWatermark(
   // RFC1918 hostnames are refused.
   const safe = sanitizeWatermarkUrl(url);
   if (!safe) throw new Error('INVALID_WATERMARK_URL');
+  // #4572 follow-up: Browser Rendering fetches it at export, outside our fetcher, so the host is resolved now:
+  // a public name pointing at a private, loopback or metadata address is refused at save.
+  if (await publicHostRefusal(safe)) throw new Error('WATERMARK_HOST_NOT_PUBLIC');
   await env.DB.prepare(
     `INSERT INTO deck_brand_watermarks (user_id, watermark_url, updated_at)
      VALUES (?, ?, datetime('now'))

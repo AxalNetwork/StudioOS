@@ -150,8 +150,10 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `grow_campaigns_d4447.test.mjs` | D4447 (#4447): eight Grow campaign requests, encoded identifiers and project-bound write bodies. |
 | `distribution_campaigns_4487.test.mjs` | Campaign cards, full-page plan steps, status actions, honest figures, confirmations and partial-save retries (D4487). |
 | `distribution_shell_4484.test.mjs` | D4484: static Distribution routes, retained records/Overview, module primary, tabs, honest Ask states and proposal callbacks. |
+| `distribution_results_4491.test.mjs` | D4491: Results' named Not recorded reasons, cost-per-lead rounding, the MRR note and link, the read-error card with no raw error, the window check and the CycleRoute line. |
 | `learning_home_actions_4481.test.mjs` | D4481: desktop/phone Register and refusals, rapid double-click guards, Join and enrolled progress, Browse courses, phone primary and unknown seats through existing clients. |
 | `distribution_inbox_4494.test.mjs` | D4494: real Inbox/composer behavior, actual count/empty states, client requests, source alignment, and stale selection/search guards. |
+| `distribution_newsletter_4495.test.mjs` | D4495: the not-connected copy, the disabled Connect with its visible reason, Not recorded results, and no request at all (never `/api/newsletter`). |
 | `_redirectLinks_2319.mjs` | D2319 (#4415): syntax-aware navigation-target audit across frontend and Worker source, without treating API paths or comparisons as links. |
 
 `team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
@@ -163,4 +165,6 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
 
 - `distribution_overview_4485.test.mjs` — Distribution DS1 read/client, null-safe figures and real-date week columns, rendered independent failures, retries and existing contact-create actions (D4485).
+
+- `network_relationships_fixes_4740.test.mjs` — #4740 (S1 audit): the RI3/RI4/RI6 "Ask Eadwyn to draft…" buttons quote before they run and open in the composer or the reason field, a refusal reads the mapped copy, IntroCompose's unreadable mailboxes get their own alert, `?intro=<uid>` highlights its row or says it left the desk, the D4464 summary reads "Not recorded" (never 0) and Unreadable, and a failed `RecordEmailSheet` shares read is Unreadable for a member.
 `distribution_ads_4490.test.mjs` checks the Ads banner, gaps without bars, budget sliders, unavailable platforms and Later copy.

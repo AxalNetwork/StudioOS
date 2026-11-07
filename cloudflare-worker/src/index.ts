@@ -2413,6 +2413,16 @@ export default {
         // must poll (Google Meet transcripts) runs its sweep; at 03:50 the
         // pending-conversation store is purged past its 30 days. Every tier:
         // a branch's members and their conversations are its own.
+        // D4703 (#4703): failed calendar deletes are retried hourly, oldest first.
+        if (now.getUTCMinutes() === 17) {
+          try {
+            const { retryFailedCalendarDeletes } = await import('./services/calendar/sync');
+            const r = await retryFailedCalendarDeletes(env, 20);
+            if (r.tried) cronSummary.push(`calendar delete retries tried=${r.tried} cleared=${r.cleared}`);
+          } catch (e) {
+            taskFailed('calendar delete retry', e instanceof Error ? e.message : 'error');
+          }
+        }
         if (now.getUTCMinutes() % 5 === 2) {
           try {
             const { runChannelSweeps } = await import('./services/channels/jobs');

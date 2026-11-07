@@ -136,6 +136,8 @@ export function syncFailureOf(e: unknown): Record<string, unknown> {
 }
 
 adminCatalog.post('/sync', async (c) => {
+  // D1009: a repair that reads Stripe into the mirror, not a mutation, so it
+  // does not ask for a fresh step-up (D4703 leaves it as it is).
   const admin = await requireSuperAdmin(c);
   try {
     const result = await syncCatalog(c.env);
@@ -507,7 +509,7 @@ const PACK_AMOUNT = { error: 'token_pack_amount_invalid',
 // price with its own key, each with an Idempotency-Key, so a retried press
 // gives one product, one price and one row.
 adminCatalog.post('/token-packs', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const body = (await c.req.json().catch(() => ({}))) as { amount_usd?: unknown; idempotency_key?: unknown };
   const amount = body.amount_usd;
   if (typeof amount !== 'number' || !Number.isInteger(amount) || !wholeDollarsInRange(amount * 100)) return c.json(PACK_AMOUNT, 400);
@@ -533,7 +535,7 @@ adminCatalog.post('/token-packs', async (c) => {
 
 // POST /token-packs/adopt — record an existing one-time USD price of whole dollars from $5 to $500, after D750's judge.
 adminCatalog.post('/token-packs/adopt', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const body = (await c.req.json().catch(() => ({}))) as { price_id?: unknown };
   const priceId = body.price_id;
   if (typeof priceId !== 'string' || !PRICE_ID.test(priceId)) return c.json({ error: 'invalid_price', message: 'Give a Stripe price ID (price_…).' }, 400);
@@ -564,7 +566,7 @@ adminCatalog.post('/token-packs/adopt', async (c) => {
 // PATCH /token-packs/:uid — on sale, bonus (0–10% of face), sort, and D790's offer window and first purchase only.
 // An amount never changes: a new amount is a new pack.
 adminCatalog.patch('/token-packs/:uid', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body || typeof body !== 'object') return c.json({ error: 'invalid_request' }, 400);
   if ('amount_usd' in body || 'face_cents' in body || 'unit_amount' in body || 'price_id' in body)
@@ -610,7 +612,7 @@ adminCatalog.patch('/token-packs/:uid', async (c) => {
 
 // POST /token-packs/:uid/archive — off sale for good, and the Stripe price archived.
 adminCatalog.post('/token-packs/:uid/archive', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   try {
     const row = await packRowByUid(c.env, c.req.param('uid'));
     if (!row) return c.json({ error: 'token_pack_not_found' }, 404);

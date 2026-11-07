@@ -16,6 +16,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
+import { grantWriteBar } from './_write_bar_session.mjs';
 import { removeMigratedDatabases } from './_storage_schema.ts';
 import { ADMIN, AGENT, MEMBER, PROJECT, SPONSOR, world, type World } from './_agent_engine_fixture.ts';
 import policyRoutes from '../src/routes/admin_ai_agents_policy.ts';
@@ -32,13 +33,15 @@ const P = { kind: 'project' as const, id: PROJECT };
 
 function app(w: World) {
   w.db.exec(`INSERT OR IGNORE INTO super_admins (user_id) VALUES (${ADMIN})`);
+  // D4703: policy writes take the write bar; the admin acts from a fresh TOTP session.
+  grantWriteBar(w.db, ADMIN);
   const a = new Hono<any>().route('/api/admin/ai-agents/policy', policyRoutes).route('/api/teams/platform-status', platformStatusRoutes);
   a.onError((err, c) => c.json({ detail: err.message }, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
   return a;
 }
 async function call(w: World, who: number | null, method: string, path: string, body?: unknown) {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (who) headers.Authorization = `Bearer ${await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(w.env.JWT_SECRET))}`;
+  if (who) headers.Authorization = `Bearer ${await new SignJWT({ user_id: who, ...(who === ADMIN ? { jti: `write-bar-${ADMIN}` } : {}) }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(w.env.JWT_SECRET))}`;
   const res = await app(w).request(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }, w.env);
   const text = await res.text();
   return { status: res.status, body: text ? JSON.parse(text) : null, text };
@@ -201,4 +204,42 @@ test('the banner route mounts above every /api/teams router, so a team-agents fl
   const index = (await import('node:fs')).readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
   const teamLines = [...index.matchAll(/^app\.route\('\/api\/teams', (\w+)\);/gm)].map((m) => m[1]);
   assert.equal(teamLines[0], 'agentEngineRoutes', 'agent_engine.ts is still the first /api/teams mount');
+});
+
+// D4703 (#4703) part 3: the AI kill switch is a sensitive write, and its
+// resume ends only the pause the page read.
+test('D4703: pausing needs the write bar, and a resume from an older page cannot clear a newer pause', async () => {
+  // Mutation checked: requireSuperAdmin restored on /pause → the stale session pauses;
+  // the resume's `AND paused_at = ?` removed → the old page clears the new pause.
+  const w = world();
+  try {
+    app(w);
+    // A super admin without a fresh step-up: refused, and nothing paused.
+    const stale = await new SignJWT({ user_id: ADMIN }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(w.env.JWT_SECRET));
+    const refused = await app(w).request(`${POLICY}/pause`, { method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${stale}` },
+      body: JSON.stringify({ reason: 'Model provider incident', confirm: 'PAUSE' }) }, w.env);
+    assert.equal(refused.status, 403);
+    assert.equal(await platformPaused(w.env), false, 'nothing was paused');
+
+    // Paused at T1. A page reads it. Someone else resumes and pauses again at T2.
+    assert.equal((await call(w, ADMIN, 'POST', `${POLICY}/pause`, { reason: 'First incident', confirm: 'PAUSE' })).status, 200);
+    const firstSince = (w.db.prepare('SELECT paused_at FROM ai_agent_policy WHERE id = 1').get() as any).paused_at;
+    w.db.prepare("UPDATE ai_agent_policy SET paused_at = '2099-01-01 00:00:00', paused_reason = 'Second incident' WHERE id = 1").run();
+    // The old page's resume runs against what it read: its pause is gone, so the
+    // conditional update changes nothing and the newer pause stands.
+    const realPrepare = w.env.DB.prepare.bind(w.env.DB);
+    let readOld = true;
+    const olderPage = { ...w.env, DB: { ...w.env.DB, prepare(sql: string) {
+      const st = realPrepare(sql);
+      if (readOld && /FROM ai_agent_policy/.test(sql) && /^\s*SELECT/i.test(sql)) {
+        readOld = false;
+        return { ...st, bind: (...b: any[]) => ({ ...st.bind(...b), first: async () => ({ ...(await st.bind(...b).first()), paused_at: firstSince }) }),
+          first: async () => ({ ...(await st.first()), paused_at: firstSince }) };
+      }
+      return st;
+    } } };
+    await call({ ...w, env: olderPage } as any, ADMIN, 'POST', `${POLICY}/resume`, { reason: 'From the old page' });
+    const now = w.db.prepare('SELECT paused, paused_reason FROM ai_agent_policy WHERE id = 1').get() as any;
+    assert.deepEqual([now.paused, now.paused_reason], [1, 'Second incident'], 'the newer pause stands');
+  } finally { w.close(); }
 });
