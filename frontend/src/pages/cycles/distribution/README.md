@@ -52,13 +52,15 @@ starting ads.
 | `distributionStates.css` | D4496: shared state theme, phone/tablet targets and responsive Overview treatment. |
 | `useDistributionLayout.js` | D4496: reactive phone/tablet layout using the shared media hook. |
 | `useDistributionAccess.js` | D4496: existing form-options writer permission, fail closed while unknown. |
+| `ResultsTab.jsx` | D4491: read-only funnels, Campaigns, Attribution and Spend per channel with source chips, the window, the MRR note, skeleton and read-error card. |
+| `resultsModel.js` | D4491: Not recorded reasons, money and cost-per-lead rounding, funnel widths and the window label. |
 
 CycleRoute still owns the module page. Overview retains its charts,
 outreach draft, This week calendar summary, update-ask replies, Mercury, Notion and tool
 doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
 mounted D4486 tab; its table replaces Overview’s legacy channel records.
 Calendar is the D4489 tab, using the same scoped read as This week.
-Prospects is the D4492 tab. Other tabs show Coming in this module soon until
+Prospects is the D4492 tab. Results is the D4491 tab: read only, it writes no MRR. Other tabs show Coming in this module soon until
 their tasks land.
 Import `ProspectsTab` for the shell's Prospects slot, with its verified venture
 id and read/write state. The wizard may call `useProspectConsentSummary` once,
