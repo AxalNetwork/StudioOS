@@ -19,12 +19,12 @@ import './studioModules.css';
 
 export const EDIT_HINT = 'Drag a module by its handle, choose a size, or remove it. Move up and Move down are in each module’s ⋯ menu.';
 export const EDIT_HINT_PHONE = 'Press and hold a module to move it, or use Move up and Move down in its ⋯ menu. On the phone every module is full width.';
-export const EMPTY_LINE = 'Your Studio has no modules. Add modules from the Module map.';
+export const EMPTY_LINE = 'Your Studio has no modules. Add modules from the Artifact map.';
 
 export default function StudioModules({ studio, tiles, extra = [], withheld = false }) {
   const byKey = new Map((studio.catalogue || []).map((m) => [m.key, m]));
-  const titleOf = (key) => byKey.get(key)?.title || fallbackTitle(key);
-  const hrefOf = (key) => byKey.get(key)?.href || null;
+  const moduleOf = (key) => byKey.get(key) || { key, title: fallbackTitle(key) };
+  const titleOf = (key) => moduleOf(key).title;
   const openMap = () => { if (!studio.editing) studio.customise(); studio.setMapOpen(true); };
 
   if (studio.noProfile) return <section className="sm-root" data-testid="studio-modules"><StudioNoProfile /></section>;
@@ -65,8 +65,7 @@ export default function StudioModules({ studio, tiles, extra = [], withheld = fa
           {(items.length > 0 || extra.length > 0) && (
             <StudioModuleGrid
               items={items}
-              titleOf={titleOf}
-              hrefOf={hrefOf}
+              moduleOf={moduleOf}
               tiles={tiles}
               editing={studio.editing}
               edit={studio.edit}

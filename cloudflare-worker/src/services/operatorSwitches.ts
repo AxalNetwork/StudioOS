@@ -73,6 +73,8 @@ export interface OperatorSwitchRow {
   set_by_user_id: number | null;
   /** SQLite's clock, `YYYY-MM-DD HH:MM:SS`. */
   set_at: string;
+  /** D4703: raised by one on every throw; a release must name it. */
+  revision: number;
 }
 
 export type OperatorSwitchRead =
@@ -135,8 +137,8 @@ export async function readOperatorSwitches(
   let next: Reading;
   try {
     const res = await env.DB.prepare(
-      'SELECT switch_key, thrown, reason, set_by_user_id, set_at FROM platform_switches',
-    ).all<{ switch_key: string; thrown: number; reason: string | null; set_by_user_id: number | null; set_at: string }>();
+      'SELECT switch_key, thrown, reason, set_by_user_id, set_at, revision FROM platform_switches',
+    ).all<{ switch_key: string; thrown: number; reason: string | null; set_by_user_id: number | null; set_at: string; revision: number }>();
     const rows = new Map<string, OperatorSwitchRow>();
     for (const row of res.results || []) {
       rows.set(String(row.switch_key), {
@@ -144,6 +146,7 @@ export async function readOperatorSwitches(
         reason: String(row.reason ?? ''),
         set_by_user_id: row.set_by_user_id == null ? null : Number(row.set_by_user_id),
         set_at: String(row.set_at ?? ''),
+        revision: Number(row.revision ?? 0),
       });
     }
     next = { good: { rows, read_at: now }, checked_at: now, error: null };
@@ -164,6 +167,12 @@ export async function readOperatorSwitches(
  *
  * The state test is inside the statement, not a read before it, so two
  * operators pressing at once cannot both record a change.
+ *
+ * D4703 (#4703): A THROW RAISES THE REVISION; A RELEASE NAMES IT. A release
+ * whose `revision` is not the current one changes nothing, so a tab that read
+ * an older throw cannot end a newer one. `audit` is the change's audit row
+ * (`adminAuditStatement(..., { onlyIfChanged: true })`), run in the same batch
+ * so the switch never changes without its record and a no-op leaves none.
  */
 export async function setOperatorSwitch(
   env: Env,
@@ -171,21 +180,25 @@ export async function setOperatorSwitch(
   thrown: boolean,
   reason: string,
   actorUserId: number,
+  opts: { revision?: number; audit?: D1PreparedStatement } = {},
 ): Promise<{ changed: boolean }> {
-  const res = thrown
-    ? await env.DB.prepare(
-      `INSERT INTO platform_switches (switch_key, thrown, reason, set_by_user_id, set_at)
-       VALUES (?, 1, ?, ?, datetime('now'))
+  const write = thrown
+    ? env.DB.prepare(
+      `INSERT INTO platform_switches (switch_key, thrown, reason, set_by_user_id, set_at, revision)
+       VALUES (?, 1, ?, ?, datetime('now'), 1)
        ON CONFLICT(switch_key) DO UPDATE SET
          thrown = 1, reason = excluded.reason,
-         set_by_user_id = excluded.set_by_user_id, set_at = excluded.set_at
+         set_by_user_id = excluded.set_by_user_id, set_at = excluded.set_at,
+         revision = platform_switches.revision + 1
        WHERE platform_switches.thrown = 0`,
-    ).bind(key, reason, actorUserId).run()
-    : await env.DB.prepare(
+    ).bind(key, reason, actorUserId)
+    : env.DB.prepare(
       `UPDATE platform_switches
           SET thrown = 0, reason = ?, set_by_user_id = ?, set_at = datetime('now')
-        WHERE switch_key = ? AND thrown = 1`,
-    ).bind(reason, actorUserId, key).run();
+        WHERE switch_key = ? AND thrown = 1 AND revision = ?`,
+    ).bind(reason, actorUserId, key, Number(opts.revision));
+
+  const [res] = await env.DB.batch(opts.audit ? [write, opts.audit] : [write]);
 
   // This isolate's next request reads the store again rather than its old
   // reading. The others follow within OPERATOR_SWITCH_TTL_MS.

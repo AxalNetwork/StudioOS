@@ -1,0 +1,34 @@
+{
+  "skill": "responsive-breakpoint-specification",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Responsive Breakpoint Specification",
+        "task_scope": "Specifies responsive layouts and breakpoint behaviour from content, device constraints and component requirements.",
+        "evidence": [
+          "content-driven breakpoint rules"
+        ],
+        "omitted_field": "minimum viewport"
+      },
+      "github.repos": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for content-driven breakpoint rules."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "content-driven breakpoint rules"
+    ],
+    "must_say_not_recorded": [
+      "minimum viewport"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

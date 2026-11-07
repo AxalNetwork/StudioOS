@@ -152,7 +152,7 @@ export async function approvalFor(env: Env, skillId: number, hash: string): Prom
 }
 
 /** The four states: a draft with an open review on its current text is `in_review`. */
-export function lifecycleStatus(status: 'draft' | 'published' | 'retired', open: ReviewRow | null, hash: string): 'draft' | 'in_review' | 'published' | 'retired' {
+export function lifecycleStatus(status: 'draft' | 'published' | 'retired', open: Pick<ReviewRow, 'draft_hash'> | null, hash: string): 'draft' | 'in_review' | 'published' | 'retired' {
   if (status === 'retired') return 'retired';
   if (open && open.draft_hash === hash) return 'in_review';
   return status;

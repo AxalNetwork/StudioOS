@@ -26,7 +26,7 @@ const BASE = '/admin/ai-agents/skills';
 const send = (path, method, body) => request(`${BASE}${path}`, { method, body: JSON.stringify(body ?? {}) });
 
 export const adminHqSkillsApi = {
-  list: () => request(BASE),
+  list: (options) => request(BASE, options),
   get: (uid) => request(`${BASE}/${enc(uid)}`),
   diff: (uid, { from, to } = {}) => {
     const q = new URLSearchParams(Object.entries({ from, to }).filter(([, v]) => v)).toString();

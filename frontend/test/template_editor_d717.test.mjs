@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { api, contractsApi } from '../src/lib/api.js';
+import { editorStoredFormat } from '../src/lib/templateFormatState.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import Desk from '../src/pages/admin/contracts/ContractsDesk.jsx';
 import PaperPreview, { PaperFrame } from '../src/components/PaperPreview.jsx';
@@ -34,6 +35,7 @@ const base = { category: 'gp', layer: 'gp', layer_label: 'Internal Management (G
 const ROWS = {
   agree: { ...base, slug: 'd717_test_agreement', title: 'Test Agreement', version: 3, body_md: '# Test Agreement\n## One {{a.b}}\nText', kind: 'agreement', party: 'gp', usage_count: 3, format_options: OPTIONS({ kind: 'agreement', party: 'gp' }, 'gp') },
   policy: { ...base, slug: 'd717_test_policy', title: 'Test Policy', version: 1, body_md: 'Policy text', kind: 'policy', party: 'none', format_options: OPTIONS({ kind: 'policy', party: 'none' }, 'management') },
+  stalePolicy: { ...base, slug: 'd717_test_stale_policy', title: 'Legacy Test Policy', version: 2, body_md: 'Policy text', doc_kind: 'policy', axal_party: 'management', kind: 'policy', party: 'management', format_options: OPTIONS({ kind: 'policy', party: 'none' }, 'management') },
   notice: { ...base, slug: 'd717_test_notice', title: 'Test Notice', version: 1, body_md: 'Notice text', kind: 'notice', party: 'gp', format_fixed: true, format_options: OPTIONS({ kind: 'notice', party: 'gp' }, 'gp') },
   stub: { ...base, slug: 'd717_test_stub', title: 'Test Stub', version: 2, body_md: '', is_stub: 1, published_version: 2, kind: 'agreement', party: 'gp', format_options: OPTIONS({ kind: 'agreement', party: 'gp' }, 'gp') },
   live: { ...base, slug: 'd717_test_live', title: 'Test Live', version: 3, body_md: 'Live body', published_version: 2, kind: 'agreement', party: 'gp', format_options: OPTIONS({ kind: 'agreement', party: 'gp' }, 'gp') },
@@ -138,6 +140,21 @@ test('Party: four entities for a party kind, None only for a partyless one, a ki
     assert.deepEqual(e.groupButtons('Axal VC party').map(b => b.text), ['From the slug (None)', 'None']);
     await e.press('Kind', 'agreement');
     assert.equal(e.groupButtons('Axal VC party')[0].text, 'From the slug (Management)', 'from format_options.entity, not derived.party');
+  } finally { await e.view.unmount(); restore(); }
+});
+
+test('A stale kind-party mismatch returns to the slug for preview and is repaired only when Save draft is pressed', async () => {
+  assert.deepEqual(editorStoredFormat(ROWS.stalePolicy), { kind: 'policy', party: null });
+  const e = await open('stalePolicy');
+  try {
+    assert.equal(e.groupButtons('Kind').find(b => b.text === 'policy').pressed, true);
+    assert.equal(e.groupButtons('Axal VC party')[0].text, 'From the slug (None)');
+    assert.equal(e.groupButtons('Axal VC party')[0].pressed, true);
+    const preview = of(e.calls, 'renderPaper').at(-1)[1][0];
+    assert.deepEqual([preview.doc_kind, preview.axal_party], ['policy', null]);
+    assert.deepEqual([ROWS.stalePolicy.doc_kind, ROWS.stalePolicy.axal_party], ['policy', 'management'], 'loading never mutates the source row');
+    await e.click('Save draft'); await e.view.flush();
+    assert.deepEqual([e.lastPut().doc_kind, e.lastPut().axal_party], ['policy', null]);
   } finally { await e.view.unmount(); restore(); }
 });
 

@@ -1440,6 +1440,8 @@ function googlePayload(ev: CalendarEvent): any {
   const where = locationLine(ev);
   if (where) body.location = where;
   if (ev.ics_status === 'TENTATIVE') body.status = 'tentative';
+  // D4703: said outright, so the PATCH that follows a confirm turns a tentative copy firm.
+  else if (ev.ics_status === 'CONFIRMED') body.status = 'confirmed';
   const att = ev.attendees
     .filter(a => a.email && a.email !== ev.organizer_email)
     .map(a => ({ email: a.email, displayName: a.name }));
@@ -1509,6 +1511,7 @@ function microsoftPayload(ev: CalendarEvent): any {
   const where = locationLine(ev);
   if (where) body.location = { displayName: where };
   if (ev.ics_status === 'TENTATIVE') body.showAs = 'tentative';
+  else if (ev.ics_status === 'CONFIRMED') body.showAs = 'busy';
   const att = ev.attendees
     .filter(a => a.email && a.email !== ev.organizer_email)
     .map(a => ({

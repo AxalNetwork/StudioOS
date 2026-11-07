@@ -1,0 +1,83 @@
+{
+  "skill": "api-contract-compatibility-review",
+  "version": 1,
+  "note": "Synthetic fixture only; all repositories, people, advisories, identifiers and measurements are invented for evaluation. No production data.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "repository": "synthetic-orders-api",
+        "revision": "fixture-api-127",
+        "contracts": [
+          {
+            "id": "orders-contract-v1a",
+            "version": "v1",
+            "response": {
+              "order_status": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "complete"
+                ]
+              }
+            }
+          },
+          {
+            "id": "orders-contract-v1b",
+            "version": "v1",
+            "response": {
+              "order_status": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "complete",
+                  "processing"
+                ]
+              }
+            }
+          }
+        ],
+        "consumers": [
+          {
+            "id": "client-orders-v1",
+            "uses_api_version": "v1",
+            "handled_order_statuses": [
+              "queued",
+              "complete"
+            ],
+            "default_behavior": "throw an exception for an unrecognized status"
+          }
+        ],
+        "server_tests": {
+          "id": "server-suite-127",
+          "revision": "fixture-api-127",
+          "status": "passed",
+          "coverage": "New server can serialize each declared enum value."
+        }
+      },
+      "build.records": {
+        "id": "api-release-review-127",
+        "change": "Expose the intermediate order status on the existing v1 response.",
+        "consumer_contract_test_result": null,
+        "version_negotiation_change": null,
+        "review_owner": "Nora Vale"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Breaking risk",
+      "processing",
+      "client-orders-v1",
+      "orders-contract-v1b"
+    ],
+    "must_say_not_recorded": [
+      "consumer contract test result"
+    ],
+    "must_not_include": [
+      "Backward compatibility is guaranteed",
+      "All clients are compatible",
+      "I approved the release"
+    ]
+  }
+}

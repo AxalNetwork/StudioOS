@@ -520,7 +520,15 @@ test('roles lists the models an agent may run on, and plan_locked agrees with th
     const paid = (await call(w, EDITOR, 'GET', '/roles')).body.models as any[];
     assert.ok(paid.length > 3);
     const llama = paid.find((m) => m.id === MODEL);
-    assert.deepEqual(llama, { id: MODEL, label: 'llama-3.3-70b-instruct-fp8-fast', kind: 'Text Generation', beta: false, plan_locked: false });
+    assert.deepEqual(llama, {
+      id: MODEL,
+      label: 'llama-3.3-70b-instruct-fp8-fast',
+      kind: 'Text Generation',
+      beta: false,
+      plan_locked: false,
+      input_usd_per_million: 0.366685,
+      output_usd_per_million: 2.81606875,
+    });
     assert.ok(!paid.some((m) => m.id === '@cf/black-forest-labs/flux-1-schnell'), 'only text models');
     for (const m of paid) {
       const r = await call(w, EDITOR, 'POST', `${CO}/agents`, { ...cfo({ model_id: m.id }), role_key: 'cto' });

@@ -377,6 +377,10 @@ export interface Env {
   AGENT_TASK?: Workflow<{ run_uid: string }>;
   /** D1528: `studioos-agent-queue`; messages are `{ job_type: 'agent_run', payload: { run_uid } }`. */
   AGENT_QUEUE?: Queue<JobMessage>;
+  /** D4559 (#4559): optional whole-byte overrides for the D1 plan limit and its warning/critical review sizes (services/platformCapacity). Unset: 10 GB / 5 GB / 7.5 GB. */
+  PLATFORM_D1_LIMIT_BYTES?: string;
+  PLATFORM_D1_WARN_BYTES?: string;
+  PLATFORM_D1_CRIT_BYTES?: string;
   KEK_R2?: string;
   // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
   // Kept distinct from KEK_PII so a key rotation on PII columns never

@@ -30,6 +30,10 @@ const ROLE_KEYS = new Set(ROLES.map((r) => r.key));
 export async function draftPartsOf(env: Env, s: SkillRow): Promise<DraftParts> {
   const tags = (await env.DB.prepare('SELECT taxonomy_skill_slug AS slug, level FROM agent_skill_tags WHERE skill_id = ? ORDER BY rowid').bind(s.id).all<Tag>()).results ?? [];
   const roles = ((await env.DB.prepare('SELECT role_key FROM agent_skill_roles WHERE skill_id = ? ORDER BY rowid').bind(s.id).all<{ role_key: string }>()).results ?? []).map((r) => r.role_key);
+  return draftParts(s, tags, roles);
+}
+
+export function draftParts(s: SkillRow, tags: Tag[], roles: string[]): DraftParts {
   return { name: s.name, purpose: s.purpose, steps: parse(s.steps_json, []), tools: parse(s.allowed_tools_json, []), output_kind: s.output_kind as OutputKind, tags, roles };
 }
 

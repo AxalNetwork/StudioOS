@@ -66,6 +66,9 @@ function freshDb() {
       budget_min REAL, budget_max REAL, timeline TEXT, status TEXT NOT NULL DEFAULT 'open',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    -- #4673: an engagement's founder_id is a founder profile (founders.id); the client's name is read
+    -- from it. This fixture keeps the founder's id equal to the user's on purpose.
+    CREATE TABLE founders (id INTEGER PRIMARY KEY, uid TEXT, name TEXT NOT NULL, email TEXT);
     CREATE TABLE engagements (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       need_id INTEGER NOT NULL, quote_id INTEGER NOT NULL UNIQUE,
@@ -93,6 +96,7 @@ function freshDb() {
   u.run(THEIRS, 'partner', 2, 'Theirs', 'theirs@example.com');
   u.run(UNLINKED, 'partner', null, 'Nobody', 'nobody@example.com');
   u.run(FOUNDER, 'founder', null, 'Verwood', 'fran@example.com');
+  db.prepare('INSERT INTO founders (id, name, email) VALUES (?, ?, ?)').run(FOUNDER, 'Verwood', 'fran@example.com');
   db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)').run(1, 'p-1', 'Ours', 'ours@example.com');
   db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)').run(2, 'p-2', 'Theirs', 'theirs@example.com');
   const n = db.prepare('INSERT INTO founder_needs (id, uid, project_id, founder_id, category, title, description) VALUES (?,?,?,?,?,?,?)');
