@@ -91,7 +91,7 @@ test('the schedule form sends only changed terms with the revision it read, and 
 // 4 ───────────────────────────────────────────────────────────────────────────
 test('the Terms editor is wired to the dirty-field form, not to a full-row save', () => {
   // Mutations checked: the editor sending every field again; the reconcile effect removed; the reason box removed.
-  const page = readFileSync(new URL('../src/pages/admin/AdminLicences.jsx', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../src/pages/admin/licences/CommercialTerms.jsx', import.meta.url), 'utf8');
   const editor = page.slice(page.indexOf('function TermsEditor('), page.indexOf('function TermsEditor(') + 6000);
   assert.match(editor, /buildCoreSave\(\{ form: st\.form, base: st\.base, revision: st\.revision, reason \}\)/);
   assert.match(editor, /setSt\(\(cur\) => reconcileCoreForm\(cur, licence\)\)/);
