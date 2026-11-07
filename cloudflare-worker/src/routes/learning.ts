@@ -28,6 +28,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
+import { ASSESSED_LESSON_KINDS, refreshCourses } from '../services/learningCompletion';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { mapError } from './_t13t14t15_helpers';
 import {
@@ -441,6 +442,30 @@ r.post('/progress', async (c) => {
     return refuse(c, 404, { code: 'not_found', message: 'No such item, lesson or course.' });
   }
   const now = new Date().toISOString();
+  // D4643 (#4643): completion is authoritative. A course's row is derived from its required lessons
+  // (`refreshCourses`), whatever is posted for it; an exercise or exam lesson completes only by its result.
+  if (kind === 'course') {
+    const course = await c.env.DB.prepare('SELECT id FROM learning_courses WHERE uid = ?').bind(uid).first<{ id: number }>();
+    if (course) await refreshCourses(c.env, Number(user.id), [Number(course.id)], now);
+    const row = await c.env.DB.prepare(
+      `SELECT subject_kind, subject_uid, status, percent, position_seconds, started_at, completed_at FROM learning_progress
+        WHERE user_id = ? AND subject_kind = 'course' AND subject_uid = ?`,
+    ).bind(user.id, uid).first<any>();
+    return c.json({ progress: row });
+  }
+  let lessonCourse: number | null = null;
+  if (kind === 'lesson') {
+    const lesson = await c.env.DB.prepare(
+      'SELECT l.kind, m.course_id FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id WHERE l.uid = ?',
+    ).bind(uid).first<{ kind: string; course_id: number }>();
+    if (lesson && status === 'completed' && ASSESSED_LESSON_KINDS.includes(lesson.kind)) {
+      return refuse(c, 409, {
+        code: 'completed_by_result',
+        message: lesson.kind === 'exam' ? 'This lesson is complete when one of your attempts passes the exam.' : 'This lesson is complete when a reviewer accepts your exercise.',
+      });
+    }
+    lessonCourse = lesson ? Number(lesson.course_id) : null;
+  }
   // Always the caller's own row: the user id comes from the session, never the body.
   // A completed subject stays completed, and the percent never goes backwards.
   await c.env.DB.prepare(
@@ -455,6 +480,8 @@ r.post('/progress', async (c) => {
        completed_at = COALESCE(learning_progress.completed_at, excluded.completed_at),
        updated_at = excluded.updated_at`,
   ).bind(user.id, kind, uid, status, pct, pos, now, status === 'completed' ? now : null, now).run();
+  // A completed lesson moves its course's derived row with it.
+  if (kind === 'lesson' && status === 'completed' && lessonCourse != null) await refreshCourses(c.env, Number(user.id), [lessonCourse], now);
   const row = await c.env.DB.prepare(
     `SELECT subject_kind, subject_uid, status, percent, position_seconds, started_at, completed_at FROM learning_progress
       WHERE user_id = ? AND subject_kind = ? AND subject_uid = ?`,

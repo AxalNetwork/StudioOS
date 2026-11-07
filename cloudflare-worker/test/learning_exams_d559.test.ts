@@ -46,6 +46,8 @@ function builtFromMigrations(): DatabaseSync {
   // 389 (D558, programs) sits between: the member reads join its tables.
   db.exec(sqlOf('389'));
   db.exec(sqlOf('390'));
+  // D4643 (#4643): the attempt's own pass mark, time limit and reveal policy.
+  db.exec(sqlOf('202611062214'));
   return db;
 }
 const BUILT = builtFromMigrations();

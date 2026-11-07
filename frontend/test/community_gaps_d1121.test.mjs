@@ -17,7 +17,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import AdminJobsPage from '../src/pages/admin/AdminJobsPage.jsx';
 import AdminCirclesPage from '../src/pages/admin/AdminCirclesPage.jsx';
 import { buildJobs, daysOpenText, jobDaysOpen } from '../src/pages/admin/community/communityModel.js';
-import { JOBS as JOBS_SPEC, JOBS_FOOT, initialState, jobRow, listView } from '../src/pages/admin/community/lightboxModel.js';
+import { JOBS as JOBS_SPEC, JOBS_FOOT, jobRow } from '../src/pages/admin/community/lightboxModel.js';
 
 const h = React.createElement;
 const JOBS = [
@@ -151,9 +151,9 @@ test('CM4: Posted and Days open, the Days open sort, and the footnote', () => {
   assert.deepEqual([row('Closed since').posted, row('Closed since').daysOpen], ['1 Sept', 'Not open']);
   assert.deepEqual([row('Closed before 609').posted, row('Closed before 609').daysOpen], ['Not recorded', 'Not open'], 'it was live once, so not "Not published"');
   assert.deepEqual([row('A draft').posted, row('A draft').daysOpen], ['Not published', 'Not open']);
-  const sorted = listView(JOBS_SPEC, POSTINGS, { ...initialState(JOBS_SPEC), sort: 'days_open' }).rows.map((j) => j.title);
-  assert.deepEqual(sorted.slice(0, 2), ['Ten days', 'One day'], 'longest open first');
-  assert.deepEqual(new Set(sorted.slice(2)), new Set(['Before 609', 'Closed since', 'Closed before 609', 'A draft']), 'not open or not recorded sorts last');
+  // #4717 package 4: the Days open order is the Worker's (community_lists_4717 checks longest open first,
+  // not-open and not-recorded last); the lightbox offers the sort and draws what it gets back.
+  assert.ok(JOBS_SPEC.sorts.some((x) => x.key === 'days_open'), 'the Days open sort is offered');
   assert.doesNotMatch(JOBS_FOOT, /not shown/);
   assert.match(JOBS_FOOT, /last approved/);
 });
