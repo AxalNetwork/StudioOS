@@ -1,7 +1,7 @@
 // #4698 (Delivery audit 4/6) — Health, exercised by interaction.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React, { act } from 'react';
+import { act } from 'react';
 import Zone from '../src/pages/partner/delivery/HealthZone.jsx';
 import { stubApi, restoreApi, deferred, mountZone } from './_delivery_zone_harness.mjs';
 
