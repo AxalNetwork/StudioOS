@@ -132,7 +132,13 @@ function hqBody({ complete = true } = {}) {
   };
   return {
     complete, unreadable_areas: complete ? [] : ['message_attachments'], reason: complete ? null : 'Some stored files could not be read, so no member’s total is complete.',
-    totals: { members: 10, members_with_files: 6, files: 9, measured_bytes: 13200, unknown_size_files: 4, complete },
+    totals: { files: 9, measured_bytes: 13200, unknown_size_files: 4, complete },
+    populations: {
+      members: { accounts: 8, accounts_with_files: 6, files: 8, measured_bytes: 12000, unknown_size_files: 3 },
+      staff: { accounts: 2, accounts_with_files: 1, files: 1, measured_bytes: 1200, unknown_size_files: 1 },
+      unattributed: { accounts: 0, accounts_with_files: 0, files: 0, measured_bytes: 0, unknown_size_files: 0 },
+      total: { files: 9, measured_bytes: 13200, unknown_size_files: 4 },
+    },
     by_tier_reason: complete ? null : 'Some stored files could not be read, so no member’s total is complete.',
     by_tier: STORAGE_TIERS.map((t) => {
       const f = figures[t.key];
@@ -153,7 +159,8 @@ test('HQ’s model: tiles, rows sorted by use, a negotiated plan not measured, a
   const body = hqBody();
   const t = Object.fromEntries(tiles(body).map((x) => [x.key, x]));
   assert.deepEqual([t.stored.value, t.members.value, t.near.value, t.full.value, t.over.value, t.unknown.value], ['12.9 KB', '6', '2', '1', '1', '4 files']);
-  assert.equal(t.stored.note, 'across 6 members with files');
+  assert.equal(t.stored.note, 'members 11.7 KB · staff 1.2 KB');
+  assert.equal(t.members.note, 'of 8 members · 11.7 KB stored · staff not counted');
   const rows = planRows(body);
   assert.deepEqual(rows.map((r) => r.key), ['usd_20', 'free', 'negotiated', 'usd_100', 'usd_50', 'usd_150', 'lp_access']);
   assert.deepEqual(planRows(body, 'plan').map((r) => r.key), STORAGE_TIERS.map((x) => x.key));
@@ -185,6 +192,8 @@ test('rendered HQ page: totals, both charts and the table; no member or file is 
     const all = text(page.container);
     assert.match(all, /Storage.*HQ only.*How much members store, by plan and by kind\. Totals only\./);
     assert.equal(byTest(page.container, 'hq-storage-tiles')[0].childNodes.length, 6);
+    assert.equal(byTest(page.container, 'hq-storage-populations').length, 1, 'D4856: who holds the bytes is drawn once');
+    assert.equal(walk(page.container).filter((n) => props(n)['data-population']).length, 3, 'members, staff and the total (no unattributed rows)');
     assert.equal(byTest(page.container, 'hq-storage-kind-chart').length, 1);
     assert.equal(byTest(page.container, 'hq-storage-state-chart').length, 1);
     assert.match(all, /Totals only\. A member’s files are theirs; HQ sees sums\. No member or file is named here\./);
