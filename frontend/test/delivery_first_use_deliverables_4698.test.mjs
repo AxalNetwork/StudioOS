@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Zone from '../src/pages/partner/delivery/DeliverablesZone.jsx';
-import { stubApi, restoreApi, deferred, mountZone, walk } from './_delivery_zone_harness.mjs';
+import { stubApi, restoreApi, deferred, mountZone } from './_delivery_zone_harness.mjs';
 
 const ENG = [{ engagement_id: 1, founder_name: 'Acme', engagement_uid: 'e1' }, { engagement_id: 2, founder_name: 'Birch', engagement_uid: 'e2' }];
 const row = (id, over = {}) => ({ id, engagement_id: 1, title: `Deck ${id}`, version: '', link_url: '', sent_at: '2026-10-01', opened_at: null, signed_off_at: null, days_since_sent: 30, founder_name: 'Acme', is_unopened: true, ...over });
