@@ -182,7 +182,7 @@ test('a container that reports before the start returns keeps its own container 
       return Response.json({ code: 'started' }, { status: 202 });
     } });
     const started = await startDiagnosis(w.env, { id: 1 }, MEET, { id: ID });
-    assert.deepEqual(started.rows.find((r: any) => r.stage === 'container'), { stage: 'container', result: 'pass', code: 'command_received', facts: {}, fix: null });
+    assert.deepEqual(started.rows.find((r: any) => r.stage === 'container'), { stage: 'container', result: 'pass', code: 'command_received', facts: {}, fix: null, delivery: 'ok' });
   } finally { w.db.close(); }
 });
 

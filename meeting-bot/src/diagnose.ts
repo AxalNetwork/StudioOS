@@ -15,6 +15,15 @@
  * the owner only. The probe chunk is zeros: it proves the upload path without
  * carrying what was said.
  *
+ * Running a stage and telling the Worker about it are two facts (#4857). Every
+ * stage the bot has finished sits in a ledger with its own `delivered` flag; a
+ * report is the whole ledger so far (a cumulative snapshot with the diagnosis
+ * id, a revision and each stage's event revision), so a report that fails is
+ * simply carried by the next one, and the Worker merges by (diagnosis, stage,
+ * event revision) and can take a snapshot twice or out of order. A failed send
+ * is retried a bounded number of times with backoff on the injected clock; it
+ * never reruns the stage's action.
+ *
  * Zoom joins through the native SDK with a run's own credentials, so Zoom's
  * container stages stop at egress; the Worker checks Zoom's credentials and
  * reads the last Zoom run instead.
@@ -35,13 +44,27 @@ export interface DiagnoseReport {
   readonly code: string;
   readonly facts?: Readonly<Record<string, DiagnoseFact>>;
 }
+/** A stage's result with its stable identity: `rev` orders this stage's events, `at` is when it ran, `attempts` how many sends of it failed first. */
+export interface DiagnoseEvent extends DiagnoseReport {
+  readonly rev: number;
+  readonly at: number;
+  readonly attempts: number;
+}
+/** What one callback carries: every stage run so far, so no earlier callback is needed. */
+export interface DiagnoseSnapshot {
+  readonly diagnosis_id: string;
+  readonly revision: number;
+  readonly events: readonly DiagnoseEvent[];
+}
 /** The page of the stopping point: a screenshot and an address read for its host only. */
 export interface DiagnosePage { screenshot(): Promise<Uint8Array>; url(): string }
 export interface DiagnoseMeet extends MeetingAdapter { diagnostic(): string | null }
 export interface DiagnoseDeps {
   readonly launch: () => Promise<{ page: DiagnosePage; meet: DiagnoseMeet; close(): Promise<void> }>;
   readonly fetch: typeof fetch;
-  readonly report: (r: DiagnoseReport) => Promise<void>;
+  /** The Worker's acknowledgement is this promise resolving; a rejection means the snapshot may not have arrived. */
+  readonly report: (snapshot: DiagnoseSnapshot) => Promise<void>;
+  readonly diagnosisId: string;
   readonly screenshot: (png: Uint8Array) => Promise<void>;
   readonly probe: (wav: Uint8Array) => Promise<void>;
   readonly clock: Clock;
@@ -61,7 +84,15 @@ export const EGRESS_HOSTS: Record<Platform, readonly string[]> = {
 };
 const CODE = /^[a-z0-9_]{1,40}$/;
 const code = (value: unknown, fallback: string) => (typeof value === 'string' && CODE.test(value) ? value : fallback);
-const STAGES: readonly DiagnoseStage[] = ['container', 'browser', 'egress', 'join', 'admission', 'audio'];
+export const DIAGNOSE_STAGES: readonly DiagnoseStage[] = ['container', 'browser', 'egress', 'join', 'admission', 'audio'];
+const STAGES = DIAGNOSE_STAGES;
+/** Sends per report while the check runs (short, so a dead callback never stalls it) and in the last flush after it. */
+export const REPORT_TRIES = 2;
+export const FINAL_REPORT_TRIES = 6;
+/** Backoff after the n-th failed send: 0.5 s, 1 s, 2 s … capped at 8 s. */
+export const reportBackoffMs = (failed: number) => Math.min(500 * 2 ** failed, 8000);
+/** The stages whose result the Worker has not acknowledged. */
+export interface DiagnoseOutcome { readonly undelivered: readonly DiagnoseStage[] }
 
 /** Where the Meet page stopped: D1368's step, D1373's page kind, or the adapter's refusal. */
 export function joinStop(error: unknown, step: string | null): string {
@@ -88,15 +119,45 @@ async function reach(doFetch: typeof fetch, host: string): Promise<DiagnoseFact>
   }
 }
 
-export async function runDiagnosis(platform: Platform, meetingUrl: string, deps: DiagnoseDeps): Promise<void> {
-  const done = new Set<DiagnoseStage>();
+export async function runDiagnosis(platform: Platform, meetingUrl: string, deps: DiagnoseDeps): Promise<DiagnoseOutcome> {
+  // "Ran" is a ledger entry; "delivered" is the Worker's acknowledgement of it. Neither implies the other.
+  const ledger = new Map<DiagnoseStage, { event: DiagnoseReport & { rev: number; at: number }; delivered: boolean; failed: number }>();
+  let revision = 0;
+  const snapshot = (): DiagnoseSnapshot => ({ diagnosis_id: deps.diagnosisId, revision,
+    events: STAGES.flatMap((stage) => { const l = ledger.get(stage); return l ? [{ ...l.event, attempts: l.failed }] : []; }) });
+  const deliver = async (tries: number) => {
+    for (let n = 0; n < tries; n += 1) {
+      const sent = snapshot();
+      try {
+        await deps.report(sent);
+        for (const e of sent.events) { const l = ledger.get(e.stage); if (l?.event.rev === e.rev) l.delivered = true; }
+        return;
+      } catch {
+        for (const e of sent.events) { const l = ledger.get(e.stage); if (l && !l.delivered && l.event.rev === e.rev) l.failed += 1; }
+        if (n + 1 < tries) await deps.clock.sleep(reportBackoffMs(n));
+      }
+    }
+  };
   const say = async (r: DiagnoseReport) => {
-    if (r.result !== 'running') done.add(r.stage);
-    try { await deps.report(r); } catch { /* the next report says it again */ }
+    revision += 1;
+    ledger.set(r.stage, { event: { ...r, rev: revision, at: deps.clock.now() }, delivered: false, failed: 0 });
+    await deliver(REPORT_TRIES);
   };
+  const ran = (stage: DiagnoseStage) => { const l = ledger.get(stage); return !!l && l.event.result !== 'running'; };
   const skipRest = async (why: string) => {
-    for (const stage of STAGES) if (!done.has(stage)) await say({ stage, result: 'skipped', code: why });
+    for (const stage of STAGES) if (!ran(stage)) await say({ stage, result: 'skipped', code: why });
   };
+  try {
+    await execute(say, skipRest);
+  } finally {
+    // What the check could not tell the Worker while it ran, it tells now: the whole ledger, retried with backoff.
+    const pending = () => STAGES.filter((s) => ledger.has(s) && !ledger.get(s)!.delivered);
+    if (pending().length) await deliver(FINAL_REPORT_TRIES);
+    if (pending().length) deps.log?.('diagnose_delivery_failed', { undelivered: pending().length });
+  }
+  return { undelivered: STAGES.filter((s) => ledger.has(s) && !ledger.get(s)!.delivered) };
+
+  async function execute(say: (r: DiagnoseReport) => Promise<void>, skipRest: (why: string) => Promise<void>): Promise<void> {
   await say({ stage: 'container', result: 'pass', code: 'command_received' });
 
   // Egress first for Zoom (no browser); for Meet the browser needs the hosts anyway.
@@ -179,6 +240,7 @@ export async function runDiagnosis(platform: Platform, meetingUrl: string, deps:
     try { await meet.leave(); } catch { /* the browser closes below */ }
     try { await session.close(); } catch { /* the container ends with its lease */ }
   }
+  }
 }
 
 /** The Worker's three diagnostic callbacks, each signed like B2's events, with the run's own key. */
@@ -190,7 +252,7 @@ export function diagnoseCallbacks(origin: string, id: string, key: string, doFet
     if (!res.ok) throw new Error(`diagnose_${res.status}`);
   };
   return {
-    report: (r: DiagnoseReport) => post('report', r),
+    report: (snapshot: DiagnoseSnapshot) => post('report', snapshot),
     screenshot: (png: Uint8Array) => post('screenshot', { png: Buffer.from(png).toString('base64') }),
     probe: (wav: Uint8Array) => post('probe', { wav: Buffer.from(wav).toString('base64') }),
   };

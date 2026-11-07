@@ -52,7 +52,7 @@ export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterCon
 /** #3708: the owner's staged diagnostic with the packaged browser and the Meet adapter. */
 export async function runtimeDiagnose(platform:Platform,meetingUrl:string,context:RuntimeDiagnoseContext,factories:RuntimeFactories={}):Promise<void>{
   const callbacks=diagnoseCallbacks(context.callbackOrigin,context.uid,context.secret,factories.fetch??fetch);
-  await runDiagnosis(platform,meetingUrl,{...callbacks,fetch:factories.fetch??fetch,clock:realClock,stop:context.stop,log:consoleSink,
+  await runDiagnosis(platform,meetingUrl,{...callbacks,diagnosisId:context.uid,fetch:factories.fetch??fetch,clock:realClock,stop:context.stop,log:consoleSink,
     launch:async()=>{
       const browser=await (factories.launch??(()=>chromium.launch({headless:true,chromiumSandbox:true})))();
       try{
