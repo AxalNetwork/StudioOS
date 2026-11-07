@@ -23,7 +23,7 @@ import { writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  BENCH_LIMITS, DEFAULT_MIX, MIX_KEYS, amplification, benchWorld, fairness, footprint, invariants, ramp, runClosed, scanControl, schedule, summarise,
+  BENCH_LIMITS, DEFAULT_MIX, MIX_KEYS, amplification, benchWorld, fairness, footprint, invariants, ramp, runClosed, scanControl, schedule, summarise, indexControl, withoutCandidates,
 } from '../cloudflare-worker/test/_d1_bench.ts';
 
 const args = process.argv.slice(2);
@@ -43,6 +43,9 @@ const maxOps = Number(value('--max-ops', String(BENCH_LIMITS.ops)));
 const maxErrorRate = Number(value('--max-error-rate', '0.01'));
 const maxP95Ms = Number(value('--max-p95-ms', '2000'));
 const control = value('--control') ? list('--control') : [];
+// D4568: `--index-control 1000,10000,100000` times the candidate indexes with and without; `--without-candidates` runs the mix on the schema before them.
+const idxControl = value('--index-control') ? list('--index-control') : [];
+const noCandidates = args.includes('--without-candidates');
 const out = value('--out');
 let mix = DEFAULT_MIX;
 if (value('--mix')) {
@@ -65,11 +68,13 @@ const report = {
   note: 'Local node:sqlite over the actual migrations, synthetic fixtures, stubbed inference. Latencies are relative, never a D1 capacity figure.',
   issue: 4567, taken_at: new Date().toISOString(), commit, node: process.version, sqlite,
   options: { tenants: tenantsList, ops, concurrency, seed, hot, agents, mix, ramp: rampRates, seconds, maxOps, maxErrorRate, maxP95Ms, control },
-  scales: [], control: null,
+  candidates: noCandidates ? 'dropped (the schema before D4568)' : 'present (migration 202611070806)',
+  scales: [], control: null, index_control: null,
 };
 let bad = 0;
 for (const tenants of tenantsList) {
   const w = benchWorld({ tenants, agentsPerTenant: agents });
+  if (noCandidates) withoutCandidates(w);
   const before = footprint(w);
   const t0 = performance.now();
   let results, steps = null, stopped = null;
@@ -95,6 +100,7 @@ for (const tenants of tenantsList) {
   });
   bad += Object.values(inv).reduce((s, n) => s + n, 0);
   if (tenants === tenantsList[tenantsList.length - 1] && control.length) report.control = scanControl(w, control);
+  if (tenants === tenantsList[tenantsList.length - 1] && idxControl.length) report.index_control = indexControl(w, idxControl);
   w.db.close();
   console.log(`· ${tenants} tenants: ${results.length} ops, ${executions} executions, invariants ${Object.values(inv).every((n) => n === 0) ? 'all 0' : JSON.stringify(inv)}`);
 }
