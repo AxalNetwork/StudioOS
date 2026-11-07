@@ -28,6 +28,7 @@
  * from YouTube, Vimeo or Cloudflare Stream. An upload (`video_source = 'r2'`)
  * has no upload path yet and is refused rather than stored without a file.
  */
+import { COURSE_META_COLUMNS, COURSE_META_SELECT, courseMetaFields, courseMetaView, MetaInvalid } from '../services/learningCourseMeta';
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
@@ -145,7 +146,25 @@ function courseFields(b: any, creating: boolean) {
     estimated_minutes: wholeOrNull(b?.estimated_minutes, 'estimated_minutes'),
     resources_json,
     visibility: oneOf(b?.visibility, LEARNING_VISIBILITIES, 'visibility'),
+    // D4650 (#4650, part 2): audience, stage, outcomes, prerequisites, author, reviewer, review date, practical output.
+    ...metaFields(b),
   };
+}
+
+function metaFields(b: any) {
+  try { return courseMetaFields(b); } catch (e) {
+    if (e instanceof MetaInvalid) bad(e.code, e.reason);
+    throw e;
+  }
+}
+
+/** A course row as the authoring routes answer it: the stored JSON columns read into `resources` and `meta`. */
+function courseOut(row: any) {
+  const { id: _id, resources_json, audience_json: _a, outcomes_json: _o, prerequisites_json: _p, stage: _s, author_name: _au,
+    reviewer_name: _r, reviewed_on: _d, practical_output: _po, ...rest } = row;
+  let resources: unknown = [];
+  try { resources = JSON.parse(resources_json || '[]'); } catch { resources = []; }
+  return { ...rest, resources, meta: courseMetaView(row) };
 }
 
 /** Run a handler body, turning a validation throw into its 400. */
@@ -160,10 +179,10 @@ const now = () => new Date().toISOString();
 
 // Fixed column lists: an UPDATE names only columns from these, never a key from the body.
 const ITEM_COLUMNS = ['title', 'summary', 'body', 'video_url', 'duration_seconds', 'thumbnail_url', 'transcript', 'topic', 'level', 'visibility', 'chapters_json'] as const;
-const COURSE_COLUMNS = ['slug', 'title', 'summary', 'cover_url', 'level', 'estimated_minutes', 'resources_json', 'visibility'] as const;
+const COURSE_COLUMNS = ['slug', 'title', 'summary', 'cover_url', 'level', 'estimated_minutes', 'resources_json', 'visibility', ...COURSE_META_COLUMNS] as const;
 
 const ITEM_SELECT = 'SELECT uid, kind, title, summary, body, video_source, video_url, duration_seconds, thumbnail_url, transcript, topic, level, visibility, status, created_by, created_at, updated_at, published_at FROM learning_items';
-const COURSE_SELECT = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at, published_at FROM learning_courses';
+const COURSE_SELECT = `SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at, published_at, ${COURSE_META_SELECT} FROM learning_courses`;
 
 // ---- items ---------------------------------------------------------------------
 
@@ -315,7 +334,7 @@ r.post('/items/:uid/archive', (c) => setItemStatus(c, 'archive'));
 r.get('/courses', async (c) => {
   const admin = await gate(c); if (admin instanceof Response) return admin;
   const res = await c.env.DB.prepare(COURSE_SELECT + ' ORDER BY updated_at DESC, id DESC LIMIT 500').all<any>();
-  return c.json({ courses: (res.results || []).map(({ id: _id, ...x }) => x) });
+  return c.json({ courses: (res.results || []).map(courseOut) });
 });
 
 async function slugTaken(env: Env, slug: string, exceptUid: string | null) {
@@ -331,10 +350,13 @@ r.post('/courses', async (c) => {
     const uid = newUid();
     const t = now();
     await c.env.DB.prepare(
-      `INSERT INTO learning_courses (uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
+      `INSERT INTO learning_courses (uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at,
+         ${COURSE_META_SELECT})
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(uid, f.slug, f.title, f.summary ?? null, f.cover_url ?? null, f.level ?? null, f.estimated_minutes ?? null,
-      f.resources_json ?? '[]', f.visibility ?? 'open', admin.id, t, t).run();
+      f.resources_json ?? '[]', f.visibility ?? 'open', admin.id, t, t,
+      f.audience_json ?? '[]', f.stage ?? null, f.outcomes_json ?? '[]', f.prerequisites_json ?? '[]',
+      f.author_name ?? null, f.reviewer_name ?? null, f.reviewed_on ?? null, f.practical_output ?? null).run();
     await record(c, admin, 'learning.course.create', { uid, slug: f.slug });
     return c.json({ course: await courseTree(c.env, uid) }, 201);
   });
@@ -348,11 +370,8 @@ async function courseTree(env: Env, uid: string) {
     env.DB.prepare(`SELECT l.uid, l.module_id, l.title, l.position, l.kind, l.ref_uid, l.required FROM learning_lessons l
                       JOIN learning_course_modules m ON m.id = l.module_id WHERE m.course_id = ? ORDER BY l.position, l.id`).bind(course.id).all<any>(),
   ]);
-  const { id: _id, resources_json, ...rest } = course;
-  let resources: unknown = [];
-  try { resources = JSON.parse(resources_json || '[]'); } catch { resources = []; }
   return {
-    ...rest, resources,
+    ...courseOut(course),
     modules: (mods.results || []).map((m) => ({
       uid: m.uid, title: m.title, position: m.position,
       lessons: (lessons.results || []).filter((l) => l.module_id === m.id)
