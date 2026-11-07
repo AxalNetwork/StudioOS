@@ -19,6 +19,7 @@
  */
 import type { Env } from '../types';
 import { readMeta, laterOf, type OperationalReadMeta } from '../util/operationalRead';
+import { buildHealth, readCronStreaks, readTelemetryHealth, readWebhookHealth, type HealthInput } from './platformHealth';
 import { readWebhookDeliveries } from './stripeWebhookDeliveries';
 import { CRON_TRIGGERS, STALE_GRACE_MINUTES, latestRunPerTrigger, triggerState } from '../util/cronHistory';
 import { dlqDepth } from './deadLetters';
@@ -466,6 +467,10 @@ export type PlatformSummaryReaders = {
   github_sync: (env: Env) => Promise<unknown>;
   payments_catalog: (env: Env) => Promise<unknown>;
   promo_codes: (env: Env) => Promise<unknown>;
+  /** D4854: the signals health is judged from, beside the panels above. */
+  cron_streaks: (env: Env) => Promise<unknown>;
+  webhook_health: (env: Env) => Promise<unknown>;
+  telemetry: (env: Env) => Promise<unknown>;
 };
 
 export const PLATFORM_SUMMARY_READERS: PlatformSummaryReaders = {
@@ -480,6 +485,9 @@ export const PLATFORM_SUMMARY_READERS: PlatformSummaryReaders = {
   github_sync: readGithubSummary,
   payments_catalog: readPaymentsSummary,
   promo_codes: (env) => readPromoSummary(env),
+  cron_streaks: (env) => readCronStreaks(env),
+  webhook_health: readWebhookHealth,
+  telemetry: (env) => readTelemetryHealth(env),
 };
 
 /** Each block's answer when its reader fails or times out: its own shape, `available: false`, and why. */
@@ -506,6 +514,9 @@ function fallbacks(env: Env): Record<keyof PlatformSummaryReaders, (w: 'failed' 
       storefront_note: STOREFRONT_NOTE,
     }),
     promo_codes: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The promo code mirror')(w) }),
+    cron_streaks: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The recent runs of each scheduled job')(w) }),
+    webhook_health: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The webhook delivery streak')(w) }),
+    telemetry: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The telemetry probe')(w) }),
   };
 }
 
@@ -526,6 +537,9 @@ export const PLATFORM_READ_SOURCES: Record<keyof PlatformSummaryReaders, string>
   github_sync: 'the Support ticket mirror attempts (D1)',
   payments_catalog: CATALOG_SYNC_CAPABILITY.source + '; the Stripe webhook request log',
   promo_codes: 'promo_codes (D1), the Stripe promotion code mirror',
+  cron_streaks: 'cron_run_history (D1), the latest runs of each declared trigger',
+  webhook_health: 'activity_logs (D1), the Stripe webhook\'s request log',
+  telemetry: 'Analytics Engine, through its SQL API',
 };
 
 type Block = Record<string, unknown> | null | undefined;
@@ -581,6 +595,16 @@ export function blockReadMeta(key: keyof PlatformSummaryReaders, value: unknown,
       const latest = channels.reduce<string | null>((acc, ch) => laterOf(acc, str(ch.last_sent_at)), null);
       return readMeta({ ...base, answered: answered(b), reason: reasonOf(b), source_updated_at: latest });
     }
+    case 'telemetry': {
+      const st = typeof b?.status === 'string' ? b.status : null;
+      return readMeta({
+        ...base,
+        answered: st === 'healthy' || st === 'stale',
+        complete: st !== 'stale',
+        reason: str(b?.reason),
+        source_updated_at: str(b?.last_event_at),
+      });
+    }
     default:
       return readMeta({
         ...base,
@@ -618,5 +642,16 @@ export async function readPlatformSummary(env: Env, { readers = PLATFORM_SUMMARY
     switches: got.switches,
     // D4858 — each panel's read state, source and times, in one shape, keyed as the readers are.
     reads,
+    // D4854 — one health state and the incidents the platform detects, published incidents kept apart.
+    health: buildHealth({
+      jobs: got.jobs as HealthInput['jobs'],
+      cron: got.cron_streaks as HealthInput['cron'],
+      dlq: got.dlq as HealthInput['dlq'],
+      webhook: got.webhook_health as HealthInput['webhook'],
+      telemetry: got.telemetry as HealthInput['telemetry'],
+      published: got.incidents as HealthInput['published'],
+      stripe_configured: !!env.STRIPE_SECRET_KEY,
+      now: new Date(readAt),
+    }),
   };
 }
