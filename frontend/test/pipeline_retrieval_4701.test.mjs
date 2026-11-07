@@ -264,6 +264,53 @@ test('a read dropped while another move is still in flight is replaced when the 
   } finally { await b.unmount(); }
 });
 
+test('a read started DURING a move (a direct reload) is dropped when the move settles, and replaced', async () => {
+  // Mutation checked: without the bump in endMove the held read lands over the
+  // settled move; without the stale mark nothing replaces it.
+  const held = deferred();
+  let n = 0;
+  const b = await mountBoard(() => {
+    n += 1;
+    if (n === 1) return Promise.resolve({ items: [deal(1)], complete: true });
+    if (n === 2) return held.promise;
+    return Promise.resolve({ items: [deal(1, 'mvp_dev')], complete: true });
+  });
+  try {
+    await tick();
+    b.out.current.beginMove(1);
+    await act(async () => { b.out.current.reload(); });          // read #2, started during the move
+    await act(async () => { b.out.current.endMove(1); });        // settles: #2 may predate the write
+    await tick();
+    await act(async () => { held.resolve({ items: [deal(1, 'iterate')], complete: true }); });
+    await tick();
+    assert.equal(n, 3, 'the read started during the move was never replaced');
+    assert.equal(b.out.current.deals[0].pipeline_stage, 'mvp_dev', 'a read started during the move landed over it');
+  } finally { await b.unmount(); }
+});
+
+test('with two moves in flight, the first to settle drops a read that began during it', async () => {
+  // Mutation checked: without the bump in endMove the held read lands while the
+  // other move is still in flight, over the first move's confirmed stage.
+  const held = deferred();
+  let n = 0;
+  const b = await mountBoard(() => {
+    n += 1;
+    if (n === 1) return Promise.resolve({ items: [deal(1), deal(2)], complete: true });
+    if (n === 2) return held.promise;
+    return Promise.resolve({ items: [deal(1, 'mvp_dev'), deal(2, 'mvp_dev')], complete: true });
+  });
+  try {
+    await tick();
+    b.out.current.beginMove(1); b.out.current.beginMove(2);
+    await act(async () => { b.out.current.writeDeals(b.out.current.getDeals().map((d) => ({ ...d, pipeline_stage: 'mvp_dev' }))); });
+    await act(async () => { b.out.current.reload(); });           // held read, started during both moves
+    await act(async () => { b.out.current.endMove(1); });         // card 2 still moving
+    await act(async () => { held.resolve({ items: [deal(1, 'iterate'), deal(2, 'iterate')], complete: true }); });
+    await tick();
+    assert.equal(b.out.current.deals.find((d) => d.id === 1).pipeline_stage, 'mvp_dev', 'a predating read overwrote a settled move');
+  } finally { await b.unmount(); }
+});
+
 test('a re-read that began before a move settled is dropped and replaced', async () => {
   const stale = deferred();
   let n = 0;
