@@ -1401,7 +1401,8 @@ export const api = {
   // it — the same split RevenuePage made for disputes.
   dealScreening: () => request('/deals/screening'),
   draftDeal: (data) => request('/deals/draft', { method: 'POST', body: JSON.stringify(data) }),
-  advanceDeal: (id) => request(`/deals/${id}/advance`, { method: 'POST' }),
+  // D4632: `from` is the stage the page shows; a retry of a landed advance moves nothing.
+  advanceDeal: (id, from) => request(`/deals/${id}/advance`, { method: 'POST', body: JSON.stringify(from ? { from } : {}) }),
   // Task #127 — the only write path to the terminal stage. `reason` must be a
   // key from lib/dealFlow.js PASS_TAXONOMY; the worker 400s anything else.
   passDeal: (id, { reason, note } = {}) =>
@@ -1434,7 +1435,6 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   dealCommitments: (id) => request(`/deals/${id}/commitments`),
-  dealCommitmentWithdraw: (id, uid) => request(`/deals/${id}/commitments/${encodeURIComponent(uid)}/withdraw`, { method: 'POST' }),
   createCommitment: (id, data) => request(`/deals/${id}/commitments`, { method: 'POST', body: JSON.stringify(data) }),
   dealActivity: (id) => request(`/deals/${id}/activity`),
   dealInvitations: (id) => request(`/deals/${id}/invitations`),
@@ -2904,11 +2904,12 @@ export const api = {
 
   // #4701 — one page of the Build desk list: `{ items, next_cursor, has_more, total }`.
   // A list capped at its first page and silent about the rest read as "all of
-  // them", so the board follows `next_cursor` through `pipelineActiveAll`.
+  // them", so `pipelineActive` follows `next_cursor` to the end and answers one envelope
+  // `{ items, total, complete, remainder_error }`.
   pipelineActivePage: (cursor) => request(
     cursor ? `/pipeline/active?cursor=${encodeURIComponent(cursor)}` : '/pipeline/active',
   ),
-  pipelineActiveAll: () => readAllPages((cursor) => api.pipelineActivePage(cursor)),
+  pipelineActive: () => readAllPages((cursor) => api.pipelineActivePage(cursor)),
   pipelineCreateProject: (data) => request('/pipeline/projects', { method: 'POST', body: JSON.stringify(data) }),
   pipelineAdvance: (id, stage) => request(`/pipeline/projects/${id}/advance`, { method: 'POST', body: JSON.stringify({ stage }) }),
   pipelineDealDetail: (id) => request(`/pipeline/projects/${id}/detail`),

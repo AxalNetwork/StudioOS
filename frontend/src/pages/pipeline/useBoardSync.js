@@ -40,6 +40,9 @@ export default function useBoardSync(loadAll) {
   const inFlight = useRef(false);
   const again = useRef(false);
   const mounted = useRef(true);
+  // The list as of right now. A move handler reads the card and its stage from
+  // here, synchronously, rather than out of a state updater React may run later.
+  const dealsRef = useRef([]);
 
   const reload = useCallback(function reload() {
     const mine = (generation.current += 1);
@@ -53,17 +56,16 @@ export default function useBoardSync(loadAll) {
         (r) => {
           if (!mounted.current || generation.current !== mine) return;
           const moving = pending.current;
-          setState((s) => {
-            const byId = new Map(s.deals.map((d) => [d.id, d]));
-            const rows = r.items || [];
-            // A card with a move in flight keeps the stage the reader dropped it on.
-            const deals = moving.size
-              ? rows.map((d) => (moving.has(d.id) && byId.has(d.id) ? { ...d, pipeline_stage: byId.get(d.id).pipeline_stage } : d))
-              : rows;
-            return {
-              status: 'ready', deals, total: r.total ?? deals.length,
-              partial: r.complete === false, refreshing: false, refreshError: false,
-            };
+          const byId = new Map(dealsRef.current.map((d) => [d.id, d]));
+          const rows = r.items || [];
+          // A card with a move in flight keeps the stage the reader dropped it on.
+          const deals = moving.size
+            ? rows.map((d) => (moving.has(d.id) && byId.has(d.id) ? { ...d, pipeline_stage: byId.get(d.id).pipeline_stage } : d))
+            : rows;
+          dealsRef.current = deals;
+          setState({
+            status: 'ready', deals, total: r.total ?? deals.length,
+            partial: r.complete === false, refreshing: false, refreshError: false,
           });
         },
         () => {
@@ -95,6 +97,11 @@ export default function useBoardSync(loadAll) {
   const beginMove = useCallback((id) => {
     if (pending.current.has(id)) return false;
     pending.current.add(id);
+    // A read that began before this write predates it: drop it, and read again
+    // once the moves have settled.
+    generation.current += 1;
+    if (inFlight.current) stale.current = true;
+    inFlight.current = false;
     return true;
   }, []);
 
@@ -110,7 +117,8 @@ export default function useBoardSync(loadAll) {
   }, [reload]);
 
   const isMoving = useCallback((id) => pending.current.has(id), []);
-  const setDeals = useCallback((update) => setState((s) => ({ ...s, deals: update(s.deals) })), []);
+  const getDeals = useCallback(() => dealsRef.current, []);
+  const writeDeals = useCallback((next) => { dealsRef.current = next; setState((s) => ({ ...s, deals: next })); }, []);
 
-  return { ...state, reload, refresh, reconnected: refresh, beginMove, endMove, isMoving, setDeals };
+  return { ...state, reload, refresh, reconnected: refresh, beginMove, endMove, isMoving, getDeals, writeDeals };
 }

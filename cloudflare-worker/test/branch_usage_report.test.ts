@@ -83,7 +83,7 @@ async function sha256Hex(s: string): Promise<string> {
 }
 
 const HQ_SCHEMA = `
-  CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+  CREATE TABLE territory_licences ( revision INTEGER NOT NULL DEFAULT 0,id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
     licence_ref TEXT UNIQUE NOT NULL, legal_entity_name TEXT NOT NULL, brand_name TEXT NOT NULL,
     revenue_share_bps INTEGER, currency TEXT NOT NULL DEFAULT 'EUR', status TEXT NOT NULL DEFAULT 'active');
   CREATE TABLE licence_deployments (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_uid TEXT NOT NULL UNIQUE,

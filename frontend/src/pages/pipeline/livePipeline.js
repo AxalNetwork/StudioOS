@@ -33,9 +33,9 @@ export function usePipelineDeals() {
     setLoading(true);
     setError('');
     try {
-      const data = await api.pipelineActiveAll();
+      const data = await api.pipelineActive();
       if (generation.current !== mine) return;
-      setDeals(Array.isArray(data?.items) ? data.items : []);
+      setDeals(Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []));
       setPartial(data?.complete === false);
     } catch (e) {
       if (generation.current !== mine) return;

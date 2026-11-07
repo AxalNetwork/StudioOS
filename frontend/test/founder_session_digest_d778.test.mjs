@@ -141,7 +141,8 @@ test('both Summarise presses send their option and answer only the session they 
   assert.match(page, /if \(current\(\)\) await load\(\);/);
   assert.match(page, /if \(!current\(\)\) return;\s*setDigestBusy\(false\); setSummarising\(false\); loadReceipt\(\);/);
   const review = read('src/pages/founder/InterviewReviewPage.jsx');
-  assert.match(review, /sessions\.summarise\(session\.id, undefined, railPressHeaders\('summarise:session'\)\)/);
+  // D4587: the press summarises the loaded session it was pressed for (`target`).
+  assert.match(review, /sessions\.summarise\(target\.id, undefined, railPressHeaders\('summarise:session'\)\)/);
   assert.equal((review.match(/if \(openSession\.current !== pressedFor\) return;/g) || []).length, 2, 'both the answer and the refusal are checked');
   assert.match(review, /openSession\.current = chosenId;/);
 });

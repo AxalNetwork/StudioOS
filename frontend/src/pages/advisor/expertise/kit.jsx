@@ -232,7 +232,7 @@ export const ghostButtonClass =
 export function SaveNote({ note }) {
   if (!note) return null;
   return (
-    <p className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+    <p role={note.ok ? 'status' : 'alert'} className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
       {note.text}
     </p>
   );

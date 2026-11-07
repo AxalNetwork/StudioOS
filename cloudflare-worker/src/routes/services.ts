@@ -15,6 +15,10 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { offeringOwned } from '../services/profileWriteGates';
+import {
+  REQUEST_MEASURE_BASIS, REQUEST_MEASURE_NOTE, REQUEST_VALUE_NOTE,
+  requestMeasures, sumRequestMeasures, type RequestMeasures,
+} from '../services/serviceMeasures';
 
 const services = new Hono<{ Bindings: Env }>();
 
@@ -31,7 +35,13 @@ type Offering = {
   is_active: number;
   created_at: string;
   updated_at: string;
-  sold?: number;
+  requested?: number;
+  pending?: number;
+  booked?: number;
+  delivered?: number;
+  invoiced?: number;
+  paid?: number;
+  cancelled?: number;
 };
 
 /**
@@ -44,7 +54,8 @@ type Offering = {
  */
 const MODELS = ['fixed', 'retainer', 'seat'];
 
-type SerializedOffering = Omit<Offering, 'is_active'> & { is_active: boolean };
+type SerializedOffering = Omit<Offering, 'is_active' | 'requested' | 'pending' | 'booked' | 'delivered' | 'invoiced' | 'paid' | 'cancelled'>
+  & { is_active: boolean; requests: RequestMeasures };
 function serialize(o: Offering): SerializedOffering {
   return {
     id: o.id,
@@ -68,10 +79,10 @@ function serialize(o: Offering): SerializedOffering {
     // once", as the artboard's instMeta puts it.
     price_cents: o.price_cents ?? (o.price_usd == null ? null : Math.round(o.price_usd * 100)),
     engagement_model: o.engagement_model ?? null,
-    // Counted from `service_engagements`, joined rather than stored — an
-    // engagement nobody linked to an offering is counted against none. Absent
-    // on the single-row reads, which do not join.
-    sold: o.sold,
+    // Counted from `service_engagements` by status, joined rather than stored.
+    // All zero on the single-row reads, which do not join (#4696). There is no
+    // `sold`: a request is not a sale until it is booked.
+    requests: requestMeasures(o as unknown as Record<string, unknown>),
     is_active: !!o.is_active,
     created_at: o.created_at,
     updated_at: o.updated_at,
@@ -128,9 +139,26 @@ services.get('/offerings', async (c) => {
   // stored count drifts the moment an engagement is deleted; a correlated count
   // cannot. `service_engagements` (migration 034) carries `offering_id` and has
   // a writer in this same file.
+  // `requests` IS A SET OF COUNTS BY STATUS, never a price (#4696). This was
+  // `sold`, a count of every non-cancelled request, which the catalogue page
+  // multiplied by the entry's CURRENT price and labelled "Booked to date": a
+  // pending request read as a sale and a reprice restated the history. The
+  // definitions live in services/serviceMeasures.ts.
   const rows = await c.env.DB.prepare(
-    `SELECT o.*, (SELECT COUNT(*) FROM service_engagements se
-                   WHERE se.offering_id = o.id AND se.status <> 'cancelled') AS sold
+    `SELECT o.*,
+            (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id) AS requested,
+            (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id
+                AND se.status = 'pending') AS pending,
+            (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id
+                AND se.status IN ('accepted', 'in_progress', 'delivered', 'reviewed', 'invoiced', 'paid')) AS booked,
+            (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id
+                AND se.status IN ('delivered', 'reviewed', 'invoiced', 'paid')) AS delivered,
+            (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id
+                AND se.status IN ('invoiced', 'paid')) AS invoiced,
+            (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id
+                AND se.status = 'paid') AS paid,
+            (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id
+                AND se.status = 'cancelled') AS cancelled
        FROM service_offerings o WHERE ${where} ORDER BY o.created_at DESC LIMIT 200`,
   ).bind(...params).all<Offering>();
   let items: SerializedOffering[] = (rows.results || []).map(serialize);
@@ -139,7 +167,17 @@ services.get('/offerings', async (c) => {
       (o.title || '').toLowerCase().includes(q) ||
       (o.summary || '').toLowerCase().includes(q));
   }
-  return c.json({ items });
+  return c.json({
+    items,
+    // Summed from the rows served, so the strip and the table cannot disagree.
+    // Over the whole result when no search term narrowed it.
+    measures: sumRequestMeasures(items),
+    measures_basis: REQUEST_MEASURE_BASIS,
+    measures_note: REQUEST_MEASURE_NOTE,
+    // No historical monetary measure: a request stores no amount. Null, not 0.
+    booked_value_cents: null,
+    booked_value_note: REQUEST_VALUE_NOTE,
+  });
 });
 
 services.get('/offerings/:id', async (c) => {

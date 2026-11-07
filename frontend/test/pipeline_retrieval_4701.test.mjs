@@ -224,7 +224,7 @@ test('a board event during a local move is queued, and reconciled once the move 
     assert.equal(reads, 1);
     assert.equal(b.out.current.beginMove(1), true);
     assert.equal(b.out.current.beginMove(1), false, 'a second move on the same card must be refused');
-    await act(async () => { b.out.current.setDeals((d) => d.map((x) => (x.id === 1 ? { ...x, pipeline_stage: 'mvp_dev' } : x))); });
+    await act(async () => { b.out.current.writeDeals(b.out.current.getDeals().map((x) => (x.id === 1 ? { ...x, pipeline_stage: 'mvp_dev' } : x))); });
     // Someone else moves card 2 while ours is in flight.
     await act(async () => { b.out.current.refresh(); });
     await tick();
@@ -330,12 +330,11 @@ test('an older tally never replaces a newer one, and a pushed tally keeps the vi
 
 // ── wiring (the page uses these, not its own copies) ─────────────────────────
 
-test('the board page wires the sync, the reconnect cue and the keyed drawer; the analytics zone is keyed to period and company', () => {
+test('the board page wires the sync and the reconnect cue; the analytics zone is keyed to period and company', () => {
   const page = fs.readFileSync(new URL('../src/pages/PipelinePage.jsx', import.meta.url), 'utf8');
-  assert.match(page, /useBoardSync\(/);
+  assert.match(page, /useBoardSync\(loadBoard\)/);
   assert.match(page, /onOpen:\s*\(\{ reconnect \}\) => \{ if \(reconnect\) board\.reconnected\(\)/);
   assert.match(page, /routeBoardEvent\(msg/);
-  assert.match(page, /useKeyedRead\(dealId/);
   assert.match(page, /data-testid="pipeline-unreadable"/);
   assert.doesNotMatch(page, /pendingDealsRef/, 'the old drop-while-moving ref is back');
   const zone = fs.readFileSync(new URL('../src/pages/partner/pipeline/AnalyticsZone.jsx', import.meta.url), 'utf8');

@@ -35,8 +35,8 @@ test('every board this build cannot fill names its task', () => {
 });
 
 test('LR1 Your progress: the four figures of #4180; one not recorded reads "Not recorded", never a 0; a failed read is never zeros', () => {
-  const tiles = statsTiles({ courses_in_progress: 2, lessons_completed_this_month: null, watch_seconds_this_month: 3600, exams: { passed: 1, sat: 2 } });
-  assert.deepEqual(tiles.map((t) => t.label), ['Courses in progress', 'Lessons completed this month', 'Watch time this month', 'Exams passed']);
+  const tiles = statsTiles({ courses_in_progress: 2, lessons_completed_this_month: null, videos_played_this_month: 5, exams: { passed: 1, sat: 2 } });
+  assert.deepEqual(tiles.map((t) => t.label), ['Courses in progress', 'Lessons completed this month', 'Videos played this month', 'Exams passed']);
   const m = html(h(ProgressStrip, { state: { status: 'ready', tiles } }));
   assert.equal((m.match(/data-testid="progress-figure"/g) || []).length, 4);
   assert.equal((flat(m).match(/Not recorded/g) || []).length, 1, 'only the figure the route did not record');
@@ -235,7 +235,7 @@ test('#4480: member program read carries the own date into a semantic mono date,
 test('LR1 readMyStats reads #4180\'s stats route once and turns it into the four tiles', async () => {
   const real = learningApi.myStats;
   let calls = 0;
-  learningApi.myStats = async () => { calls += 1; return { courses_in_progress: 3, lessons_completed_this_month: 0, watch_seconds_this_month: null, exams: null }; };
+  learningApi.myStats = async () => { calls += 1; return { courses_in_progress: 3, lessons_completed_this_month: 0, videos_played_this_month: null, exams: null }; };
   try {
     const { tiles } = await readMyStats();
     assert.equal(calls, 1);

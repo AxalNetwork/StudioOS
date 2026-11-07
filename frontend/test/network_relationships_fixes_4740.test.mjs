@@ -256,7 +256,7 @@ test('RecordEmailSheet: a failed shares read is Unreadable for a member, never t
     shares: async () => { sharesCalls += 1; throw new Error('shares_unreadable'); },
     context: async () => ({ person: { ref: 'member:u9', kind: 'member', name: 'Bo Member' }, items: [] }),
   };
-  const m = await mountContracts(h(RecordEmailSheet, { person: { ref: 'member:u9', name: 'Bo' }, onClose() {}, api }), '/network/relationships');
+  const m = await mountContracts(h(RecordEmailSheet, { person: 'member:u9', label: 'Bo', onClose() {}, api }), '/network/relationships');
   try {
     await m.flush(); await m.flush();
     assert.match(m.text(), /Unreadable: this person’s records could not be read/);

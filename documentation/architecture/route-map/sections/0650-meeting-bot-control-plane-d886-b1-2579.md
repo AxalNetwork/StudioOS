@@ -14,6 +14,9 @@
   GET `…/diagnose/:id/screenshot`: `admin_platform.ts`; #3708's owner-run
   staged diagnostic. Super Admin only, the start behind TOTP and recent
   step-up; a diagnostic and its screenshot are read only by who started it.
+- The diagnostic's `report` body is a cumulative snapshot (`diagnosis_id`,
+  `revision`, per-stage `rev`, `at`, `attempts`); the Worker keeps the highest
+  `rev` per stage, so repeats and out-of-order sends change nothing (D4857, #4857).
 
 D886 B7 (#2585): Record a Session dispatches through the bot member routes, and
 its session page polls status/Stop plus GET `…/sessions/:id/bot/participants`

@@ -6,7 +6,6 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import Sheet from '../ui/Sheet.jsx';
 import { confidenceLine } from '../lib/decisionConfidence.js';
 import useBoardSync from './pipeline/useBoardSync.js';
-import useKeyedRead from '../hooks/useKeyedRead.js';
 import { routeBoardEvent, acceptTally, mergePushedTally } from './pipeline/liveEvents.js';
 
 const STAGES = [
@@ -18,13 +17,22 @@ const STAGES = [
   { id: 'iterate', label: 'Iterate', color: 'bg-orange-100 text-orange-700', border: 'border-orange-300' },
 ];
 
+// The Build desk list answers an envelope now (every page, `complete`, `total`);
+// a stubbed or dev-mirror client may still answer a bare array. Either is one list.
+const loadBoard = async () => {
+  const r = await api.pipelineActive();
+  return Array.isArray(r) ? { items: r, total: r.length, complete: true } : r;
+};
+
 export default function PipelinePage({ embedded = false }) {
   // The list, its states and its re-reads live in `useBoardSync` (#4701): a
   // first read that fails is `unreadable` rather than an empty board, a re-read
-  // that fails keeps the rows, a stale answer is dropped, and a live event that
-  // lands during a local move is queued until the move settles.
-  const board = useBoardSync(React.useCallback(() => api.pipelineActiveAll(), []));
+  // that fails keeps the rows and says so, a stale answer is dropped, and a live
+  // event or a reconnect that lands during a local move is queued until the
+  // moves settle instead of being dropped.
+  const board = useBoardSync(loadBoard);
   const deals = board.deals;
+  const reload = board.reload;
   const [openId, setOpenId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [me, setMe] = useState(null);
@@ -32,14 +40,7 @@ export default function PipelinePage({ embedded = false }) {
   const [dragId, setDragId] = useState(null);
   const [dragOverStage, setDragOverStage] = useState(null);
   const [pendingMoves, setPendingMoves] = useState({}); // { dealId: true } — cards mid-flight
-  const [moveError, setMoveError] = useState('');
-
-  // Per-deal op versioning so concurrent moves can't clobber each other:
-  // `latestOpRef` records the latest op id per deal so we only roll back if
-  // we're still the most recent in-flight write.
-  const latestOpRef = useRef({});            // { dealId: opId }
-  const opCounterRef = useRef(0);
-  const reload = board.reload;
+  const [moveError, setMoveError] = useState(null); // { text, retry: { dealId, toStage } | { reload: true } }
   useEffect(() => { (async () => { try { setMe(await api.getCurrentUser()); } catch {} })(); }, []);
 
   // Studio-operator write access. The board (create/advance/gate/tasks/metrics)
@@ -67,50 +68,47 @@ export default function PipelinePage({ embedded = false }) {
     }),
   });
 
-  // Optimistic stage-move with versioned, deal-scoped rollback. Single source
-  // of truth for both drag-and-drop and button-based advances so the UI never
-  // diverges from the database.
+  // Optimistic stage move, shared by drag-and-drop, the drawer's buttons and
+  // the Try again button. Resolves `true` when the server confirmed the write
+  // (or the deal is already in that column) and `false` when it did not; it
+  // never throws, so no caller has to guess. On `false` the card is back in the
+  // column it came from and `moveError` says so, with a retry.
   const moveDealToStage = async (dealId, toStage) => {
-    // Block additional concurrent writes for this deal BEFORE any state
-    // mutation — otherwise we'd leave a stale optimistic stage in place.
-    if (board.isMoving(dealId)) return;
-
-    // Snapshot only the field we touched for this one deal — never replace the
-    // whole list on rollback.
-    const target = deals.find((d) => d.id === dealId);
-    if (!target || target.pipeline_stage === toStage) return; // no-op (same column or unknown deal)
+    // One write per deal, decided BEFORE any state changes.
+    if (board.isMoving(dealId)) return false;
+    const target = board.getDeals().find(d => d.id === dealId);
+    if (!target) return false;
+    if (target.pipeline_stage === toStage) return true;
     const fromStage = target.pipeline_stage;
     const dealName = target.name;
-    board.setDeals((curr) => curr.map((d) => (d.id === dealId ? { ...d, pipeline_stage: toStage } : d)));
+    const label = (id) => STAGES.find(s => s.id === id)?.label || id;
 
-    if (!board.beginMove(dealId)) return;
-
-    const opId = ++opCounterRef.current;
-    latestOpRef.current[dealId] = opId;
-
+    // Starting a move drops any read that began before it; settling it (below)
+    // drops one that began during it, and runs the re-read that was queued.
+    board.beginMove(dealId);
+    board.writeDeals(board.getDeals().map(d => d.id === dealId ? { ...d, pipeline_stage: toStage } : d));
     setPendingMoves(p => ({ ...p, [dealId]: true }));
-    setMoveError('');
+    setMoveError(null);
 
-    let failure = null;
+    let confirmed = false;
     try {
       await api.pipelineAdvance(dealId, toStage);
-    } catch (e) {
-      failure = e;
-    } finally {
-      setPendingMoves(p => { const n = { ...p }; delete n[dealId]; return n; });
+      confirmed = true;
+    } catch {
+      confirmed = false;
     }
+    setPendingMoves(p => { const n = { ...p }; delete n[dealId]; return n; });
 
-    // Only act if we're still the latest op for this deal — protects against
-    // out-of-order completion where a newer move already overwrote our state.
-    if (latestOpRef.current[dealId] === opId && failure) {
-      // Per-field, per-deal rollback. Other deals and other fields untouched.
-      board.setDeals((curr) => curr.map(d => d.id === dealId ? { ...d, pipeline_stage: fromStage } : d));
-      setMoveError(`Couldn't move "${dealName}" — ${failure.message || 'request failed'}. Reverted.`);
+    if (!confirmed) {
+      // Only this deal's stage goes back; every other card and field is as it was.
+      board.writeDeals(board.getDeals().map(d => d.id === dealId ? { ...d, pipeline_stage: fromStage } : d));
+      setMoveError({
+        text: `Could not move "${dealName}" to ${label(toStage)}. It is back in ${label(fromStage)}.`,
+        retry: { dealId, toStage },
+      });
     }
-    // Settling the move is what releases any re-read the board queued while it
-    // was in flight; a read that began before this point is dropped.
     board.endMove(dealId);
-    if (latestOpRef.current[dealId] === opId && failure) throw failure;
+    return confirmed;
   };
 
   const grouped = STAGES.reduce((acc, s) => ({ ...acc, [s.id]: [] }), {});
@@ -170,32 +168,41 @@ export default function PipelinePage({ embedded = false }) {
       </div>
 
       {moveError && (
-        <div className="mb-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2 flex items-start justify-between gap-3">
-          <span>{moveError}</span>
-          <button onClick={() => setMoveError('')} className="text-red-500 hover:text-red-700"><X size={12} /></button>
+        <div role="alert" data-testid="pipeline-move-error" className="mb-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3">
+          <span>{moveError.text}</span>
+          <span className="flex items-center gap-2">
+            {moveError.retry && (
+              <button type="button" onClick={() => { const r = moveError.retry; setMoveError(null); if (r.reload) reload(); else moveDealToStage(r.dealId, r.toStage); }}
+                className="min-h-[44px] px-3 rounded-lg border border-red-300 dark:border-red-800 font-semibold hover:bg-red-100 dark:hover:bg-red-950/50">
+                Try again
+              </button>
+            )}
+            <button type="button" aria-label="Dismiss" onClick={() => setMoveError(null)}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-red-500 hover:text-red-700 dark:text-red-300"><X size={12} /></button>
+          </span>
         </div>
       )}
 
       {board.status === 'ready' && board.refreshError && (
-        <div role="alert" data-testid="pipeline-refresh-error" className="mb-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg px-3 py-2 flex items-center justify-between gap-3">
+        <div role="alert" data-testid="pipeline-refresh-error" className="mb-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3">
           <span>The board could not be refreshed. What you see is from the last read that worked.</span>
-          <button type="button" onClick={reload} className="font-semibold underline">Try again</button>
+          <button type="button" onClick={reload} className="min-h-[44px] px-3 font-semibold underline">Try again</button>
         </div>
       )}
       {board.status === 'ready' && board.partial && (
-        <div role="alert" data-testid="pipeline-partial" className="mb-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg px-3 py-2 flex items-center justify-between gap-3">
+        <div role="alert" data-testid="pipeline-partial" className="mb-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3">
           <span>Showing {deals.length}{board.total != null ? ` of ${board.total}` : ''} projects. The rest could not be read, so this board is not the whole list.</span>
-          <button type="button" onClick={reload} className="font-semibold underline">Read the rest</button>
+          <button type="button" onClick={reload} className="min-h-[44px] px-3 font-semibold underline">Read the rest</button>
         </div>
       )}
       {board.status === 'ready' && board.refreshing && (
         <div className="mb-2 text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1" data-testid="pipeline-refreshing" aria-live="polite"><Loader2 className="animate-spin" size={10} /> Refreshing…</div>
       )}
       {board.status === 'unreadable' ? (
-        <div role="alert" data-testid="pipeline-unreadable" className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-6 text-sm text-center">
+        <div role="alert" data-testid="pipeline-unreadable" className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 rounded-lg px-4 py-6 text-sm text-center">
           <div className="font-semibold mb-1">The pipeline could not be read.</div>
           <div className="text-xs mb-3">This is not an empty board — nothing was loaded. Try again in a moment.</div>
-          <button type="button" onClick={reload} className="bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 py-1.5 rounded">Try again</button>
+          <button type="button" onClick={reload} className="min-h-[44px] bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 rounded">Try again</button>
         </div>
       ) : board.status === 'loading' ? <Loading text="Loading pipeline…" /> : (
         <div className="sm:overflow-x-auto pb-4">
@@ -422,52 +429,69 @@ function DealVoteWidget({ dealId, liveTally }) {
 }
 
 function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
-  // The read is keyed to the deal (#4701): opening deal B while deal A is still
-  // answering must not draw A's rows under B's name, and a read that fails is
-  // an unreadable drawer with a retry, not a spinner that never ends.
-  const detail = useKeyedRead(dealId, () => api.pipelineDealDetail(dealId));
-  const data = detail.data;
-  const setData = detail.mutate;
-  const loading = detail.status === 'loading';
-  const load = async () => detail.reload();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const loadGen = useRef(0);
+  const loadedFor = useRef(null);
+
+  // The skeleton shows only while THIS deal has not loaded yet. Reloading after
+  // a save is a background refresh, so the tab, the open add-task or metrics
+  // form and what was typed in it survive. A response for a deal the drawer has
+  // since left is dropped, so it cannot overwrite the one now on screen.
+  const load = async () => {
+    const mine = ++loadGen.current;
+    if (loadedFor.current !== dealId) { setData(null); setLoading(true); }
+    try {
+      const next = await api.pipelineDealDetail(dealId);
+      if (mine !== loadGen.current) return;
+      loadedFor.current = dealId;
+      setData(next);
+    } catch {
+      if (mine === loadGen.current && loadedFor.current !== dealId) {
+        setErr('This deal did not load. Close it and open it again to retry.');
+      }
+    } finally {
+      if (mine === loadGen.current) setLoading(false);
+    }
+  };
+  useEffect(() => { setErr(''); load(); }, [dealId]);
 
   const triggerReview = async () => {
     setBusy(true); setErr('');
     try { const result = await api.pipelineTriggerReview(dealId); if (result?.status === 'not_recorded') { setErr(result.reason || 'Traction not recorded'); return; } await load(); onChanged?.(); }
-    catch (e) { setErr(e.message); }
+    catch { setErr('The review did not start. Try again.'); }
     finally { setBusy(false); }
   };
   const advance = async (stage) => {
-    // Route through the parent's optimistic mover so the board state and the
-    // drawer can never disagree if the API fails. `busy` is set throughout so
-    // the user can't fire concurrent advances on the same deal.
+    // Route through the parent's mover so the board and the drawer can never
+    // disagree. It resolves true only after the server confirmed the write;
+    // on false the stage shown here goes back and the reason stays on screen.
     setErr('');
     if (onAdvance) {
       const prevStage = data?.current_stage;
+      const forDeal = dealId;
       setBusy(true);
       setData(d => d ? { ...d, current_stage: stage } : d);
-      try {
-        await onAdvance(dealId, stage);
-      } catch (e) {
+      const ok = await onAdvance(dealId, stage);
+      if (!ok && loadedFor.current === forDeal) {
         setData(d => d ? { ...d, current_stage: prevStage } : d);
-        setErr(e.message || 'Failed to advance');
-      } finally {
-        setBusy(false);
+        setErr('The stage did not change. It is back where it was, so try again.');
       }
+      setBusy(false);
       return;
     }
     setBusy(true);
     try { await api.pipelineAdvance(dealId, stage); await load(); onChanged?.(); }
-    catch (e) { setErr(e.message); }
+    catch { setErr('The stage did not change. Try again.'); }
     finally { setBusy(false); }
   };
   const decide = async (gateId, decision) => {
     setBusy(true); setErr('');
     try { await api.pipelineDecide(gateId, decision); await load(); onChanged?.(); }
-    catch (e) { setErr(e.message); }
+    catch { setErr('That decision did not save. Try again.'); }
     finally { setBusy(false); }
   };
 
@@ -475,16 +499,9 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
     <Sheet label={data?.project?.name || "Deal"} title={data?.project?.name || "Loading…"} width={760} testId="pipeline-deal-sheet" onClose={onClose} headerActions={canEdit ? <button onClick={triggerReview} disabled={busy} className="flex items-center gap-1 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded">{busy ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} Trigger AI Review</button> : null}>
       <div className="">
 
-        {detail.status === 'unreadable' ? (
-          <div role="alert" data-testid="pipeline-deal-unreadable" className="p-6 text-sm text-red-700">
-            <div className="font-semibold mb-1">This deal could not be read.</div>
-            <div className="text-xs mb-3">Nothing on this page was loaded. It is not an empty deal.</div>
-            <button type="button" onClick={detail.reload} className="bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 py-1.5 rounded">Try again</button>
-          </div>
-        ) : loading || !data ? <Loading text="" /> : (
+        {loading || !data ? (err ? <div role="alert" className="p-6 text-xs text-red-700 dark:text-red-300">{err}</div> : <Loading text="" />) : (
           <div className="p-6">
-            {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded p-2 text-xs mb-3">{err}</div>}
-            {detail.refreshError && <div role="alert" className="bg-amber-50 border border-amber-200 text-amber-800 rounded p-2 text-xs mb-3">This deal could not be refreshed. You are seeing the last read that worked.</div>}
+            {err && <div role="alert" className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 rounded p-2 text-xs mb-3">{err}</div>}
 
             <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-800">
               {[{id:'overview',label:'Overview',icon:Activity},{id:'tasks',label:`MVP Tasks (${data.tasks.length})`,icon:Target},{id:'metrics',label:`Metrics (${data.metrics_total ?? data.metrics.length})`,icon:TrendingUp},{id:'gates',label:`Gates (${data.gates_total ?? data.gates.length})`,icon:Sparkles}].map(t => {
@@ -536,8 +553,8 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
               </div>
             )}
 
-            {tab === 'tasks' && <TasksTab data={data} canEdit={canEdit} dealId={dealId} reload={load} />}
-            {tab === 'metrics' && <MetricsTab data={data} canEdit={canEdit} dealId={dealId} reload={load} />}
+            {tab === 'tasks' && <TasksTab data={data} canEdit={canEdit} dealId={dealId} reload={load} report={setErr} />}
+            {tab === 'metrics' && <MetricsTab data={data} canEdit={canEdit} dealId={dealId} reload={load} report={setErr} />}
             {tab === 'gates' && <GatesTab data={data} canEdit={canEdit} onDecide={decide} busy={busy} />}
           </div>
         )}
@@ -546,16 +563,22 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
   );
 }
 
-function TasksTab({ data, canEdit, dealId, reload }) {
+function TasksTab({ data, canEdit, dealId, reload, report }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ title: '', description: '' });
   const cols = { todo: data.tasks.filter(t => t.status === 'todo'), in_progress: data.tasks.filter(t => t.status === 'in_progress'), done: data.tasks.filter(t => t.status === 'done') };
   const addTask = async () => {
     if (!form.title) return;
-    await api.pipelineCreateTask({ deal_id: dealId, ...form });
-    setForm({ title: '', description: '' }); setAdding(false); reload();
+    try { await api.pipelineCreateTask({ deal_id: dealId, ...form }); }
+    catch { report('The task was not added. What you typed is still here, so try again.'); return; }
+    // Cleared only after the server took it.
+    report(''); setForm({ title: '', description: '' }); setAdding(false); reload();
   };
-  const updateStatus = async (id, status) => { await api.pipelineUpdateTask(id, { status }); reload(); };
+  const updateStatus = async (id, status) => {
+    try { await api.pipelineUpdateTask(id, { status }); }
+    catch { report('The task status did not change. Try again.'); return; }
+    report(''); reload();
+  };
   return (
     <div>
       {canEdit && (adding ? (
@@ -595,7 +618,7 @@ function TasksTab({ data, canEdit, dealId, reload }) {
   );
 }
 
-function MetricsTab({ data, canEdit, dealId, reload }) {
+function MetricsTab({ data, canEdit, dealId, reload, report }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ users: '', revenue: '', engagement: '', growth: '' });
   const submit = async () => {
@@ -604,8 +627,9 @@ function MetricsTab({ data, canEdit, dealId, reload }) {
       const v = parseFloat(form[k]); if (!isNaN(v)) km[k] = v;
     }
     if (!Object.keys(km).length) return;
-    await api.pipelineSnapshot({ deal_id: dealId, key_metrics: km });
-    setForm({ users: '', revenue: '', engagement: '', growth: '' }); setAdding(false); reload();
+    try { await api.pipelineSnapshot({ deal_id: dealId, key_metrics: km }); }
+    catch { report('The snapshot was not saved. What you typed is still here, so try again.'); return; }
+    report(''); setForm({ users: '', revenue: '', engagement: '', growth: '' }); setAdding(false); reload();
   };
   const series = data.metrics.slice().reverse();
   const max = Math.max(1, ...series.map(s => s.traction_score || 0));
