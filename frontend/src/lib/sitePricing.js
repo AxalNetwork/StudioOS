@@ -73,12 +73,12 @@ export const PLAN_CARDS = Object.freeze({
   ],
   advisor: [
     {
-      id: 'free', name: 'Advisor Basic', kick: 'Free plan', free: true, storage: 'advisor:free', cta: 'Start free',
+      id: 'free', name: 'Advisor Basic', kick: 'Free plan', free: true, storage: 'advisor:free', lane: 'advisor', cta: 'Start free',
       tag: 'Publish a profile.',
       feats: ['Public advisor profile', 'Listed in the advisor directory', 'Office hours and session types', 'Booking links', 'AI runs from AI tokens you top up'],
     },
     {
-      id: 'pro', name: 'Advisor Pro', kick: 'Practice subscription', match: 'advisor', storage: 'advisor:pro', cta: 'Get Advisor Pro', highlight: true,
+      id: 'pro', name: 'Advisor Pro', kick: 'Practice subscription', match: 'advisor', storage: 'advisor:pro', lane: 'advisor', cta: 'Get Advisor Pro', highlight: true,
       tag: 'More reach, better matches.',
       feats: ['More reach in matching', 'Paid sessions through your booking links', 'Deliverables and the client access log', 'Earnings and payouts'],
     },

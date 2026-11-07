@@ -9,7 +9,7 @@ import { request } from '../api.js';
 //   connectMcp(body)               POST   /mail/accounts/mcp { connection_uid, address, display_name? } → 201 { account } (D1343:
 //                                  a member's own MCP mail server; its send tool is approved on the custom connector first)
 //   verifyAccount(uid)             POST   /mail/accounts/:uid/verify → { account }
-//   disconnect(uid)                DELETE /mail/accounts/:uid → { ok }
+//   disconnect(uid)                DELETE /mail/accounts/:uid → { ok, account } the persisted state (revoked), or 409 connection_changed when a newer connection was saved meanwhile (#4654)
 //   confirmSend(accountUid)        POST   /mail/send/confirm { account_uid } → { nonce, expires_at }
 //   send(body)                     POST   /mail/send { account_uid, to, subject, body, draft_uid?, operation_key?, nonce } → 201 { sent, operation }
 //                                  (D4665: 200 { recovered } for a repeat of an accepted operation; 202 { operation } while pending or uncertain)
