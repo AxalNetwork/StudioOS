@@ -22,7 +22,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import {
   COMMUNITY_PATH, MOVED_KEY, MOVED_NOTICE, PAGE_UNREADABLE,
   buildCircles, buildConsoles, buildJobs, buildNeeds, buildNextUp, buildTiles,
-  isEmptyCommunity, pageFailed, readAllPages, seatsText,
+  clockOf, isEmptyCommunity, pageFailed, readAllPages, rosterOf, seatsText,
 } from '../src/pages/admin/community/communityModel.js';
 import AdminCommunity from '../src/pages/admin/community/AdminCommunity.jsx';
 import HeldCommunityRedirect from '../src/pages/admin/community/HeldCommunityRedirect.jsx';
@@ -64,11 +64,13 @@ const CIRCLES = [
   { id: 3, type: 'city', published: false, featured: false, members: 0 },
   { id: 4, type: 'topic', published: true, featured: true, members: 12 },
 ];
-const ROSTER = [
-  { kind: 'advisor', is_active: true }, { kind: 'mentor', is_active: true }, { kind: 'advisor', is_active: false },
-  { kind: 'partner', is_active: true }, { kind: 'investor', is_active: false },
-];
-const ALL = { glance: ok(GLANCE), events: ok(EVENTS), analytics: ok(ANALYTICS), jobs: ok(JOBS), circles: ok(CIRCLES), roster: ok(ROSTER) };
+// #4717: the roster is the Community read's network block, counted on the server, archived rows out.
+const NETWORK = {
+  available: true, archived: 4,
+  by_kind_state: { advisor: { active: 1, hidden: 1 }, mentor: { active: 1, hidden: 0 }, partner: { active: 1, hidden: 0 }, investor: { active: 0, hidden: 1 } },
+};
+const ROSTER_OVERVIEW = { weeks: 4, as_of: new Date(NOW).toISOString(), blocks: { network: NETWORK } };
+const ALL = { glance: ok(GLANCE), events: ok(EVENTS), analytics: ok(ANALYTICS), jobs: ok(JOBS), circles: ok(CIRCLES), overview: ok(ROSTER_OVERVIEW) };
 const tile = (tiles, key) => tiles.find((t) => t.key === key);
 
 // ---------------------------------------------------------------- the model
@@ -118,12 +120,14 @@ test('Next up is the three soonest published events in 30 days, each with D918\'
 });
 
 test('the period figures wait for the Community read, and are never a zero before it answers (D933 draws them)', () => {
-  const tiles = buildTiles(ALL, NOW);
-  for (const key of ['registrations', 'applications', 'show-up', 'experts']) {
+  const before = { ...ALL, overview: undefined }; // the Community read has not answered
+  const tiles = buildTiles(before, NOW);
+  for (const key of ['registrations', 'applications', 'show-up', 'experts', 'roster']) {
     assert.equal(tile(tiles, key).state, 'loading', key);
     assert.equal(tile(tiles, key).value, undefined, key);
   }
-  assert.equal(buildConsoles(ALL).wellbeing.state, 'loading');
+  assert.equal(buildConsoles(before).wellbeing.state, 'loading');
+  assert.equal(buildConsoles(before).roster.state, 'loading');
 });
 
 test('Jobs: postings by status in the canvas\'s order, and the five with most applications', () => {
@@ -142,6 +146,31 @@ test('Circles count as stored, members are as entered, and a legacy mentor is an
   ]);
   assert.equal(tile(buildTiles(ALL, NOW), 'circles').value, '3 of 4');
   assert.equal(tile(buildTiles(ALL, NOW), 'roster').value, '3');
+});
+
+test('#4717 the roster is the server\'s count: archived rows out, and a missing or odd count is unreadable, never 0', () => {
+  // 600 profiles on the roster: counted in full, whatever a list endpoint would cap at.
+  const big = { ...ALL, overview: ok({ ...ROSTER_OVERVIEW, blocks: { network: { available: true, archived: 9, by_kind_state: { advisor: { active: 501, hidden: 99 } } } } }) };
+  assert.equal(tile(buildTiles(big, NOW), 'roster').value, '501');
+  assert.equal(rosterOf(big).rows[0].inactive, 99, 'the 9 archived rows are in neither column');
+  for (const bad of [{ advisor: { active: '3', hidden: 0 } }, { advisor: { active: 2 } }, { advisor: { active: -1, hidden: 0 } }, null]) {
+    const r = rosterOf({ ...ALL, overview: ok({ ...ROSTER_OVERVIEW, blocks: { network: { available: true, by_kind_state: bad } } }) });
+    assert.equal(r.state, 'unreadable', `${JSON.stringify(bad)} read as a count`);
+  }
+  assert.equal(rosterOf({ ...ALL, overview: { status: 'error', data: null } }).state, 'unreadable');
+  assert.equal(rosterOf({ ...ALL, overview: { status: 'loading', data: null } }).state, 'loading');
+});
+
+test('#4717 the clock is the read\'s as_of: a Refresh that brings a later as_of moves every time-relative figure', () => {
+  const at = (iso) => ({ ...ALL, overview: ok({ ...ROSTER_OVERVIEW, as_of: iso }) });
+  assert.equal(clockOf(at('2026-10-24T12:00:00Z'), null), Date.parse('2026-10-24T12:00:00Z'));
+  assert.equal(clockOf(at('2026-10-31T12:00:00Z'), null), Date.parse('2026-10-31T12:00:00Z'));
+  // Before the read answers, the moment the page's reads settled; never a stamp frozen at mount.
+  assert.equal(clockOf({ ...ALL, overview: { status: 'loading', data: null } }, 123), 123);
+  assert.equal(clockOf(at('not a time'), 456), 456);
+  const page = read('frontend/src/pages/admin/community/AdminCommunity.jsx');
+  assert.doesNotMatch(page, /const \[now\] = useState\(/, 'the clock is frozen at mount again');
+  assert.match(page, /const now = useMemo\(\(\) => clockOf\(reads, asOf\), \[reads, asOf\]\);/);
 });
 
 test('Needs a decision: waiting events and jobs, oldest first, and a half that failed says so', () => {
@@ -199,7 +228,12 @@ function worker(fail = []) {
     }
     if (p === '/api/admin/jobs') return down('jobs') ? json({ detail: 'down' }, 503) : json({ jobs: JOBS });
     if (p === '/api/admin/circles') return down('circles') ? json({ detail: 'down' }, 503) : json({ circles: CIRCLES });
-    if (p === '/api/admin/network-profiles') return down('roster') ? json({ detail: 'down' }, 503) : json({ profiles: ROSTER_ROWS, count: 2 });
+    if (p === '/api/admin/community/overview') {
+      if (down('overview')) return json({ detail: 'down' }, 503);
+      // The roster's counts only: one shown, one hidden. No name is in this read.
+      return json({ weeks: Number(u.searchParams.get('weeks') || 12), as_of: new Date(NOW).toISOString(), blocks: { network: { available: true, archived: 0, by_kind_state: { advisor: { active: 1, hidden: 1 } } } } });
+    }
+    if (p === '/api/admin/network-profiles') return json({ profiles: ROSTER_ROWS, count: 2 });
     return json({});
   };
   return seen;
@@ -250,7 +284,7 @@ test('mounted: each block is drawn from its own read, and no roster name reaches
     assert.ok(!m.seen.some((s) => s.startsWith('/api/wellbeing')), 'the page read a wellbeing route');
     assert.deepEqual([...paths].sort(), [
       '/api/admin/circles', '/api/admin/community/activity', '/api/admin/community/overview', '/api/admin/events', '/api/admin/events/analytics',
-      '/api/admin/jobs', '/api/admin/network-profiles', '/api/admin/studio/glance',
+      '/api/admin/jobs', '/api/admin/studio/glance',
     ]);
     assert.ok(m.seen.includes('/api/admin/events?status=published&limit=200&offset=0'));
     assert.ok(m.seen.includes('/api/admin/events?status=pending_review&limit=200&offset=0'));
@@ -268,7 +302,7 @@ test('mounted CM10a: the job board failing costs only its blocks, and says it is
 });
 
 test('mounted CM10b: every read failed — the banner says nothing is a zero, and every console door still works', async () => {
-  const m = await mount(COMMUNITY_PATH, ['glance', 'events', 'analytics', 'jobs', 'circles', 'roster']);
+  const m = await mount(COMMUNITY_PATH, ['glance', 'events', 'analytics', 'jobs', 'circles', 'overview']);
   try {
     assert.match(m.of('community-unreadable'), new RegExp(PAGE_UNREADABLE.replace('.', '\\.')));
     assert.ok(!m.has('community-tiles'), 'tiles drawn under a page that could not be read');
@@ -319,8 +353,9 @@ test('the routes, the row and the reads the page must never make', () => {
   const page = read('frontend/src/pages/admin/community/AdminCommunity.jsx');
   // The aggregate decrypts members' answers to average them; the experts read caps at 50 and counts samples (D930 §2).
   assert.doesNotMatch(page, /wellbeingAggregate|wellbeingExperts|\/wellbeing\//, 'the page reads a wellbeing route');
-  // The roster read keeps the kind and whether a row is active, and nothing else: no name leaves it.
-  assert.match(page, /a\.profiles\.map\(\(p\) => \(\{ kind: p\.kind, is_active: Boolean\(p\.is_active\) \}\)\)/);
+  // #4717: the roster is counted on the server; the page reads no profile list, so no name can reach it.
+  assert.doesNotMatch(page, /adminNetworkProfiles|network-profiles/);
+  assert.match(read('frontend/src/pages/admin/community/communityModel.js'), /blockOf\(reads\.overview, 'network', ROSTER_UNREAD\)/);
   // The analytics summary is all time; nothing here reads it.
   assert.doesNotMatch(read('frontend/src/pages/admin/community/communityModel.js'), /\.summary\b/);
 });

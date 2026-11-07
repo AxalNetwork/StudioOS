@@ -51,8 +51,17 @@ export const ROOT_ACTION_PATHS = { validate: 'record', build: 'connect', raise: 
 export function phoneFocus(raw, search = '', cycle = 'validate') {
   const f = raw?.focus;
   const href = safeHref(f?.cta?.href);
+  // D4589 (#4589): the Worker's policy also sends `rule`, `secondary` and, when
+  // a fact it needs could not be read, `state: 'unavailable'` with no CTA. That
+  // is drawn as said, never replaced by a card's next: a failed read is not
+  // guidance. Desktop (`ValidateNextAction.jsx`) draws this same object.
+  const secondary = (Array.isArray(f?.secondary) ? f.secondary : [])
+    .map((s) => ({ label: String(s?.label || ''), href: safeHref(s?.href) })).filter((s) => s.label && s.href);
+  if (f && typeof f === 'object' && f.headline && f.state === 'unavailable') {
+    return { rule: f.rule || 'unavailable', unavailable: true, eyebrow: f.eyebrow || `${nameOf(cycle)} · Next`, headline: f.headline, why: f.why || null, cta: null, href: null, then: null, secondary };
+  }
   if (f && typeof f === 'object' && f.headline && href) {
-    return { eyebrow: f.eyebrow || `${nameOf(cycle)} · Next`, headline: f.headline, why: f.why || null, cta: f.cta.text || f.cta.label || 'Open', href, then: f.then || null };
+    return { rule: f.rule || null, eyebrow: f.eyebrow || `${nameOf(cycle)} · Next`, headline: f.headline, why: f.why || null, cta: f.cta.text || f.cta.label || 'Open', href, then: f.then || null, secondary };
   }
   if (cycle === 'validate') {
     const research = card(raw, 'customer-research');

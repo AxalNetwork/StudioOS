@@ -446,12 +446,12 @@ test('a reversed pair of stamps is dropped rather than counted as negative time'
     'but it contributes no duration, so the median reports nothing rather than a negative');
 });
 
-test('an unopened row can lose its address, which is why addressable is its own number', async () => {
-  // The send rule means every row is addressable AT THE MOMENT IT IS SENT, so
-  // `unopened` and `addressable` are equal in the ordinary case — and that is
-  // exactly what makes this gap invisible without staging the unordinary one.
-  // Unlinking the engagement after a send leaves a row that went out and can
-  // never be nudged, and the tile has to be able to say so.
+test('#4684: unlinking after a send keeps the row addressable through the account it was sent to', async () => {
+  // Before #4684 a sent version belonged to whoever the engagement named, so
+  // unlinking the work product left a row nobody could open or be nudged
+  // about. Now the version keeps its recipient: the work product shows no
+  // client account (nothing new can be sent), but what already went out still
+  // reaches the person it went to.
   const e = env(freshDb());
   const d = await create(e, ada, { engagement_id: 1, title: 'Sent then unlinked' });
   await call(e, 'POST', `/me/deliverables/${d.id}/versions/1/send`, ada);
@@ -464,8 +464,9 @@ test('an unopened row can lose its address, which is why addressable is its own 
 
   const after = await listOf(e);
   assert.equal(after.totals.unopened, 1, 'it was still sent and still unread');
-  assert.equal(after.totals.addressable, 0, 'but nothing can reach the client any more');
-  assert.equal(after.items[0].client_user_email, null);
+  assert.equal(after.totals.addressable, 1, 'its recipient can still be reached');
+  assert.equal(after.items[0].client_user_email, null, 'but nothing new can be sent: there is no client account now');
+  assert.ok(after.items[0].latest_version.recipient_name, 'the version names who it went to');
 });
 
 test('the table refuses two versions with the same ordinal', () => {

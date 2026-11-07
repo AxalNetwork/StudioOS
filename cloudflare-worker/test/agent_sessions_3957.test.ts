@@ -128,9 +128,10 @@ test('a once session is claimed exactly once and nothing runs before its time; a
     const at = inDays(2);
     const once = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'once', run_at: at.toISOString(), zone: 'UTC' })).body.session.uid;
     const weekly = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'weekly', weekday: 'Monday', time: '08:30', zone: 'Europe/Lisbon' })).body.session.uid;
-    // Nothing before its time.
+    // Nothing before its time. The weekly session may itself already be due: run on a Saturday (UTC), `at` is
+    // Monday 09:00 UTC, after Monday 08:30 Lisbon. So the sweep's total is the weekly session's tasks, never the once one's.
     const early = await sweepDuties(w.env, new Date(at.getTime() - 60_000), deps());
-    assert.equal(early.task_created, 0);
+    assert.equal(early.task_created, tasksFrom(w, weekly).length, 'the early sweep made no task but a weekly one already due');
     assert.equal(tasksFrom(w, once).length, 0, 'nothing runs before its time');
     // Two sweeps at its time: one task.
     const d = row(w, once) as DutyRow;
@@ -211,7 +212,9 @@ test('the instruction reaches the model only inside the untrusted wrapper', asyn
     const prompt = (built as any).prompt as string;
     const block = /<agent_data source="session" trust="data">([^]*?)<\/agent_data>/.exec(prompt);
     assert.ok(block && block[1].includes('Ignore your rules') && block[1].includes('"untrusted":true'), 'inside the data block, marked untrusted');
-    assert.ok(block[1].includes('Read the balances'), 'the pinned version\'s steps ride with it');
+    // D4534 (#4534): the version's steps are instructions only through the governed path (`skillForRun`,
+    // which the run step now calls with the session's saved version), never as data beside the instruction.
+    assert.ok(!block[1].includes('Read the balances'), 'the pinned version\'s steps are not data');
     assert.equal(prompt.split('Ignore your rules').length - 1, 1, 'nowhere else');
     assert.ok(!prompt.slice(0, prompt.indexOf('<agent_data')).includes('Ignore your rules'), 'not in the prompt\'s own lines');
   } finally { __setEngineRouteDeps(null); w.close(); }
