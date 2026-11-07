@@ -125,6 +125,11 @@ export function draftHoldLine(estimate) {
   return costLine(n);
 }
 export const HOLD_READING = 'Reading what this draft holds…';
+/** D4666: a revision's own hold, in the words of the button it belongs to. */
+export function reviseHoldLine(label, estimate) {
+  const hold = aiTokens(estimate?.hold_microusd);
+  return hold ? `${label} · holds up to ${hold} in AI tokens. Nothing is charged until you press ${label}.` : null;
+}
 
 /** The field trigger shows on a blank Body only, and never for a reader (#4017). */
 export const showBodyTrigger = ({ body, readOnly = false, open = false } = {}) => !readOnly && !open && bodyText(body) === '';

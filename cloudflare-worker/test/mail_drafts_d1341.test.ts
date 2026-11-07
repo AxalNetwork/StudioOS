@@ -84,12 +84,24 @@ async function fixture(answer: () => string = () => ANSWER) {
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
-async function call(f: F, who: number, method: string, path: string, json?: unknown, claims: Record<string, unknown> = {}) {
+async function rawCall(f: F, who: number, method: string, path: string, json?: unknown, claims: Record<string, unknown> = {}) {
   const jwt = await new SignJWT({ user_id: who, ...claims }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await f.app.request(path, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: json === undefined ? undefined : JSON.stringify(json) }, f.env);
   const text = await res.text();
   let body: any; try { body = JSON.parse(text); } catch { body = text; }
   return { status: res.status, body };
+}
+/**
+ * D4666: a press brings the quote of its own estimate. The tests that are about something else press the way
+ * the page does: estimate the same operation, then run it with that quote. `rawCall` is the bare request.
+ */
+const RUN_PATH = /^\/api\/mail\/drafts(\/[a-f0-9]{32}\/revise)?$/;
+async function call(f: F, who: number, method: string, path: string, json?: any, claims: Record<string, unknown> = {}) {
+  if (method === 'POST' && RUN_PATH.test(path) && json && typeof json === 'object' && !json.estimate && !('quote' in json)) {
+    const e = await rawCall(f, who, method, path, { ...json, estimate: true }, claims);
+    if (e.status === 200 && e.body?.estimate?.quote) json = { ...json, quote: e.body.estimate.quote };
+  }
+  return rawCall(f, who, method, path, json, claims);
 }
 const ASK = { person: 'interviewee:11', intent: 'thank_follow_up', tone: 'warm', length: 'short' };
 
@@ -318,4 +330,97 @@ test('a support session drafts nothing', async () => {
       assert.deepEqual([r.status, r.body.error], [403, 'support_session_refused'], path);
     }
   } finally { f.close(); }
+});
+
+// ─────────────────────────────────────────────────────────── D4666 (#4666): the estimate approves the operation that runs
+
+test('D4666: a run without an approval starts no model call and reserves nothing; the answer is a fresh estimate to approve', async () => {
+  const f = await fixture();
+  try {
+    const none = await rawCall(f, 2, 'POST', '/api/mail/drafts', { ...ASK, refs: ['interviewee:11'] });
+    assert.deepEqual([none.status, none.body.error, none.body.reason], [409, 'estimate_required', 'missing']);
+    assert.ok(none.body.estimate.quote && none.body.estimate.hold_microusd > 0, 'it carries the estimate to review');
+    assert.deepEqual([f.runs(), f.drafts()], [[], []], 'no run, no stored draft');
+    const forged = await rawCall(f, 2, 'POST', '/api/mail/drafts', { ...ASK, refs: ['interviewee:11'], quote: 'q1.eyJ1IjoyfQ.AAAA' });
+    assert.deepEqual([forged.status, forged.body.reason], [409, 'invalid']);
+    assert.deepEqual(f.runs(), []);
+  } finally { f.close(); }
+});
+
+test('D4666: an approval is for its own operation: another recipient setting, another member, or changed source text each need a new estimate', async () => {
+  const f = await fixture();
+  try {
+    const ask = { ...ASK, refs: ['interviewee:11'] };
+    const est = await rawCall(f, 2, 'POST', '/api/mail/drafts', { ...ask, estimate: true });
+    const quote = est.body.estimate.quote;
+    const tone = await rawCall(f, 2, 'POST', '/api/mail/drafts', { ...ask, tone: 'direct', quote });
+    assert.deepEqual([tone.status, tone.body.reason], [409, 'changed'], 'a different setting');
+    const noSource = await rawCall(f, 2, 'POST', '/api/mail/drafts', { ...ask, refs: [], quote });
+    assert.deepEqual([noSource.status, noSource.body.reason], [409, 'changed'], 'different sources');
+    const other = await rawCall(f, 3, 'POST', '/api/mail/drafts', { ...ask, quote });
+    assert.notEqual(other.status, 201, 'another member cannot spend this approval');
+    // The same ask, but the source text moved after the member saw the estimate.
+    f.db.exec(`UPDATE discovery_interviews SET pains_json = '["A different pain recorded after the estimate"]', updated_at = '2026-10-09 09:00:00' WHERE id = 11`);
+    const moved = await rawCall(f, 2, 'POST', '/api/mail/drafts', { ...ask, quote });
+    assert.deepEqual([moved.status, moved.body.reason], [409, 'changed'], 'changed source contents');
+    assert.deepEqual([f.runs(), f.drafts()], [[], []], 'none of them ran');
+    const again = await rawCall(f, 2, 'POST', '/api/mail/drafts', { ...ask, quote: moved.body.estimate.quote });
+    assert.equal(again.status, 201, 'the refreshed estimate approves the new operation');
+    assert.ok(f.runs()[0].charged_microusd <= moved.body.estimate.hold_microusd, 'charged no more than the approved maximum');
+  } finally { f.close(); }
+});
+
+test('D4666: Shorter has its own estimate, of the text it will revise; the draft\'s estimate cannot run it; the member\'s edits are the base when sent', async () => {
+  const f = await fixture();
+  try {
+    const ask = { ...ASK, refs: ['interviewee:11'] };
+    const askEst = await rawCall(f, 2, 'POST', '/api/mail/drafts', { ...ask, estimate: true });
+    const first = await call(f, 2, 'POST', '/api/mail/drafts', ask);
+    const uid = first.body.draft.uid;
+    const path = `/api/mail/drafts/${uid}/revise`;
+    const rev = await rawCall(f, 2, 'POST', path, { instruction: 'shorter', estimate: true });
+    assert.equal(rev.status, 200, JSON.stringify(rev.body));
+    assert.equal(rev.body.estimate.kind, 'revise');
+    assert.notEqual(rev.body.estimate.quote, askEst.body.estimate.quote);
+    assert.ok(rev.body.estimate.hold_microusd >= askEst.body.estimate.hold_microusd, 'the revision prompt also carries the draft and the instruction');
+    const wrong = await rawCall(f, 2, 'POST', path, { instruction: 'shorter', quote: askEst.body.estimate.quote });
+    assert.deepEqual([wrong.status, wrong.body.reason], [409, 'changed']);
+    const otherInstruction = await rawCall(f, 2, 'POST', path, { instruction: 'warmer', quote: rev.body.estimate.quote });
+    assert.deepEqual([otherInstruction.status, otherInstruction.body.reason], [409, 'changed'], 'the instruction is part of the operation');
+    // The member edited the text in the editor: the estimate names that text, and the run must too.
+    const base = { subject: 'Edited subject', body: 'A much longer edited body that the member typed over the saved draft. '.repeat(30) };
+    const edited = await rawCall(f, 2, 'POST', path, { instruction: 'shorter', base, estimate: true });
+    assert.ok(edited.body.estimate.hold_microusd > rev.body.estimate.hold_microusd, 'the larger edited text is what is quoted');
+    const hiddenParent = await rawCall(f, 2, 'POST', path, { instruction: 'shorter', quote: edited.body.estimate.quote });
+    assert.deepEqual([hiddenParent.status, hiddenParent.body.reason], [409, 'changed'], 'the saved parent is not what was approved');
+    const before = f.runs().length;
+    const ok = await rawCall(f, 2, 'POST', path, { instruction: 'shorter', base, quote: edited.body.estimate.quote });
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    assert.equal(f.runs().length, before + 1, 'one model call, for the approved operation');
+    assert.equal(ok.body.draft.parent_uid, uid);
+  } finally { f.close(); }
+});
+
+test('D4666: a quote is member-bound, signed and short-lived; a rise in the price needs a new approval', async () => {
+  const { signQuote, checkQuote, operationFingerprint, QUOTE_TTL_SECONDS } = await import('../src/services/mail/draftQuote.ts');
+  const env: any = { JWT_SECRET };
+  const fp = await operationFingerprint({ task: 'mail_draft', maxTokens: 450, messages: [{ role: 'user', content: 'one' }] });
+  const now = { userId: 2, fingerprint: fp, hold: 1000, model: 'm1' };
+  const t0 = Date.now();
+  const { quote } = await signQuote(env, { userId: 2, fingerprint: fp, hold: 1000, model: 'm1' }, t0);
+  assert.equal((await checkQuote(env, quote, now, t0 + 1000)).ok, true);
+  assert.equal((await checkQuote(env, quote, { ...now, hold: 900 }, t0 + 1000)).ok, true, 'a lower price is within the approved maximum');
+  const why = async (token: unknown, n = now, at = t0 + 1000) => { const r = await checkQuote(env, token, n, at); return r.ok ? 'ok' : r.why; };
+  assert.equal(await why(quote, now, t0 + (QUOTE_TTL_SECONDS + 5) * 1000), 'expired');
+  assert.equal(await why(quote, { ...now, hold: 1001 }), 'repriced');
+  assert.equal(await why(quote, { ...now, model: 'm2' }), 'changed');
+  assert.equal(await why(quote, { ...now, fingerprint: await operationFingerprint({ task: 'mail_draft', maxTokens: 450, messages: [{ role: 'user', content: 'two' }] }) }), 'changed');
+  assert.equal(await why(quote, { ...now, userId: 3 }), 'other_member');
+  const [v, payload, sig] = quote.split('.');
+  const forgedPayload = btoa(JSON.stringify({ u: 2, f: fp, h: 999999999, m: 'm1', e: Math.floor(t0 / 1000) + 600 })).replace(/=+$/, '');
+  assert.equal(await why(`${v}.${forgedPayload}.${sig}`), 'invalid', 'a raised maximum does not verify');
+  assert.equal(await why(`${v}.${payload}.${sig.slice(0, -2)}AA`), 'invalid');
+  assert.equal(await why(undefined), 'missing');
+  assert.equal(await why({ not: 'a string' }), 'missing');
+  assert.equal(await checkQuote({ JWT_SECRET: 'another-secret-entirely' } as any, quote, now, t0 + 1000).then((r) => r.ok), false, 'another signing key');
 });

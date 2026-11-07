@@ -3,8 +3,10 @@
  *
  *   GET    /context?person=<kind:id>[&project=]  the context pack: the person's record (selected) and the company's items
  *   POST   /blocks    { kind, ref?, project? }   one live update block, computed now; `{ block: null }` when there is none
- *   POST   /drafts    { person, intent, tone, length, refs[], blocks[], project?, estimate? }
- *   POST   /drafts/:uid/revise { instruction, project?, estimate? }
+ *   POST   /drafts    { person, intent, tone, length, refs[], blocks[], project?, estimate?, quote? }
+ *   POST   /drafts/:uid/revise { instruction, base?: { subject, body }, project?, estimate?, quote? }
+ *     D4666: `estimate: true` answers a signed `quote`; a run without a valid quote for the operation as it
+ *     stands is 409 `estimate_required` with a fresh estimate, and starts no model call.
  *   GET    /drafts[?person=]   GET /drafts/:uid   DELETE /drafts/:uid   the member's own drafts only
  *
  * A draft is one `mail_draft` run (`services/aiRouter.ts`), held and settled in
@@ -27,6 +29,7 @@ import {
 import type { Block } from '../services/mail/blocks';
 import type { Pack, PackItem } from '../services/mail/contextPack';
 import { railFor, refuseRun } from '../util/railContext';
+import { checkQuote, operationFingerprint, signQuote } from '../services/mail/draftQuote';
 import { refuse } from '../util/refusal';
 import { caseOnly } from '../services/mail/profileRecords';
 
@@ -60,16 +63,34 @@ function runOptions(c: Context<any>, user: User, pack: Pack, ask: DraftAsk, sour
   };
 }
 
-/** One press: the estimate, or the run, its draft stored with its sources and the router's charge. */
+/**
+ * One press: the estimate, or the run, its draft stored with its sources and the router's charge.
+ *
+ * D4666: the estimate is of this exact operation and carries a signed quote. A run must bring that quote;
+ * without a valid one for the operation as it stands now, nothing is reserved and no model is called, and the
+ * answer is a fresh estimate to approve (`estimate_required`).
+ */
 async function press(c: Context<any>, user: User, b: Record<string, unknown>, parent: { uid: string; revision: Revision } | null) {
   const { ask, pack } = await draftAsk(c.env, user, b);
   const sources = ticked(pack, ask.refs);
   const blocks = await blocksNow(c.env, user, pack, ask);
   const opts = runOptions(c, user, pack, ask, sources, blocks, parent?.revision ?? null);
+  const q = await quoteRun(c.env, { ...opts, surface: AI_SURFACE.mailDraft, rail: opts.rail });
+  if (!q.ok) return refuseRun(c, { refusal: q.refusal, error: q.error }) ?? refuse(c, 503, { code: 'estimate_unreadable', message: 'The cost of this draft could not be worked out. Try again.' });
+  const fingerprint = await operationFingerprint(opts);
+  const fresh = async () => ({
+    hold_microusd: q.hold_microusd, model: q.model, kind: parent ? 'revise' : 'draft',
+    ...(await signQuote(c.env, { userId: Number(user.id), fingerprint, hold: q.hold_microusd, model: q.model })),
+  });
   if (b.estimate === true) {
-    const q = await quoteRun(c.env, { ...opts, surface: AI_SURFACE.mailDraft, rail: opts.rail });
-    if (!q.ok) return refuseRun(c, { refusal: q.refusal, error: q.error }) ?? refuse(c, 503, { code: 'estimate_unreadable', message: 'The cost of this draft could not be worked out. Try again.' });
-    return c.json({ estimate: { hold_microusd: q.hold_microusd, model: q.model }, sources: sources.map(({ ref, label, as_of, link }) => ({ ref, label, as_of, link })), blocks: blocks.map(({ kind, as_of, link }) => ({ kind, as_of, link })) });
+    return c.json({ estimate: await fresh(), sources: sources.map(({ ref, label, as_of, link }) => ({ ref, label, as_of, link })), blocks: blocks.map(({ kind, as_of, link }) => ({ kind, as_of, link })) });
+  }
+  const approved = await checkQuote(c.env, b.quote, { userId: Number(user.id), fingerprint, hold: q.hold_microusd, model: q.model });
+  if (!approved.ok) {
+    const message = approved.why === 'missing' ? 'Review the estimate for this draft, then press again.'
+      : approved.why === 'expired' ? 'That estimate expired. Review the new one, then press again.'
+      : 'This draft changed since you saw its estimate (its sources, text, settings, model or price). Review the new estimate, then press again.';
+    return refuse(c, 409, { code: 'estimate_required', message, extra: { reason: approved.why, estimate: await fresh() } });
   }
   // D1343: the run and the store are `runDraft`'s, shared with the MCP tool `mail_draft`.
   const out = await runDraft(c.env, user, { ask, pack, sources, blocks, parent, rail: opts.rail });
@@ -118,8 +139,16 @@ mail.post('/drafts/:uid/revise', async (c) => {
     const b = await body(c);
     const parent = await parentAsk(c.env, user, c.req.param('uid'));
     if (!parent) return refuse(c, 404, { code: 'not_found', message: 'Draft not found.' });
-    const revision = { subject: parent.row.subject, body: parent.row.body, instruction: revisionInstruction(b.instruction) };
-    return await press(c, user, { ...parent.body, project: b.project, estimate: b.estimate }, { uid: parent.row.uid, revision });
+    // D4666: the text being revised is the member's snapshot when they send one (their edits to the saved draft),
+    // so the estimate and the run name the same text. Absent, it is the saved draft.
+    const base = b.base && typeof b.base === 'object' && !Array.isArray(b.base) ? b.base as Record<string, unknown> : null;
+    const snap = (v: unknown, max: number, fallback: string) => (typeof v === 'string' && v.trim() ? v.slice(0, max) : fallback);
+    const revision = {
+      subject: base ? snap(base.subject, 200, parent.row.subject) : parent.row.subject,
+      body: base ? snap(base.body, 8000, parent.row.body) : parent.row.body,
+      instruction: revisionInstruction(b.instruction),
+    };
+    return await press(c, user, { ...parent.body, project: b.project, estimate: b.estimate, quote: b.quote }, { uid: parent.row.uid, revision });
   } catch (e) { return failure(c, e); }
 });
 

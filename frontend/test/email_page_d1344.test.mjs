@@ -78,8 +78,9 @@ test('the estimate is shown before every draft, and Draft waits for it', () => {
   assert.equal(canDraft({ estimate: { hold_microusd: 6000 }, intent: 'thank_follow_up', busy: true }), false);
   assert.equal(canDraft({ estimate: { hold_microusd: 6000 }, intent: 'thank_follow_up' }), true);
   const sheet = codeOnly(readFileSync(new URL('../src/pages/email/ComposeSheet.jsx', import.meta.url), 'utf8'));
-  assert.match(sheet, /disabled=\{!canDraft\(\{ estimate, intent, busy \}\)\} onClick=\{press\}/, 'Draft and Regenerate both wait for the estimate');
-  assert.equal((sheet.match(/canDraft\(\{ estimate, intent, busy \}\)/g) || []).length, 2);
+  // D4666: both wait for the estimate of THEIR operation (a quote that matches what is on screen), not any estimate.
+  assert.match(sheet, /disabled=\{!pressable\(gate, busy\) \|\| !intent\} onClick=\{press\}/, 'Draft and Regenerate both wait for the estimate');
+  assert.equal((sheet.match(/pressable\(gate, busy\)/g) || []).length, 2);
   assert.match(sheet, /api\.estimate\(ask\)/, 'the estimate is read for the exact request Draft sends');
   assert.match(sheet, /setConfirm\(true\)/, 'Send is behind a confirmation');
   assert.doesNotMatch(sheet, /Gmail drafts|Schedule/, 'no Copy to Gmail drafts (D1347 §3), no Schedule without a Worker route');
