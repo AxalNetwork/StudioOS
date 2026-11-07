@@ -969,7 +969,9 @@ export function learnersFrom(read) {
     return { state: 'unreadable' };
   }
   const learners = Array.isArray(read.data?.learners) ? read.data.learners : [];
-  return { state: 'ready', learners };
+  // D4810: a page carries how many there are in all; null when the read did not say.
+  const total = Number.isFinite(Number(read.data?.total)) && read.data?.total !== null && read.data?.total !== undefined ? Number(read.data.total) : null;
+  return { state: 'ready', learners, total };
 }
 
 /* ------------------------------------------------------------------ *
