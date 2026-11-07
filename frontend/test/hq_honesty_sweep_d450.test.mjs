@@ -8,6 +8,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
 import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -21,7 +22,7 @@ test('HQ Support names an escalation subject relation or says why it is missing'
 });
 
 test('admin licences list reason no longer claims no account carries a licence', () => {
-  const route = read('cloudflare-worker/src/routes/admin_licences.ts');
+  const route = licenceRoutesSource();
   assert.doesNotMatch(route, /No account carries one/);
   assert.match(route, /U1/);
 });
