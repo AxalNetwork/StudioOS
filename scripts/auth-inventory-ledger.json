@@ -25,6 +25,11 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
+    "GET /api/advisors/proof-consents/:token/claim": {
+      "review": "no_gate_found",
+      "kind": "link_token",
+      "state": "unreviewed"
+    },
     "GET /api/articles": {
       "review": "no_gate_found",
       "kind": "public_content",
@@ -293,6 +298,11 @@
     "GET /api/mentors/:uid": {
       "review": "no_gate_found",
       "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "GET /api/mentors/proof-consents/:token/claim": {
+      "review": "no_gate_found",
+      "kind": "link_token",
       "state": "unreviewed"
     },
     "GET /api/metrics/:projectId": {
@@ -570,8 +580,13 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "POST /api/advisors/proof-consents/:token/respond": {
+    "POST /api/advisors/proof-consents/:token/code": {
       "review": "no_gate_found",
+      "kind": "link_token",
+      "state": "unreviewed"
+    },
+    "POST /api/advisors/proof-consents/:token/respond": {
+      "review": "optional_auth",
       "kind": "link_token",
       "state": "unreviewed"
     },
@@ -797,8 +812,13 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "POST /api/mentors/proof-consents/:token/respond": {
+    "POST /api/mentors/proof-consents/:token/code": {
       "review": "no_gate_found",
+      "kind": "link_token",
+      "state": "unreviewed"
+    },
+    "POST /api/mentors/proof-consents/:token/respond": {
+      "review": "optional_auth",
       "kind": "link_token",
       "state": "unreviewed"
     },
