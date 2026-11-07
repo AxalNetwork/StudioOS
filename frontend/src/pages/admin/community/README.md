@@ -44,6 +44,10 @@ Community landing is retired. It has no pending queue; no count is invented.
   the funnel and events by type each answer alone. A block that
   could not be read says so, and one no store records says "Not recorded".
   It is never a zero and never a sample.
+- The read's shape is checked, never patched (#4717 package 3). A count that is
+  missing, a string, negative or fractional, a map without a key the card
+  draws, or a row without its title makes that part unreadable. No builder
+  reads `Number(x) || 0`.
 - The check-in band is a range of founders, withheld under seven founders.
   Other roles' check-ins are not counted toward it (#4717). No mood or stress
   figure is drawn here.

@@ -25,6 +25,7 @@ import {
   deltaText, oldestWait, searchWithWeeks, waitText, weeksFrom,
 } from '../src/pages/admin/community/communityModel.js';
 import AdminCommunity from '../src/pages/admin/community/AdminCommunity.jsx';
+import { EVENT_TYPES } from '../src/lib/eventTypes.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -64,7 +65,8 @@ function overview(over = {}) {
       },
       show_up: { available: true, events: 3, seats_taken: 80, confirmed: 64, attended: 52, rate: 0.65 },
       upcoming: { available: true, events: 3, seats_taken: 59, full: 0 },
-      by_type: { available: true, counts: { workshop: 4, office_hours: 2, networking: 0, other: 1 } },
+      // The read counts all twelve types, zeros included (#4717 package 3: a type it leaves out is unreadable, not 0).
+      by_type: { available: true, counts: { ...Object.fromEntries(EVENT_TYPES.map((t) => [t.id, 0])), workshop: 4, office_hours: 2, other: 1 } },
       waitlisted: { available: true, registrations: 9, events: 2 },
     },
     jobs: {
@@ -285,7 +287,7 @@ test('#4717 Needs a decision: each row\'s wait and Overdue are the Community rea
       { event_id: 1, title: 'Pricing Clinic', waiting_since: at(-80), from_created: false, waiting_hours: 80, overdue: true },
       { event_id: 2, title: 'Legacy Talk', waiting_since: at(-10), from_created: true, waiting_hours: 10, overdue: false },
     ] },
-    jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, review: [
+    jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, oldest_wait_hours: 72, review: [
       { posting_id: 3, title: 'Backend Engineer', company: null, waiting_since: at(-72), waiting_hours: 72, overdue: false },
       { posting_id: 4, title: 'Old Posting', company: null, waiting_since: null, waiting_hours: null, overdue: false },
     ] },
