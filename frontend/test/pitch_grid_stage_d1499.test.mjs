@@ -124,7 +124,7 @@ test('⋯ › Slide size: 4:3 redraws the stage at once, says so in the save sum
     const b2 = m.pr(m.by('pitch-editor-block-b2')).style;
     assert.equal(b2.left, placeOf({ c1: 1, c2: 7, r1: 2, r2: 6 }, '4:3').left);
     assert.equal(b2.width, placeOf({ c1: 1, c2: 7, r1: 2, r2: 6 }, '4:3').width);
-    assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/, 'held until Save');
+    assert.match(m.text(m.by('pitch-editor-save-state')), /Saving…|Unsaved changes/, 'a slide-size change is a draft change (D4596): autosaved, a version only on Save version');
     await m.press(m.by('pitch-editor-save'));
     assert.match(m.text(m.by('pitch-editor-save-changes')), /The slide size becomes Standard 4:3 \(1440 × 1080\)\./);
     await m.press(m.by('pitch-editor-save-run'));
