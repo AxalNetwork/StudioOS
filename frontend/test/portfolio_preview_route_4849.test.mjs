@@ -32,7 +32,6 @@ const settled = { kyc_status: 'approved', access_level: 'full', onboarding_compl
 const SUPER = { id: 9501, role: 'admin', is_super_admin: 1, email: 'super@p4849.test', name: 'Super P4849', ...settled };
 const PLAIN = { id: 9502, role: 'admin', is_super_admin: 0, email: 'admin@p4849.test', name: 'Admin P4849', ...settled };
 const INVESTOR = { id: 9503, role: 'investor', email: 'investor@p4849.test', name: 'Investor P4849', ...settled };
-const FOUNDER = { id: 9504, role: 'founder', email: 'founder@p4849.test', name: 'Founder P4849', ...settled };
 
 /** The Studio home's own marks: the page title and the preview line. */
 const STUDIO = '[data-testid="text-investor-studio-title"]';
