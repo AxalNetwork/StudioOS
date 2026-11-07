@@ -36,7 +36,7 @@ const ROOT = resolve(HERE, '../..');
 const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture
 const REASON = 'Agreed at the October HQ review.';
-const WHOLE = ['560_program_registry.sql', '561_program_proposals.sql', '562_program_grants_draft.sql'];
+const WHOLE = ['560_program_registry.sql', '561_program_proposals.sql', '562_program_grants_draft.sql', '202611072010_program_approved_specs.sql'];
 
 const SUPER = 1, LIS = 2, NAI = 3, LONE = 4, PLAIN = 5;
 const ROLE: Record<number, string> = { [SUPER]: 'admin', [LIS]: 'admin', [NAI]: 'admin', [LONE]: 'admin', [PLAIN]: 'admin' };

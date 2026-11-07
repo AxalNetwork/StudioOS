@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
@@ -6,6 +6,7 @@ import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { StatedLimit } from '../advisor/expertise/kit';
 import useRecordCrumb from '../admin/useRecordCrumb';
 import { day, fileSize, when } from './diligenceRead';
+import { createRecordGate } from './recordGate.js';
 
 /**
  * `/research/diligence/:grantUid/files/:fileUid` — one document in a room the
@@ -40,14 +41,24 @@ export default function DiligenceFile({ role = 'investor' }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
+  // D4607: a read that answers after the route has moved on, or after the
+  // page has left, is dropped with its result, its error and its loading state.
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
+  useEffect(() => () => gate.current.invalidate(), []);
+
   const load = useCallback(async () => {
+    const fresh = gate.current.begin();
     setState('loading');
+    setData(null);
     try {
       const r = await api.research.diligenceFile(grantUid, fileUid);
+      if (!fresh()) return;
       setData(r);
       setRoomRef(r.room);
       setState('ready');
     } catch (e) {
+      if (!fresh()) return;
       setData(null);
       // D278 — the code decides the state; the refusal's `room` is the only
       // thing a gated or missing document's answer carries.

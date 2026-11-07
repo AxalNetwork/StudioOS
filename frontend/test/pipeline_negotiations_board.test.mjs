@@ -77,9 +77,9 @@ test('the strip is the artboard’s four, counted over what is in play', () => {
   // tracking is not a negotiation at all — folding either in would make the
   // board look busier than the work is.
   const read = between(worker, "partnerPipeline.get('/negotiations'", 'PUT because');
-  // D4693: "open" is one shared rule (tracked, not closed, and the quote behind it
-  // still waiting), decided by negotiationIsOpen and read off each item.
-  assert.ok(/const open = items\.filter\(\(x: any\) => x\.negotiation\?\.open\);/.test(read),
+  // D4693: "open" is the shared rule, read off each item. #4701: the count walks the whole book.
+  assert.ok(/scanAll\(/.test(read), 'the counts stopped walking the whole book');
+  assert.ok(/if \(!x\.negotiation\?\.open\) continue;/.test(read),
     'the counts stopped excluding untracked and closed negotiations');
   assert.ok(/open: negotiationIsOpen\(r\.stage, r\.quote_status\)/.test(worker),
     'a negotiation is no longer open by the shared rule');

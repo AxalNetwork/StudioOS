@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
 import { usePipelineZone } from './usePipelineZone';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
@@ -338,7 +340,7 @@ function RetainerRow({ row, onSaveRetainer, onDeleteRetainer, onSaveUsage, onDel
 
 export default function PartnerRetainersZone() {
   const { state, load, run, busy, note } = usePipelineZone(
-    () => api.listPartnerRetainers(), 'The retainer record did not load.',
+    () => readAllPages((cur) => api.listPartnerRetainers(cur)), 'The retainer record did not load.',
   );
   const [view, setView] = useState('all');
 
@@ -475,6 +477,7 @@ export default function PartnerRetainersZone() {
       )}
     >
       <div className="space-y-6">
+        <PartialRead data={state.data} noun="engagements" onRetry={load} />
         <ZoneHeading
           title="Retainers"
           blurb={

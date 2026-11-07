@@ -101,7 +101,7 @@ test('the two tiles that need a read receipt are absent, with the reason', () =>
   assert.ok(worker.includes("read_receipts: 'none',"), 'the read stopped declaring the absence');
   assert.ok(flat(worker).includes('There is no client-side surface to record it on'),
     'the worker stopped saying why');
-  assert.ok(!/opened_at|opens_count|view_count/.test(between(worker, "partnerPipeline.get('/proposals'", 'Append a version')),
+  assert.ok(!/opened_at|opens_count|view_count/.test(between(worker, 'async function readProposals', 'Append a version')),
     'the proposals read is inventing an open');
 });
 
@@ -111,15 +111,14 @@ test('the win rate is null with nothing decided, and Analytics reads the same on
     'a win rate is drawn over an empty denominator');
   assert.ok(flat(strip).includes('nothing decided yet, so there is no rate'));
   const read = between(worker, "partnerPipeline.get('/proposals'", 'Append a version');
-  // D4693: the same function `/quotes/analytics` uses, so the two cannot disagree: won over won-plus-lost, null with none decided.
-  assert.ok(/win_rate_pct: winRate\(won\.length, lost\.length\)\.pct,/.test(read),
+  // D4693: the same function `/quotes/analytics` uses, over the whole book (#4701).
+  assert.ok(/win_rate_pct: winRate\(wonCount, lostCount\)\.pct,/.test(read),
     'the win rate is no longer won-over-decided, or no longer null when nothing is decided');
   assert.ok(/win_rate_basis: winRateBasis\(/.test(read), 'the win rate stopped saying what it was counted from');
-  // DECIDED IS ACCEPTED PLUS REJECTED — a proposal still waiting is not a loss,
-  // and a withdrawn one was never lost to anyone.
-  assert.ok(/const decidedItems = items\.filter\(\(x: any\) => x\.decided\);/.test(read));
-  // D4693: a decided_at stamp alone no longer decides a quote (a withdrawn one can carry it).
-  assert.ok(/const outcome = quoteOutcome\(q\.status\);\s*\n\s*const decided = outcome === 'won' \|\| outcome === 'lost';/.test(read),
+  assert.ok(/scanAll\(/.test(read), 'the win rate stopped being counted over the whole book');
+  // DECIDED IS WON PLUS LOST — a proposal still waiting is not a loss,
+  // and a withdrawn one was never lost to anyone, even with a decided_at stamp.
+  assert.ok(/const outcome = quoteOutcome\(q\.status\);\s*\n\s*const decided = outcome === 'won' \|\| outcome === 'lost';/.test(between(worker, 'async function readProposals', 'Append a version')),
     'the decided test changed shape');
 });
 
@@ -268,7 +267,7 @@ test('the ops row and the AI band are the artboard’s, and the surface is allow
 });
 
 test('the writers are reachable, scoped, and the units are named', () => {
-  assert.ok(/listPartnerProposals: \(\) => request\('\/partner\/pipeline\/proposals'\)/.test(apiJs));
+  assert.ok(/listPartnerProposals: \(cursor\) => request\(/.test(apiJs));
   assert.ok(/addPartnerProposalVersion: \(quoteId, data\) =>/.test(apiJs));
   assert.ok(/setPartnerProposalOutcome: \(quoteId, data\) =>/.test(apiJs));
   assert.ok(worker.includes("partnerPipeline.get('/proposals'"));
@@ -279,7 +278,7 @@ test('the writers are reachable, scoped, and the units are named', () => {
   // `quotes.price` is grandfathered REAL dollars; `quote_versions.price_cents`
   // is the new dialect. A field called `price` carrying both would be the bug
   // the Leads card already had once.
-  const read = between(worker, "partnerPipeline.get('/proposals'", 'Append a version');
+  const read = between(worker, 'async function readProposals', 'Append a version');
   assert.ok(/price_dollars: q\.price == null \? null : Number\(q\.price\),/.test(read),
     'the quote price stopped naming its unit');
   assert.ok(/price_cents: v\.price_cents == null \? null : Number\(v\.price_cents\),/.test(read),
