@@ -10,9 +10,84 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
+    "DELETE /api/mail/shares/:uid": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "DELETE /api/metrics/snapshot/:id": {
       "review": "forwarded",
       "kind": "alias",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/delivery/blockers/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/delivery/deliverables/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/delivery/engagements/:engagementId/hours/:personId/:period": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/delivery/milestones/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/delivery/status-reports/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/offers/engagements/:engagementId/source": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/offers/fit-rules/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/offers/proof/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/offers/surfaces/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/pipeline/leads/:needId/pass": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/pipeline/negotiation-terms/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/pipeline/retainers/:engagementId": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/pipeline/retainers/:engagementId/usage/:period": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "DELETE /api/partner/testing/programmes/:uid/logo": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "GET /api/admin/event-syndication/oauth/:channel/callback": {
@@ -32,6 +107,16 @@
     },
     "GET /api/articles/:id/image/:filename": {
       "review": "optional_auth",
+      "kind": "public_content",
+      "state": "unreviewed"
+    },
+    "GET /api/articles/:id/revisions": {
+      "review": "record_without_ownership_check",
+      "kind": "public_content",
+      "state": "unreviewed"
+    },
+    "GET /api/articles/:id/revisions/:rev": {
+      "review": "record_without_ownership_check",
       "kind": "public_content",
       "state": "unreviewed"
     },
@@ -240,9 +325,19 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
+    "GET /api/learning/exams/:uid": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "GET /api/learning/stream/source/:token": {
       "review": "no_gate_found",
       "kind": "link_token",
+      "state": "unreviewed"
+    },
+    "GET /api/learning/webinars/:uid/calendar.ics": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "GET /api/legal/esign/sign/:token": {
@@ -263,6 +358,11 @@
     "GET /api/linkedin/oauth/callback": {
       "review": "no_gate_found",
       "kind": "oauth_callback",
+      "state": "unreviewed"
+    },
+    "GET /api/liquidity/listings/:id/rofr": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "GET /api/mail/accounts/oauth/callback": {
@@ -353,6 +453,26 @@
     "GET /api/partner-onboard/:token/status": {
       "review": "no_gate_found",
       "kind": "link_token",
+      "state": "unreviewed"
+    },
+    "GET /api/partner/delivery/engagements/:engagementId/blockers": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "GET /api/partner/delivery/engagements/:engagementId/milestones": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "GET /api/partner/delivery/engagements/:engagementId/report-draft/:period": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "GET /api/partner/testing/programmes/:uid/applicants": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "GET /api/payments/config": {
@@ -530,6 +650,11 @@
       "kind": "oauth_callback",
       "state": "unreviewed"
     },
+    "GET /api/scoring/deal-memos/:projectId": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "GET /api/settings/headshot/:uid": {
       "review": "no_gate_found",
       "kind": "unclassified",
@@ -555,9 +680,64 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
+    "GET /api/testing/programmes/:uid/logo": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "GET /api/watchlist/anti-portfolio": {
       "review": "forwarded",
       "kind": "alias",
+      "state": "unreviewed"
+    },
+    "PATCH /api/deals/:id/closing-checklist/items/:itemUid": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PATCH /api/partner/delivery/blockers/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PATCH /api/partner/delivery/deliverables/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PATCH /api/partner/delivery/milestones/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PATCH /api/partner/delivery/seats/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PATCH /api/partner/offers/fit-rules/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PATCH /api/partner/offers/proof/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PATCH /api/partner/offers/surfaces/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PATCH /api/partner/pipeline/negotiation-terms/:id": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PATCH /api/partner/testing/programmes/:uid": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "POST /api/advisors/:uid/book": {
@@ -567,6 +747,26 @@
     },
     "POST /api/advisors/booking-links/open": {
       "review": "optional_auth",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/advisors/bookings/:id/cancel": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/advisors/bookings/:id/complete": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/advisors/bookings/:id/confirm": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/advisors/bookings/:id/no-show": {
+      "review": "record_without_ownership_check",
       "kind": "unclassified",
       "state": "unreviewed"
     },
@@ -710,6 +910,11 @@
       "kind": "webhook",
       "state": "unreviewed"
     },
+    "POST /api/channels/whatsapp/captures/:uid/consent": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "POST /api/channels/whatsapp/link/:uid/confirm": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
@@ -762,14 +967,44 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
+    "POST /api/deals/:id/closing-checklist/apply": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/deals/:id/closing-checklist/items": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/funds/lps/:lpId/sign-lpa": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "POST /api/items": {
       "review": "forwarded",
       "kind": "alias",
       "state": "unreviewed"
     },
+    "POST /api/jobs/:id/close": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/jobs/:id/submit-review": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "POST /api/journal/entries": {
       "review": "forwarded",
       "kind": "alias",
+      "state": "unreviewed"
+    },
+    "POST /api/learning/exams/:uid/attempts/:attempt/submit": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "POST /api/legal/esign/sign/:token": {
@@ -782,9 +1017,19 @@
       "kind": "link_token",
       "state": "unreviewed"
     },
+    "POST /api/liquidity/listings/:id/proceeds": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "POST /api/market-intel-public/unsubscribe": {
       "review": "no_gate_found",
       "kind": "link_token",
+      "state": "unreviewed"
+    },
+    "POST /api/mcp/consent/:id/deny": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "POST /api/mentors/:uid/book": {
@@ -794,6 +1039,26 @@
     },
     "POST /api/mentors/booking-links/open": {
       "review": "optional_auth",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/mentors/bookings/:id/cancel": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/mentors/bookings/:id/complete": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/mentors/bookings/:id/confirm": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/mentors/bookings/:id/no-show": {
+      "review": "record_without_ownership_check",
       "kind": "unclassified",
       "state": "unreviewed"
     },
@@ -817,6 +1082,11 @@
       "kind": "alias",
       "state": "unreviewed"
     },
+    "POST /api/networkfx/syndicates/:id/join": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "POST /api/newsletter/confirm": {
       "review": "no_gate_found",
       "kind": "public_content",
@@ -835,6 +1105,26 @@
     "POST /api/partner-office-hours/:uid/book": {
       "review": "forwarded",
       "kind": "alias",
+      "state": "unreviewed"
+    },
+    "POST /api/partner-office-hours/bookings/:id/cancel": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner-office-hours/bookings/:id/complete": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner-office-hours/bookings/:id/confirm": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner-office-hours/bookings/:id/no-show": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "POST /api/partner-onboard/:token/finalize": {
@@ -857,9 +1147,84 @@
       "kind": "link_token",
       "state": "unreviewed"
     },
+    "POST /api/partner/delivery/engagements/:engagementId/blockers": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/delivery/engagements/:engagementId/deliverables": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/delivery/engagements/:engagementId/milestones": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/delivery/engagements/:engagementId/seats": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/delivery/seats/:id/revoke": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/delivery/status-reports/:id/send": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "POST /api/partner/offers/proof-consents/:token/respond": {
       "review": "no_gate_found",
       "kind": "link_token",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/offers/proof/:id/consent-request": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/offers/proof/:id/consents/:consentId/withdraw": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/pipeline/leads/:needId/pass": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/pipeline/negotiations/:quoteId/terms": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/pipeline/proposals/:quoteId/versions": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/testing/applications/:uid/decline": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/testing/applications/:uid/pick": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/partner/testing/programmes/:uid/submit": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/projects/:id/advance-week": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "POST /api/public/analytics/pageview": {
@@ -887,6 +1252,11 @@
       "kind": "public_content",
       "state": "unreviewed"
     },
+    "POST /api/public/status/incidents/:id/updates": {
+      "review": "record_without_ownership_check",
+      "kind": "public_content",
+      "state": "unreviewed"
+    },
     "POST /api/public/trust/subprocessors/confirm": {
       "review": "no_gate_found",
       "kind": "public_content",
@@ -895,6 +1265,21 @@
     "POST /api/public/trust/subprocessors/subscribe": {
       "review": "no_gate_found",
       "kind": "public_content",
+      "state": "unreviewed"
+    },
+    "POST /api/quotes/:id/accept": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/quotes/:id/reject": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/quotes/:id/withdraw": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "POST /api/references/:id/recording": {
@@ -926,6 +1311,11 @@
       "test": "cloudflare-worker/test/authz_cross_tenant_d4570.test.ts",
       "note": "Scoped in its service by the caller's id; a member who is not a party is refused 404 and nothing changes."
     },
+    "POST /api/scoring/score/:projectId/deal-memo": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "POST /api/settings/email-change/confirm": {
       "review": "no_gate_found",
       "kind": "link_token",
@@ -934,6 +1324,16 @@
     "POST /api/settings/email-change/revoke": {
       "review": "no_gate_found",
       "kind": "link_token",
+      "state": "unreviewed"
+    },
+    "POST /api/testing/applications/:uid/withdraw": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "POST /api/testing/programmes/:uid/apply": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     },
     "POST /api/track": {
@@ -946,9 +1346,64 @@
       "kind": "link_token",
       "state": "unreviewed"
     },
+    "PUT /api/legal/cofounder-agreement/:docId{[0-9]+}/positions/:clauseKey": {
+      "review": "record_without_ownership_check",
+      "kind": "public_content",
+      "state": "unreviewed"
+    },
+    "PUT /api/liquidity/listings/:id/rofr": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "PUT /api/metrics/snapshot/:id": {
       "review": "forwarded",
       "kind": "alias",
+      "state": "unreviewed"
+    },
+    "PUT /api/partner/delivery/engagements/:engagementId/health": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PUT /api/partner/delivery/engagements/:engagementId/hours/:personId/:period": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PUT /api/partner/delivery/engagements/:engagementId/status-reports/:period": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PUT /api/partner/offers/engagements/:engagementId/source": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PUT /api/partner/pipeline/negotiations/:quoteId": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PUT /api/partner/pipeline/proposals/:quoteId/outcome": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PUT /api/partner/pipeline/retainers/:engagementId": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PUT /api/partner/pipeline/retainers/:engagementId/usage/:period": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
+    "PUT /api/partner/testing/programmes/:uid/logo": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
       "state": "unreviewed"
     }
   }
