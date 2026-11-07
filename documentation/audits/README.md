@@ -10,6 +10,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | File | Covers |
 | --- | --- |
 | `SCALE_1000_DAU_AUDIT_2026-09-18.md` | Worker + D1 + SPA load for the first 1,000 daily users, with a Claude Code implementation plan. |
+| `PERFORMANCE_BASELINE_2026-11-06.md` | #4573 part 1: what is measured on main, the frontend shell and lazy-chunk composition, lab Web Vitals for the anonymous pages, D1 statements per API flow, ten proven hotspots and the budgets now in CI. Local and read-only; production metrics are marked unavailable. |
 | `PLATFORM-DELIVERY-AUDIT.md` | The most recent canvas-by-canvas delivery sweep. Start here for “what shipped.” |
 | `BETA_READINESS_AUDIT_2026-05-20.md`, `BETA_READINESS_AUDIT_2026-06-03.md`, `BETA_READINESS_AUDIT_2026-07-03.md` | Three successive beta-readiness passes. |
 | `BETA_READINESS_ISSUES_2026-05-20.md` | The issue list from the first of those. |
