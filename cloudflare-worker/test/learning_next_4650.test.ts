@@ -35,7 +35,6 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const SUPER = 1, MEMBER = 10, PEER = 11;
 const ROLE: Record<number, string> = { [SUPER]: 'admin', [MEMBER]: 'founder', [PEER]: 'investor' };
-const MIN = 60_000;
 
 function builtFromMigrations(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
@@ -74,12 +73,6 @@ function seeded(): DatabaseSync {
   return db;
 }
 
-function webinar(db: DatabaseSync, uid: string, startIn: number, capacity: number | null) {
-  db.prepare(`INSERT INTO learning_webinars (uid, title, starts_at, ends_at, capacity, status, visibility, created_by)
-              VALUES (?, 'Raising in the Nordics', ?, ?, ?, 'published', 'open', 1)`)
-    .run(uid, new Date(Date.now() + startIn).toISOString(), new Date(Date.now() + startIn + 45 * MIN).toISOString(), capacity);
-}
-
 async function tokenFor(who: number, support = false) {
   return new SignJWT({ user_id: who, role: ROLE[who], ...(support ? { impersonated_by: SUPER } : {}) }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
@@ -98,7 +91,6 @@ async function call(db: DatabaseSync, who: number, path: string, init: { method?
   try { body = JSON.parse(text); } catch { body = null; }
   return { status: res.status, body };
 }
-const count = (db: DatabaseSync, sql: string, ...args: any[]) => Number((db.prepare(sql).get(...args) as any).n);
 
 
 const next = async (db: DatabaseSync, who: number) => (await call(db, who, '/next')).body;
