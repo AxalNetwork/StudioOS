@@ -34,10 +34,11 @@ import { fileURLToPath } from 'node:url';
 import { EU_27, EU_CODES, coverageCells, renewalPipeline, sortCells } from '../src/lib/licenceCoverage.js';
 import { DEPLOY_TIMELINE, deployProgress } from '../src/lib/deployTimeline.js';
 import { codeOnly, codeOnlyJsx } from './_codeOnly.mjs';
+import { licencePageSource } from './_licencePage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
-const PAGE = codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx'));
+const PAGE = codeOnly(licencePageSource());
 const PLATFORM = codeOnly(read('frontend/src/pages/hq/PlatformPage.jsx'));
 const API = read('frontend/src/lib/api.js');
 
@@ -249,7 +250,7 @@ test('the HQ sidebar comment counts the rows its own guard counts', () => {
 /* ── H2 · the page renders both zones ──────────────────────────────── */
 
 test('the coverage grid and the renewal pipeline are on the page, off the shared library', () => {
-  assert.match(PAGE, /from '\.\.\/\.\.\/lib\/licenceCoverage'/);
+  assert.match(PAGE, /from '(\.\.\/)+lib\/licenceCoverage'/);
   assert.match(PAGE, /coverageCells\(/);
   assert.match(PAGE, /renewalPipeline\(/);
   assert.match(PAGE, /data-testid="hq-coverage"/);
@@ -261,7 +262,7 @@ test('the coverage grid and the renewal pipeline are on the page, off the shared
   // new code: a page that said "not drawn" beside the drawing is worse than
   // either. The phrase that stood here named the choropleth as refused.
   assert.ok(
-    !/refus\w+ as "the EU choropleth"/i.test(read('frontend/src/pages/admin/AdminLicences.jsx')),
+    !/refus\w+ as "the EU choropleth"/i.test(licencePageSource()),
     'the choropleth refusal must be retired now that the grid exists',
   );
 });
@@ -358,7 +359,7 @@ test('the timeline shows the steps still ahead, not only the one reached', () =>
   assert.match(PAGE, /data-testid="deploy-timeline"/);
   // And the page must read the one list rather than keeping a second copy of
   // the eight steps beside it.
-  assert.match(PAGE, /from '\.\.\/\.\.\/lib\/deployTimeline'/);
+  assert.match(PAGE, /from '(\.\.\/)+lib\/deployTimeline'/);
   assert.ok(
     !/const DEPLOY_TIMELINE = \[/.test(PAGE),
     'the eight steps are declared once, in lib/deployTimeline.js',
