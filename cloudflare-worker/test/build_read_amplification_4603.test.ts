@@ -84,11 +84,10 @@ test('5. the remaining limit, recorded: rows still grow with the venture (bounde
   const s = await overview(small), l = await overview(large);
   assert.equal(s.statements, l.statements, 'the statement count does not grow with the venture');
   assert.ok(l.rows > 50 * s.rows / 10, `rows returned grow with the venture: ${s.rows} → ${l.rows}`);
-  // Part 2 pages Solution design's features in SQL (build_bounded_reads_4603.test.ts); its risks list
-  // (`facts.risks`, D662) is still read whole, and so are the other modules' lists.
+  // Part 2 bounds Solution design (build_bounded_reads_4603.test.ts); the other modules' lists are still read whole.
   const page = await module(large, 'solution-design');
   assert.equal(page.body.records.rows.length, 25, 'a page shows 25 records');
-  assert.ok(page.rows >= 1000 && page.rows < 1100, `the risks list is still read whole: ${page.rows} rows returned to the Worker`);
+  assert.ok(page.rows < 100, `Solution design is bounded: ${page.rows} rows returned to the Worker`);
   const roadmapPage = await module(large, 'product-roadmap');
   assert.ok(roadmapPage.rows >= 1000, `the other modules still read every record: ${roadmapPage.rows} rows returned to the Worker`);
 });

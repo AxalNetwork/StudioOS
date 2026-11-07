@@ -271,15 +271,12 @@ async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
   ).bind(p.id).first<{ n: number; linked: number }>();
   const featureCount = number(counts?.n), linked = number(counts?.linked);
   const unlinked = featureCount - linked;
-  // The risks list is the module page's facts (D662); the overview needs only its counts.
-  const risks = opts.rows ? rows(await env.DB.prepare(
-    'SELECT id, title, severity, owner_user_id, mitigation, state FROM venture_risks WHERE project_id = ? ORDER BY id',
-  ).bind(p.id).all<any>()) : null;
-  const bySeverity = risks ? null : new Map(rows(await env.DB.prepare(
+  // Risks are counted, never listed: the owner dropped the module page's `facts.risks` list (#4603 part 2, 2026-11-07).
+  const bySeverity = new Map(rows(await env.DB.prepare(
     'SELECT severity, COUNT(*) AS n FROM venture_risks WHERE project_id = ? GROUP BY severity',
   ).bind(p.id).all<{ severity: string | null; n: number }>()).map(r => [r.severity, number(r.n)]));
-  const severity = ['high', 'medium', 'low'].map(s => risks ? risks.filter(r => r.severity === s).length : bySeverity!.get(s) ?? 0);
-  const riskCount = risks ? risks.length : [...bySeverity!.values()].reduce((a, b) => a + b, 0);
+  const severity = ['high', 'medium', 'low'].map(s => bySeverity.get(s) ?? 0);
+  const riskCount = [...bySeverity.values()].reduce((a, b) => a + b, 0);
   const series: ChartSpec[] = [];
   if (featureCount) series.push({ kind: 'stack', rows: [{ label: 'Features', parts: [linked, unlinked] }], tones: ['v1', 'grey'], legend: [{ label: 'Linked', tone: 'v1' }, { label: 'Unlinked', tone: 'grey' }] });
   if (riskCount) series.push({ kind: 'stack', rows: [{ label: 'Risks', parts: severity }], tones: ['bad', 'warn', 'grey'], legend: ['High', 'Medium', 'Low'].map((label, i) => ({ label, tone: ['bad', 'warn', 'grey'][i] })) });
@@ -301,7 +298,7 @@ async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
     list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
       sort: { key: 'impact', label: 'Impact' }, orders: { impact: [...FEATURE_ORDERS.impact], effort: [...FEATURE_ORDERS.effort] } },
     ...(paged ? { paged } : {}),
-    facts: { features: featureCount, linked, ...(risks ? { risks } : {}) }, ...(opts.parts ? { parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } } : {}) };
+    facts: { features: featureCount, linked }, ...(opts.parts ? { parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } } : {}) };
 }
 
 /** D1097 (#2962): Solution design's "Runs on" from Vercel (VC4a). Its own read, Unreadable on its own. */
