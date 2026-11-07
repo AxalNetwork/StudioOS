@@ -64,7 +64,9 @@ export default function DeliveryZone() {
   const [filter, setFilter] = useState(() => (VIEWS.has(searchParams.get('view')) ? searchParams.get('view') : 'all'));
   const [state, setState] = useState({
     loading: true, error: '', items: [], totals: null,
-    sessions: [], reviews: {}, sessionsUnavailable: false,
+    // #4702: the held sessions and their review coverage are read AFTER the work
+    // products have rendered, and are `loading`/`null` until they land.
+    sessions: [], heldTotal: null, coverage: null, sessionsUnavailable: false, heldLoading: true,
   });
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState(null);
@@ -78,35 +80,35 @@ export default function DeliveryZone() {
   const [attaching, setAttaching] = useState(null);
 
   const load = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true, error: '' }));
+    setState((current) => ({ ...current, loading: true, error: '', heldLoading: true }));
     try {
       const data = await api.listMyAdvisorDeliverables();
-      // THREE SECOND SOURCES, none of which may take the page down with it. The
-      // engagements feed the create form's picker, and the sessions and reviews
-      // feed the review loop below — an advisor with unreadable sessions still
-      // has a delivery record, and "could not be read" is not "you have none".
-      const engs = await api.listMyAdvisorEngagements().catch(() => null);
-      const held = await api.listMyAdvisorBookings('completed').catch(() => null);
-      const sessions = held?.items || [];
-      const reviews = {};
-      if (held) {
-        for (const b of sessions.slice(0, 20)) {
-          reviews[b.id] = (await api.listBookingReviews(b.id).catch(() => null))?.items || [];
-        }
-      }
-      setEngagements(engs?.items || []);
-      setState({
-        loading: false, error: '',
-        items: data?.items || [], totals: data?.totals || null,
-        sessions, reviews, sessionsUnavailable: held === null,
-      });
+      // THE PRIMARY LIST RENDERS AS SOON AS IT ARRIVES. The engagements, the
+      // held sessions and the review coverage are secondary reads and used to be
+      // awaited one after another before anything was set, so a slow reviews
+      // route held the whole work-product list on a skeleton (#4702).
+      setState((current) => ({ ...current, loading: false, error: '', items: data?.items || [], totals: data?.totals || null }));
     } catch (error) {
-      setState({
-        loading: false,
+      setState((current) => ({
+        ...current, loading: false, heldLoading: false,
         error: error?.message || 'The delivery record could not be read.',
-        items: [], totals: null, sessions: [], reviews: {}, sessionsUnavailable: true,
-      });
+        items: [], totals: null, sessions: [], heldTotal: null, coverage: null, sessionsUnavailable: true,
+      }));
+      return;
     }
+    // THREE SECOND SOURCES, read together, none of which may take the page down
+    // with it: "could not be read" is not "you have none" and is not "no review".
+    const [engs, held, coverage] = await Promise.all([
+      api.listMyAdvisorEngagements().catch(() => null),
+      api.listMyAdvisorBookings('completed').catch(() => null),
+      api.getMyAdvisorReviewCoverage().catch(() => null),
+    ]);
+    setEngagements(engs?.items || []);
+    setState((current) => ({
+      ...current, heldLoading: false,
+      sessions: held?.items || [], heldTotal: held == null ? null : (Number.isFinite(Number(held.total)) ? Number(held.total) : (held.items || []).length),
+      coverage, sessionsUnavailable: held === null,
+    }));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -228,10 +230,12 @@ export default function DeliveryZone() {
     },
   };
 
-  const reviewed = state.sessions.filter((b) => (state.reviews[b.id] || []).length > 0);
-  const awaiting = state.sessions.filter((b) => (state.reviews[b.id] || []).length === 0);
-  const ratings = Object.values(state.reviews).flat().map((r) => Number(r.rating)).filter(Boolean);
-  const avg = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
+  // The review tiles are the coverage route's numbers over EVERY held session;
+  // a failed read leaves them unknown (`null`), never zero or "No review".
+  const cov = state.coverage;
+  const covById = new Map((cov?.items || []).map((i) => [i.booking_id, i]));
+  const ratingCount = cov?.ratings?.count ?? 0;
+  const avg = ratingCount > 0 ? Number(cov.ratings.sum) / ratingCount : null;
 
   return (
     <ZoneBody
@@ -466,57 +470,72 @@ export default function DeliveryZone() {
           title="Sessions you have held"
           blurb="Still here, and not on this artboard: whether each held session has a review, and your own review of them."
         />
-        {state.sessionsUnavailable
-          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
-            Your held sessions could not be read. That is not a claim that you have none.
-          </p>
-          : <>
-            <div className="grid grid-cols-3 gap-3">
-              <Stat label="Sessions held" value={state.sessions.length}
-                note={state.sessions.length ? 'marked completed' : 'none marked completed yet'} />
-              <Stat label="Reviewed" value={reviewed.length}
-                note={`${awaiting.length} without a review`} />
-              {/* THE EM-DASH THIS PAGE INHERITED AND DOES NOT KEEP. The legacy
-                  tab rendered `'—'` here when no rating existed, which is the
-                  absent-as-dash form D56/D68 forbids. */}
-              <Stat label="Average rating"
-                value={avg == null ? <Unrecorded>Not recorded</Unrecorded> : avg.toFixed(1)}
-                note={ratings.length ? `${ratings.length} review${ratings.length === 1 ? '' : 's'}` : 'no review has been filed'} />
-            </div>
-            {state.sessions.length > 0 && (
-              <ul className="mt-3 space-y-2">{state.sessions.slice(0, 10).map((b) => {
-                const rs = state.reviews[b.id] || [];
-                const mine = rs.find((r) => r.reviewer_role === 'advisor');
-                return (
-                  <li key={b.id} data-testid={`row-pr3-session-${b.id}`}
-                    className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <strong className="text-[12.5px] font-extrabold tracking-tight">{b.topic || 'Session'}</strong>
-                        <p className="mt-0.5 text-[11px] text-axal-faint">
-                          {b.founder_name || b.founder_email || `Member #${b.founder_user_id}`}
-                          {' · '}{b.slot_starts_at ? formatDateTime(b.slot_starts_at) : <Unrecorded>date not recorded</Unrecorded>}
-                        </p>
+        {state.heldLoading
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted" aria-busy="true">Reading your held sessions…</p>
+          : state.sessionsUnavailable
+            ? <p className="text-[12.5px] leading-relaxed text-axal-muted" role="alert">
+              Your held sessions could not be read. That is not a claim that you have none.
+            </p>
+            : <>
+              {/* #4702: the tiles are database counts over EVERY held session. If
+                  the coverage read failed, they say so; they never turn an
+                  unread session into "without a review". */}
+              <div className="grid grid-cols-3 gap-3">
+                <Stat label="Sessions held" value={cov?.held ?? state.heldTotal ?? state.sessions.length}
+                  note={(cov?.held ?? state.heldTotal ?? state.sessions.length) ? 'marked completed' : 'none marked completed yet'} />
+                <Stat label="Reviewed"
+                  value={cov ? cov.reviewed : <Unrecorded>Not read</Unrecorded>}
+                  note={cov ? `${cov.awaiting} without a review` : 'review coverage could not be read'} />
+                {/* THE EM-DASH THIS PAGE INHERITED AND DOES NOT KEEP. The legacy
+                    tab rendered `'—'` here when no rating existed, which is the
+                    absent-as-dash form D56/D68 forbids. */}
+                <Stat label="Average rating"
+                  value={avg == null ? <Unrecorded>Not recorded</Unrecorded> : avg.toFixed(1)}
+                  note={!cov ? 'review coverage could not be read'
+                    : ratingCount ? `${ratingCount} review${ratingCount === 1 ? '' : 's'}` : 'no review has been filed'} />
+              </div>
+              {state.sessions.length > 0 && (
+                <ul className="mt-3 space-y-2">{state.sessions.slice(0, 10).map((b) => {
+                  const item = cov ? covById.get(b.id) : undefined;
+                  // Known only when the coverage read answered AND listed this session.
+                  const unread = !item;
+                  const mine = item?.advisor_filed === true;
+                  return (
+                    <li key={b.id} data-testid={`row-pr3-session-${b.id}`}
+                      className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <strong className="text-[12.5px] font-extrabold tracking-tight">{b.topic || 'Session'}</strong>
+                          <p className="mt-0.5 text-[11px] text-axal-faint">
+                            {b.founder_name || b.founder_email || `Member #${b.founder_user_id}`}
+                            {' · '}{b.slot_starts_at ? formatDateTime(b.slot_starts_at) : <Unrecorded>date not recorded</Unrecorded>}
+                          </p>
+                        </div>
+                        {unread
+                          ? <Pill tone="neutral">Reviews not read</Pill>
+                          : item.reviews === 0
+                            ? <Pill tone="warn">No review</Pill>
+                            : <span className="flex items-center gap-1 text-[11px] font-semibold">
+                              <Star size={11} fill="currentColor" className="text-amber-400" />
+                              {item.rating == null ? '' : Number(item.rating).toFixed(1)}
+                              {mine ? <Pill tone="ok">Yours filed</Pill> : <Pill tone="neutral">Theirs only</Pill>}
+                            </span>}
                       </div>
-                      {rs.length === 0
-                        ? <Pill tone="warn">No review</Pill>
-                        : <span className="flex items-center gap-1 text-[11px] font-semibold">
-                          <Star size={11} fill="currentColor" className="text-amber-400" />
-                          {Number(rs[0].rating).toFixed(1)}
-                          {mine ? <Pill tone="ok">Yours filed</Pill> : <Pill tone="neutral">Theirs only</Pill>}
-                        </span>}
-                    </div>
-                    {/* THE CONTROL, NOT JUST THE COUNT. Porting the tiles and
-                        leaving the form behind would have deleted the capability
-                        the moment `/advisor/advisory/delivery` became a
-                        redirect: a page that says "3 without a review" and
-                        cannot file one is the gap it is reporting. */}
-                    {!mine && <ReviewForm booking={b} onFiled={load} />}
-                  </li>
-                );
-              })}</ul>
-            )}
-          </>}
+                      {/* THE CONTROL, NOT JUST THE COUNT. A page that says "3
+                          without a review" and cannot file one is the gap it is
+                          reporting. An unread session offers no form: filing over
+                          reviews that were not read could duplicate one. */}
+                      {!unread && !mine && <ReviewForm booking={b} onFiled={load} />}
+                    </li>
+                  );
+                })}</ul>
+              )}
+              {state.heldTotal != null && state.heldTotal > state.sessions.length && (
+                <p className="mt-2 text-[11px] text-axal-faint" data-testid="held-truncated">
+                  Showing the {Math.min(10, state.sessions.length)} newest of {state.heldTotal} held sessions. The counts above cover all {state.heldTotal}.
+                </p>
+              )}
+            </>}
       </Card>
 
       <StatedLimit title="What this collection cannot say">
@@ -648,7 +667,7 @@ function ReviewForm({ booking, onFiled }) {
     } catch (err) {
       const msg = (err?.message || '').toLowerCase();
       if (msg.includes('already reviewed')) setError('You have already reviewed this session.');
-      else if (msg.includes('completed')) setError('Only a session marked as held can be reviewed. Mark it held under Engagements first.');
+      else if (msg.includes('completed')) setError('Only a session marked as held can be reviewed. Mark it held first.');
       else setError(err?.message || 'The review could not be filed. Nothing was saved.');
     } finally {
       setBusy(false);

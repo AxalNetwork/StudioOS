@@ -270,6 +270,12 @@ export default function EarningsZone() {
         cell(r.client_name), r.sessions, r.unpriced_sessions,
         cents(r.retainer_cents), cents(r.gross_cents), cents(r.cut_cents), cents(r.net_cents),
       ].join(',')),
+      // #4702: clients past the listing cap are one summed row, so the rows above
+      // plus this one equal the Total, and the file never silently drops anyone.
+      ...(L?.clients_other ? [[
+        cell(`${L.clients_other.clients} more clients`), L.clients_other.sessions, L.clients_other.unpriced_sessions, '',
+        cents(L.clients_other.gross_cents), cents(L.clients_other.cut_cents), cents(L.clients_other.net_cents),
+      ].join(',')] : []),
       ['Total', totals?.sessions ?? '', totals?.unpriced_sessions ?? '', '',
         cents(totals?.gross_cents), cents(totals?.cut_cents), cents(totals?.net_cents)].join(','),
     ];
@@ -339,7 +345,8 @@ export default function EarningsZone() {
         `${window_.label} gross ${money(totals?.gross_cents) ?? 'not recorded'}`,
         `platform cut ${money(totals?.cut_cents) ?? 'not recorded'} at ${takeRatePct(L?.take_rate)}`,
         `you received ${money(totals?.net_cents) ?? 'not recorded'}`,
-        `${totals?.priced_sessions ?? 0} priced sessions, ${totals?.unpriced_sessions ?? 0} with no price recorded`,
+        `${totals?.priced_sessions ?? 0} priced sessions, ${totals?.unpriced_sessions ?? 0} with no price recorded, across all ${totals?.sessions ?? 0} bookings in the window`,
+        'the retainer column is contract value per cycle, not revenue earned in the window',
         L?.concentration
           ? `top client is ${L.concentration.pct}% of gross`
           : 'no concentration figure — nothing priced in this window',
@@ -529,6 +536,20 @@ export default function EarningsZone() {
                         <td className="px-2 py-2.5 text-right font-bold tabular-nums">{money(r.net_cents)}</td>
                       </tr>
                     ))}
+                    {L.clients_other && (
+                      <tr data-testid="ledger-d4-other" className="border-b border-axal-hairline/60 dark:border-gray-800">
+                        <td className="px-2 py-2.5 text-axal-muted">
+                          {L.clients_other.clients} more client{L.clients_other.clients === 1 ? '' : 's'}, summed
+                        </td>
+                        <td className="px-2 py-2.5 text-right tabular-nums">{L.clients_other.sessions}</td>
+                        <td className="px-2 py-2.5" />
+                        <td className="px-2 py-2.5 text-right font-bold tabular-nums">{money(L.clients_other.gross_cents)}</td>
+                        <td className="px-2 py-2.5 text-right tabular-nums text-amber-700 dark:text-amber-400">
+                          {L.clients_other.cut_cents ? `−${money(L.clients_other.cut_cents)}` : money(L.clients_other.cut_cents)}
+                        </td>
+                        <td className="px-2 py-2.5 text-right font-bold tabular-nums">{money(L.clients_other.net_cents)}</td>
+                      </tr>
+                    )}
                     <tr className="border-t-2 border-axal-hairline dark:border-gray-700" data-testid="ledger-d4-total">
                       <td className="px-2 py-2.5 text-[12.5px] font-extrabold">{window_.label} total</td>
                       <td className="px-2 py-2.5 text-right font-extrabold tabular-nums">{totals?.sessions}</td>
@@ -548,6 +569,20 @@ export default function EarningsZone() {
                   concentration: L.concentration,
                   equityClients: L.equity_clients || 0,
                 })}
+              </p>
+              {/* #4702: WHAT THE FIGURES COVER, from the response and not assumed.
+                  The totals are database sums over EVERY booking in the window;
+                  the client list is capped, and a capped list says so. */}
+              <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint" data-testid="ledger-completeness">
+                Totals cover all {L.completeness?.sessions ?? totals?.sessions ?? 0} booking{(L.completeness?.sessions ?? totals?.sessions) === 1 ? '' : 's'} created in this window.
+                {L.completeness && L.completeness.clients?.complete === false
+                  && ` ${L.completeness.clients.listed} of ${L.completeness.clients.total} clients are listed; the rest are summed in one row.`}
+                {L.completeness?.engagements?.read === false && ' Your contracts could not be read, so the Retainer column is empty.'}
+                {L.completeness?.engagements?.read && L.completeness.engagements.complete === false && ' Only the first 500 contracts are in the Retainer column.'}
+              </p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-axal-faint" data-testid="ledger-retainer-basis">
+                Retainer is the contract&rsquo;s value per cycle, for contracts in effect during this window. It is
+                not revenue earned in the window: that is the priced sessions in the other columns.
               </p>
               {totals?.unpriced_sessions > 0 && (
                 <p className="mt-2 text-[11.5px] leading-relaxed text-amber-800 dark:text-amber-300">
