@@ -77,8 +77,8 @@ test('the transcript line and the progress figures: a time or figure not recorde
   assert.equal(transcriptLine({ in: 'transcript', snippet: 'churn', at_seconds: null }), 'Found in a transcript “churn”');
   assert.equal(transcriptLine(null), null);
   assert.equal(catalogRow({ kind: 'video', id: 'v1', title: 'Pricing', match: { in: 'transcript', snippet: 'churn', at_seconds: 60 } }).found, 'Found in a transcript “churn” at 01:00');
-  const tiles = statsTiles({ courses_in_progress: 0, lessons_completed_this_month: 3, watch_seconds_this_month: null, exams: { passed: 1, sat: 2 } });
-  // Mutation checked: draw a null watch time as 0 → "0" and this fails.
+  const tiles = statsTiles({ courses_in_progress: 0, lessons_completed_this_month: 3, videos_played_this_month: null, exams: { passed: 1, sat: 2 } });
+  // Mutation checked: draw a null videos count as 0 → "0" and this fails.
   assert.deepEqual(tiles.map((t) => t.value), ['0', '3', 'Not recorded', '1 of 2']);
   assert.deepEqual(statsTiles(null).map((t) => t.value), ['Not recorded', 'Not recorded', 'Not recorded', 'Not recorded']);
 });
