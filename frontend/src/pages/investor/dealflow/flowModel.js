@@ -21,6 +21,7 @@
 
 import { SCOPES as SCORE_SCOPES } from '../../../components/scoring/scorecard/scorecardModel.js';
 import { BASE, MAX_COMPARE, roundWord } from './dealFlowModel.js';
+import { roundAsk } from '../../../components/deals/dealMoney.js';
 
 /** SCORING's eleven scope keys and labels, in its one order. There is no Overall. */
 export const SCOPE_KEYS = Object.freeze(SCORE_SCOPES.map((s) => s.key));
@@ -154,7 +155,7 @@ export function flowRows(scope, { flow, deals }) {
     sector: f?.sector || d?.project_sector || null,
     roundStatus: f?.round_status || d?.status || null,
     round: roundWord(f?.round_status || d?.status),
-    ask: f ? num(f.ask) : num(d?.target_raise ?? d?.amount),
+    ask: f ? num(f.ask) : roundAsk(d),
     currency: d?.currency || null,
     instrument: d?.instrument || null,
     inFlow: !!f,

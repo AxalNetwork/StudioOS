@@ -256,3 +256,4 @@ advisor CTA and stored search-result URLs after redirect retirement (#4415).
 - the cycle activation interrupted at its batch, then resumed until it converges, completing only when every applicant is done and duplicating nothing on a rerun;
 - approval against withdrawal in both orders, including the race where the approval lands between the withdrawal's read and its write;
 - notification retry: failed and cut-off sends, the conditional re-claim, and abandonment.
+D4856 (#4856): `catalog_modes_4856.test.ts` holds Platform's catalogue summary to `getCatalog`'s mode rule (current, other and unknown rows), and `storage_populations_4856.test.ts` holds the storage read's members, staff and unattributed populations to their sum.
