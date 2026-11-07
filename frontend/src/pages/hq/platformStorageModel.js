@@ -20,6 +20,8 @@ export const STORAGE_HQ = Object.freeze({
   byState: 'Members by state, per plan',
   byStateFoot: 'Members on each plan, by how much of their allowance they use.',
   table: 'By plan',
+  populations: 'Who holds the bytes',
+  populationsFoot: 'Members, staff and anything whose owner is no account; the total is their sum.',
   tableFoot: 'Totals only. A member’s files are theirs; HQ sees sums. No member or file is named here.',
   reading: 'Reading platform storage…',
   noMembers: 'No members on this plan',
@@ -68,6 +70,34 @@ const near = (t) => {
   return a === null || b === null ? null : a + b;
 };
 
+/** The total's split by holder, in the same bytes: "members 100 MB · staff 900 MB". */
+function populationNote(pops) {
+  if (!pops) return 'Who holds it: not read';
+  const parts = [['members', pops.members], ['staff', pops.staff], ['unattributed', pops.unattributed]]
+    .filter(([key, p]) => key !== 'unattributed' || (count(p?.files) ?? 0) > 0)
+    .map(([key, p]) => `${key} ${sizeText(p?.measured_bytes) ?? 'Not recorded'}`);
+  return parts.join(' · ');
+}
+
+/**
+ * D4856: the populations table's rows, one per holder, each with its own
+ * accounts, files, bytes and unknown-size files; the last row is their total.
+ * Null when the plans could not be read, with the read's reason.
+ */
+export function populationRows(read) {
+  const pops = read?.populations;
+  if (!pops) return null;
+  const row = (key, label, p) => ({
+    key, label,
+    accounts: countText(p?.accounts), files: countText(p?.files), stored: sizeText(p?.measured_bytes),
+    unknown: countText(p?.unknown_size_files),
+  });
+  const rows = [row('members', 'Members', pops.members), row('staff', 'Staff', pops.staff)];
+  if ((count(pops.unattributed?.files) ?? 0) > 0) rows.push(row('unattributed', 'Not an account', pops.unattributed));
+  rows.push({ ...row('total', 'Total', pops.total), accounts: null });
+  return rows;
+}
+
 /**
  * The six tiles. Each is `{ key, label, value, note }`; `value` null means it
  * could not be read, and `reason` says why.
@@ -77,12 +107,18 @@ export function tiles(read) {
   const totals = read?.totals || {};
   const stateReason = read?.by_tier_reason || null;
   const states = (pick) => (ts ? sumOf(ts, (t) => (t.by_state ? count(pick(t.by_state)) : null)) : null);
-  const withFiles = count(totals.members_with_files);
+  // D4856: a figure and its denominator come from one population. The total's
+  // note splits the total by who holds it; the members tile counts members only.
+  const pops = read?.populations || null;
+  const withFiles = count(pops?.members?.accounts_with_files);
+  const memberAccounts = count(pops?.members?.accounts);
   const stored = sizeText(totals.measured_bytes);
   return [
     { key: 'stored', label: 'Total stored', value: stored === null ? null : read?.complete === false ? `at least ${stored}` : stored,
-      note: read?.complete === false ? STORAGE_HQ.floor : withFiles === null ? 'Members not read' : `across ${countText(withFiles)} members with files` },
-    { key: 'members', label: 'Members with files', value: countText(withFiles), note: 'staff accounts not counted', reason: withFiles === null ? read?.by_plan_reason : null },
+      note: read?.complete === false ? STORAGE_HQ.floor : populationNote(pops) },
+    { key: 'members', label: 'Members with files', value: countText(withFiles),
+      note: memberAccounts === null ? 'Members not read' : `of ${countText(memberAccounts)} members · ${sizeText(pops.members.measured_bytes) ?? 'Not recorded'} stored · staff not counted`,
+      reason: withFiles === null ? read?.populations_reason || read?.by_plan_reason : null },
     { key: 'near', label: 'Near the limit', value: countText(ts ? sumOf(ts, near) : null), note: 'at 80% or more of their plan', reason: stateReason },
     { key: 'full', label: 'Storage full', value: countText(states((s) => s.full)), note: 'new uploads paused', reason: stateReason },
     { key: 'over', label: 'Over their plan', value: countText(states((s) => s.over)), note: 'after a plan change', reason: stateReason },

@@ -654,6 +654,16 @@ function FieldRow({ label, children, testid }) {
   );
 }
 
+/** D4856: the mirror's mode in words; a missing mode is not guessed. */
+const mirrorModeText = (mode) => (mode === 'live' ? 'Live' : mode === 'test' ? 'Test' : mode === 'unconfigured' ? 'No Stripe key: nothing is in the catalogue' : 'Not recorded');
+/** D4856: rows stamped for the other mode, said with that mode's name. */
+function otherModeText(catalog) {
+  const n = catalog.other_mode?.products;
+  if (!Number.isSafeInteger(n)) return 'Not recorded';
+  const mode = catalog.other_mode.mode;
+  return `${num(n)} ${mode ? `${mode}-mode ` : ''}${n === 1 ? 'product' : 'products'}, not counted`;
+}
+
 /** H16 P3 — the money rail: the key checkout is served, the mirror, the webhook. */
 export function PaymentsCatalogPanel({ loading, unreadable, payments }) {
   let body;
@@ -678,6 +688,10 @@ export function PaymentsCatalogPanel({ loading, unreadable, payments }) {
         </FieldRow>
         {catalog?.available ? (
           <>
+            <FieldRow label="Mirror mode" testid="hq-pay-mode">
+              <span>{mirrorModeText(catalog.stripe_mode)}</span>
+              <span className="block text-[10.5px] text-axal-faint">Counts below are this mode&apos;s rows only, the catalogue checkout reads.</span>
+            </FieldRow>
             <FieldRow label="Products" testid="hq-pay-products">
               <span className="tabular-nums">{num(catalog.products.active)} active of {num(catalog.products.all)}</span>
             </FieldRow>
@@ -690,8 +704,21 @@ export function PaymentsCatalogPanel({ loading, unreadable, payments }) {
                 </span>
               )}
             </FieldRow>
+            <FieldRow label="Other mode" testid="hq-pay-other-mode">
+              <span className="tabular-nums">{otherModeText(catalog)}</span>
+            </FieldRow>
+            <FieldRow label="Unknown mode" testid="hq-pay-unknown-mode">
+              <span className="tabular-nums">
+                {Number.isSafeInteger(catalog.unknown_mode?.products) ? `${num(catalog.unknown_mode.products)} ${catalog.unknown_mode.products === 1 ? 'product' : 'products'} with no recognised mode, not counted` : 'Not recorded'}
+              </span>
+            </FieldRow>
             <FieldRow label="Mirror last written" testid="hq-pay-written">
-              <span className="font-mono">{catalog.last_written_at ? day(catalog.last_written_at) : 'never written'}</span>
+              <span className="font-mono">{catalog.last_written_at ? day(catalog.last_written_at) : 'Not recorded'}</span>
+              <span className="block text-[10.5px] text-axal-faint">Latest write to a {catalog.stripe_mode === 'unconfigured' ? '' : `${catalog.stripe_mode}-mode `}row</span>
+            </FieldRow>
+            <FieldRow label="Sync" testid="hq-pay-sync">
+              <span>{catalog.sync_state === 'not_recorded' || !catalog.sync_state ? 'Not recorded' : String(catalog.sync_state)}</span>
+              <span className="block text-[10.5px] text-axal-faint">Whether a sync is running or failed is not stored.</span>
             </FieldRow>
           </>
         ) : (
@@ -903,7 +930,7 @@ export default function PlatformPage() {
     githubSync?.window?.available
       ? `Ticket mirror: ${num(githubSync.window.synced)} synced and ${num(githubSync.window.failed)} failed in ${num(githubSync.window.window_hours)}h` : null,
     paymentsCatalog?.catalog?.available
-      ? `Catalog mirror: ${num(paymentsCatalog.catalog.products.active)} active products, ${num(paymentsCatalog.catalog.prices.active)} active prices` : null,
+      ? `Catalog mirror${paymentsCatalog.catalog.stripe_mode === 'live' || paymentsCatalog.catalog.stripe_mode === 'test' ? `, ${paymentsCatalog.catalog.stripe_mode} mode` : ''}: ${num(paymentsCatalog.catalog.products.active)} active products, ${num(paymentsCatalog.catalog.prices.active)} active prices` : null,
     promoCodes?.available
       ? `${num(promoCodes.total)} promo codes, ${num(promoCodes.counts.active)} active` : null,
   ].filter(Boolean);

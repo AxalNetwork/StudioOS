@@ -79,7 +79,7 @@ test('by_tier: members, members with files, bytes in all, by kind and the median
   assert.deepEqual([plus.members, plus.measured_bytes, plus.median_bytes], [0, 0, null], 'no members: a measured 0 B, and no median');
   // Staff hold no plan: in no tier, and not among members with files.
   assert.equal(body.by_tier!.reduce((n, t) => n + t.members, 0), 5);
-  assert.equal(body.totals.members_with_files, 4);
+  assert.equal(body.populations!.members.accounts_with_files, 4);
   for (const t of body.by_tier!) assert.equal(Object.values(t.by_state!).reduce((n, v) => n + v, 0), t.members, `${t.tier}: every member in one state`);
   const keys = new Set<string>();
   const walk = (v: any) => { if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { keys.add(k); walk(x); } };
@@ -103,5 +103,5 @@ test('by_tier says what it could not read: an area unreadable leaves members and
   assert.match(partial.by_tier_reason!, /no member’s total is complete/);
   f.fail(/account_subscriptions/);
   const none = await readPlatformStorage(f.env);
-  assert.deepEqual([none.by_tier, none.totals.members_with_files, none.by_tier_reason], [null, null, 'The plans could not be read.']);
+  assert.deepEqual([none.by_tier, none.populations, none.by_tier_reason], [null, null, 'The plans could not be read.']);
 });
