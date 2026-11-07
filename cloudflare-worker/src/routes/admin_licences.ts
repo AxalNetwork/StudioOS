@@ -72,7 +72,7 @@ import { refuse } from '../util/refusal';
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
 import { pushLicenceToBranch } from '../services/licencePush';
-import { CORE_TERM_KEYS, DEFAULT_TERM_SECTIONS, LICENCE_TERM_KEYS, parseExpectedRevision, readLicenceTerms, termsDiff, validateCoreTermsBody, validateTermsBody, type CoreTermKey, type LicenceTerms, type LicenceTermsRecord } from '../services/licenceTerms';
+import { DEFAULT_TERM_SECTIONS, LICENCE_TERM_KEYS, parseExpectedRevision, readLicenceTerms, termsDiff, validateCoreTermsBody, validateTermsBody, type LicenceTerms, type LicenceTermsRecord } from '../services/licenceTerms';
 // D262 — termination reaches the branch's own administrators too.
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
@@ -674,18 +674,24 @@ r.patch('/:uid/terms', async (c) => {
     if (!rev.ok) return c.json({ error: 'revision_required', message: rev.message }, 400);
     const v = validateCoreTermsBody(b);
     if (!v.ok) return c.json({ error: 'invalid_terms', message: `${v.errors[0].field} ${v.errors[0].message}.`, errors: v.errors }, 400);
-    const keys = (Object.keys(v.set) as CoreTermKey[]).filter((k) => CORE_TERM_KEYS.includes(k));
+    const keys = Object.keys(v.set) as Array<keyof typeof v.set>;
     if (!keys.length) return c.json({ error: 'nothing_to_change', message: 'Name at least one term to change.' }, 400);
     const coreOf = (l: LicenceRow) => ({
       term_years: l.term_years ?? null, annual_fee_cents: l.annual_fee_cents ?? null, currency: l.currency ?? null,
       revenue_share_bps: l.revenue_share_bps ?? null, token_split_bps: l.token_split_bps ?? null,
       starts_on: l.starts_on ?? null, renews_on: l.renews_on ?? null,
     });
+    // READ → MERGE → ONE LITERAL UPDATE, the way every PATCH in this repo is written (no `${}` in `DB.prepare`). Only
+    // the named keys differ from the snapshot; the revision guard makes the merge safe, because a write whose snapshot
+    // is not the stored revision changes no row.
+    const merged = { ...coreOf(licence), ...v.set };
     const res = await c.env.DB.prepare(
       `UPDATE territory_licences
-          SET ${keys.map((k) => `${k} = ?`).join(', ')}, terms_revision = terms_revision + 1, updated_at = ?
+          SET term_years = ?, annual_fee_cents = ?, currency = ?, revenue_share_bps = ?, token_split_bps = ?,
+              starts_on = ?, renews_on = ?, terms_revision = terms_revision + 1, updated_at = ?
         WHERE id = ? AND terms_revision = ?`,
-    ).bind(...keys.map((k) => v.set[k] ?? null), nowIso(), licence.id, rev.value).run();
+    ).bind(merged.term_years, merged.annual_fee_cents, merged.currency, merged.revenue_share_bps, merged.token_split_bps,
+      merged.starts_on, merged.renews_on, nowIso(), licence.id, rev.value).run();
     if (Number(res?.meta?.changes ?? 0) !== 1) {
       const now = await byUid(c.env, licence.uid);
       return c.json({
@@ -771,16 +777,39 @@ r.put('/:uid/terms', async (c) => {
     // and does nothing if another save inserted first; a later save updates only
     // the revision it read. No row changed means someone got there first: a 409,
     // and no event is appended for a save that did not commit.
-    const cols = [...LICENCE_TERM_KEYS, 'sections_json', 'updated_by_user_id', 'updated_at'];
     const values = [...LICENCE_TERM_KEYS.map((k) => after.terms[k] ?? null), JSON.stringify(overrides), admin.id, nowIso()];
     const written = before === null
       ? await c.env.DB.prepare(
-        `INSERT INTO licence_terms (licence_uid, ${cols.join(', ')}, revision)
-         VALUES (?, ${cols.map(() => '?').join(', ')}, 1)
+        `INSERT INTO licence_terms
+           (licence_uid,
+          licensor_ip_entity, licensor_brand_entity, governing_law, exclusive,
+          non_compete_months, referrals_note, renewal_mode, non_renewal_notice_days,
+          cure_days, termination_note, share_subscriptions_bps, share_licence_fees_bps,
+          share_token_margin_bps, royalty_platform_licence_bps, payment_terms_days, late_interest_bps,
+          minimum_guarantee_cents, fee_invoiced, first_look_business_days, co_invest_max_bps,
+          carry_share_bps, referral_fee_bps, hq_approval_above_cents, conflicts_note,
+          seat_includes, brand_kit, usage_report_day, statement_period,
+          data_role, audit_right, audit_notice_days, sections_json,
+          updated_by_user_id, updated_at,
+          revision)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
          ON CONFLICT(licence_uid) DO NOTHING`,
       ).bind(licence.uid, ...values).run()
       : await c.env.DB.prepare(
-        `UPDATE licence_terms SET ${cols.map((k) => `${k} = ?`).join(', ')}, revision = revision + 1
+        `UPDATE licence_terms SET
+          licensor_ip_entity = ?, licensor_brand_entity = ?, governing_law = ?,
+          exclusive = ?, non_compete_months = ?, referrals_note = ?,
+          renewal_mode = ?, non_renewal_notice_days = ?, cure_days = ?,
+          termination_note = ?, share_subscriptions_bps = ?, share_licence_fees_bps = ?,
+          share_token_margin_bps = ?, royalty_platform_licence_bps = ?, payment_terms_days = ?,
+          late_interest_bps = ?, minimum_guarantee_cents = ?, fee_invoiced = ?,
+          first_look_business_days = ?, co_invest_max_bps = ?, carry_share_bps = ?,
+          referral_fee_bps = ?, hq_approval_above_cents = ?, conflicts_note = ?,
+          seat_includes = ?, brand_kit = ?, usage_report_day = ?,
+          statement_period = ?, data_role = ?, audit_right = ?,
+          audit_notice_days = ?, sections_json = ?, updated_by_user_id = ?,
+          updated_at = ?,
+          revision = revision + 1
           WHERE licence_uid = ? AND revision = ?`,
       ).bind(...values, licence.uid, rev.value).run();
     if (Number(written?.meta?.changes ?? 0) !== 1) return conflict(await readLicenceTerms(c.env, licence.uid));
