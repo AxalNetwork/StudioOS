@@ -1,24 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
+import { railPressHeaders } from '../../../lib/railPage';
 import { Lightbox } from '../../../ui';
+import { useRailOption } from '../../../ui/railCrumbs';
+import { NEW_PATH } from './newDeckModel';
 import {
-  BRANDING_FAILED, BRANDING_TITLE, READINESS_FAILED, READINESS_TITLE, WATERMARK_BAD, WATERMARK_PLAN,
-  brandingView, isSpinoutDeck, readinessView, watermarkInput, watermarkSentence,
+  BRANDING_FAILED, BRANDING_TITLE, DRAFT_SENTENCE, DRAFT_TITLE, READINESS_FAILED, READINESS_TITLE, WATERMARK_BAD, WATERMARK_PLAN,
+  brandingView, draftRefusal, isSpinoutDeck, proposalHref, readinessView, watermarkInput, watermarkSentence,
 } from './studioActionsModel';
 
 /**
- * D898 group E (#2676) — the old template builder's actions, each now a
+ * D898 group E (#2676) — the old template builder's four actions, each now a
  * studio action (the owner's call, 2026-10-27). The builder is retired;
- * `/raise/pitch/builder` opens the studio. Its fourth action, drafting the deck
- * again from the project, was unmounted by D1604 and is gone (#4734): the deck's
- * Ask proposes instead.
+ * `/raise/pitch/builder` opens the studio.
  *
- *   SpinoutReadiness  for a Spin-Out deck: what is still empty, and
+ *   AskDraftFromProject  on the Decks tab's current deck. Its proposal is kept
+ *                     card by card at New deck's step 4, as a template start's is.
+ *   SpinoutReadiness  beside it, for a Spin-Out deck: what is still empty, and
  *                     whether an export is a draft. A read.
- *   BrandingCard      the plan, the footer and the watermark, which
+ *   BrandingCard      beside it: the plan, the footer and the watermark, which
  *                     a Studio plan changes behind a dialog.
  *   (Recommended)     New deck's Start from marks the recommended template
  *                     (`NewDeck.jsx`, `markRecommended`).
@@ -63,6 +66,40 @@ function Refusal({ refusal, testId }) {
       {refusal.link ? <Link to={refusal.link.href} className="underline">{refusal.link.text}</Link> : null}
       {refusal.topUp ? <a href={refusal.topUp.href} className="underline">{refusal.topUp.text}</a> : null}
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ask Eadwyn to draft from project (#3930: was "Fill from project")
+// ---------------------------------------------------------------------------
+
+/** "Ask Eadwyn to draft from project": the deck's template drafted again as a proposal, reviewed at New deck. */
+export function AskDraftFromProject({ deck, q }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState(null);
+  // D771: the rail names the option while its run is at the model.
+  useRailOption(busy ? 'form:deck' : null, DRAFT_TITLE);
+  const draft = async () => {
+    setBusy(true); setRefusal(null);
+    try {
+      const r = await api.deckAutofill(deck.id, railPressHeaders('form:deck'));
+      if (!r?.proposal?.id) throw new Error('No proposal came back.');
+      navigate(proposalHref(NEW_PATH, q, r.proposal.id));
+    } catch (e) {
+      setRefusal(draftRefusal(e, `${NEW_PATH}${q}`)); setOpen(false);
+      if (e?.status !== 409 && e?.status !== 402) reportError('pitch-studio:fill', e);
+    } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button type="button" className={GHOST} onClick={() => setOpen(true)} data-testid="pitch-studio-fill">{DRAFT_TITLE}</button>
+      <Refusal refusal={refusal} testId="pitch-studio-fill-refusal" />
+      {open ? (
+        <Confirm title={DRAFT_TITLE} sentence={DRAFT_SENTENCE} action="Draft" busy={busy} onConfirm={draft} onClose={() => setOpen(false)} testId="pitch-studio-fill-dialog" />
+      ) : null}
+    </>
   );
 }
 

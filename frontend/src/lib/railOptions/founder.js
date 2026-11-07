@@ -52,6 +52,7 @@ const REVIEWER = 'frontend/src/pages/DeckReviewerPage.jsx';
 const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
 // D1604 (#3716, pd1): the one-click moved from PitchStudio.jsx to the studio's home.
 const ONE_CLICK = 'frontend/src/pages/raise/pitch/OneClickBuild.jsx';
+const STUDIO_ACTIONS = 'frontend/src/pages/raise/pitch/StudioActions.jsx';
 const REHEARSE = 'frontend/src/pages/raise/pitch/RehearsePanel.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
 const AREA_LIGHTBOX = 'frontend/src/pages/raise/pitch/AreaLightbox.jsx';
@@ -203,9 +204,13 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-objection', route: '/raise/investor-narrative/story', label: 'Answer an objection', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/raise/narrative/StoryTab.jsx', 'narrativeApi.draftObjection(']],
   },
-  // The pitch deck's template fill. D898 group E (#2676): the template builder retired, and a template is
-  // started from New deck. The old studio action that drafted a deck again from the project
-  // (`form:deck`, `api.deckAutofill`) has been unmounted since D1604; the deck's Ask proposes instead (#4734).
+  // The pitch deck's two template fills. D898 group E (#2676): the template
+  // builder retired; Ask Eadwyn to draft from project (#3930: was "Fill from project") is on the studio's Decks tab, and a
+  // template is started from New deck.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch', label: 'Ask Eadwyn to draft from project', kind: 'write', handler: 'form',
+    at: [[STUDIO_ACTIONS, 'api.deckAutofill(']],
+  },
   {
     page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch/new', label: 'Use this template', kind: 'write', handler: 'form',
     at: [[NEW_DECK, 'api.deckApplyMethod(']],

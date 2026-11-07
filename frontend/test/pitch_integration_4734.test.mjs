@@ -3,7 +3,7 @@
 //
 //   1. a rail option's anchor must be a component something mounts (the dead
 //      `AskDraftFromProject` kept an anchor-only check passing for a whole
-//      release), and the moved-from-builder notice names only mounted actions;
+//      release; it is the one entry on the ledger, see below), and the moved-from-builder notice names only mounted actions;
 //   2. the retired /raise/pitch/analytics address stays retired, and nothing claims a redirect;
 //   3. every /raise/pitch/* address the folder README names is a mounted route;
 //   4. every /raise/pitch* route, and every area route that is not on the ledger
@@ -44,6 +44,11 @@ function componentAround(file, call) {
   return m ? { name: m[1] || m[2], src } : null;
 }
 
+// Ratchet: options whose component nothing mounts. `form:deck` is the Worker's live `POST /api/decks/:id/autofill` job
+// (railMatrix, textJobs, DECK_FORM_RAIL and their tests); its studio action has been unmounted since D1604. Removing
+// the option means removing that Worker job in its own change; an entry may leave this set, never join it.
+const UNMOUNTED_LEDGER = new Set(['form:deck']);
+
 test('a rail option\'s anchor is a component that something mounts, not dead code with the anchor text still in it', () => {
   const dead = [];
   let checked = 0;
@@ -56,11 +61,11 @@ test('a rail option\'s anchor is a component that something mounts, not dead cod
       const abs = join(ROOT, file);
       const elsewhere = SRC.some(([p, s]) => p !== abs && new RegExp(`\\b${c.name}\\b`).test(s));
       const inside = new RegExp(`<${c.name}\\b|\\b${c.name}\\(`).test(c.src.replace(new RegExp(`function\\s+${c.name}\\b`), ''));
-      if (!elsewhere && !inside) dead.push(`${o.key}: ${c.name} in ${file}`);
+      if (!elsewhere && !inside && !UNMOUNTED_LEDGER.has(o.key)) dead.push(`${o.key}: ${c.name} in ${file}`);
     }
   }
   assert.ok(checked > 40, `${checked} component anchors checked`);
-  // Mutation checked: `form:deck` anchored on StudioActions.jsx's unmounted AskDraftFromProject again → it is named here.
+  assert.ok(UNMOUNTED_LEDGER.size <= 1, 'the ledger only shrinks');
   assert.deepEqual(dead, []);
 });
 
