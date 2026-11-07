@@ -159,7 +159,13 @@ test('a read that began before a move cannot undo it when it lands afterwards', 
   const slow = deferred();
   let reads = 0;
   const { m, restore } = await mountBoard([deal(1, 'Alpha', 'idea')], {
-    pipelineActive: () => { reads += 1; return reads === 1 ? Promise.resolve([deal(1, 'Alpha', 'idea')]) : slow.promise; },
+    // Read 2 is the one held open. A read that began before the move is dropped and replaced (#4701),
+    // and the replacement (read 3) sees the server as it is after the move.
+    pipelineActive: () => {
+      reads += 1;
+      if (reads === 1) return Promise.resolve([deal(1, 'Alpha', 'idea')]);
+      return reads === 2 ? slow.promise : Promise.resolve([deal(1, 'Alpha', 'mvp_dev')]);
+    },
     pipelineAdvance: async () => ({}),
     pipelineTriggerReview: async () => ({}),
   });
