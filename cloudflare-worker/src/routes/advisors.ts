@@ -1916,20 +1916,51 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
     // 15% must still read 15% after the setting moves to 12%, or a quarter an
     // advisor already reconciled restates itself.
     //
+    // #4713 (D4713): STAMPED ONCE, WHEN THE LINE IS PRICED. A write that leaves
+    // the amount as it is (a status-only change: billed → collected) keeps the
+    // stored rate and cut, whatever the setting reads now. Only a change of the
+    // amount is a reprice: it is stamped at the current rate and written to
+    // `advisor_booking_price_events` with who and when. A collected or
+    // written-off line's amount is settled history and is not repriced (409).
+    //
     // Clearing the price clears both. A line with no amount has no cut, and
     // leaving a stale cut behind would be a figure with nothing under it.
-    const rate = await takeRate(c.env);
-    const cut = cutCents(amount_cents, rate.bps);
-    await c.env.DB.prepare(
+    const before = row as BookingRow & { amount_cents: number | null; platform_cut_cents?: number | null; take_rate_bps?: number | null };
+    const amountChanged = amount_cents !== (before.amount_cents ?? null);
+    if (amountChanged && before.amount_cents != null && (row.billing_state === 'collected' || row.billing_state === 'written_off')) {
+      return c.json({ detail: 'This session’s price is settled history: it was already collected or written off, so it cannot be repriced.', code: 'price_settled' }, 409);
+    }
+    let rateBps: number | null;
+    let cut: number | null;
+    if (amountChanged) {
+      const rate = await takeRate(c.env);
+      rateBps = amount_cents == null ? null : rate.bps;
+      cut = cutCents(amount_cents, rate.bps);
+    } else {
+      rateBps = before.take_rate_bps ?? null;
+      cut = before.platform_cut_cents ?? null;
+    }
+    const writes = [c.env.DB.prepare(
       `UPDATE advisor_bookings
           SET amount_cents = ?, billing_state = ?,
               platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
         WHERE id = ?`
     ).bind(
       amount_cents, billing_state,
-      cut, amount_cents == null ? null : rate.bps,
+      cut, rateBps,
       nowIso(), row.id,
-    ).run();
+    )];
+    if (amountChanged && before.amount_cents != null) {
+      writes.push(c.env.DB.prepare(
+        `INSERT INTO advisor_booking_price_events
+           (booking_id, actor_user_id, impersonated_by, from_amount_cents, to_amount_cents, from_take_rate_bps, to_take_rate_bps, from_cut_cents, to_cut_cents)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        row.id, Number(user.id), (user as any).impersonated_by ? Number((user as any).impersonated_by) : null,
+        before.amount_cents, amount_cents, before.take_rate_bps ?? null, rateBps, before.platform_cut_cents ?? null, cut,
+      ));
+    }
+    await c.env.DB.batch(writes);
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
       .bind(row.id).first<BookingRow & { amount_cents: number | null; billing_state: string }>();
     return c.json(bookingDto(fresh!, advisorMoney(fresh!)));
@@ -2182,6 +2213,44 @@ advisors.get('/me/earnings', async (c) => {
 // says 'none' no surface may render any of this as a receipt. D75.
 // ---------------------------------------------------------------------------
 
+/**
+ * #4713 (D4713): the ledger's figures by what happened to each priced line.
+ *
+ *   priced        every priced line (the existing gross / cut / net)
+ *   billed        lines billed, then collected or written off: ever billed
+ *   collected     lines the advisor recorded as collected: the only money "received"
+ *   written_off   lines the advisor wrote off
+ *   outstanding   billed and neither collected nor written off
+ *
+ * billed = collected + written_off + outstanding, by construction. Each line
+ * counts at its own stored rate and cut (the fallback rate only for a line
+ * priced before 241 stored one). Priced lines still in the `unpriced` state
+ * (an amount recorded, nothing said about it) count in `priced` only.
+ */
+export function ledgerFigures(
+  lines: Array<{ amount_cents: number | null; platform_cut_cents?: number | null; take_rate_bps?: number | null; billing_state?: string | null }>,
+  fallbackBps: number,
+) {
+  const zero = () => ({ gross_cents: 0, cut_cents: 0, net_cents: 0, sessions: 0 });
+  const add = (t: ReturnType<typeof zero>, gross: number, cut: number) => {
+    t.gross_cents += gross; t.cut_cents += cut; t.net_cents += gross - cut; t.sessions += 1;
+  };
+  const f = { priced: zero(), billed: zero(), collected: zero(), written_off: zero(), outstanding: zero() };
+  for (const l of lines) {
+    if (l.amount_cents == null) continue;
+    const gross = Number(l.amount_cents);
+    const bps = l.take_rate_bps != null ? Number(l.take_rate_bps) : fallbackBps;
+    const cut = l.platform_cut_cents != null ? Number(l.platform_cut_cents) : (cutCents(gross, bps) ?? 0);
+    add(f.priced, gross, cut);
+    const st = l.billing_state ?? 'unpriced';
+    if (st === 'billed' || st === 'collected' || st === 'written_off') add(f.billed, gross, cut);
+    if (st === 'collected') add(f.collected, gross, cut);
+    if (st === 'written_off') add(f.written_off, gross, cut);
+    if (st === 'billed') add(f.outstanding, gross, cut);
+  }
+  return f;
+}
+
 /** One row of D4's "By client · Q3" table, reconciling by construction. */
 function clientLineDto(r: {
   client_name: string | null; client_user_id: number | null;
@@ -2246,7 +2315,7 @@ advisors.get('/me/ledger', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT b.founder_user_id AS client_user_id, u.name AS client_name,
               b.amount_cents AS amount_cents, b.platform_cut_cents AS platform_cut_cents,
-              b.take_rate_bps AS take_rate_bps
+              b.take_rate_bps AS take_rate_bps, b.billing_state AS billing_state
          FROM advisor_bookings b
          LEFT JOIN users u ON u.id = b.founder_user_id
         WHERE b.advisor_id = ?
@@ -2257,10 +2326,28 @@ advisors.get('/me/ledger', async (c) => {
     ).bind(m.id, from, from, until, until).all<{
       client_user_id: number | null; client_name: string | null;
       amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null;
+      billing_state: string | null;
     }>();
 
     const rate = await takeRate(c.env);
     const lines = rows.results || [];
+    // #4713 (D4713): the ledger's DISTINCT figures, by what happened to each
+    // priced line. Priced work is not billed, billed is not collected, and
+    // none of it is a receipt: `collected` is the advisor's own note that the
+    // money arrived (205), `recorded_payouts` is what the platform's payout
+    // ledger holds as paid. Each line counts at its own stored rate and cut.
+    const figures = ledgerFigures(lines, rate.bps);
+    let recordedPayouts: { available: false } | { available: true; paid_cents: number; payouts: number };
+    try {
+      const pr = await c.env.DB.prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS paid_cents, COUNT(*) AS payouts
+           FROM advisor_payouts
+          WHERE advisor_id = ? AND state = 'paid'
+            AND (? IS NULL OR datetime(paid_at) >= datetime(?))
+            AND (? IS NULL OR datetime(paid_at) < datetime(?))`
+      ).bind(m.id, from, from, until, until).first<{ paid_cents: number; payouts: number }>();
+      recordedPayouts = pr ? { available: true, paid_cents: Number(pr.paid_cents), payouts: Number(pr.payouts) } : { available: false };
+    } catch { recordedPayouts = { available: false }; }
 
     // Grouped in the worker rather than by SQL, because the cut of a line
     // recorded before 241 has to be DERIVED from its stored rate (or the
@@ -2365,6 +2452,8 @@ advisors.get('/me/ledger', async (c) => {
         // complete one.
         unpriced_sessions: totals.unpriced,
       },
+      figures,
+      recorded_payouts: recordedPayouts,
       // NULL WHEN THERE IS NOTHING TO CONCENTRATE. A share of zero gross is
       // not 0% — it is a question with no answer, and 0% reads as "well
       // spread", which is the opposite of what an empty quarter means.
@@ -4599,6 +4688,10 @@ function availabilityDto(r: AvailabilityRow | null): any {
     // Lets the page tell "no rules configured" from "rules configured to
     // nothing", which read identically in the four fields above.
     configured: Boolean(r),
+    // #4713 (D4713): the version of this rule set. A replacement that names the
+    // revision it was edited from is refused when the rules have changed since
+    // (another tab, another device). `''` is "no rules yet".
+    revision: r?.updated_at ?? '',
   };
 }
 
@@ -4682,6 +4775,40 @@ advisors.put('/me/availability', async (c) => {
     const buffer = parseOptionalCount(body.buffer_minutes, 'buffer_minutes', 24 * 60);
     const notice = parseOptionalCount(body.min_notice_hours, 'min_notice_hours', 24 * 365);
     const blackouts = parseBlackouts(body.blackouts);
+    // #4713 (D4713): optional compare-and-set. A caller that sends the
+    // `revision` it read replaces only that version of the rules: if another
+    // tab changed them since, the write is refused (409 `rules_changed`) with
+    // the current rules, and nothing is overwritten. Omitting it keeps the
+    // unconditional replace the route always had.
+    const expected = body.expected_revision !== undefined && body.expected_revision !== null ? String(body.expected_revision) : null;
+    const rulesChanged = async () => {
+      const row = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json({
+        detail: 'Your availability rules changed somewhere else since you opened them. Nothing was saved; reload to see the current rules.',
+        code: 'rules_changed', current: availabilityDto(row),
+      }, 409);
+    };
+    if (expected !== null) {
+      // The compare and the write are ONE statement, so two tabs saving from
+      // the same revision cannot both win: the loser's UPDATE matches no row.
+      const at = nowIso();
+      const res = expected === ''
+        ? await c.env.DB.prepare(
+          `INSERT INTO advisor_availability_rules
+             (advisor_id, weekly_paid_cap, buffer_minutes, min_notice_hours, blackouts_json, timezone, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(advisor_id) DO NOTHING`
+        ).bind(m.id, cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, at).run()
+        : await c.env.DB.prepare(
+          `UPDATE advisor_availability_rules
+              SET weekly_paid_cap = ?, buffer_minutes = ?, min_notice_hours = ?, blackouts_json = ?, timezone = ?, updated_at = ?
+            WHERE advisor_id = ? AND updated_at = ?`
+        ).bind(cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, m.id, expected).run();
+      if (!Number((res as any).meta?.changes ?? 0)) return rulesChanged();
+      const done = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json(availabilityDto(done));
+    }
     const now = nowIso();
     await c.env.DB.prepare(
       `INSERT INTO advisor_availability_rules
