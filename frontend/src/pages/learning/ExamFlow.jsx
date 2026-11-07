@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { Check, Timer, X } from 'lucide-react';
 import { Card, Pill, Stat, StatGrid, Unrecorded } from '../../ui';
 import { LearningLoading, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
+import { DRAFT_WORDS } from './learningDrafts';
+import { useLearningDraft } from './useLearningDraft';
 import { NOT_LIVE, attemptsLeft as attemptsLeftOf, byPosition, formatClock, formatDay, minutesLabel } from './learningModel';
 import {
   answerIndexes, attemptOutcome, attemptSecondsLeft, isLearningPath, openAttemptOf, optionRows, perQuestionResults, revealedAnswers, reviewLine, reviewRows, scoreOf,
@@ -121,7 +123,7 @@ function ExamIntro({ exam, attempts, left, attemptsStatus, onRetryAttempts, onSt
       {open && (
         <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink dark:text-gray-200" data-testid="exam-open-attempt">
           You have an attempt open, started {formatDay(open.started_at) || 'on a date not recorded'}.
-          {limit ? ' Its clock has run since then.' : ''} Choices are not saved until you submit, so a resumed attempt starts with none chosen.
+          {limit ? ' Its clock has run since then.' : ''} Your choices are kept on this device as you make them, so reopening this attempt here restores them. They are not sent until you submit.
         </p>
       )}
       {draft && (
@@ -173,9 +175,33 @@ function AttemptList({ attempts, status, onRetry, title, except, resultLabels = 
   );
 }
 
+/**
+ * The choices saved for an attempt, kept only where they still fit it: a question that is in the attempt, an option that
+ * belongs to that question. Anything else (a stale draft, an edited exam) is dropped, never sent.
+ */
+export function restoredAnswers(saved, questions) {
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
+  const out = {};
+  for (const q of Array.isArray(questions) ? questions : []) {
+    const had = saved[q.uid];
+    if (!Array.isArray(had)) continue;
+    const keys = new Set(optionRows(q.options).map((o) => o.key));
+    const kept = had.filter((k) => keys.has(k));
+    if (kept.length) out[q.uid] = q.kind === 'multiple' ? kept : kept.slice(0, 1);
+  }
+  return out;
+}
+
 function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
   const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState({});
+  // #4646: this learner's choices for THIS attempt come back after a refresh, a closed tab or a lost connection, kept on
+  // this device under the attempt's own uid. The server still owns the clock and the submission; resuming reuses the
+  // open attempt and consumes no allowance.
+  const saved = useLearningDraft({ kind: 'exam', uid: exam?.uid, attempt: attempt?.uid });
+  const [answers, setAnswers] = useState(() => restoredAnswers(saved.initial, attempt?.questions));
+  useEffect(() => { saved.write(answers); }, [answers]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Once the server has the attempt's answers, the copy on the device goes.
+  useEffect(() => { if (attempt?.submitted_at) saved.clear(); }, [attempt?.submitted_at]); // eslint-disable-line react-hooks/exhaustive-deps
   const [review, setReview] = useState(false);
   const sending = useRef(false);
   useEffect(() => { if (!busy) sending.current = false; }, [busy]);
@@ -238,6 +264,9 @@ function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
     <Card padding="none" className="min-w-0 max-w-[760px]" data-testid="exam-taking">
       <div className="flex items-center justify-between gap-3 border-b border-axal-hairline px-4 py-2.5 dark:border-gray-800">
         <span className="text-[12px] tabular-nums text-axal-muted dark:text-gray-400">Question {at + 1} of {total} · {answered} answered</span>
+        {saved.state !== 'none' && (
+          <span role="status" className={`text-[11.5px] ${saved.state === 'failed' ? 'text-amber-800 dark:text-amber-300' : 'text-axal-faint dark:text-gray-500'}`} data-testid="exam-draft-state" data-state={saved.state}>{DRAFT_WORDS[saved.state]}</span>
+        )}
         <span className={`inline-flex items-center gap-1 text-[13px] font-semibold tabular-nums ${left === 0 ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-gray-100'}`} data-testid="text-exam-clock">
           <Timer size={14} aria-hidden="true" /> {clockLabel}
         </span>

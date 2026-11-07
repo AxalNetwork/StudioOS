@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useR
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { preserveReloadGuards } from './lib/reloadGuard';
-import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
+import { consumePendingNextOnce, loginRedirectFor, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
@@ -37,6 +37,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { collectRouteModules } from './lib/routeModules';
 const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));
 import { useRedirectBeacon } from './lib/redirectBeacon';
+import { ventureSearch } from './pages/raise/pitch/pitchRoutes';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -614,7 +615,9 @@ export { ValidateZoneRedirect };
 // D4254 (#4254): an old Pitch address lands on its new one, venture and hash kept.
 function KeepQueryRedirect({ to }) {
   const loc = useLocation();
-  return <Navigate to={{ pathname: to, search: loc.search, hash: loc.hash }} replace />;
+  // #4853: the venture rides as `project_id`, the only name the Pitch Studio reads. The Raise module's
+  // links said `?project=`, which a redirect that kept the query as written left unread.
+  return <Navigate to={{ pathname: to, search: ventureSearch(loc.search), hash: loc.hash }} replace />;
 }
 
 // D2319: legacy helper contracts remain exported for isolated tests; their
@@ -1773,7 +1776,8 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   }
 
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    // #4646: a Learning deep link comes back to the exact course, lesson or webinar after sign-in, through every method.
+    return <Navigate to={loginRedirectFor(location)} state={{ from: location }} replace />;
   }
 
   // Task #1 — route to the stored invite/deep-link target (at most once per
@@ -3299,6 +3303,9 @@ function AppInner() {
       <Route path="/raise/pitch/script" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="script" />))} />
       <Route path="/raise/pitch/share" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="analytics" />))} />
       <Route path="/raise/pitch-deck" element={<KeepQueryRedirect to="/raise/pitch" />} />
+      {/* #4853: the module's own Add form was a second sharing flow; it lands on the Studio's Share tab.
+          A static path, so `/raise/:slug/new` never takes it. */}
+      <Route path="/raise/pitch-deck/new" element={<KeepQueryRedirect to="/raise/pitch/share" />} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
       {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. The
           template builder retired with group E: its four actions are the
