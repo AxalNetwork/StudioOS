@@ -336,7 +336,7 @@ r.post('/company/create', async (c) => {
 //     changed field NAMES and the revision before and after, never a value. A rename and a currency change keep
 //     their own events beside it.
 //   - An archived company refuses (`companyAccess.archivedRefusal`), as every company write does.
-const UPDATABLE = ['company_name', 'stage', 'revenue_range', 'employee_count',
+const updatable = ['company_name', 'stage', 'revenue_range', 'employee_count',
   'current_products', 'international_presence', 'expansion_goals',
   'logo_url', 'website', 'linkedin_url', 'description', 'default_currency'] as const;
 
@@ -392,7 +392,7 @@ r.patch('/company/:uid', async (c) => {
       if (!code) return c.json({ code: 'currency_invalid', detail: CURRENCY_INVALID_MESSAGE }, 422);
       body.default_currency = code;
     }
-    const changed = UPDATABLE.filter((f) => body[f] !== undefined && !sameValue(body[f], (company as any)[f]));
+    const changed = updatable.filter((f) => body[f] !== undefined && !sameValue(body[f], (company as any)[f]));
     if (changed.length) {
       const sets = changed.map((f) => `${f} = ?`);
       const params: any[] = changed.map((f) => body[f]);
