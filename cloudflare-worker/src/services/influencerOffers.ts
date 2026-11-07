@@ -26,7 +26,8 @@
  * Every function that decides by time takes `now` (ms).
  */
 import type { Env } from '../types';
-import { computeDiscount, getPromoById, planKeyOf, promoExpired, readIntervals, readProductIds, validatePromoForProduct, type PromoRow } from './promos';
+import { computeDiscount, getPromoById, planKeyOf, promoExpired, readIntervals, readProductIds, type PromoRow } from './promos';
+import { canRedeemPromo } from './promoRedemption';
 import { planByKey } from './planCatalogue';
 import { todayUtc } from './referralPartnerTerms';
 
@@ -125,10 +126,11 @@ export async function autoOffer(env: Env, buyerUserId: number, sale: {
     const promo = await getPromoById(env, offer.promo_id);
     if (!promo) { skipped.push({ uid: offer.uid, why: 'code_refused' }); continue; }
     if (!planInScope(promo, sale.product)) { skipped.push({ uid: offer.uid, why: 'plan_not_in_offer' }); continue; }
-    const v = await validatePromoForProduct(env, promo.code, sale.product.id, sale.unitAmount, sale.currency, {
+    // D4855: the same rule as every checkout, so an offer the licence's ceiling cannot cover is not applied.
+    const v = await canRedeemPromo(env, { code: promo.code, productId: sale.product.id, amountCents: sale.unitAmount, currency: sale.currency, buyer: {
       userId: buyerUserId, interval: (sale.interval === 'month' || sale.interval === 'year') ? sale.interval : null,
-    });
-    if (!v.ok || !v.promo) { skipped.push({ uid: offer.uid, why: 'code_refused' }); continue; }
+    } });
+    if (!v.ok) { skipped.push({ uid: offer.uid, why: 'code_refused' }); continue; }
     const discount = computeDiscount(v.promo, sale.unitAmount).discountCents;
     const spend = await offerSpend(env, promo.id);
     if (givenIn(spend.given, currency) + discount > offer.budget_cents) { skipped.push({ uid: offer.uid, why: 'budget_used' }); continue; }
