@@ -50,6 +50,12 @@ import {
   type GuidanceRow, type CalendarItem,
 } from './_advisor_cohort_helpers';
 import { advisorVisibility } from '../services/advisorVisibility';
+import { pageFacts, pageWindow } from '../services/listPage';
+
+/** #4689: the most rows one page of each Expertise list returns (the caps they had). */
+const SERVICES_PAGE = 200;
+const PROOF_PAGE = 200;
+const THINKING_PAGE = 100;
 
 const advisors = new Hono<{ Bindings: Env }>();
 
@@ -1319,10 +1325,22 @@ advisors.get('/me/services', async (c) => {
   try {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
+    // #4689: a page of the list, ordered to a unique column, and the counts of
+    // the whole list beside it (services/listPage.ts).
+    const w = pageWindow(c.req.query(), SERVICES_PAGE);
     const rows = await c.env.DB.prepare(
       `SELECT * FROM advisor_services WHERE advisor_id = ?
-        ORDER BY is_active DESC, created_at DESC LIMIT 200`
-    ).bind(m.id).all<ServiceRow>();
+        ORDER BY is_active DESC, created_at DESC, id DESC LIMIT ? OFFSET ?`
+    ).bind(m.id, w.limit, w.offset).all<ServiceRow>();
+    const whole = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END), 0) AS live,
+              COALESCE(SUM(CASE WHEN price_cents IS NOT NULL THEN 1 ELSE 0 END), 0) AS priced
+         FROM advisor_services WHERE advisor_id = ?`
+    ).bind(m.id).first<{ total: number; live: number; priced: number }>();
+    const items = rows.results || [];
+    const total = Number(whole?.total) || 0;
+    const live = Number(whole?.live) || 0;
+    const priced = Number(whole?.priced) || 0;
 
     // `units_sold` STAYS NULL, and that is the honest answer rather than a
     // missing feature. Nothing links a booking to a service: `advisor_bookings`
@@ -1331,7 +1349,11 @@ advisors.get('/me/services', async (c) => {
     // like a fact and is a guess — the exact thing CLAUDE.md's absent-is-not-
     // empty rule forbids. The Services zone renders "Not recorded" until a
     // booking can name the service it delivered.
-    return c.json({ items: (rows.results || []).map((r) => serviceDto(r, null)) });
+    return c.json({
+      items: items.map((r) => serviceDto(r, null)),
+      page: pageFacts(w, total, items.length),
+      counts: { total, live, draft: total - live, priced, unpriced: total - priced },
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1501,12 +1523,37 @@ advisors.get('/me/proof', async (c) => {
   try {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
+    // #4689: a page of the list and, over the whole list, how many claims are
+    // confirmed. "Confirmed" is the rule `proofDto` applies: a consent given
+    // and not withdrawn.
+    const w = pageWindow(c.req.query(), PROOF_PAGE);
     const rows = await c.env.DB.prepare(
-      'SELECT * FROM advisor_proof_items WHERE advisor_id = ? ORDER BY created_at DESC LIMIT 200'
-    ).bind(m.id).all<ProofRow>();
+      'SELECT * FROM advisor_proof_items WHERE advisor_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?'
+    ).bind(m.id, w.limit, w.offset).all<ProofRow>();
+    const whole = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN EXISTS (
+                SELECT 1 FROM advisor_proof_consents x
+                 WHERE x.proof_item_id = p.id AND x.consent_given = 1
+                   AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
+              ) THEN 1 ELSE 0 END), 0) AS attested,
+              COALESCE(SUM(CASE WHEN EXISTS (
+                SELECT 1 FROM advisor_proof_consents x
+                 WHERE x.proof_item_id = p.id AND COALESCE(x.consent_given, 0) <> 1
+                   AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
+              ) THEN 1 ELSE 0 END), 0) AS awaiting
+         FROM advisor_proof_items p WHERE p.advisor_id = ?`
+    ).bind(m.id).first<{ total: number; attested: number; awaiting: number }>();
     const items = rows.results || [];
     const consents = await loadProofConsents(c.env, items.map((r) => r.id));
-    return c.json({ items: items.map((r) => proofDto(r, consents.get(r.id) || [])) });
+    const total = Number(whole?.total) || 0;
+    const attested = Number(whole?.attested) || 0;
+    return c.json({
+      items: items.map((r) => proofDto(r, consents.get(r.id) || [])),
+      page: pageFacts(w, total, items.length),
+      // `awaiting`: a claim with an ask no one has answered or withdrawn.
+      counts: { total, attested, self_stated: total - attested, awaiting: Number(whole?.awaiting) || 0 },
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -3059,29 +3106,43 @@ advisors.get('/me/thinking', async (c) => {
     if (!holdsLicence(user, 'advisor')) {
       return c.json({ detail: 'Only an advisor has a thinking shelf' }, 403);
     }
+    // #4689: a page of the shelf, ordered to a unique column. The counts are
+    // read over the whole shelf by their own query, so a writer with 101
+    // pieces is not told about their first 100.
+    const w = pageWindow(c.req.query(), THINKING_PAGE);
     const rows = await c.env.DB.prepare(
       `SELECT id, slug, title, subtitle, status, published_at, publish_at, word_count,
               read_minutes, views, sector, created_at, updated_at
          FROM articles
         WHERE author_user_id = ?
-        ORDER BY COALESCE(published_at, created_at) DESC
-        LIMIT 100`
-    ).bind(user.id).all<{
+        ORDER BY COALESCE(published_at, created_at) DESC, id DESC
+        LIMIT ? OFFSET ?`
+    ).bind(user.id, w.limit, w.offset).all<{
       id: number; slug: string; title: string; subtitle: string | null;
       status: string; published_at: string | null; publish_at: string | null; word_count: number;
       read_minutes: number; views: number; sector: string | null;
     }>();
     const items = rows.results || [];
-    const published = items.filter((a) => a.status === 'published');
-    const reach = published.map((a) => Number(a.views || 0));
+    const whole = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END), 0) AS published,
+              MAX(CASE WHEN status = 'published' THEN COALESCE(views, 0) END) AS best_reach,
+              SUM(CASE WHEN status = 'published' THEN COALESCE(views, 0) END) AS total_reach
+         FROM articles WHERE author_user_id = ?`
+    ).bind(user.id).first<{ total: number; published: number; best_reach: number | null; total_reach: number | null }>();
+    const total = Number(whole?.total) || 0;
+    const published = Number(whole?.published) || 0;
     return c.json({
       items,
+      page: pageFacts(w, total, items.length),
       counts: {
-        published: published.length,
-        drafts: items.filter((a) => a.status !== 'published').length,
-        // Real reach, from a counter the product actually increments.
-        best_reach: reach.length ? Math.max(...reach) : null,
-        total_reach: reach.length ? reach.reduce((s, n) => s + n, 0) : null,
+        published,
+        drafts: total - published,
+        // Opens here on Axal, from a counter incremented on every published
+        // read (`routes/articles.ts`): times opened, not people. Null when
+        // nothing is published, since there is no piece to have been opened.
+        best_reach: published > 0 ? Number(whole?.best_reach) || 0 : null,
+        total_reach: published > 0 ? Number(whole?.total_reach) || 0 : null,
         // "Where it ran" — the one claim on the old card that WAS true.
         // Nothing records an external publication or a talk, so no number.
         talk_reach: null,
@@ -4694,7 +4755,7 @@ advisors.get('/me/visibility', async (c) => {
     const user = await requireAuth(c);
     if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
     const m = await requireMyAdvisor(c, user);
-    return c.json(await advisorVisibility(c.env, { advisorId: m.id, userId: user.id }, c.req.query('days')));
+    return c.json(await advisorVisibility(c.env, { advisorId: m.id, userId: user.id }, c.req.query('days'), Date.now(), { limit: c.req.query('limit'), offset: c.req.query('offset') }));
   } catch (e) { return mapError(c, e); }
 });
 
