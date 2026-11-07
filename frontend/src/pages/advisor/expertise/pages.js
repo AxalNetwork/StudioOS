@@ -70,17 +70,28 @@ export function showingLine(shown, page) {
  * advisor, not by us. The thrown error goes to `reportError`, so nothing
  * is hidden from the logs.
  */
-export function usePagedList(fetchPage, { key = 'items', pageKey = 'page', rowKey = 'id', counts = null, errorText = 'This list could not be read.', moreErrorText = 'The next rows could not be read. Try again.' } = {}) {
+export function usePagedList(fetchPage, {
+  key = 'items', pageKey = 'page', rowKey = 'id', counts = null,
+  errorText = 'This list could not be read.',
+  moreErrorText = 'The next rows could not be read. Try again.',
+  refreshErrorText = 'The list could not be read again, so it may be out of date. Try again.',
+} = {}) {
   const [state, setState] = useState({ loading: true, error: '', rows: [], res: null, moreBusy: false, moreError: '' });
   const latest = useRef(null);
+  // D4711: the newest read wins. Two writes in a row start two re-reads; the
+  // older one can answer last, and must not redraw the list as it was.
+  const seq = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++seq.current;
     setState((c) => ({ ...c, loading: true, error: '', moreError: '' }));
     try {
       const res = await fetchPage({});
+      if (mine !== seq.current) return;
       latest.current = res;
       setState({ loading: false, error: '', rows: rowsOf(res, key), res, moreBusy: false, moreError: '' });
     } catch (e) {
       reportError('expertise:list', e);
+      if (mine !== seq.current) return;
       latest.current = null;
       setState({ loading: false, error: errorText, rows: [], res: null, moreBusy: false, moreError: '' });
     }
@@ -98,6 +109,40 @@ export function usePagedList(fetchPage, { key = 'items', pageKey = 'page', rowKe
       setState((c) => ({ ...c, moreBusy: false, moreError: moreErrorText }));
     }
   }, [fetchPage, key, pageKey, rowKey, moreErrorText]);
+  /**
+   * D4711 — re-read after a write, IN PLACE. `load()` is the first read: it
+   * draws the loading state, and so unmounts every row (an open consent form
+   * and its "Request recorded" line with it) and keeps only the first page.
+   * `refresh()` keeps the rows on screen while it reads, and reads as many rows
+   * as were shown, page by page, so a row reached through "Show more" is still
+   * there after an unrelated edit. A failed re-read keeps the rows it had and
+   * says the list may be out of date (`refreshError`); the write itself is
+   * already reported by the zone.
+   */
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const refresh = useCallback(async () => {
+    const mine = ++seq.current;
+    const want = Math.max(stateRef.current.rows.length, 1);
+    setState((c) => ({ ...c, refreshError: '' }));
+    try {
+      let res = await fetchPage({});
+      let rows = rowsOf(res, key);
+      // Bounded: one page per page already shown, never past the end.
+      for (let guard = 0; rows.length < want && nextOffset(res?.[pageKey]) !== null && guard < 50; guard += 1) {
+        const page = await fetchPage({ offset: nextOffset(res[pageKey]) });
+        rows = appendRows(rows, rowsOf(page, key), rowKey);
+        res = page;
+      }
+      if (mine !== seq.current) return;
+      latest.current = res;
+      setState((c) => ({ ...c, loading: false, error: '', rows, res, moreError: '', refreshError: '' }));
+    } catch (e) {
+      reportError('expertise:list-refresh', e);
+      if (mine !== seq.current) return;
+      setState((c) => ({ ...c, refreshError: refreshErrorText }));
+    }
+  }, [fetchPage, key, pageKey, rowKey, refreshErrorText]);
   const line = showingLine(counts ? state.rows.filter(counts).length : state.rows.length, state.res?.[pageKey]);
-  return { ...state, load, more, line };
+  return { ...state, refreshError: state.refreshError || '', load, more, refresh, line };
 }
