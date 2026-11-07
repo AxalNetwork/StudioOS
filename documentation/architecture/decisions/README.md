@@ -61,3 +61,4 @@ and citations by number keep working.
 | `D4496.md` | Distribution cross-tab states and responsive layouts (#4496). |
 | `D4576.md` | Adds 32 specialist agent skills and synthetic golden cases through the existing library contract. |
 | `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
+| `D4569.md` | #4569 (proposed, gated on #4567/#4568): conditional D1 partitioning options A–D, authority boundaries, payer shard key and the financial-consistency protocol. No migration. |
