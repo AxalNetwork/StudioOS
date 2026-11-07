@@ -527,7 +527,7 @@ export function ConsoleGroups({ sigs }) {
         <h2 id="dc-h" className="text-[14.5px] font-extrabold tracking-tight text-axal-ink dark:text-white">Detailed consoles</h2>
         <span className="text-[11px] text-axal-faint">grouped by domain</span>
       </div>
-      <nav aria-labelledby="dc-h" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <nav aria-labelledby="dc-h" className="grid gap-3 sm:grid-cols-2">
         {CONSOLE_GROUPS.map(([group, links]) => (
           <section key={group} className={CARD} data-testid={`hq-console-group-${group.toLowerCase()}`}>
             <h3 className="text-[12px] font-extrabold uppercase tracking-[.06em] text-axal-faint">{group}</h3>

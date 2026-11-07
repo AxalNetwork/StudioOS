@@ -99,6 +99,8 @@ export function ageText(from, now) {
   return `${Math.floor(h / 24)} d ${h % 24} h`;
 }
 
+/** A provider key as a name: its first letter capitalised, nothing else changed. */
+const cap = (v) => { const t = String(v || ''); return t ? t[0].toUpperCase() + t.slice(1) : t; };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
 
@@ -351,7 +353,7 @@ export function signals({ data, deps, traffic, now, observed = {}, UNAVAILABLE }
       key: 'integrations', name: 'Integrations', core: true,
       status: bad.length ? 'Degraded' : 'Healthy',
       line: bad.length ? `${plural(sum(bad.map((x) => x.n)), 'connection needs', 'connections need')} attention` : `${ints.total} healthy`,
-      items: bad.map(({ p, n }) => ({ severity: 'High', title: `${p.provider} integration in error`, detail: `${plural(n, 'connection is', 'connections are')} in error or disconnected.`, state: 'Error', observed: seen, link: { ...LINK.keys, label: `Reconnect ${p.provider}` } })),
+      items: bad.map(({ p, n }) => ({ severity: 'High', title: `${cap(p.provider)} integration in error`, detail: `${plural(n, 'connection is', 'connections are')} in error or disconnected.`, state: 'Error', observed: seen, link: { ...LINK.keys, label: `Reconnect ${cap(p.provider)}` } })),
     });
   }
 
