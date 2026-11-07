@@ -162,7 +162,10 @@ const now = () => new Date().toISOString();
 const ITEM_COLUMNS = ['title', 'summary', 'body', 'video_url', 'duration_seconds', 'thumbnail_url', 'transcript', 'topic', 'level', 'visibility', 'chapters_json'] as const;
 const COURSE_COLUMNS = ['slug', 'title', 'summary', 'cover_url', 'level', 'estimated_minutes', 'resources_json', 'visibility'] as const;
 
-const ITEM_SELECT = 'SELECT uid, kind, title, summary, body, video_source, video_url, duration_seconds, thumbnail_url, transcript, topic, level, visibility, status, created_by, created_at, updated_at, published_at FROM learning_items';
+// #4742 — `stream_uid` is read here too: the Studio's content table needs it to draw "Stream · Ready"
+// (videoColumn in frontend/src/pages/learning/videoUpload.js), and without it every Stream video read
+// through this route as `null`.
+const ITEM_SELECT = 'SELECT uid, kind, title, summary, body, video_source, video_url, duration_seconds, thumbnail_url, transcript, topic, level, visibility, status, stream_uid, created_by, created_at, updated_at, published_at FROM learning_items';
 const COURSE_SELECT = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, visibility, status, created_by, created_at, updated_at, published_at FROM learning_courses';
 
 // ---- items ---------------------------------------------------------------------

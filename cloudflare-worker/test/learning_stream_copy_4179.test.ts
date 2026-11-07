@@ -198,6 +198,10 @@ test('a copy is verified only when ready with a duration above 0, and the item m
   assert.deepEqual(listed.find((i: any) => i.uid === 'vid-2').stream_copy, { state: 'none' });
   assert.equal('stream_copy' in listed.find((i: any) => i.uid === 'vid-link'), false);
   assert.equal(JSON.stringify(listed).includes(KEY), false, 'the content read never sends the bucket key');
+  // #4742: ITEM_SELECT carries `stream_uid` too, so the Studio draws "Stream · Ready" for a verified copy.
+  // Mutation checked: drop `stream_uid` from ITEM_SELECT → both of these read `undefined` and fail.
+  assert.equal(listed.find((i: any) => i.uid === 'vid-1').stream_uid, COPY, 'the content read carries stream_uid once the item plays it');
+  assert.equal(listed.find((i: any) => i.uid === 'vid-2').stream_uid, null, 'an item with no Stream video carries stream_uid: null, not absent');
 
   // A copy of a file the item has since replaced is verified but plays nothing.
   const g = fixture();

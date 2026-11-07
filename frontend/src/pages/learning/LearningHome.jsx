@@ -316,18 +316,36 @@ export function CatalogList({ state, kind = null, q = '', onPage, onRetry }) {
 }
 
 /**
+ * #4742 — "My learning" and "My learning plan", for every profile the gate
+ * admits (`learnerLinks` in `LearningPage.jsx`). Drawn beside the progress
+ * figures regardless of their read's state, since a nav link is not a claim
+ * about what the route answered.
+ */
+function ProgressLinks({ links }) {
+  if (!links.length) return null;
+  return (
+    <nav aria-label="Your learning" className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]" data-testid="learning-progress-links">
+      {links.map((l) => (
+        <Link key={l.to} to={l.to} className="font-semibold text-axal-violet-deep underline hover:text-axal-violet dark:text-violet-300">{l.label}</Link>
+      ))}
+    </nav>
+  );
+}
+
+/**
  * D3726 (#3726) LR1 — "Your progress": the four figures of #4180's
  * `GET /api/learning/me/stats` (`statsTiles`). A figure the route does not
  * record reads "Not recorded", never 0; a failed read says so and is never
  * a row of zeros.
  */
-export function ProgressStrip({ state = IDLE, onRetry }) {
-  if (isLoading(state)) return <LearningLoading rows={1} what="your progress figures" />;
+export function ProgressStrip({ state = IDLE, onRetry, links = [] }) {
+  if (isLoading(state)) return <><ProgressLinks links={links} /><LearningLoading rows={1} what="your progress figures" /></>;
   if (state.status !== 'ready') {
-    return <LearningUnreadable what="Your progress figures" claim="This is not a claim that they are zero." onRetry={onRetry} />;
+    return <><ProgressLinks links={links} /><LearningUnreadable what="Your progress figures" claim="This is not a claim that they are zero." onRetry={onRetry} /></>;
   }
   return (
     <div data-testid="section-progress">
+      <ProgressLinks links={links} />
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {(state.tiles || []).map((t) => (
           <Card key={t.key} padding="sm" className="flex flex-col gap-0.5" data-testid="progress-figure">
@@ -587,6 +605,9 @@ function LearningCatalogue({
  *   programs  `useMyPrograms()`'s reads and enrol (D558), for My programs
  *   now       the clock the webinar rows are placed against
  *   links     extra links for an admin: [{ to, label }]
+ *   learnerLinks   "My learning" and "My learning plan" for every profile the
+ *             gate admits (#4742, `learnerLinks()` in `LearningPage.jsx`), in
+ *             the progress strip and, unlabelled, on the phone
  */
 /** The home shares Help's decorative artwork; no Learning reads or gates change. */
 export function LearningHero({ phoneBar = null, primary = null, showArticle = true }) {
@@ -608,7 +629,7 @@ export function LearningHomeView({
   gated, tab, onTab = () => {}, query = '', onQuery = () => {}, q = '',
   catalog = IDLE, articles = IDLE, publications = IDLE, events = IDLE, me = IDLE,
   upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(), fresh = IDLE, stats = IDLE, webinarActions = {},
-  onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [],
+  onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [], learnerLinks = [],
   exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
   videoFilters = {}, onVideoFilter, videoOptions = [], videoTotal = null,
 }) {
@@ -623,7 +644,7 @@ export function LearningHomeView({
           <>
             <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
               <div className="min-w-0 space-y-4">
-                <ProgressStrip state={stats} onRetry={onRetry.stats} />
+                <ProgressStrip state={stats} onRetry={onRetry.stats} links={learnerLinks} />
                 <SectionCard title="Continue learning" meta="Pick up where you left off." testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} onBrowse={() => onTab('courses')} /></SectionCard>
                 <NewThisWeek state={fresh} now={now} onRetry={onRetry.fresh} />
               </div>
@@ -683,10 +704,18 @@ export function browseGroup({ gated }) {
  * Everyone else gets Continue learning, My programs and Upcoming webinars
  * first, from the same reads as the desktop's cards.
  */
-export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE, upcoming = IDLE, fresh = IDLE, now = Date.now(), onRetry = {}, onBrowse, webinarActions = {} }) {
+export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE, upcoming = IDLE, fresh = IDLE, now = Date.now(), onRetry = {}, onBrowse, webinarActions = {}, learnerLinks = [] }) {
   if (gated) return [browseGroup({ gated })];
   const [continueTitle, , webinarsTitle] = ACCOUNT_PHONE_PAGES.learning.sections;
   const status = (st) => (isLoading(st) ? 'loading' : st.status);
+
+  // #4742 — "My learning" and "My learning plan", reachable on a phone too. No
+  // `label`: an unlabelled group draws its rows with no header, so this never
+  // adds a section title to the page's pinned heading order.
+  const links = learnerLinks.length ? [{
+    rows: learnerLinks.map((l) => ({ key: l.to, title: l.label, to: l.to, chevron: true, testid: `learning-phone-link-${l.to.split('/').pop()}` })),
+    testid: 'learning-phone-links',
+  }] : [];
 
   const cont = { label: continueTitle, rows: [], testid: 'learning-phone-continue' };
   if (status(me) !== 'ready') cont.note = phonePending(status(me), 'Your progress', 'This is not a claim that you have started nothing.', onRetry.me);
@@ -739,13 +768,13 @@ export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE
     latest.rows = newThisWeek(fresh.rows, now).slice(0, 3).map((row) => ({ key: row.key, title: row.title, to: row.href, description: kindLabel(row.kind), value: catalogMeta(row) || 'Length not recorded', testid: 'learning-phone-new-row' }));
     if (!latest.rows.length) latest.note = 'Nothing new this week.';
   }
-  return [cont, latest, mine, web, browseGroup({ gated })];
+  return [cont, ...links, latest, mine, web, browseGroup({ gated })];
 }
 
 /** A8m — the bar and the sections, then `children`: the tab lists Browse opens. */
-export function LearningPhoneView({ gated, me, programs, upcoming, fresh, now, onRetry, onTab = () => {}, tab = 'all', webinarActions = {}, children = null, videoLibrary = tab === 'videos' }) {
+export function LearningPhoneView({ gated, me, programs, upcoming, fresh, now, onRetry, onTab = () => {}, tab = 'all', webinarActions = {}, children = null, videoLibrary = tab === 'videos', learnerLinks = [] }) {
   const onBrowse = () => onTab('courses');
-  const groups = videoLibrary ? [] : learningPhoneGroups({ gated, me, programs, upcoming, fresh, now, onRetry, onBrowse, webinarActions });
+  const groups = videoLibrary ? [] : learningPhoneGroups({ gated, me, programs, upcoming, fresh, now, onRetry, onBrowse, webinarActions, learnerLinks });
   return <div className="min-h-screen bg-white dark:bg-gray-950" data-testid="learning-phone" data-phone="true">
     <LearningHero phoneBar={<PhoneBar back={{ label: 'Back' }} title="Learning" />} showArticle={gated} primary={!gated && !videoLibrary && <HomePhonePrimary state={me} onBrowse={onBrowse} />} />
     <div className="px-4"><TabBar tab={tab} gated={gated} onTab={onTab} /></div>
@@ -780,7 +809,7 @@ export function homeCoverage({ gated, q, catalog, articles, publications, events
  * only while it is open. A gated profile reads articles only: nothing else is
  * drawn for it.
  */
-export default function LearningHome({ gated, links = [] }) {
+export default function LearningHome({ gated, links = [], learnerLinks = [] }) {
   const [params, setParams] = useSearchParams();
   const tab = resolveTab(params.get('tab'), gated);
   const live = tabMode(tab, gated) === 'live';
@@ -870,7 +899,7 @@ export default function LearningHome({ gated, links = [] }) {
   return (
     <RailFrame data-testid="learning-home">
       {phone ? (
-        <LearningPhoneView gated={gated} me={me} programs={programs} upcoming={upcoming} fresh={fresh} now={now} onRetry={onRetry} onTab={onTab} tab={tab} webinarActions={webinarActions}>
+        <LearningPhoneView gated={gated} me={me} programs={programs} upcoming={upcoming} fresh={fresh} now={now} onRetry={onRetry} onTab={onTab} tab={tab} webinarActions={webinarActions} learnerLinks={learnerLinks}>
           <AdminLinks links={links} />
           {!gated && tab !== 'videos' && <WriteArticleLink secondary />}
           <LearningCatalogue
@@ -906,6 +935,7 @@ export default function LearningHome({ gated, links = [] }) {
             onArticlesPage={onArticlesPage}
             onRetry={onRetry}
             links={links}
+            learnerLinks={learnerLinks}
             exercises={exercises}
             exams={exams}
             onAssessmentPage={onAssessmentPage}

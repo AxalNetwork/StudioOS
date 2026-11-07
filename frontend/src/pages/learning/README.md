@@ -130,15 +130,24 @@ coming-soon gate, links, searches and reads are unchanged.
   anything is sent) and chapters (times must increase, at most 100, saved by
   the item's PATCH; read from `GET /api/learning/items/:uid`, the only read
   that sends them).
-- **The content table's Video column** reads Stream · Ready only when the item
-  list carries `stream_uid`, which it does not yet; "None" is claimed only for
-  `stream_uid: null`, else a video with no file or link is "Not recorded".
-- **L4 is not built.** Copy to Stream, Copying…, Verified, "Copy failed · Try
-  again" and the banner "[n] uploaded videos still play from storage." draw
-  only when the list carries `stream_copy`, a name and shape guessed here
-  pending #4179 (`videoUpload.js`), and the buttons only when the page passes
-  `onCopyToStream`. No page does: there is no client method and no route for
-  the copy yet, so today none of it is drawn.
+- **The content table's Video column** reads Stream · Ready once the item list
+  carries a truthy `stream_uid`, which `GET /admin/learning/items` has sent
+  since #4742 (`admin_learning.ts`'s `ITEM_SELECT`; before that it was absent
+  from every row, so "Stream · Ready" never drew even for a copied or
+  natively-uploaded Stream video); "None" is claimed only for `stream_uid:
+  null`, else a video with no file or link is "Not recorded".
+- **L4 (#4179) copies an uploaded file to Stream**, and #4742 wired it into the
+  Studio. `GET /items` sends `stream_copy: { state: 'none' | 'copying' |
+  'verified' | 'failed', stream_uid?, error_code?, error_message? }` for every
+  `r2` item (`copyStates`, `cloudflare-worker/src/services/learningStream.ts`); `streamCopyOf`
+  (`videoUpload.js`) reads `state: 'none'` and a bare `null` the same way,
+  "Copy to Stream". The button, "Try again" and the banner "[n] uploaded
+  videos still play from storage." draw because `LearningStudio.jsx` passes
+  `onCopyToStream`, which calls `studioActions.copyToStream` →
+  `adminLearningApi.migrateVideoToStream` → `POST
+  /admin/learning/stream/migrations`; a refusal updates the row's own
+  `stream_copy` to `{ state: 'failed', error_message }`, read only from the
+  route's `error.data.message`, never `e.message`.
 - **The Ask triggers on a blank Title, Summary and Topic (#3706) are not
   wired here.** #3706's field triggers come from `GET /api/fills/sheet`, whose
   `FILL_FIELDS` has no Learning form;
