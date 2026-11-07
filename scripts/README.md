@@ -182,7 +182,7 @@ pull.
 | Folder | What lives there |
 | --- | --- |
 | `lib/` | Shared helpers (`migrationPlan.mjs`, `assetRetention.mjs`, `sourceTreeHash.mjs`, `branchConfig.mjs`) and their unit tests — `npm run test:retention` runs every `*.test.mjs` here. |
-| `perf/` | #4573's performance baselines, all local and read-only: `bundle-baseline.mjs` (the built shell's critical path and each lazy chunk's cost beyond it, raw/gzip/brotli), `vitals-local.mjs` (lab LCP/FCP/CLS for the anonymous pages in a local Chromium, `/api` stubbed) and `api-bench.mjs` (D1 statements per API flow through the whole Worker; run under the Worker's TS loader). The baseline they produced is `documentation/audits/PERFORMANCE_BASELINE_2026-11-06.md`. |
+| `perf/` | #4573's performance baselines, all local and read-only: `bundle-baseline.mjs` (the built shell's critical path and each lazy chunk's cost beyond it, raw/gzip/brotli), `vitals-local.mjs` (lab LCP/FCP/CLS for the anonymous pages in a local Chromium, `/api` stubbed) `api-bench.mjs` (D1 statements per API flow through the whole Worker; run under the Worker's TS loader) and `community-bench.mjs` (the Community overview at 4, 12 and 52 weeks and Recent activity on a large synthetic community, #4717 package 5; same loader). The baseline they produced is `documentation/audits/PERFORMANCE_BASELINE_2026-11-06.md`. |
 | `fixtures/` | Small inputs for the importers. `shai-goldman-sample.csv` has the third fund list's shape and no real row from that list. |
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
