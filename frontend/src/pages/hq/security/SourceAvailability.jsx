@@ -32,7 +32,7 @@ export default function SourceAvailability({ sources, onRetry, filterLabel, comp
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-md border border-axal-hairline bg-white px-2 py-0.5 text-[11px] font-semibold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            className="rounded-md border border-axal-hairline bg-white px-2 py-0.5 text-[11px] font-semibold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
           >
             Retry
           </button>

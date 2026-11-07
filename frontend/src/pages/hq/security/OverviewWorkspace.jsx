@@ -20,8 +20,8 @@ import { tabHref } from './securityTabs.js';
  */
 
 const ACTION = 'inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border px-3 text-[12px] font-bold sm:min-h-0 sm:w-auto sm:py-1.5';
-const ACTION_PRIMARY = `${ACTION} border-violet-700 bg-violet-700 text-white hover:bg-violet-800 dark:border-violet-500 dark:bg-violet-600`;
-const ACTION_PLAIN = `${ACTION} border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`;
+const ACTION_PRIMARY = `${ACTION} border-violet-700 bg-violet-700 text-white hover:bg-violet-800 dark:border-violet-500 dark:bg-violet-600 dark:hover:bg-violet-700`;
+const ACTION_PLAIN = `${ACTION} border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 
 function FindingAction({ finding, onRetry }) {
   const a = finding.action;
