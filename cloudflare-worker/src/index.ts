@@ -205,6 +205,8 @@ import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
 import './integrations/providers/notion';
 import './integrations/providers/posthog';
+// D2407 (#2407) — a founder's own Beehiiv newsletter, read-only, through Beehiiv's MCP server: sign-in only.
+import './integrations/providers/beehiiv';
 // D855 §4 (#3733 part 1) — a member's own Linear, read-only, through Linear's read-only MCP server: sign-in only, not listed yet.
 import './integrations/providers/linear';
 // D855 §4 (#3733 part 2) — a member's own Cloudflare, read-only, through Cloudflare's REST API: sign-in only, not listed yet.
