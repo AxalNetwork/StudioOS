@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Unreadable } from '../../ui';
 import { CARD, Pill, Skeleton } from './MyEventsTabs';
 import { timeLine } from './myEventsModel';
 import {
-  EXPLORER_REASON, FORMATS, GOALS_MAX, HOST_NEVER, NOT_FOR_ME_DONE, NOT_FOR_ME_REASONS, NO_ATTENDEES, PENDING_OWNER, PENDING_WORD, RANK_LINE, ROW_TITLE, SIGNALS,
-  checkPrefs, explainQuoteLine, reasonsOf, registerState, rowState, signalWord, travelWords,
+  FORMATS, GOALS_MAX, HOST_NEVER, NOT_FOR_ME_DONE, NOT_FOR_ME_REASONS, NO_ATTENDEES, RANK_LINE, ROW_TITLE, SIGNALS, TOPICS, TOPICS_MAX,
+  checkPrefs, explainQuoteLine, prefsToForm, reasonsOf, registerState, rowState, signalWord, travelWords,
 } from './recommendationsModel';
 
 /**
@@ -13,9 +13,9 @@ import {
  * (ME3), Not for me (ME4), Tune recommendations (ME6) and the states (ME10).
  *
  * It imports no client: the page passes `read` (the adapter's answer) and
- * `act` (the adapter's writes). Until D1487's read is switched on, every
- * state but `ready` draws the page's own `fallback` (today's Suggested card)
- * under one line saying why, so nothing is faked and nothing is lost.
+ * `act` (the adapter's writes). Every state but `ready` draws the page's own
+ * `fallback` (today's Suggested card) under one line saying why, so nothing is
+ * faked and nothing is lost.
  */
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -115,13 +115,25 @@ export function WhyThis({ event, explorer = false, act = {}, onClose }) {
   const reasons = reasonsOf(event, { explorer, limit: 6 });
   const [quote, setQuote] = useState(null);
   const [text, setText] = useState(null);
+  const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState(false);
+  // D4450: the price is a quote with an identity. Asking runs with that quote's
+  // `quote_uid`; if it has expired (409 quote_stale) the member is shown a new
+  // price and asks again. Nothing paid is retried on its own.
   const ask = async () => {
     setBusy(true);
-    const r = quote?.available ? await act.explain?.(event.id) : await act.explainQuote?.(event.id);
-    setBusy(false);
-    if (!quote?.available) { setQuote(r || { available: false, reason: 'That did not go through.' }); return; }
-    if (r?.available) setText(r.value?.text || null); else setQuote({ available: false, reason: r?.reason || 'That did not go through.' });
+    try {
+      if (!quote?.available) { setQuote((await act.explainQuote?.(event.id)) || { available: false, reason: 'That did not go through.' }); return; }
+      const r = await act.explain?.(event.id, quote.value?.quote_uid);
+      if (r?.available) { setText(r.value?.text || null); return; }
+      if (r?.stale) {
+        const fresh = await act.explainQuote?.(event.id);
+        setQuote(fresh?.available ? fresh : { available: false, reason: fresh?.reason || r.reason });
+        setStale(true);
+        return;
+      }
+      setQuote({ available: false, reason: r?.reason || 'That did not go through.' });
+    } finally { setBusy(false); }
   };
   return (
     <Lightbox label={`Why ${event.title || 'this event'}`} title="Why you’re seeing this" sub={event.title || 'Not recorded'} onClose={onClose} width={480} phone="sheet" testId="my-events-why">
@@ -130,13 +142,12 @@ export function WhyThis({ event, explorer = false, act = {}, onClose }) {
           <ul className="m-0 flex list-disc flex-col gap-1 pl-5" data-testid="my-events-why-reasons">{reasons.map((r) => <li key={r} className={INK}>{r}</li>)}</ul>
         ) : <p className={`m-0 ${MUTED}`}>No reason was recorded for this pick.</p>}
         <p className={`m-0 text-[12px] ${MUTED}`}>These come from your own profile. Reading them is free. {NO_ATTENDEES}</p>
-        {reasons.includes(EXPLORER_REASON) ? <p className={`m-0 text-[12px] ${MUTED}`}>{PENDING_WORD}: whether Explorers get recommendations (question 5 on #3724).</p> : null}
         <div className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
           <span className={`text-[12.5px] font-bold ${INK}`}>Ask Eadwyn why, in a few sentences</span>
           <span className={`text-[12px] ${MUTED}`} data-testid="my-events-why-cost">
             {quote?.available ? explainQuoteLine(quote.value) : quote ? quote.reason : 'The cost is shown before anything runs.'}
           </span>
-          <span className={`text-[11.5px] ${MUTED}`}>{PENDING_WORD}: what Explain costs (question 2 on #3724).</span>
+          {stale && quote?.available ? <span className={`text-[12px] ${MUTED}`} role="status" data-testid="my-events-why-stale">That price had expired. This is the new one; nothing was charged.</span> : null}
           {text ? <p className={`m-0 ${INK}`} data-testid="my-events-why-text">{text}</p> : (
             <button type="button" className={`${BTN} w-fit`} disabled={busy || (quote && !quote.available)} onClick={ask} data-testid="my-events-why-ask">
               {busy ? 'Working…' : quote?.available ? 'Ask Eadwyn' : 'See the cost'}
@@ -178,7 +189,19 @@ export function NotForMe({ event, act = {}, onClose, onHidden }) {
 
 /** ME6: what the picks are drawn from, and the switch that turns them off. */
 export function TunePanel({ act = {}, signals = {}, initial = {}, onClose }) {
-  const [p, setP] = useState({ interests: '', goals: '', formats: [], home_city: '', travel_km: '', enabled: true, ...initial });
+  const [p, setP] = useState({ interests: [], goals: '', formats: [], home_city: '', travel_km: '', enabled: true, ...initial });
+  // The saved preferences are read before anything can be saved over them. A page that
+  // passes no `prefs` read (a test, a preview) starts ready with `initial`.
+  const [loaded, setLoaded] = useState(act.prefs ? 'loading' : 'ready');
+  useEffect(() => {
+    if (!act.prefs) return undefined;
+    let alive = true;
+    Promise.resolve(act.prefs()).then((r) => {
+      if (!alive) return;
+      if (r?.available) { setP((x) => ({ ...x, ...prefsToForm(r.value?.prefs) })); setLoaded('ready'); } else { setLoaded('failed'); setErr({ field: null, error: r?.reason || 'Your saved preferences could not be read.' }); }
+    });
+    return () => { alive = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [err, setErr] = useState(null);
   const [done, setDone] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -189,15 +212,18 @@ export function TunePanel({ act = {}, signals = {}, initial = {}, onClose }) {
     setBusy(true);
     const r = await act.savePrefs?.(p);
     setBusy(false);
-    if (r?.available) setDone('Saved. Your picks use these from now on.'); else setErr({ field: null, error: r?.reason || 'That did not go through.' });
+    if (r?.available) setDone('Saved. Your picks use these from now on.'); else setErr({ field: r?.field || null, error: r?.reason || 'That did not go through.' });
   };
   const goalsLeft = GOALS_MAX - (p.goals || '').length;
   return (
     <Lightbox label="Tune recommendations" title="Tune recommendations" sub="What your picks are drawn from" onClose={onClose} width={560} phone="sheet" testId="my-events-tune"
-      footer={<div className="flex justify-end gap-2"><button type="button" className={BTN} onClick={onClose}>Close</button><button type="button" className={PRIMARY} disabled={busy} onClick={save} data-testid="my-events-tune-save">Save preferences</button></div>}>
+      footer={<div className="flex justify-end gap-2"><button type="button" className={BTN} onClick={onClose}>Close</button><button type="button" className={PRIMARY} disabled={busy || loaded !== 'ready'} onClick={save} data-testid="my-events-tune-save">Save preferences</button></div>}>
       <div className="flex flex-col gap-3 px-5 py-4 text-[13px]">
-        <label className="flex flex-col gap-1"><span className={`text-[12.5px] font-bold ${INK}`}>Interests</span>
-          <input className={FIELD} value={p.interests} onChange={(e) => set('interests', e.target.value)} placeholder="Pricing, fundraising, hiring" /></label>
+        <fieldset className="m-0 border-0 p-0"><legend className={`mb-1.5 text-[12.5px] font-bold ${INK}`}>Interests</legend>
+          <div className="flex flex-wrap gap-1.5">{TOPICS.map((t) => {
+            const on = p.interests.includes(t.key);
+            return <button key={t.key} type="button" className={CHIP(on)} aria-pressed={on} disabled={!on && p.interests.length >= TOPICS_MAX} onClick={() => set('interests', on ? p.interests.filter((k) => k !== t.key) : [...p.interests, t.key])}>{t.label}</button>;
+          })}</div></fieldset>
         <label className="flex flex-col gap-1"><span className={`text-[12.5px] font-bold ${INK}`}>Goals</span>
           <textarea className={FIELD} rows={3} value={p.goals} onChange={(e) => set('goals', e.target.value)} aria-invalid={err?.field === 'goals' || undefined} aria-describedby="tune-goals-left" />
           <span id="tune-goals-left" className={`text-[11.5px] ${goalsLeft < 0 ? 'text-axal-destructive dark:text-red-300' : MUTED}`}>{goalsLeft} characters left</span></label>
@@ -221,10 +247,6 @@ export function TunePanel({ act = {}, signals = {}, initial = {}, onClose }) {
         </div>
         <label className="flex items-center gap-2"><input type="checkbox" checked={p.enabled !== false} onChange={(e) => set('enabled', e.target.checked)} />
           <span className={INK}>Recommend events to me</span></label>
-        <details className="text-[12px]"><summary className={`cursor-pointer ${MUTED}`}>{PENDING_WORD}: five questions on #3724</summary>
-          <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0" data-testid="my-events-pending-owner">
-            {PENDING_OWNER.map((q) => <li key={q.key} className={MUTED}>{q.n}. {q.question}</li>)}
-          </ul></details>
         {err ? <p className="m-0 text-[12px] text-axal-destructive dark:text-red-300" role="alert" data-testid="my-events-tune-error">{err.error}</p> : null}
         {done ? <p className="m-0 text-[12px] text-emerald-800 dark:text-emerald-200" role="status">{done}</p> : null}
       </div>
