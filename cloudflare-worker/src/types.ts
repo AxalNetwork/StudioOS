@@ -367,6 +367,10 @@ export interface Env {
   AGENT_RUNTIME?: string;
   /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
   AGENT_AI_GATEWAY?: string;
+  /** D4557 (#4557): `on` with AGENT_COMPUTE_SECRET turns on agent compute jobs (`services/agents/compute.ts`); unset or anything else is off. Declared nowhere yet. */
+  AGENT_COMPUTE?: string;
+  /** D4557: the master key run grants are derived from, per job. A secret, at least 32 characters; unset keeps compute off. */
+  AGENT_COMPUTE_SECRET?: string;
   /** #3851 (E7): the `agents` gateway's monthly limit in micro-USD, mirrored from its dashboard; at 70% HQ ops hear once a month. Unset = no alert. */
   AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD?: string;
   /** D1528: one `AgentScope` Durable Object per scope, named `project:{id}` or `company:{id}`. */
