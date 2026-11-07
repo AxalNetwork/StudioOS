@@ -447,8 +447,16 @@ async function eventsParts(env: Env, weeks: CommunityWeeks, nowMs: number) {
 // The read
 // ---------------------------------------------------------------------------
 
+/**
+ * #4717 package 6 — the period a read without `weeks` answers: 12, the page's
+ * own default (D933). D931 answered 4, so the read and the page it serves
+ * disagreed about the one period neither named; the page always names one,
+ * and any other caller now gets the page's.
+ */
+export const COMMUNITY_DEFAULT_WEEKS: CommunityWeeks = 12;
+
 export function parseCommunityWeeks(raw: string | undefined): CommunityWeeks | null {
-  if (raw === undefined || raw === '') return 4;
+  if (raw === undefined || raw === '') return COMMUNITY_DEFAULT_WEEKS;
   const w = Number(raw);
   return (COMMUNITY_WEEKS as readonly number[]).includes(w) && String(w) === raw ? (w as CommunityWeeks) : null;
 }
