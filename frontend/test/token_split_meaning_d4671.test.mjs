@@ -21,10 +21,11 @@ test('no label, in any surface that names the split, gives it to HQ', () => {
 });
 
 test('the console, history and branch page read their labels from the one module', () => {
-  const admin = read('src/pages/admin/AdminLicences.jsx');
-  assert.match(admin, /\{TOKEN_SPLIT_HQ_INPUT\}/);
-  assert.match(admin, /label=\{TOKEN_SPLIT_HQ_LABEL\}/);
-  assert.doesNotMatch(admin, /[Tt]oken split to HQ/);
+  const terms = read('src/pages/admin/licences/CommercialTerms.jsx');
+  const detail = read('src/pages/admin/licences/LicenceDetail.jsx');
+  assert.match(terms, /\{TOKEN_SPLIT_HQ_INPUT\}/);
+  assert.match(detail, /label=\{TOKEN_SPLIT_HQ_LABEL\}/);
+  assert.doesNotMatch(terms + detail, /[Tt]oken split to HQ/);
   assert.match(read('src/pages/admin/licenceHistoryModel.js'), /token_split_bps: TOKEN_SPLIT_HISTORY_LABEL/);
   assert.match(read('src/pages/subsidiary/MyLicencePage.jsx'), /r\(TOKEN_SPLIT_OWN_LABEL,/);
 });
@@ -41,7 +42,7 @@ test('the agreement text agrees: the same number is the Licensee\'s share', () =
 });
 
 test('the contract card offers entity completion, shows the fingerprint, and will not send while a field is open', () => {
-  const page = read('src/pages/admin/AdminLicences.jsx');
+  const page = read('src/pages/admin/licences/ContractStep.jsx');
   assert.match(page, /api\.licenceEntityComplete\(licence\.uid, f\)/);
   assert.match(page, /data-testid="contract-fingerprint"/);
   assert.match(page, /disabled=\{sendBusy \|\| current\.unfilled_fields\?\.length > 0\}/);

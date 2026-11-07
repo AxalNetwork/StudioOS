@@ -14,7 +14,7 @@ import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
 import { projectOwned as sharedProjectOwned } from '../middleware/projectContentAccess';
 import { getProjectMembershipRole } from '../services/projectAccess';
-import { ensureTier, tierCovers } from '../middleware/requireTier';
+import { ensureTier, tierCovers, userMeetsTier } from '../middleware/requireTier';
 import { DECK_STUDIO_TIER } from '../services/decks/studioAccess';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
@@ -1354,12 +1354,13 @@ decks.get('/video-link', async (c) => {
 decks.get('/methods', async (c) => {
   const user = await requireAuth(c);
   const tier = String((user as any).subscription_tier || 'free').toLowerCase();
-  const isBypass = ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role));
+  // D4729: the lock follows the same rule as the Raise + Grow gate, so a held licence's bypass never unlocks Founder's premium methods.
+  const meetsStudio = userMeetsTier(user, 'studio');
   const items = DECK_METHODS.map((m) => ({
     id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
     best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,
     category: m.category, ai_fill_hint: m.ai_fill_hint,
-    locked: !!m.premium && !isBypass && !tierCovers(tier, 'studio'),
+    locked: !!m.premium && !meetsStudio,
     fields_from_project: m.fields_from_project,
     fields_from_financials: m.fields_from_financials,
     fields_from_captable: m.fields_from_captable,

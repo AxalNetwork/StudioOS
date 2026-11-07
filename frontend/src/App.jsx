@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useR
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { preserveReloadGuards } from './lib/reloadGuard';
-import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
+import { consumePendingNextOnce, loginRedirectFor, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
@@ -37,6 +37,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { collectRouteModules } from './lib/routeModules';
 const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));
 import { useRedirectBeacon } from './lib/redirectBeacon';
+import { ventureSearch } from './pages/raise/pitch/pitchRoutes';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -261,6 +262,8 @@ const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
 // occurred" banner: logout and session expiry hard-navigate here, the lazy
 // import fails, and three independent reload recoveries stack on top of each other.
 import RegisterPage from './pages/RegisterPage';
+import { planIntentFrom } from './lib/planIntent';
+import { SignedInPlanNotice } from './components/auth/RegistrationPlan';
 import LoginPage from './pages/LoginPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 const NetworkIntroReviewPage = lazy(() => import('./pages/NetworkIntroReviewPage'));
@@ -612,7 +615,9 @@ export { ValidateZoneRedirect };
 // D4254 (#4254): an old Pitch address lands on its new one, venture and hash kept.
 function KeepQueryRedirect({ to }) {
   const loc = useLocation();
-  return <Navigate to={{ pathname: to, search: loc.search, hash: loc.hash }} replace />;
+  // #4853: the venture rides as `project_id`, the only name the Pitch Studio reads. The Raise module's
+  // links said `?project=`, which a redirect that kept the query as written left unread.
+  return <Navigate to={{ pathname: to, search: ventureSearch(loc.search), hash: loc.hash }} replace />;
 }
 
 // D2319: legacy helper contracts remain exported for isolated tests; their
@@ -1771,7 +1776,8 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   }
 
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    // #4646: a Learning deep link comes back to the exact course, lesson or webinar after sign-in, through every method.
+    return <Navigate to={loginRedirectFor(location)} state={{ from: location }} replace />;
   }
 
   // Task #1 — route to the stored invite/deep-link target (at most once per
@@ -1993,14 +1999,21 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
 // it setUser(null)s synchronously, `user` flips to null and the form renders —
 // the server-side cookie/session revoke completes in the background. A signed-
 // out visitor renders the form immediately with no teardown.
-function AuthScreen({ user, clearSession, children }) {
+function AuthScreen({ user, clearSession, children, heldFor = null }) {
   const startedRef = React.useRef(false);
+  // #4651: a signed-in visitor who follows a plan link to /register is told so and given the choice, instead of
+  // being signed out in silence with the plan they chose lost. `heldFor` reads that plan from the address.
+  const held = user && heldFor ? heldFor() : null;
+  const [signingOut, setSigningOut] = React.useState(false);
   useEffect(() => {
-    if (user && !startedRef.current) {
+    if (user && !held && !startedRef.current) {
       startedRef.current = true;
       clearSession();
     }
-  }, [user, clearSession]);
+  }, [user, held, clearSession]);
+  if (user && held && !signingOut) {
+    return <SignedInPlanNotice user={user} intent={held} onSignOut={() => { setSigningOut(true); clearSession(); }} />;
+  }
   if (user) {
     return (
       <div className="flex items-center justify-center min-h-screen text-sm text-gray-500 dark:text-gray-400">
@@ -2609,7 +2622,7 @@ function AppInner() {
       <Route path="/for-service-partners" element={<DoorPage door="partners" />} />
       <Route path="/for-advisors" element={<DoorPage door="advisors" />} />
       {/* D786 (#2211): the Investor tab of the one /pricing page. */}
-      <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
+      <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession} heldFor={() => planIntentFrom(window.location.search)}><RegisterPage /></AuthScreen>} />
       <Route path="/login" element={<AuthScreen user={user} clearSession={clearSession}><LoginPage /></AuthScreen>} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/network-intro/:token" element={<NetworkIntroReviewPage />} />
@@ -3290,6 +3303,9 @@ function AppInner() {
       <Route path="/raise/pitch/script" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="script" />))} />
       <Route path="/raise/pitch/share" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="analytics" />))} />
       <Route path="/raise/pitch-deck" element={<KeepQueryRedirect to="/raise/pitch" />} />
+      {/* #4853: the module's own Add form was a second sharing flow; it lands on the Studio's Share tab.
+          A static path, so `/raise/:slug/new` never takes it. */}
+      <Route path="/raise/pitch-deck/new" element={<KeepQueryRedirect to="/raise/pitch/share" />} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
       {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. The
           template builder retired with group E: its four actions are the

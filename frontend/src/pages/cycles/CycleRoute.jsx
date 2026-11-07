@@ -952,7 +952,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // The table's query resets when the module changes.
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
 
+  // D4601: the overview on screen has an identity: its cycle, its venture and a generation that every
+  // (re)read, venture switch or page change advances. A card retry applies only to the identity it started under.
+  const overviewId = useRef({ gen: 0, key: '' });
+  const retrySeq = useRef({});
   useEffect(() => {
+    overviewId.current = { gen: overviewId.current.gen + 1, key: `${cycle}|${projectId}|${overviewId.current.gen + 1}` };
     // D1056, D1063: the Reporting desk and Build's plan make their own reads, never the overview's.
     if (record || slug || reporting || buildPlan || !projectId || !def) return undefined;
     let alive = true;
@@ -999,8 +1004,15 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // others stay drawn (D656: a failing source leaves the others alone).
   const retryCard = useCallback((cardSlug) => {
     if (!projectId) return;
+    const started = overviewId.current.key;
+    const seq = (retrySeq.current[cardSlug] || 0) + 1;
+    retrySeq.current[cardSlug] = seq;
     cyclesApi.module(cycle, projectId, cardSlug, {})
-      .then((data) => setOverview((o) => (o ? { ...o, cards: o.cards.map((c) => (c.slug === cardSlug ? adaptCard(cycle, { slug: cardSlug, ...data.card }) : c)) } : o)))
+      .then((data) => {
+        // A venture switch, a re-read or a newer retry of this card has happened since: this answer is obsolete.
+        if (overviewId.current.key !== started || retrySeq.current[cardSlug] !== seq) return;
+        setOverview((o) => (o ? { ...o, cards: o.cards.map((c) => (c.slug === cardSlug ? adaptCard(cycle, { slug: cardSlug, ...data.card }) : c)) } : o));
+      })
       .catch(() => {});
   }, [cycle, projectId]);
 
@@ -1216,7 +1228,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
       </RecordHeaderProvider>
       </RecordPhoneProvider>
-      {emailing && emailPerson && <RecordEmailSheet person={emailPerson} from={emailFrom} readOnly={Boolean(narrativeAdmin || supportOpen)} onClose={() => setEmailing(false)} />}
+      {emailing && emailPerson && <RecordEmailSheet person={emailPerson} label={recordTitle} from={emailFrom} readOnly={Boolean(narrativeAdmin || supportOpen)} onClose={() => setEmailing(false)} />}
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {

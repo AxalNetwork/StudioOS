@@ -190,16 +190,18 @@ test('nothing to charge is an error, never a free session', async () => {
 
 // ── The fee ────────────────────────────────────────────────────────────────
 
-test('the application fee is the ledger’s own cut, not a second computation', () => {
+test('the application fee is the booking’s stored snapshot, not a second computation', () => {
   // READ FROM THE SOURCE, because the call itself cannot run without a
-  // network. What matters is that the fee is `cutCents` applied to the rate
-  // the SETTING holds — two functions computing a platform fee is how a
-  // client is charged one number and an advisor shown another.
+  // network. #4679: the fee is the cut stamped on the line when it was priced,
+  // never today's setting — two computations of a platform fee is how a client
+  // is charged one number and an advisor shown another.
   const src = read(`${SRC}/services/advisorConnect.ts`);
   const fn = src.slice(src.indexOf('export async function chargeSession'));
   const body = fn.slice(0, fn.indexOf('\n}\n'));
-  assert.match(body, /await takeRate\(env\)/, 'the rate must come from the setting');
-  assert.match(body, /cutCents\(gross, rate\.bps\)/, 'the fee must be the ledger’s own cut');
+  assert.equal(/takeRate\(/.test(body), false, 'the charge must not read the current rate');
+  assert.equal(/cutCents\(/.test(body), false, 'the charge must not recompute the cut');
+  assert.match(body, /args\.feeSnapshot/, 'the fee must come from the stored snapshot');
+  assert.match(body, /FeeSnapshotMissing/, 'a missing snapshot is refused, not repaired');
   assert.match(body, /application_fee_amount: String\(fee\)/);
   assert.match(body, /'transfer_data\[destination\]'/, 'a destination charge, not a plain one');
   // NO SECOND ARITHMETIC. A literal percentage or a hand-rolled multiply here
@@ -219,7 +221,7 @@ test('the intent carries the rate it was charged at, and names the product', () 
   const src = read(`${SRC}/services/advisorConnect.ts`);
   // A dispute six months later is settled by what the processor recorded, not
   // by what the setting says then.
-  assert.match(src, /'metadata\[take_rate_bps\]': String\(rate\.bps\)/);
+  assert.match(src, /'metadata\[take_rate_bps\]': String\(bps\)/);
   // One Stripe platform account now carries connected accounts for two
   // products; without this they are indistinguishable in any reconciliation.
   assert.match(src, /'metadata\[axal_product\]': 'advisory'/);

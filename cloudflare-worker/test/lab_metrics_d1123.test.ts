@@ -33,7 +33,7 @@ const OCT = cycleWeekWindows(2026, 10);
 function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(baseline);
-  for (const m of ['313_lab_host_applications', '315_spinout_application_lifecycle', '316_spinout_application_interviews', '256_branch_local_copies', '602_lab_interview_outcome_and_reached_weeks']) {
+  for (const m of ['313_lab_host_applications', '315_spinout_application_lifecycle', '316_spinout_application_interviews', '256_branch_local_copies', '602_lab_interview_outcome_and_reached_weeks', '202611071700_spinout_lab_enrollments']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${m}.sql`, import.meta.url), 'utf8'));
   }
   db.exec("UPDATE lab_metric_capture SET started_at = '2026-10-20 00:00:00'");

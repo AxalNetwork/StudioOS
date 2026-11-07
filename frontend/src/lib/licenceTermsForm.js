@@ -183,6 +183,8 @@ export function buildSave(stored, form, reason, fields = LICENCE_TERM_FIELDS) {
       ...(Object.keys(terms).length ? { terms } : {}),
       ...(Object.keys(sections).length ? { sections } : {}),
       reason: why,
+      // D4694 — the revision the form was read at; a save from an older one is refused with a 409.
+      expected_revision: Number.isSafeInteger(stored?.revision) ? stored.revision : 0,
     },
   };
 }

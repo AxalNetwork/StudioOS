@@ -169,7 +169,7 @@ function AdvanceDialog({ row, onClose, onDone }) {
   const to = ROUND_WORD[nextStatus(row.status)];
   const go = async () => {
     setBusy(true); setRefusal(null);
-    try { await api.advanceDeal(row.id); onDone(`${row.name} moved to ${to}.`); } catch (e) { reportError('StudioLens:advance', e); setRefusal(e?.message || 'The round did not move. Nothing changed.'); setBusy(false); }
+    try { await api.advanceDeal(row.id, row.status); onDone(`${row.name} moved to ${to}.`); } catch (e) { reportError('StudioLens:advance', e); setRefusal(e?.message || 'The round did not move. Nothing changed.'); setBusy(false); }
   };
   return (
     <Lightbox phone="sheet" label={`Move ${row.name} to ${to}?`} title={`Move ${row.name} to ${to}?`} onClose={() => { if (!busy) onClose(); }} testId="studio-advance"

@@ -7,6 +7,7 @@
  * and a row no person wrote (a scheduled job) is "System".
  */
 
+import { eventOutcomeOf } from '../../lib/licenceContracts.js';
 import { TOKEN_SPLIT_HISTORY_LABEL } from '../../lib/tokenSplit';
 
 const LABELS = {
@@ -23,9 +24,11 @@ export function actorLabel(actor) {
   return actor.name || 'Unknown account';
 }
 
+/** A row's outcome in words; anything the contract does not name reads as Not recorded. */
 export function outcomeLabel(outcome) {
-  if (outcome === 'committed') return 'Done';
-  if (outcome === 'partial') return 'HQ done · branch pending';
+  const o = eventOutcomeOf(outcome);
+  if (o === 'committed') return 'Done';
+  if (o === 'partial') return 'HQ done · branch pending';
   return 'Not recorded';
 }
 
