@@ -24,7 +24,7 @@ test('every managed deck route delegates project access to the authoritative dec
 });
 
 test('template-resolved fields obey quote, figures, cap-table and internal-data exclusions', () => {
-  const slide = { title: 'Synthetic', fields: [
+  const slide = { title: 'Synthetic', method_id: 'axal_spinout_demoday', fields: [
     templateField('cover_headline', 'Frozen headline'),
     templateField('validation_quote1_takeaway', 'No consent'),
     templateField('validation_quote2_takeaway', 'Consented', 'paragraph', { consent: true }),
@@ -45,6 +45,15 @@ test('template-resolved fields obey quote, figures, cap-table and internal-data 
   assert.ok(!JSON.stringify(full).includes('No consent'));
   assert.ok(!JSON.stringify(full).includes('91'));
   assert.ok(!JSON.stringify(full).includes('$9m'));
+});
+
+test('the figure-key rule applies to flattened template fields only; an ordinary paragraph field stays (#4720, D1586)', () => {
+  const plain = { title: 'Plan', fields: [templateField('plan_revenue', '$2.4M'), templateField('vr_total_score', '91')] };
+  const sent = shareSlides([plain], { ...DEFAULT_SHARE_INCLUDE, figures: false });
+  assert.deepEqual(sent[0].fields.map((f: any) => f.key), ['plan_revenue']);
+  const template = { ...plain, method_id: 'axal_spinout_demoday' };
+  assert.deepEqual(shareSlides([template], { ...DEFAULT_SHARE_INCLUDE, figures: false })[0].fields, []);
+  assert.deepEqual(shareSlides([template], { ...DEFAULT_SHARE_INCLUDE, figures: true })[0].fields.map((f: any) => f.key), ['plan_revenue']);
 });
 
 test('all render modes use fields from the selected saved version', () => {

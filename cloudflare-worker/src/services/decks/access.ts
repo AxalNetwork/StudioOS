@@ -3,9 +3,12 @@
  * Pitch deck endpoint. Public share-token reads and investor deal grants use
  * their own narrower, recipient-scoped gates.
  *
- * Read: the venture owner, an accepted cofounder, or HQ. Advisors (including
- * accepted advisor members) and investor-only accounts cannot read a managed
- * deck.
+ * Read: the venture owner, an accepted cofounder, or HQ. Advisor-only
+ * accounts and investor-only accounts cannot read a managed deck. An accepted
+ * advisor member cannot read one either, except where a route passes
+ * `advisorRead`: the owner's decision on #4720 (2026-11-07) keeps their read
+ * of `GET /api/decks/:id/check` (D1511) and of stage norms (D1589). That
+ * option never applies to a write.
  *
  * Write: the owner, an accepted cofounder, or the Super Admin. Every
  * non-owner write is actor-audited by the shared project-content gate; a
@@ -18,7 +21,13 @@ import { projectOwned as sharedProjectOwned } from '../../middleware/projectCont
 import { holdsLicence, holdsOnlyLicence } from '../accountLicences';
 import { getProjectMembershipRole } from '../projectAccess';
 
-export type DeckAccessOptions = { write?: boolean; audit?: boolean; contactData?: boolean };
+export type DeckAccessOptions = {
+  write?: boolean;
+  audit?: boolean;
+  contactData?: boolean;
+  /** Reads only: an accepted advisor member may read (deck check D1511, stage norms D1589). */
+  advisorRead?: boolean;
+};
 
 export async function projectOwned(c: any, user: any, projectId: number, opts: DeckAccessOptions = {}) {
   user = { ...user, role: String(user.role || '').toLowerCase() };
@@ -28,9 +37,11 @@ export async function projectOwned(c: any, user: any, projectId: number, opts: D
   const adminWrite = Boolean(opts.write && user.role === 'admin');
   if (adminWrite && !isSuperAdmin(await hydrateSuperAdmin(c.env, user))) throw new Error('Forbidden');
 
+  // The shared gate reads only write, audit and contactData; advisorRead is this gate's own.
   const project = await sharedProjectOwned(c, user, projectId, opts);
   const owner = holdsLicence(user, 'founder') && user.founder_id != null && user.founder_id === project.founder_id;
-  if (!owner && user.role !== 'admin' && await getProjectMembershipRole(c.env, projectId, user.id) === 'advisor') {
+  const advisorMayRead = Boolean(opts.advisorRead && !opts.write);
+  if (!owner && !advisorMayRead && user.role !== 'admin' && await getProjectMembershipRole(c.env, projectId, user.id) === 'advisor') {
     throw new Error('Forbidden');
   }
   if (adminWrite && opts.audit !== false) {
