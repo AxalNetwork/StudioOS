@@ -8,7 +8,7 @@ imports. The bucket roots and the zone routing live in
 | --- | --- |
 | `pipeline/` | Pipeline zones: Leads, Proposals, Negotiations, Retainers, Analytics. |
 | `delivery/` | Delivery zones: Board (with the engagement lifecycle and invoice ledger, D395), Deliverables, Capacity, Status reports, Health (with Founder reviews, D390). |
-| `offers/` | Offers zones: Catalog, Visibility, Proof, Audience fit. |
+| `offers/` | Offers zones: Catalog, Visibility, Proof, Audience fit. Visibility, Proof and Audience fit write through `useGuardedWrite.jsx` (#4688): a failed write keeps its editor and fields and offers Retry, cleanup runs only once the write persisted, and a saved write whose refresh failed offers a reload and never a second write. Their editors are mounted outside `ZoneBody`, so the first record can be created from an empty store. |
 | `earnings/` | The three earnings screens at the canvas's own routes (D569): `/partner/earnings`, `/partner/referrals` and `/partner/relationships/:id` (the leaderboard was removed, #2297). Not a bucket of the shell, so they draw their own pill row (`EARNINGS_AREA`). `parts.jsx` is what they share with the admin console `/admin/commissions`; the rules about what a figure means are in `frontend/src/lib/partnerEarnings.js`. |
 | `kit.jsx` | The one import surface for partner zones; its header lists the three traps it exists to defuse. |
 | `PartnerStudioHome.jsx` | Partner Studio, what `/studio` renders for a partner: the masthead, Eadwyn (`StudioInterview`) and the profile band, around `PartnerHomeP2` (D564). |
