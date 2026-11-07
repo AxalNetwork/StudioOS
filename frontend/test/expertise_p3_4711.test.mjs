@@ -38,7 +38,7 @@ const testidOf = (node) => node && Object.entries(node).find(([k]) => k.startsWi
 
 test('a save note is a live region that exists before its sentence, and a failure interrupts', async () => {
   // The region announced only when it already exists. Mutation checked: SaveNote returning null
-  // when empty → the empty mount has no status region.
+  // when empty → the empty mount has no status region; a failure without role="alert" → no alert.
   const f = await mountForm(h(SaveNote, { note: null, testid: 'n' }));
   try {
     const empty = f.by('n');
@@ -49,10 +49,13 @@ test('a save note is a live region that exists before its sentence, and a failur
     assert.equal(textOf(empty), '');
     await f.render(h(SaveNote, { note: { ok: false, text: 'Nothing was saved.' }, testid: 'n' }));
     assert.equal(f.by('n'), empty, 'the same region receives the sentence');
-    assert.equal(f.props(f.by('n'))['aria-live'], 'assertive', 'a failure interrupts');
+    const alert = f.nodes().find((n) => f.props(n).role === 'alert');
+    assert.ok(alert, 'a failure interrupts: its sentence is an alert (#4698)');
+    assert.equal(textOf(alert), 'Nothing was saved.');
     assert.equal(textOf(f.by('n')), 'Nothing was saved.');
     await f.render(h(SaveNote, { note: { ok: true, text: 'Saved.' }, testid: 'n' }));
     assert.equal(f.props(f.by('n'))['aria-live'], 'polite');
+    assert.ok(!f.nodes().some((n) => f.props(n).role === 'alert'), 'a save is not an alert');
   } finally { await f.unmount(); }
 });
 

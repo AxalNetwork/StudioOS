@@ -270,14 +270,17 @@ export const ghostButtonClass =
  * live region's changes, not its arrival: a `role="status"` mounted together
  * with its sentence is read by some readers and silently skipped by others. So
  * the region renders empty from the start and the sentence lands in it. A
- * failure is `assertive` (it interrupts: the person has to act), a save is
- * `polite`. Empty, it draws nothing visible.
+ * failure's sentence is `role="alert"` (it interrupts: the person has to
+ * act); a save is the polite status. Empty, it draws nothing visible.
  */
 export function SaveNote({ note, testid }) {
+  // A failure is also `role="alert"` (#4698, D4924's Delivery forms): an alert
+  // interrupts, and it is how a refusal is found by role. A save stays the
+  // polite status around it.
   return (
-    <div role="status" aria-live={note && !note.ok ? 'assertive' : 'polite'} aria-atomic="true" data-testid={testid}>
+    <div role="status" aria-live="polite" aria-atomic="true" data-testid={testid}>
       {note ? (
-        <p className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+        <p role={note.ok ? undefined : 'alert'} className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
           {note.text}
         </p>
       ) : null}
