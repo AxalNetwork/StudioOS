@@ -55,6 +55,16 @@ export function storePendingNext(path) {
   safeWriteJSON(KEY, { path: p, ts: Date.now() });
 }
 
+/**
+ * #4651: a Pricing return (`/pricing?…checkout=<plan>`) kept for a plan the visitor has since walked away from must not
+ * send a later, plain sign-up to that plan's checkout. Dropped when /register is opened without a `next` of its own;
+ * any other kept path (an invitation, a deep link) is left alone.
+ */
+export function clearPendingPricingNext() {
+  const v = safeReadJSON(KEY, null);
+  if (v && typeof v === 'object' && typeof v.path === 'string' && /^\/pricing\?(?:.*&)?checkout=/.test(v.path)) safeRemove(KEY);
+}
+
 function readPendingNext() {
   const v = safeReadJSON(KEY, null);
   if (!v || typeof v !== 'object') return null;
