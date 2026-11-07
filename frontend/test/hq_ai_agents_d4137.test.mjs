@@ -17,8 +17,9 @@ test('the four tabs and their sub-tabs at the canvas addresses (SA0–SA8)', () 
     ['Overview', '/hq/ai-agents'], ['Roster', '/hq/ai-agents/roster'],
     ['Skills library', '/hq/ai-agents/skills'], ['Operations', '/hq/ai-agents/operations'],
   ]);
-  assert.deepEqual(SUBTABS.skills.map((t) => t.label), ['From Axal', 'Company skills']);
+  assert.deepEqual(SUBTABS.skills.map((t) => t.label), ['From Axal VC', 'Company skills']);
   assert.deepEqual(SUBTABS.operations.map((t) => t.label), ['Runs', 'Spend', 'Policies', 'Audit']);
+  assert.match(PAGE, />‹ \{FROM_AXAL_VC\}<\/Link>/, 'the skill detail back link uses the full Axal VC name');
 });
 
 test('every address the page answers is a registered, Super Admin-only route', () => {

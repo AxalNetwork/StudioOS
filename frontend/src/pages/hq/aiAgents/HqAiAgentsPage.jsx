@@ -11,7 +11,7 @@ import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
 import { AgentRadar } from '../../team/SkillParts';
 import { radarVector } from '../../team/skillsModel';
 import {
-  COMPANY_COLUMNS, NOT_RECORDED, REASON_MIN,
+  COMPANY_COLUMNS, FROM_AXAL_VC, NOT_RECORDED, REASON_MIN,
   ROSTER_COLUMNS, SUBTITLE, areaTiles, notYet, skillRow, viewFor,
   PERSONA_STATUS, VALUE_KEYS, actionWord, defaultsArmed, filterRoster, fitLabel, historyLine, identityChanges, retireLines,
   rosterCounts, rosterRefusal, rosterRow, saveArmed, statusArmed, teamLine, usd, valueLabel,
@@ -22,7 +22,7 @@ import {
  *
  * Super Admin only (`hqOnly` in App.jsx; every route H1–H5 adds re-checks with
  * `requireSuperAdmin`). Four tabs at their own addresses: Overview, Roster,
- * Skills library (From Axal · Company skills) and Operations (Runs · Spend ·
+ * Skills library (From Axal VC · Company skills) and Operations (Runs · Spend ·
  * Policies · Audit).
  *
  * D4522 connects the Super Admin skills library, Overview, Operations and
@@ -354,7 +354,7 @@ function SubTabs({ view }) {
   if (view.tab === 'skills') {
     return (
       <nav aria-label="Skills library" className="flex gap-5 border-b border-axal-hairline dark:border-gray-800" data-testid="ai-agents-subtabs">
-        <HeaderTab to="/hq/ai-agents/skills" end data-testid="ai-agents-sub-axal">From Axal</HeaderTab>
+        <HeaderTab to="/hq/ai-agents/skills" end data-testid="ai-agents-sub-axal">{FROM_AXAL_VC}</HeaderTab>
         <HeaderTab to="/hq/ai-agents/skills/companies" end data-testid="ai-agents-sub-companies">Company skills</HeaderTab>
       </nav>
     );
@@ -385,7 +385,7 @@ function FromAxal({ skills, onRetry }) {
   const [q, setQ] = useState('');
   const rows = useMemo(() => (skills.hq ?? []).map(skillRow).filter((r) => !q || `${r.name} ${r.slug ?? ''}`.toLowerCase().includes(q.toLowerCase())), [skills.hq, q]);
   if (skills.status === 'loading') return <p role="status" className={MUTED}>Reading the library…</p>;
-  if (skills.status === 'unreadable') return <Unreadable onRetry={onRetry} what="The From Axal skills" />;
+  if (skills.status === 'unreadable') return <Unreadable onRetry={onRetry} what={`The ${FROM_AXAL_VC} skills`} />;
   const tiles = areaTiles(skills.hq);
   return (
     <div className="space-y-3" data-testid="ai-agents-skills">
@@ -408,7 +408,7 @@ function FromAxal({ skills, onRetry }) {
             <thead className={EYEBROW}><tr className="text-left">{['Skill', 'Area · level', 'Version · status', 'Agents', 'Tools', 'Golden cases', 'Last eval'].map((h) => <th key={h} className="py-1.5 pr-3">{h}</th>)}</tr></thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={7} className="py-6 text-center text-axal-muted dark:text-gray-400">{q ? 'No skill matches.' : 'No From Axal skill yet.'}</td></tr>
+                <tr><td colSpan={7} className="py-6 text-center text-axal-muted dark:text-gray-400">{q ? 'No skill matches.' : `No ${FROM_AXAL_VC} skills yet.`}</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.uid} className="border-t border-axal-hairline/60 align-top dark:border-gray-800" data-testid="ai-agents-skill-row">
                   <td className="py-2 pr-3"><Link to={`/hq/ai-agents/skills/${encodeURIComponent(r.uid)}/edit`} className="font-semibold text-axal-ink hover:underline dark:text-gray-100">{r.name}</Link>{r.slug ? <div className="font-mono text-[11px] text-axal-muted dark:text-gray-500">{r.slug}</div> : null}</td>
@@ -451,7 +451,7 @@ export function Editor({ view }) {
   const row = data ? skillRow(data.skill) : null;
   const show = value => value == null ? 'Not recorded' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
   return <div className="space-y-3" data-testid="ai-agents-skill-editor">
-    <Link to="/hq/ai-agents/skills" className="text-[12.5px] font-semibold text-axal-violet dark:text-violet-300">‹ From Axal</Link>
+    <Link to="/hq/ai-agents/skills" className="text-[12.5px] font-semibold text-axal-violet dark:text-violet-300">‹ {FROM_AXAL_VC}</Link>
     {result.loading && <p role="status">Reading skill details…</p>}
     {result.error && <p role="alert">The skill details could not be read. <button className={BTN} onClick={() => setAttempt(n => n + 1)}>Try again</button></p>}
     {data && <>
