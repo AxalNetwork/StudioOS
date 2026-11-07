@@ -54,8 +54,8 @@ export function RegistrationSteps({ selection, lane }) {
     <ol className="mb-5 list-none space-y-2 p-0 text-xs text-gray-600" data-testid="register-steps">
       {steps.map((s, i) => (
         <li key={s.key} className="flex gap-2" data-testid={`register-step-${s.key}`}>
-          <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[10px] font-bold text-gray-700">{i + 1}</span>
-          <span><b className="text-gray-800">{s.title}.</b> {s.line}</span>
+          <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[10px] font-bold text-gray-700 dark:text-gray-300">{i + 1}</span>
+          <span><b className="text-gray-800 dark:text-gray-200">{s.title}.</b> {s.line}</span>
         </li>
       ))}
     </ol>
@@ -67,14 +67,14 @@ export function SignedInPlanNotice({ user, intent, onSignOut }) {
   const name = found?.spec.name || null;
   const to = found ? pricingReturnPath({ tab: found.tab, planKey: intent.planKey, interval: intent.interval }) : '/pricing';
   return (
-    <div className="flex min-h-screen items-center justify-center bg-white px-4" data-testid="register-signed-in">
-      <div className="max-w-md rounded-lg border border-gray-200 p-6 text-sm text-gray-800">
+    <div className="flex min-h-screen items-center justify-center bg-white px-4 dark:bg-gray-900" data-testid="register-signed-in">
+      <div className="max-w-md rounded-lg border border-gray-200 p-6 text-sm text-gray-800 dark:border-gray-800 dark:text-gray-200">
         <h1 className="m-0 text-lg font-bold">You are already signed in</h1>
         <p className="mt-2">You are signed in as {user?.name || user?.email || 'this account'}. {name ? `To get ${name}, open it on Pricing: checkout opens there for your account.` : 'Plans are bought on Pricing while you are signed in.'}</p>
         <p className="mt-2 text-gray-600">Nothing has been changed, and you were not signed out.</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Link to={to} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white" data-testid="register-signed-in-continue">Continue to Pricing</Link>
-          <button type="button" className="rounded-lg border border-gray-300 px-4 py-2 font-semibold" onClick={onSignOut} data-testid="register-signed-in-signout">Sign out and create a different account</button>
+          <button type="button" className="rounded-lg border border-gray-300 px-4 py-2 font-semibold dark:border-gray-700" onClick={onSignOut} data-testid="register-signed-in-signout">Sign out and create a different account</button>
         </div>
       </div>
     </div>
