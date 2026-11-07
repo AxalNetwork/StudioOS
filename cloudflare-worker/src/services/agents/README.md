@@ -41,6 +41,9 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `modelOffers.ts` | D4422: the shared existing plan and chat-model offer, re-exported by team_agents. |
 
 | `workRuns.ts` | D1614 (#3968): W1’s live E3 latest-run reader and guard-inclusive last/task charges; a usage failure leaves costs unavailable without hiding a recorded run. |
+| `skillRunManifest.ts` | D4555 (#4555): the run-scoped skill manifest (only links that pass `skillForRun()` and `attachCheck()` at the exact pin, published, with reads inside the sponsor's grants and the rule book's `READ_KEYS`), opaque per-run resource ids, a D1 re-check on every activation and read, the `SkillRuntime` seam and the legacy loader. Reads only; no model call. |
+| `skillsSdk.ts` | D4555: the Cloudflare Agent Skills SDK adapter (`agents/skills` `manifest` and `loadSkillCatalog` only, pinned 0.32.0) over that manifest; a catalogue that does not match it, or a call that throws, goes to the legacy loader. |
+| `skillRuntime.ts` | D4555: which skill runtime a run uses: legacy unless the SDK is asked for and usable, with the fallback reason. `skills_sdk_adapter_4555.test.ts` covers the three files. |
 
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
