@@ -149,6 +149,8 @@ r.post('/:uid/renew', async (c) => {
     }
     const stale = staleRequest(c, licence);
     if (stale) return stale;
+    // `transition` bumps `terms_revision` in the same statement as `renews_on`, so a terms
+    // form opened before this renewal cannot write the old date back (D4694).
     const moved = await transition(c.env, licence, 'renew', { renewsOn: next, now: nowIso() });
     if (!moved.ok) return moved.code === 'bad_transition'
       ? c.json({ error: 'bad_transition', message: 'This licence can no longer be renewed.' }, 409)

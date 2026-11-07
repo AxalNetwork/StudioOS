@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 
+import { licenceRevisionAlters } from './_licence_revisions.mjs';
 import licences from '../src/routes/admin_licences.ts';
 import { freezeOverdueNotices } from '../src/services/complianceLadder.ts';
 import { APPOINTABLE, ENTERS_ACTIVE, FROM, TO, allows, appliedGuard, transition } from '../src/services/licenceTransitions.ts';
@@ -130,6 +131,7 @@ function freshDb({ status = 'active', complete = true, memberRole = 'exploring',
   db.exec(noticesDdl());
   // The migration under test: the revision column and the triggers, from the file itself.
   db.exec(MIGRATION_4678);
+  db.exec(licenceRevisionAlters('territory_licences'));
   if (accountLicences) db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611041822_account_licences.sql'), 'utf8'));
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
@@ -306,7 +308,7 @@ test('the prerequisites are checked in SQL as well: territory removed between th
 test('editing territory, seats or terms bumps the revision, so an activation on the old one loses', async () => {
   const w = world({ status: 'draft' });
   const before = row(w.raw).revision;
-  for (const [m, path, body] of [['PUT', 'territories', { countries: ['FR', 'DE'] }], ['PUT', 'seats', { seats: { founder: 3 } }], ['PATCH', 'terms', { annual_fee_cents: 120000 }]] as const) {
+  for (const [m, path, body] of [['PUT', 'territories', { countries: ['FR', 'DE'] }], ['PUT', 'seats', { seats: { founder: 3 } }], ['PATCH', 'terms', { annual_fee_cents: 120000, expected_revision: 0, reason: 'The annual fee was agreed' }]] as const) {
     const r = await call(w, m, `/${LIC}/${path}`, body);
     assert.equal(r.status, 200, `${path}: ${JSON.stringify(r.body)}`);
   }
