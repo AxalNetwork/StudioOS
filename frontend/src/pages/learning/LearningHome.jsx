@@ -6,7 +6,7 @@ import { phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import { COMING_SOON_LINE } from './learningAccess';
 import {
-  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, RECOMMENDED_FUTURE, SUBMISSION_STATUS, TAB_KIND,
+  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, SUBMISSION_STATUS, TAB_KIND,
   newThisWeek,
   durationLabel, formatDay, formatWhen, kindLabel, matchesQuery, minutesLabel, rangeLabel, resolveTab, sourceStates, tabMode, webinarPhase,
 } from './learningModel';
@@ -22,6 +22,7 @@ import { formatWebinarDayTime, seatsOf } from './webinarModel';
 import { memberProgramHref, programProgress, progressLine } from './programModel';
 import useLearningRead from './useLearningRead';
 import VideosLibrary from './VideosLibrary';
+import NextForYou from './NextForYou';
 import { videoFilters as readVideoFilters, withVideoFilter } from './videoLibraryModel';
 import { HOME_SECONDARY, HomePhonePrimary, HomeWebinarAction, HomeWebinarsList, homeSeatsLine, inProgressCourses, useHomeWebinarRegistration } from './LearningHomeActions';
 
@@ -388,16 +389,6 @@ export function NewThisWeek({ state, now = Date.now(), onRetry, limit = 4 }) {
   return <SectionCard title="New this week" meta="Newest first" testid="section-new-this-week">{body}</SectionCard>;
 }
 
-/** D3726 LR1 — "Recommended for you": a dashed future block, with no rows (#3724). */
-export function RecommendedFuture() {
-  return (
-    <div className="rounded-axal border border-dashed border-axal-hairline px-4 py-3 dark:border-gray-700" data-testid="section-recommended">
-      <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">Recommended for you <span className="ml-1 rounded-full bg-axal-ground px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:bg-gray-800 dark:text-gray-400">Future</span></p>
-      <p className="mt-0.5 text-[12px] text-axal-muted dark:text-gray-400">{RECOMMENDED_FUTURE}</p>
-    </div>
-  );
-}
-
 /** Continue learning: what the member has started, from `GET /api/learning/me`. */
 export function ContinueLearning({ state, onRetry, onBrowse }) {
   if (isLoading(state)) return <LearningLoading rows={2} what="your progress" />;
@@ -651,7 +642,7 @@ export function LearningHomeView({
               <div className="min-w-0 space-y-4">
                 <MyProgramsSection {...programs} />
                 <SectionCard title="Upcoming webinars" testid="section-webinars"><HomeWebinarsList state={upcoming} now={now} onRetry={onRetry.upcoming} actions={webinarActions} /></SectionCard>
-                <RecommendedFuture />
+                <NextForYou />
               </div>
             </div>
           </>

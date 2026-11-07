@@ -110,7 +110,10 @@ export type TriggerState = (typeof TRIGGER_STATES)[number];
  * Admin Console's Cron tab colours the same set red, and
  * `cron_record_d201.test.ts` fails when its copy and this one differ.
  */
-export const FAILED_STATUSES: ReadonlySet<string> = new Set(['failed', 'error', 'skipped']);
+// D4703 (#4703): `partial` is a tick whose batch finished but one or more of
+// its sub-tasks failed. It reads as failed, so a sub-task that failed is never
+// shown as a healthy run because the trigger around it completed.
+export const FAILED_STATUSES: ReadonlySet<string> = new Set(['failed', 'error', 'skipped', 'partial']);
 
 /**
  * How long after its scheduled minute a trigger's row may still be missing
@@ -130,6 +133,12 @@ export interface CronRunHistoryRecord {
   startedAt: string;
   /** Non-null when the batch threw; persisted to the `error` column. */
   cronError: string | null;
+  /**
+   * D4703: the sub-tasks whose own catch fired during the tick. Each is caught
+   * so the next one runs, which is why the batch "completes"; a non-empty list
+   * makes the row `partial` and names them in `error`.
+   */
+  failedTasks?: string[];
   /** Per-branch summary fragments; joined with ` | ` (empty -> NULL). */
   summary: string[];
 }
@@ -142,6 +151,19 @@ export interface CronRunHistoryRecord {
  * schema error, so the caller's catch can log `cron history write failed`
  * rather than a real bug hiding behind backoff.
  */
+/** D4703: `failed` when the batch threw, `partial` when a sub-task failed, else `completed`. */
+export function cronRunStatus(rec: Pick<CronRunHistoryRecord, 'cronError' | 'failedTasks'>): 'failed' | 'partial' | 'completed' {
+  if (rec.cronError) return 'failed';
+  return rec.failedTasks && rec.failedTasks.length ? 'partial' : 'completed';
+}
+
+/** The `error` column: the batch's error, else the failed sub-tasks by name (each once, in order). */
+export function cronRunError(rec: Pick<CronRunHistoryRecord, 'cronError' | 'failedTasks'>): string | null {
+  if (rec.cronError) return rec.cronError;
+  const tasks = [...new Set(rec.failedTasks || [])];
+  return tasks.length ? `sub-tasks failed: ${tasks.join(', ')}`.slice(0, 1000) : null;
+}
+
 export async function writeCronRunHistory(
   env: Env,
   rec: CronRunHistoryRecord,
@@ -159,9 +181,9 @@ export async function writeCronRunHistory(
           rec.triggerName,
           rec.startedAt,
           finishedAt,
-          rec.cronError ? 'failed' : 'completed',
+          cronRunStatus(rec),
           rec.summary.join(' | ') || null,
-          rec.cronError,
+          cronRunError(rec),
         )
         .run(),
     { retries: opts?.retries, baseDelayMs: opts?.baseDelayMs },

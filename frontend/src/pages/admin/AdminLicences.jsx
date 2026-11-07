@@ -38,6 +38,7 @@
 // need account attribution that does not exist, and inventing the numbers
 // under them is the thing this file refuses.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import DeployVersion from '../../components/DeployVersion';
 import { utcDay } from '../../lib/utcStamp';
 import {
@@ -56,6 +57,15 @@ import LicenceTermsSchedule from './LicenceTermsSchedule';
 import LicenceRequestsPanel from './LicenceRequestsPanel';
 // D802 (#2238) — the annual fee invoices tab.
 import LicenceFeeInvoices from './LicenceFeeInvoices';
+import { useReasonDialog } from './LicenceReasonDialog';
+import LicenceHistory from './LicenceHistory';
+import { LICENCE_REASONS } from './licenceReasonModel';
+import {
+  DEFAULT_TAB, kindFromParam, ledgerSelection, stepOfTab, tabFromParam, tabKeyMove, tabOfStep, tabsFor,
+} from './licenceNavModel';
+import LicenceDeploymentAttempts from './LicenceDeploymentAttempts';
+import OutcomeNotice from '../../components/OutcomeNotice';
+import { describeOutcome, outcomeFromError, outcomeOfError } from '../../lib/mutationOutcome';
 
 const UNAVAILABLE = Symbol('unavailable');
 import {
@@ -324,17 +334,22 @@ function SeatEditor({ licence, onSaved }) {
     return s;
   });
   const [busy, setBusy] = useState(false);
+  // D4706 — a save says how it ended; a failed one keeps what was typed.
+  const [notice, setNotice] = useState(null);
   const total = SEAT_TYPES.reduce((a, t) => a + (Number(seats[t.k]) || 0), 0);
 
   async function save() {
-    setBusy(true);
+    setBusy(true); setNotice(null);
     try {
       const out = {};
       for (const t of SEAT_TYPES) out[t.k] = Number(seats[t.k]) || 0;
       await api.licenceSetSeats(licence.uid, out);
+      setNotice(describeOutcome('committed', { fallback: 'Seats saved.' }));
       onSaved?.();
-    } catch (e) { reportError('licence_seats_failed', e); }
-    finally { setBusy(false); }
+    } catch (e) {
+      reportError('licence_seats_failed', e);
+      setNotice(outcomeFromError(e, 'The seats were not saved.'));
+    } finally { setBusy(false); }
   }
 
   return (
@@ -362,6 +377,7 @@ function SeatEditor({ licence, onSaved }) {
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : 'Save seats'}
       </button>
+      <div className="mt-2"><OutcomeNotice notice={notice} testId="licence-seats-outcome" /></div>
     </div>
   );
 }
@@ -378,10 +394,12 @@ function TermsEditor({ licence, onSaved }) {
     renews_on: licence.renews_on || '',
   });
   const [busy, setBusy] = useState(false);
+  // D4706 — a save says how it ended; a failed one keeps what was typed.
+  const [notice, setNotice] = useState(null);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
 
   async function save() {
-    setBusy(true);
+    setBusy(true); setNotice(null);
     try {
       await api.licenceSetTerms(licence.uid, {
         term_years: f.term_years === '' ? null : Number(f.term_years),
@@ -393,9 +411,12 @@ function TermsEditor({ licence, onSaved }) {
         starts_on: f.starts_on,
         renews_on: f.renews_on,
       });
+      setNotice(describeOutcome('committed', { fallback: 'Terms saved.' }));
       onSaved?.();
-    } catch (e) { reportError('licence_terms_failed', e); }
-    finally { setBusy(false); }
+    } catch (e) {
+      reportError('licence_terms_failed', e);
+      setNotice(outcomeFromError(e, 'The terms were not saved.'));
+    } finally { setBusy(false); }
   }
 
   return (
@@ -445,6 +466,7 @@ function TermsEditor({ licence, onSaved }) {
           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {busy ? <Loader2 size={14} className="animate-spin" /> : 'Save terms'}
         </button>
+        <div className="mt-2"><OutcomeNotice notice={notice} testId="licence-terms-outcome" /></div>
         <p className="mt-2 text-[11px] text-gray-500">
           Rates are stored as integer basis points, not as a fraction — 3500 is 35%. The same
           reason money is stored in cents: 0.35 is not exactly representable in binary floating
@@ -633,7 +655,8 @@ function DeployStep({ licence }) {
   const [doJur, setDoJur] = useState('none');
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
+  // D4706 — how the last Deploy ended, in the shared outcome vocabulary.
+  const [notice, setNotice] = useState(null);
 
   const load = useCallback(() => {
     api.deployments()
@@ -649,16 +672,23 @@ function DeployStep({ licence }) {
   const codeOk = BRANCH_CODE_RE.test(code);
 
   async function deploy() {
-    setBusy(true); setErr(null);
+    setBusy(true); setNotice({ outcome: 'pending', message: 'Asking GitHub for the provisioning run…' });
     try {
-      await api.licenceDeploy(licence.uid, {
+      const r = await api.licenceDeploy(licence.uid, {
         code, d1_jurisdiction: d1, location_hint: hint, do_jurisdiction: doJur, principal_email: email,
       });
-      load();
+      setNotice({ outcome: 'pending', message: r?.note || 'The provisioning run was asked for.' });
     } catch (e) {
       reportError('licence_deploy_failed', e);
-      setErr(e?.message || 'The deploy request was refused.');
-    } finally { setBusy(false); }
+      // Refused, or unknown when no answer came: either way the form keeps
+      // what was typed, and the registry is re-read below — a refusal after
+      // the row was written shows its attempt and a Retry, and an unknown
+      // shows a status check rather than a second Deploy.
+      setNotice(outcomeFromError(e, 'The deploy request was refused.'));
+    } finally {
+      setBusy(false);
+      load();
+    }
   }
 
   if (mine) {
@@ -685,6 +715,9 @@ function DeployStep({ licence }) {
             ? 'bg-green-50 text-green-700 border-green-200'
             : 'bg-gray-100 text-gray-600 border-gray-200'}>{mine.live_state.replace(/_/g, ' ')}</Chip>
         </div>
+        {/* D4706 — the attempts: current, last failure, last success, and
+            the Retry or status check the attempt's state allows. */}
+        <LicenceDeploymentAttempts licence={licence} initialEmail={email} notice={notice} onChanged={load} />
         {mine.status_note && (
           <div
             data-testid="deploy-status-note"
@@ -829,7 +862,7 @@ function DeployStep({ licence }) {
       >
         Deploy this branch
       </button>
-      {err && <p className="text-sm text-red-600">{err}</p>}
+      <OutcomeNotice notice={notice} testId="deploy-outcome" />
     </div>
   );
 }
@@ -1063,6 +1096,8 @@ function BrandKitEditor({ licence, onSaved }) {
 }
 
 function AdminsEditor({ licence, onSaved, prefill = null }) {
+  // D4707 — reasons are asked for in a labelled dialog, never window.prompt.
+  const [reasonDialog, ask] = useReasonDialog();
   const [items, setItems] = useState(undefined);
   const [loadErr, setLoadErr] = useState(null);
   // D801 — "Grant admin" from a delegate request arrives with the email and the
@@ -1098,6 +1133,7 @@ function AdminsEditor({ licence, onSaved, prefill = null }) {
 
   return (
     <div data-testid="licence-admins">
+      {reasonDialog}
       <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Administrators</h3>
       <p className="mt-1 text-[11px] text-gray-500">
         Appointing someone here makes the account an admin and binds it to this licence in one
@@ -1138,8 +1174,8 @@ function AdminsEditor({ licence, onSaved, prefill = null }) {
                       : <Chip tone={STATUS_TONE.draft}>no longer an admin — detach</Chip>}
                     <button
                       type="button" disabled={busy || !isAdmin}
-                      onClick={() => {
-                        const reason = window.prompt('Why is this administrator being removed? At least 10 characters, and it is recorded.');
+                      onClick={async () => {
+                        const reason = await ask(LICENCE_REASONS.demoteAdmin);
                         if (reason) run(() => api.adminDemoteAdmin(a.user_id, reason));
                       }}
                       className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-40"
@@ -1237,6 +1273,8 @@ function AdminsEditor({ licence, onSaved, prefill = null }) {
 // else, so a free-text field would be a field whose wrong answers are only
 // discoverable by submitting. The options are this licence's own administrators.
 function NoticesEditor({ licence, onSaved }) {
+  // D4707 — reasons are asked for in a labelled dialog, never window.prompt.
+  const [reasonDialog, ask] = useReasonDialog();
   const [items, setItems] = useState(undefined);
   const [holders, setHolders] = useState(null);
   const [loadErr, setLoadErr] = useState(null);
@@ -1312,6 +1350,7 @@ function NoticesEditor({ licence, onSaved }) {
 
   return (
     <div data-testid="licence-notices">
+      {reasonDialog}
       <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Compliance notices</h3>
       <p className="mt-1 text-[11px] text-gray-500">
         A notice is the first rung: the administrator is told what is wrong and by when to answer.
@@ -1370,23 +1409,28 @@ function NoticesEditor({ licence, onSaved }) {
                     <Chip tone={NOTICE_TONE[n.status]}>{String(n.status || '').replace(/_/g, ' ')}</Chip>
                     <button
                       type="button" disabled={busy || !reviewable}
-                      onClick={() => run(async () => {
-                        const note = window.prompt('A note on why this is accepted. Optional, and it is recorded.') || '';
-                        const res = await api.licenceNoticeReview(licence.uid, n.uid, { decision: 'accept', note });
-                        setLastReview(res);
-                      })}
+                      onClick={async () => {
+                        const note = await ask(LICENCE_REASONS.acceptNotice);
+                        if (note === null) return;
+                        run(async () => {
+                          const res = await api.licenceNoticeReview(licence.uid, n.uid, { decision: 'accept', note });
+                          setLastReview(res);
+                        });
+                      }}
                       className="inline-flex items-center gap-1 rounded-md border border-green-300 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-50 disabled:opacity-40"
                     >
                       <Check size={12} /> Accept
                     </button>
                     <button
                       type="button" disabled={busy || !reviewable}
-                      onClick={() => run(async () => {
-                        const note = window.prompt('Why is this response not accepted? The account stays frozen, and this is what they read.');
+                      onClick={async () => {
+                        const note = await ask(LICENCE_REASONS.rejectNotice);
                         if (note === null) return;
-                        const res = await api.licenceNoticeReview(licence.uid, n.uid, { decision: 'reject', note });
-                        setLastReview(res);
-                      })}
+                        run(async () => {
+                          const res = await api.licenceNoticeReview(licence.uid, n.uid, { decision: 'reject', note });
+                          setLastReview(res);
+                        });
+                      }}
                       className="inline-flex items-center gap-1 rounded-md border border-rose-300 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-40"
                     >
                       <X size={12} /> Reject
@@ -1537,9 +1581,13 @@ function NoticesEditor({ licence, onSaved }) {
  * Detail                                                              *
  * ------------------------------------------------------------------ */
 
-function Detail({ uid, held, onChanged, onOpenLicence }) {
+function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB, onTab }) {
+  // D4707 — reasons are asked for in a labelled dialog, never window.prompt.
+  const [reasonDialog, ask] = useReasonDialog();
   const [d, setD] = useState(null);
-  const [step, setStep] = useState(1);
+  // D4707 — the tab lives in the URL (`?tab=`), so a link reopens it.
+  const step = stepOfTab(tab);
+  const setStep = (n) => onTab?.(tabOfStep(n));
   const [busy, setBusy] = useState(false);
   // D197 — the detach's own reason and its own error. `act` below reports a
   // failure to the beacon and renders nothing, which is right for a control
@@ -1561,11 +1609,22 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
 
   const refresh = () => { load(); onChanged?.(); };
 
+  // D4706 — every lifecycle action (activate, suspend, reinstate, renew,
+  // terminate) says how it ended. An unknown outcome re-reads the licence
+  // before anything is offered again, so the status shown is the one the
+  // server holds, not the one the operator hoped for.
+  const [actNotice, setActNotice] = useState(null);
   async function act(fn, ...args) {
-    setBusy(true);
-    try { await fn(...args); refresh(); }
-    catch (e) { reportError('licence_action_failed', e); }
-    finally { setBusy(false); }
+    setBusy(true); setActNotice(null);
+    try {
+      await fn(...args);
+      setActNotice(describeOutcome('committed', { fallback: 'Done. The licence below is as the server now holds it.' }));
+      refresh();
+    } catch (e) {
+      reportError('licence_action_failed', e);
+      setActNotice(outcomeFromError(e, 'That was refused. The licence is unchanged.'));
+      if (outcomeOfError(e) === 'unknown') refresh();
+    } finally { setBusy(false); }
   }
 
   if (d === false) return <p className="text-sm text-red-600">Could not load this licence.</p>;
@@ -1575,6 +1634,8 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
 
   return (
     <div>
+      {reasonDialog}
+      <OutcomeNotice notice={actNotice} testId="licence-action-outcome" onDismiss={() => setActNotice(null)} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -1596,8 +1657,8 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
             </button>
           ) : d.status === 'active' && (
             <button type="button" disabled={busy}
-              onClick={() => {
-                const note = window.prompt('Why is this licence being suspended? The reason is recorded.');
+              onClick={async () => {
+                const note = await ask(LICENCE_REASONS.suspendLicence);
                 if (note) act(api.licenceSuspend, d.uid, note);
               }}
               className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50">
@@ -1611,10 +1672,8 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
                 <RotateCw size={12} /> Renew
               </button>
               <button type="button" disabled={busy}
-                onClick={() => {
-                  const note = window.prompt(
-                    'Terminating releases every country this licence holds, permanently. Why?',
-                  );
+                onClick={async () => {
+                  const note = await ask(LICENCE_REASONS.terminateLicence);
                   if (note) act(api.licenceTerminate, d.uid, note);
                 }}
                 className="inline-flex items-center gap-1 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
@@ -1779,78 +1838,37 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
         </button>
       )}
 
-      <div className="mt-6 flex gap-1 border-b border-gray-200 dark:border-gray-800">
-        {STEPS.map((label, i) => (
+      {/* D4707 — a real tablist: arrow keys, Home and End move between tabs,
+          the selected one says so, and on a narrow screen the row scrolls
+          sideways instead of wrapping into a second row of half-tabs. */}
+      <div
+        role="tablist" aria-label="Licence sections" data-testid="licence-tabs"
+        className="mt-6 -mx-1 flex gap-1 overflow-x-auto whitespace-nowrap border-b border-gray-200 px-1 [scrollbar-width:thin] dark:border-gray-800"
+        onKeyDown={(e) => {
+          const tabs = tabsFor(d.kind);
+          const at = tabs.findIndex((t) => t.step === step);
+          const next = tabKeyMove(e.key, at < 0 ? 0 : at, tabs.length);
+          if (next === null) return;
+          e.preventDefault();
+          setStep(tabs[next].step);
+          document.getElementById(`licence-tab-${tabs[next].key}`)?.focus();
+        }}
+      >
+        {tabsFor(d.kind).map((t) => (
           <button
-            key={label} type="button" onClick={() => setStep(i + 1)}
-            className={`-mb-px border-b-2 px-3 py-2 text-xs ${
-              step === i + 1 ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+            key={t.key} id={`licence-tab-${t.key}`} type="button" role="tab"
+            aria-selected={step === t.step} aria-controls="licence-tabpanel" tabIndex={step === t.step ? 0 : -1}
+            data-testid={t.testId} onClick={() => setStep(t.step)}
+            className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ${
+              step === t.step ? 'border-indigo-600 font-medium text-indigo-700 dark:text-indigo-300' : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
             }`}
           >
-            {i + 1}. {label}
+            {t.label}
           </button>
         ))}
-        <button
-          type="button" onClick={() => setStep(SCHEDULE_STEP)}
-          data-testid="licence-schedule-tab"
-          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
-            step === SCHEDULE_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          Terms schedule
-        </button>
-        {/* Unnumbered, because none is a step of the issue flow — one is the
-            append-only record of what the flow did, one is who runs the
-            subsidiary afterwards, and one is a compliance notice served months
-            later. The brand kit is unnumbered for a different reason: it is
-            drawn only for the kind that has one. */}
-        {d.kind === 'white_label' && (
-          <button
-            type="button" onClick={() => setStep(BRAND_STEP)}
-            data-testid="licence-brand-tab"
-            className={`-mb-px border-b-2 px-3 py-2 text-xs ${
-              step === BRAND_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Brand kit
-          </button>
-        )}
-        <button
-          type="button" onClick={() => setStep(ADMINS_STEP)}
-          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
-            step === ADMINS_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          Administrators
-        </button>
-        <button
-          type="button" onClick={() => setStep(NOTICES_STEP)}
-          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
-            step === NOTICES_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          Notices
-        </button>
-        <button
-          type="button" onClick={() => setStep(FEE_INVOICES_STEP)}
-          data-testid="licence-fee-invoices-tab"
-          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
-            step === FEE_INVOICES_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          Annual fee invoices
-        </button>
-        <button
-          type="button" onClick={() => setStep(HISTORY_STEP)}
-          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
-            step === HISTORY_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          History
-        </button>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <div className="min-w-0">
+      <div className="min-w-0" role="tabpanel" id="licence-tabpanel" aria-labelledby={`licence-tab-${tabOfStep(step)}`}>
         {step === 1 && (
           <div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1892,28 +1910,7 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
             rather than to an editor for a store its kind has no row in. */}
         {step === BRAND_STEP && d.kind === 'white_label'
           && <BrandKitEditor licence={d} onSaved={refresh} />}
-        {step === HISTORY_STEP && (
-          <div>
-            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">History</h3>
-            {(d.events || []).length === 0 ? (
-              <p className="mt-2 text-sm text-gray-600">Nothing recorded yet.</p>
-            ) : (
-              <ul className="mt-2 space-y-1.5 text-sm">
-                {d.events.map((e, i) => (
-                  <li key={i} className="flex gap-3">
-                    <span className="w-24 shrink-0 text-gray-500">{String(e.created_at || '').slice(0, 10)}</span>
-                    <span className="text-gray-900 dark:text-gray-100">{e.event.replace('_', ' ')}</span>
-                    {e.note && <span className="text-gray-600">— {e.note}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="mt-3 text-[11px] text-gray-500">
-              Append-only. A contract dispute is exactly the case where an overwritten status is
-              useless, so nothing here is ever edited or removed.
-            </p>
-          </div>
-        )}
+        {step === HISTORY_STEP && <LicenceHistory licence={d} />}
       </div>
       <LicenceRequestsPanel
         licence={d}
@@ -2107,15 +2104,60 @@ export default function AdminLicences() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [held, setHeld] = useState([]);
   const [heldUnreadable, setHeldUnreadable] = useState(false);
-  const [sel, setSel] = useState(null);
-  const [kindFilter, setKindFilter] = useState('all');
+  // D4707 — the licence, its tab and the kind filter live in the URL, so a
+  // link reopens the same licence on the same tab. Choosing a licence pushes
+  // a history entry; reconciling one a filter hid replaces it.
+  const [params, setParams] = useSearchParams();
+  const kindFilter = kindFromParam(params.get('kind'));
+  const wanted = params.get('licence');
+  const setParam = useCallback((patch, { replace = false } = {}) => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === null || v === undefined || v === '' || (k === 'kind' && v === 'all')) next.delete(k);
+        else next.set(k, v);
+      }
+      return next;
+    }, { replace });
+  }, [setParams]);
+  const setKindFilter = (k) => setParam({ kind: k });
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
+  // D4707 — the filters the loaded page was read for. Until the page for the
+  // current filters has arrived, the rows on screen are the old filter's, and
+  // reconciling against them would move the selection for the wrong reason.
+  const [dataFor, setDataFor] = useState(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
   const [err, setErr] = useState('');
+  // #4700: `data.items` is the server's page for the current search and kind,
+  // so it is exactly the rows the list draws.
+  const allItems = Array.isArray(data?.items) ? data.items : [];
+  // The server applies the kind and the search (#4700), so the loaded rows
+  // are already the visible ones.
+  const visible = allItems;
+  const filters = useMemo(() => ({ q: search, kind: kindFilter === 'all' ? '' : kindFilter, limit: 50 }), [search, kindFilter]);
+  // Never the hidden row (D4707, over #4700's paged ledger): see
+  // `ledgerSelection`. `ready` means the loaded page is the one for the
+  // current search and kind, so the rows on screen are the filter's own.
+  const ready = Boolean(data) && data !== UNAVAILABLE && dataFor === filters && query.trim() === search;
+  const { sel, finding, settle } = ledgerSelection({ wanted, visible, ready, hasMore: Boolean(data?.next_cursor) });
+  useEffect(() => {
+    if (settle && sel !== wanted) setParam({ licence: sel }, { replace: true });
+  }, [settle, sel, wanted, setParam]);
+  // Opening a licence the filter hides (a coverage cell, a link from another
+  // licence) widens the filter rather than opening a row nobody can see.
+  const setSel = (uid) => {
+    const shown = visible.some((l) => l.uid === uid);
+    if (shown) { setParam({ licence: uid }); return; }
+    // Hidden by the search or the kind: clear both, then the paging above
+    // finds it if it is past the first page.
+    setQuery('');
+    setParam({ licence: uid, kind: 'all' });
+  };
   // D775 (#2101): the licence open in the detail pane is the rail's record.
-  const open = Array.isArray(data?.items) ? data.items.find((l) => l.uid === sel) : null;
+  const open = allItems.find((l) => l.uid === sel) || null;
+  const tab = tabFromParam(params.get('tab'), open?.kind).key;
   useRecordCrumb(open ? (open.brand_name || open.licence_ref) : null, 'licence', open?.uid);
 
   // The search waits for the typing to stop, so one search is one request.
@@ -2127,25 +2169,25 @@ export default function AdminLicences() {
   // Each read carries its own sequence number: a slow answer to an older
   // search never replaces a newer one.
   const seq = React.useRef(0);
-  const filters = useMemo(() => ({ q: search, kind: kindFilter === 'all' ? '' : kindFilter, limit: 50 }), [search, kindFilter]);
   const loadPage = useCallback(() => {
     const mine = ++seq.current;
-    licenceLedgerApi.page(filters)
+    return licenceLedgerApi.page(filters)
       .then((d) => {
         if (mine !== seq.current) return;
         setData(d);
-        setSel((cur) => cur || d?.items?.[0]?.uid || null);
+        setDataFor(filters);
       })
       .catch((e) => { if (mine === seq.current) { reportError('licences_failed', e); setData(UNAVAILABLE); } });
   }, [filters]);
   const load = useCallback(() => {
-    loadPage();
+    const ledger = loadPage();
     licenceLedgerApi.summary()
       .then(setSummary)
       .catch((e) => { reportError('licence_summary_failed', e); setSummary(UNAVAILABLE); });
     api.licenceTerritories()
       .then((d) => { setHeld(d?.items || []); setHeldUnreadable(false); })
       .catch((e) => { reportError('licence_territories_load_failed', e); setHeldUnreadable(true); });
+    return ledger;
   }, [loadPage]);
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   // A new search or kind re-reads the first page; the summary does not change with it.
@@ -2163,6 +2205,12 @@ export default function AdminLicences() {
       .catch((e) => reportError('licences_more_failed', e))
       .finally(() => setLoadingMore(false));
   }, [data, filters]);
+  // D4707 — a licence the URL names that is not on the loaded page yet is
+  // looked for by reading the next page, so a link past the first page still
+  // reopens it. The selection waits meanwhile (see `sel`).
+  useEffect(() => {
+    if (finding && !loadingMore) loadMore();
+  }, [finding, loadingMore, loadMore]);
 
   async function create(e) {
     e.preventDefault();
@@ -2180,8 +2228,10 @@ export default function AdminLicences() {
       const r = await api.licenceCreate(payload);
       setCreating(false);
       setForm({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
-      setSel(r.uid);
-      load();
+      // Selected only once the ledger holds it, or reconciliation would move
+      // the selection off a row the list has not drawn yet.
+      await load();
+      setParam({ licence: r.uid, kind: kindFilter === 'all' || kindFilter === payload.kind ? kindFilter : 'all' });
     } catch (e2) {
       reportError('licence_create_failed', e2);
       setErr(e2?.message || 'Could not create the licence.');
@@ -2231,6 +2281,7 @@ export default function AdminLicences() {
             key={id}
             type="button"
             onClick={() => setKindFilter(id)}
+            aria-pressed={kindFilter === id}
             className={`rounded-full border px-3 py-1 text-xs font-medium ${
               kindFilter === id
                 ? 'border-indigo-600 bg-indigo-50 text-indigo-800 dark:border-indigo-500 dark:bg-indigo-950/40 dark:text-indigo-200'
@@ -2294,6 +2345,7 @@ export default function AdminLicences() {
                   key={id}
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, kind: id }))}
+                  aria-pressed={form.kind === id}
                   className={`rounded-full border px-3 py-1 text-xs font-medium ${
                     form.kind === id
                       ? 'border-indigo-600 bg-indigo-50 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200'
@@ -2312,13 +2364,13 @@ export default function AdminLicences() {
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <input className="rounded-md border border-gray-300 px-3 py-2 text-sm uppercase dark:border-gray-700"
-              placeholder="Reference, e.g. AXL-005" required
+              placeholder="Reference, e.g. AXL-005" required aria-label="Licence reference"
               value={form.licence_ref} onChange={(e) => setForm((f) => ({ ...f, licence_ref: e.target.value }))} />
             <input className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
-              placeholder="Legal entity name" required
+              placeholder="Legal entity name" required aria-label="Legal entity name"
               value={form.legal_entity_name} onChange={(e) => setForm((f) => ({ ...f, legal_entity_name: e.target.value }))} />
             <input className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
-              placeholder="Brand name in product"
+              placeholder="Brand name in product" aria-label="Brand name in product"
               value={form.brand_name} onChange={(e) => setForm((f) => ({ ...f, brand_name: e.target.value }))} />
           </div>
           {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
@@ -2358,6 +2410,8 @@ export default function AdminLicences() {
             {filteredItems.map((l) => (
               <button
                 key={l.uid} type="button" onClick={() => setSel(l.uid)}
+                aria-current={sel === l.uid ? 'true' : undefined}
+                aria-label={`${l.brand_name}, ${l.licence_ref}, ${String(l.status).replace('_', ' ')}`}
                 className={`w-full rounded-lg border p-3 text-left ${
                   sel === l.uid ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 bg-white hover:bg-gray-50'
                 }`}
@@ -2408,9 +2462,12 @@ export default function AdminLicences() {
           </div>
           <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
             {sel ? (
-              <Detail key={sel} uid={sel} held={held} onChanged={load} onOpenLicence={(u) => setSel(u)} />
+              <Detail
+                key={sel} uid={sel} held={held} onChanged={load} onOpenLicence={(u) => setSel(u)}
+                tab={tab} onTab={(t) => setParam({ tab: t === DEFAULT_TAB ? null : t })}
+              />
             ) : (
-              <p className="text-sm text-gray-500">Pick a licence.</p>
+              <p className="text-sm text-gray-500">{finding ? 'Finding that licence in the ledger…' : 'Pick a licence.'}</p>
             )}
           </div>
         </div>

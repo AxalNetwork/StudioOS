@@ -82,10 +82,16 @@ function ddlFrom(file: string, marker: string): string {
   return sql.slice(at, end + 2);
 }
 
+
+/** D4707 — the columns 202611062240 adds to licence_events, from the migration itself. */
+const EVENT_CHANGE_COLUMNS = readFileSync(
+  resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611062240_licence_event_changes.sql'), 'utf8',
+).split('\n').filter((l) => /^ALTER TABLE licence_events ADD COLUMN/.test(l)).join('\n');
+
 /** `licence_events` with the CHECK 266 widened, never a relaxed copy. */
 const licenceEventsDdl = () => ddlFrom(
   '266_licence_event_contract.sql', 'CREATE TABLE IF NOT EXISTS licence_events_266',
-).replace('licence_events_266', 'licence_events');
+).replace('licence_events_266', 'licence_events') + '\n' + EVENT_CHANGE_COLUMNS;
 
 /** Migration 264's `admin_notices`, with its own CHECKs. */
 const noticesDdl = () => ddlFrom('264_admin_notices.sql', 'CREATE TABLE IF NOT EXISTS admin_notices');

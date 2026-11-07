@@ -51,6 +51,7 @@ function world() {
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: the attach gate reads it
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
+  db.exec(sql('migrations/202611070826_team_agent_skill_events.sql')); // D4534: the skills_changed kind
   db.exec(sql('migrations/091_user_skill_profile.sql'));
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);
@@ -258,6 +259,9 @@ test('A2 add-agent takes skills through the same gates; a refused skill adds no 
   const added = await call(w, EDITOR, 'POST', '/project/' + ALONE + '/agents', body({ skills: [{ uid: cfo }] }));
   assert.equal(added.status, 201, added.text);
   assert.deepEqual(links(w).map((l) => [l.skill, l.version]), [[cfo, 1]]);
+  // D4534: the skills an agent was added with are one skills_changed event, by the person who added it.
+  const ev = w.db.prepare("SELECT actor_user_id, detail_json FROM team_agent_events WHERE kind = 'skills_changed'").all() as any[];
+  assert.deepEqual(ev.map((e) => [e.actor_user_id, JSON.parse(e.detail_json)]), [[EDITOR, { added: [{ uid: cfo, version: 1 }], repinned: [], removed: [] }]]);
 });
 
 test('Team Skills lists a large HQ draft catalogue with bounded queries and keeps drafts scoped to writers', async () => {

@@ -10,12 +10,13 @@ keeps the query and hash and adds `?moved=held-community` for CM13's notice.
   "Not recorded" figures and the consoles strip. It mounts its own
   `WorkerRail` in a `RailFrame`. The Recent activity card makes its own read
   of D932's activity, so a filter chip reads only that card again.
-- `communityModel.js` — pure. Turns the seven reads into tiles and cards, each
-  `ready`, `loading`, `unreadable` or `unrecorded`; the copy the canvas fixes;
-  D915's Guard G for seats taken. D933 (#2717) adds the Community read's
-  blocks (D931): the period tiles and their deltas, the weekly chart and its
-  table, the funnel and events by type, who takes part, wellbeing, and the
-  waits in Needs a decision.
+- `communityModel.js` — pure. Turns the Community read (D931) into tiles and
+  cards, each `ready`, `loading`, `unreadable` or `unrecorded`; the copy the
+  canvas fixes; D915's Guard G for seats taken. Since #4717 package 2 the page
+  has ONE read: every figure and every row behind one (Next up, Needs a
+  decision, most applications) is that read's, under its `as_of`. The Studio
+  glance, the events and jobs lists, the analytics and the circles list are no
+  longer read by the page; the lightboxes read what they list.
 - `HeldCommunityRedirect.jsx` — the old address.
 - D934 (#2718), the four lightboxes (CM3–CM6), opened from the cards or by
   `?open=events|jobs|circles|activity`:
@@ -26,8 +27,11 @@ keeps the query and hash and adds `?moved=held-community` for CM13's notice.
   - `JobsLightbox.jsx` — CM4.
   - `CirclesLightbox.jsx` — CM5.
   - `ActivityLightbox.jsx` — CM6, D932's activity read.
-  - `lightboxModel.js` — pure. The addresses, the search, filters, sorts and
-    25-row pages, and the Events and activity queries.
+  - `lightboxModel.js` — pure. The addresses, the filters and sorts each
+    lightbox offers, and the query each one sends. Since #4717 package 4 every
+    lightbox reads one 25-row page from the Worker (Jobs and Circles from
+    `GET /api/admin/community/jobs|circles`), and a search waits for the
+    typing to stop.
 
 The charts are D893's (`../../../ui/Charts.jsx`): one palette, and
 only violet changes in dark mode.
@@ -37,10 +41,16 @@ Community landing is retired. It has no pending queue; no count is invented.
 
 ## Rules
 
-- Every figure comes from a read that exists today (D930 §2, D933), and each
-  read answers alone; so does each block of the Community read. A block that
+- Every figure comes from the Community read (#4717), and each of its blocks
+  answers alone. If the read itself fails, the page says nothing is a zero and
+  draws no figure; the consoles strip still works. In the Events card, Next up,
+  the funnel and events by type each answer alone. A block that
   could not be read says so, and one no store records says "Not recorded".
   It is never a zero and never a sample.
+- The read's shape is checked, never patched (#4717 package 3). A count that is
+  missing, a string, negative or fractional, a map without a key the card
+  draws, or a row without its title makes that part unreadable. No builder
+  reads `Number(x) || 0`.
 - The check-in band is a range of founders, withheld under seven founders.
   Other roles' check-ins are not counted toward it (#4717). No mood or stress
   figure is drawn here.

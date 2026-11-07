@@ -27,8 +27,35 @@
 # Exit codes:
 #   0  drill green
 #   1  setup failure (couldn't list backups, etc.)
-#   2  restore failed
+#   2  restore failed (or the backup does not match its manifest)
 #   3  smoke tests failed
+#
+# D4558 — THE BACKUP MUST MATCH ITS MANIFEST. backup-d1.yml writes
+# `<key minus .sql>.manifest.json` beside each export (scripts/d1-backup-manifest.mjs):
+# sha256, size, the export's start time, every table's row count and the
+# last migration. The drill reads it, downloads the backup and checks it
+# BEFORE creating any database, and fails closed on a missing or stale
+# manifest, a size or sha256 mismatch, or a migration this checkout does
+# not know. After the restore it compares every table's row count with the
+# manifest. The marker records the recovery point and its age (the RPO this
+# drill saw) and the duration (its RTO). Every line is a name, a count, a
+# hash or a time; backup content is never printed.
+#
+# D4558, THE OWNER'S TARGETS (2026-11-07): RPO 24 h from the export's real
+# start, RTO 4 h for an export restore. The marker records both targets and
+# whether this run met them; a miss pages. A backup older than
+# DR_MAX_BACKUP_AGE_HOURS (default 30: the 24 h cadence plus GitHub's
+# scheduling delay) fails the drill.
+#
+# THE INDEPENDENT COPY. With DR_SECOND_COPY_ENABLED=true the scheduled drill
+# also reads `heartbeat-d1-independent.json` and fails when the copy is
+# missing or stale. DR_SOURCE=independent is the OWNER-RUN drill of that copy
+# (the owner holds its key): it fetches DR_INDEPENDENT_POINT (a
+# `…/daily/<point>` or `…/monthly/<YYYY-MM>` prefix) from DR_COPY_ENDPOINT /
+# DR_COPY_BUCKET with a read credential, checks the ciphertext's sha256,
+# decrypts it with DR_AGE_IDENTITY_FILE, and restores it through the same
+# verification, chunked import and row-count comparison. The identity file
+# is read by `age` only, and never copied or logged.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -41,6 +68,17 @@ STARTED_EPOCH=$(date -u +%s)
 STARTED_AT=$(date -u +%FT%TZ)
 LATEST_KEY=""
 DB_CREATED=0
+SOURCE="${DR_SOURCE:-primary}"
+[[ "${SOURCE}" == "primary" || "${SOURCE}" == "independent" ]] || { echo "[dr-drill] FATAL: DR_SOURCE is primary or independent" >&2; exit 1; }
+# An owner choosing an older recovery point of the independent copy is not a stale backup.
+MAX_AGE_HOURS="${DR_MAX_BACKUP_AGE_HOURS:-$([[ "${SOURCE}" == "independent" ]] && echo 9600 || echo 30)}"
+RPO_TARGET_S=86400
+RTO_TARGET_S=14400
+RECOVERY_POINT=""
+BACKUP_SHA=""
+MIGRATION=""
+TABLES=0
+FAIL_REASON=
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 log() { echo "[dr-drill] $*"; }
@@ -70,10 +108,28 @@ write_marker() {
       --argjson exit_code "${rc}" \
       --arg backup_key "${LATEST_KEY}" \
       --arg run_id "${GITHUB_RUN_ID:-}" \
+      --arg recovery_point "${RECOVERY_POINT}" \
+      --arg sha256 "${BACKUP_SHA}" \
+      --arg migration "${MIGRATION}" \
+      --argjson tables "${TABLES}" \
+      --arg reason "${FAIL_REASON}" \
+      --argjson started "${STARTED_EPOCH}" \
+      --arg copy "${SOURCE}" \
+      --argjson rpo_target_s "${RPO_TARGET_S}" \
+      --argjson rto_target_s "${RTO_TARGET_S}" \
       '{at: $at, outcome: $outcome, duration_s: $duration_s, source: $source, step: $step,
         exit_code: $exit_code,
         backup_key: (if $backup_key == "" then null else $backup_key end),
-        run_id: (if $run_id == "" then null else $run_id end)}' > "${marker}"; then
+        run_id: (if $run_id == "" then null else $run_id end),
+        recovery_point: (if $recovery_point == "" then null else $recovery_point end),
+        recovery_point_age_s: (if $recovery_point == "" then null else ($started - ($recovery_point | fromdateiso8601)) end),
+        sha256: (if $sha256 == "" then null else $sha256 end),
+        migration: (if $migration == "" then null else $migration end),
+        tables: (if $tables == 0 then null else $tables end),
+        reason: (if $reason == "" then null else $reason end),
+        copy: $copy, rpo_target_s: $rpo_target_s, rto_target_s: $rto_target_s,
+        rpo_met: (if $recovery_point == "" then null else (($started - ($recovery_point | fromdateiso8601)) <= $rpo_target_s) end),
+        rto_met: ($duration_s <= $rto_target_s)}' > "${marker}"; then
     wrangler r2 object put "${BUCKET}/drill-d1.json" --file "${marker}" --content-type application/json --remote \
       || log "WARN: could not write the drill marker (r2://${BUCKET}/drill-d1.json)"
   else
@@ -98,6 +154,16 @@ on_exit() {
     rm -rf "${TMP}" || log "WARN: tmp cleanup failed (${TMP})"
   fi
   write_marker "$rc"
+  # D4558: a passing run that missed a target still pages; the marker says which.
+  if [[ $rc -eq 0 ]]; then
+    local now_s age_s
+    now_s=$(date -u +%s)
+    if [[ -n "${RECOVERY_POINT}" ]]; then
+      age_s=$(( STARTED_EPOCH - $(date -u -d "${RECOVERY_POINT}" +%s) ))
+      [[ "${age_s}" -le "${RPO_TARGET_S}" ]] || page "rpo_target_missed: the restored recovery point was ${age_s} s old (target ${RPO_TARGET_S} s)"
+    fi
+    [[ $(( now_s - STARTED_EPOCH )) -le "${RTO_TARGET_S}" ]] || page "rto_target_missed: the drill took $(( now_s - STARTED_EPOCH )) s (target ${RTO_TARGET_S} s)"
+  fi
   if [[ $rc -ne 0 ]]; then
     page "exit_code=$rc step=${STEP:-unknown}"
   fi
@@ -107,37 +173,106 @@ trap on_exit EXIT
 
 # ---------- 1. Find the latest backup -------------------------------
 STEP="find_backup"
-# D263 — THE KEY COMES FROM THE EXPORT'S OWN HEARTBEAT. This used to run
-# `wrangler r2 object list`, a subcommand wrangler 4.131 does not have (only
-# get, put and delete are registered), and it threw wrangler's error away with
-# `2>/dev/null`; `set -e` then ended the script at the assignment, so the
-# empty-target check below was unreachable. backup-d1.yml writes the key it
-# just uploaded into heartbeat-d1.json, so that is where the drill reads it.
-log "reading the latest backup key from r2://${BUCKET}/heartbeat-d1.json"
-if ! HEARTBEAT=$(wrangler r2 object get "${BUCKET}/heartbeat-d1.json" --remote --pipe); then
-  log "FATAL: could not read r2://${BUCKET}/heartbeat-d1.json"
-  exit 1
-fi
-LATEST_KEY=$(printf '%s' "${HEARTBEAT}" | jq -r '.key // empty' 2>&1) || LATEST_KEY=""
+TMP=$(mktemp -d)
+if [[ "${SOURCE}" == "primary" ]]; then
+  # D263 — THE KEY COMES FROM THE EXPORT'S OWN HEARTBEAT. This used to run
+  # `wrangler r2 object list`, a subcommand wrangler 4.131 does not have (only
+  # get, put and delete are registered), and it threw wrangler's error away with
+  # `2>/dev/null`; `set -e` then ended the script at the assignment, so the
+  # empty-target check below was unreachable. backup-d1.yml writes the key it
+  # just uploaded into heartbeat-d1.json, so that is where the drill reads it.
+  log "reading the latest backup key from r2://${BUCKET}/heartbeat-d1.json"
+  if ! HEARTBEAT=$(wrangler r2 object get "${BUCKET}/heartbeat-d1.json" --remote --pipe); then
+    log "FATAL: could not read r2://${BUCKET}/heartbeat-d1.json"
+    exit 1
+  fi
+  LATEST_KEY=$(printf '%s' "${HEARTBEAT}" | jq -r '.key // empty' 2>&1) || LATEST_KEY=""
 
-if [[ -z "${LATEST_KEY:-}" ]]; then
-  log "FATAL: the heartbeat names no backup key"
-  exit 1
-fi
-if ! [[ "${LATEST_KEY}" =~ ^d1/(studioos-db/)?backup-[0-9]{4}-[0-9]{2}-[0-9]{2}\.sql$ ]]; then
-  log "FATAL: the heartbeat's key is not a D1 backup key: ${LATEST_KEY}"
-  LATEST_KEY=""
-  exit 1
-fi
-log "latest backup: ${LATEST_KEY}"
+  if [[ -z "${LATEST_KEY:-}" ]]; then
+    log "FATAL: the heartbeat names no backup key"
+    exit 1
+  fi
+  if ! [[ "${LATEST_KEY}" =~ ^d1/(studioos-db/)?backup-[0-9]{4}-[0-9]{2}-[0-9]{2}\.sql$ ]]; then
+    log "FATAL: the heartbeat's key is not a D1 backup key: ${LATEST_KEY}"
+    LATEST_KEY=""
+    exit 1
+  fi
+  log "latest backup: ${LATEST_KEY}"
 
-# Backup freshness check — RPO is 24h.
-BACKUP_DATE=$(echo "${LATEST_KEY}" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
-AGE_DAYS=$(( ( $(date -u +%s) - $(date -u -d "${BACKUP_DATE}" +%s) ) / 86400 ))
-if [[ "${AGE_DAYS}" -gt 1 ]]; then
-  log "WARN: latest backup is ${AGE_DAYS} days old — RPO breach"
-  page "rpo_breach age_days=${AGE_DAYS}"
+  # 1a. D4558: the independent copy, when it is on, must be there and fresh.
+  if [[ "${DR_SECOND_COPY_ENABLED:-}" == "true" ]]; then
+    # wrangler's error is kept (D263), in a file: a missing heartbeat is the finding, not noise.
+    if ! INDEP=$(wrangler r2 object get "${BUCKET}/heartbeat-d1-independent.json" --remote --pipe 2>"${TMP}/indep.err") \
+        || ! INDEP_AT=$(printf '%s' "${INDEP}" | jq -r '.exported_at // empty' 2>/dev/null) || [[ -z "${INDEP_AT}" ]]; then
+      FAIL_REASON="independent_copy_missing"
+      log "FATAL: the independent copy is enabled and has no heartbeat: $(head -c 300 "${TMP}/indep.err" 2>/dev/null)"
+      exit 1
+    fi
+    INDEP_AGE_H=$(( ( $(date -u +%s) - $(date -u -d "${INDEP_AT}" +%s) ) / 3600 ))
+    if [[ "${INDEP_AGE_H}" -gt "${MAX_AGE_HOURS}" ]]; then
+      FAIL_REASON="independent_copy_stale"
+      log "FATAL: the independent copy's newest recovery point is ${INDEP_AGE_H} h old (limit ${MAX_AGE_HOURS} h)"
+      exit 1
+    fi
+    log "independent copy: newest recovery point ${INDEP_AT} (${INDEP_AGE_H} h old)"
+  fi
+else
+  # The owner-run drill of the independent copy.
+  POINT="${DR_INDEPENDENT_POINT:-}"
+  IDENTITY="${DR_AGE_IDENTITY_FILE:-}"
+  [[ "${POINT}" =~ ^[A-Za-z0-9_./-]+/(daily|monthly)/[0-9A-Za-z-]+$ ]] || { FAIL_REASON="point_invalid"; log "FATAL: DR_INDEPENDENT_POINT names no recovery point"; exit 1; }
+  [[ -n "${IDENTITY}" && -r "${IDENTITY}" ]] || { FAIL_REASON="key_missing"; log "FATAL: DR_AGE_IDENTITY_FILE is not a readable file"; exit 1; }
+  [[ -n "${DR_COPY_ENDPOINT:-}" && -n "${DR_COPY_BUCKET:-}" ]] || { FAIL_REASON="copy_unconfigured"; log "FATAL: DR_COPY_ENDPOINT and DR_COPY_BUCKET are required"; exit 1; }
+  s3get() { aws s3api get-object --bucket "${DR_COPY_BUCKET}" --key "$1" "$2" --endpoint-url "${DR_COPY_ENDPOINT}" --region "${DR_COPY_REGION:-auto}" >/dev/null; }
+  log "reading the independent recovery point ${POINT}/"
+  if ! s3get "${POINT}/manifest.json" "${TMP}/manifest.json"; then
+    FAIL_REASON="manifest_missing"; log "FATAL: the recovery point has no manifest"; exit 2
+  fi
+  s3get "${POINT}/backup.sql.age" "${TMP}/backup.sql.age" || { FAIL_REASON="ciphertext_missing"; log "FATAL: the recovery point has no ciphertext"; exit 2; }
+  WANT=$(jq -r '.independent_copy.ciphertext_sha256 // empty' "${TMP}/manifest.json" 2>/dev/null || true)
+  if [[ -z "${WANT}" || "$(sha256sum "${TMP}/backup.sql.age" | cut -d' ' -f1)" != "${WANT}" ]]; then
+    FAIL_REASON="ciphertext_mismatch"; log "FATAL: the ciphertext does not match its manifest"; exit 2
+  fi
+  if ! age -d -i "${IDENTITY}" -o "${TMP}/backup.sql" "${TMP}/backup.sql.age" 2>/dev/null; then
+    FAIL_REASON="decrypt_failed"; log "FATAL: the copy could not be decrypted with that key"; exit 2
+  fi
+  rm -f "${TMP}/backup.sql.age"
+  LATEST_KEY=$(jq -r '.key // empty' "${TMP}/manifest.json")
+  [[ -n "${LATEST_KEY}" ]] || { FAIL_REASON="manifest_invalid"; log "FATAL: the manifest names no backup"; exit 2; }
+  log "independent copy decrypted: the export of ${LATEST_KEY}"
 fi
+
+# ---------- 1b. Verify it against its manifest (D4558) -------------
+# Before any database exists: a backup its manifest does not vouch for is
+# never restored. Staleness is measured from the manifest's export time, the
+# real recovery point, not from the date in the key.
+STEP="verify"
+if [[ "${SOURCE}" == "primary" ]]; then
+  MANIFEST_KEY="${LATEST_KEY%.sql}.manifest.json"
+  if ! wrangler r2 object get "${BUCKET}/${MANIFEST_KEY}" --file "${TMP}/manifest.json" --remote; then
+    FAIL_REASON="manifest_missing"
+    log "FATAL: no manifest at r2://${BUCKET}/${MANIFEST_KEY}; a backup nothing vouches for is not restored"
+    exit 2
+  fi
+fi
+RECOVERY_POINT=$(jq -r '.exported_at // empty' "${TMP}/manifest.json" 2>/dev/null || true)
+MIGRATION=$(jq -r '.migrations.last // empty' "${TMP}/manifest.json" 2>/dev/null || true)
+TABLES=$(jq -r '(.tables | length) // 0' "${TMP}/manifest.json" 2>/dev/null || echo 0)
+[[ "${TABLES}" =~ ^[0-9]+$ ]] || TABLES=0
+if [[ "${SOURCE}" == "primary" ]]; then
+  wrangler r2 object get "${BUCKET}/${LATEST_KEY}" --file "${TMP}/backup.sql" --remote
+fi
+log "backup ready: $(wc -c < "${TMP}/backup.sql") bytes"
+if ! VERIFY=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" verify "${TMP}/backup.sql" "${TMP}/manifest.json" \
+    --key "${LATEST_KEY}" --migrations "${REPO_ROOT}/cloudflare-worker/sql/migrations" --max-age-hours "${MAX_AGE_HOURS}"); then
+  FAIL_REASON=$(printf '%s' "${VERIFY}" | sed -n 's/^reason=//p' | head -1)
+  FAIL_REASON="${FAIL_REASON:-verify_failed}"
+  [[ "${FAIL_REASON}" == "stale" ]] && page "rpo_breach: the newest backup is older than ${MAX_AGE_HOURS} h"
+  log "FATAL: the backup does not match its manifest: ${FAIL_REASON}"
+  exit 2
+fi
+BACKUP_SHA=$(jq -r '.sha256' "${TMP}/manifest.json")
+log "${VERIFY}"
 
 # ---------- 2. Provision throwaway DB -------------------------------
 STEP="create_db"
@@ -154,11 +289,7 @@ DB_CREATED=1
 
 # ---------- 3. Restore ---------------------------------------------
 STEP="restore"
-log "downloading + restoring backup into ${TARGET_DB}"
-TMP=$(mktemp -d)
-wrangler r2 object get "${BUCKET}/${LATEST_KEY}" --file "${TMP}/backup.sql" --remote
-log "backup downloaded: $(wc -c < "${TMP}/backup.sql") bytes"
-
+log "restoring the verified backup into ${TARGET_DB}"
 # D523 — THE RESTORE IMPORTS IN CHUNKS. One remote import of the whole export
 # ended `{"D1_RESET_DO":true}` 1.4 s after the upload (run 36862064332): D1
 # reset the Durable Object behind the throwaway database mid-import, which is
@@ -186,6 +317,10 @@ while IFS=$'\t' read -r CHUNK_FILE CHUNK_PHASE CHUNK_STMTS CHUNK_SIZE CHUNK_OVER
   if ! wrangler d1 execute "${TARGET_DB}" --remote --file "${CHUNK_FILE}" > "${TMP}/chunk.log" 2>&1; then
     CODES=$(grep -oE 'D1_[A-Z_]+|SQLITE_[A-Z_]+|exceeded its memory limit|D1 reset before execute completed|File could not be uploaded|did not upload successfully' "${TMP}/chunk.log" | sort -u | paste -sd ' ' - || true)
     log "FATAL: restore failed at chunk ${CHUNK_N}/${CHUNK_TOTAL} (${CHUNK_PHASE}); wrangler's error codes: ${CODES:-none recognised (its full output is withheld because it can quote backup SQL)}"
+    # D4558: which tables that chunk writes, and their parents, so the next
+    # failure says where to look. Schema names only.
+    log "chunk ${CHUNK_N} $(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" chunk-tables "${CHUNK_FILE}" "${TMP}/manifest.json" 2>/dev/null || echo 'tables: unreadable')"
+    FAIL_REASON="chunk_${CHUNK_N}_of_${CHUNK_TOTAL}"
     exit 2
   fi
   EXECUTED=$(grep -oE 'Executed [0-9]+ queries in [0-9.]+ms \([0-9]+ rows read, [0-9]+ rows written\)' "${TMP}/chunk.log" | head -1 || true)
@@ -228,6 +363,33 @@ for t in "${REQUIRED_TABLES[@]}"; do
   fi
 done
 log "schema smoke ok (${#REQUIRED_TABLES[@]} required tables present)"
+
+# 4b'. D4558 — every table's row count against the manifest. The counts are
+# read 40 tables to a query; a table missing from the restore counts as a
+# mismatch. Only table names and the number that differ are logged.
+node -e '
+  const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  const q = (n) => `"${n.replace(/"/g, "\"\"")}"`;
+  const lit = (n) => `${String.fromCharCode(39)}${n.replace(/\x27/g, "\x27\x27")}${String.fromCharCode(39)}`;
+  for (let i = 0; i < m.tables.length; i += 40) {
+    console.log(m.tables.slice(i, i + 40).map((t) => `SELECT ${lit(t.name)} AS t, COUNT(*) AS n FROM ${q(t.name)}`).join(" UNION ALL ") + ";");
+  }' "${TMP}/manifest.json" > "${TMP}/counts.sql"
+: > "${TMP}/counts.jsonl"
+while IFS= read -r COUNT_SQL <&4; do
+  if ! wrangler d1 execute "${TARGET_DB}" --remote --command "${COUNT_SQL}" --json > "${TMP}/count.json" 2>"${TMP}/count.err"; then
+    FAIL_REASON="row_counts_unreadable"
+    log "FATAL: a row-count query failed (a table in the manifest is missing from the restore)"
+    exit 3
+  fi
+  jq -c '.[] .results[]' "${TMP}/count.json" >> "${TMP}/counts.jsonl"
+done 4< "${TMP}/counts.sql"
+jq -s '.' "${TMP}/counts.jsonl" > "${TMP}/counts.json"
+if ! COMPARE=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" compare "${TMP}/manifest.json" "${TMP}/counts.json"); then
+  FAIL_REASON="row_counts_differ"
+  log "FATAL: ${COMPARE}"
+  exit 3
+fi
+log "${COMPARE}"
 
 # 4c. (removed, D263) This ran `npm run test:drift` from the checkout. That
 # suite never touches the restored database, the workflow never ran `npm ci`
@@ -300,5 +462,5 @@ fi
 # The EXIT trap deletes the throwaway database and writes the marker, on this
 # path and on every failure path alike.
 STEP="teardown"
-log "DR drill GREEN ✓ (backup=${LATEST_KEY}, users=${USERS}, projects=${PROJECTS})"
+log "DR drill GREEN ✓ (backup=${LATEST_KEY}, recovery point ${RECOVERY_POINT}, migration ${MIGRATION:-none recorded}, $(( $(date -u +%s) - STARTED_EPOCH )) s)"
 exit 0

@@ -30,7 +30,12 @@ export default function RecordEmailSheet({ person, from = null, readOnly = false
   const [state, setState] = useState({ status: 'reading' });
   const load = useCallback(() => {
     setState({ status: 'reading' });
-    Promise.all([api.accounts(), api.shares().catch(() => ({ items: [] })), api.context(person.ref)])
+    // #4740 (S1 audit): a failed shares read used to fall back to `{ items: [] }`,
+    // which told a member who HAD shared that they had not (NOT_SHARED is a
+    // false statement of fact) and silently blocked their composer too. No
+    // catch here: a failed shares read reaches the same `unreadable` state as
+    // a failed accounts or context read, below.
+    Promise.all([api.accounts(), api.shares(), api.context(person.ref)])
       .then(([a, s, pack]) => setState({ status: 'ready', accounts: a?.accounts ?? [], shares: s?.items ?? [], pack }))
       .catch(() => setState({ status: 'unreadable' }));
   }, [api, person.ref]);

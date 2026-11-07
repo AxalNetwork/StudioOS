@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, Copy, Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
+  Field, MoreRows, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -13,6 +13,9 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import {
   PROOF_DELETE_FAILED, PROOF_NOT_PUBLIC, proofDeleteLines, proofDeleteTitle, proofDeletedLine,
 } from './expertiseModel';
+import { usePagedList } from './pages';
+
+const readProofPage = (page) => api.listMyAdvisorProof(page);
 
 /**
  * Expertise · Proof — what you claim, and who has confirmed it.
@@ -147,7 +150,11 @@ function AskForm({ item, onDone }) {
 }
 
 export default function ProofZone() {
-  const [state, setState] = useState({ loading: true, error: '', items: [] });
+  // #4689: a page at a time; the tiles read `counts`, the whole record's figures.
+  const list = usePagedList(readProofPage, { errorText: 'Your proof record could not be read.' });
+  const state = { loading: list.loading, error: list.error, items: list.rows };
+  const counts = list.res?.counts || null;
+  const load = list.load;
   const [draft, setDraft] = useState(BLANK);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
@@ -166,15 +173,6 @@ export default function ProofZone() {
     return () => { live = false; };
   }, []);
 
-  const load = useCallback(async () => {
-    setState((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorProof();
-      setState({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [] });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your proof record could not be read.', items: [] });
-    }
-  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -245,9 +243,9 @@ export default function ProofZone() {
       {state.items.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: 'Attested', value: String(attested.length), note: 'named client, dated' },
-            { label: 'Awaiting consent', value: String(awaiting.length), note: 'asked, no answer yet' },
-            { label: 'Self-stated', value: String(selfStated.length), note: 'no external attestation' },
+            { label: 'Attested', value: String(counts?.attested ?? attested.length), note: 'named client, dated' },
+            { label: 'Awaiting consent', value: String(counts?.awaiting ?? awaiting.length), note: 'asked, no answer yet' },
+            { label: 'Self-stated', value: String(counts?.self_stated ?? selfStated.length), note: 'no external attestation' },
             // No verifying body is connected, so this is absent — never a dash
             // that reads like a value somebody chose (D392).
             { label: 'Credential verified', value: null, note: 'no verifying body connected' },
@@ -312,7 +310,7 @@ export default function ProofZone() {
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
-          <p className="text-[12.5px] text-axal-muted">{`No claim is in this state. ${state.items.length} in total.`}</p>
+          <p className="text-[12.5px] text-axal-muted">{`No claim is in this state. ${counts?.total ?? state.items.length} in total.`}</p>
         )}
         <div className="space-y-3">
           {shown.map((row) => {
@@ -400,6 +398,7 @@ export default function ProofZone() {
             );
           })}
         </div>
+        <MoreRows line={list.line} onMore={list.more} busy={list.moreBusy} error={list.moreError} testid="advisor-proof-more" />
       </ZoneBody>
     </div>
   );

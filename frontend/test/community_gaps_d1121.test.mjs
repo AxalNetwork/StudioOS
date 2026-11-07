@@ -17,7 +17,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import AdminJobsPage from '../src/pages/admin/AdminJobsPage.jsx';
 import AdminCirclesPage from '../src/pages/admin/AdminCirclesPage.jsx';
 import { buildJobs, daysOpenText, jobDaysOpen } from '../src/pages/admin/community/communityModel.js';
-import { JOBS as JOBS_SPEC, JOBS_FOOT, initialState, jobRow, listView } from '../src/pages/admin/community/lightboxModel.js';
+import { JOBS as JOBS_SPEC, JOBS_FOOT, jobRow } from '../src/pages/admin/community/lightboxModel.js';
 
 const h = React.createElement;
 const JOBS = [
@@ -127,8 +127,16 @@ test('days open: only a published posting is open, counted in whole days from it
   assert.equal(daysOpenText(byTitle('Before 609'), NOW), 'Days open not recorded');
   assert.equal(daysOpenText(byTitle('Closed since'), NOW), null);
 
-  // The Jobs card's most-applications rows carry it.
-  const card = buildJobs({ jobs: { status: 'ready', data: POSTINGS } }, NOW);
+  // #4717: the Jobs card's most-applications rows carry the Community read's own days open
+  // (counted at its as_of by the same rule, admin_community_d931), worded the same way.
+  const most = [
+    { posting_id: 2, title: 'One day', status: 'published', applications: 9, days_open: 1 },
+    { posting_id: 3, title: 'Before 609', status: 'published', applications: 4, days_open: { recorded: false, reason: 'x' } },
+    { posting_id: 1, title: 'Ten days', status: 'published', applications: 3, days_open: 10 },
+    { posting_id: 4, title: 'Closed since', status: 'closed', applications: 1, days_open: null },
+  ];
+  const overview = { status: 'ready', data: { blocks: { jobs: { available: true, by_status: { published: 3, closed: 2, draft: 1, pending_review: 0, rejected: 0 }, most_applied: most } } } };
+  const card = buildJobs({ overview });
   assert.deepEqual(card.most.map((j) => [j.title, j.daysOpen]), [
     ['One day', '1 day open'], ['Before 609', 'Days open not recorded'], ['Ten days', '10 days open'], ['Closed since', null],
   ]);
@@ -143,9 +151,9 @@ test('CM4: Posted and Days open, the Days open sort, and the footnote', () => {
   assert.deepEqual([row('Closed since').posted, row('Closed since').daysOpen], ['1 Sept', 'Not open']);
   assert.deepEqual([row('Closed before 609').posted, row('Closed before 609').daysOpen], ['Not recorded', 'Not open'], 'it was live once, so not "Not published"');
   assert.deepEqual([row('A draft').posted, row('A draft').daysOpen], ['Not published', 'Not open']);
-  const sorted = listView(JOBS_SPEC, POSTINGS, { ...initialState(JOBS_SPEC), sort: 'days_open' }).rows.map((j) => j.title);
-  assert.deepEqual(sorted.slice(0, 2), ['Ten days', 'One day'], 'longest open first');
-  assert.deepEqual(new Set(sorted.slice(2)), new Set(['Before 609', 'Closed since', 'Closed before 609', 'A draft']), 'not open or not recorded sorts last');
+  // #4717 package 4: the Days open order is the Worker's (community_lists_4717 checks longest open first,
+  // not-open and not-recorded last); the lightbox offers the sort and draws what it gets back.
+  assert.ok(JOBS_SPEC.sorts.some((x) => x.key === 'days_open'), 'the Days open sort is offered');
   assert.doesNotMatch(JOBS_FOOT, /not shown/);
   assert.match(JOBS_FOOT, /last approved/);
 });

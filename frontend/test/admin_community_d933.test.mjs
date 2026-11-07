@@ -25,6 +25,7 @@ import {
   deltaText, oldestWait, searchWithWeeks, waitText, weeksFrom,
 } from '../src/pages/admin/community/communityModel.js';
 import AdminCommunity from '../src/pages/admin/community/AdminCommunity.jsx';
+import { EVENT_TYPES } from '../src/lib/eventTypes.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -44,7 +45,11 @@ function overview(over = {}) {
   const blocks = {
     queue: {
       events: { available: true, count: 2, oldest_since: at(-100), oldest_hours: 100, overdue: 1, overdue_after_hours: 72, waiting_from_created_at: 0 },
-      jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, oldest_submitted_at: at(-30), oldest_wait_hours: 30 },
+      // #4717 package 2: the rows behind the queue's count, the server's own waits.
+      event_rows: { available: true, total: 2, rows: [
+        { event_id: 9, title: 'Pricing Clinic', waiting_since: at(-100), from_created: false, waiting_hours: 100, overdue: true },
+      ] },
+      jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, oldest_submitted_at: at(-30), oldest_wait_hours: 30, review: [] },
       overdue_hours: 72,
     },
     events: {
@@ -60,7 +65,8 @@ function overview(over = {}) {
       },
       show_up: { available: true, events: 3, seats_taken: 80, confirmed: 64, attended: 52, rate: 0.65 },
       upcoming: { available: true, events: 3, seats_taken: 59, full: 0 },
-      by_type: { available: true, counts: { workshop: 4, office_hours: 2, networking: 0, other: 1 } },
+      // The read counts all twelve types, zeros included (#4717 package 3: a type it leaves out is unreadable, not 0).
+      by_type: { available: true, counts: { ...Object.fromEntries(EVENT_TYPES.map((t) => [t.id, 0])), workshop: 4, office_hours: 2, other: 1 } },
       waitlisted: { available: true, registrations: 9, events: 2 },
     },
     jobs: {
@@ -95,8 +101,7 @@ function overview(over = {}) {
   return { weeks: 4, week_starts: WEEKS4, current_week: '2026-10-19', as_of: at(0), blocks: merge(blocks, over) };
 }
 
-const GLANCE = { approvals: { lanes: [{ key: 'events', count: 2 }, { key: 'jobs', count: 2 }] } };
-const READS = (o = overview()) => ({ glance: ok(GLANCE), events: ok([]), analytics: ok({ events: [], unreadable: [] }), jobs: ok([]), circles: ok([]), overview: ok(o) });
+const READS = (o = overview()) => ({ overview: ok(o) });
 const tile = (tiles, key) => tiles.find((t) => t.key === key);
 
 // ---------------------------------------------------------------- the period
@@ -121,7 +126,7 @@ test('deltas compare with the same weeks before, and never invent a percentage f
 });
 
 test('the period tiles: registrations and applications with deltas, show-up, and verified experts', () => {
-  const tiles = buildTiles(READS(), NOW);
+  const tiles = buildTiles(READS());
   assert.deepEqual([tile(tiles, 'registrations').value, tile(tiles, 'registrations').sub], ['60', '+50% on the 4 weeks before']);
   assert.deepEqual([tile(tiles, 'applications').value, tile(tiles, 'applications').sub], ['12', 'same as the 4 weeks before']);
   assert.deepEqual([tile(tiles, 'show-up').value, tile(tiles, 'show-up').sub], ['65%', '52 of 80 seats · 3 events ended']);
@@ -131,21 +136,21 @@ test('the period tiles: registrations and applications with deltas, show-up, and
 });
 
 test('show-up is a dash with its reason when no event ended or no seat was taken, never 0%', () => {
-  const none = buildTiles(READS(overview({ events: { show_up: { available: true, events: 0, seats_taken: 0, attended: 0, rate: null } } })), NOW);
+  const none = buildTiles(READS(overview({ events: { show_up: { available: true, events: 0, seats_taken: 0, attended: 0, rate: null } } })));
   assert.deepEqual([tile(none, 'show-up').value, tile(none, 'show-up').sub], ['—', 'No event ended in these 4 weeks.']);
-  const empty = buildTiles(READS(overview({ events: { show_up: { available: true, events: 2, seats_taken: 0, attended: 0, rate: null } } })), NOW);
+  const empty = buildTiles(READS(overview({ events: { show_up: { available: true, events: 2, seats_taken: 0, attended: 0, rate: null } } })));
   assert.deepEqual([tile(empty, 'show-up').value, tile(empty, 'show-up').sub], ['—', 'No seat was taken on the 2 events that ended.']);
 });
 
 test('each period tile answers alone: loading, a block that failed, and the whole read failing', () => {
-  const load = buildTiles({ ...READS(), overview: loading }, NOW);
+  const load = buildTiles({ ...READS(), overview: loading });
   for (const k of ['registrations', 'applications', 'show-up', 'experts']) assert.equal(tile(load, k).state, 'loading', k);
-  const whole = buildTiles({ ...READS(), overview: bad }, NOW);
+  const whole = buildTiles({ ...READS(), overview: bad });
   for (const k of ['registrations', 'applications', 'show-up', 'experts']) {
     assert.equal(tile(whole, k).state, 'unreadable', k);
     assert.equal(tile(whole, k).value, undefined, `${k} drew a value from a failed read`);
   }
-  const one = buildTiles(READS(overview({ jobs: gone('The job board') })), NOW);
+  const one = buildTiles(READS(overview({ jobs: gone('The job board') })));
   assert.equal(tile(one, 'applications').state, 'unreadable');
   assert.match(tile(one, 'applications').reason, /The job board could not be read.*not the same as none/);
   assert.equal(tile(one, 'registrations').state, 'ready', 'a failed jobs block cost the events tile');
@@ -155,7 +160,7 @@ test('each period tile answers alone: loading, a block that failed, and the whol
 });
 
 test('Waiting on you gains the oldest wait, and the amber dot past 72 hours', () => {
-  const t = tile(buildTiles(READS(), NOW), 'waiting');
+  const t = tile(buildTiles(READS()), 'waiting');
   assert.equal(t.sub, '2 events · 2 jobs · oldest 4 days', 'the oldest of both queues, 100 hours, whole days');
   assert.equal(t.overdue, true);
   assert.match(t.note, /1 jobs were submitted before waits were recorded, so they are not dated or marked overdue/);
@@ -275,24 +280,27 @@ test('wellbeing: under seven founders the band is withheld with the canvas\'s se
 
 // ---------------------------------------------------------------- Needs a decision
 
-test('Needs a decision: each row says how long it waited, and is Overdue past 72 hours', () => {
-  const reads = {
-    events: ok([
-      { id: 1, title: 'Pricing Clinic', status: 'pending_review', submitted_at: at(-80), created_at: at(-200) },
-      { id: 2, title: 'Legacy Talk', status: 'pending_review', submitted_at: null, created_at: at(-10) },
-    ]),
-    jobs: ok([
-      { id: 3, title: 'Backend Engineer', status: 'pending_review', submitted_at: at(-72), created_at: at(-300) },
-      { id: 4, title: 'Old Posting', status: 'pending_review', submitted_at: null, created_at: at(-500) },
-    ]),
-  };
-  const n = buildNeeds(reads, NOW);
+test('#4717 Needs a decision: each row\'s wait and Overdue are the Community read\'s, measured at its as_of', () => {
+  // The server measured these at its `as_of`; the page words them and never recomputes them.
+  const o = overview({ queue: {
+    event_rows: { available: true, total: 2, rows: [
+      { event_id: 1, title: 'Pricing Clinic', waiting_since: at(-80), from_created: false, waiting_hours: 80, overdue: true },
+      { event_id: 2, title: 'Legacy Talk', waiting_since: at(-10), from_created: true, waiting_hours: 10, overdue: false },
+    ] },
+    jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, oldest_wait_hours: 72, review: [
+      { posting_id: 3, title: 'Backend Engineer', company: null, waiting_since: at(-72), waiting_hours: 72, overdue: false },
+      { posting_id: 4, title: 'Old Posting', company: null, waiting_since: null, waiting_hours: null, overdue: false },
+    ] },
+  } });
+  const n = buildNeeds({ overview: ok(o) });
   assert.deepEqual(n.rows.map((r) => [r.title, r.wait, r.overdue]), [
     ['Pricing Clinic', 'waiting 3 days', true],
     ['Backend Engineer', 'waiting 3 days', false],
     ['Legacy Talk', 'waiting 10 hours · since created', false],
     ['Old Posting', 'wait not recorded', false],
-  ], 'exactly 72 hours is not overdue, and a job with no submission stamp is never dated');
+  ], 'a job with no submission stamp is never dated');
+  // The queues' own counts: 2 events (1 overdue) and 2 jobs (none overdue).
+  assert.equal(n.total, 4);
   assert.equal(n.overdue, 1);
 });
 
@@ -435,23 +443,35 @@ test('mounted: a filter chip reads Recent activity again for its kind only', asy
   } finally { await m.unmount(); }
 });
 
-test('mounted CM10a: the Community read failing costs only its blocks, and none is drawn as zero', async () => {
-  const m = await mount(COMMUNITY_PATH, { fail: ['overview', 'activity'] });
+test('#4717 mounted: the page\'s one read failing draws no figure at all, and says nothing is a zero', async () => {
+  const m = await mount(COMMUNITY_PATH, { fail: ['overview'] });
   try {
-    assert.match(m.of('community-tile-registrations'), /Unreadable.*Community read could not be read/s);
-    assert.match(m.of('community-card-activity'), /could not be read\. That is not the same as no activity\./);
+    assert.match(m.of('community-unreadable'), /Community figures could not be read\. Nothing here is a zero\./);
+    assert.ok(!m.has('community-tiles'), 'a tile drawn without its read');
+    assert.ok(!m.has('community-card-jobs'), 'a card drawn without its read');
+  } finally { await m.unmount(); }
+});
+
+test('mounted CM10a: a block the Community read could not read costs only that block, and Recent activity fails alone', async () => {
+  const answer = () => overview({ jobs: gone('The job board'), events: { weekly: gone('The weekly registrations') } });
+  const m = await mount(COMMUNITY_PATH, { fail: ['activity'], answer });
+  try {
+    assert.match(m.of('community-tile-registrations'), /Unreadable.*could not be read/s);
+    assert.match(m.of('community-tile-applications'), /Unreadable.*could not be read/s);
     assert.match(m.of('community-card-recent'), /Community activity could not be read\. That is not the same as nothing happening\./);
-    assert.match(m.of('community-card-wellbeing'), /could not be read/);
-    assert.match(m.of('community-tile-waiting'), /4.*2 events · 2 jobs/s, 'the glance stopped answering');
-    assert.ok(!m.has('community-unreadable'), 'the page banner needs every read to fail');
+    assert.match(m.of('community-tile-waiting'), /4.*2 events · 2 jobs/s, 'the queues stopped answering');
+    assert.match(m.of('community-card-wellbeing'), /9 verified|verified/);
+    assert.ok(!m.has('community-unreadable'), 'one block\'s failure is not the page\'s');
   } finally { await m.unmount(); }
 });
 
 test('mounted: an answer for another period is refused, never drawn as this one', async () => {
   const m = await mount(`${COMMUNITY_PATH}?weeks=52`, { answer: () => ({ ...overview(), weeks: 4 }), pin: true });
   try {
-    assert.match(m.of('community-tile-registrations'), /Unreadable/);
-    assert.doesNotMatch(m.of('community-tile-registrations'), /60/);
+    // #4717: the page's one read refused, so no figure of another period is drawn as this one's.
+    assert.match(m.of('community-unreadable'), /Nothing here is a zero/);
+    assert.ok(!m.has('community-tiles'));
+    assert.doesNotMatch(m.text(), /60 registrations|\b60\b.*on the 4 weeks/);
   } finally { await m.unmount(); }
 });
 
