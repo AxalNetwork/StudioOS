@@ -286,3 +286,86 @@ test('D4855 cart: a free order has no payment webhook, so its discount is commit
   assert.equal(res.body.free, true);
   assert.deepEqual(ledger(db).map((r) => [r.amount_cents, r.state]), [[8000, 'committed']]);
 });
+
+// ── Option B (owner, 2026-11-07): no ceiling recorded for the period allows the discount ─────────
+
+test('D4855 option B, plan checkout: with no ceiling the quote shows the discount, the start gives it and records it, and a retry is the same row', async () => {
+  const { db, env } = world(null);
+  const q = await quote(env, db, 'PCT5');
+  assert.deepEqual(q.body.discount, { amount: 500, code: 'PCT5' });
+  assert.equal(q.body.discount_reason ?? null, null);
+  assert.deepEqual(ledger(db), [], 'a quote records nothing');
+  const s1 = await start(env, db, 'nonce-nocap-0001', 'PCT5');
+  assert.equal(s1.status, 200, s1.text);
+  assert.equal(posted('/subscriptions')[0].get('metadata[promo_reservation_ref]'), ledger(db)[0].ref);
+  assert.deepEqual(ledger(db).map((r) => [r.amount_cents, r.state]), [[500, 'reserved']]);
+  assert.equal((await start(env, db, 'nonce-nocap-0001', 'PCT5')).status, 200);
+  assert.equal(ledger(db).length, 1);
+  // A big discount is not held back by a ceiling that is not there.
+  const big = await start(env, db, 'nonce-nocap-0002', 'PCT20', OTHER);
+  assert.equal(big.status, 200, big.text);
+});
+
+test('D4855 option B, plan checkout: a ceiling for another period is the same as none, and the first paid invoice commits the recorded row', async () => {
+  const { db, env } = world(1000);
+  db.prepare("UPDATE branch_promo_ceiling SET period = '2019-Q1'").run();
+  const s = await start(env, db, 'nonce-old-0001', 'PCT20');
+  assert.equal(s.status, 200, s.text);
+  assert.deepEqual(ledger(db).map((r) => [r.amount_cents, r.state]), [[2000, 'reserved']]);
+  const { commitPromoReservation } = await import('../src/services/promoRedemption.ts');
+  await commitPromoReservation(env, ledger(db)[0].ref);
+  assert.deepEqual(ledger(db).map((r) => r.state), ['committed']);
+});
+
+test('D4855 option B, plan checkout: the automatic influencer offer applies when no ceiling is recorded', async () => {
+  const { db, env } = world(null);
+  db.prepare(`INSERT INTO influencer_offers (uid, influencer_user_id, promo_id, budget_cents, currency, status, featured, created_by)
+    VALUES ('off-20', ?, 'promo_p20', 50000, 'USD', 'active', 0, ?)`).run(JANE, SUPER);
+  const q = await quote(env, db, undefined, OTHER);
+  assert.deepEqual(q.body.discount, { amount: 2000, code: 'PCT20' });
+  const s = await start(env, db, 'nonce-offer-0001', undefined, OTHER);
+  assert.equal(s.status, 200, s.text);
+  assert.equal(posted('/subscriptions')[0].get('discounts[0][promotion_code]') !== null, true);
+  assert.deepEqual(ledger(db).map((r) => [r.amount_cents, r.state]), [[2000, 'reserved']]);
+});
+
+test('D4855 option B, plan checkout: a ledger write that fails with no ceiling does not stop the start', async () => {
+  const { db, env } = world(null);
+  db.exec('DROP TABLE promo_ceiling_reservations');
+  const s = await start(env, db, 'nonce-lost-0001', 'PCT5');
+  assert.equal(s.status, 200, s.text);
+  assert.equal(posted('/subscriptions').length, 1);
+  assert.equal(posted('/subscriptions')[0].get('metadata[promo_reservation_ref]'), null, 'nothing is stamped for a row that was not written');
+});
+
+test('D4855 option B, plan checkout: an unreadable ceiling still refuses the start', async () => {
+  const { db, env } = world(1000);
+  db.exec('DROP TABLE promo_ceiling_reservations');
+  const s = await start(env, db, 'nonce-bad-0001', 'PCT5');
+  assert.equal(s.status, 400, s.text);
+  assert.equal(s.body.reason, 'ceiling_unreadable');
+  assert.equal(posted('/subscriptions').length, 0);
+});
+
+test('D4855 option B, cart: with no ceiling a code is allowed and held once; a free cart is committed at once', async () => {
+  const { db, env } = world(null);
+  const ok = await hit(env, db, '/api/orders/intent', MEMBER, cart('n1', 'SIX'));
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.body.discount_cents, 600);
+  assert.equal(posted('/payment_intents')[0].get('metadata[promo_reservation_ref]'), ledger(db)[0].ref);
+  const again = await hit(env, db, '/api/orders/intent', MEMBER, cart('n1', 'SIX'));
+  assert.equal(again.status, 200, again.text);
+  assert.equal(ledger(db).length, 1);
+  const free = await hit(env, db, '/api/orders/intent', MEMBER, cart('n2', 'FULL'));
+  assert.equal(free.status, 200, free.text);
+  assert.equal(free.body.free, true);
+  assert.deepEqual(ledger(db).map((r) => r.state).sort(), ['committed', 'reserved']);
+});
+
+test('D4855 option B, cart: a ledger write that fails with no ceiling does not block the order', async () => {
+  const { db, env } = world(null);
+  db.exec('DROP TABLE promo_ceiling_reservations');
+  const ok = await hit(env, db, '/api/orders/intent', MEMBER, cart('n3', 'SIX'));
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.body.discount_cents, 600);
+});

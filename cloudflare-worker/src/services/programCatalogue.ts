@@ -47,7 +47,7 @@ export const DEFAULT_PROGRAM_WEEKS: ProgramWeeks = 12;
 
 export const HQ_READS_REASON = 'HQ reads these figures.';
 export const LAB_PEOPLE_REASON =
-  'The Lab is left out until O-FND and #2374 say who a cohort\'s founders are.';
+  'The Lab is left out until a cohort\'s founders are defined.';
 export const REFERRAL_REWARDS_REASON = 'Referral rewards are not paid in perk credits yet.';
 export const PRODUCT_TESTING_HQ_ONLY = 'Runs at HQ. Its figures are for HQ only.';
 
