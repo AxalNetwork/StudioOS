@@ -5,9 +5,10 @@ import { companyLogoApi } from '../../../lib/api/companyLogo';
 import { safeReadJSON } from '../../../lib/storage';
 import { useUpdateCompanyDetails } from '../../../contexts/ActiveCompanyContext';
 import {
-  DESCRIPTION_MAX, LABELS, LEAVE_PROMPT, LOGO_HINT, SECTIONS, STAGES, canEditCompany, changes, formOf, logoProblem, problemOf, readOnlyLine, regionsOf, regionsText, shownLogo, unsavedLine,
+  CURRENCY_CODES, DESCRIPTION_MAX, LABELS, LEAVE_PROMPT, LOGO_HINT, SECTIONS, STAGES, canEditCompany, changes, formOf, logoProblem, problemOf, readOnlyLine, regionsOf, regionsText, shownLogo, unsavedLine,
 } from './generalFormModel';
-import { CompanyMark, Failed, INK, MUTED, PCard, Reading } from './portfolioUi.jsx';
+import { CompanyMark, Failed, INK, MUTED, NotYours, PCard, Reading } from './portfolioUi.jsx';
+import * as portfolio from './portfolioAdapter.js';
 
 /**
  * D4152 (#4152 §5, ST2–ST6) — Company settings › General: one form, one
@@ -50,6 +51,15 @@ function Field({ f, form, set, disabled }) {
     input = (
       <select id={id} className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)}>
         {STAGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+    );
+  } else if (f === 'default_currency') {
+    // An unrecorded currency is "Not recorded", never a guessed default; a stored code off the list is still shown.
+    const codes = v && !CURRENCY_CODES.includes(v) ? [v, ...CURRENCY_CODES] : CURRENCY_CODES;
+    input = (
+      <select id={id} className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} data-testid="general-default-currency">
+        <option value="" data-testid="general-default-currency-none">Not recorded</option>
+        {codes.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
     );
   } else if (f === 'international_presence') {
@@ -123,10 +133,12 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi }) {
   useEffect(() => {
     let alive = true;
     setState({ status: 'loading', row: null });
-    teamsApi.getCompany(uid).then(
-      (row) => { if (alive) { setState({ status: 'ready', row }); setForm(formOf(row)); } },
-      () => { if (alive) setState({ status: 'error', row: null }); },
-    );
+    // #4736: a 404 is "not yours to open" (no Try again); any other failure is a real error that retries.
+    portfolio.through(() => teamsApi.getCompany(uid)).then((r) => {
+      if (!alive) return;
+      if (r.available) { setState({ status: 'ready', row: r.value }); setForm(formOf(r.value)); }
+      else setState({ status: r.notFound ? 'notFound' : 'error', row: null });
+    });
     return () => { alive = false; };
   }, [uid, tick]);
 
@@ -170,6 +182,7 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi }) {
   };
 
   if (state.status === 'loading') return <PCard title="General"><Reading lines={4} /></PCard>;
+  if (state.status === 'notFound') return <NotYours />;
   if (state.status === 'error') return <PCard title="General" testId="company-general"><Failed what="Settings" onRetry={() => setTick((n) => n + 1)} testId="company-general-unread" /></PCard>;
 
   const name = String(form.company_name || row.company_name || '').trim();

@@ -26,6 +26,8 @@ npm run bench:d1 -- --tenants 100 --ramp 1,5,10,25,50,100 --seconds 5 --max-p95-
 npm run bench:d1 -- --tenants 100 --hot 0.5                       # one tenant takes half the load
 npm run bench:d1 -- --tenants 10 --mix C=1 --concurrency 1        # agent runs alone: exact statements per stage
 npm run bench:d1 -- --tenants 1 --control 1000,10000,100000       # the chargedFor scan as ai_usage_logs grows
+npm run bench:d1 -- --tenants 1 --index-control 1000,10000,100000 # D4568's indexes: reads and insert upkeep, with and without
+npm run bench:d1 -- --tenants 10 --mix C=1 --without-candidates   # a mix on the schema before D4568
 ```
 
 **What it does.** It drives the Worker's own services over a throwaway node:sqlite database:

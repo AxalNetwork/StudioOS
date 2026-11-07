@@ -10,6 +10,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | File | Covers |
 | --- | --- |
 | `RUNTIME_DDL_2026-11-07.md` | Every runtime `ADD COLUMN` in the Worker: 360 blind ALTERs in 61 files, 359 for columns a migration already declares, so each fails as `duplicate column name` on every fresh isolate against an up-to-date database; the cohort bootstrap moved onto `runSchemaBootstrap` and the no-growth ratchet (#4568 R2-04). |
+| `USAGE_TABLES_2026-11-07.md`, `USAGE_TABLES_2026-11-07.json` | The five usage tables read from the code: every statement, its plan, each index's readers and write cost, the foreign keys and triggers that bound retention, and D4568's before and after (D4568). |
 | `D1_BASELINE_2026-11-06.md`, `D1_BASELINE_2026-11-06.json` | The D1 contention benchmark's first results (simulated): statements per operation and stage, the scans that grow with the platform, load steps, growth, invariants, and what production's baseline must still supply (D4567). |
 | `SCALE_1000_DAU_AUDIT_2026-09-18.md` | Worker + D1 + SPA load for the first 1,000 daily users, with a Claude Code implementation plan. |
 | `PERFORMANCE_BASELINE_2026-11-06.md` | #4573 part 1: what is measured on main, the frontend shell and lazy-chunk composition, lab Web Vitals for the anonymous pages, D1 statements per API flow, ten proven hotspots and the budgets now in CI. Local and read-only; production metrics are marked unavailable. |

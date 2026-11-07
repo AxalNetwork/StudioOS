@@ -10,8 +10,9 @@
  * SUMS. `estimate_points` sums the estimates of the week's items; an item with
  * no estimate is counted in `unestimated`, never as 0 points.
  *
- * CAPACITY. A person's `weekly_capacity_points` (`work_capacity`), set in their
- * Team profile. Unset is `{ available: false, reason: 'Not recorded' }`,
+ * CAPACITY. A person's `weekly_capacity_points` (`work_capacity`), set from the
+ * Workload view by that person or by a project editor
+ * (`PUT /api/teams/project/:id/work/capacity/:person`, #4735). Unset is `{ available: false, reason: 'Not recorded' }`,
  * never 0, and a person with no capacity recorded is never over it
  * (`over_capacity: null`). Agents have no points capacity: their caps are money
  * (D1496), so their `capacity` and `over_capacity` are null.

@@ -3,7 +3,7 @@
  * Cloudflare Stream: the upload state machine, the 200 MB switch between basic
  * POST and tus, the 10-second poll, the thumbnail, captions (WebVTT only) and
  * chapters (times increase, at most 100), the content table's Video column
- * and the Copy to Stream state that waits for L4 (#4179), and that no control
+ * and L4's (#4179) Copy to Stream state, wired by #4742, and that no control
  * is drawn before L1's routes answer.
  *
  * The Worker calls run through the real client against a stubbed `fetch`
@@ -396,9 +396,13 @@ test('the thumbnail: a slider over the video, the frame from Stream\'s own host 
 
 // ── The content table (lr16) ───────────────────────────────────────────────
 
-test('the content table\'s Video column, and Copy to Stream drawn only when the read carries L4\'s copy state', () => {
+test('the content table\'s Video column, and Copy to Stream drawn once the read carries the copy state (#4742)', () => {
   const row = (over) => ({ kind: 'video', uid: 'v', title: 'T', status: 'published', visibility: 'open', programs: null, updated_at: '2026-10-30', ...over });
   assert.deepEqual(videoColumn(row({ stream_uid: SUID, video_source: 'r2' })), ['Stream · Ready', 'ok']);
+  // #4742 (item 2): a video uploaded straight to Stream carries no `video_source` at all (only an
+  // R2 upload sets it) — "Stream · Ready" must not depend on it. Mutation checked: check
+  // `video_source` before `stream_uid` → this reads "Not recorded" instead and fails.
+  assert.deepEqual(videoColumn(row({ stream_uid: SUID })), ['Stream · Ready', 'ok']);
   assert.deepEqual(videoColumn(row({ video_source: 'r2' })), ['Uploaded file', 'warn']);
   assert.deepEqual(videoColumn(row({ video_source: 'url', video_url: 'https://vimeo.com/1' })), ['Link', 'neutral']);
   assert.deepEqual(videoColumn(row({ video_source: null, stream_uid: null })), ['None', 'neutral']);
@@ -410,40 +414,45 @@ test('the content table\'s Video column, and Copy to Stream drawn only when the 
   assert.ok(!Object.hasOwn(plain, 'stream_uid') && !Object.hasOwn(plain, 'stream_copy'));
   const [carried] = studioRows([{ ...ITEM, video_source: 'r2', stream_uid: null, stream_copy: null }], []);
   assert.deepEqual([carried.stream_uid, carried.stream_copy], [null, null]);
-  // Today (no L4): no copy state, no banner, no Copy to Stream.
+  // A read with no copy state at all (absent field, e.g. an older cached read): no banner, no Copy to Stream.
   const today = html(h(StudioContentTable, { status: 'ready', rows: [row({ uid: 'a', video_source: 'r2' })] }));
   assert.match(flat(today), /Programs Video Updated/);
   assert.match(flat(today), /Uploaded file/);
   assert.doesNotMatch(today, /studio-storage-banner|Copy to Stream|Copying|Verified/);
   assert.equal(stillOnStorage([row({ video_source: 'r2' })]), null);
-  // With L4's field (a guess, `stream_copy`): each state, and the banner.
+  // The route's own shape (`GET /items` since #4179): {state:'none'} reads the same as the bare
+  // `null` a local optimistic update or an older fixture may still carry.
+  // Mutation checked: map {state:'none'} to null instead of 'copy' → the 'a' row below fails.
   const rows = [
-    row({ uid: 'a', video_source: 'r2', stream_uid: null, stream_copy: null }),
+    row({ uid: 'a', video_source: 'r2', stream_uid: null, stream_copy: { state: 'none' } }),
     row({ uid: 'b', video_source: 'r2', stream_uid: null, stream_copy: { state: 'copying' } }),
     row({ uid: 'c', video_source: 'r2', stream_uid: null, stream_copy: { state: 'verified' } }),
     row({ uid: 'd', video_source: 'r2', stream_uid: null, stream_copy: { state: 'failed', error_message: 'Stream rejected the file: unsupported container.' } }),
     row({ uid: 'e', video_source: 'r2', stream_uid: SUID, stream_copy: null }),
+    row({ uid: 'f', video_source: 'r2', stream_uid: null, stream_copy: null }),
   ];
-  assert.deepEqual(rows.map(streamCopyOf), ['copy', 'copying', 'verified', 'failed', null]);
-  assert.equal(stillOnStorage(rows), 3);
-  assert.equal(storageBanner(3), '3 uploaded videos still play from storage.');
+  assert.deepEqual(rows.map(streamCopyOf), ['copy', 'copying', 'verified', 'failed', null, 'copy']);
+  assert.equal(stillOnStorage(rows), 4);
+  assert.equal(storageBanner(4), '4 uploaded videos still play from storage.');
   const later = html(h(StudioContentTable, { status: 'ready', rows, onCopyToStream: () => {} }));
-  assert.match(flat(later), new RegExp(`3 uploaded videos still play from storage\\. ${escapeRe(STORAGE_BANNER_LINE)}`));
+  assert.match(flat(later), new RegExp(`4 uploaded videos still play from storage\\. ${escapeRe(STORAGE_BANNER_LINE)}`));
   assert.match(later, /data-testid="button-copy-stream-a"/);
+  assert.match(later, /data-testid="button-copy-stream-f"/);
   assert.match(flat(later), /Copying…/);
   assert.match(flat(later), /Verified/);
   assert.match(flat(later), /Stream rejected the file: unsupported container\. Copy failed · Try again/);
   assert.doesNotMatch(later, /button-copy-stream-e/, 'a video already on Stream is not copied again');
-  // No handler (no L4 route): the states draw, the buttons do not.
+  // No handler: the states still draw, the buttons do not.
   const noRoute = html(h(StudioContentTable, { status: 'ready', rows }));
   assert.doesNotMatch(noRoute, /button-copy-stream|Try again/);
   assert.match(flat(noRoute), /Copy failed/);
-  // No route is invented: L4 (#4179) mounted `POST /stream/migrations` with its client method, so the
-  // client's copy path must be the Worker's own route; the studio still passes no handler.
-  if (/stream\/migrations/.test(read('frontend/src/lib/api/adminLearning.js'))) {
-    assert.match(read('cloudflare-worker/src/routes/learning_stream.ts'), /admin\.post\('\/stream\/migrations'/, 'a client copy path with no Worker route');
-  }
-  assert.doesNotMatch(codeOnly(read('frontend/src/pages/learning/LearningStudio.jsx')), /onCopyToStream/);
+  // #4742 — no route is invented: the client's copy path is the Worker's own mounted route, and
+  // LearningStudio.jsx now wires it as `onCopyToStream` rather than passing no handler.
+  assert.match(read('frontend/src/lib/api/adminLearning.js'), /stream\/migrations/);
+  assert.match(read('cloudflare-worker/src/routes/learning_stream.ts'), /admin\.post\('\/stream\/migrations'/, "the client's copy path is the Worker's own route");
+  const studioSrc = codeOnly(read('frontend/src/pages/learning/LearningStudio.jsx'));
+  assert.match(studioSrc, /onCopyToStream/, 'the Studio wires Copy to Stream into the table');
+  assert.match(studioSrc, /copyToStream\(row\.uid\)/, 'through studioActions.copyToStream, not a new call');
 });
 
 test('the AI surfaces\' words, and no email, in the new code', () => {

@@ -102,6 +102,8 @@ export const workAdapter = {
   // D1614 W8 (#3994): the Team picker and My tasks (#4286).
   assignable: (projectId) => through(() => workApi.assignable(projectId), WORK_OFF),
   myTasks: (filter) => through(() => workApi.myTasks(filter), WORK_OFF),
+  // #4735: a person's weekly capacity (`null` clears it), W4's `PUT /work/capacity/:person`.
+  setCapacity: (projectId, personUid, points) => through(() => workApi.setCapacity(projectId, personUid, points), WORK_OFF),
 };
 
 /** Every method, with the issue that turns it on, for the decision file and its test. */
@@ -131,5 +133,5 @@ export const WORK_SEAM = Object.freeze({
   complianceTasks: '#3976', complianceTask: '#3976', markDone: '#3976', createWork: '#3976',
   complianceCreate: '#3976', complianceUpdate: '#3976', complianceAssignable: '#3976', complianceAssign: '#3976',
   complianceComment: '#3976', complianceReady: '#3976', complianceReopen: '#3976',
-  assignable: '#3994', myTasks: '#3994',
+  assignable: '#3994', myTasks: '#3994', setCapacity: '#4735',
 });

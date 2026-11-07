@@ -154,7 +154,7 @@ async function dlqAlerts(env: Env, d: AlertDeps, out: AlertCounts) {
     type: 'agents_dlq',
     title: 'Agent runs reached the dead-letter queue',
     body: `${Number(r.n)} agent run message(s) failed every retry and reached the dead-letter queue.`,
-    link: '/admin/operations',
+    link: '/hq/ai-agents/operations',
   });
   out.dlq += Number(r.n);
 }
@@ -176,7 +176,7 @@ async function gatewayAlerts(env: Env, now: Date, d: AlertDeps, out: AlertCounts
     type: 'agents_gateway_near',
     title: `Agents are at ${GATEWAY_THRESHOLD}% of the gateway's monthly limit`,
     body: `Agent runs this month have spent ${GATEWAY_THRESHOLD}% or more of the agents gateway's limit. At 100% the engine pauses itself.`,
-    link: '/admin/operations',
+    link: '/hq/ai-agents/operations',
   });
   out.gateway_70 += 1;
 }
@@ -201,6 +201,6 @@ export async function sweepAgentAlerts(env: Env, now = new Date(), deps: Partial
 /** The halt set or cleared: HQ hears each change. */
 export async function haltAlert(env: Env, halted: boolean, reason: string | null, byName: string | null, d: Pick<AlertDeps, 'tellHq'> = DEFAULT_DEPS) {
   await d.tellHq(env, halted
-    ? { type: 'agents_halt_set', title: 'Every agent is halted', body: `${byName ?? 'An admin'} halted every agent${reason ? `: ${reason}` : ''}. Runs end at their next step; nothing new starts.`, link: '/admin/agents' }
-    : { type: 'agents_halt_cleared', title: 'Agents may run again', body: `${byName ?? 'An admin'} cleared the halt. Agents may be started again.`, link: '/admin/agents' });
+    ? { type: 'agents_halt_set', title: 'Every agent is halted', body: `${byName ?? 'An admin'} halted every agent${reason ? `: ${reason}` : ''}. Runs end at their next step; nothing new starts.`, link: '/hq/ai-agents/operations/policies' }
+    : { type: 'agents_halt_cleared', title: 'Agents may run again', body: `${byName ?? 'An admin'} cleared the halt. Agents may be started again.`, link: '/hq/ai-agents/operations/policies' });
 }

@@ -135,7 +135,7 @@ test('days open: only a published posting is open, counted in whole days from it
     { posting_id: 1, title: 'Ten days', status: 'published', applications: 3, days_open: 10 },
     { posting_id: 4, title: 'Closed since', status: 'closed', applications: 1, days_open: null },
   ];
-  const overview = { status: 'ready', data: { blocks: { jobs: { available: true, by_status: { published: 3, closed: 2, draft: 1 }, most_applied: most } } } };
+  const overview = { status: 'ready', data: { blocks: { jobs: { available: true, by_status: { published: 3, closed: 2, draft: 1, pending_review: 0, rejected: 0 }, most_applied: most } } } };
   const card = buildJobs({ overview });
   assert.deepEqual(card.most.map((j) => [j.title, j.daysOpen]), [
     ['One day', '1 day open'], ['Before 609', 'Days open not recorded'], ['Ten days', '10 days open'], ['Closed since', null],
