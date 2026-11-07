@@ -10,6 +10,8 @@
  *   PATCH  /:uid              move, resize, change the repeat or reminder, skip
  *   DELETE /:uid              remove it
  *   POST   /:uid/done         mark it done
+ *   GET    /next              the member's next learning action and its reason, or an
+ *                             empty state naming what was checked (#4650, D4650)
  *
  * RULES (#3959):
  *   - Only a subject the caller can see is planned (`canSeeLearning`); any other
@@ -26,6 +28,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { refuse } from '../util/refusal';
+import { nextFor } from '../services/learningNext';
 import {
   PLAN_KINDS, REPEATS, occurrences, planRowsIn, planTitle, recordedDone, registerForWebinar, resolveSubject, weekdaysOf,
   type PlanKind, type PlanRow,
@@ -113,6 +116,12 @@ async function viewOf(env: Env, user: User, row: PlanRow, fromIso?: string, toIs
     ...(fromIso && toIso ? { occurrences: occurrences(row, fromIso, toIso) } : {}),
   };
 }
+
+// #4650 (D4650): the next learning action, by explainable rules (services/learningNext.ts). Read-only.
+r.get('/next', async (c) => {
+  const user = await member(c); if (user instanceof Response) return user;
+  return c.json(await nextFor(c.env, user));
+});
 
 r.get('/', async (c) => {
   const user = await member(c); if (user instanceof Response) return user;
