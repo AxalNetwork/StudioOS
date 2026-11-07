@@ -55,6 +55,17 @@ export function StudioLayoutNotice({ studio, titleOf }) {
       </p>,
     );
   }
+  // D4622: the catalogue failing is its own notice; the layout above is unaffected and Try again re-reads only the catalogue.
+  if (studio.modulesRead === 'failed' && studio.layoutRead !== 'loading' && !studio.noProfile && !studio.readOnly) {
+    out.push(
+      <p key="modules" className="sm-notice" role="status" data-testid="studio-notice-modules">
+        <Info size={14} aria-hidden="true" />
+        <span>The module list could not be read, so Customise is unavailable for now.</span>
+        <span className="sm-spacer" />
+        <button type="button" className="sm-btn sm-btn-s sm-btn-sm" onClick={studio.reloadModules}>Try again</button>
+      </p>,
+    );
+  }
   const lines = droppedLines(studio.dropped);
   if (lines.length) {
     out.push(
