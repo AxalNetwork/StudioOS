@@ -106,7 +106,7 @@ A zone with real derivations keeps them in a sibling module that imports nothing
 - `sessionGrid.js` — PR4's slot precedence, the four tile counts, day grouping
   and the blackout label. The first module here to hold **both** kinds of time,
   so its header says which is which.
-- `earningsLedger.js` — D4's four windows, its cut note and its payout labels.
+- `earningsLedger.js` — D4's four windows, its cut note and its payout labels. D4679: `latestOnly` (only the newest request writes), `draftFitsPeriod` (text is filed only against its own period) and `stateTiles` ("You received" is the collected net only).
   It holds the third pairing: a period is a **calendar label** (`2026-Q3`, a
   key and a chip) whose **bounds are UTC instants**, because `created_at` is.
 - `practiceTools.js` — D571's: the deliverable flow, the four price modes and

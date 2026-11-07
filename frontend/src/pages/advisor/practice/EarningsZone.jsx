@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
@@ -7,7 +7,8 @@ import {
   buttonClass, ghostButtonClass, inputClass, money,
 } from '../expertise/kit';
 import {
-  PAYOUT_STATE_LABEL, PAYOUT_TONE, cutNote, noteIsStale, payoutWhen, periodWindow,
+  PAYOUT_STATE_LABEL, PAYOUT_TONE, cutNote, draftFitsPeriod, latestOnly, noteIsStale,
+  payoutWhen, periodWindow, stateTiles,
 } from './earningsLedger';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -153,6 +154,12 @@ export default function EarningsZone() {
   useRailOption(drafting ? 'draft:period-narrative' : null, 'Draft it');
   // The model's last text for this window, so Accept can say who wrote what is filed.
   const [modelText, setModelText] = useState(null);
+  // #4679 — tickets so only the latest read/draft for the CURRENT period writes,
+  // and the period each piece of note text belongs to.
+  const ledgerTicket = useRef(latestOnly());
+  const restTicket = useRef(latestOnly());
+  const draftTicket = useRef(latestOnly());
+  const [draftKey, setDraftKey] = useState(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saveNote, setSaveNote] = useState(null);
@@ -207,11 +214,16 @@ export default function EarningsZone() {
   }, []);
 
   const loadLedger = useCallback(async (w) => {
-    setLedger((c) => ({ ...c, loading: true, error: '' }));
+    const t = ledgerTicket.current.begin();
+    // The previous window's figures are cleared, not kept under the new
+    // heading while the read is in flight.
+    setLedger({ loading: true, error: '', data: null });
     try {
       const data = await api.getMyAdvisorLedger({ from: w.from, until: w.until });
+      if (!ledgerTicket.current.isCurrent(t)) return;
       setLedger({ loading: false, error: '', data });
     } catch (e) {
+      if (!ledgerTicket.current.isCurrent(t)) return;
       setLedger({ loading: false, error: e?.message || 'This window could not be read.', data: null });
     }
   }, []);
@@ -221,25 +233,35 @@ export default function EarningsZone() {
     // it are configuration and history. A reader whose payout account fails to
     // load should still see what they earned, and each card says its own
     // absence rather than taking the page down.
+    const t = restTicket.current.begin();
     const [acct, hist, n] = await Promise.all([
       api.getMyAdvisorPayoutAccount().catch(() => null),
       api.listMyAdvisorPayouts().catch(() => null),
       api.getMyAdvisorPeriodNote(w.key).catch(() => null),
     ]);
+    if (!restTicket.current.isCurrent(t)) return;
     setPayout(acct);
     setPayouts(Array.isArray(hist?.items) ? hist.items : []);
     setNote(n?.note || null);
     setDraft(n?.note?.body || '');
+    setDraftKey(w.key);
     setModelText(n?.note?.source === 'ai' ? n.note.body : null);
     setEditing(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadLedger(window_); loadRest(window_); }, [loadLedger, loadRest, window_]);
+  useEffect(() => {
+    // A new period invalidates any model draft still in flight for the old one,
+    // and the text on screen no longer belongs to the period shown.
+    draftTicket.current.cancel();
+    setDrafting(false); setDraftKey(null); setSaveNote(null);
+    loadLedger(window_); loadRest(window_);
+  }, [loadLedger, loadRest, window_]);
 
   const d = state.data;
   const L = ledger.data;
   const totals = L?.totals;
+  const tiles = stateTiles(L);
 
   const nothingRecorded = d
     && !d.billed_cents && !d.collected_cents && !d.written_off_cents && !d.unpriced_count;
@@ -328,6 +350,8 @@ export default function EarningsZone() {
   // ── The AI band ──────────────────────────────────────────────────────────
 
   const narrate = useCallback(async () => {
+    const t = draftTicket.current.begin();
+    const forKey = window_.key;
     setDrafting(true); setSaveNote(null);
     try {
       // COVERAGE LINES, NOT ROWS. The same rule the rail follows: these are
@@ -338,7 +362,9 @@ export default function EarningsZone() {
       const coverage = [
         `${window_.label} gross ${money(totals?.gross_cents) ?? 'not recorded'}`,
         `platform cut ${money(totals?.cut_cents) ?? 'not recorded'} at ${takeRatePct(L?.take_rate)}`,
-        `you received ${money(totals?.net_cents) ?? 'not recorded'}`,
+        `received (collected, net of the cut) ${money(tiles?.received_cents) ?? 'not recorded'}`,
+        `billed and not yet paid ${money(tiles?.unpaid_cents) ?? 'not recorded'}`,
+        `written off ${money(tiles?.written_off_cents) ?? 'not recorded'}`,
         `${totals?.priced_sessions ?? 0} priced sessions, ${totals?.unpriced_sessions ?? 0} with no price recorded`,
         L?.concentration
           ? `top client is ${L.concentration.pct}% of gross`
@@ -348,16 +374,25 @@ export default function EarningsZone() {
       const res = await api.aiWorkspaceExplain({ workspace: 'Practice', zone: 'Earnings', coverage });
       const text = String(res?.text || res?.answer || '').trim();
       if (!text) throw new Error('The model returned nothing to read.');
-      setDraft(text); setModelText(text); setEditing(true);
+      // A response for an earlier period is dropped, not filed under this one.
+      if (!draftTicket.current.isCurrent(t)) return;
+      setDraft(text); setModelText(text); setDraftKey(forKey); setEditing(true);
     } catch (e) {
+      if (!draftTicket.current.isCurrent(t)) return;
       setSaveNote({ ok: false, text: e?.message || 'Nothing was drafted.' });
-    } finally { setDrafting(false); }
-  }, [L, totals, window_]);
+    } finally { if (draftTicket.current.isCurrent(t)) setDrafting(false); }
+  }, [L, totals, tiles, window_]);
 
   const accept = useCallback(async () => {
+    // The text must belong to the period on screen; otherwise nothing is sent.
+    if (!draftFitsPeriod(draftKey, window_.key)) {
+      setSaveNote({ ok: false, text: 'This text was written for another period, so it was not filed. Draft it again.' });
+      return;
+    }
     setBusy(true); setSaveNote(null);
     try {
       const res = await api.saveMyAdvisorPeriodNote(window_.key, {
+        period_key: window_.key,
         body: draft,
         // 'edited' when the advisor changed a draft, 'ai' when they accepted
         // it as written, 'advisor' when no draft was involved. Over-crediting
@@ -373,7 +408,7 @@ export default function EarningsZone() {
     } catch (e) {
       setSaveNote({ ok: false, text: e?.message || 'That note was not filed.' });
     } finally { setBusy(false); }
-  }, [draft, modelText, note, totals, window_]);
+  }, [draft, draftKey, modelText, note, totals, window_]);
 
   const discard = useCallback(async () => {
     setBusy(true); setSaveNote(null);
@@ -464,8 +499,8 @@ export default function EarningsZone() {
                 value={money(totals?.cut_cents) ?? <Unrecorded />}
                 note={`${takeRatePct(L.take_rate)} of gross, recorded per line`} />
               <Stat label="You received" tone="ok"
-                value={money(totals?.net_cents) ?? <Unrecorded />}
-                note={`across ${(L.clients || []).length} client${(L.clients || []).length === 1 ? '' : 's'}`} />
+                value={money(tiles?.received_cents) ?? <Unrecorded />}
+                note={`collected, net of the cut — ${tiles?.received_sessions ?? 0} session${tiles?.received_sessions === 1 ? '' : 's'}`} />
               {/* A SHARE OF NOTHING IS NOT NOUGHT PER CENT. 0% reads as "well
                   spread", which is the opposite of what an empty window
                   means, so the worker answers null and the tile says so. */}
@@ -475,6 +510,28 @@ export default function EarningsZone() {
                   ? `${L.concentration.client_name || 'one client'} alone`
                   : 'nothing priced in this window to concentrate'} />
             </div>
+
+            {/* #4679 — WHERE THE PRICED MONEY STANDS. Only "Received" above is
+                money in hand; these are the other states a priced session can
+                be in, each from the worker's own per-state totals. */}
+            {tiles && (
+              <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="earnings-states">
+                <Stat label="Billed, not yet paid"
+                  value={money(tiles.unpaid_cents) ?? <Unrecorded />}
+                  note={`${tiles.unpaid_sessions} session${tiles.unpaid_sessions === 1 ? '' : 's'} awaiting payment`} />
+                <Stat label="Written off"
+                  value={money(tiles.written_off_cents) ?? <Unrecorded />}
+                  note={`${tiles.written_off_sessions} session${tiles.written_off_sessions === 1 ? '' : 's'} you closed unpaid`} />
+                <Stat label="Owed back"
+                  value={money(tiles.refunds_owed_cents) ?? <Unrecorded />}
+                  note={`collected on a cancelled or missed session; already refunded ${money(tiles.refunded_cents) ?? 'not recorded'}`} />
+                <Stat label="Paid out"
+                  value={money(tiles.paid_out_cents) ?? <Unrecorded />}
+                  note={tiles.void_sessions
+                    ? `${tiles.void_sessions} cancelled or missed session${tiles.void_sessions === 1 ? '' : 's'} left out`
+                    : 'sent to your payout account in this window'} />
+              </div>
+            )}
 
             <Card padding="md" className="mt-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
