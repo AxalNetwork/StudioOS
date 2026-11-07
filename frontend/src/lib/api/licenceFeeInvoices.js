@@ -22,13 +22,16 @@ export const licenceFeeInvoicesApi = {
   list: (licenceUid) => request(`/admin/licences/${enc(licenceUid)}/fee-invoices`),
   /** Issue the invoice for the licence year that holds today. */
   issue: (licenceUid) => request(`/admin/licences/${enc(licenceUid)}/fee-invoices`, { method: 'POST' }),
-  /** The running total received, in cents, with an optional note. */
-  recordPayment: (licenceUid, invoiceUid, paidCents, paidNote) => request(`/admin/licences/${enc(licenceUid)}/fee-invoices/${enc(invoiceUid)}`, {
-    method: 'PATCH', body: JSON.stringify({ paid_cents: paidCents, ...(paidNote ? { paid_note: paidNote } : {}) }),
+  /**
+   * The running total received, in cents, with an optional note. `expectedRevision` is the invoice's
+   * `revision` as the screen read it (D4694): a 409 `invoice_changed` means another write got there first.
+   */
+  recordPayment: (licenceUid, invoiceUid, paidCents, paidNote, expectedRevision) => request(`/admin/licences/${enc(licenceUid)}/fee-invoices/${enc(invoiceUid)}`, {
+    method: 'PATCH', body: JSON.stringify({ paid_cents: paidCents, ...(paidNote ? { paid_note: paidNote } : {}), expected_revision: expectedRevision }),
   }),
-  /** Void an invoice with nothing paid on it; the reason is required. */
-  voidInvoice: (licenceUid, invoiceUid, voidNote) => request(`/admin/licences/${enc(licenceUid)}/fee-invoices/${enc(invoiceUid)}`, {
-    method: 'PATCH', body: JSON.stringify({ status: 'void', void_note: voidNote }),
+  /** Void an invoice with nothing paid on it; the reason is required, and so is the revision the screen read. */
+  voidInvoice: (licenceUid, invoiceUid, voidNote, expectedRevision) => request(`/admin/licences/${enc(licenceUid)}/fee-invoices/${enc(invoiceUid)}`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'void', void_note: voidNote, expected_revision: expectedRevision }),
   }),
   pdfBlob: (licenceUid, invoiceUid) => pdfBlob(`/admin/licences/${enc(licenceUid)}/fee-invoices/${enc(invoiceUid)}/pdf`, `invoice-${invoiceUid}.pdf`),
   /** The Administrator's copy of one of their own invoices. */

@@ -49,6 +49,7 @@ import { api } from '../../lib/api';
 import { licenceLedgerApi } from '../../lib/api/licenceLedger';
 import { bpsPercent as pct } from '../../lib/bps';
 import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
+import { buildCoreSave, coreFormFrom, coreRevision, dirtyKeys, reconcileCoreForm } from '../../lib/licenceCoreTermsForm';
 import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
 import { RailFrame, Unreadable, Unrecorded, WorkerRail } from '../../ui';
@@ -383,39 +384,41 @@ function SeatEditor({ licence, onSaved }) {
 }
 
 function TermsEditor({ licence, onSaved }) {
-  const [f, setF] = useState({
-    term_years: licence.term_years ?? '',
-    annual_fee: licence.annual_fee_cents === null || licence.annual_fee_cents === undefined
-      ? '' : String(Math.round(Number(licence.annual_fee_cents)) / 100),
-    currency: licence.currency || 'EUR',
-    revenue_share_bps: licence.revenue_share_bps ?? '',
-    token_split_bps: licence.token_split_bps ?? '',
-    starts_on: licence.starts_on || '',
-    renews_on: licence.renews_on || '',
-  });
+  // D4694 — the form remembers what it was last synced to (`base`) and the revision it read, so a save
+  // sends only the fields the user changed, and a refresh of the licence (a renewal, another admin's
+  // save) updates every field the user has not touched.
+  const [st, setSt] = useState(() => ({ form: coreFormFrom(licence), base: coreFormFrom(licence), revision: coreRevision(licence), moved: [] }));
+  const [reason, setReason] = useState('');
+  const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   // D4706 — a save says how it ended; a failed one keeps what was typed.
   const [notice, setNotice] = useState(null);
-  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  useEffect(() => {
+    setSt((cur) => reconcileCoreForm(cur, licence));
+  }, [licence]);
+  const f = st.form;
+  const dirty = dirtyKeys(st.form, st.base);
+  const set = (k) => (e) => { const v = e.target.value; setSt((cur) => ({ ...cur, form: { ...cur.form, [k]: v } })); };
 
   async function save() {
-    setBusy(true); setNotice(null);
+    const built = buildCoreSave({ form: st.form, base: st.base, revision: st.revision, reason });
+    if (!built.ok) { setErrors(built.errors); return; }
+    setErrors({}); setBusy(true); setNotice(null);
     try {
-      await api.licenceSetTerms(licence.uid, {
-        term_years: f.term_years === '' ? null : Number(f.term_years),
-        // Entered in whole currency units, stored as an integer of cents.
-        annual_fee_cents: f.annual_fee === '' ? null : Math.round(Number(f.annual_fee) * 100),
-        currency: f.currency,
-        revenue_share_bps: f.revenue_share_bps === '' ? null : Number(f.revenue_share_bps),
-        token_split_bps: f.token_split_bps === '' ? null : Number(f.token_split_bps),
-        starts_on: f.starts_on,
-        renews_on: f.renews_on,
-      });
+      await api.licenceSetTerms(licence.uid, built.body);
+      setReason('');
       setNotice(describeOutcome('committed', { fallback: 'Terms saved.' }));
       onSaved?.();
     } catch (e) {
       reportError('licence_terms_failed', e);
-      setNotice(outcomeFromError(e, 'The terms were not saved.'));
+      if (e?.code === 'terms_conflict') {
+        // Another save or a renewal got there first. Nothing was written; the page reloads the licence,
+        // untouched fields update, and what was typed stays in the form to be checked and saved again.
+        setNotice({ tone: 'error', text: e.message || 'These terms changed since you opened them, so nothing was saved. Check the fields and save again.' });
+        onSaved?.();
+      } else {
+        setNotice(outcomeFromError(e, 'The terms were not saved.'));
+      }
     } finally { setBusy(false); }
   }
 
@@ -462,8 +465,24 @@ function TermsEditor({ licence, onSaved }) {
           value={f.renews_on} onChange={set('renews_on')} />
       </label>
       <div className="sm:col-span-2">
-        <button type="button" onClick={save} disabled={busy}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+        {st.moved.length > 0 && (
+          <p className="mb-2 text-[12px] text-amber-800" role="status" data-testid="licence-terms-moved">
+            Changed elsewhere since you started editing: {st.moved.join(', ')}. Saving replaces the newer value with what you typed.
+          </p>
+        )}
+        <label className="block text-sm">
+          <span className="text-[11px] uppercase tracking-wide text-gray-500">Why are the terms changing?</span>
+          <textarea rows={2} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)}
+            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" data-testid="licence-terms-reason" />
+        </label>
+        {errors.reason && <p className="mt-1 text-[11px] text-red-600" role="alert">{errors.reason}</p>}
+        {errors.form && <p className="mt-1 text-[11px] text-gray-600" role="status">{errors.form}</p>}
+        {Object.entries(errors).filter(([k]) => k !== 'reason' && k !== 'form').map(([k, m]) => (
+          <p key={k} className="mt-1 text-[11px] text-red-600" role="alert">{k.replace(/_/g, ' ')} {m}.</p>
+        ))}
+        <button type="button" onClick={save} disabled={busy || dirty.length === 0}
+          className="mt-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          data-testid="licence-terms-save">
           {busy ? <Loader2 size={14} className="animate-spin" /> : 'Save terms'}
         </button>
         <div className="mt-2"><OutcomeNotice notice={notice} testId="licence-terms-outcome" /></div>

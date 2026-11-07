@@ -30,6 +30,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
+import { licenceRevisionAlters } from './_licence_revisions.mjs';
 import { Hono } from 'hono';
 
 import licences from '../src/routes/admin_licences.ts';
@@ -134,6 +135,8 @@ function freshDb({ terms = true }: { terms?: boolean } = {}) {
       hostname TEXT, status TEXT, status_note TEXT);
   `);
   if (terms) db.exec(TERMS_DDL);
+  // D4694 — the revision columns, read from their migration.
+  db.exec(licenceRevisionAlters('territory_licences', ...(terms ? ['licence_terms'] : [])));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(SUPER, 'admin', 'Sue', 'sue@axal.example');
   u.run(HOLDER, 'admin', 'Hana', 'hana@axal.example');
@@ -167,7 +170,15 @@ async function call(a: any, e: any, actor: number, path: string, method = 'GET',
   try { out = await res.json(); } catch { /* empty */ }
   return { status: res.status, body: out };
 }
-const save = (e: any, body: unknown, actor = SUPER, uid = LIC) => call(hq, e, actor, `/admin/licences/${uid}/terms`, 'PUT', body);
+// D4694 — a save names the revision it read. Unless a test names one itself, this reads the stored one.
+const save = async (e: any, body: unknown, actor = SUPER, uid = LIC) => {
+  const b: any = body && typeof body === 'object' ? { ...(body as object) } : body;
+  if (b && typeof b === 'object' && !('expected_revision' in b)) {
+    const row: any = await e.DB.prepare('SELECT revision FROM licence_terms WHERE licence_uid = ?').bind(uid).first();
+    b.expected_revision = Number(row?.revision ?? 0);
+  }
+  return call(hq, e, actor, `/admin/licences/${uid}/terms`, 'PUT', b);
+};
 const events = (db: any) => db.prepare("SELECT event, detail_json, note, actor_user_id FROM licence_events WHERE event = 'terms_changed' ORDER BY id").all();
 
 const TERMS = {

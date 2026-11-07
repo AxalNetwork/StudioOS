@@ -22,6 +22,7 @@ const INV = {
   uid: 'inv_1', period_label: '2026–27', period_start: '2026-03-15', period_end: '2027-03-14', amount_cents: 1200000, currency: 'EUR',
   paid_cents: 0, outstanding_cents: 1200000, reference: 'AXAL-LIC-LIC-A-2026-27', issued_at: '2026-10-20', due_at: '2026-11-19',
   status: 'issued', paid_at: null, paid_note: null, void_note: null, pdf_url: '/api/admin/licences/lic_a/fee-invoices/inv_1/pdf',
+  revision: 0,
 };
 const READ = { invoices: [INV], annual_fee_cents: 1200000, currency: 'EUR', starts_on: '2020-03-15' };
 
@@ -112,14 +113,14 @@ test('Record payment sends the total in cents with its note; Void needs a reason
     await m.type('fee-invoice-paid', '4,000.10');
     await m.type('fee-invoice-note', ' Bank ref 1 ');
     await m.submit('fee-invoice-pay-form');
-    assert.deepEqual(sent, [['pay', 'lic_a', 'inv_1', 400010, 'Bank ref 1']]);
+    assert.deepEqual(sent, [['pay', 'lic_a', 'inv_1', 400010, 'Bank ref 1', 0]], 'the revision the screen read rides the call (D4694)');
     await m.click('fee-invoice-void');
     await m.type('fee-invoice-void-note', 'short');
     await m.submit('fee-invoice-void-form');
     assert.equal(sent.length, 1, 'no void without a reason');
     await m.type('fee-invoice-void-note', 'Issued to the wrong licence year');
     await m.submit('fee-invoice-void-form');
-    assert.deepEqual(sent[1], ['void', 'lic_a', 'inv_1', 'Issued to the wrong licence year']);
+    assert.deepEqual(sent[1], ['void', 'lic_a', 'inv_1', 'Issued to the wrong licence year', 0]);
   } finally { await m.unmount(); }
   const paid = await mount({ list: async () => ({ ...READ, invoices: [{ ...INV, paid_cents: 100, status: 'issued' }] }) });
   try { assert.equal(paid.by('fee-invoice-void'), undefined, 'a payment is recorded: no Void'); } finally { await paid.unmount(); }
@@ -137,7 +138,8 @@ test('the calls go to the Worker\'s routes, and the licence console draws the ta
   assert.match(src, /list: \(licenceUid\) => request\(`\/admin\/licences\/\$\{enc\(licenceUid\)\}\/fee-invoices`\)/);
   assert.match(src, /issue: \(licenceUid\) => request\(`\/admin\/licences\/\$\{enc\(licenceUid\)\}\/fee-invoices`, \{ method: 'POST' \}\)/);
   assert.match(src, /method: 'PATCH', body: JSON\.stringify\(\{ paid_cents: paidCents/);
-  assert.match(src, /method: 'PATCH', body: JSON\.stringify\(\{ status: 'void', void_note: voidNote \}\)/);
+  assert.match(src, /expected_revision: expectedRevision \}\),\n  \}\),\n  \/\*\* Void/);
+  assert.match(src, /method: 'PATCH', body: JSON\.stringify\(\{ status: 'void', void_note: voidNote, expected_revision: expectedRevision \}\)/);
   assert.match(src, /`\/licence\/mine\/fee-invoices\/\$\{enc\(invoiceUid\)\}\/pdf`/);
   const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/admin_licences.ts', import.meta.url), 'utf8');
   for (const route of ["r.get('/:uid/fee-invoices'", "r.post('/:uid/fee-invoices'", "r.patch('/:uid/fee-invoices/:invoiceUid'", "r.get('/:uid/fee-invoices/:invoiceUid/pdf'"]) {

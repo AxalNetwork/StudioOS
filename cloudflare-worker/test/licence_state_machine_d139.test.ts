@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
+import { licenceRevisionAlters } from './_licence_revisions.mjs';
 import { Hono } from 'hono';
 
 import licences from '../src/routes/admin_licences.ts';
@@ -133,6 +134,8 @@ function freshDb({ withNotices = true, status = 'active' } = {}) {
   `);
   db.exec(licenceEventsDdl());
   if (withNotices) db.exec(noticesDdl());
+  // D4694 — renewing bumps the terms revision; the column is read from its migration.
+  db.exec(licenceRevisionAlters('territory_licences'));
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(SUPER, 'admin', 'Sue', 'sue@axal.example');

@@ -176,8 +176,22 @@ export function validateTermsBody(terms: unknown, sections: unknown): { ok: true
   return errors.length ? { ok: false, errors } : { ok: true, terms: out, sections: secs };
 }
 
-/** The stored row, as the reads return it. */
-export type LicenceTermsRecord = { terms: LicenceTerms; sections: Record<string, string> };
+/**
+ * The stored row, as the reads return it. `revision` is the row's write count
+ * (migration 202611071531): a save names the revision it read, and a write made
+ * from an older one is refused (D4694). A licence with no row reads 0.
+ */
+export type LicenceTermsRecord = { terms: LicenceTerms; sections: Record<string, string>; revision: number };
+
+/**
+ * The revision a write names (`expected_revision`): a whole number, zero or
+ * more. A string, a float, a negative or a missing value is refused, never read
+ * as 0, because "0" is a real revision (a licence with no schedule yet).
+ */
+export function parseExpectedRevision(raw: unknown): { ok: true; value: number } | { ok: false; message: string } {
+  if (typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0) return { ok: true, value: raw };
+  return { ok: false, message: 'expected_revision is required: the revision you read, as a whole number, zero or more.' };
+}
 
 type Row = Record<string, unknown> & { sections_json?: string | null };
 
@@ -198,7 +212,8 @@ export function termsFromRow(row: Row | null | undefined): LicenceTermsRecord | 
       }
     }
   } catch { sections = {}; }
-  return { terms, sections };
+  const rev = Number(row.revision ?? 0);
+  return { terms, sections, revision: Number.isSafeInteger(rev) && rev >= 0 ? rev : 0 };
 }
 
 /** One licence's stored terms, or null when HQ has recorded none. Throws when the read fails. */
@@ -222,6 +237,68 @@ export function termsDiff(before: LicenceTermsRecord | null, after: LicenceTerms
     if (b !== a) diff[`sections.${key}`] = { before: b, after: a };
   }
   return diff;
+}
+
+/**
+ * Step 4's core terms (`territory_licences`, migration 187), validated for
+ * `PATCH /api/admin/licences/:uid/terms` (D4694).
+ *
+ * NOTHING IS COERCED. A value outside its range is refused, never clamped to the
+ * nearest valid one: 12000 basis points is a typo, not a 100% share, and "USDX"
+ * is not "USD". A number must be a JSON number (a string of digits is refused),
+ * a whole number where a count is meant. `null` clears a nullable term; a key
+ * the body leaves out keeps its value; an unknown key is refused.
+ */
+export const CORE_TERM_KEYS = ['term_years', 'annual_fee_cents', 'currency', 'revenue_share_bps', 'token_split_bps', 'starts_on', 'renews_on'] as const;
+export type CoreTermKey = (typeof CORE_TERM_KEYS)[number];
+export type CoreTerms = Partial<Record<CoreTermKey, string | number | null>>;
+
+/** The most years a licence term may state. */
+export const MAX_TERM_YEARS = 50;
+/** A fee ceiling that keeps cents inside what a JSON number holds exactly. */
+export const MAX_FEE_CENTS = 1_000_000_000_000;
+
+/** A real calendar day as YYYY-MM-DD; 2026-02-30 is not one. */
+export function isIsoDay(v: unknown): v is string {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
+
+export function validateCoreTermsBody(body: Record<string, unknown>):
+  { ok: true; set: CoreTerms } | { ok: false; errors: TermError[] } {
+  const errors: TermError[] = [];
+  const set: CoreTerms = {};
+  const allowed = new Set<string>([...CORE_TERM_KEYS, 'reason', 'expected_revision']);
+  for (const key of Object.keys(body)) {
+    if (!allowed.has(key)) errors.push({ field: key, message: 'is not a licence term' });
+  }
+  const whole = (key: CoreTermKey, min: number, max: number, what: string) => {
+    if (!(key in body)) return;
+    const v = body[key];
+    if (v === null) { set[key] = null; return; }
+    if (typeof v === 'number' && Number.isSafeInteger(v) && v >= min && v <= max) set[key] = v;
+    else errors.push({ field: key, message: `must be ${what} from ${min} to ${max}, or null to clear it` });
+  };
+  whole('term_years', 1, MAX_TERM_YEARS, 'a whole number of years');
+  whole('annual_fee_cents', 0, MAX_FEE_CENTS, 'whole cents');
+  whole('revenue_share_bps', 0, 10000, 'whole basis points');
+  whole('token_split_bps', 0, 10000, 'whole basis points');
+  if ('currency' in body) {
+    const v = body.currency;
+    const code = typeof v === 'string' ? v.trim().toUpperCase() : '';
+    if (/^[A-Z]{3}$/.test(code)) set.currency = code;
+    else errors.push({ field: 'currency', message: 'must be a three-letter currency code' });
+  }
+  for (const key of ['starts_on', 'renews_on'] as const) {
+    if (!(key in body)) continue;
+    const v = body[key];
+    if (v === null) set[key] = null;
+    else if (isIsoDay(v)) set[key] = v;
+    else errors.push({ field: key, message: 'must be a real date as YYYY-MM-DD, or null to clear it' });
+  }
+  return errors.length ? { ok: false, errors } : { ok: true, set };
 }
 
 /** The sentences a read gives when there are no terms to show. */
