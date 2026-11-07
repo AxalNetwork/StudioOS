@@ -112,15 +112,18 @@ test('one input produces both money columns, so they cannot disagree', () => {
     'the read-side resolution that replaces that backfill is gone');
 });
 
-test('sold is counted from engagements, never stored on the row', () => {
-  assert.match(worker, /SELECT COUNT\(\*\) FROM service_engagements se\s*\n\s*WHERE se\.offering_id = o\.id/,
-    'the sold count is no longer joined from the engagement table');
-  assert.ok(!/ADD COLUMN sold|sold INTEGER/.test(migration),
-    'a sold counter has been added to the row, where it can drift');
+test('requests are counted from the request table by status, never stored on the row', () => {
+  // #4696: `sold` counted every non-cancelled request, so a pending request read
+  // as a sale. The worker serves counts by status from the request table.
+  assert.match(worker, /SELECT COUNT\(\*\) FROM service_engagements se WHERE se\.offering_id = o\.id\) AS requested/,
+    'the request counts are no longer joined from the request table');
+  assert.ok(!/\bsold\b/.test(worker.replace(/\/\/.*$/gm, '')), 'a sold count is back on the offering read');
+  assert.ok(!/ADD COLUMN (sold|requested)|(sold|requested) INTEGER/.test(migration),
+    'a request counter has been added to the row, where it can drift');
   // A service nobody has linked reads an em dash rather than a zero: nothing
   // has been sold AND nothing has been recorded are the same cell here, and
   // "0" claims the first.
-  assert.match(MINE, /\{ text: o\.sold \? String\(o\.sold\) : '—' \}/,
+  assert.match(MINE, /\{ text: rowRequests\(o\)\?\.requested \? String\(rowRequests\(o\)\.requested\) : '—' \}/,
     'an unlinked service is reporting a zero it cannot know');
 });
 
@@ -149,7 +152,13 @@ test('the four tiles are the artboard’s, and the strip counts the whole catalo
   const adds = PO1.slice(PO1.indexOf('adds:['), PO1.indexOf('linkage:'));
   const labels = [...adds.matchAll(/label:'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(labels, ['Live services', 'Booked to date', 'Highest price', 'Retainer price']);
-  for (const label of labels) {
+  // THE ONE DEPARTURE FROM THE ARTBOARD (#4696). Its second tile is "Booked to
+  // date", which the page computed as the current price times every
+  // non-cancelled request: a pending request read as a sale and a reprice
+  // restated the history. The tile is the request COUNT; no amount is stated.
+  assert.ok(!MINE.includes('label="Booked to date"'), 'the request-times-price tile is back');
+  assert.ok(MINE.includes('label="Requested"'), 'the requested tile is gone');
+  for (const label of labels.map((l) => (l === 'Booked to date' ? 'Requested' : l))) {
     assert.ok(MINE.includes(`label="${label}"`), `the strip has lost the ${label} tile`);
   }
   // COUNTED OVER `rows`, NEVER OVER THE CHIP-NARROWED LIST. A tile that changes
@@ -180,7 +189,9 @@ test('the linkage note says an unpriced entry is a scoring gap', () => {
 test('the instrument draws the artboard’s columns, in its order and at its widths', () => {
   const head = JSON.parse(`[${PO1.match(/head:\[([^\]]+)\]/)[1].replace(/\\u2019/g, '’').replace(/'/g, '"')}]`);
   assert.deepEqual(head, ['Service', 'Model', 'Price', 'Sold', 'What’s included']);
-  assert.ok(MINE.includes(`head={${JSON.stringify(head).replace(/"/g, "'").replace(/,/g, ', ')}}`),
+  // `Sold` is the artboard's word; the page says Requested, because a request is not a sale (#4696).
+  const ours = head.map((h) => (h === 'Sold' ? 'Requested' : h));
+  assert.ok(MINE.includes(`head={${JSON.stringify(ours).replace(/"/g, "'").replace(/,/g, ', ')}}`),
     'the instrument head is no longer the artboard’s five columns in its order');
   assert.ok(MINE.includes(`cols="${PO1.match(/cols:'([^']+)'/)[1]}"`),
     'the instrument no longer uses the artboard’s column widths');
