@@ -91,8 +91,9 @@ function app() {
     const status = AUTH_ERROR_STATUSES[e?.message];
     return status ? c.json({ detail: e.message }, status) : c.json({ detail: 'Internal server error', m: String(e?.message) }, 500);
   });
-  a.route('/api/teams', teamSkills);
+  // Production order (index.ts): team_agents is mounted before team_skills. #4733: the other order hid the shadowing.
   a.route('/api/teams', teamAgents);
+  a.route('/api/teams', teamSkills);
   return a;
 }
 async function call(w: W, who: number, method: string, path: string, body?: unknown, company?: number) {

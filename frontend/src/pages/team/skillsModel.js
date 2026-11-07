@@ -251,6 +251,14 @@ export function skillRefusalWords(code, detail) {
     case 'no_steps': return 'A skill needs at least one step.';
     case 'too_long': return 'This SKILL.md is too long.';
     case 'invalid_skill': return `This skill can’t be saved. ${detail ? `Check ${detail}.` : 'Check each field.'}`;
+    case 'name_missing': return 'A skill needs a name.';
+    case 'purpose_missing': return 'A skill needs a one-line description.';
+    case 'steps_invalid': return 'A skill needs between one and twenty steps, each a short line.';
+    case 'tags_invalid': case 'tag_unknown': return 'Pick at least one /studio skill, at a level, to set its area.';
+    case 'output_invalid': return 'Choose what the skill produces.';
+    case 'skill_md_invalid': return 'That SKILL.md could not be read. It needs frontmatter between --- lines with a name and a description, then the steps.';
+    case 'not_editor': return 'Only this skill’s editors can do this.';
+    case 'scope_invalid': return 'Skills are written for a company. Open the company’s Team to write one.';
     case 'slug_taken': return 'A skill with that name already exists here.';
     case 'version_changed': return 'Someone published this skill a moment ago. Reload it and try again.';
     case 'skill_retired': return 'Axal retired this skill. It keeps working at its pinned version.';
