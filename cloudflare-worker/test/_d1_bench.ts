@@ -468,6 +468,10 @@ export function scanControl(w: World, sizes: number[], reps = 200) {
   const time = (sql: string, id: number) => { const st = w.db.prepare(sql); const t = performance.now(); for (let i = 0; i < reps; i++) st.get(id, id); return round((performance.now() - t) / reps, 4); };
   const plan = (sql: string) => (w.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as any[]).map((r) => r.detail).join('; ');
   let have = Number((w.db.prepare('SELECT COUNT(*) AS n FROM ai_usage_logs').get() as any).n);
+  // D4568's own indexes cover this read; the control measures the schema without them, and puts them back.
+  const kept = (w.db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name IN ('idx_ai_usage_logs_guard_for', 'idx_ai_usage_logs_reservation_ref')`).all() as any[]).map((r) => String(r.sql));
+  w.db.exec('DROP INDEX IF EXISTS idx_ai_usage_logs_guard_for; DROP INDEX IF EXISTS idx_ai_usage_logs_reservation_ref');
+  try {
   for (const size of [...sizes].sort((a, b) => a - b)) {
     if (!Number.isSafeInteger(size) || size < 1 || size > 1_000_000) throw new Error('a control size is 1 to 1,000,000 rows');
     if (size > have) {
@@ -483,6 +487,7 @@ export function scanControl(w: World, sizes: number[], reps = 200) {
     w.db.exec('DROP INDEX bench_only_guard_for');
     out.push(row);
   }
+  } finally { for (const sql of kept) w.db.exec(sql.replace(/^CREATE INDEX /i, 'CREATE INDEX IF NOT EXISTS ')); }
   return out;
 }
 
