@@ -114,3 +114,50 @@ admissions while existing runs settle, or `off` to stop engine processing. Manua
 sponsor runs have their existing separate policy gates. See
 [AGENT_RUNTIME_SWITCH.md](AGENT_RUNTIME_SWITCH.md) for rebuilding scopes and
 switching runtimes; no runtime switch is included here.
+
+## Readiness scorecard and evidence gates (#4575, D4575)
+
+This scorecard is evidence for the owner's go/no-go decision at each step above. It never enables anything, and no metric passing a threshold flips a switch. Two weeks of cohort data is a minimum, not an approval.
+
+Every result records:
+- the commit and the environment;
+- the observation window;
+- the method;
+- the sample count;
+- the owner-approved threshold;
+- **pass**, **fail** or **not run**;
+- the unresolved risks.
+
+Each figure is labelled:
+- **observed**: read from the tables or logs;
+- **estimated**: modelled, with the model named;
+- **unavailable**: not recorded. Unavailable is never 0 and never a pass.
+
+### Where each figure comes from
+
+| Metric | Source (existing; no new store) | Notes |
+| --- | --- | --- |
+| Acceptance, edit, discard, open past 3 days, expired | HQ › AI agents › Evaluation (`services/agents/evaluation.ts`, TM14) | Under 10 decisions a role is not rated |
+| Cost per accepted proposal, and per successful task | The same board, and `runCostReader` | An unrecorded charge makes the sum unavailable |
+| A run's lineage (task, scope, agent, sponsor, model configured and invoked, skill version, run and hold keys, proposal and decision, charge) | `runProvenance` (`services/agents/provenance.ts`) | The grants at admission and the data class are not recorded per run, so they read as unavailable |
+| Duplicate holds or proposals per run | `runProvenance` reconciliation, and the unique `run_key` | Must be 0 |
+| Unresolved holds: `held_unsettled`, `held_expired`, `mismatch`, `unrecorded` | `runProvenance` over the window's runs | Each needs a named cause before go |
+| Refusal correctness | The board's `refused` by reason, sampled by a person | Synthetic tasks only |
+| p95 and p99 latency | `ai_usage_logs.latency_ms` for agent runs | Comparable baselines are #4573's |
+| Halt acknowledgement and enforcement | D4572's contract: the stop boundary is the next step | A propagation bound needs hosted evidence (#4594) |
+| Oldest eligible work and fairness | #4592 | |
+| Unresolved repair age (DLQ) | #4593 | |
+| Provider throttling and retry amplification | #4556 | |
+| Last successful hosted lifecycle and restore | #4594 (after #4566); #4558 and #4591 | A Worker deploy is not restore evidence |
+| Security findings open | #4571, #4572 | |
+
+### Gates (all must hold before each step's PR is proposed)
+
+- [ ] **Recovery:** in the period, no run with two proposals or two holds, no `mismatch`, and no `held_expired` older than the sweep interval. Each `unrecorded` is explained.
+- [ ] **Isolation:** no cross-tenant read in the period's sampled runs, and #4572's suite is green.
+- [ ] **Approval:** no write landed without a person's Accept. Every agent effect is a proposal.
+- [ ] **Halt:** a drill on a synthetic scope stopped every run at its next step. The result is recorded with its timestamp and step.
+- [ ] **Hosted evidence:** for the cohort step and later, #4594's lifecycle run passed in #4566's isolated preview, with the owner's approved spend.
+- [ ] **Privacy:** no prompt, payload, token-bearing URL or customer identifier in the period's telemetry or in this scorecard.
+
+**Rollback** for any step is the previous switch value, in its own PR. Halt first if runs are live (see Halt and breaker recovery). Pending human decisions remain available after a halt.
