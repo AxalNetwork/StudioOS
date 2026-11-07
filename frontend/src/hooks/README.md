@@ -12,7 +12,8 @@ page belongs in that page instead.
 | `useSpinoutDeckFields.js` | Deck field values shared across lab tools. |
 | `useIncorporationStatus.js` | Where an entity is in formation. |
 | `useAiSpend.js` | Assistant spend, for the AI rail. |
-| `useWebSocket.js` | The realtime connection. |
+| `useWebSocket.js` | The realtime connection. `onOpen({ reconnect })` runs on every open; `reconnect` is true from the second, the cue to re-read what a dropped socket missed (#4701). |
+| `useKeyedRead.js` | #4701 — one read keyed to what it was asked about (period, company, deal). An answer for an earlier key or generation is dropped, another key shows loading rather than the previous key's data, a first failure is `unreadable`, and a failed background refresh keeps the data and sets `refreshError`. |
 | `useInactivityTimeout.js` | Session idle handling. |
 | `useEscapeClose.js` | Escape-to-close for drawers and modals. |
 | `useScrollToHash.js` | Scrolls to the section a URL hash names once it has rendered (D571: the Practice zones' redirected sections). |

@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllLeadPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
 import RankByFit from '../../../ui/RankByFit';
 import { applyRank } from '../../../lib/rankByFit';
 import {
@@ -210,12 +212,17 @@ export default function PartnerLeadsZone() {
   // #3938 (IN10): Rank by fit orders the open leads against the firm's own audience fit, as a view.
   const [rank, setRank] = useState(null);
 
+  const loadGen = useRef(0);
   const load = useCallback(async () => {
+    const mine = (loadGen.current += 1);
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
-      const r = await api.listPartnerLeads();
+      const r = await readAllLeadPages((cur, pcur) => api.listPartnerLeads(cur, pcur));
+      // A newer load (a write's re-read, a retry) owns the screen: drop this answer.
+      if (loadGen.current !== mine) return;
       setState({ loading: false, error: '', data: r || {} });
     } catch (e) {
+      if (loadGen.current !== mine) return;
       setState({ loading: false, error: e?.message || 'The lead list did not load.', data: null });
     }
   }, []);
@@ -300,6 +307,7 @@ export default function PartnerLeadsZone() {
         )}
       >
         <div className="space-y-6">
+          <PartialRead data={state.data} noun="leads" onRetry={load} />
           <ZoneHeading
             title="Leads"
             blurb={

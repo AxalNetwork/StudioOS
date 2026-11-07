@@ -29,6 +29,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { notifyPipelineRoom } from '../services/realtime';
 import type { RouteMount } from '../util/routeRegistry';
 
 const votes = new Hono<{ Bindings: Env }>();
@@ -180,6 +181,24 @@ votes.post('/:deal_id', async (c) => {
 
     const publicTally = await buildPublicTally(c.env, dealId);
     const { total_voters: totalVoters, total_weight: totalWeight } = publicTally;
+
+    // PUBLISH THE AGGREGATE, AFTER THE WRITE COMMITTED (#4701). The board
+    // listens for `vote_updated` and the writer never sent one, so a second
+    // viewer's board stayed on the tally it loaded with until a reload.
+    //
+    // WHAT GOES OUT IS `publicTally` AND NOTHING ELSE: counts, weights, the
+    // buy share and the threshold flag. It is built by `buildPublicTally`,
+    // which carries no per-user field by construction. The caster's `my_vote`
+    // (their own choice, their comment, their anonymity flag) is viewer-specific
+    // and goes back in this response only; a comment is never put on a socket,
+    // because the room is every connected board and the comment is the one part
+    // of a vote its author may have marked anonymous.
+    //
+    // A FAILED PUBLISH NEVER FAILS THE VOTE. The row is written; a viewer who
+    // missed the push recovers on the board's reconnect refresh.
+    try {
+      await notifyPipelineRoom(c.env, dealId, { type: 'vote_updated', deal_id: dealId, tally: publicTally });
+    } catch (e) { console.warn('[votes] vote_updated publish failed', e); }
 
     if (publicTally.threshold_reached) {
       try {

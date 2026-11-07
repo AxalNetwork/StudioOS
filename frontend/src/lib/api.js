@@ -3,6 +3,7 @@ import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
 import { railPageHeaders } from './railPage.js';
 import { railBody } from './railPages.js';
+import { readAllPages } from './pagedRead.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
 // lib/api/<domain>.js, so unrelated features stop colliding in this file.
@@ -2901,7 +2902,13 @@ export const api = {
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
   investorLifecycle: () => request('/dashboard/investor-lifecycle'),
 
-  pipelineActive: () => request('/pipeline/active'),
+  // #4701 — one page of the Build desk list: `{ items, next_cursor, has_more, total }`.
+  // A list capped at its first page and silent about the rest read as "all of
+  // them", so the board follows `next_cursor` through `pipelineActiveAll`.
+  pipelineActivePage: (cursor) => request(
+    cursor ? `/pipeline/active?cursor=${encodeURIComponent(cursor)}` : '/pipeline/active',
+  ),
+  pipelineActiveAll: () => readAllPages((cursor) => api.pipelineActivePage(cursor)),
   pipelineCreateProject: (data) => request('/pipeline/projects', { method: 'POST', body: JSON.stringify(data) }),
   pipelineAdvance: (id, stage) => request(`/pipeline/projects/${id}/advance`, { method: 'POST', body: JSON.stringify({ stage }) }),
   pipelineDealDetail: (id) => request(`/pipeline/projects/${id}/detail`),
@@ -4382,7 +4389,12 @@ export const api = {
   // The three sets the Leads zone keeps disjoint: open leads (never bid, never
   // passed), the passes with their reasons, and — by their absence — the needs
   // this firm already quoted on, which are proposals.
-  listPartnerLeads: () => request('/partner/pipeline/leads'),
+  // `cursor` pages the open leads and `passedCursor` the passes (#4701): each list
+  // answers `next_cursor` / `passed_next_cursor`, and the totals describe all of them.
+  listPartnerLeads: (cursor, passedCursor) => {
+    const q = [cursor ? `cursor=${encodeURIComponent(cursor)}` : '', passedCursor ? `passed_cursor=${encodeURIComponent(passedCursor)}` : ''].filter(Boolean).join('&');
+    return request(`/partner/pipeline/leads${q ? `?${q}` : ''}`);
+  },
   // #3938 IN10, the firm's press: open leads ranked by fit with its own audience fit
   // (bge-m3, then the reranker). Rows `{ need_id, position, line: null }`; 409 when
   // the firm wrote no fit, no service and typed nothing.
@@ -4398,7 +4410,9 @@ export const api = {
   // Every bid this firm has made, with its version trail and the loss taxonomy.
   // `read_receipts: 'none'` comes back with it: nothing records that a client
   // opened a proposal, so a quiet one cannot be told from an unread one.
-  listPartnerProposals: () => request('/partner/pipeline/proposals'),
+  listPartnerProposals: (cursor) => request(
+    cursor ? `/partner/pipeline/proposals?cursor=${encodeURIComponent(cursor)}` : '/partner/pipeline/proposals',
+  ),
   // Append-only and self-numbering — the caller does not choose the version, so
   // two edits cannot both claim to be v3.
   addPartnerProposalVersion: (quoteId, data) =>
@@ -4411,7 +4425,9 @@ export const api = {
     request(`/partner/pipeline/proposals/${quoteId}/outcome`, {
       method: 'PUT', body: JSON.stringify(data),
     }),
-  listPartnerNegotiations: () => request('/partner/pipeline/negotiations'),
+  listPartnerNegotiations: (cursor) => request(
+    cursor ? `/partner/pipeline/negotiations?cursor=${encodeURIComponent(cursor)}` : '/partner/pipeline/negotiations',
+  ),
   // PUT, not POST: one negotiation per quote is a UNIQUE index, so this is an
   // upsert. `{touch: true}` advances the stalled clock without changing stage.
   savePartnerNegotiation: (quoteId, data) =>
@@ -4426,7 +4442,9 @@ export const api = {
   // Returns `items`, plus `mrr_cents` and the `mrr_basis` sentence saying what
   // that total counted. `mrr_cents` is null when no retainer carries an amount:
   // a total of zero would claim the clients pay nothing.
-  listPartnerRetainers: () => request('/partner/pipeline/retainers'),
+  listPartnerRetainers: (cursor) => request(
+    cursor ? `/partner/pipeline/retainers?cursor=${encodeURIComponent(cursor)}` : '/partner/pipeline/retainers',
+  ),
   savePartnerRetainer: (engagementId, data) =>
     request(`/partner/pipeline/retainers/${engagementId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePartnerRetainer: (engagementId) =>

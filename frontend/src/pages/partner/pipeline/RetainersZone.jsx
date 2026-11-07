@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -339,12 +341,17 @@ export default function PartnerRetainersZone() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
 
+  const loadGen = useRef(0);
   const load = useCallback(async () => {
+    const mine = (loadGen.current += 1);
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
-      const r = await api.listPartnerRetainers();
+      const r = await readAllPages((cur) => api.listPartnerRetainers(cur));
+      // A newer load (a write's re-read, a retry) owns the screen: drop this answer.
+      if (loadGen.current !== mine) return;
       setState({ loading: false, error: '', data: r || {} });
     } catch (e) {
+      if (loadGen.current !== mine) return;
       setState({ loading: false, error: e?.message || 'The retainer record did not load.', data: null });
     }
   }, []);
@@ -494,6 +501,7 @@ export default function PartnerRetainersZone() {
       )}
     >
       <div className="space-y-6">
+        <PartialRead data={state.data} noun="engagements" onRetry={load} />
         <ZoneHeading
           title="Retainers"
           blurb={

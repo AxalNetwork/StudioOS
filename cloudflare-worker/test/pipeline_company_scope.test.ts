@@ -127,7 +127,7 @@ test('founder sees only the active company\'s projects', async () => {
   const db = freshDb();
   const { status, body } = await call(db, FOUNDER.user, 'founder', CO_A);
   assert.equal(status, 200);
-  const names = body.map((r: any) => r.name).sort();
+  const names = body.items.map((r: any) => r.name).sort();
   assert.deepEqual(names, ['Alpha', 'Gamma']); // CO_A + unassigned
 });
 
@@ -135,7 +135,7 @@ test('founder with no company selected sees all owned projects', async () => {
   const db = freshDb();
   const { status, body } = await call(db, FOUNDER.user, 'founder');
   assert.equal(status, 200);
-  const names = body.map((r: any) => r.name).sort();
+  const names = body.items.map((r: any) => r.name).sort();
   assert.deepEqual(names, ['Alpha', 'Beta', 'Gamma']);
 });
 
@@ -143,7 +143,7 @@ test('admin branch is not narrowed by company', async () => {
   const db = freshDb();
   const { status, body } = await call(db, ADMIN, 'admin', CO_A);
   assert.equal(status, 200);
-  const names = body.map((r: any) => r.name).sort();
+  const names = body.items.map((r: any) => r.name).sort();
   assert.deepEqual(names, ['Alpha', 'Beta', 'Gamma']);
 });
 
@@ -151,6 +151,6 @@ test('forged company id is ignored', async () => {
   const db = freshDb();
   const { status, body } = await call(db, FOUNDER.user, 'founder', 999);
   assert.equal(status, 200);
-  const names = body.map((r: any) => r.name).sort();
+  const names = body.items.map((r: any) => r.name).sort();
   assert.deepEqual(names, ['Alpha', 'Beta', 'Gamma']); // falls back to all owned
 });

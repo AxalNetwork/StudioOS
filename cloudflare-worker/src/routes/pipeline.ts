@@ -3,6 +3,8 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { notifyPipelineRoom } from '../services/realtime';
+import { decodeCursor, encodeCursor } from '../util/keyset';
+import { clampLimit } from '../util/pagination';
 import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
 import { activeCompanyFor } from '../middleware/activeCompany';
@@ -171,28 +173,60 @@ pipeline.get('/active', async (c) => {
   // the sidebar expects this list to show only that company's projects, and
   // without the clause the switcher visibly does nothing on the Build desk.
   const companyId = isFounder ? await activeCompanyFor(c, user) : null;
-  const baseRows = isAdmin
+
+  // KEYSET PAGE, NOT A SILENT CAP (#4701). The list used to be `LIMIT 100` with
+  // nothing after it, so the 101st project was unreachable and nothing said
+  // so. A page now names where it stopped (`next_cursor`) and the response
+  // carries `total` for the whole authorized population, so a board can say
+  // "100 of 240" instead of drawing 100 as though they were all.
+  const limit = clampLimit(c.req.query('limit'), 100, 200);
+  let cur: ReturnType<typeof decodeCursor>;
+  try { cur = decodeCursor(c.req.query('cursor'), 2); } catch (e) { if (e instanceof Response) return e; throw e; }
+  const afterA = cur ? cur[0] : null;
+  const afterB = cur ? cur[1] : null;
+  const baseRowsPlus = isAdmin
     ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                   p.status as project_status, p.created_at
                 FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
-                ORDER BY p.created_at DESC LIMIT 100`
+                  AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
+                ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`
     : isFounder
       ? companyId === null
         ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                       p.status as project_status, p.created_at
                     FROM projects p
                     WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
-                    ORDER BY p.created_at DESC LIMIT 100`
+                      AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
+                    ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`
         : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                       p.status as project_status, p.created_at
                     FROM projects p
                     WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
                       AND (p.company_id = ${companyId} OR p.company_id IS NULL)
-                    ORDER BY p.created_at DESC LIMIT 100`
+                      AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
+                    ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`
       : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                     p.status as project_status, p.created_at
                   FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
-                  ORDER BY p.created_at DESC LIMIT 100`;
+                    AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
+                  ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`;
+  const hasMore = (baseRowsPlus as any[]).length > limit;
+  const baseRows = hasMore ? (baseRowsPlus as any[]).slice(0, limit) : baseRowsPlus;
+  const lastBase: any = (baseRows as any[])[(baseRows as any[]).length - 1];
+  const nextCursor = hasMore && lastBase ? encodeCursor([String(lastBase.created_at), Number(lastBase.id)]) : null;
+
+  // The whole authorized population, whatever page this is.
+  const [totalRow] = isAdmin
+    ? await sql`SELECT COUNT(*) AS n FROM projects p WHERE p.status NOT IN ('rejected', 'archived')`
+    : isFounder
+      ? companyId === null
+        ? await sql`SELECT COUNT(*) AS n FROM projects p
+                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})`
+        : await sql`SELECT COUNT(*) AS n FROM projects p
+                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
+                      AND (p.company_id = ${companyId} OR p.company_id IS NULL)`
+      : await sql`SELECT COUNT(*) AS n FROM projects p WHERE p.status NOT IN ('rejected', 'archived')`;
+  const total = Number((totalRow as any)?.n ?? 0);
 
   // Per-project verified read: HMAC re-checked, audit row written. A row
   // with no LP-visible snapshot returns score=null (UI shows "—").
@@ -210,25 +244,27 @@ pipeline.get('/active', async (c) => {
   );
 
   const ids = rows.map(r => r.id);
-  if (!ids.length) { await sql.end(); return c.json([]); }
-  const placeholders = ids.map(() => '?').join(',');
+  if (!ids.length) { await sql.end(); return c.json({ items: [], next_cursor: null, has_more: false, total }); }
+  // The child reads below are scoped to THIS PAGE's projects only, through one
+  // bound id list.
+  const idList = JSON.stringify(ids);
 
-  const stages = await c.env.DB.prepare(`SELECT deal_id, stage_name, status, start_date FROM project_stages WHERE deal_id IN (${placeholders}) AND status = 'active'`).bind(...ids).all();
+  const stages = await c.env.DB.prepare(`SELECT deal_id, stage_name, status, start_date FROM project_stages WHERE deal_id IN (SELECT value FROM json_each(?)) AND status = 'active'`).bind(idList).all();
   const stageByDeal: Record<number, any> = {};
   for (const r of (stages.results || []) as any[]) stageByDeal[r.deal_id] = r;
 
-  const tasks = await c.env.DB.prepare(`SELECT deal_id, status, COUNT(*) as n FROM mvp_tasks WHERE deal_id IN (${placeholders}) GROUP BY deal_id, status`).bind(...ids).all();
+  const tasks = await c.env.DB.prepare(`SELECT deal_id, status, COUNT(*) as n FROM mvp_tasks WHERE deal_id IN (SELECT value FROM json_each(?)) GROUP BY deal_id, status`).bind(idList).all();
   const taskByDeal: Record<number, any> = {};
   for (const r of (tasks.results || []) as any[]) {
     taskByDeal[r.deal_id] = taskByDeal[r.deal_id] || { todo: 0, in_progress: 0, done: 0 };
     taskByDeal[r.deal_id][r.status] = r.n;
   }
 
-  const latestMetrics = await c.env.DB.prepare(`SELECT deal_id, traction_score, key_metrics, snapshot_date FROM metrics_snapshots WHERE id IN (SELECT MAX(id) FROM metrics_snapshots WHERE deal_id IN (${placeholders}) GROUP BY deal_id)`).bind(...ids).all();
+  const latestMetrics = await c.env.DB.prepare(`SELECT deal_id, traction_score, key_metrics, snapshot_date FROM metrics_snapshots WHERE id IN (SELECT MAX(id) FROM metrics_snapshots WHERE deal_id IN (SELECT value FROM json_each(?)) GROUP BY deal_id)`).bind(idList).all();
   const metricByDeal: Record<number, any> = {};
   for (const r of (latestMetrics.results || []) as any[]) metricByDeal[r.deal_id] = { ...r, key_metrics: safeJson(r.key_metrics, {}) };
 
-  const latestGates = await c.env.DB.prepare(`SELECT deal_id, status, ai_recommendation, final_decision, created_at FROM decision_gates WHERE id IN (SELECT MAX(id) FROM decision_gates WHERE deal_id IN (${placeholders}) GROUP BY deal_id)`).bind(...ids).all();
+  const latestGates = await c.env.DB.prepare(`SELECT deal_id, status, ai_recommendation, final_decision, created_at FROM decision_gates WHERE id IN (SELECT MAX(id) FROM decision_gates WHERE deal_id IN (SELECT value FROM json_each(?)) GROUP BY deal_id)`).bind(idList).all();
   const gateByDeal: Record<number, any> = {};
   for (const r of (latestGates.results || []) as any[]) gateByDeal[r.deal_id] = r;
 
@@ -241,7 +277,7 @@ pipeline.get('/active', async (c) => {
     latest_gate: gateByDeal[r.id] || null,
   }));
   await sql.end();
-  return c.json(enriched);
+  return c.json({ items: enriched, next_cursor: nextCursor, has_more: hasMore, total });
 });
 
 pipeline.post('/projects', async (c) => {
@@ -312,7 +348,15 @@ pipeline.get('/projects/:id/detail', async (c) => {
   const stages = await sql`SELECT * FROM project_stages WHERE deal_id = ${dealId} ORDER BY id`;
   const tasks = await sql`SELECT * FROM mvp_tasks WHERE deal_id = ${dealId} ORDER BY status, created_at`;
   const metrics = await sql`SELECT * FROM metrics_snapshots WHERE deal_id = ${dealId} ORDER BY snapshot_date DESC LIMIT 30`;
-  const gates = await sql`SELECT * FROM decision_gates WHERE deal_id = ${dealId} ORDER BY created_at DESC LIMIT 10`;
+  const gates = await sql`SELECT * FROM decision_gates WHERE deal_id = ${dealId} ORDER BY created_at DESC, id DESC LIMIT 10`;
+  // The history lists are windows (30 snapshots, 10 gates), so the tab labels
+  // must not read their length as the count. These are the real totals, and
+  // `*_truncated` says when the list shown is not all of it (#4701).
+  const [histCounts] = await sql`SELECT
+      (SELECT COUNT(*) FROM metrics_snapshots WHERE deal_id = ${dealId}) AS metrics_total,
+      (SELECT COUNT(*) FROM decision_gates WHERE deal_id = ${dealId}) AS gates_total`;
+  const metricsTotal = Number((histCounts as any)?.metrics_total ?? (metrics as any[]).length);
+  const gatesTotal = Number((histCounts as any)?.gates_total ?? (gates as any[]).length);
   await sql.end();
   return c.json({
     project,
@@ -320,6 +364,10 @@ pipeline.get('/projects/:id/detail', async (c) => {
     tasks: (tasks as any[]).map(t => ({ ...t, ai_generated: !!t.ai_generated })),
     metrics: (metrics as any[]).map(m => ({ ...m, key_metrics: safeJson(m.key_metrics, {}) })),
     gates,
+    metrics_total: metricsTotal,
+    gates_total: gatesTotal,
+    metrics_truncated: metricsTotal > (metrics as any[]).length,
+    gates_truncated: gatesTotal > (gates as any[]).length,
     current_stage: (stages as any[]).find((s: any) => s.status === 'active')?.stage_name || 'idea',
   });
 });

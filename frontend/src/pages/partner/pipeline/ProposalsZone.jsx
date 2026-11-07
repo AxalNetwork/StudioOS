@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading,
   Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
@@ -86,12 +88,17 @@ export default function PartnerProposalsZone() {
   const [openTrail, setOpenTrail] = useState(null);
   const [draft, setDraft] = useState({ change_summary: '', note: '', price: '' });
 
+  const loadGen = useRef(0);
   const load = useCallback(async () => {
+    const mine = (loadGen.current += 1);
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
-      const r = await api.listPartnerProposals();
+      const r = await readAllPages((cur) => api.listPartnerProposals(cur));
+      // A newer load (a write's re-read, a retry) owns the screen: drop this answer.
+      if (loadGen.current !== mine) return;
       setState({ loading: false, error: '', data: r || {} });
     } catch (e) {
+      if (loadGen.current !== mine) return;
       setState({ loading: false, error: e?.message || 'The proposals did not load.', data: null });
     }
   }, []);
@@ -178,6 +185,7 @@ export default function PartnerProposalsZone() {
         )}
       >
         <div className="space-y-6">
+          <PartialRead data={state.data} noun="proposals" onRetry={load} />
           <ZoneHeading
             title="Proposals"
             blurb={

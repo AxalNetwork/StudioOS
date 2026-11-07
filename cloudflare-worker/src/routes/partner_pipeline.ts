@@ -51,6 +51,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { decodeCursor, encodeCursor, listLimit, scanAll, trimPage } from '../util/keyset';
 import { LOSS_REASONS } from '../services/bdAnalytics';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
@@ -218,27 +219,67 @@ function scoreLead(
  * a LEAD. Each read excludes the other two, so no status column has to be kept
  * in step and no name can claim two states at once.
  */
+/**
+ * One chunk of the firm's open leads, in the order the page shows them.
+ *
+ * BOTH EXCLUSIONS ARE IN THE WHERE CLAUSE (#4701). A need this firm quoted on
+ * and a need it passed on are each a `NOT EXISTS` here, so a page is `limit`
+ * actionable leads and the cap can never be spent on a row the handler was
+ * going to throw away afterwards. The handler used to read 200 needs and 200
+ * passes independently and filter in JS: a firm with 200+ recent passes hid
+ * actionable leads behind rows it had already declined, and a pass older than
+ * its newest 200 fell out of the exclusion set and came back as a lead.
+ */
+async function readOpenLeads(env: Env, partnerId: number, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 2);
+  const rows = await env.DB.prepare(
+    `SELECT n.id, n.uid, n.title, n.description, n.category,
+            n.budget_min, n.budget_max, n.timeline, n.created_at,
+            f.name AS founder_name, p.name AS project_name
+       FROM founder_needs n
+       LEFT JOIN founders f ON f.id = n.founder_id
+       LEFT JOIN projects p ON p.id = n.project_id
+      WHERE n.status = 'open'
+        AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
+        AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
+        AND (? IS NULL OR n.created_at < ? OR (n.created_at = ? AND n.id < ?))
+      ORDER BY n.created_at DESC, n.id DESC
+      LIMIT ?`,
+  ).bind(partnerId, partnerId, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const last = page.rows[page.rows.length - 1];
+  return { rows: page.rows, next: page.hasMore && last ? encodeCursor([String(last.created_at), Number(last.id)]) : null };
+}
+
+async function readPasses(env: Env, partnerId: number, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 2);
+  const rows = await env.DB.prepare(
+    `SELECT lp.id, lp.need_id, lp.reason, lp.note, lp.passed_at,
+            n.title AS need_title, f.name AS founder_name
+       FROM partner_lead_passes lp
+       JOIN founder_needs n ON n.id = lp.need_id
+       LEFT JOIN founders f ON f.id = n.founder_id
+      WHERE lp.partner_id = ?
+        AND (? IS NULL OR lp.passed_at < ? OR (lp.passed_at = ? AND lp.id < ?))
+      ORDER BY lp.passed_at DESC, lp.id DESC
+      LIMIT ?`,
+  ).bind(partnerId, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const last = page.rows[page.rows.length - 1];
+  return { rows: page.rows, next: page.hasMore && last ? encodeCursor([String(last.passed_at), Number(last.id)]) : null };
+}
+
 partnerPipeline.get('/leads', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
+    const limit = listLimit(c.req.query('limit'));
+    const cursor = c.req.query('cursor') ?? null;
+    const passedCursor = c.req.query('passed_cursor') ?? null;
+    // A bad cursor is a 400 before any read.
+    decodeCursor(cursor, 2); decodeCursor(passedCursor, 2);
 
-    const [needs, rules, offerings, passes] = await Promise.all([
-      // Open needs this firm has NOT quoted on. The `NOT EXISTS` is what makes
-      // "already bid" leave this list rather than a flag somebody maintains.
-      c.env.DB.prepare(
-        `SELECT n.id, n.uid, n.title, n.description, n.category,
-                n.budget_min, n.budget_max, n.timeline, n.created_at,
-                f.name AS founder_name, p.name AS project_name
-           FROM founder_needs n
-           LEFT JOIN founders f ON f.id = n.founder_id
-           LEFT JOIN projects p ON p.id = n.project_id
-          WHERE n.status = 'open'
-            AND NOT EXISTS (
-              SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?
-            )
-          ORDER BY n.created_at DESC
-          LIMIT 200`,
-      ).bind(partnerId).all<any>(),
+    const [leadPage, rules, offerings, passPage, passTotal] = await Promise.all([
+      readOpenLeads(c.env, partnerId, cursor, limit),
       c.env.DB.prepare(
         `SELECT kind, value, floor_cents, statement, referred_to, signal
            FROM partner_fit_rules WHERE partner_id = ? AND is_active = 1`,
@@ -251,7 +292,7 @@ partnerPipeline.get('/leads', async (c) => {
       // `partner_id` column — not in migration 034, not in 200's rebuild, not in
       // the production baseline. `WHERE partner_id = ?` here answered
       // `D1_ERROR: no such column: partner_id at offset 62` for every partner,
-      // and because all four reads share one `Promise.all` it took the whole
+      // and because all the reads share one `Promise.all` it took the whole
       // payload with it, not just the score.
       //
       // THE HOP IS THROUGH `users.partner_id`, and it is not a guess: migration
@@ -267,51 +308,65 @@ partnerPipeline.get('/leads', async (c) => {
           WHERE owner_user_id IN (SELECT id FROM users WHERE partner_id = ?)
             AND is_active = 1`,
       ).bind(partnerId).all<any>(),
+      readPasses(c.env, partnerId, passedCursor, limit),
       c.env.DB.prepare(
-        `SELECT lp.id, lp.need_id, lp.reason, lp.note, lp.passed_at,
-                n.title AS need_title, f.name AS founder_name
+        `SELECT COUNT(*) AS n
            FROM partner_lead_passes lp
            JOIN founder_needs n ON n.id = lp.need_id
-           LEFT JOIN founders f ON f.id = n.founder_id
-          WHERE lp.partner_id = ?
-          ORDER BY lp.passed_at DESC
-          LIMIT 200`,
-      ).bind(partnerId).all<any>(),
+          WHERE lp.partner_id = ?`,
+      ).bind(partnerId).first<{ n: number }>(),
     ]);
 
     const ruleRows = rules.results || [];
     const offeringRows = offerings.results || [];
-    const passedIds = new Set((passes.results || []).map((p: any) => Number(p.need_id)));
 
-    const items = (needs.results || [])
-      .filter((n: any) => !passedIds.has(Number(n.id)))
-      .map((n: any) => {
-        const judged = scoreLead(n, ruleRows, offeringRows);
-        return {
-          need_id: Number(n.id),
-          need_uid: n.uid,
-          who: n.founder_name ?? n.project_name ?? null,
-          title: n.title,
-          need: n.description ?? null,
-          category: n.category ?? null,
-          budget_min: n.budget_min == null ? null : Number(n.budget_min),
-          budget_max: n.budget_max == null ? null : Number(n.budget_max),
-          timeline: n.timeline ?? null,
-          // WHERE IT CAME FROM, and there is exactly one answer on this build.
-          // Every lead this product can see is a marketplace need; nothing
-          // records a lead arriving any other way, so a second provenance chip
-          // would be a distinction the reader could never see.
-          source: 'marketplace_need',
-          source_label: 'Marketplace need',
-          days_old: daysBetween(n.created_at),
-          ...judged,
-        };
-      });
+    const items = leadPage.rows.map((n: any) => {
+      const judged = scoreLead(n, ruleRows, offeringRows);
+      return {
+        need_id: Number(n.id),
+        need_uid: n.uid,
+        who: n.founder_name ?? n.project_name ?? null,
+        title: n.title,
+        need: n.description ?? null,
+        category: n.category ?? null,
+        budget_min: n.budget_min == null ? null : Number(n.budget_min),
+        budget_max: n.budget_max == null ? null : Number(n.budget_max),
+        timeline: n.timeline ?? null,
+        // WHERE IT CAME FROM, and there is exactly one answer on this build.
+        // Every lead this product can see is a marketplace need; nothing
+        // records a lead arriving any other way, so a second provenance chip
+        // would be a distinction the reader could never see.
+        source: 'marketplace_need',
+        source_label: 'Marketplace need',
+        days_old: daysBetween(n.created_at),
+        ...judged,
+      };
+    });
 
-    const scored = items.filter((x: any) => x.score != null);
+    // THE STRIP DESCRIBES EVERY OPEN LEAD, NOT THE PAGE. The counts are read by
+    // walking the whole population in chunks, so a firm with 600 open leads is
+    // told 600, and `totals_complete` says so if the walk could not finish.
+    let openCount = 0;
+    let scoredCount = 0;
+    let strongCount = 0;
+    let excludedCount = 0;
+    const walk = await scanAll(
+      (cur) => readOpenLeads(c.env, partnerId, cur, 200),
+      (rows) => {
+        for (const n of rows) {
+          openCount += 1;
+          const judged = scoreLead(n, ruleRows, offeringRows);
+          if (judged.excluded_by) excludedCount += 1;
+          if (judged.score != null) { scoredCount += 1; if (judged.score >= 80) strongCount += 1; }
+        }
+      },
+    );
+
     return c.json({
       items,
-      passed: (passes.results || []).map((p: any) => ({
+      next_cursor: leadPage.next,
+      has_more: leadPage.next !== null,
+      passed: passPage.rows.map((p: any) => ({
         id: Number(p.id),
         need_id: Number(p.need_id),
         who: p.founder_name ?? null,
@@ -320,13 +375,16 @@ partnerPipeline.get('/leads', async (c) => {
         note: p.note ?? null,
         passed_at: p.passed_at,
       })),
-      open_count: items.length,
+      passed_next_cursor: passPage.next,
+      passed_has_more: passPage.next !== null,
+      open_count: openCount,
       // NULL, NOT ZERO, when nothing can be scored at all. "No strong fits" and
       // "no rules to judge fit with" are different answers and the strip draws
       // them differently.
-      strong_fit_count: scored.length ? scored.filter((x: any) => x.score >= 80).length : null,
-      excluded_count: items.filter((x: any) => x.excluded_by).length,
-      passed_count: (passes.results || []).length,
+      strong_fit_count: scoredCount ? strongCount : null,
+      excluded_count: excludedCount,
+      passed_count: Number(passTotal?.n ?? 0),
+      totals_complete: walk.complete,
       // What the score is made of, said in the response so the page cannot
       // imply a model where there is a substring match.
       scoring: ruleRows.length || offeringRows.length ? 'fit_rules' : 'none',
@@ -504,111 +562,152 @@ partnerPipeline.delete('/leads/:needId/pass', async (c) => {
  * not — and `read_receipts: 'none'` carries the reason. A "never opened" count
  * computed from silence would be a number about our own send.
  */
+/**
+ * One chunk of this firm's bids and the version trail of exactly those bids.
+ *
+ * THE TRAIL IS SCOPED TO THE RETURNED PARENTS (#4701). It used to read every
+ * version the firm had ever written, then keep the ones whose quote was in the
+ * capped list: the cost grew with history the page never showed, and a chunk
+ * of the answer was thrown away. The ids ride in one bound `json_each(?)`, so
+ * nothing is interpolated into the statement.
+ */
+async function readProposals(env: Env, partnerId: number, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 2);
+  const rows = await env.DB.prepare(
+    `SELECT q.id, q.uid, q.need_id, q.price, q.timeline_weeks, q.deliverables,
+            q.status, q.decided_at, q.loss_reason, q.created_at, q.updated_at,
+            n.title AS need_title, f.name AS client,
+            e.id AS engagement_id, r.shape AS retainer_shape
+       FROM quotes q
+       LEFT JOIN founder_needs n ON n.id = q.need_id
+       LEFT JOIN founders f ON f.id = n.founder_id
+       LEFT JOIN engagements e ON e.quote_id = q.id
+       LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+      WHERE q.partner_id = ?
+        AND (? IS NULL OR q.created_at < ? OR (q.created_at = ? AND q.id < ?))
+      ORDER BY q.created_at DESC, q.id DESC
+      LIMIT ?`,
+  ).bind(partnerId, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const ids = page.rows.map((q: any) => Number(q.id));
+  const versions = ids.length
+    ? await env.DB.prepare(
+      `SELECT v.id, v.quote_id, v.version, v.change_summary, v.note, v.price_cents, v.created_at
+         FROM quote_versions v
+         JOIN quotes q ON q.id = v.quote_id
+        WHERE q.partner_id = ? AND v.quote_id IN (SELECT value FROM json_each(?))
+        ORDER BY v.quote_id, v.version`,
+    ).bind(partnerId, JSON.stringify(ids)).all<any>()
+    : { results: [] as any[] };
+
+  const byQuote = new Map<number, any[]>();
+  for (const v of versions.results || []) {
+    const k = Number(v.quote_id);
+    if (!byQuote.has(k)) byQuote.set(k, []);
+    byQuote.get(k)!.push({
+      id: Number(v.id),
+      version: Number(v.version),
+      change_summary: v.change_summary,
+      note: v.note ?? null,
+      price_cents: v.price_cents == null ? null : Number(v.price_cents),
+      created_at: v.created_at,
+    });
+  }
+
+  const items = page.rows.map((q: any) => {
+    const trail = byQuote.get(Number(q.id)) || [];
+    const decided = Boolean(q.decided_at) || q.status === 'accepted' || q.status === 'rejected';
+    return {
+      quote_id: Number(q.id),
+      uid: q.uid,
+      need_id: Number(q.need_id),
+      client: q.client ?? null,
+      need_title: q.need_title ?? null,
+      // `quotes.price` is grandfathered REAL dollars; every new money column
+      // in this bucket is cents, so the unit is named rather than guessed at
+      // by the reader.
+      price_dollars: q.price == null ? null : Number(q.price),
+      timeline_weeks: q.timeline_weeks == null ? null : Number(q.timeline_weeks),
+      // THE SHAPE IS THE RETAINER RECORD'S OR IT IS A FIXED SCOPE. Nothing
+      // stores "shape" on a quote, and an accepted quote with a retainer
+      // behind it is the only thing that makes one recurring.
+      shape: q.retainer_shape === 'retainer' ? 'Retainer'
+        : (q.retainer_shape === 'embedded_seat' ? 'Embedded seat' : 'Fixed scope'),
+      // v1 IS THE PROPOSAL ITSELF. A quote with no version rows has been sent
+      // once and never revised, which is a version history of length one
+      // rather than an absence.
+      version: trail.length ? Math.max(...trail.map((v: any) => v.version)) : 1,
+      versions: trail,
+      status: q.status,
+      state: q.status === 'accepted' ? 'Won'
+        : (q.status === 'rejected' ? 'Lost'
+          : (q.status === 'withdrawn' ? 'Withdrawn' : 'Sent')),
+      decided,
+      decided_at: q.decided_at ?? null,
+      loss_reason: q.loss_reason ?? null,
+      days_since_sent: daysBetween(q.created_at),
+      // WHAT THIS SIDE KNOWS, and it is not whether they read it.
+      signal: decided
+        ? `Decided ${q.decided_at ? String(q.decided_at).slice(0, 10) : ''}`.trim()
+        : `Sent · silent ${daysBetween(q.created_at) ?? 0} days`,
+      engagement_id: q.engagement_id ? Number(q.engagement_id) : null,
+    };
+  });
+  const last = page.rows[page.rows.length - 1];
+  return { rows: items, next: page.hasMore && last ? encodeCursor([String(last.created_at), Number(last.id)]) : null };
+}
+
 partnerPipeline.get('/proposals', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
-    const [rows, versions] = await Promise.all([
-      c.env.DB.prepare(
-        `SELECT q.id, q.uid, q.need_id, q.price, q.timeline_weeks, q.deliverables,
-                q.status, q.decided_at, q.loss_reason, q.created_at, q.updated_at,
-                n.title AS need_title, f.name AS client,
-                e.id AS engagement_id, r.shape AS retainer_shape
-           FROM quotes q
-           LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN founders f ON f.id = n.founder_id
-           LEFT JOIN engagements e ON e.quote_id = q.id
-           LEFT JOIN partner_retainers r ON r.engagement_id = e.id
-          WHERE q.partner_id = ?
-          ORDER BY q.created_at DESC
-          LIMIT 200`,
-      ).bind(partnerId).all<any>(),
-      c.env.DB.prepare(
-        `SELECT v.id, v.quote_id, v.version, v.change_summary, v.note, v.price_cents, v.created_at
-           FROM quote_versions v
-           JOIN quotes q ON q.id = v.quote_id
-          WHERE q.partner_id = ?
-          ORDER BY v.quote_id, v.version`,
-      ).bind(partnerId).all<any>(),
-    ]);
+    const limit = listLimit(c.req.query('limit'));
+    const cursor = c.req.query('cursor') ?? null;
+    decodeCursor(cursor, 2);
+    const pageRead = await readProposals(c.env, partnerId, cursor, limit);
+    const items = pageRead.rows;
 
-    const byQuote = new Map<number, any[]>();
-    for (const v of versions.results || []) {
-      const k = Number(v.quote_id);
-      if (!byQuote.has(k)) byQuote.set(k, []);
-      byQuote.get(k)!.push({
-        id: Number(v.id),
-        version: Number(v.version),
-        change_summary: v.change_summary,
-        note: v.note ?? null,
-        price_cents: v.price_cents == null ? null : Number(v.price_cents),
-        created_at: v.created_at,
-      });
-    }
-
-    const items = (rows.results || []).map((q: any) => {
-      const trail = byQuote.get(Number(q.id)) || [];
-      const decided = Boolean(q.decided_at) || q.status === 'accepted' || q.status === 'rejected';
-      return {
-        quote_id: Number(q.id),
-        uid: q.uid,
-        need_id: Number(q.need_id),
-        client: q.client ?? null,
-        need_title: q.need_title ?? null,
-        // `quotes.price` is grandfathered REAL dollars; every new money column
-        // in this bucket is cents, so the unit is named rather than guessed at
-        // by the reader.
-        price_dollars: q.price == null ? null : Number(q.price),
-        timeline_weeks: q.timeline_weeks == null ? null : Number(q.timeline_weeks),
-        // THE SHAPE IS THE RETAINER RECORD'S OR IT IS A FIXED SCOPE. Nothing
-        // stores "shape" on a quote, and an accepted quote with a retainer
-        // behind it is the only thing that makes one recurring.
-        shape: q.retainer_shape === 'retainer' ? 'Retainer'
-          : (q.retainer_shape === 'embedded_seat' ? 'Embedded seat' : 'Fixed scope'),
-        // v1 IS THE PROPOSAL ITSELF. A quote with no version rows has been sent
-        // once and never revised, which is a version history of length one
-        // rather than an absence.
-        version: trail.length ? Math.max(...trail.map((v: any) => v.version)) : 1,
-        versions: trail,
-        status: q.status,
-        state: q.status === 'accepted' ? 'Won'
-          : (q.status === 'rejected' ? 'Lost'
-            : (q.status === 'withdrawn' ? 'Withdrawn' : 'Sent')),
-        decided,
-        decided_at: q.decided_at ?? null,
-        loss_reason: q.loss_reason ?? null,
-        days_since_sent: daysBetween(q.created_at),
-        // WHAT THIS SIDE KNOWS, and it is not whether they read it.
-        signal: decided
-          ? `Decided ${q.decided_at ? String(q.decided_at).slice(0, 10) : ''}`.trim()
-          : `Sent · silent ${daysBetween(q.created_at) ?? 0} days`,
-        engagement_id: q.engagement_id ? Number(q.engagement_id) : null,
-      };
-    });
-
-    const live = items.filter((x: any) => !x.decided && x.status !== 'withdrawn');
-    const decidedItems = items.filter((x: any) => x.decided);
-    const won = decidedItems.filter((x: any) => x.state === 'Won');
-    const lost = decidedItems.filter((x: any) => x.state === 'Lost');
+    // EVERY FIGURE BELOW DESCRIBES THE WHOLE BOOK, NOT THE PAGE (#4701). The
+    // win rate over a firm's newest 200 bids is a different number from its
+    // win rate, and it moves as old bids age out of the window.
+    let liveCount = 0;
+    let liveValue = 0;
+    let decidedCount = 0;
+    let wonCount = 0;
+    let lostCount = 0;
     const lossCounts: Record<string, number> = {};
     for (const r of LOSS_REASONS) lossCounts[r] = 0;
     let unstatedLosses = 0;
-    for (const l of lost) {
-      if (l.loss_reason && LOSS_REASONS.includes(l.loss_reason)) lossCounts[l.loss_reason] += 1;
-      else unstatedLosses += 1;
-    }
+    const walk = await scanAll(
+      (cur) => readProposals(c.env, partnerId, cur, 200),
+      (rows) => {
+        for (const x of rows) {
+          if (!x.decided && x.status !== 'withdrawn') { liveCount += 1; liveValue += x.price_dollars || 0; }
+          if (!x.decided) continue;
+          decidedCount += 1;
+          if (x.state === 'Won') wonCount += 1;
+          if (x.state === 'Lost') {
+            lostCount += 1;
+            if (x.loss_reason && LOSS_REASONS.includes(x.loss_reason)) lossCounts[x.loss_reason] += 1;
+            else unstatedLosses += 1;
+          }
+        }
+      },
+    );
 
     return c.json({
       items,
-      live_count: live.length,
-      live_value_dollars: live.reduce((a: number, x: any) => a + (x.price_dollars || 0), 0),
-      decided_count: decidedItems.length,
-      won_count: won.length,
-      lost_count: lost.length,
+      next_cursor: pageRead.next,
+      has_more: pageRead.next !== null,
+      totals_complete: walk.complete,
+      live_count: liveCount,
+      live_value_dollars: liveValue,
+      decided_count: decidedCount,
+      won_count: wonCount,
+      lost_count: lostCount,
       // NULL WITH NOTHING DECIDED. A rate over an empty denominator is not zero
       // per cent, and the analytics zone reports the same figure from the same
       // rule rather than a second one.
-      win_rate_pct: decidedItems.length
-        ? Math.round((won.length / decidedItems.length) * 100) : null,
+      win_rate_pct: decidedCount ? Math.round((wonCount / decidedCount) * 100) : null,
       loss_reasons: LOSS_REASONS.map((reason) => ({ reason, count: lossCounts[reason] })),
       // A LOSS WITH NO REASON IS THE CHART'S REAL FINDING, so it is counted
       // rather than folded into `other`: "we did not ask" and "they said other"
@@ -733,85 +832,116 @@ const STAGES = ['scoping', 'terms', 'legal', 'ready_to_sign', 'closed'];
 const BALLS = ['us', 'them'];
 const TERM_STATES = ['open', 'agreed', 'conceded', 'refused'];
 
-partnerPipeline.get('/negotiations', async (c) => {
-  try {
-    const { partnerId } = await actingPartner(c);
-    const rows = await c.env.DB.prepare(
-      `SELECT q.id AS quote_id, q.uid AS quote_uid, q.price, q.status AS quote_status,
-              q.need_id, n.title AS need_title, n.category AS need_category,
-              f.name AS founder_name,
-              g.id AS negotiation_id, g.uid AS negotiation_uid, g.stage, g.ball,
-              g.open_question, g.last_moved_at
-         FROM quotes q
-         LEFT JOIN founder_needs n ON n.id = q.need_id
-         LEFT JOIN founders f ON f.id = n.founder_id
-         LEFT JOIN quote_negotiations g ON g.quote_id = q.id
-        WHERE q.partner_id = ?
-        ORDER BY q.created_at DESC
-        LIMIT 200`,
-    ).bind(partnerId).all<any>();
-
-    const list = rows.results || [];
-
-    // The terms for every negotiation this firm owns, in one read.
-    //
-    // JOINED BACK TO `quotes.partner_id` RATHER THAN `IN (…ids)`. Two reasons,
-    // and the second is the one that matters: an id list built in JS becomes a
-    // `${}` inside `DB.prepare`, which `check-sql-prepare.mjs` fails on sight
-    // — placeholders are safe but the check cannot tell a placeholder string
-    // from a value, and it is right not to try. And the ownership predicate
-    // then lives in the query rather than in the JS that assembled the list,
-    // so a term can only be returned for a quote that is this partner's.
-    const terms = await c.env.DB.prepare(
+/**
+ * One chunk of the firm's quotes with their negotiation, and the terms of
+ * exactly those negotiations (#4701).
+ *
+ * The terms used to be every term the firm owned, read in one query and then
+ * matched to whichever 200 quotes the list returned. They now ride a bound
+ * `json_each(?)` of the returned negotiation ids, still joined back to
+ * `quotes.partner_id` so the ownership predicate lives in the query: a term can
+ * only come back for a quote that is this partner's.
+ */
+async function readNegotiations(env: Env, partnerId: number, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 2);
+  const rows = await env.DB.prepare(
+    `SELECT q.id AS quote_id, q.uid AS quote_uid, q.price, q.status AS quote_status,
+            q.need_id, q.created_at AS quote_created_at, n.title AS need_title, n.category AS need_category,
+            f.name AS founder_name,
+            g.id AS negotiation_id, g.uid AS negotiation_uid, g.stage, g.ball,
+            g.open_question, g.last_moved_at
+       FROM quotes q
+       LEFT JOIN founder_needs n ON n.id = q.need_id
+       LEFT JOIN founders f ON f.id = n.founder_id
+       LEFT JOIN quote_negotiations g ON g.quote_id = q.id
+      WHERE q.partner_id = ?
+        AND (? IS NULL OR q.created_at < ? OR (q.created_at = ? AND q.id < ?))
+      ORDER BY q.created_at DESC, q.id DESC
+      LIMIT ?`,
+  ).bind(partnerId, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const negotiationIds = page.rows.filter((r: any) => r.negotiation_id).map((r: any) => Number(r.negotiation_id));
+  const terms = negotiationIds.length
+    ? await env.DB.prepare(
       `SELECT t.*
          FROM quote_terms t
          JOIN quote_negotiations g ON g.id = t.negotiation_id
          JOIN quotes q ON q.id = g.quote_id
-        WHERE q.partner_id = ?
+        WHERE q.partner_id = ? AND t.negotiation_id IN (SELECT value FROM json_each(?))
         ORDER BY t.negotiation_id, t.id`,
-    ).bind(partnerId).all<any>();
-    const termsByNegotiation = new Map<number, any[]>();
-    for (const t of terms.results || []) {
-      const k = Number(t.negotiation_id);
-      if (!termsByNegotiation.has(k)) termsByNegotiation.set(k, []);
-      termsByNegotiation.get(k)!.push(termDto(t));
-    }
+    ).bind(partnerId, JSON.stringify(negotiationIds)).all<any>()
+    : { results: [] as any[] };
+  const termsByNegotiation = new Map<number, any[]>();
+  for (const t of terms.results || []) {
+    const k = Number(t.negotiation_id);
+    if (!termsByNegotiation.has(k)) termsByNegotiation.set(k, []);
+    termsByNegotiation.get(k)!.push(termDto(t));
+  }
+  const items = page.rows.map((r: any) => ({
+    quote_id: Number(r.quote_id),
+    quote_uid: r.quote_uid,
+    quote_status: r.quote_status,
+    price: r.price,
+    need_id: r.need_id ? Number(r.need_id) : null,
+    need_title: r.need_title ?? null,
+    need_category: r.need_category ?? null,
+    // The lane card's heading. `need_title` is what the work is; the client
+    // is who it is for, and a board of scopes with no names on it is a board
+    // nobody can act from.
+    founder_name: r.founder_name ?? null,
+    negotiation: r.negotiation_id ? negotiationDto(r) : null,
+    terms: r.negotiation_id ? (termsByNegotiation.get(Number(r.negotiation_id)) || []) : [],
+  }));
+  const last = page.rows[page.rows.length - 1];
+  return { rows: items, next: page.hasMore && last ? encodeCursor([String(last.quote_created_at), Number(last.quote_id)]) : null };
+}
 
-    const items = list.map((r: any) => ({
-      quote_id: Number(r.quote_id),
-      quote_uid: r.quote_uid,
-      quote_status: r.quote_status,
-      price: r.price,
-      need_id: r.need_id ? Number(r.need_id) : null,
-      need_title: r.need_title ?? null,
-      need_category: r.need_category ?? null,
-      // The lane card's heading. `need_title` is what the work is; the client
-      // is who it is for, and a board of scopes with no names on it is a board
-      // nobody can act from.
-      founder_name: r.founder_name ?? null,
-      negotiation: r.negotiation_id ? negotiationDto(r) : null,
-      terms: r.negotiation_id ? (termsByNegotiation.get(Number(r.negotiation_id)) || []) : [],
-    }));
+partnerPipeline.get('/negotiations', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const limit = listLimit(c.req.query('limit'));
+    const cursor = c.req.query('cursor') ?? null;
+    decodeCursor(cursor, 2);
+    const pageRead = await readNegotiations(c.env, partnerId, cursor, limit);
+    const items = pageRead.rows;
 
     // ── The `p3` strip, counted server-side over the whole book ───────────
     // TRACKED AND OPEN. A quote with no negotiation row is not being tracked
     // here at all, and a closed one is not live — neither belongs in a count
     // of what is in play, and folding either in would make the board look
-    // busier than the work is.
-    const open = items.filter(
-      (x: any) => x.negotiation && x.negotiation.stage !== 'closed',
+    // busier than the work is. The count walks EVERY quote, not the page.
+    let liveCount = 0;
+    let liveValue = 0;
+    let awaitingUs = 0;
+    let awaitingThem = 0;
+    let stalled = 0;
+    const walk = await scanAll(
+      (cur) => readNegotiations(c.env, partnerId, cur, 200),
+      (rows) => {
+        for (const x of rows) {
+          if (!x.negotiation || x.negotiation.stage === 'closed') continue;
+          liveCount += 1;
+          liveValue += Number(x.price) || 0;
+          if (x.negotiation.ball === 'us') awaitingUs += 1;
+          if (x.negotiation.ball === 'them') awaitingThem += 1;
+          if ((x.negotiation.days_stalled ?? 0) >= 7) stalled += 1;
+        }
+      },
     );
     return c.json({
       items,
-      live_count: open.length,
+      next_cursor: pageRead.next,
+      has_more: pageRead.next !== null,
+      totals_complete: walk.complete,
+      live_count: liveCount,
       // `quotes.price` is grandfathered REAL dollars — named, not guessed at.
-      live_value_dollars: open.reduce((a: number, x: any) => a + (Number(x.price) || 0), 0),
-      awaiting_us_count: open.filter((x: any) => x.negotiation.ball === 'us').length,
-      awaiting_them_count: open.filter((x: any) => x.negotiation.ball === 'them').length,
+      live_value_dollars: liveValue,
+      awaiting_us_count: awaitingUs,
+      awaiting_them_count: awaitingThem,
       // SEVEN DAYS WITHOUT A RECORDED MOVE. `days_stalled` is computed from
       // `last_moved_at` in the worker rather than by the page, so the row and
       // the count cannot disagree about the same negotiation.
-      stalled_count: open.filter((x: any) => (x.negotiation.days_stalled ?? 0) >= 7).length,
+      stalled_count: stalled,
       // NOT COMPUTABLE, AND SAID IN THE RESPONSE. See the zone's own limit: a
       // percentage drawn from stage alone is the stage relabelled as a forecast.
       close_probability: null,
@@ -990,146 +1120,197 @@ function currentPeriod(cadence: string, now = new Date()): string {
   return `${y}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-partnerPipeline.get('/retainers', async (c) => {
-  try {
-    const { partnerId } = await actingPartner(c);
-    // LEFT JOIN, matching `/negotiations` above: every engagement this firm
-    // holds comes back, with `retainer: null` where none is recorded. An inner
-    // join would return only the retainers that already exist, which reads as
-    // an empty book to a firm whose engagements are all one-off — and leaves
-    // the zone with no list to record the first retainer against.
-    const rows = await c.env.DB.prepare(
-      `SELECT e.id AS engagement_id, e.uid AS engagement_uid, e.status AS engagement_status,
-              e.price, e.founder_id, e.delivered_at, e.cancelled_at,
-              n.title AS need_title, f.name AS founder_name,
-              r.id AS retainer_id, r.uid AS retainer_uid, r.shape, r.cadence,
-              r.amount_cents, r.retained_hours, r.renews_at, r.ended_at
-         FROM engagements e
-         LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN founders f ON f.id = e.founder_id
-         LEFT JOIN partner_retainers r ON r.engagement_id = e.id
-        WHERE e.partner_id = ?
-        ORDER BY r.id IS NULL, r.renews_at IS NULL, r.renews_at, e.created_at DESC
-        LIMIT 200`,
-    ).bind(partnerId).all<any>();
+/**
+ * One chunk of the firm's engagements with their retainer, and the usage rows
+ * of exactly those retainers (#4701).
+ *
+ * LEFT JOIN, matching `/negotiations` above: every engagement this firm
+ * holds comes back, with `retainer: null` where none is recorded. An inner
+ * join would return only the retainers that already exist, which reads as
+ * an empty book to a firm whose engagements are all one-off — and leaves
+ * the zone with no list to record the first retainer against.
+ *
+ * THE ORDER IS A KEYSET, so a page can name where it stopped: recorded
+ * retainers first, soonest renewal first, then engagements with none, newest
+ * first. The tie-break is `-e.id` (newest first), which is what
+ * `e.created_at DESC` meant for rows written in order, and unlike a timestamp
+ * it is unique.
+ *
+ * Usage rides a bound `json_each(?)` of the returned retainer ids and is
+ * joined back to `engagements.partner_id`, so a usage row can only come back
+ * for a retainer on one of this firm's engagements.
+ */
+async function readRetainers(env: Env, partnerId: number, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 4);
+  const rows = await env.DB.prepare(
+    `SELECT e.id AS engagement_id, e.uid AS engagement_uid, e.status AS engagement_status,
+            e.price, e.founder_id, e.delivered_at, e.cancelled_at,
+            n.title AS need_title, f.name AS founder_name,
+            r.id AS retainer_id, r.uid AS retainer_uid, r.shape, r.cadence,
+            r.amount_cents, r.retained_hours, r.renews_at, r.ended_at,
+            (r.id IS NULL) AS k_none, (r.renews_at IS NULL) AS k_undated,
+            COALESCE(r.renews_at, '') AS k_renews, (0 - e.id) AS k_neg_id
+       FROM engagements e
+       LEFT JOIN founder_needs n ON n.id = e.need_id
+       LEFT JOIN founders f ON f.id = e.founder_id
+       LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+      WHERE e.partner_id = ?
+        AND (? IS NULL OR ((r.id IS NULL), (r.renews_at IS NULL), COALESCE(r.renews_at, ''), (0 - e.id)) > (?, ?, ?, ?))
+      ORDER BY (r.id IS NULL), (r.renews_at IS NULL), COALESCE(r.renews_at, ''), (0 - e.id)
+      LIMIT ?`,
+  ).bind(
+    partnerId, cur ? 1 : null,
+    cur ? cur[0] : null, cur ? cur[1] : null, cur ? cur[2] : null, cur ? cur[3] : null,
+    limit + 1,
+  ).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const list = page.rows;
 
-    const list = rows.results || [];
-
-    // Same join-back-to-owner shape as the terms read above, for the same two
-    // reasons: no `${}` reaches `DB.prepare`, and a usage row can only come
-    // back for a retainer on one of this firm's engagements.
-    const usageRows = await c.env.DB.prepare(
+  const retainerIds = list.filter((r: any) => r.retainer_id).map((r: any) => Number(r.retainer_id));
+  const usageRows = retainerIds.length
+    ? await env.DB.prepare(
       `SELECT u.*
          FROM retainer_usage u
          JOIN partner_retainers r ON r.id = u.retainer_id
          JOIN engagements e ON e.id = r.engagement_id
-        WHERE e.partner_id = ?
+        WHERE e.partner_id = ? AND u.retainer_id IN (SELECT value FROM json_each(?))
         ORDER BY u.retainer_id, u.period DESC`,
-    ).bind(partnerId).all<any>();
-    const usageByRetainer = new Map<number, any[]>();
-    for (const u of usageRows.results || []) {
-      const k = Number(u.retainer_id);
-      if (!usageByRetainer.has(k)) usageByRetainer.set(k, []);
-      usageByRetainer.get(k)!.push({
-        period: u.period, hours_used: Number(u.hours_used), note: u.note ?? null,
-      });
-    }
+    ).bind(partnerId, JSON.stringify(retainerIds)).all<any>()
+    : { results: [] as any[] };
+  const usageByRetainer = new Map<number, any[]>();
+  for (const u of usageRows.results || []) {
+    const k = Number(u.retainer_id);
+    if (!usageByRetainer.has(k)) usageByRetainer.set(k, []);
+    usageByRetainer.get(k)!.push({
+      period: u.period, hours_used: Number(u.hours_used), note: u.note ?? null,
+    });
+  }
 
+  const items = list.map((r: any) => {
+    const base = {
+      engagement_id: Number(r.engagement_id),
+      engagement_uid: r.engagement_uid,
+      engagement_status: r.engagement_status,
+      engagement_price: r.price === null ? null : Number(r.price),
+      founder_id: r.founder_id ? Number(r.founder_id) : null,
+      founder_name: r.founder_name ?? null,
+      need_title: r.need_title ?? null,
+    };
+    if (!r.retainer_id) {
+      // Not a gap in a retainer — an engagement that is not one. The zone
+      // offers it as something to record against; it is not counted as an
+      // unpriced retainer, because it is not a retainer at all.
+      return { ...base, retainer: null, current_period: null, usage: [], ...utilisationFor(null, null) };
+    }
+    const period = currentPeriod(String(r.cadence));
+    const usage = usageByRetainer.get(Number(r.retainer_id)) || [];
+    const thisPeriod = usage.find((u: any) => u.period === period) || null;
+    const u = utilisationFor(
+      { retained_hours: r.retained_hours === null ? null : Number(r.retained_hours) },
+      thisPeriod,
+    );
+    return {
+      ...base,
+      retainer: {
+        id: Number(r.retainer_id),
+        uid: r.retainer_uid,
+        shape: r.shape,
+        cadence: r.cadence,
+        amount_cents: r.amount_cents === null ? null : Number(r.amount_cents),
+        retained_hours: r.retained_hours === null ? null : Number(r.retained_hours),
+        renews_at: r.renews_at ?? null,
+        ended_at: r.ended_at ?? null,
+        days_to_renewal: r.renews_at ? -(daysBetween(r.renews_at) ?? 0) : null,
+      },
+      current_period: period,
+      usage,
+      ...u,
+    };
+  });
+  const last = list[list.length - 1];
+  return {
+    rows: items,
+    next: page.hasMore && last
+      ? encodeCursor([Number(last.k_none), Number(last.k_undated), String(last.k_renews), Number(last.k_neg_id)])
+      : null,
+  };
+}
+
+partnerPipeline.get('/retainers', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const limit = listLimit(c.req.query('limit'));
+    const cursor = c.req.query('cursor') ?? null;
+    decodeCursor(cursor, 4);
+    const pageRead = await readRetainers(c.env, partnerId, cursor, limit);
+    const items = pageRead.rows;
+
+    // EVERY FIGURE BELOW IS OVER THE WHOLE BOOK (#4701): the walk reads every
+    // engagement, so a firm with 300 retainers is not told its MRR from the
+    // soonest-renewing 200.
     let mrrCents = 0;
     let counted = 0;
     let unpriced = 0;
     let withRetainer = 0;
-    const items = list.map((r: any) => {
-      const base = {
-        engagement_id: Number(r.engagement_id),
-        engagement_uid: r.engagement_uid,
-        engagement_status: r.engagement_status,
-        engagement_price: r.price === null ? null : Number(r.price),
-        founder_id: r.founder_id ? Number(r.founder_id) : null,
-        founder_name: r.founder_name ?? null,
-        need_title: r.need_title ?? null,
-      };
-      if (!r.retainer_id) {
-        // Not a gap in a retainer — an engagement that is not one. The zone
-        // offers it as something to record against; it is not counted as an
-        // unpriced retainer, because it is not a retainer at all.
-        return { ...base, retainer: null, current_period: null, usage: [], ...utilisationFor(null, null) };
-      }
-      withRetainer += 1;
-      const period = currentPeriod(String(r.cadence));
-      const usage = usageByRetainer.get(Number(r.retainer_id)) || [];
-      const thisPeriod = usage.find((u: any) => u.period === period) || null;
-      const u = utilisationFor(
-        { retained_hours: r.retained_hours === null ? null : Number(r.retained_hours) },
-        thisPeriod,
-      );
-      if (r.amount_cents === null || r.amount_cents === undefined) unpriced += 1;
-      else {
-        // A quarterly amount is not a monthly one. Dividing here rather than
-        // summing raw is the difference between MRR and a number that is three
-        // times too big for every quarterly line.
-        mrrCents += r.cadence === 'quarterly'
-          ? Math.round(Number(r.amount_cents) / 3)
-          : Number(r.amount_cents);
-        counted += 1;
-      }
-      return {
-        ...base,
-        retainer: {
-          id: Number(r.retainer_id),
-          uid: r.retainer_uid,
-          shape: r.shape,
-          cadence: r.cadence,
-          amount_cents: r.amount_cents === null ? null : Number(r.amount_cents),
-          retained_hours: r.retained_hours === null ? null : Number(r.retained_hours),
-          renews_at: r.renews_at ?? null,
-          ended_at: r.ended_at ?? null,
-          days_to_renewal: r.renews_at ? -(daysBetween(r.renews_at) ?? 0) : null,
-        },
-        current_period: period,
-        usage,
-        ...u,
-      };
-    });
-
-    // ── The `p4` strip ───────────────────────────────────────────────────
-    // UNDER-CONSUMING IS THE PAGE'S WHOLE ARGUMENT: "a client using 34% of
-    // retained hours is a churn risk that no complaint has surfaced yet, and a
-    // client at 118% is unbilled work." Both are read off the same utilisation
-    // the row draws, so the strip and the table cannot disagree.
-    //
-    // A RETAINER WITH NO RETAINED HOURS IS IN NEITHER. It has no utilisation at
-    // all — a different shape of deal, not a badly-consumed one — and sweeping
-    // it into `under` would report a fee-based retainer as a churn risk.
-    const live = items.filter((x: any) => x.retainer && !x.retainer.ended_at);
-    const under = live.filter((x: any) => x.utilisation_pct != null && x.utilisation_pct < 60);
-    const over = live.filter((x: any) => x.utilisation_pct != null && x.utilisation_pct > 100);
+    let under = 0;
+    let over = 0;
+    let atRiskCents = 0;
+    let atRiskPriced = false;
+    const byShape: Record<string, number> = { retainer: 0, embedded_seat: 0 };
     const monthlyOf = (x: any) => {
       const cents = x.retainer?.amount_cents;
       if (cents == null) return null;
       return x.retainer.cadence === 'quarterly' ? Math.round(Number(cents) / 3) : Number(cents);
     };
-    const byShape: Record<string, number> = { retainer: 0, embedded_seat: 0 };
-    for (const x of live) {
-      const shape = x.retainer?.shape;
-      if (shape && shape in byShape) byShape[shape] += 1;
-    }
+    const walk = await scanAll(
+      (cur) => readRetainers(c.env, partnerId, cur, 200),
+      (rows) => {
+        for (const x of rows) {
+          if (!x.retainer) continue;
+          withRetainer += 1;
+          const monthly = monthlyOf(x);
+          // A quarterly amount is not a monthly one. Dividing here rather than
+          // summing raw is the difference between MRR and a number that is three
+          // times too big for every quarterly line.
+          if (monthly == null) unpriced += 1;
+          else { mrrCents += monthly; counted += 1; }
+          // ── The `p4` strip ─────────────────────────────────────────────
+          // UNDER-CONSUMING IS THE PAGE'S WHOLE ARGUMENT: "a client using 34% of
+          // retained hours is a churn risk that no complaint has surfaced yet, and a
+          // client at 118% is unbilled work." Both are read off the same utilisation
+          // the row draws, so the strip and the table cannot disagree.
+          //
+          // A RETAINER WITH NO RETAINED HOURS IS IN NEITHER. It has no utilisation at
+          // all — a different shape of deal, not a badly-consumed one — and sweeping
+          // it into `under` would report a fee-based retainer as a churn risk.
+          if (x.retainer.ended_at) continue;
+          const shape = x.retainer.shape;
+          if (shape && shape in byShape) byShape[shape] += 1;
+          if (x.utilisation_pct != null && x.utilisation_pct < 60) {
+            under += 1;
+            if (monthly != null) { atRiskCents += monthly; atRiskPriced = true; }
+          }
+          if (x.utilisation_pct != null && x.utilisation_pct > 100) over += 1;
+        }
+      },
+    );
 
     return c.json({
       items,
+      next_cursor: pageRead.next,
+      has_more: pageRead.next !== null,
+      totals_complete: walk.complete,
       retainer_count: withRetainer,
       mrr_cents: counted ? mrrCents : null,
       // COUNTED BY SHAPE, because an embedded seat is recurring revenue and is
       // not a retainer — and this is the page that exists to tell those
       // economics apart.
       shape_counts: byShape,
-      under_consuming_count: under.length,
-      over_scope_count: over.length,
+      under_consuming_count: under,
+      over_scope_count: over,
       // NULL, NOT ZERO, when nothing under-consuming carries an amount: "no
       // money at risk" and "we cannot price the risk" are different answers.
-      at_risk_mrr_cents: under.some((x: any) => monthlyOf(x) != null)
-        ? under.reduce((a: number, x: any) => a + (monthlyOf(x) || 0), 0)
-        : null,
+      at_risk_mrr_cents: atRiskPriced ? atRiskCents : null,
       // Says what it counted rather than presenting a total as complete. A
       // retainer with no amount is skipped, never counted as zero — zero would
       // claim the client pays nothing.

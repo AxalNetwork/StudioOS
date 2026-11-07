@@ -405,6 +405,30 @@ function readPeriod(raw: string | undefined): DecisionPeriod {
   return (Object.prototype.hasOwnProperty.call(PERIOD_LABELS, v) ? v : 'all') as DecisionPeriod;
 }
 
+
+/** Rows per chunk when the analytics walk a table. */
+const ANALYTICS_CHUNK = 500;
+/** Chunks one walk reads before it refuses to go on (250,000 rows). */
+const ANALYTICS_MAX_CHUNKS = 500;
+
+/**
+ * Read a whole table in id order, a chunk at a time. A walk that cannot finish
+ * THROWS: a figure computed from part of a book must not be sent as the figure.
+ */
+async function readAllByIdChunks<T extends { id: number }>(
+  read: (afterId: number) => Promise<{ results?: T[] }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  let after = 0;
+  for (let i = 0; i < ANALYTICS_MAX_CHUNKS; i += 1) {
+    const page = (await read(after)).results || [];
+    out.push(...page);
+    if (page.length < ANALYTICS_CHUNK) return out;
+    after = Number(page[page.length - 1].id);
+  }
+  throw new Error('analytics walk did not finish');
+}
+
 quotesRouter.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -426,43 +450,60 @@ quotesRouter.get('/analytics', async (c) => {
     // would silently drop it and quietly change the denominator of the one
     // figure this endpoint exists to compute. Unmatched rows land in the
     // by-shape breakdown as an unrecorded shape, which is what they are.
-    const quotes = await (
+    //
+    // EVERY QUOTE, NOT THE NEWEST THOUSAND (#4701). These reads were
+    // `ORDER BY created_at DESC LIMIT 1000`, so a firm with more than a
+    // thousand bids was told a win rate, a cycle time and a forecast computed
+    // from the newest thousand while the page said nothing about the rest. The
+    // reads now walk the table in id order in bounded chunks until it is
+    // exhausted; `rows_read` says how many were counted.
+    const readQuotes = (afterId: number) => (
       admin
         ? c.env.DB.prepare(
-            `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
+            `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-              ORDER BY q.created_at DESC LIMIT 1000`,
-          )
+              WHERE q.id > ?
+              ORDER BY q.id LIMIT ?`,
+          ).bind(afterId, ANALYTICS_CHUNK)
         : analyticsCompany !== null
           ? c.env.DB.prepare(
-              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
+              `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                  FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-                WHERE q.partner_id = ? AND (q.company_id = ? OR q.company_id IS NULL)
-                ORDER BY q.created_at DESC LIMIT 1000`,
-            ).bind(user.partner_id ?? -1, analyticsCompany)
+                WHERE q.partner_id = ? AND (q.company_id = ? OR q.company_id IS NULL) AND q.id > ?
+                ORDER BY q.id LIMIT ?`,
+            ).bind(user.partner_id ?? -1, analyticsCompany, afterId, ANALYTICS_CHUNK)
           : c.env.DB.prepare(
-              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
+              `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                  FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-                WHERE q.partner_id = ? ORDER BY q.created_at DESC LIMIT 1000`,
-            ).bind(user.partner_id ?? -1)
-    ).all<QuoteAnalyticsRow>();
-    const engagements = await (
+                WHERE q.partner_id = ? AND q.id > ? ORDER BY q.id LIMIT ?`,
+            ).bind(user.partner_id ?? -1, afterId, ANALYTICS_CHUNK)
+    ).all<QuoteAnalyticsRow & { id: number }>();
+    const readEngagements = (afterId: number) => (
       admin
         ? c.env.DB.prepare(
-            'SELECT status, price AS amount FROM engagements ORDER BY created_at DESC LIMIT 1000',
-          )
+            'SELECT id, status, price AS amount FROM engagements WHERE id > ? ORDER BY id LIMIT ?',
+          ).bind(afterId, ANALYTICS_CHUNK)
         : analyticsCompany !== null
           ? c.env.DB.prepare(
-              `SELECT status, price AS amount FROM engagements
-                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL)
-                ORDER BY created_at DESC LIMIT 1000`,
-            ).bind(user.partner_id ?? -1, analyticsCompany)
+              `SELECT id, status, price AS amount FROM engagements
+                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL) AND id > ?
+                ORDER BY id LIMIT ?`,
+            ).bind(user.partner_id ?? -1, analyticsCompany, afterId, ANALYTICS_CHUNK)
           : c.env.DB.prepare(
-              'SELECT status, price AS amount FROM engagements WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1000',
-            ).bind(user.partner_id ?? -1)
-    ).all<EngagementAnalyticsRow>().catch(() => ({ results: [] as EngagementAnalyticsRow[] }));
+              'SELECT id, status, price AS amount FROM engagements WHERE partner_id = ? AND id > ? ORDER BY id LIMIT ?',
+            ).bind(user.partner_id ?? -1, afterId, ANALYTICS_CHUNK)
+    ).all<EngagementAnalyticsRow & { id: number }>();
+    const quoteRows = await readAllByIdChunks(readQuotes);
 
-    const q = quotes.results || [];
+    // THE DELIVERY READ IS INDEPENDENT AND MAY FAIL ON ITS OWN. It used to
+    // `.catch(() => ({ results: [] }))`, which turned an unreadable engagements
+    // table into "0 active, 0 delivered" — a valid-looking zero. A failed read
+    // is now `delivery: null` with `delivery_unavailable: true`, and the quote
+    // figures, which did read, stay.
+    let engagementRows: Array<EngagementAnalyticsRow & { id: number }> | null = null;
+    try { engagementRows = await readAllByIdChunks(readEngagements); } catch { engagementRows = null; }
+
+    const q = quoteRows;
     // WHAT THE WINDOW APPLIES TO, and what it deliberately does not.
     //
     //   in       what was DECIDED in the window — the rate, the cycle, the
@@ -476,7 +517,9 @@ quotesRouter.get('/analytics', async (c) => {
     return c.json({
       pipeline,
       forecast: weightedPipeline(q),
-      delivery: analyseDelivery(engagements.results || []),
+      delivery: engagementRows === null ? null : analyseDelivery(engagementRows),
+      delivery_unavailable: engagementRows === null,
+      rows_read: q.length,
       by_shape: analyseByShape(inWindow),
       // NOT NARROWED, on purpose: this IS the time series. Applying the chip to
       // it would leave a quarter-over-quarter chart with one quarter in it.
