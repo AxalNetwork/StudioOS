@@ -27,7 +27,6 @@ import { SignJWT } from 'jose';
 import learningAssessment from '../src/routes/learning_assessment.ts';
 import adminAssessment from '../src/routes/admin_learning_assessment.ts';
 import learning from '../src/routes/learning.ts';
-import { coursePercent, PROGRESS_UPSERT } from '../src/services/learningCompletion.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
