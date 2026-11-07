@@ -5,6 +5,10 @@ agents. The committed switches remain `TEAM_AGENTS_ENABLED="false"`,
 `AGENT_ENGINE="off"`, `AGENT_AUTONOMY="manual"` and `AGENT_RUNTIME="do"`.
 Every later flip is its own PR, approved and merged by the owner.
 
+Testing agent execution before any flip happens outside production, in an
+isolated preview, behind a fail-closed preflight:
+`AGENT_EXECUTION_VALIDATION.md` (D4566, #4566).
+
 ## Owner prerequisites
 
 - Confirm Workers Paid and acceptance of Workflow step billing. Production's
