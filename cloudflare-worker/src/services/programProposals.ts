@@ -23,9 +23,9 @@
  */
 import type { Env } from '../types';
 import { logAdminAction } from './adminAudit';
-import { openDraftStatements } from './programGrants';
+import { openDraftStatementsOnApproval } from './programGrants';
 import {
-  PROGRAM_GROUPS, PROPOSAL_ACTIONS, ProgramError, checkNewKey, checkTemplates, insertProgramStatements, isKeyTaken,
+  PROGRAM_GROUPS, PROPOSAL_ACTIONS, ProgramError, checkNewKey, checkTemplates, insertProgramStatements, insertProgramStatementsOnApproval, isKeyTaken,
   keyFromName, type Actor, type NewProgram, type ProgramReader,
 } from './programRegistry';
 
@@ -479,12 +479,15 @@ export function reviewSections(v: ReturnType<typeof proposalView>): NewProgram['
  * POST /api/admin/programs/proposals/:uid/decision — { outcome, note }.
  * Only a `sent` proposal is decided (409 `not_waiting`). Send back and Decline
  * need a note. An approval writes the registry row and its draft in the same
- * batch as the decision, and the decision's UPDATE is guarded on `sent`, so a
- * second decision racing the first changes nothing.
+ * batch as the decision. The decision's UPDATE is the batch's first statement,
+ * guarded on `sent`, and every write after it is gated on that decision having
+ * won (D4806), so a second decision racing the first changes nothing at all:
+ * not the proposal, and not the registry row, the playbook draft or the draft
+ * grant either.
  *
  * D956 (#2789): an approval for this studio only also opens a `draft` grant of
  * the new program for the studio's licence, with its history event, in the
- * same batch (`openDraftStatements`). A studio whose licence row is gone gets
+ * same batch (`openDraftStatementsOnApproval`). A studio whose licence row is gone gets
  * no draft; the approval still lands, and its audit row says so (`draft_grant: false`).
  */
 export async function decide(env: Env, uid: string, body: unknown, actor: Actor) {
@@ -510,7 +513,14 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
   let programKey: string | null = null;
   let draftLicence: number | null = null;
   const t = new Date().toISOString();
-  const stmts = [];
+  // D4806 (#4806): the decision's UPDATE comes FIRST, guarded on `sent`, and every approval write after it is
+  // gated on that decision having won (`decided_at = t` by this actor). A decision that lost to a decline, a
+  // send-back or another approval writes nothing at all: no registry row, no playbook draft, no draft grant,
+  // no history line.
+  const stmts: D1PreparedStatement[] = [env.DB.prepare(
+    `UPDATE program_proposals SET status = ?, decision = ?, hq_note = ?, decided_by_user_id = ?, decided_at = ?, program_key = ?, updated_at = ?
+      WHERE id = ? AND status = 'sent'`,
+  ).bind(status, decision, note || null, actor.id, t, null, t, row.id)];
   if (decision) {
     if (decision === 'studio' && !row.licence_uid) {
       throw new ProgramError(409, 'no_studio', 'This proposal was sent by no studio, so it cannot be approved for one studio only.');
@@ -518,22 +528,22 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
     const v = proposalView(row);
     programKey = keyFromName(v.name ?? '');
     await checkNewKey(env, programKey);
-    stmts.push(...insertProgramStatements(env, {
+    stmts.push(...insertProgramStatementsOnApproval(env, {
       key: programKey, grp: v.group!, name: v.name!, purpose: v.purpose, who: whoLine(v.who ?? []), join_method: v.join_method,
       licence_uid: decision === 'studio' ? row.licence_uid : null, sections: reviewSections(v),
-    }, actor.id));
+    }, actor.id, { proposalId: row.id, decidedAt: t }));
+    // The decision names the program it wrote; the UPDATE above could not know the key before it was derived.
+    stmts.push(env.DB.prepare(
+      `UPDATE program_proposals SET program_key = ? WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?`,
+    ).bind(programKey, row.id, t, actor.id));
     if (decision === 'studio') {
       const lic = await env.DB.prepare('SELECT id FROM territory_licences WHERE uid = ?').bind(row.licence_uid).first<{ id: number }>();
       if (lic) {
         draftLicence = Number(lic.id);
-        stmts.push(...openDraftStatements(env, { licenceId: draftLicence, programKey, proposalUid: row.uid, actorId: actor.id, at: t }));
+        stmts.push(...openDraftStatementsOnApproval(env, { licenceId: draftLicence, programKey, proposalUid: row.uid, proposalId: row.id, actorId: actor.id, at: t }));
       }
     }
   }
-  stmts.push(env.DB.prepare(
-    `UPDATE program_proposals SET status = ?, decision = ?, hq_note = ?, decided_by_user_id = ?, decided_at = ?, program_key = ?, updated_at = ?
-      WHERE id = ? AND status = 'sent'`,
-  ).bind(status, decision, note || null, actor.id, t, programKey, t, row.id));
   let results;
   try {
     results = await env.DB.batch(stmts);
@@ -541,7 +551,7 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
     if (isKeyTaken(e)) throw new ProgramError(409, 'program_key_taken', `A program with the key ${programKey} already exists.`);
     throw e;
   }
-  if (!Number(results[results.length - 1]?.meta?.changes)) {
+  if (!Number(results[0]?.meta?.changes)) {
     throw new ProgramError(409, 'not_waiting', 'Another decision landed first. Reload the proposal.');
   }
   await logAdminAction(env, actor.id, actor.email, PROPOSAL_ACTIONS.decide, {

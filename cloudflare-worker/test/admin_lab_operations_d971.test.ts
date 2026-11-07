@@ -82,6 +82,9 @@ async function call(app: any, db: DatabaseSync, who: number, path: string, init:
 }
 const progs = (db: DatabaseSync, who: number, path: string, init?: Parameters<typeof call>[4]) => call(adminPrograms, db, who, path, init);
 
+/** D4806: Publish names the revision of the draft the reviewer saw (`draft.hash`), as the Playbook page sends it. */
+const publishAs = async (db: DatabaseSync, path: string) => ({ method: 'POST', body: { expected_hash: ((await progs(db, SUPER, path)).body as any).draft.hash } }) as any;
+
 
 
 
@@ -104,10 +107,10 @@ test('Lab: no read writes, first draft is Super Admin only, validated, audited a
   assert.equal(edit.body.playbook.published, false);
   assert.equal((await progs(db, ADMIN, '/spinout-lab')).body.draft, undefined);
   assert.equal((await progs(db, ADMIN, '/spinout-lab/playbook/publish', { method: 'POST' })).status, 403);
-  assert.equal((await progs(db, SUPER, '/spinout-lab/playbook/publish', { method: 'POST' })).body.playbook.version, 1);
+  assert.equal((await progs(db, SUPER, '/spinout-lab/playbook/publish', await publishAs(db, '/spinout-lab'))).body.playbook.version, 1);
   await progs(db, SUPER, '/spinout-lab/playbook/sections/purpose', { method: 'PUT', body: { body: 'New draft' } });
   assert.equal((await progs(db, ADMIN, '/spinout-lab')).body.playbook.sections[0].body, 'HQ draft');
-  const published = await progs(db, SUPER, '/spinout-lab/playbook/publish', { method: 'POST' });
+  const published = await progs(db, SUPER, '/spinout-lab/playbook/publish', await publishAs(db, '/spinout-lab'));
   assert.equal(published.status, 200);
   assert.equal(published.body.playbook.version, 2);
   assert.equal(db.prepare("SELECT body FROM program_playbook_sections WHERE program_key='spinout-lab' AND version=1").get()!.body, 'HQ draft');
