@@ -1732,6 +1732,11 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
+    "POST /api/deals/:id/commitments/:uid/withdraw": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "unreviewed"
+    },
     "POST /api/email/invites/:id/remind": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",

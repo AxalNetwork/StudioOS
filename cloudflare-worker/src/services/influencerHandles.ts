@@ -212,11 +212,13 @@ export async function setHandle(env: Env, userId: number, body: any, now = Date.
 /**
  * HQ takes a handle down: the handle is cleared, its history row is marked
  * taken down (no redirect, unclaimable for 12 months), and the influencer may
- * choose another at once. Returns the handle taken down, or null when there
- * was none.
+ * choose another at once.
+ *
+ * D4805 (#4805): these are the history rows only. The CLEAR is the deciding UPDATE of
+ * `changeInfluencer`'s batch (it names the handle it read), and these two statements follow its guard, so
+ * a takedown that lost to a handle change retires nothing.
  */
-export function takedownStatements(env: Env, m: { id: number; handle: string | null }, adminId: number, now: number) {
-  if (!m.handle) return null;
+export function retireHandleStatements(env: Env, m: { id: number; handle: string }, adminId: number, now: number) {
   const at = sqlTime(now);
   return [
     env.DB.prepare(`DELETE FROM slug_history WHERE kind = 'handle' AND slug = ?`).bind(m.handle),
@@ -224,8 +226,6 @@ export function takedownStatements(env: Env, m: { id: number; handle: string | n
       `INSERT INTO slug_history (kind, scope_company_id, slug, target_id, retired_by, retired_at, expires_at, taken_down)
        VALUES ('handle', NULL, ?, ?, ?, ?, ?, 1)`,
     ).bind(m.handle, m.id, adminId, at, sqlTime(addMonths(now, HANDLE_REDIRECT_MONTHS))),
-    // Cleared. The member may choose another at once: the 30-day wait (`nextChangeAt`) runs only while a handle is set.
-    env.DB.prepare('UPDATE influencers SET handle = NULL, updated_at = ? WHERE id = ? AND handle = ?').bind(at, m.id, m.handle),
   ];
 }
 

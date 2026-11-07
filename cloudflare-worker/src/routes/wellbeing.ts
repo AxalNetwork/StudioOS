@@ -1,4 +1,4 @@
-import { holdsOnlyLicence } from '../services/accountLicences';
+import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
 /**
  * T11 + Task #8 (DI) — Founder Wellbeing.
  *
@@ -1219,7 +1219,7 @@ wellbeing.get('/experts', async (c) => {
 
     // Free-tier cap surface (informational; actual block on /experts/:uid)
     let viewBudget: { tier: string; views_used: number; views_limit: number | null; remaining: number | null } | null = null;
-    if (role(user) === 'founder' && !userMeetsTier(user as TierUser, 'growth')) {
+    if (holdsLicence(user, 'founder') && !userMeetsTier(user as TierUser, 'growth')) {
       const used = await countMonthlyProfileViews(c.env, user.id);
       viewBudget = {
         tier: 'free',
@@ -1267,7 +1267,7 @@ wellbeing.get('/experts/:uid', async (c) => {
   if (role(user) !== 'admin' && isSampleExpert(expert.uid)) return c.json({ detail: 'Expert not found' }, 404);
 
   // Tier gate: free founders can view at most N distinct experts/month.
-  if (role(user) === 'founder' && !userMeetsTier(user as TierUser, 'growth')) {
+  if (holdsLicence(user, 'founder') && !userMeetsTier(user as TierUser, 'growth')) {
     // Has the user already viewed THIS expert this month? If so, allow.
     const monthStart = (() => {
       const now = new Date();
