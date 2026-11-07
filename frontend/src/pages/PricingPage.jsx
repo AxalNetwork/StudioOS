@@ -32,7 +32,7 @@ import PackSheet from '../components/checkout/PackSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
 import {
   PRICING_TABS, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
-  storageGroup, modelUsage,
+  storageGroup, modelUsage, priceOf, usd,
 } from '../lib/pricingModel';
 import {
   AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS, STORAGE_COMPARE, TOKENS_BAND,
@@ -189,6 +189,27 @@ function Compare({ tab, cards, storage = null }) {
             </React.Fragment>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * #4651: back from sign-up or sign-in, the plan the visitor chose is said plainly when the price is not the one
+ * they saw, or when the plan or its yearly price is no longer sold. Nothing is chosen for them instead.
+ */
+function ReturnedNotice({ notice, onClose }) {
+  const D = useContext(Face);
+  const text = notice.kind === 'price'
+    ? `The price of ${notice.name} is now ${notice.now}${notice.interval === 'yearly' ? ' a year' : ' a month'}; it was ${notice.was} when you chose it. Checkout shows today’s price: review it before you pay.`
+    : notice.kind === 'interval'
+      ? `Yearly billing is not offered for ${notice.name} right now. Choose monthly or another plan below; nothing was chosen for you.`
+      : 'The plan you chose is no longer offered here. Choose a plan below; nothing was chosen for you.';
+  return (
+    <section className="axp-sec" role="status" data-testid={`pricing-returned-${notice.kind}`}>
+      <div className="axp-unavail">
+        <div><div className={`axp-unavail-t${D}`}>{text}</div></div>
+        <button type="button" className="axp-btn" onClick={onClose}>OK</button>
       </div>
     </section>
   );
@@ -465,23 +486,33 @@ export function PricingBody({ user = null }) {
 
   const specs = PLAN_CARDS[tab] || [];
   const built = roleTab && plans.status === 'ready'
-    ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab, planRead), signedIn: !!user })
+    ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab, planRead), signedIn: !!user, tab })
     : null;
   const ready = built && !built.unreadable;
   const D = user ? '' : ' ax-display';
 
   // D1053 (#2904, PAYX19a): back from sign-in, the sheet opens on the plan the member chose
   // (`?checkout=<plan key>&interval=`), and the address drops the request so Back does not reopen it.
+  // #4651: `seen` is the amount the card showed when it was chosen. A different price now, or a plan
+  // or interval no longer sold, is said before the sheet, and nothing else is chosen instead.
   const wanted = new URLSearchParams(location.search).get('checkout');
+  const [returned, setReturned] = useState(null);
   useEffect(() => {
     if (!wanted || !ready) return;
     const q = new URLSearchParams(location.search);
     const iv = q.get('interval');
-    q.delete('checkout'); q.delete('interval');
+    const seen = Number(q.get('seen'));
+    q.delete('checkout'); q.delete('interval'); q.delete('seen');
     navigate({ pathname: location.pathname, search: q.toString() ? `?${q}` : '', hash: location.hash }, { replace: true });
     const card = built.cards.find((c) => c.button?.checkout && planKeyOf(c.plan) === wanted);
-    if (!card) return;
+    if (!card) { setReturned({ kind: 'gone' }); return; }
+    const interval = iv === 'yearly' ? 'yearly' : 'monthly';
+    const now = priceOf(card.plan, interval === 'yearly' ? 'year' : 'month');
+    if (interval === 'yearly' && !now) { setReturned({ kind: 'interval', name: card.name }); return; }
     if (iv === 'yearly' || iv === 'monthly') setBilling(iv);
+    if (Number.isSafeInteger(seen) && seen > 0 && now && now.unit_amount !== seen) {
+      setReturned({ kind: 'price', name: card.name, was: usd(seen), now: usd(now.unit_amount), interval });
+    }
     setCheckout(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wanted, ready]);
@@ -519,6 +550,8 @@ export function PricingBody({ user = null }) {
           </div>
         )}
       </section>
+
+      {roleTab && returned && <ReturnedNotice notice={returned} onClose={() => setReturned(null)} />}
 
       {roleTab && (
         <section className="axp-sec axp-plans">
