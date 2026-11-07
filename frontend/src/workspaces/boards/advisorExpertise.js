@@ -1,5 +1,8 @@
 import { count, day, summary, title, top, usdCents } from './format.js';
 
+/** A list's full-set total from its page facts (#4689), or null when the answer carries none. */
+const pageTotal = (page) => (Number.isInteger(page?.total) ? page.total : null);
+
 /*
  * `/expertise` — Advisor Canvas V4, "Package what I know".
  *
@@ -10,10 +13,17 @@ import { count, day, summary, title, top, usdCents } from './format.js';
  * board section can never be kinder than the page behind it.
  *
  * THINKING COUNTS OPENS ON THIS HUB, AND SAYS SO. V4 subtitles it "6 pieces ·
- * 14,200 reads". `articles.views` is real, but it counts opens of the article
- * on this hub and nothing else — not syndication, not a newsletter, not a link
+ * 14,200 reads". `articles.views` is real, but it counts each open of the
+ * article on this hub (one person opening twice is two) and nothing else — not syndication, not a newsletter, not a link
  * someone forwarded. The zone blurb already draws that line ("how many people
  * opened it here"), and the footnote keeps it.
+ *
+ * EVERY FIGURE IS THE WHOLE LIST (#4689). The four list reads return a page
+ * (`page`, or `links` for Visibility) and `counts` over the whole list, so a
+ * summary reads `counts` or `requests`, a section's `total` reads the page
+ * facts' `total`, and nothing is counted off the rows that came back. An
+ * answer with no `counts` (an older Worker) shows no figure rather than a
+ * page's.
  *
  * PROOF RENDERS TWO KINDS OF EVIDENCE DIFFERENTLY, which is the whole point of
  * the zone: `proofDto` returns `status: 'attested' | 'self_stated'`, because an
@@ -68,9 +78,8 @@ export default function advisorExpertiseBoard(role, api) {
         cols: '1.6fr 1fr 1fr',
         columns: ['Service', 'Price', 'State'],
         empty: 'You have listed no service yet.',
-        summary: (d) => summary(
-          count((d?.items || []).filter((s) => s.is_active).length, 'live', 'live'),
-        ),
+        summary: (d) => summary(count(d?.counts?.live ?? null, 'live', 'live')),
+        total: (d) => pageTotal(d?.page),
         rows: (d) => top(d?.items).map((s) => [
           s.title, usdCents(s.price_cents), s.is_active ? 'Live' : 'Draft',
         ]),
@@ -88,9 +97,10 @@ export default function advisorExpertiseBoard(role, api) {
         columns: ['Claim', 'Evidence'],
         empty: 'No claim is recorded yet.',
         summary: (d) => summary(
-          count((d?.items || []).filter((p) => p.status === 'attested').length, 'confirmed', 'confirmed'),
-          count((d?.items || []).filter((p) => p.status !== 'attested').length, 'self-stated', 'self-stated'),
+          count(d?.counts?.attested ?? null, 'confirmed', 'confirmed'),
+          count(d?.counts?.self_stated ?? null, 'self-stated', 'self-stated'),
         ),
+        total: (d) => pageTotal(d?.page),
         rows: (d) => top(d?.items).map((p) => [p.title, title(p.status)]),
         footnote: () =>
           'A claim you made and a claim the named person confirmed are different evidence, so they '
@@ -105,13 +115,13 @@ export default function advisorExpertiseBoard(role, api) {
         cols: '1.8fr .9fr 1fr',
         columns: ['Piece', 'Opens', 'Published'],
         empty: 'You have published nothing yet.',
-        summary: (d) => summary(
-          count((d?.items || []).filter((a) => a.status === 'published').length, 'published', 'published'),
-        ),
+        summary: (d) => summary(count(d?.counts?.published ?? null, 'published', 'published')),
+        total: (d) => pageTotal(d?.page),
         rows: (d) => top(d?.items).map((a) => [a.title, a.views, day(a.published_at)]),
         footnote: () =>
-          'Opens counts people who opened the piece here. It is not a readership figure — nothing '
-          + 'tracks syndication, forwards or anywhere else it may have been read.',
+          'Opens counts each time the piece was opened here, so one person opening it twice counts '
+          + 'twice. It is not a count of people or a readership figure — nothing tracks syndication, '
+          + 'forwards or anywhere else it may have been read.',
       },
       {
         slug: 'visibility',
@@ -123,7 +133,9 @@ export default function advisorExpertiseBoard(role, api) {
         columns: ['Booking link', 'Requests'],
         empty: 'You have no booking link yet.',
         // A failed surfaces read rejects in `sources` above, so `surfaces` is a list here.
-        summary: (d) => summary(count(d.surfaces.reduce((n, s) => n + (Number(s.requests) || 0), 0), 'request')),
+        // `requests` is every link's and none's, not the links on the first page.
+        summary: (d) => summary(count(d?.requests?.total ?? null, 'request')),
+        total: (d) => pageTotal(d?.links),
         rows: (d) => top(d.surfaces).map((s) => [s.name, s.requests]),
         footnote: (d) => summary('Requests in the last month, per link.', d?.views_note),
       },

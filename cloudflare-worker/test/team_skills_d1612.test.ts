@@ -177,6 +177,35 @@ test('D1612: HQ skills are written by a Super Admin, company skills by its edito
   assert.equal((await call(w, SUPER, 'POST', '/skills', update())).body.error, 'slug_taken');
 });
 
+test('D4534: only a Super Admin edits or publishes an HQ draft; only a company\'s editors edit or publish its skill; a suspended one is not attached', async () => {
+  const w = world();
+  const hqDraft = (await call(w, SUPER, 'POST', '/skills', update({ name: 'HQ draft for the write gates' }))).body.skill.uid;
+  await passHqGate(w.db, hqDraft);
+  for (const who of [ADMIN, EDITOR, MEMBER]) {
+    // A draft is its writers' alone: to anyone else it does not exist (404), a plain admin included.
+    assert.equal((await call(w, who, 'PATCH', `/skills/${hqDraft}`, { name: 'Taken over' })).status, 404, `PATCH by ${who}`);
+    assert.notEqual((await call(w, who, 'POST', `/skills/${hqDraft}/publish`)).status, 200, `publish by ${who}`);
+  }
+  assert.equal((w.db.prepare('SELECT current_version FROM agent_skills WHERE uid = ?').get(hqDraft) as any).current_version, 0, 'nothing was published');
+  assert.equal((w.db.prepare('SELECT name FROM agent_skills WHERE uid = ?').get(hqDraft) as any).name, 'HQ draft for the write gates');
+
+  const co = (await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1', name: 'Acme write gates', roles: ['cfo'] }))).body.skill.uid;
+  assert.equal((await call(w, MEMBER, 'PATCH', `/skills/${co}`, { name: 'Taken over' })).status, 404, 'a member cannot read another\'s draft');
+  assert.equal((await call(w, OTHER_EDITOR, 'PATCH', `/skills/${co}`, { name: 'Taken over' })).status, 404, 'another company\'s editor');
+  assert.equal((await call(w, OTHER_EDITOR, 'POST', `/skills/${co}/publish`)).status, 404);
+  assert.equal((await call(w, EDITOR, 'POST', `/skills/${co}/publish`)).status, 200);
+  assert.equal((await call(w, MEMBER, 'PATCH', `/skills/${co}`, { name: 'Taken over' })).status, 403, 'a member reads the published skill, and may not edit it');
+  assert.equal((await call(w, MEMBER, 'POST', `/skills/${co}/publish`)).status, 403);
+
+  // HQ suspends it; the company's editor cannot attach it to an agent.
+  const id = (w.db.prepare('SELECT id FROM agent_skills WHERE uid = ?').get(co) as any).id;
+  w.db.prepare(`INSERT INTO agent_skill_moderation (skill_id, action, version, reason, created_by) VALUES (?, 'suspend', 1, 'Sends figures it never read.', ?)`).run(id, SUPER);
+  const put = await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [co] });
+  assert.equal(put.status, 409, put.text);
+  assert.equal(put.body.error, 'skill_suspended');
+  assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_links WHERE skill_id = ?').get(id) as any).n, 0);
+});
+
 test('D1612: a published version is immutable; a pinned agent stays on it until "Update to v2"', async () => {
   const w = world();
   const uid = await published(w, update());

@@ -97,6 +97,8 @@ export type AgentRunInput = {
   runUid?: string | null;
   /** D1612 part D (#3954): the uid of one of the agent's skills; its PINNED version guides the run. */
   skill?: string | null;
+  /** D4534: the version the caller saved (a scheduled session); a different pin is refused `skill_version_changed`. */
+  skillVersion?: number | null;
 };
 
 export type AgentRefusal = { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
@@ -344,7 +346,7 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   const shaped = cleanReads(input.toolReads, grantsOf(a.tool_grants_json));
   if (!shaped.ok) return refused(env, a, shaped, input.module, input.option);
   // D1612 part D (#3954): a named skill runs at the agent's pinned version; its tools are checked again now.
-  const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool)) : null;
+  const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool), input.skillVersion ?? null) : null;
   if (skill && !skill.ok) return refused(env, a, skill, input.module, input.option);
   if (skill) c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${skillPrompt(skill.version)}`;
   const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
