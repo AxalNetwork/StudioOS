@@ -21,11 +21,12 @@ import {
 } from '../src/lib/licenceTermsForm.js';
 import {
   ESCALATION_KIND_LABELS, LICENCE_REQUEST_KINDS, LICENCE_PANEL_KINDS, escalationKindLabel, filterByKind, kindFilters,
-  licenceRequests, nonRenewalCheck, requestSummary, termAsItStands, termTarget,
+  nonRenewalCheck, requestSummary, termAsItStands, termTarget,
 } from '../src/lib/escalationKinds.js';
 import { api } from '../src/lib/api.js';
+import { licenceLedgerApi } from '../src/lib/api/licenceLedger.js';
 import { TermsScheduleForm, saveError } from '../src/pages/admin/LicenceTermsSchedule.jsx';
-import { RequestsPanelView, loadOpenRequests } from '../src/pages/admin/LicenceRequestsPanel.jsx';
+import { RequestsPanelView, loadLicenceRequests } from '../src/pages/admin/LicenceRequestsPanel.jsx';
 import { EscalationKindFilter, escalationCardProps } from '../src/pages/hq/HqSupportPage.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -164,29 +165,54 @@ const ROWS = [
   ROW({ uid: 'r_branch', kind: 'renewal', subject_ref: null, branch_code: 'pt' }),
 ];
 
-test('the panel lists only this licence\'s open requests of the new kinds', () => {
-  assert.deepEqual(licenceRequests(ROWS, 'lic_1').map((r) => r.uid), ['r_seat', 'r_terms', 'r_del', 'r_nr']);
-  assert.deepEqual(licenceRequests(ROWS, 'lic_1', 'pt').map((r) => r.uid), ['r_seat', 'r_terms', 'r_del', 'r_nr', 'r_branch']);
-  assert.deepEqual(licenceRequests(ROWS, 'lic_2').map((r) => r.uid), ['r_other_licence']);
+// #4700 — the server scopes a licence's requests (worker test
+// licence_ledger_reads_4700); the panel draws what it is given.
+const LIC_1 = ['r_seat', 'r_terms', 'r_del', 'r_nr'];
+const lic1Rows = () => ROWS.filter((r) => LIC_1.includes(r.uid));
+
+test('the panel\'s kinds are the worker\'s', () => {
   assert.deepEqual(LICENCE_PANEL_KINDS, ['renewal', 'terms_change', 'seat_increase', 'delegate', 'non_renewal']);
 });
 
-test('the panel reads HQ\'s board through the existing route, open rows of each kind; an unreadable board is unknown', async () => {
-  const saved = api.escalations;
+test('#4700 the panel reads this licence\'s requests from the server, one page with its total; an unreadable board is unknown', async () => {
+  const saved = licenceLedgerApi.requests;
   const calls = [];
   try {
-    api.escalations = async (filter) => { calls.push(filter); return { available: true, items: ROWS.filter((r) => r.kind === filter.kind) }; };
-    const all = await loadOpenRequests();
-    assert.deepEqual(calls, LICENCE_PANEL_KINDS.map((kind) => ({ status: 'open', kind })));
-    assert.equal(all.length, ROWS.filter((r) => LICENCE_PANEL_KINDS.includes(r.kind)).length);
-    api.escalations = async () => ({ available: false, items: [] });
-    assert.equal(await loadOpenRequests(), null);
-  } finally { api.escalations = saved; }
+    licenceLedgerApi.requests = async (uid, params) => {
+      calls.push([uid, params]);
+      return { available: true, items: lic1Rows(), total: 6, next_cursor: 'c2', branch_code: 'pt', branch_readable: true };
+    };
+    const first = await loadLicenceRequests('lic_1');
+    assert.deepEqual(calls[0], ['lic_1', {}]);
+    assert.deepEqual(first.items.map((r) => r.uid), LIC_1);
+    assert.equal(first.total, 6);
+    assert.equal(first.nextCursor, 'c2');
+    await loadLicenceRequests('lic_1', 'c2');
+    assert.deepEqual(calls[1], ['lic_1', { cursor: 'c2' }]);
+    licenceLedgerApi.requests = async () => ({ available: false, reason: 'board unreadable' });
+    assert.equal(await loadLicenceRequests('lic_1'), null);
+    // The page no longer reads HQ's whole board in the browser.
+    const SRC = codeOnly(read('frontend/src/pages/admin/LicenceRequestsPanel.jsx'));
+    assert.ok(!SRC.includes('api.escalations('), 'the panel reads its own scoped route, not the board');
+  } finally { licenceLedgerApi.requests = saved; }
+});
+
+test('#4700 a page short of the total says so, a branch not looked up is said, and only a full read is "none"', () => {
+  const base = { licence: LICENCE, noticeDays: 90, openUid: null, onToggle() {}, onRecorded() {}, onReload() {}, onOpenTerm() {}, onGrantAdmin() {} };
+  const partial = renderedText(render(RequestsPanelView, { ...base, items: lic1Rows(), total: 130, hasMore: true, onMore() {} }));
+  assert.ok(partial.includes('Showing 4 of 130 open requests.') && partial.includes('Show more'));
+  const noBranch = renderedText(render(RequestsPanelView, { ...base, items: [], total: 0, branchReadable: false }));
+  assert.ok(noBranch.includes('No open requests filed against this licence at HQ.'));
+  assert.ok(noBranch.includes('unknown, not none'));
+  assert.ok(!noBranch.includes('No open requests from this licence'), 'an unlooked branch is not "none"');
+  // Mutation checked: an empty page whose total is unknown must not read as none.
+  const unknownTotal = renderedText(render(RequestsPanelView, { ...base, items: [], total: null }));
+  assert.ok(unknownTotal.includes('unknown — not none'));
 });
 
 test('each request shows its kind, date, band and what it asks; Answer opens the Support queue\'s own panel', () => {
-  const items = licenceRequests(ROWS, 'lic_1');
-  const base = { items, licence: LICENCE, noticeDays: 90, openUid: null, onToggle() {}, onRecorded() {}, onReload() {}, onOpenTerm() {}, onGrantAdmin() {} };
+  const items = lic1Rows();
+  const base = { items, total: items.length, licence: LICENCE, noticeDays: 90, openUid: null, onToggle() {}, onRecorded() {}, onReload() {}, onOpenTerm() {}, onGrantAdmin() {} };
   const text = renderedText(render(RequestsPanelView, base));
   assert.ok(text.includes('Seats · Founder +20'));
   assert.ok(text.includes('Change · Fee'));
@@ -205,7 +231,7 @@ test('each request shows its kind, date, band and what it asks; Answer opens the
   assert.ok(SRC.includes("import { EscalationDecision } from '../hq/HqSupportPage'"), 'Answer is the existing panel and route');
   assert.ok(codeOnly(read('frontend/src/pages/hq/HqSupportPage.jsx')).includes('api.escalationAnswer(item.uid,'));
   assert.equal(renderedText(render(RequestsPanelView, { ...base, items: null })).includes('unknown'), true);
-  assert.equal(renderedText(render(RequestsPanelView, { ...base, items: [] })), 'No open requests from this licence\'s Administrator.');
+  assert.equal(renderedText(render(RequestsPanelView, { ...base, items: [], total: 0 })), 'No open requests from this licence\'s Administrator.');
 });
 
 test('Open terms goes to the term\'s row or its step; a notice of non-renewal is checked against the terms', () => {
