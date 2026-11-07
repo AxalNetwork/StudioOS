@@ -17,6 +17,7 @@ import {
   PROPOSE_TITLE, QUEUE_EMPTY, QUEUE_SORTS, QUEUE_STATUSES, QUEUE_TITLE, dayLabel, isEditable, lastPage, listParams,
   pageLabel, proposalHref, studioOptions,
 } from './proposalsModel';
+import { proposalSummary } from './genericProgramModel';
 
 export const BTN = 'inline-flex min-h-[34px] items-center rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] font-bold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 export const PRIMARY = 'inline-flex min-h-[36px] items-center rounded-[9px] bg-axal-violet px-3.5 text-[13px] font-bold text-white hover:opacity-90 dark:bg-violet-600';
@@ -127,7 +128,24 @@ export function YourProposals() {
   );
 }
 
-/** PG2's Proposals from studios, for a Super Admin: on the catalogue and on its own address. */
+/**
+ * D4808: the catalogue's compact proposal line for a Super Admin: how many wait on HQ, and one door to `/admin/programs/proposals`,
+ * where the search, filters and review live.
+ */
+export function ProposalsSummary({ waiting }) {
+  const s = proposalSummary(waiting);
+  return (
+    <section className={`${CARD} flex flex-wrap items-center justify-between gap-3 px-[18px] py-3`} data-testid="proposals-summary">
+      <div className="flex flex-col gap-0.5">
+        <h2 className={H2}>{QUEUE_TITLE}</h2>
+        <p className={`m-0 ${SUB}`} data-testid="proposals-summary-text">{s.text}</p>
+      </div>
+      <Link to="/admin/programs/proposals" className={PRIMARY} data-testid="proposals-summary-open">Open proposals</Link>
+    </section>
+  );
+}
+
+/** PG2's Proposals from studios, for a Super Admin, on its own address `/admin/programs/proposals`. */
 export function ProposalsFromStudios({ onDecided }) {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState(null);
@@ -165,9 +183,8 @@ export function ProposalsFromStudios({ onDecided }) {
                   <td className={`${TD} font-mono`}>{dayLabel(r.sent_at)}</td>
                   <td className={TD}><ProposalPill status={r.status} /></td>
                   <td className={TD}>
-                    {r.status === 'sent'
-                      ? <button type="button" className={`${LINK} font-bold`} onClick={() => setDeciding(r)} data-testid={`proposals-queue-decide-${r.uid}`}>Decide</button>
-                      : <Link to={proposalHref(r.uid)} className={LINK} data-testid={`proposals-queue-open-${r.uid}`}>Open</Link>}
+                    {/* D4808: a sent proposal leads to its review, where every submitted field is read before Decide. */}
+                    <Link to={`/admin/programs/proposals/${r.uid}`} className={`${LINK}${r.status === 'sent' ? ' font-bold' : ''}`} aria-label={`${r.status === 'sent' ? 'Review' : 'Open'} ${r.name}`} data-testid={r.status === 'sent' ? `proposals-queue-review-${r.uid}` : `proposals-queue-open-${r.uid}`}>{r.status === 'sent' ? 'Review' : 'Open'}</Link>
                   </td>
                 </tr>
               ))}

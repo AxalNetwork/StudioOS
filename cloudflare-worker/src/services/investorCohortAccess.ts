@@ -49,7 +49,16 @@ export type Scope = typeof READABLE_SCOPES[number];
 
 export const GRANT_STATES = ['active', 'ended', 'waits_for_verification', 'waits_for_nda'] as const;
 export type GrantState = typeof GRANT_STATES[number];
-export const NDA_STATES = ['signed', 'sent', 'not_sent'] as const;
+/**
+ * D4809: where the cohort NDA stands, from the grant and its envelope.
+ *   signed           the envelope completed; access opens (if verified and not ended)
+ *   delivery_failed  the last send could not create the envelope or email it; Send NDA again
+ *   declined         the investor declined the envelope; Send NDA sends a new one
+ *   voided           the envelope was voided; Send NDA sends a new one
+ *   sent             out for signature, the email went
+ *   not_sent         never sent
+ */
+export const NDA_STATES = ['signed', 'delivery_failed', 'declined', 'voided', 'sent', 'not_sent'] as const;
 export type NdaState = typeof NDA_STATES[number];
 
 export const NOTICE_TYPE = 'investor_cohort_access';
@@ -118,11 +127,26 @@ export type GrantRow = {
   ended_at: string | null; ended_by_admin_id: number | null; end_reason: string | null;
   note: string | null; scope_json: string; nda_template_slug: string;
   nda_envelope_uuid: string | null; nda_sent_at: string | null; nda_signed_at: string | null;
+  nda_delivery?: string | null; nda_delivery_at?: string | null;
 };
 
-export function ndaStateOf(g: Pick<GrantRow, 'nda_signed_at' | 'nda_envelope_uuid'>): NdaState {
-  return g.nda_signed_at ? 'signed' : g.nda_envelope_uuid ? 'sent' : 'not_sent';
+/** D4809: the NDA state; `envelopeStatus` is the envelope's own status when there is one. */
+export function ndaStateOf(g: Pick<GrantRow, 'nda_signed_at' | 'nda_envelope_uuid'> & { nda_delivery?: string | null }, envelopeStatus: string | null = null): NdaState {
+  if (g.nda_signed_at) return 'signed';
+  // The last send failing outranks the envelope's state: a resend voids the old
+  // envelope first, and a failure after that is what HQ has to act on.
+  if (g.nda_delivery === 'failed') return 'delivery_failed';
+  if (g.nda_envelope_uuid && envelopeStatus === 'rejected') return 'declined';
+  if (g.nda_envelope_uuid && envelopeStatus === 'void') return 'voided';
+  return g.nda_envelope_uuid ? 'sent' : 'not_sent';
 }
+
+/** The same rule in SQL, over `g` (the grant) and `e` (its envelope, LEFT JOINed). Kept beside ndaStateOf. */
+export const NDA_STATE_SQL = `CASE WHEN g.nda_signed_at IS NOT NULL THEN 'signed'
+            WHEN g.nda_delivery = 'failed' THEN 'delivery_failed'
+            WHEN g.nda_envelope_uuid IS NOT NULL AND e.status = 'rejected' THEN 'declined'
+            WHEN g.nda_envelope_uuid IS NOT NULL AND e.status = 'void' THEN 'voided'
+            WHEN g.nda_envelope_uuid IS NOT NULL THEN 'sent' ELSE 'not_sent' END`;
 
 /** A grant is over when it was ended, or its last day has passed. */
 export const isOver = (g: Pick<GrantRow, 'ended_at' | 'ends_at'>, today: string) => Boolean(g.ended_at) || g.ends_at < today;
@@ -351,9 +375,18 @@ export async function setFounderVisibility(env: Env, founderUserId: number, inve
  * changes nothing.
  */
 export async function onCohortNdaEnvelopeCompleted(env: Env, envelopeUuid: string): Promise<{ changed: boolean }> {
-  const res = await env.DB.prepare(
-    `UPDATE investor_cohort_access SET nda_signed_at = datetime('now')
-      WHERE nda_envelope_uuid = ? AND nda_signed_at IS NULL`,
-  ).bind(envelopeUuid).run();
-  return { changed: Number(res.meta?.changes) > 0 };
+  // D4809: the signature and its history row are one batch; the row is written
+  // only when this completion changed the grant (a second completion writes neither).
+  const res = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE investor_cohort_access SET nda_signed_at = datetime('now')
+        WHERE nda_envelope_uuid = ? AND nda_signed_at IS NULL`,
+    ).bind(envelopeUuid),
+    env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, user_id, entity_type, entity_id)
+       SELECT 'investor_cohort.nda_signed', json_object('grant_uid', g.uid, 'cohort_cycle_id', g.cohort_cycle_id), g.investor_user_id, 'investor_cohort_access', g.uid
+         FROM investor_cohort_access g WHERE g.nda_envelope_uuid = ? AND changes() > 0`,
+    ).bind(envelopeUuid),
+  ]);
+  return { changed: Number(res[0]?.meta?.changes) > 0 };
 }

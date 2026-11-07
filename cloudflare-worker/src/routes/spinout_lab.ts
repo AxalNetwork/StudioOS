@@ -451,6 +451,17 @@ spinoutLab.get('/state', async (c) => {
     application_window: applicationWindow,
     server_time: new Date().toISOString(),
   };
+  // D4657: catch up the caller's own progress (work saved while no Lab page
+  // recorded it, or a grant an interrupted request left unpaid), after the
+  // response, at most every RECONCILE_EVERY_MS. The cron does the same for
+  // founders who never open the page.
+  try {
+    const { reconcileDue, reconcileLabProgress } = await import('../services/labProgress');
+    if (state.active && (await reconcileDue(c.env, user.id))) {
+      const pass = reconcileLabProgress(c.env, user.id).catch(() => undefined);
+      try { c.executionCtx.waitUntil(pass); } catch { await pass; }
+    }
+  } catch { /* the state read never fails on this */ }
   if (cohortTiming) {
     const cap = Math.min(state.week, cohortTiming.max_week);
     payload.week = cap;
@@ -773,6 +784,25 @@ spinoutLab.post('/apply/interview/reschedule', async (c) => {
 
 spinoutLab.post('/start', async (c) => {
   const user = await requireAuth(c);
+  // D4657: starting follows the recorded enrollment, not the button. An
+  // account never admitted, one under a moderation sanction, or one whose
+  // cohort opens later is refused; a read that fails is a retryable 503,
+  // never a start. A cohort member starts on their cycle's own instant.
+  const { resolveLabEligibility, mayParticipate, refusal } = await import('../services/labEnrollment');
+  const elig = await resolveLabEligibility(c.env, user.id);
+  if (!mayParticipate(elig)) {
+    const no = refusal(elig);
+    return c.json(no.body, no.status);
+  }
+  if (elig.status === 'eligible' && elig.enrollment.cycle_start_at) {
+    try {
+      await c.env.DB.prepare(
+        `UPDATE users SET spinout_lab_started_at = ? WHERE id = ? AND spinout_lab_started_at IS NULL`,
+      ).bind(elig.enrollment.cycle_start_at, user.id).run();
+    } catch {
+      return c.json({ error: 'Your Lab could not be started just now. Try again in a moment.', code: 'lab_start_unavailable', retryable: true }, 503);
+    }
+  }
   const sql = getSQL(c.env);
   const r = await startLab(sql, user.id);
   await sql.end();
@@ -793,49 +823,18 @@ type MilestoneBody = { milestone_key?: unknown };
 spinoutLab.post('/milestone', async (c) => {
   const user = await requireAuth(c);
   const body = (await c.req.json().catch(() => ({}))) as MilestoneBody;
-  const key = typeof body.milestone_key === 'string' ? body.milestone_key : '';
-  // Cohort week gating — enforced at the wire layer (keeps the pure
-  // recordMilestone logic sliceable by the test harness). A founder may
-  // only record milestones for weeks at or below their gate's max_week:
-  // calendar-locked future weeks and weeks beyond a failed (frozen) week
-  // are rejected with 423 Locked.
-  try {
-    const { getCohortGate } = await import('../services/cohortTiming');
-    const gate = await getCohortGate(c.env, user.id);
-    if (gate) {
-      // A failed (frozen) founder can record NOTHING — not even the frozen
-      // week — otherwise recordMilestone's auto-advance loop could bump
-      // users.spinout_lab_week and bypass the freeze at the data layer.
-      // Unfreezing requires an admin grace extension or force-pass.
-      if (gate.frozen) {
-        return c.json({
-          error: `Your sprint is paused at Week ${gate.frozen_week} pending admin review — deliverables can't be recorded until an admin grants a grace extension or an override.`,
-          locked: true, max_week: gate.max_week,
-        }, 423);
-      }
-      const keyWeek = weekForKey((key ?? '').trim());
-      if (keyWeek && keyWeek > gate.max_week) {
-        const why = gate.frozen
-          ? `Your sprint is paused at Week ${gate.frozen_week} pending admin review.`
-          : `Week ${keyWeek} unlocks on schedule — it is locked until ${gate.weeks.find((w) => w.week === keyWeek)?.unlock_at ?? 'its unlock time'} UTC.`;
-        return c.json({ error: `Week ${keyWeek} is locked. ${why}`, locked: true, max_week: gate.max_week }, 423);
-      }
-    }
-  } catch { /* gate unavailable (pre-migration) — legacy behavior */ }
-  // D541 — a milestone pays credits only when this call is the one that
-  // recorded it. recordMilestone's INSERT OR IGNORE says nothing about that,
-  // so look first; a read that fails counts as "already there" and pays
-  // nothing. Two racing calls can both see it absent — the grant's own
-  // source ref then pays it once.
-  const trimmed = (key ?? '').trim();
+  const key = typeof body.milestone_key === 'string' ? body.milestone_key.trim() : '';
   // D585 (#1212): graduation's formation milestone comes only from the
-  // server's order status, at payment. A client call cannot record it; it
-  // asks the server to sync, which records it only behind a paid order.
-  if (trimmed === 'incorporation_completed') {
+  // server's order status, at payment. A client call asks the server to sync,
+  // which records it only behind a paid order.
+  if (key === 'incorporation_completed') {
     const { syncIncorporationMilestone } = await import('../services/labIncorporationMilestone');
     const out = await syncIncorporationMilestone(c.env, user.id);
     if (!out.recorded && out.reason === 'not_paid') {
       return c.json({ error: 'incorporation_not_paid', message: 'This milestone is recorded when your incorporation order is paid.' }, 409);
+    }
+    if (!out.recorded && out.reason === 'unavailable') {
+      return c.json({ error: 'This step could not be checked just now. Try again in a moment.', code: 'lab_evidence_unavailable', retryable: true }, 503);
     }
     const sqlS = getSQL(c.env);
     const state = await getLabState(sqlS, user.id);
@@ -846,49 +845,13 @@ spinoutLab.post('/milestone', async (c) => {
       graduation_credit: out.recorded ? out.graduation_credit : null,
     });
   }
-  let existedBefore = true;
-  try {
-    existedBefore = !!(await c.env.DB.prepare(
-      'SELECT 1 AS x FROM spinout_lab_milestones WHERE user_id = ? AND milestone_key = ?',
-    ).bind(user.id, trimmed).first());
-  } catch (e) {
-    console.warn('[spinout-lab] milestone pre-read failed; no credit for this call', (e as Error).message);
-  }
-  const sql = getSQL(c.env);
-  const r = await recordMilestone(sql, user.id, key);
-  await sql.end();
-  if (!r.ok) return c.json({ error: r.error }, r.status);
-  let milestoneCredit: unknown = null;
-  if (!existedBefore && r.state.milestones.some((m) => m.key === trimmed)) {
-    const { creditLabMilestone } = await import('../services/labMilestoneCredits');
-    milestoneCredit = await creditLabMilestone(c.env, user.id, trimmed);
-  }
-
-  // Graduation issues the credential. `incorporation_completed` is already
-  // the definition of "graduated" everywhere else (public graduate list,
-  // /stats, week-4 gating), so keying issuance on the same row avoids
-  // inventing a second, competing definition.
-  //
-  // Deliberately after recordMilestone and outside its transaction: a founder
-  // finishing the program must not have their completion rejected because a
-  // certificate insert failed. issueOnGraduation never throws and is
-  // idempotent, and the backfill picks up anything it missed.
-  //
-  // D541 — the graduation bonus is paid when the certificate is issued, and
-  // only then; creditLabGraduation never throws.
-  let graduationCredit: unknown = null;
-  if (key === 'incorporation_completed') {
-    try {
-      const { issueOnGraduation } = await import('../services/certificateIssuance');
-      const outcome = await issueOnGraduation(c.env, user.id);
-      if (outcome === 'issued') {
-        const { creditLabGraduation } = await import('../services/labMilestoneCredits');
-        graduationCredit = await creditLabGraduation(c.env, user.id);
-      }
-    } catch { /* issuance is best-effort — never blocks graduation */ }
-  }
-
-  return c.json({ ...r.state, milestone_credit: milestoneCredit, graduation_credit: graduationCredit });
+  // D4657: the browser asks; the server records only what the policy, the
+  // cohort calendar and the saved work allow (services/labProgress.ts). A
+  // milestone pays only from the request whose insert recorded it.
+  const { recordLabMilestone } = await import('../services/labProgress');
+  const r = await recordLabMilestone(c.env, user.id, key, 'member');
+  if (!r.ok) return c.json(r.body, r.status);
+  return c.json({ ...(r.state as Record<string, unknown>), milestone_credit: r.milestone_credit, graduation_credit: r.graduation_credit });
 });
 
 spinoutLab.post('/exit', async (c) => {

@@ -27,7 +27,7 @@ import { LearningOverview, LearningPeople } from './LearningPages';
 import { PerksOverview, PerksQueue } from './PerksPages';
 import { InvitePartner, PartnersOverview, PartnersQueue, useQueueCount } from './ReferralPartners';
 import { ApproveDialog, EndTermsDialog, RuleDialog, SendDialog, TermsDialog } from './ReferralTermsDialogs';
-import { EndAccessDialog, GiveAccessDialog, InvestorOverview, useInvestorReads } from './InvestorCohorts';
+import { EndAccessDialog, GiveAccessDialog, InvestorOverview, NdaSendDialog, useInvestorReads } from './InvestorCohorts';
 import { InvestorTabs } from './ProgramTabs';
 import { SUB, Tile } from './parts';
 import { STATUS_WORD } from './catalogueModel';
@@ -119,6 +119,7 @@ function InvestorCohorts({ tab, superAdmin }) {
       {tab === 'activity' ? <ActivityTab program="investor-cohorts" testId="programs-investor-activity" /> : null}
       {d?.kind === 'give' ? <GiveAccessDialog reads={reads} onClose={desk.close} onGiven={desk.reload} /> : null}
       {d?.kind === 'end' ? <EndAccessDialog grant={d.grant} onClose={desk.close} onEnded={desk.reload} /> : null}
+      {d?.kind === 'nda' ? <NdaSendDialog grant={d.grant} onClose={desk.close} onSent={desk.reload} /> : null}
     </ProgramFrame>
   );
 }

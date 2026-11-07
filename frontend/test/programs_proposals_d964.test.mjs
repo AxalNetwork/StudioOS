@@ -15,7 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
@@ -23,6 +23,7 @@ import { pageKeyFor } from '../src/lib/railPages.js';
 import ProgramsCatalogue from '../src/pages/admin/programs/ProgramsCatalogue.jsx';
 import ProposePage from '../src/pages/admin/programs/ProposePage.jsx';
 import ProposalsPage from '../src/pages/admin/programs/ProposalsPage.jsx';
+import ProposalReviewPage from '../src/pages/admin/programs/ProposalReviewPage.jsx';
 import { LINE_SUPER } from '../src/pages/admin/programs/programsModel.js';
 import {
   NOT_SAVED, PROPOSALS_CLOSED, emptyForm, fieldsFrom, formFrom, joinLine, missingSentence, newProgramFields, proposalRefusal,
@@ -89,6 +90,9 @@ function worker(o = {}) {
   };
 }
 const fieldsOut = (b) => (b ? { ...b } : {});
+/** D4808: the review page at its address, which carries the proposal's uid. */
+const ReviewAt = () => h(Routes, null, h(Route, { path: '/admin/programs/proposals/:uid', element: h(ProposalReviewPage) }));
+const SENT = proposal({ uid: 'pp-q1', name: 'Fitness Sprint', status: 'sent', sent_at: '2026-10-16T08:00:00Z' });
 
 async function mounted(url, page, handle, { user = null } = {}) {
   const restore = installDocument();
@@ -218,7 +222,7 @@ test('Your proposals: an empty list says so with the door, a failed read says so
   } finally { await failed.close(); }
 });
 
-test('a Super Admin\'s catalogue: New program, the tab strip with the amber count, the line, and Proposals from studios', async () => {
+test('a Super Admin\'s catalogue: New program, the tab strip with the amber count, the line, and a compact proposal line (D4808)', async () => {
   const view = await mounted('/admin/programs', ProgramsCatalogue, worker({ user: SUPER }), { user: SUPER });
   try {
     assert.equal(view.textOf('programs-catalogue-line'), LINE_SUPER);
@@ -226,8 +230,20 @@ test('a Super Admin\'s catalogue: New program, the tab strip with the amber coun
     assert.ok(!view.has('programs-propose'), 'HQ does not propose to itself');
     assert.equal(view.textOf('programs-tab-catalogue'), 'Catalogue');
     assert.equal(view.textOf('programs-tab-proposals-count'), '1', 'the proposals sent to HQ');
-    assert.match(view.textOf('proposals-queue-row-pp-q1'), /Fitness Sprint.*Studio North.*16 Oct.*Sent to HQ.*Decide/s);
+    // D4808: the catalogue keeps a summary and one door; the search, filters and review are at /admin/programs/proposals.
+    assert.equal(view.textOf('proposals-summary-text'), '1 proposal is waiting on HQ.');
+    assert.ok(view.has('proposals-summary-open'));
+    assert.ok(!view.has('proposals-queue'), 'no second copy of the queue on the catalogue');
+    assert.ok(!view.has('proposals-queue-search'));
+  } finally { await view.close(); }
+});
+
+test('the proposals page: the queue with its filters, and a sent proposal leads to Review, not straight to Decide (D4808)', async () => {
+  const view = await mounted('/admin/programs/proposals', ProposalsPage, worker({ user: SUPER }), { user: SUPER });
+  try {
+    assert.match(view.textOf('proposals-queue-row-pp-q1'), /Fitness Sprint.*Studio North.*16 Oct.*Sent to HQ.*Review/s);
     assert.match(view.textOf('proposals-queue-row-pp-q2'), /Studio East.*Sent back.*Open/s);
+    assert.ok(!view.has('proposals-queue-decide-pp-q1'), 'Decide is not one click from the queue any more');
     assert.ok(view.requests.some((r) => r.url === '/api/admin/programs/proposals?sort=oldest'), 'oldest first');
     await view.change('proposals-queue-studio', 'lic-e');
     assert.ok(view.requests.some((r) => r.url === '/api/admin/programs/proposals?sort=oldest&licence=lic-e'));
@@ -240,12 +256,12 @@ test('a Super Admin\'s catalogue: New program, the tab strip with the amber coun
 
 test('Decide: the note is required for Send back and Decline before anything is sent, and a refusal keeps the dialog open', async () => {
   let refuse = true;
-  const view = await mounted('/admin/programs', ProgramsCatalogue, worker({
-    user: SUPER,
+  const view = await mounted('/admin/programs/proposals/pp-q1', ReviewAt, worker({
+    user: SUPER, one: { 'pp-q1': { proposal: SENT } },
     decide: (uid, body) => (refuse ? refusal('not_waiting', 409) : response({ proposal: proposal({ uid, status: body.outcome === 'decline' ? 'declined' : 'sent_back' }) })),
   }), { user: SUPER });
   try {
-    await view.click('proposals-queue-decide-pp-q1');
+    await view.click('proposal-review-decide');
     assert.ok(view.has('proposals-decide-dialog'));
     assert.match(view.text(), /Decide on Fitness Sprint/);
     assert.match(view.text(), /From Studio North · sent 16 Oct\./);
@@ -268,9 +284,9 @@ test('Decide: the note is required for Send back and Decline before anything is 
 });
 
 test('Decide: an approval needs no note, and the dialog says an approval sets no grant yet', async () => {
-  const view = await mounted('/admin/programs/proposals', ProposalsPage, worker({ user: SUPER }), { user: SUPER });
+  const view = await mounted('/admin/programs/proposals/pp-q1', ReviewAt, worker({ user: SUPER, one: { 'pp-q1': { proposal: SENT } } }), { user: SUPER });
   try {
-    await view.click('proposals-queue-decide-pp-q1');
+    await view.click('proposal-review-decide');
     assert.match(view.textOf('proposals-decide-grant'), /an approval sets no grant yet/);
     await view.change('proposals-decide-approve_catalogue', true, 'checked');
     await view.click('proposals-decide-confirm');
@@ -297,9 +313,13 @@ test('New program: a Super Admin\'s only, Basics and How it runs, and program_ke
     assert.equal(view.textOf('programs-new-refusal'), 'A program with this name already exists. Change the name and try again.');
     assert.ok(view.has('programs-new-dialog'), 'the dialog stays open');
     taken = false;
+    const before = view.requests.filter((r) => r.url.startsWith('/api/admin/programs?') || r.url === '/api/admin/programs').length;
     await view.click('programs-new-create');
     assert.ok(!view.has('programs-new-dialog'));
-    assert.match(view.textOf('programs-new-done'), /Operator Fellowship is added as Proposed, with an empty playbook draft\./);
+    assert.match(view.textOf('programs-new-done'), /Operator Fellowship is added as Proposed, with an empty playbook draft you edit and publish on its page\./);
+    // D4808: the catalogue is read again, and Open program is a door to the new program's own page.
+    assert.ok(view.requests.filter((r) => r.method === 'GET' && r.url.startsWith('/api/admin/programs')).length > before, 'the catalogue refreshed');
+    assert.ok(view.has('programs-new-open'));
   } finally { await view.close(); }
 });
 

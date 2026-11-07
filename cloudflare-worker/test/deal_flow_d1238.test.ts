@@ -186,6 +186,60 @@ test('a pass on a deal not yet in the flow adds it as passed, from its New for y
   assert.equal(roundOf(f, 102), 'active');
 });
 
+// ---------------------------------------------------------------- D4632: whole writes
+
+/** Runs `sql` just before the route's next batch: a write landing between its read and its write. */
+function race(f: any, sql: string) {
+  const batch = f.env.DB.batch.bind(f.env.DB);
+  f.env.DB.batch = async (list: any[]) => { f.db.exec(sql); f.env.DB.batch = batch; return batch(list); };
+}
+const entry = (f: any) => ({ ...f.db.prepare('SELECT stage, owner_user_id, note, pass_reason FROM deal_flow_entries WHERE deal_id=101').get() });
+const eventCount = (f: any) => Number(f.db.prepare('SELECT COUNT(*) AS n FROM deal_flow_events WHERE deal_id=101').get().n);
+
+test('D4632: a move that lost the race writes no stage, owner, note or history', async () => {
+  const f = fixture();
+  await call(f, '', 1, 'POST', { deal_id: 101 });
+  const before = eventCount(f);
+  race(f, "UPDATE deal_flow_entries SET stage='screening', stage_changed_at='2026-11-01 00:00:00' WHERE deal_id=101");
+  const r = await call(f, '/101', 1, 'PATCH', { stage: 'diligence', owner_user_id: 2, note: 'Check the IP.' });
+  assert.deepEqual([r.status, r.body.code], [409, 'flow_changed']);
+  assert.deepEqual(entry(f), { stage: 'screening', owner_user_id: 1, note: null, pass_reason: null });
+  assert.equal(eventCount(f), before, 'no history row for any part of it');
+  // Without a move, an owner and a note still land together.
+  const ok = await call(f, '/101', 1, 'PATCH', { owner_user_id: 2, note: 'Check the IP.' });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(entry(f), { stage: 'screening', owner_user_id: 2, note: 'Check the IP.', pass_reason: null });
+  assert.equal(eventCount(f), before + 2);
+});
+
+test('D4632: a pass that lost the race writes neither the pass nor its history', async () => {
+  const f = fixture();
+  await call(f, '', 1, 'POST', { deal_id: 101 });
+  const before = eventCount(f);
+  race(f, "UPDATE deal_flow_entries SET stage='diligence', stage_changed_at='2026-11-01 00:00:00' WHERE deal_id=101");
+  const r = await call(f, '/101/pass', 1, 'POST', { reason: 'early' });
+  assert.equal(r.status, 409);
+  assert.deepEqual(entry(f), { stage: 'diligence', owner_user_id: 1, note: null, pass_reason: null });
+  assert.equal(eventCount(f), before);
+});
+
+test('D4632: two adds in flight write one row and one history row; the second is told', async () => {
+  const f = fixture();
+  // The other add lands after this one checked and before it writes.
+  race(f, "INSERT INTO deal_flow_entries (uid, scope_key, company_id, investor_user_id, deal_id, stage, owner_user_id, entered_via) VALUES ('other', 'c:10', 10, 2, 101, 'sourcing', 2, 'added')");
+  const r = await call(f, '', 1, 'POST', { deal_id: 101 });
+  assert.deepEqual([r.status, r.body.code], [409, 'already_in_flow']);
+  assert.equal(Number(f.db.prepare('SELECT COUNT(*) AS n FROM deal_flow_entries WHERE deal_id=101').get().n), 1);
+  assert.equal(eventCount(f), 0, 'the losing add wrote no history, and none on the winner\'s row');
+  // The same for a pass that would add the row.
+  const g = fixture();
+  race(g, "INSERT INTO deal_flow_entries (uid, scope_key, company_id, investor_user_id, deal_id, stage, owner_user_id, entered_via) VALUES ('other', 'c:10', 10, 2, 102, 'sourcing', 2, 'added')");
+  const p = await call(g, '/102/pass', 1, 'POST', { reason: 'thesis' });
+  assert.equal(p.status, 409);
+  assert.equal(Number(g.db.prepare("SELECT COUNT(*) AS n FROM deal_flow_events WHERE deal_id=102").get().n), 0);
+  assert.equal(g.db.prepare('SELECT stage FROM deal_flow_entries WHERE deal_id=102').get().stage, 'sourcing');
+});
+
 // ---------------------------------------------------------------- New for you
 
 test('New for you lists each way in not yet in the flow, newest first, and leaves out a deleted venture', async () => {

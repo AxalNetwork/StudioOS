@@ -27,12 +27,12 @@ export const learningApi = {
 
   // #4180 (D4180) — the list reads (routes/learning_lists.ts). Published and
   // visible only; a figure not recorded is null, never 0.
-  //   exercises({ limit, offset }) → { items: [{ uid, title, submission_kind, where: { kind, title } | null, status, submitted_at, updated_at, href }], total, limit, offset }
-  //   exams({ limit, offset })     → { items: [{ uid, title, where, question_count, time_limit_minutes, pass_mark_percent,
+  //   exercises({ limit, offset, q }) → { items: [{ uid, title, submission_kind, where: { kind, title } | null, status, submitted_at, updated_at, href }], total, limit, offset }
+  //   exams({ limit, offset, q })     → { items: [{ uid, title, where, question_count, time_limit_minutes, pass_mark_percent,
   //                                    attempts_left, attempts_used, best_score_percent, passed, updated_at, href }], total, limit, offset }
   //   mySubmissions()              → { submissions: [{ uid, status, feedback, submitted_at, reviewed_at, exercise: { uid, title, href } }] }
   //   myAttempts()                 → { attempts: [{ uid, started_at, submitted_at, score_percent, passed, timed_out, exam: { uid, title, pass_mark_percent, href } }] }
-  //   myStats()                    → { month, courses_in_progress, lessons_completed_this_month, watch_seconds_this_month, exams: { passed, sat } }
+  //   myStats()                    → { month, courses_in_progress, lessons_completed_this_month, videos_played_this_month, exams: { passed, sat } }
   // The catalog also takes `max_minutes`, and a row found in a transcript carries `match: { in, snippet, at_seconds }`.
   exercises: (params) => request(`/learning/exercises${qs(params)}`),
   exams: (params) => request(`/learning/exams${qs(params)}`),

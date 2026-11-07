@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useMutations, useZoneRead, signature } from './useZoneMutations';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
@@ -93,23 +94,23 @@ function HealthTile({ label, value, note, nr = false }) {
  * silently clear another; the route treats an absent key as untouched, and this
  * form always knows all three.
  */
-function StatedFacts({ row, roster, busy, onSave, note }) {
-  const [draft, setDraft] = useState({
+function factsOf(row) {
+  return {
     owner_user_id: row.owner_user_id ? String(row.owner_user_id) : '',
     scope_state: row.scope_state || '',
     scope_note: row.scope_note || '',
     satisfaction: row.satisfaction == null ? '' : String(row.satisfaction),
     satisfaction_source: row.satisfaction_source || '',
-  });
-  useEffect(() => {
-    setDraft({
-      owner_user_id: row.owner_user_id ? String(row.owner_user_id) : '',
-      scope_state: row.scope_state || '',
-      scope_note: row.scope_note || '',
-      satisfaction: row.satisfaction == null ? '' : String(row.satisfaction),
-      satisfaction_source: row.satisfaction_source || '',
-    });
-  }, [row]);
+  };
+}
+
+function StatedFacts({ row, roster, busy, onSave, note }) {
+  const [draft, setDraft] = useState(() => factsOf(row));
+  // Re-seeded only when THIS engagement's stated facts change on the server.
+  // Keying on the row object re-seeded every open form on every refetch, so
+  // saving one engagement discarded what was typed into another (#4698).
+  const seed = signature(factsOf(row));
+  useEffect(() => { setDraft(factsOf(row)); }, [seed]);
 
   return (
     <div>
@@ -149,16 +150,16 @@ function StatedFacts({ row, roster, busy, onSave, note }) {
         </Field>
         <div className="flex items-end">
           <button
-            type="button" className={buttonClass} disabled={busy}
-            onClick={() => onSave({
+            type="button" className={buttonClass} aria-disabled={busy || undefined}
+            onClick={() => { if (!busy) onSave({
               owner_user_id: draft.owner_user_id ? Number(draft.owner_user_id) : null,
               scope_state: draft.scope_state || null,
               scope_note: draft.scope_note,
               satisfaction: draft.satisfaction.trim() === '' ? null : Number(draft.satisfaction),
               satisfaction_source: draft.satisfaction_source,
-            })}
+            }); }}
           >
-            Save
+            {busy ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
@@ -187,7 +188,7 @@ function Utilisation({ row }) {
   );
 }
 
-function MilestoneEditor({ engagementId, busy, onChanged, onError }) {
+function MilestoneEditor({ engagementId, pending, mutate }) {
   // `rows` is SEEDED WITH `[]`, and "have we read it yet" is a separate flag.
   // Holding a list as null and dereferencing it is the crash `_zoneGuards.mjs`
   // rule 2 exists for — React builds children before ZoneBody decides whether
@@ -205,20 +206,29 @@ function MilestoneEditor({ engagementId, busy, onChanged, onError }) {
       setError('');
       setReady(true);
     } catch (e) {
-      setRows([]);
-      setReady(false);
+      // A list already read stays on screen: a failed reload after a save is a
+      // stale list with a warning, not an empty one and not a lost draft.
       setError(e?.message || 'The milestones did not load.');
     }
   }, [engagementId]);
   useEffect(() => { load(); }, [load]);
 
-  if (error) {
-    return <p className="text-[12px] text-red-700 dark:text-red-300">{error}</p>;
+  if (!ready && error) {
+    return <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{error}</p>;
   }
   if (!ready) return <p className="text-[12px] text-axal-faint">Loading…</p>;
+  // `mutate` resolves true only for a confirmed write. The list re-reads on
+  // that and on nothing else, and a form resets on that and on nothing else.
+  const change = async (key, fn) => {
+    const ok = await mutate(key, fn);
+    if (ok) await load();
+    return ok;
+  };
+  const addPending = pending('ms:new');
 
   return (
     <div>
+      {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{error}</p>}
       {rows.length === 0 && (
         <p className="text-[12px] leading-relaxed text-axal-faint">
           No milestone recorded. Without one, nothing here can be overdue — which
@@ -237,24 +247,18 @@ function MilestoneEditor({ engagementId, busy, onChanged, onError }) {
             )}
           </span>
           <button
-            type="button" className={`${ghostButtonClass} ml-auto`} disabled={busy}
-            onClick={async () => {
-              try {
-                await api.updatePartnerMilestone(m.id, {
-                  completed_at: m.completed_at ? null : new Date().toISOString(),
-                });
-                await load(); onChanged();
-              } catch (e) { onError(e); }
-            }}
+            type="button" className={`${ghostButtonClass} ml-auto`}
+            aria-disabled={pending(`ms:${m.id}`) || undefined}
+            onClick={() => change(`ms:${m.id}`, () => api.updatePartnerMilestone(m.id, {
+              completed_at: m.completed_at ? null : new Date().toISOString(),
+            }))}
           >
             {m.completed_at ? 'Reopen' : 'Complete'}
           </button>
           <button
-            type="button" className={`${ghostButtonClass} text-red-700 dark:text-red-300`} disabled={busy}
-            onClick={async () => {
-              try { await api.deletePartnerMilestone(m.id); await load(); onChanged(); }
-              catch (e) { onError(e); }
-            }}
+            type="button" className={`${ghostButtonClass} text-red-700 dark:text-red-300`}
+            aria-disabled={pending(`ms:${m.id}`) || undefined}
+            onClick={() => change(`ms:${m.id}`, () => api.deletePartnerMilestone(m.id))}
           >
             Remove
           </button>
@@ -271,13 +275,13 @@ function MilestoneEditor({ engagementId, busy, onChanged, onError }) {
         </Field>
         <div className="flex items-end">
           <button
-            type="button" className={buttonClass} disabled={busy || !draft.title.trim()}
+            type="button" className={buttonClass} disabled={!draft.title.trim()}
+            aria-disabled={addPending || undefined}
             onClick={async () => {
-              try {
-                await api.createPartnerMilestone(engagementId, draft);
-                setDraft({ title: '', due_at: '' });
-                await load(); onChanged();
-              } catch (e) { onError(e); }
+              if (addPending) return;
+              const sending = draft;
+              const ok = await change('ms:new', () => api.createPartnerMilestone(engagementId, sending));
+              if (ok) setDraft({ title: '', due_at: '' });
             }}
           >
             Add
@@ -288,7 +292,7 @@ function MilestoneEditor({ engagementId, busy, onChanged, onError }) {
   );
 }
 
-function BlockerEditor({ engagementId, busy, onChanged, onError }) {
+function BlockerEditor({ engagementId, pending, mutate }) {
   // Seeded with `[]` for the reason above: a list held as null is a crash
   // waiting for the first render, whatever the guard above it says.
   const [rows, setRows] = useState([]);
@@ -303,28 +307,31 @@ function BlockerEditor({ engagementId, busy, onChanged, onError }) {
       setError('');
       setReady(true);
     } catch (e) {
-      setRows([]);
-      setReady(false);
+      // Same rule as the milestones: a list already read is kept.
       setError(e?.message || 'The blockers did not load.');
     }
   }, [engagementId]);
   useEffect(() => { load(); }, [load]);
 
-  if (error) {
+  if (!ready && error) {
     return (
       <div className="text-[12px]" data-testid="blockers-unreadable">
-        <p className="text-red-700 dark:text-red-300">Blockers could not be read just now. {error}</p>
+        <p role="alert" className="text-red-700 dark:text-red-300">Blockers could not be read just now. {error}</p>
         <button type="button" className={`${ghostButtonClass} mt-1`} onClick={load}>Try again</button>
       </div>
     );
   }
   if (!ready) return <p className="text-[12px] text-axal-faint">Loading…</p>;
-  const act = async (fn) => {
-    try { await fn(); await load(); onChanged(); } catch (e) { onError(e); }
+  const act = async (key, fn) => {
+    const ok = await mutate(key, fn);
+    if (ok) await load();
+    return ok;
   };
+  const addPending = pending('bl:new');
 
   return (
     <div>
+      {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">Blockers could not be refreshed just now. {error}</p>}
       {rows.length === 0 && (
         <p className="text-[12px] leading-relaxed text-axal-faint">Nothing blocked.</p>
       )}
@@ -333,10 +340,10 @@ function BlockerEditor({ engagementId, busy, onChanged, onError }) {
           the firm's. */}
       {rows.map((b) => (
         <BlockerRow
-          key={b.id} b={b} busy={busy}
-          onClear={() => act(() => api.updatePartnerBlocker(b.id, { cleared_at: new Date().toISOString() }))}
-          onReopen={() => act(() => api.updatePartnerBlocker(b.id, { cleared_at: null }))}
-          onDelete={() => { if (window.confirm(blockerDeleteQuestion(b))) act(() => api.deletePartnerBlocker(b.id)); }}
+          key={b.id} b={b} busy={pending(`bl:${b.id}`)}
+          onClear={() => act(`bl:${b.id}`, () => api.updatePartnerBlocker(b.id, { cleared_at: new Date().toISOString() }))}
+          onReopen={() => act(`bl:${b.id}`, () => api.updatePartnerBlocker(b.id, { cleared_at: null }))}
+          onDelete={() => { if (window.confirm(blockerDeleteQuestion(b))) act(`bl:${b.id}`, () => api.deletePartnerBlocker(b.id)); }}
         />
       ))}
       <div className="mt-2 grid gap-2 md:grid-cols-3">
@@ -353,13 +360,13 @@ function BlockerEditor({ engagementId, busy, onChanged, onError }) {
         </Field>
         <div className="flex items-end">
           <button
-            type="button" className={buttonClass} disabled={busy || !draft.summary.trim()}
+            type="button" className={buttonClass} disabled={!draft.summary.trim()}
+            aria-disabled={addPending || undefined}
             onClick={async () => {
-              try {
-                await api.createPartnerBlocker(engagementId, draft);
-                setDraft({ summary: '', side: 'ours' });
-                await load(); onChanged();
-              } catch (e) { onError(e); }
+              if (addPending) return;
+              const sending = draft;
+              const ok = await act('bl:new', () => api.createPartnerBlocker(engagementId, sending));
+              if (ok) setDraft({ summary: '', side: 'ours' });
             }}
           >
             Add
@@ -370,7 +377,7 @@ function BlockerEditor({ engagementId, busy, onChanged, onError }) {
   );
 }
 
-function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note }) {
+function HealthRow({ row, roster, pending, mutate, onSaveFacts, note }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -389,7 +396,7 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
             {row.need_title && row.founder_name && <> · {row.need_title}</>}
           </div>
         </div>
-        <button type="button" className={ghostButtonClass} onClick={() => setOpen((v) => !v)}>
+        <button type="button" className={ghostButtonClass} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           {open ? 'Hide' : 'Record'}
         </button>
       </div>
@@ -443,15 +450,13 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
           <div>
             <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Milestones</div>
             <div className="mt-1">
-              <MilestoneEditor engagementId={row.engagement_id} busy={busy}
-                onChanged={onChanged} onError={onError} />
+              <MilestoneEditor engagementId={row.engagement_id} pending={pending} mutate={mutate} />
             </div>
           </div>
           <div>
             <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Blockers</div>
             <div className="mt-1">
-              <BlockerEditor engagementId={row.engagement_id} busy={busy}
-                onChanged={onChanged} onError={onError} />
+              <BlockerEditor engagementId={row.engagement_id} pending={pending} mutate={mutate} />
             </div>
           </div>
           {/* THE THREE FACTS NOTHING DERIVES. Owner, scope assessment and the
@@ -467,7 +472,7 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
               <StatedFacts
                 row={row}
                 roster={roster}
-                busy={busy}
+                busy={pending('facts')}
                 note={note?.scope === `facts:${row.engagement_id}` ? note : null}
                 onSave={(data) => onSaveFacts(row, data)}
               />
@@ -481,33 +486,42 @@ function HealthRow({ row, roster, busy, onChanged, onError, onSaveFacts, note })
 }
 
 export default function PartnerHealthZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null, people: null });
+  // The roster is what the owner picker offers, and it is the firm's own
+  // people only — an owner naming anybody else would be as false as a seat
+  // register naming them. The skeleton is for the FIRST read: a later one
+  // (every save) keeps the rows, and the editors open on them, mounted.
+  const { state: read, load } = useZoneRead(async () => {
+    const [r, ppl] = await Promise.all([
+      api.getPartnerDeliveryHealth(),
+      api.listPartnerPeople().catch(() => ({ items: [] })),
+    ]);
+    return { data: r || {}, people: Array.isArray(ppl?.items) ? ppl.items : [] };
+  }, 'The delivery record did not load.');
+  const state = {
+    loading: read.loading,
+    error: read.error,
+    data: read.data?.data ?? null,
+    people: read.data?.people ?? null,
+  };
   const [view, setView] = useState('at_risk');
-  const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  const { run: runMutation, isPending } = useMutations();
 
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      // The roster is what the owner picker offers, and it is the firm's own
-      // people only — an owner naming anybody else would be as false as a seat
-      // register naming them.
-      const [r, ppl] = await Promise.all([
-        api.getPartnerDeliveryHealth(),
-        api.listPartnerPeople().catch(() => ({ items: [] })),
-      ]);
-      setState({
-        loading: false, error: '', data: r || {},
-        people: Array.isArray(ppl?.items) ? ppl.items : [],
-      });
-    } catch (e) {
-      setState({
-        loading: false, error: e?.message || 'The delivery record did not load.',
-        data: null, people: null,
-      });
+  // One operation, one key, and the key carries the engagement: two engagements
+  // save independently, and a second click on the same operation while its
+  // request is out starts nothing. Resolves true only for a CONFIRMED write.
+  const act = useCallback(async (key, fn, ok, scope) => {
+    setNote((n) => (n?.scope === scope ? null : n));
+    const r = await runMutation(key, fn);
+    if (r.skipped) return false;
+    if (!r.ok) {
+      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      return false;
     }
-  }, []);
-  useEffect(() => { load(); }, [load]);
+    setNote({ ok: true, text: ok, scope });
+    load();
+    return true;
+  }, [runMutation, load]);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -566,6 +580,16 @@ export default function PartnerHealthZone() {
     return items;
   })();
 
+  // THE CARDS BELOW ARE THE SELECTED CHIP'S RECORDS, the same set the table and
+  // the export read. They drew every engagement whatever was chosen, so the
+  // page said "At risk" above a list of the book and offered record-specific
+  // actions on rows the filter had excluded (#4698). `By owner` is an ordering
+  // and keeps its own; the other chips lead with blocked, then at risk.
+  const engagementRows = view === 'owner' ? visible : visible.slice().sort((a, b) => {
+    const rank = { blocked: 0, at_risk: 1, on_track: 3 };
+    return (rank[a.health] ?? 2) - (rank[b.health] ?? 2);
+  });
+
   const rowActions = partnerZoneActions('delivery/health', { view: { header: ['Engagement', 'Founder', 'Health', 'Utilisation %', 'Milestones', 'Deliverables sent', 'Open blockers', 'Renews'], rows: visible, cells: (r) => [r.need_title, r.founder_name, r.health, r.utilisation_pct, r.milestone_count, r.deliverables_sent, r.open_blockers?.length ?? 0, r.renews_at] } });
 
   // NOT AN EARLY RETURN ANY MORE. This was
@@ -614,7 +638,12 @@ export default function PartnerHealthZone() {
         />
       )}
     >
-      <div className="space-y-6">
+      <div className="space-y-6" aria-busy={read.refreshing || undefined}>
+        {read.refreshError && (
+          <p role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300">
+            The delivery record could not be refreshed just now, so what is shown may be out of date. {read.refreshError}
+          </p>
+        )}
         <ZoneHeading
           title="Engagement health"
           blurb={
@@ -743,51 +772,27 @@ export default function PartnerHealthZone() {
 
         <Section title="Engagements">
           <div className="space-y-3">
-            {items
-              .slice()
-              // At-risk first, then blocked, then the rest — the row that needs
-              // attention should not be below three that do not.
-              .sort((a, b) => {
-                const rank = { blocked: 0, at_risk: 1, on_track: 3 };
-                return (rank[a.health] ?? 2) - (rank[b.health] ?? 2);
-              })
-              .map((row) => (
+            {engagementRows.map((row) => (
                 <HealthRow
                   key={row.engagement_id}
                   row={row}
                   roster={roster}
-                  busy={busy}
                   note={note}
-                  onSaveFacts={async (r, data) => {
-                    setBusy(true);
-                    setNote(null);
-                    try {
-                      await api.savePartnerEngagementHealth(r.engagement_id, data);
-                      setNote({ ok: true, text: 'Saved.', scope: `facts:${r.engagement_id}` });
-                      await load();
-                    } catch (e) {
-                      setNote({
-                        ok: false,
-                        text: e?.message || 'That did not save.',
-                        scope: `facts:${r.engagement_id}`,
-                      });
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                  onChanged={async () => {
-                    setBusy(true);
-                    setNote({ ok: true, text: 'Saved.', scope: `eng:${row.engagement_id}` });
-                    await load();
-                    setBusy(false);
-                  }}
-                  onError={(e) => setNote({
-                    ok: false,
-                    text: e?.message || 'That did not save.',
-                    scope: `eng:${row.engagement_id}`,
-                  })}
+                  pending={(k) => isPending(`${row.engagement_id}:${k}`)}
+                  mutate={(k, fn) => act(`${row.engagement_id}:${k}`, fn, 'Saved.', `eng:${row.engagement_id}`)}
+                  onSaveFacts={(r, data) => act(
+                    `${r.engagement_id}:facts`,
+                    () => api.savePartnerEngagementHealth(r.engagement_id, data),
+                    'Saved.', `facts:${r.engagement_id}`,
+                  )}
                 />
               ))}
+            {items.length > 0 && engagementRows.length === 0 && (
+              <p className="text-[12px] text-axal-muted">
+                No engagement is in this state, so there is nothing to record against here.
+                Choose All to reach every one of the {items.length}.
+              </p>
+            )}
           </div>
         </Section>
 

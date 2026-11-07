@@ -26,12 +26,13 @@ const CRUMB_LINK = 'text-axal-muted hover:text-axal-violet dark:text-gray-400 da
  * logged (`POST /api/admin/programs/:key/export`). Pause waits for OD-PAUSE,
  * so the menu does not offer it.
  */
-export default function ProgramFrame({ program, superAdmin = false, status = null, actions = null, actionsOnPhone = true, tabs = null, detail = null, children }) {
+export default function ProgramFrame({ program, superAdmin = false, status = null, actions = null, actionsOnPhone = true, tabs = null, detail = null, meta = null, children }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const phone = usePhoneWidth();
-  const page = PAGES[program];
-  const card = programByKey(program);
+  // D4808: a program the nine do not include passes its own `meta` (title, line, facts) from the registry.
+  const page = meta || PAGES[program];
+  const card = programByKey(program) || { status: null, grant: null, hqGrant: null };
   const moved = movedNotice(loc.pathname, loc.search);
   // D4810: the page's own detail read when it passes one, so the frame never reads it again.
   const grantBadge = useGrantBadge(program, detail);
@@ -39,7 +40,7 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-24 pt-6 sm:px-6 lg:pb-10" data-testid={`programs-page-${program}`}>
       <nav aria-label="Breadcrumb" className={CRUMB} data-testid="programs-crumb">
         {phone
-          ? <Link to="/admin/programs" className={CRUMB_LINK}>{crumbText(program, true)}</Link>
+          ? <Link to="/admin/programs" className={CRUMB_LINK}>{meta ? '‹ Programs' : crumbText(program, true)}</Link>
           : <><Link to="/admin/programs" className={CRUMB_LINK}>Programs</Link>{` › ${page.title}`}</>}
       </nav>
 
