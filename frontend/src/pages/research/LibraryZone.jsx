@@ -56,12 +56,15 @@ import { railOptionFor } from '../../lib/railOptions';
 
 const STATE_LABEL = {
   indexed: 'Answerable',
+  // D4605: some passages indexed, the rest not; Ask answers from what was.
+  partial: 'Partly answerable',
   pending: 'Reading…',
   unsupported: 'Not answerable',
   failed: 'Not answerable',
 };
 const STATE_TONE = {
   indexed: 'ok',
+  partial: 'warn',
   pending: 'neutral',
   unsupported: 'warn',
   failed: 'danger',
