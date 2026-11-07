@@ -81,6 +81,13 @@ involved. A work product can only be SENT to an engagement whose client has an
 Axal account, and `EngagementsZone.jsx` is where that account is linked — from the
 people who have booked this advisor, never by typing an id. D73.
 
+**A sent version keeps the person it was sent to** (D4684, #4684). The send
+records `recipient_user_id`, and the client's reads and receipts are authorised
+against it, never against the engagement's current client. Relinking an
+engagement or a work product moves nothing already sent: new sends go to the
+account linked now, and the trail says who each version went to. Each receipt
+records the account that made it (`opened_by_user_id`, `signed_off_by_user_id`).
+
 **What a replaced tab could do that its artboard does not draw moves with it.**
 Delivery's post-session review loop — sessions held, which have a review, your
 average rating, and the form that files one — is a section at the bottom of

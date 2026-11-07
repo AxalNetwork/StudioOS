@@ -172,7 +172,9 @@ test('the form needs a reason and an acknowledgement before it can submit', () =
 });
 
 test('the form sends the reason it shows and turns the TOTP refusal into what to do', () => {
-  assert.ok(SWITCHES.includes('api.hqSetPlatformSwitch(sw.key, action, reason.trim())'));
+  // D4703: and the revision of the throw it read, so a release from this tab
+  // cannot end a newer throw.
+  assert.ok(SWITCHES.includes('api.hqSetPlatformSwitch(sw.key, action, reason.trim(), sw.operator?.revision)'));
   assert.ok(SWITCHES.includes("msg === 'TOTP required'"), 'the TOTP refusal reaches the operator as a code');
   assert.ok(SWITCHES.includes('authenticator app'));
 });
@@ -247,7 +249,10 @@ test('the read and the write each have their api method, with the key encoded', 
   assert.ok(API.includes("hqPlatformSwitches: () => request('/admin/platform/switches')"));
   assert.ok(API.includes('request(`/admin/platform/switches/${encodeURIComponent(key)}`'),
     'the switch key reaches the URL unencoded');
-  assert.ok(API.includes("method: 'POST'") && API.includes('JSON.stringify({ action, reason })'));
+  assert.ok(API.includes("method: 'POST'"));
+  // D4703: a release names its revision; a throw sends only the action and reason.
+  assert.ok(API.includes("JSON.stringify(action === 'release' ? { action, reason, revision } : { action, reason })"),
+    'a release that does not send the revision is refused by the Worker');
 });
 
 test("the page and the help article speak in Eadwyn's voice", () => {

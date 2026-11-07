@@ -207,7 +207,8 @@ test('a held cell opens its licence and white space is not a button', () => {
   assert.match(PAGE, /onClick=\{\(\) => onOpen\?\.\(c\.licence\.uid\)\}/);
   // …and the call site hands it the very same setter, so a click on a country
   // and a click on its row cannot land in two different places.
-  assert.match(PAGE, /<Coverage items=\{items\} onOpen=\{setSel\} \/>/);
+  // #4700: the grid draws the summary over every licence, not the page on screen.
+  assert.match(PAGE, /<Coverage items=\{summary\.coverage\} renewals=\{summary\.renewals\} onOpen=\{setSel\} \/>/);
 
   // WHITE SPACE STAYS A DIV. A button that refuses is the `still_an_admin`
   // mistake D134 named. The ternary is keyed on `c.licence`, which is null for

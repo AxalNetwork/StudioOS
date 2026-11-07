@@ -514,24 +514,49 @@ export async function visibleSession(env: Env, uid: string, viewer: User): Promi
 
 
 /**
- * What a session's run reads, as DATA: the skill's name and its pinned
- * version's steps, the record it works on, and the member's instruction. The
- * loop wraps it in `<agent_data … trust="data">` with the untrusted notice; it
- * never reaches the prompt's own lines. Null for a task no session made.
+ * What a session's run reads, as DATA: the skill's name and saved version,
+ * the record it works on, and the member's instruction. The loop wraps it in
+ * `<agent_data … trust="data">` with the untrusted notice; it never reaches the
+ * prompt's own lines. The version's steps are not here: D4534 has the run load
+ * them through `skillForRun` (`sessionSkill`), the governed path, so they are
+ * instructions only from there. Null for a task no session made.
  */
 export async function sessionBlock(env: Env, task: { source_kind: string; source_ref: string | null }): Promise<Record<string, unknown> | null> {
   if (task.source_kind !== 'duty' || !task.source_ref) return null;
   const r = await sessionByUid(env, task.source_ref);
   if (!r) return null;
   const v = r.skill_id && r.skill_version
-    ? await env.DB.prepare('SELECT name, steps_json FROM agent_skill_versions WHERE skill_id = ? AND version = ?').bind(r.skill_id, r.skill_version)
-      .first<{ name: string; steps_json: string }>().catch(() => null)
+    ? await env.DB.prepare('SELECT name FROM agent_skill_versions WHERE skill_id = ? AND version = ?').bind(r.skill_id, r.skill_version)
+      .first<{ name: string }>().catch(() => null)
     : null;
-  let steps: unknown = [];
-  try { steps = v ? JSON.parse(v.steps_json) : []; } catch { steps = []; }
   return {
-    skill: v ? { name: v.name, version: r.skill_version, steps } : null,
+    skill: v ? { name: v.name, version: r.skill_version } : null,
     target: r.target_kind ? { kind: r.target_kind, id: r.target_id } : null,
     instruction: r.instruction,
   };
+}
+
+export type SessionSkill =
+  | { kind: 'none' }
+  | { kind: 'skill'; uid: string; version: number }
+  | { kind: 'refused'; code: 'skill_unavailable'; message: string };
+
+/**
+ * D4534 (#4534): the skill a scheduled run executes, resolved on the server
+ * from the session row, never from its display text. A task no session made
+ * runs with no skill, as before. A session's saved skill and version are
+ * passed to `agentRun` as `skill` and `skillVersion`, so the run takes the
+ * same gates a manual run takes (`skillForRun`) on the version the member
+ * saved; a session whose skill or version cannot be read is refused
+ * `skill_unavailable` rather than run as a plain role run.
+ */
+export async function sessionSkill(env: Env, task: { source_kind: string; source_ref: string | null }): Promise<SessionSkill> {
+  if (task.source_kind !== 'duty' || !task.source_ref) return { kind: 'none' };
+  const r = await sessionByUid(env, task.source_ref);
+  if (!r) return { kind: 'none' };
+  const unavailable: SessionSkill = { kind: 'refused', code: 'skill_unavailable', message: 'The skill this session runs could not be read, so it was not run. Open the session and choose its skill again.' };
+  const version = Number(r.skill_version);
+  if (!r.skill_id || !Number.isSafeInteger(version) || version < 1) return unavailable;
+  const s = await env.DB.prepare('SELECT uid FROM agent_skills WHERE id = ?').bind(r.skill_id).first<{ uid: string }>().catch(() => null);
+  return s?.uid ? { kind: 'skill', uid: s.uid, version } : unavailable;
 }
