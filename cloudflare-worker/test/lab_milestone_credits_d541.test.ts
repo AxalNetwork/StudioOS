@@ -24,6 +24,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
+import { grantWriteBar } from './_write_bar_session.mjs';
 
 import spinoutLab from '../src/routes/spinout_lab.ts';
 import certificates from '../src/routes/spinout_certificates.ts';
@@ -88,7 +89,7 @@ const envOf = (db: InstanceType<typeof DatabaseSync>) => ({ JWT_SECRET, ENVIRONM
 
 async function call(router: any, db: InstanceType<typeof DatabaseSync>, method: string, path: string, who: number, body?: unknown) {
   const role = who === ADMIN ? 'admin' : 'founder';
-  const jwt = await new SignJWT({ user_id: who, role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+  const jwt = await new SignJWT({ user_id: who, role, ...(who === SUPER ? { jti: `write-bar-${SUPER}` } : {}) }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
   const init: RequestInit = { method, headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' } };
   if (body !== undefined) init.body = JSON.stringify(body);
@@ -304,6 +305,8 @@ function cohortDb() {
   db.exec(ddl('super_admins')); db.exec(ddl('admin_audit_log'));
   db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, 'admin', 'Super One', 'super@example.test', 1)`).run(SUPER);
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
+  // D4703: the backfill takes the write bar; the Super Admin acts from a fresh TOTP session.
+  grantWriteBar(db, SUPER);
   const m = db.prepare(`INSERT INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (?, ?, ?, ?)`);
   m.run(OLD_GRAD, 2, 'okrs_created', '2026-07-01 09:00:00');
   m.run(OLD_GRAD, 3, 'cofounder_request_sent', '2026-07-10 09:00:00');
