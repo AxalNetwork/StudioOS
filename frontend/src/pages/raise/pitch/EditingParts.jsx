@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import Sheet from '../../../ui/Sheet.jsx';
 import { BOUND_NEVER, findIn } from './gridOps';
-import { SYNCED, TYPING_WORKS, offlineLine, restoreLine } from './deckAutosave';
+import { CONFLICT_LINE, DEVICE_FAILED, HELD_LINE, SYNCED, TYPING_WORKS, offlineLine, restoreLine } from './deckAutosave';
 import { STILL_CHARGED } from './deckV2Model';
 import { cardTitle } from './editorModel';
 
@@ -50,13 +50,18 @@ export function RestoreBanner({ at, busy = false, onRestore, onDiscard }) {
 }
 
 export function SyncLine({ sync }) {
+  if (sync?.state === 'held') return <div className={AMBER} role="status" data-testid="pitch-sync-held"><span className="font-bold">{HELD_LINE}</span></div>;
+  if (sync?.state === 'conflict') return <div className={AMBER} role="status" data-testid="pitch-sync-conflict"><span className="font-bold">{CONFLICT_LINE}</span></div>;
   if (sync?.state === 'offline') {
     return (
       <div className={AMBER} role="status" data-testid="pitch-sync-offline">
-        <span className="font-bold">{offlineLine(sync.queued)}</span>
-        <span>{TYPING_WORKS}</span>
+        <span className="font-bold">{offlineLine(sync.queued, sync.device)}</span>
+        {sync.device === 'saved' ? <span>{TYPING_WORKS}</span> : null}
       </div>
     );
+  }
+  if (sync?.device === 'failed' && sync.state !== 'synced' && sync.state !== 'idle') {
+    return <div className={AMBER} role="status" data-testid="pitch-sync-device-failed"><span className="font-bold">{DEVICE_FAILED}</span></div>;
   }
   if (sync?.state === 'synced' && sync.recovered) return <span className={MUTED} role="status" data-testid="pitch-sync-synced">{SYNCED}</span>;
   if (sync?.state === 'error') return <span className={MUTED} role="status" data-testid="pitch-sync-error">{sync.reason} Your changes are kept on this device.</span>;
@@ -80,7 +85,7 @@ export function ConflictView({ conflict, index, onMine, onTheirs, onCopy }) {
   if (!conflict) return null;
   return (
     <div className="flex flex-col gap-2.5 rounded-[12px] border border-amber-300 bg-white p-3 dark:border-amber-700 dark:bg-gray-900" role="alertdialog" aria-label="This card changed elsewhere" data-testid="pitch-conflict">
-      <span className={`text-[13px] font-bold ${INK}`}>Card {index + 1} changed in another tab or by another member while you were editing.</span>
+      <span className={`text-[13px] font-bold ${INK}`}>{index == null ? 'A card you removed' : `Card ${index + 1}`} changed in another tab or by another member while you were editing.</span>
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline p-2.5 dark:border-gray-700" data-testid="pitch-conflict-mine">
           <span className={EYE}>Your version</span>

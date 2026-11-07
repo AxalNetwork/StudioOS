@@ -4,25 +4,106 @@
   "description": "The reply the deck v2 adapter's `draft` method passes through: the version, its rev, when its working copy last changed (null with no cards) and each card's copy (`routes/deck_draft.ts`). D1511 (#3762).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["deck_id", "version", "rev", "updated_at", "cards"],
+  "required": [
+    "deck_id",
+    "version",
+    "rev",
+    "updated_at",
+    "cards"
+  ],
   "properties": {
-    "deck_id": { "type": "integer", "minimum": 1 },
-    "version": { "type": "integer", "minimum": 1 },
-    "rev": { "type": "integer", "minimum": 1 },
+    "deck_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "rev": {
+      "type": "integer",
+      "minimum": 1
+    },
     "updated_at": {},
-    "cards": { "type": "array", "maxItems": 60, "items": { "$ref": "#/$defs/draftCard" } }
+    "cards": {
+      "type": "array",
+      "maxItems": 60,
+      "items": {
+        "$ref": "#/$defs/draftCard"
+      }
+    },
+    "doc": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "rev",
+        "order",
+        "theme",
+        "audience",
+        "updated_at"
+      ],
+      "properties": {
+        "rev": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "order": {
+          "type": "array",
+          "maxItems": 60,
+          "items": {
+            "type": "string"
+          }
+        },
+        "theme": {},
+        "audience": {},
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "description": "D4596 (#4596): the working copy's deck-level state (which cards it keeps, in order, the theme and the audience), or null before its first save."
+    }
   },
   "$defs": {
     "draftCard": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["uid", "ord", "rev", "updated_at", "card"],
+      "required": [
+        "uid",
+        "ord",
+        "rev",
+        "updated_at",
+        "card"
+      ],
       "properties": {
-        "uid": { "type": "string" },
-        "ord": { "type": "integer", "minimum": 0, "maximum": 59 },
-        "rev": { "type": "integer", "minimum": 1 },
-        "updated_at": { "type": "string" },
-        "card": { "type": "object", "required": ["uid"], "properties": { "uid": { "type": "string" } } }
+        "uid": {
+          "type": "string"
+        },
+        "ord": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 59
+        },
+        "rev": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "card": {
+          "type": "object",
+          "required": [
+            "uid"
+          ],
+          "properties": {
+            "uid": {
+              "type": "string"
+            }
+          }
+        }
       }
     }
   }
