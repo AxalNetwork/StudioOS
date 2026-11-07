@@ -11,7 +11,10 @@ import { request } from '../api.js';
 //   verifyAccount(uid)             POST   /mail/accounts/:uid/verify → { account }
 //   disconnect(uid)                DELETE /mail/accounts/:uid → { ok }
 //   confirmSend(accountUid)        POST   /mail/send/confirm { account_uid } → { nonce, expires_at }
-//   send(body)                     POST   /mail/send { account_uid, to, subject, body, draft_uid?, nonce } → 201 { sent }
+//   send(body)                     POST   /mail/send { account_uid, to, subject, body, draft_uid?, operation_key?, nonce } → 201 { sent, operation }
+//                                  (D4665: 200 { recovered } for a repeat of an accepted operation; 202 { operation } while pending or uncertain)
+//   sendOperation(uid)             GET    /mail/send/operations/:uid → { operation: { uid, state } }
+//   resolveSend(uid, outcome)      POST   /mail/send/operations/:uid/resolve { outcome: 'arrived' | 'not_arrived' } → { operation }
 // A send needs the nonce from the composer's pressed Send; a credential never comes back.
 // D1341 (#3549, part 2) — Eadwyn's email drafts, on
 // cloudflare-worker/src/routes/mail_drafts.ts (migration 648).
@@ -46,6 +49,8 @@ export const mailApi = {
   disconnect: (uid) => request(`/mail/accounts/${id(uid)}`, { method: 'DELETE' }),
   confirmSend: (accountUid) => post('/mail/send/confirm', { account_uid: accountUid }),
   send: (body) => post('/mail/send', body),
+  sendOperation: (uid) => request(`/mail/send/operations/${id(uid)}`),
+  resolveSend: (uid, outcome) => post(`/mail/send/operations/${id(uid)}/resolve`, { outcome }),
   context: (person, project) => request(`/mail/context?person=${id(person)}${project ? `&project=${id(project)}` : ''}`),
   block: (body) => post('/mail/blocks', body),
   estimate: (body) => post('/mail/drafts', { ...body, estimate: true }),

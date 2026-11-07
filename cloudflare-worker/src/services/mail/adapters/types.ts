@@ -27,7 +27,12 @@ export type ThreadMessage = { id?: string; from: string | null; subject: string 
 /** D4494: a thread read can rotate the mailbox's access just as a send can. */
 export type ThreadRead = { messages: ThreadMessage[]; creds?: Creds };
 
-export type AdapterCode = 'expired' | 'auth_failed' | 'refused' | 'unreachable' | 'unconfigured';
+/**
+ * `uncertain` (D4665): the provider may or may not have the message. It is raised only from the point
+ * where the message has left (an SMTP payload written, a send request issued) and the answer was lost.
+ * `consent`: the provider refused for want of a permission the member did not grant.
+ */
+export type AdapterCode = 'expired' | 'auth_failed' | 'refused' | 'unreachable' | 'unconfigured' | 'uncertain' | 'consent';
 
 export class AdapterError extends Error {
   readonly code: AdapterCode;

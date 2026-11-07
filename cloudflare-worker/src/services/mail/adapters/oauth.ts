@@ -36,6 +36,8 @@ export const GMAIL_SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth
 
 const NAME: Record<OAuthProvider, string> = { outlook: 'Outlook', gmail: 'Gmail' };
 const expired = (p: OAuthProvider) => new AdapterError('expired', `${NAME[p]} asked for the mailbox to be connected again. Reconnect it to send.`);
+const consent = (p: OAuthProvider) => new AdapterError('consent', `${NAME[p]} did not allow sending with the access you granted. Reconnect the mailbox and allow sending.`);
+const uncertain = (p: OAuthProvider) => new AdapterError('uncertain', `${NAME[p]} may or may not have taken the email. Check your Sent folder before sending it again.`);
 const unreachable = (p: OAuthProvider) => new AdapterError('unreachable', `${NAME[p]} could not be reached. Try again.`);
 
 export const gmailEnabled = (env: Env) => String(env.MAIL_GMAIL_ENABLED ?? '').toLowerCase() === 'true';
@@ -115,6 +117,7 @@ async function refreshed(env: Env, p: OAuthProvider, creds: Creds, read = false)
 async function graph(access: string, path: string, init: RequestInit = {}): Promise<any> {
   const res = await fetch(`${GRAPH}${path}`, { ...init, headers: { authorization: `Bearer ${access}`, 'content-type': 'application/json', ...(init.headers || {}) } });
   if (res.status === 401) throw expired('outlook');
+  if (res.status === 403) throw consent('outlook');
   if (!res.ok) throw unreachable('outlook');
   return res.status === 202 || res.status === 204 ? null : res.json();
 }
@@ -122,13 +125,25 @@ async function graph(access: string, path: string, init: RequestInit = {}): Prom
 export const outlookAdapter: MailAdapter = {
   async send(env, creds, msg: Outgoing) {
     const t = await refreshed(env, 'outlook', creds);
-    // A draft first, then its send: `sendMail` alone returns no message id.
-    const draft = await graph(t.access, '/me/messages', { method: 'POST', body: JSON.stringify({
-      subject: msg.subject, body: { contentType: 'Text', content: msg.body }, toRecipients: [{ emailAddress: { address: msg.to } }],
-      ...(msg.attachments?.length ? { attachments: msg.attachments.map((a) => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename, contentType: a.mime, contentBytes: bytesB64(a.bytes) })) } : {}),
-    }) });
-    await graph(t.access, `/me/messages/${encodeURIComponent(String(draft?.id))}/send`, { method: 'POST' });
-    return { messageId: draft?.internetMessageId || draft?.id || null, creds: t.creds };
+    // D4665: `sendMail` needs `Mail.Send`, the only mail permission the member consents to. The draft-then-send
+    // route needed `Mail.ReadWrite` (Create message), which a send-only grant is refused. `sendMail` returns no
+    // message id, so none is recorded: reading the thread back is a `Mail.Read` grant's work and says so itself.
+    let res: Response;
+    try {
+      res = await fetch(`${GRAPH}/me/sendMail`, { method: 'POST', headers: { authorization: `Bearer ${t.access}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            subject: msg.subject, body: { contentType: 'Text', content: msg.body }, toRecipients: [{ emailAddress: { address: msg.to } }],
+            ...(msg.attachments?.length ? { attachments: msg.attachments.map((a) => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename, contentType: a.mime, contentBytes: bytesB64(a.bytes) })) } : {}),
+          },
+          saveToSentItems: true,
+        }) });
+    } catch { throw uncertain('outlook'); } // the request left; whether Graph took it is unknown
+    if (res.status === 401) throw expired('outlook');
+    if (res.status === 403) throw consent('outlook');
+    if (res.status === 408 || res.status >= 500) throw uncertain('outlook');
+    if (!res.ok) throw unreachable('outlook');
+    return { messageId: null, creds: t.creds };
   },
   async verify(env, creds) {
     const t = await refreshed(env, 'outlook', creds);
@@ -181,8 +196,10 @@ export const gmailAdapter: MailAdapter = {
     try {
       res = await fetch(GMAIL_SEND, { method: 'POST', headers: { authorization: `Bearer ${t.access}`, 'content-type': 'application/json' },
         body: JSON.stringify({ raw: b64url(buildMime(msg, messageId)) }) });
-    } catch { throw unreachable('gmail'); }
+    } catch { throw uncertain('gmail'); }
     if (res.status === 401) throw expired('gmail');
+    if (res.status === 403) throw consent('gmail');
+    if (res.status === 408 || res.status >= 500) throw uncertain('gmail');
     if (!res.ok) throw unreachable('gmail');
     const out: any = await res.json().catch(() => null);
     return { messageId: out?.id ?? messageId, creds: t.creds };

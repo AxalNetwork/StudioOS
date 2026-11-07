@@ -27,7 +27,7 @@ function fixture() {
     if (!channelSchema) throw new Error('Missing canonical channel schema');
     database.exec(channelSchema[0]);
     // Canonical baseline and this feature's actual dependencies; unrelated research seeds are not an Inbox fixture.
-    for (const file of ['277_user_recovery_state.sql', '386_contact_strength_organization.sql', '647_mail_accounts.sql', '202611041613_grow_campaigns.sql', '202611042009_distribution_inbox_reads.sql']) database.exec(readFileSync(new URL(file, dir), 'utf8'));
+    for (const file of ['277_user_recovery_state.sql', '386_contact_strength_organization.sql', '647_mail_accounts.sql', '202611071530_mail_send_operations.sql', '202611041613_grow_campaigns.sql', '202611042009_distribution_inbox_reads.sql']) database.exec(readFileSync(new URL(file, dir), 'utf8'));
     database.exec('SAVEPOINT inbox_fixture');
   } else database.exec('ROLLBACK TO inbox_fixture');
   const db = database;
