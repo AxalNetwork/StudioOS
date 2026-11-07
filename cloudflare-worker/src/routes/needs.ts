@@ -526,39 +526,82 @@ async function quoteTransition(c: Context<{ Bindings: Env }>, target: 'accept' |
   }
   // accept / reject — founder-owner only
   if (!isAdmin(user) && !isNeedOwner(need, user)) return c.json({ detail: 'Forbidden' }, 403);
-  if (q.status !== 'submitted') return c.json({ detail: `Quote already ${q.status}` }, 409);
+  if (target === 'accept' && q.status === 'accepted') {
+    // D4677: a retry of an acceptance that already landed is the same answer,
+    // not a 409, and it repairs a missing engagement (see `ENGAGEMENT_FOR_ACCEPTED`).
+    await c.env.DB.prepare(ENGAGEMENT_FOR_ACCEPTED).bind(newUid(), nowIso(), nowIso(), id, q.decided_at).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
+    return c.json(await quoteDto(c.env, fresh!));
+  }
+  if (q.status !== 'submitted') return c.json({ error: 'quote_already_decided', detail: `Quote already ${q.status}` }, 409);
   if (target === 'reject') {
     await c.env.DB.prepare("UPDATE quotes SET status='rejected', decided_at=?, updated_at=? WHERE id=?")
       .bind(nowIso(), nowIso(), id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
     return c.json(await quoteDto(c.env, fresh!));
   }
-  // accept: only one accepted quote per need; close the need; create engagement.
-  await c.env.DB.prepare(
-    `UPDATE quotes SET status='rejected', decided_at=?, updated_at=?
-     WHERE need_id = ? AND id != ? AND status = 'submitted'`
-  ).bind(nowIso(), nowIso(), q.need_id, id).run();
-  await c.env.DB.prepare("UPDATE quotes SET status='accepted', decided_at=?, updated_at=? WHERE id=?")
-    .bind(nowIso(), nowIso(), id).run();
-  await c.env.DB.prepare("UPDATE founder_needs SET status='filled', updated_at=? WHERE id=?")
-    .bind(nowIso(), q.need_id).run();
-  const eUid = newUid();
-  try {
-    await c.env.DB.prepare(
-      `INSERT INTO engagements
-         (uid, need_id, quote_id, partner_id, founder_id, project_id, price, status, created_at, updated_at, company_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'accepted', ?, ?, ?)`
-    // The agency comes from the QUOTE, not from whoever accepted it. A founder
-    // accepts under their own company; copying that here would file the
-    // partner's engagement under the founder's firm. `company_id` on both
-    // tables means the partner's agency and only that — the founder's side of
-    // the same row is answered through project_id and migration 189.
-    ).bind(eUid, q.need_id, q.id, q.partner_id, need.founder_id, need.project_id, q.price,
-           nowIso(), nowIso(), (q as Quote & { company_id?: number | null }).company_id ?? null).run();
-  } catch { /* idempotent — UNIQUE(quote_id) protects re-acceptance */ }
+  // accept: ONE transaction (D4677). The four statements run as one D1 batch, so
+  // an engagement insert that fails for any reason rolls the acceptance back and
+  // the error propagates; nothing is accepted without its engagement.
+  //
+  // THE WINNER IS CLAIMED IN THE STATEMENT, not decided from a read above it.
+  // The claim only matches while the quote is still `submitted`, the need is
+  // still open, and NO quote on the need is accepted; the three statements after
+  // it match only the quote this call just accepted (`decided_at` is the token).
+  // Two concurrent accepts of different quotes therefore cannot both win: the
+  // second claim matches nothing, and so does everything chained to it.
+  const decidedAt = nowIso();
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE quotes SET status='accepted', decided_at=?, updated_at=?
+        WHERE id = ? AND status = 'submitted'
+          AND NOT EXISTS (SELECT 1 FROM quotes o WHERE o.need_id = ? AND o.status = 'accepted')
+          AND EXISTS (SELECT 1 FROM founder_needs n WHERE n.id = ? AND n.status IN ('open', 'in_review'))`,
+    ).bind(decidedAt, decidedAt, id, q.need_id, q.need_id),
+    c.env.DB.prepare(
+      `UPDATE quotes SET status='rejected', decided_at=?, updated_at=?
+        WHERE need_id = ? AND id != ? AND status = 'submitted'
+          AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
+    ).bind(decidedAt, decidedAt, q.need_id, id, id, decidedAt),
+    c.env.DB.prepare(
+      `UPDATE founder_needs SET status='filled', updated_at=?
+        WHERE id = ? AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
+    ).bind(decidedAt, q.need_id, id, decidedAt),
+    c.env.DB.prepare(ENGAGEMENT_FOR_ACCEPTED).bind(newUid(), decidedAt, decidedAt, id, decidedAt),
+  ]);
+  if (!Number((results[0] as any)?.meta?.changes)) {
+    // Someone else's acceptance (or a closed need) got there first.
+    const now = await c.env.DB.prepare('SELECT status FROM quotes WHERE id = ?').bind(id).first<{ status: string }>();
+    if (now?.status === 'accepted') {
+      const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
+      return c.json(await quoteDto(c.env, fresh!));
+    }
+    return c.json({
+      error: 'need_already_decided',
+      detail: now?.status === 'submitted'
+        ? 'This need already has an accepted quote, or is no longer open. Nothing was changed.'
+        : `Quote already ${now?.status}: another quote on this need was accepted first.`,
+    }, 409);
+  }
   const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
   return c.json(await quoteDto(c.env, fresh!));
 }
+
+/**
+ * The engagement for one accepted quote, as one statement: `?1 uid, ?2/?3
+ * created/updated, ?4 quote id, ?5 the quote's `decided_at``. It reads the
+ * founder, project, partner, price and agency from the QUOTE and its need, so it
+ * cannot disagree with them; the agency is the quote's, never the accepting
+ * founder's firm (migration 196). `NOT EXISTS` makes a repeat insert nothing,
+ * and `quote_id` is UNIQUE besides. A real failure (a missing table, a
+ * constraint) is NOT swallowed here: it fails the batch.
+ */
+const ENGAGEMENT_FOR_ACCEPTED = `INSERT INTO engagements
+     (uid, need_id, quote_id, partner_id, founder_id, project_id, price, status, created_at, updated_at, company_id)
+   SELECT ?, q.need_id, q.id, q.partner_id, n.founder_id, n.project_id, q.price, 'accepted', ?, ?, q.company_id
+     FROM quotes q JOIN founder_needs n ON n.id = q.need_id
+    WHERE q.id = ? AND q.status = 'accepted' AND q.decided_at = ?
+      AND NOT EXISTS (SELECT 1 FROM engagements e WHERE e.quote_id = q.id)`;
 
 quotesRouter.post('/:id/accept', (c) => quoteTransition(c, 'accept'));
 quotesRouter.post('/:id/reject', (c) => quoteTransition(c, 'reject'));
