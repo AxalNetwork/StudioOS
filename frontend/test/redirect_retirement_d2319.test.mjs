@@ -28,7 +28,7 @@ function checkRetired(routeSource, listed) {
 }
 
 function checkProtected(routeSource, listed) {
-  const retained = ["/settings", "/settings/:section", "/dashboard", "/product-testing", "/raise/pitch-deck", "/insights", "/notifications", "/notifications/*", "/help/:id", "/tickets/:id", "/support", "/plans-and-pricing", "/raise/capital/cap-table", "/lp-portal", "/integrations", "/lp/founder", "/lp/customer-discovery", "/lp/investor", "/lp/partner", "/admin/spinout-lab", "/admin", "/refer", "/wellbeing/expert-dashboard"];
+  const retained = ["/settings", "/settings/:section", "/dashboard", "/product-testing", "/raise/pitch-deck", "/raise/pitch-deck/new", "/insights", "/notifications", "/notifications/*", "/help/:id", "/tickets/:id", "/support", "/plans-and-pricing", "/raise/capital/cap-table", "/lp-portal", "/integrations", "/lp/founder", "/lp/customer-discovery", "/lp/investor", "/lp/partner", "/admin/spinout-lab", "/admin", "/refer", "/wellbeing/expert-dashboard"];
   for (const path of retained) {
     assert.ok(listed.some((r) => r.path === path), path);
     assert.ok(routeSource.includes(`<Route path="${path}"`), path);

@@ -818,7 +818,7 @@ test('D1610 W1: staff get four figures and never Committed or Investors in conve
   assert.doesNotMatch(JSON.stringify(r.body), /Ivy Angel|Angel Co|250000|investors_in_conversation|"key":"committed"/);
 });
 
-test('D1610 W2: next steps are ordered by gain, at most three, never Team, never a 0 gain, each linked with ?project=', async () => {
+test('D1610 W2: next steps are ordered by gain, at most three, never Team, never a 0 gain, each linked with the venture', async () => {
   const db = fixture();
   // Scored: deck 4, narrative 8, team 6 (a person's) → overall 60. Deck to 10 → 80 (+20); an
   // unscored item at 10 → 70 (+10); narrative to 10 → 67 (+7). Team to 10 would be +13: never listed.
@@ -827,13 +827,14 @@ test('D1610 W2: next steps are ordered by gain, at most three, never Team, never
   const ns = r.body.next_steps;
   assert.equal(ns.state, 'ok');
   assert.deepEqual(ns.items.map((i: any) => [i.item_key, i.gain_points]), [['deck', 20], ['data_room', 10], ['cap_table', 10]]);
-  assert.deepEqual(ns.items[0], { item_key: 'deck', label: 'Pitch deck', text: 'No deck yet', module_slug: 'pitch-deck', href: `/raise/pitch-deck?project=${P}`, gain_points: 20 });
+  assert.deepEqual(ns.items[0], { item_key: 'deck', label: 'Pitch deck', text: 'No deck yet', module_slug: 'pitch-deck', href: `/raise/pitch?project_id=${P}`, gain_points: 20 });
   assert.equal(ns.items[1].text, 'Not scored yet');
   assert.ok(ns.items.length <= 3);
   for (const i of ns.items) {
     assert.notEqual(i.item_key, 'team');
     assert.ok(i.gain_points > 0, 'a known gain, never 0');
-    assert.match(i.href, new RegExp(`[?&]project=${P}$`));
+    // #4853: the Pitch Studio reads `project_id`; the other modules' addresses still carry `project`.
+    assert.match(i.href, new RegExp(`[?&]project(_id)?=${P}$`));
     assert.ok(inApp(i.href));
   }
   // The same items for staff, read only (the page drops the links).
