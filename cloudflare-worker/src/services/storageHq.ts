@@ -119,6 +119,11 @@ export async function readPlatformStorage(env: Env) {
 
   return {
     complete,
+    // D4703 (#4703): when this was read, and whether the byte totals are a
+    // floor: an unreadable area or a file of unknown size means the true
+    // figure is at least this, never exactly it.
+    read_at: new Date().toISOString(),
+    measured_is_floor: !complete || unknown > 0,
     unreadable_areas: unreadable,
     reason: complete ? null : AREAS_UNREADABLE,
     totals: { members: plans?.size ?? null, members_with_files: withFiles, files, measured_bytes: measured, unknown_size_files: unknown, complete },

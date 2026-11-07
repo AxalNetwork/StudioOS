@@ -120,7 +120,7 @@ test('the window is checked before reading and sent as from/to', async () => {
 
 test('CycleRoute renders ResultsTab for the results tab only', async () => {
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.match(route, /distributionTab === 'results' \? <ResultsTab key=\{projectId\} projectId=\{projectId\} \/> : <ComingSoon \/>/);
+  assert.match(route, /distributionTab === 'results' \? <ResultsTab key=\{projectId\} projectId=\{projectId\} \/> : distributionTab === 'newsletter' \? <NewsletterTab \/> : <ComingSoon \/>/);
   const routes = readFileSync(new URL('../src/routes/growDistribution.jsx', import.meta.url), 'utf8');
   assert.match(routes, /path="\/grow\/distribution\/results"[^\n]+tab="results"/);
 });

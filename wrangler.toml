@@ -1078,9 +1078,11 @@ WHATSAPP_CALLS = "false"
 WHATSAPP_MCP_SETUP = "off"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.
-# `advisor-ongoing-preview`) created in the dashboard. Defaults to the
-# prod slug so the binding still works before a preview gateway exists.
-CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# `advisor-ongoing-preview`) created in the dashboard. #4566: empty (inert,
+# calls go direct, `advisorGatewaySlug`) until that gateway exists. It used to
+# default to production's `advisor-ongoing`, which shares production's gateway
+# logs, cache and rate limits; `scripts/check-preview-isolation.mjs` refuses that.
+CF_AI_GATEWAY_SLUG_ADVISOR     = ""
 # D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
 CF_AI_GATEWAY_SLUG_DECK        = ""
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"

@@ -1645,7 +1645,7 @@ const DRAFT_SURFACES: Record<string, {
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? AND d.sent_at IS NOT NULL AND d.opened_at IS NULL
           ORDER BY d.sent_at ASC LIMIT 100`
       ).bind(me.partner_id).all<{
@@ -1693,7 +1693,7 @@ const DRAFT_SURFACES: Record<string, {
                   WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? ORDER BY e.created_at DESC LIMIT 100`
       ).bind(me.partner_id).all<{
         scope: string | null; client: string | null; seats: number;
@@ -1744,7 +1744,7 @@ const DRAFT_SURFACES: Record<string, {
            FROM partner_retainers r
            JOIN engagements e ON e.id = r.engagement_id
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? AND r.ended_at IS NULL
           ORDER BY r.renews_at IS NULL, r.renews_at LIMIT 50`
       ).bind(me.partner_id).all<{
@@ -1800,7 +1800,7 @@ const DRAFT_SURFACES: Record<string, {
            FROM quote_negotiations g
            JOIN quotes q ON q.id = g.quote_id
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
           WHERE q.partner_id = ? AND g.stage <> 'closed'
           ORDER BY g.last_moved_at ASC LIMIT 25`
       ).bind(me.partner_id).all<{
@@ -1846,7 +1846,7 @@ const DRAFT_SURFACES: Record<string, {
                 (SELECT COUNT(*) FROM quote_versions v WHERE v.quote_id = q.id) AS versions
            FROM quotes q
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
            LEFT JOIN engagements e ON e.quote_id = q.id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
           WHERE q.partner_id = ?
@@ -1903,7 +1903,7 @@ const DRAFT_SURFACES: Record<string, {
                 n.category AS shape, f.name AS client
            FROM quotes q
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
           WHERE q.partner_id = ? AND q.status IN ('accepted', 'rejected', 'submitted')
           ORDER BY q.decided_at IS NULL, q.decided_at DESC
           LIMIT 200`
@@ -1956,7 +1956,7 @@ const DRAFT_SURFACES: Record<string, {
           `SELECT n.title, n.description, n.category, n.budget_min, n.budget_max, n.timeline,
                   f.name AS client
              FROM founder_needs n
-             LEFT JOIN users f ON f.id = n.founder_id
+             LEFT JOIN founders f ON f.id = n.founder_id
             WHERE n.status = 'open'
               AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
               AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
@@ -2041,7 +2041,7 @@ const DRAFT_SURFACES: Record<string, {
                   WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
            LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
            LEFT JOIN users o ON o.id = h.owner_user_id
@@ -2110,7 +2110,7 @@ const DRAFT_SURFACES: Record<string, {
                   WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side <> 'client') AS our_blocked
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? AND e.cancelled_at IS NULL
           ORDER BY e.created_at DESC LIMIT 50`
       ).bind(me.partner_id).all<{
@@ -2247,7 +2247,7 @@ const DRAFT_SURFACES: Record<string, {
                   ORDER BY s.granted_at DESC LIMIT 1) AS seat_scope
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
            LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
           WHERE e.partner_id = ? AND e.cancelled_at IS NULL
