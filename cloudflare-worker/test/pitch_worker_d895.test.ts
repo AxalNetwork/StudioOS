@@ -351,9 +351,11 @@ test('D895: only the owning founder outside support can copy their active Mercur
   assert.equal(await recordedDeckRunway(f.env,1,3),null,'a cofounder is not the bank owner');
   assert.equal(await recordedDeckRunway(f.env,1,2),4);
   aiOff(f,2,3);
-  for(const [who,extra,allowed] of [[2,{},true],[3,{},false],[2,{claims:{impersonated_by:1}},false]] as const){
-   const generated=await call(f,who,'POST','/api/decks/generate',{project_id:1},extra);assert.equal(generated.status,201,JSON.stringify(generated.body));
-   const filled=await call(f,who,'POST','/api/decks/10/autofill',undefined,extra);assert.equal(filled.status,200,JSON.stringify(filled.body));
+  for(const [who,extra,allowed,support] of [[2,{},true,false],[3,{},false,false],[2,{claims:{impersonated_by:1}},false,true]] as const){
+   const generated=await call(f,who,'POST','/api/decks/generate',{project_id:1},extra);
+   const filled=await call(f,who,'POST','/api/decks/10/autofill',undefined,extra);
+   if(support){assert.equal(generated.status,403,JSON.stringify(generated.body));assert.equal(filled.status,403,JSON.stringify(filled.body));continue}
+   assert.equal(generated.status,201,JSON.stringify(generated.body));assert.equal(filled.status,200,JSON.stringify(filled.body));
    const runway=generated.body.proposal.slides.find((s:any)=>s.spec_id==='new:unit_economics').fields.find((x:any)=>x.key==='grow.runway');
    if(allowed){assert.equal(runway.value,'Runway · 4 months');assert.equal(runway.source,'data');assert.match(JSON.stringify(filled.body.proposal.slides),/4 months runway/)}
    else {assert.equal(runway.value,'');assert.equal(runway.source,'placeholder');assert.doesNotMatch(JSON.stringify(generated.body.proposal.slides),/4 months/);assert.doesNotMatch(JSON.stringify(filled.body.proposal.slides),/4 months runway|4 mo/)}
