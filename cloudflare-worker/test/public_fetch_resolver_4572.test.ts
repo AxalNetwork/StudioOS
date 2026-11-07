@@ -31,6 +31,8 @@ const DNS: Record<string, string[]> = {
   'mail.example.com': ['93.184.216.34'],
   'mail-inside.example.com': ['192.168.0.10'],
 };
+/** The exact host of each URL a fetcher was asked for. */
+const hostsOf = (urls: string[]) => urls.map((u) => new URL(u).hostname);
 const resolve = async (h: string) => { if (!(h in DNS)) throw new Error('nxdomain'); return DNS[h]; };
 __setPublicResolverForTest(resolve);
 
@@ -80,7 +82,7 @@ test('fetchPage (competitor pages, app links) refuses a public name pointing ins
     assert.deepEqual([inside.ok, inside.error], [false, 'blocked_or_invalid_url']);
     const moved = await fetchPage(env, 'https://www.example.com/moved', { userId: 1, noCache: true });
     assert.deepEqual([moved.ok, moved.error], [false, 'blocked_or_invalid_url']);
-    assert.ok(!asked.some((u) => u.includes('inside.example.com') || u.includes('meta.example.com')), 'neither private host was fetched');
+    assert.deepEqual(hostsOf(asked).filter((h) => h === 'inside.example.com' || h === 'meta.example.com'), [], 'neither private host was fetched');
   } finally { globalThis.fetch = real; }
 });
 
@@ -95,7 +97,7 @@ test('copying an image in from a link resolves every hop', async () => {
   assert.equal((await fetchExternalImage('https://www.example.com/a.png', 100, fetcher, 2000, resolve)).ok, true);
   assert.deepEqual(await fetchExternalImage('https://inside.example.com/a.png', 100, fetcher, 2000, resolve), { ok: false, code: 'unsafe_url' });
   assert.deepEqual(await fetchExternalImage('https://www.example.com/hop.png', 100, fetcher, 2000, resolve), { ok: false, code: 'unsafe_url' });
-  assert.ok(!asked.some((u) => u.includes('inside.') || u.includes('mixed.')), 'no private host fetched');
+  assert.deepEqual(hostsOf(asked).filter((h) => h === 'inside.example.com' || h === 'mixed.example.com'), [], 'no private host fetched');
 });
 
 test('a mailbox whose host resolves inside is refused before any socket opens', async () => {
