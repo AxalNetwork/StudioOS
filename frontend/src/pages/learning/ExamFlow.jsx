@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, Timer, X } from 'lucide-react';
 import { Card, Pill, Stat, StatGrid, Unrecorded } from '../../ui';
 import { LearningLoading, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
 import { NOT_LIVE, attemptsLeft as attemptsLeftOf, byPosition, formatClock, formatDay, minutesLabel } from './learningModel';
 import {
-  answerIndexes, attemptOutcome, attemptSecondsLeft, openAttemptOf, optionRows, perQuestionResults, revealedAnswers, reviewLine, reviewRows, scoreOf,
+  answerIndexes, attemptOutcome, attemptSecondsLeft, isLearningPath, openAttemptOf, optionRows, perQuestionResults, revealedAnswers, reviewLine, reviewRows, scoreOf,
 } from './assessmentModel';
 
 /** The clock: a prop when a test pins it, otherwise a tick a second while an attempt runs. */
@@ -314,7 +315,7 @@ function ExamResult({ exam, attempts, left, attemptsStatus, onRetryAttempts, res
           </ol>
         </Card>}
         <Card><AttemptList attempts={attempts} status={attemptsStatus} onRetry={onRetryAttempts} title="Your attempts" resultLabels />
-          <p className="mt-3 text-[12px] text-axal-muted dark:text-gray-400">No explanations or certificate</p>
+          <p className="mt-3 text-[12px] text-axal-muted dark:text-gray-400">No certificate</p>
         </Card>
       </div>
       {revealed ? (
@@ -329,6 +330,21 @@ function ExamResult({ exam, attempts, left, attemptsStatus, onRetryAttempts, res
               </p>
               <p className="mt-1 text-axal-muted dark:text-gray-400">Your answer: {a.chosen.join(', ') || 'none'}</p>
               <p className="text-emerald-700 dark:text-emerald-300">Correct: {a.correct.join(', ') || 'not recorded'}</p>
+              {/* D4650 (#4650, part 3): why, and where to revise, when the author recorded it. */}
+              {a.explanation && <p className="mt-1.5 text-axal-ink dark:text-gray-200" data-testid={`exam-explanation-${a.uid}`}>{a.explanation}</p>}
+              {a.revision.length > 0 && (
+                <p className="mt-1 text-axal-muted dark:text-gray-400" data-testid={`exam-revision-${a.uid}`}>
+                  Revise:{' '}
+                  {a.revision.map((l, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 && ' · '}
+                      {isLearningPath(l.url)
+                        ? <Link to={l.url} className="font-semibold text-axal-violet hover:underline">{l.title}</Link>
+                        : <a href={l.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-axal-violet hover:underline">{l.title}</a>}
+                    </React.Fragment>
+                  ))}
+                </p>
+              )}
             </li>
           ))}
         </ol>
