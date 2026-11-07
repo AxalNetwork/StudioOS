@@ -185,9 +185,10 @@ test('a held card\'s figure: a number (0 included), Unreadable, Not recorded, Re
 test('the held pages read the glance and no longer say "none counted here"', () => {
   // D893 (#2366, #2660): Insights is rebuilt at pages/admin/insights/ and reads its own read, not the glance.
   assert.match(read('frontend/src/pages/admin/insights/AdminInsights.jsx'), /insightsApi\.adminInsights\(/);
-  // D930 (#2367): Community is rebuilt at pages/admin/community/; its queue figures still come from the glance's lanes.
-  assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /loadStudioGlance\(\)/);
-  assert.match(read('frontend/src/pages/admin/community/communityModel.js'), /laneOf\(glance\.data, 'events'\)/);
+  // D930 (#2367): Community is rebuilt at pages/admin/community/. #4717 package 2: its queue figures are its own
+  // read's (the Community overview's queue), one snapshot with every other figure, not the glance's lanes.
+  assert.doesNotMatch(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /loadStudioGlance\(\)/);
+  assert.match(read('frontend/src/pages/admin/community/communityModel.js'), /blockOf\(reads\.overview, 'queue\.events'\)/);
   // D953 (#2371): Programs is rebuilt at pages/admin/programs/; its cohort and
   // referrals figures still come from the glance's lanes, never "none counted".
   assert.match(read('frontend/src/pages/admin/programs/useProgramReads.js'), /api\.adminStudioGlance\(\)/);
