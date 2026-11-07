@@ -164,21 +164,6 @@ function WaitingCell({ v, onRetry }) {
   return <span className={MONO} data-testid={`approvals-lane-count-${v.key}`}>{v.count.toLocaleString('en-US')}</span>;
 }
 
-/** A tile: its number, "Could not be read" with why, or a skeleton while it reads (APR12). */
-function Tile({ label, testId, t, sub }) {
-  return (
-    <div className={`${CARD} flex min-w-0 flex-col gap-1 px-4 py-3`} data-testid={testId}>
-      <span className={EYE}>{label}</span>
-      <div className="text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">
-        {t.state === 'loading' ? <Skeleton h={22} w="40%" />
-          : t.state === 'unreadable' ? <span title={t.reason} className="cursor-help text-[13px] text-axal-destructive dark:text-red-300">{LANE_FAILED}</span>
-            : <span className={MONO}>{t.value}</span>}
-      </div>
-      {t.state === 'unreadable' ? <span className={SUB}>{t.reason}</span> : (sub ?? t.sub) ? <span className={SUB}>{sub ?? t.sub}</span> : null}
-    </div>
-  );
-}
-
 /** A chart with its one-sentence summary for a screen reader and "View as table" (D915 §6). */
 function ChartCard({ title, testId, chart, alt, legend, foot, children }) {
   const [asTable, setAsTable] = useState(false);
