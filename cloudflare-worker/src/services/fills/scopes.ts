@@ -1,4 +1,5 @@
 import { holdsLicence } from '../accountLicences';
+import { statusReportAccess } from '../statusReportAccess';
 /**
  * D1329 (#3490, #2431 part 6) — RECORD_SCOPES: the records Fill with Eadwyn
  * fills that do not sit on a venture.
@@ -8,7 +9,8 @@ import { holdsLicence } from '../accountLicences';
  * write check, read here as one literal statement and one rule:
  *
  *   advisor_services          the advisor's own service    (routes/advisors.ts, `requireMyAdvisor`)
- *   engagement_status_reports the partner on the engagement, until it is sent
+ *   engagement_status_reports the partner on the engagement, until it is sent; the client founder
+ *                             reads it once it is sent (#4673, `statusReportAccess`)
  *                             (routes/partner_delivery.ts, `requireOwnEngagement`; a sent report is frozen)
  *   events, event_agenda_items `canManage`: an admin, or the event's host (routes/events.ts);
  *                             #4046 (B2): a new event (/events/new) hangs under the caller, its host
@@ -141,16 +143,12 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
         ? { partner_id: row.engagement_partner_id, founder_id: row.engagement_founder_id }
         : parentId == null ? null
           : await env.DB.prepare('SELECT partner_id, founder_id FROM engagements WHERE id = ?').bind(parentId).first<{ partner_id: number; founder_id: number | null }>();
-      if (!engagement) return NONE;
-      const partner = await myPartnerId(env, user);
-      if (partner != null && Number(engagement.partner_id) === partner) {
-        // A sent report is a record of what the client received: read, never filled.
-        return { read: true, write: !row || row.state !== 'sent' };
-      }
-      // The client founder the report is sent to reads its marks.
-      const founderId = (user as any).founder_id;
-      if (row && founderId != null && engagement.founder_id != null && Number(engagement.founder_id) === Number(founderId)) return { read: true, write: false };
-      return NONE;
+      // #4673: the one status-report policy (services/statusReportAccess.ts). The client founder
+      // reads a report only once it is sent; an unsent report is the firm's draft.
+      return statusReportAccess(row, engagement, {
+        partnerId: await myPartnerId(env, user),
+        founderId: (user as any).founder_id ?? null,
+      });
     },
   },
   // #4046 (B2): /events/new. A new event hangs under its host, the caller (`POST /api/events` makes the caller

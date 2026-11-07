@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
-import { StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from './kit';
+import { MoreRows, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from './kit';
+import { usePagedList } from './pages';
 
 /**
  * Advisor › Expertise › Visibility (D1597, #3870; mounted by D1424, #3700,
@@ -20,6 +21,11 @@ import { StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from './kit';
  * A FAILED READ IS NEVER A ZERO. The two blocks are read apart; the block that
  * came back null reads "… could not be read · Try again", and the other still
  * shows. Nothing is added up across stores into one reach figure.
+ *
+ * LINKS ARE READ A PAGE AT A TIME (#4689). The Worker returns 100 links a page
+ * with `links.next_offset`, and "Show more" appends the next. Each booking is
+ * matched to its own link in the Worker, so one on link 101 is that link's and
+ * never "Booked without a link"; the total over every link is `requests`.
  */
 export const VISIBILITY_DAYS = 30;
 
@@ -39,8 +45,20 @@ function BlockUnreadable({ what, onRetry, testid }) {
   );
 }
 
-export function VisibilityView({ data, onRetry }) {
-  const surfaces = Array.isArray(data?.surfaces) ? data.surfaces : null;
+/** The links read so far, then "Booked without a link" last (rows are merged by key, so it is there once). */
+export function orderSurfaces(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  return [...list.filter((s) => s.kind !== 'no_link'), ...list.filter((s) => s.kind === 'no_link')];
+}
+
+export function requestsLine(requests, days) {
+  const n = Number(requests?.total);
+  if (!Number.isFinite(n)) return null;
+  return `${n} ${n === 1 ? 'request' : 'requests'} in the last ${days} days, across every link`;
+}
+
+export function VisibilityView({ data, onRetry, more = null }) {
+  const surfaces = Array.isArray(data?.surfaces) ? orderSurfaces(data.surfaces) : null;
   const writing = data?.writing || null;
   const days = data?.window?.days || VISIBILITY_DAYS;
   return (
@@ -50,6 +68,9 @@ export function VisibilityView({ data, onRetry }) {
           <span className="text-sm font-extrabold tracking-tight">Booking requests, by link</span>
           <span className="text-[11px] text-axal-faint">Last {days} days</span>
         </div>
+        {surfaces !== null && requestsLine(data?.requests, days) ? (
+          <p className="m-0 mb-2 text-[11.5px] text-axal-faint" data-testid="advisor-visibility-requests-total">{requestsLine(data.requests, days)}</p>
+        ) : null}
         {surfaces === null ? (
           <BlockUnreadable what="Your booking links" onRetry={onRetry} testid="advisor-visibility-surfaces-unreadable" />
         ) : (
@@ -72,6 +93,9 @@ export function VisibilityView({ data, onRetry }) {
             ))}
           </ul>
         )}
+        {surfaces !== null && more ? (
+          <MoreRows line={more.line} onMore={more.more} busy={more.moreBusy} error={more.moreError} testid="advisor-visibility-more" />
+        ) : null}
       </Card>
 
       <Card className="p-4" data-testid="advisor-visibility-writing">
@@ -114,17 +138,27 @@ export function VisibilityView({ data, onRetry }) {
   );
 }
 
+const isLink = (s) => s.kind !== 'no_link';
+
+// A later page whose links could not be read is a failed "Show more", never a
+// page of no links: the rows already read stay and the button says so.
+const readVisibilityPage = async (page) => {
+  if (!page?.offset) return api.getMyAdvisorVisibility(VISIBILITY_DAYS);
+  const res = await api.getMyAdvisorVisibility(VISIBILITY_DAYS, page);
+  if (!Array.isArray(res?.surfaces)) throw new Error('The next links could not be read. Try again.');
+  return res;
+};
+
 export default function VisibilityZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null });
-  const load = useCallback(async () => {
-    setState((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      setState({ loading: false, error: '', data: await api.getMyAdvisorVisibility(VISIBILITY_DAYS) });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your visibility could not be read.', data: null });
-    }
-  }, []);
+  const list = usePagedList(readVisibilityPage, {
+    key: 'surfaces', pageKey: 'links', rowKey: 'key', counts: isLink, errorText: 'Your visibility could not be read.',
+  });
+  const state = { loading: list.loading, error: list.error };
+  const load = list.load;
   useEffect(() => { load(); }, [load]);
+  // The latest answer, with every link read so far. A first page whose links
+  // failed keeps `surfaces: null`, so the view draws that block as unreadable.
+  const data = list.res ? { ...list.res, surfaces: Array.isArray(list.res.surfaces) ? list.rows : null } : null;
 
   return (
     <div className="space-y-4" data-testid="advisor-expertise-visibility">
@@ -133,7 +167,7 @@ export default function VisibilityZone() {
         blurb="Requests through each of your booking links, and opens of your writing here on Axal. Only what is recorded."
       />
       <ZoneBody loading={state.loading} error={state.error} onRetry={load} isEmpty={false}>
-        <VisibilityView data={state.data} onRetry={load} />
+        <VisibilityView data={data} onRetry={load} more={list} />
         <StatedLimit title="Nothing is added up">
           Opens and booking requests come from different records, so they are never one reach figure,
           and no rate is worked out over bookings that name no link.
