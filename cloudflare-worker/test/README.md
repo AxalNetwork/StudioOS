@@ -265,3 +265,4 @@ advisor CTA and stored search-result URLs after redirect retirement (#4415).
 - the public lists naming the venture;
 - the migration's credential, single-project and needs-choice paths;
 - a held credential grandfathered until it is revoked.
+D4856 (#4856): `catalog_modes_4856.test.ts` holds Platform's catalogue summary to `getCatalog`'s mode rule (current, other and unknown rows), and `storage_populations_4856.test.ts` holds the storage read's members, staff and unattributed populations to their sum.
