@@ -20,7 +20,9 @@ const JWT_SECRET = randomBytes(32).toString('hex');
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const MIGRATION = readFileSync(new URL('../sql/migrations/687_studio_layouts.sql', import.meta.url), 'utf8');
 // D1594 (#3863): the layout's revision.
-const REVISION = readFileSync(new URL('../sql/migrations/750_studio_layout_revision.sql', import.meta.url), 'utf8');
+const REVISION = readFileSync(new URL('../sql/migrations/750_studio_layout_revision.sql', import.meta.url), 'utf8')
+  // D4621: the reset tombstone, applied after 750 as production applies it.
+  + '\n' + readFileSync(new URL('../sql/migrations/202611070916_studio_layout_reset_tombstone.sql', import.meta.url), 'utf8');
 
 const USERS: Array<[number, string, number]> = [
   [1, 'founder', 0], [2, 'investor', 0], [3, 'advisor', 0], [4, 'partner', 0],
@@ -89,7 +91,7 @@ test('an admin saves a layout per Studio, as their own row, and a member\'s save
   } finally { w.db.close(); }
 });
 
-test('an admin\'s reset deletes only that Studio\'s row of theirs; no member row and no other Studio changes', async () => {
+test('an admin\'s reset clears only that Studio\'s row of theirs; no member row and no other Studio changes', async () => {
   const w = world();
   try {
     const [f1] = two('founder');
@@ -99,7 +101,7 @@ test('an admin\'s reset deletes only that Studio\'s row of theirs; no member row
     await call(w.env, ADMIN, '/layout?profile=investor', 'PUT', { layout: [{ key: i1, size: '1/2' }] });
     const r = await call(w.env, ADMIN, '/layout/reset?profile=founder', 'POST');
     assert.deepEqual([r.status, r.body.profile, r.body.source], [200, 'founder', 'default']);
-    assert.equal(layoutOf(w.db, ADMIN, 'founder'), null);
+    assert.deepEqual(layoutOf(w.db, ADMIN, 'founder'), [], 'D4621: the reset row is kept, emptied');
     assert.deepEqual(layoutOf(w.db, ADMIN, 'investor'), [{ key: i1, size: '1/2' }], 'the admin\'s other Studio is kept');
     assert.deepEqual(layoutOf(w.db, FOUNDER, 'founder'), [{ key: f1, size: 'full' }], 'the member\'s row is kept');
     // A reset without a Studio named changes nothing.
