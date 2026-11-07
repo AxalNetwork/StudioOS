@@ -1963,9 +1963,10 @@ export async function sha256Hex(s: string): Promise<string> {
 // =====================================================================
 
 /**
- * D778 part 5 (#2103): the page and option D771's inventory gives the two deck
- * form fills (`railOptions/founder.js`). A press's own headers win (`railFor`);
- * these stand for a client that sent none.
+ * D778 part 5 (#2103): the page and option D771's inventory gives the deck's
+ * template fill (`railOptions/founder.js`). A press's own headers win (`railFor`);
+ * these stand for a client that sent none. `fill` is the autofill route's own
+ * fallback: its studio action was removed (#4734), so the inventory has no row for it.
  */
 export const DECK_FORM_RAIL = {
   page: 'Founder · Raise · Pitch deck',

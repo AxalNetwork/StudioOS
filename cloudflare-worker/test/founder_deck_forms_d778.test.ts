@@ -80,9 +80,12 @@ function noNetwork() {
   return () => { globalThis.fetch = real; };
 }
 
-test('D778: the two deck form fills fall back to the page and options D771\'s inventory gives them', () => {
+test('D778, #4734: the template fill falls back to the page and option D771\'s inventory gives it; the draft-from-project fill has no studio action left', () => {
   const rows = FOUNDER_OPTIONS.filter((o: any) => o.handler === 'form' && o.page === PAGE);
-  assert.deepEqual(rows.map((o: any) => o.key).sort(), [DECK_FORM_RAIL.fill, DECK_FORM_RAIL.template].sort());
+  // #4734: the studio's "Ask Eadwyn to draft from project" action was unmounted since D1604 and its component and
+  // inventory row are removed; `POST /api/decks/:id/autofill` stays for API clients, with its own fallback option.
+  assert.deepEqual(rows.map((o: any) => o.key), [DECK_FORM_RAIL.template]);
+  assert.equal(DECK_FORM_RAIL.fill, 'form:deck');
   assert.equal(DECK_FORM_RAIL.page, PAGE);
 });
 
