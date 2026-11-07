@@ -21,6 +21,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import decks, { ensureSchema } from '../src/routes/decks.ts';
 import deckDraft from '../src/routes/deck_draft.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
 import { loadSchema } from './_schema_once.mjs';
 
 const DIR = 'cloudflare-worker/sql/migrations';
@@ -71,6 +72,7 @@ test('1. the first write is If-Match 0; the revision climbs one per write; GET /
     let r = await put(f, { order: ['c1', 'c2'], theme: { kind: 'brand' }, audience: 'seed_fund' }, '0');
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual([r.body.doc.rev, r.body.doc.order, r.body.doc.audience, r.body.doc.theme.kind], [1, ['c1', 'c2'], 'seed_fund', 'brand']);
+    assert.deepEqual(contractErrors(JSON.parse(readFileSync('cloudflare-worker/src/contracts/deckSaveDoc.schema.json', 'utf8')), r.body), [], 'the reply keeps its contract');
     r = await put(f, { order: ['c1', 'c2'], theme: null, audience: 'angel' }, '1');
     assert.deepEqual([r.status, r.body.doc.rev, r.body.doc.theme, r.body.doc.audience], [200, 2, null, 'angel']);
     const g = await f.call('GET', `/api/decks/${DECK}/draft`);
