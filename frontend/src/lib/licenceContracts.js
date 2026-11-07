@@ -62,7 +62,7 @@ export const LICENCE_RESPONSE_FIELDS = Object.freeze({
   renew: Object.freeze(['ok', 'renews_on', 'pushed']),
   territories: Object.freeze(['ok', 'countries', 'pushed']),
   seats: Object.freeze(['ok', 'seats', 'pushed']),
-  terms: Object.freeze(['ok', 'term_years', 'annual_fee_cents', 'currency', 'revenue_share_bps', 'token_split_bps', 'starts_on', 'renews_on', 'pushed']),
+  terms: Object.freeze(['ok', 'term_years', 'annual_fee_cents', 'currency', 'revenue_share_bps', 'token_split_bps', 'starts_on', 'renews_on', 'terms_revision', 'changed', 'pushed']),
 });
 
 /** A history row's outcome, or null when the value is not one the contract names. */

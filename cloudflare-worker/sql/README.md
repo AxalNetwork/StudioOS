@@ -19,6 +19,7 @@ and is not kept in sync.
 | `migrations/202611041613_grow_campaigns.sql` | D4447 (#4447): campaign plans, channel budgets and same-venture item links; Part A of #3722. |
 | `migrations/202611041438_team_allowlists.sql` | D4422 (#4422): per-company and standalone-project model/tool lists, with actor/time; company projects inherit their parent policy. |
 | `migrations/202611042009_distribution_inbox_reads.sql` | D4494: per-member, per-message Inbox receipts. |
+| `migrations/202611071531_licence_revisions.sql` | D4694 (#4694): a `revision` on `licence_terms` and `licence_fee_invoices` and a `terms_revision` on `territory_licences`, so a write from a stale snapshot is refused (409) instead of replacing a newer value. Additive, default 0. |
 
 ## Adding a change
 

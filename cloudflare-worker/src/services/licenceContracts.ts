@@ -87,4 +87,7 @@ export type LicenceTermsResult = Pushed & {
   token_split_bps: number | null;
   starts_on: string | null;
   renews_on: string | null;
+  /** D4694: the licence's `terms_revision` after this save, and the keys it changed with their before and after. */
+  terms_revision: number;
+  changed: Record<string, { before: unknown; after: unknown }>;
 };

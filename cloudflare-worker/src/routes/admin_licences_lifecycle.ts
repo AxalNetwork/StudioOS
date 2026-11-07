@@ -131,7 +131,7 @@ r.post('/:uid/renew', async (c) => {
       next = base.toISOString().slice(0, 10);
     }
     await c.env.DB.prepare(
-      'UPDATE territory_licences SET renews_on = ?, updated_at = ? WHERE id = ?',
+      'UPDATE territory_licences SET renews_on = ?, terms_revision = terms_revision + 1, updated_at = ? WHERE id = ?',
     ).bind(next, nowIso(), licence.id).run();
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next }, null,

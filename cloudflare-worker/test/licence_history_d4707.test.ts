@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
+import { licenceRevisionAlters } from './_licence_revisions.mjs';
 import { Hono } from 'hono';
 
 import licences, { EVENTS_PAGE_MAX } from '../src/routes/admin_licences.ts';
@@ -54,6 +55,14 @@ function freshDb() {
     CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
       jwt_min_iat INTEGER, name TEXT, email TEXT);
     CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY);
+    -- D4694: a terms save is a money write, so it takes the TOTP session and step-up bar.
+    CREATE TABLE user_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, jti TEXT, factor TEXT,
+      assurance_level TEXT, revoked_at TEXT, step_up_due_at TEXT, last_seen_at TEXT, last_step_up_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')));
+    CREATE TABLE activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT,
+      user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+    CREATE TABLE admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER, action TEXT,
+      viewed_user_id INTEGER, filters_json TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));
     CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
       legal_entity_name TEXT, brand_name TEXT, registered_address TEXT, signatory_name TEXT, signatory_title TEXT,
       status TEXT NOT NULL DEFAULT 'draft', term_years INTEGER, annual_fee_cents INTEGER, currency TEXT,
@@ -68,6 +77,7 @@ function freshDb() {
       hostname TEXT, status TEXT);
   `);
   db.exec(m187.slice(at, m187.indexOf(');', at) + 2));
+  db.exec(licenceRevisionAlters('territory_licences'));
   db.exec(mig('202611062240_licence_event_changes.sql'));
   // Migration 269's seal: an event row can never be updated, so the outcome
   // has to be known when the row is written.
@@ -78,6 +88,7 @@ function freshDb() {
   }
   db.prepare("INSERT INTO users (id, role, name, email) VALUES (?, 'admin', 'Sue', 'sue@axal.example')").run(SUPER);
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
+  db.prepare("INSERT INTO user_sessions (user_id, jti, factor, assurance_level, created_at) VALUES (?, 'totp-1', 'totp', 'totp', datetime('now'))").run(SUPER);
   db.prepare(`INSERT INTO territory_licences (uid, licence_ref, legal_entity_name, brand_name, status, term_years,
       annual_fee_cents, currency, renews_on) VALUES (?, 'AXL-047', 'Axal VC France SAS', 'Axal VC France', 'draft', 3, 1000000, 'EUR', '2027-01-01')`).run(LIC);
   db.prepare("INSERT INTO licence_territories (licence_id, country_code) VALUES (1, 'FR')").run();
@@ -87,7 +98,7 @@ function freshDb() {
 
 const env = (db: any) => ({ JWT_SECRET, ENVIRONMENT: 'development', APP_URL: 'https://axal.vc', DB: makeD1(db) });
 async function call(db: any, path: string, method = 'GET', body?: unknown) {
-  const tok = await new SignJWT({ user_id: SUPER, role: 'admin' })
+  const tok = await new SignJWT({ user_id: SUPER, role: 'admin', jti: 'totp-1' })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await app.request(`/admin/licences/${LIC}${path}`, {
     method, headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
@@ -100,7 +111,7 @@ test('a write records what it replaced beside what it left, and who made it', as
   const db = freshDb();
   assert.equal((await call(db, '/territories', 'PUT', { countries: ['BE', 'FR'] })).status, 200);
   assert.equal((await call(db, '/seats', 'PUT', { seats: { founder: 8 } })).status, 200);
-  assert.equal((await call(db, '/terms', 'PATCH', { term_years: 5, annual_fee_cents: 1200000, currency: 'EUR' })).status, 200);
+  assert.equal((await call(db, '/terms', 'PATCH', { term_years: 5, annual_fee_cents: 1200000, currency: 'EUR', reason: 'Renegotiated at the annual review', expected_revision: 0 })).status, 200);
   const r = await call(db, '/events');
   assert.equal(r.status, 200);
   const [terms, seats, territory] = r.body.items;

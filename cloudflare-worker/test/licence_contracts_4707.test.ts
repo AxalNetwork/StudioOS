@@ -74,7 +74,7 @@ test('the SPA\'s field lists are the routes\' real answers', () => {
   assert.deepEqual(answerKeys('admin_licences_terms.ts', 'LicenceTerritoriesResult'), [...F.territories]);
   assert.deepEqual(answerKeys('admin_licences_terms.ts', 'LicenceSeatsResult'), [...F.seats]);
   // `...terms` spreads the terms object; its fields are LicenceTermsResult's, read off the type.
-  assert.deepEqual(answerKeys('admin_licences_terms.ts', 'LicenceTermsResult'), ['ok', '...terms', 'pushed']);
+  assert.deepEqual(answerKeys('admin_licences_terms.ts', 'LicenceTermsResult'), ['ok', '...terms', 'terms_revision', 'changed', 'pushed']);
   const contract = read('cloudflare-worker/src/services/licenceContracts.ts');
   const fieldsOf = (type: string) => {
     const at = contract.indexOf(`export type ${type} =`);
