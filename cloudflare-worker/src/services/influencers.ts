@@ -20,8 +20,14 @@
  * their own that it would overwrite, and `influencers.investor_grant` records
  * that it was set, so a pause or an end takes back only what this program gave.
  *
- * Every write is one guarded UPDATE first (so two admins deciding at once make
- * one decision), then one batch for the rest. Every event goes to the
+ * Every decision is ONE batch (D4805, #4805): the guarded UPDATE that decides
+ * it (so two admins deciding at once make one decision), a guard that rolls the
+ * batch back if that UPDATE lost, and then everything that depends on it: the
+ * membership, the referral partner row, the draft terms, the Investor Pro grant
+ * or take-back, the history rows and the member's notice. Either all of it
+ * commits or none of it does. The notice is written to `program_outbox` in that
+ * same batch and sent after the commit (`deliverOutbox`), and the cron resends
+ * one that did not land, without repeating the decision. Every event goes to the
  * append-only `influencer_events`. Amounts and rates are the tier defaults'
  * data, never literals here (D1050).
  */
@@ -54,6 +60,8 @@ export const REASON_MAX = 2000;
 
 
 import { INFLUENCER_RULE } from './influencerActions';
+import { clearGuard, decisionGuard, runDecision } from './decisionBatch';
+import { deliverOutbox, noticeStatement } from './programOutbox';
 export { INFLUENCER_ACTIONS, INFLUENCER_RULE } from './influencerActions';
 
 /** The investor plan states a grant may replace: nothing paid, nothing in force. */
@@ -238,6 +246,13 @@ const event = (env: Env, e: { userId: number; applicationId?: number | null; inf
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).bind(e.userId, e.applicationId ?? null, e.influencerId ?? null, e.event, e.detail ? JSON.stringify(e.detail) : null, e.actor ?? null, e.at);
 
+/** D4805: a history row for a membership the same batch may be creating, so its id is read where the row is written. */
+const memberEvent = (env: Env, e: { userId: number; applicationId?: number | null; event: string; detail?: Record<string, unknown> | null; actor?: number | null; at: string }) =>
+  env.DB.prepare(
+    `INSERT INTO influencer_events (user_id, application_id, influencer_id, event, detail_json, actor_user_id, created_at)
+     VALUES (?, ?, (SELECT id FROM influencers WHERE user_id = ?), ?, ?, ?, ?)`,
+  ).bind(e.userId, e.applicationId ?? null, e.userId, e.event, e.detail ? JSON.stringify(e.detail) : null, e.actor ?? null, e.at);
+
 /**
  * `POST /api/influencer/apply`. One open application per member. An open one
  * HQ asked more of is answered by applying again: its answers are replaced
@@ -359,8 +374,8 @@ const reasonOf = (v: unknown, what: string) => {
   return r;
 };
 
-/** The statements that give the member Investor Pro, only over no plan of their own, and record that it did. */
-function grantStatements(env: Env, userId: number, influencerId: number) {
+/** The statements that give the member Investor Pro, only over no plan of their own, and record that it did. By the member, so a batch can run them before the membership row is read back. */
+function grantStatements(env: Env, userId: number) {
   return [
     env.DB.prepare(
       `UPDATE users SET investor_tier = ?, investor_subscription_status = 'influencer_grant', investor_subscription_renews_at = NULL,
@@ -371,20 +386,20 @@ function grantStatements(env: Env, userId: number, influencerId: number) {
     env.DB.prepare(
       `UPDATE influencers SET investor_grant = CASE WHEN EXISTS (
           SELECT 1 FROM users WHERE id = ? AND investor_subscription_status = 'influencer_grant' AND investor_tier = ?) THEN 1 ELSE 0 END
-        WHERE id = ?`,
-    ).bind(userId, GRANT_TIER, influencerId),
+        WHERE user_id = ?`,
+    ).bind(userId, GRANT_TIER, userId),
   ];
 }
 
 /** The statements that take back only the Investor Pro this program gave. */
-function revokeStatements(env: Env, userId: number, influencerId: number) {
+function revokeStatements(env: Env, userId: number) {
   return [
     env.DB.prepare(
       `UPDATE users SET investor_tier = 'free', investor_subscription_status = 'influencer_ended', investor_dealroom_max = ?
         WHERE id = ? AND investor_subscription_status = 'influencer_grant'
-          AND EXISTS (SELECT 1 FROM influencers WHERE id = ? AND investor_grant = 1)`,
-    ).bind(INVESTOR_QUOTAS.free.dealroom_max, userId, influencerId),
-    env.DB.prepare('UPDATE influencers SET investor_grant = 0 WHERE id = ?').bind(influencerId),
+          AND EXISTS (SELECT 1 FROM influencers WHERE user_id = ? AND investor_grant = 1)`,
+    ).bind(INVESTOR_QUOTAS.free.dealroom_max, userId, userId),
+    env.DB.prepare('UPDATE influencers SET investor_grant = 0 WHERE user_id = ?').bind(userId),
   ];
 }
 
@@ -425,69 +440,76 @@ export async function decideApplication(env: Env, adminId: number, uid: string, 
   const status = decision.kind === 'admit' ? 'admitted' : decision.kind === 'decline' ? 'declined' : 'more_requested';
   const reason = decision.kind === 'decline' ? decision.reason : decision.kind === 'more' ? decision.question : null;
   const tier = decision.kind === 'admit' ? decision.tier : null;
-  // The one guarded write: of two admins deciding at once, one decides.
-  const moved = await env.DB.prepare(
+  // The deciding statement: of two admins deciding at once, one decides, and the guard that follows it rolls
+  // the other's whole batch back.
+  const decide = env.DB.prepare(
     `UPDATE influencer_applications SET status = ?, tier = ?, reason = ?, decided_by = ?, decided_at = ?, updated_at = ?
       WHERE id = ? AND status = ?`,
-  ).bind(status, tier, reason, adminId, at, at, app.id, app.status).run();
-  if (!Number(moved.meta?.changes)) throw refusal(409, 'application_decided', 'This application was decided while you were looking at it. Read it again.');
+  ).bind(status, tier, reason, adminId, at, at, app.id, app.status);
+  const lost = () => refusal(409, 'application_decided', 'This application was decided while you were looking at it. Read it again.');
+  const applicationAfter = async () => applicationView((await env.DB.prepare('SELECT * FROM influencer_applications WHERE id = ?').bind(app.id).first<AppRow>())!);
 
   if (decision.kind !== 'admit') {
-    await event(env, { userId, applicationId: app.id, event: status, detail: { reason }, actor: adminId, at }).run();
-    return { application: applicationView((await env.DB.prepare('SELECT * FROM influencer_applications WHERE id = ?').bind(app.id).first<AppRow>())!), membership: null };
+    const notice = decision.kind === 'decline'
+      ? { userId, type: 'influencer_declined', title: 'Your influencer application', body: `HQ declined your application. Reason: ${decision.reason} You can apply again after 90 days.`, link: '/referrals' }
+      : { userId, type: 'influencer_more_requested', title: 'HQ asked about your influencer application', body: `HQ asked: ${decision.question} Answer by updating your application.`, link: '/referrals' };
+    const run = await runDecision(env, [
+      decide, decisionGuard(env),
+      event(env, { userId, applicationId: app.id, event: status, detail: { reason }, actor: adminId, at }),
+      noticeStatement(env, notice),
+      clearGuard(env),
+    ]);
+    if (run.lost) throw lost();
+    await deliverOutbox(env, userId);
+    return { application: await applicationAfter(), membership: null };
   }
 
-  try {
-    const defaults = (await tierDefaults(env)).find((t) => t.tier === decision.tier) ?? null;
-    const memberUid = uidOf('inf');
-    const termsUid = `rpt_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
-    const today = dayOf(now);
-    const existing = await memberOf(env, userId);
-    await env.DB.batch([
-      // The referral partner row (D-b); a member already a partner keeps theirs.
-      env.DB.prepare(
-        `INSERT OR IGNORE INTO referral_partners (user_id, segment, note, added_by, added_at, updated_at)
-         VALUES (?, 'influencers', 'Admitted as an influencer.', ?, ?, ?)`,
-      ).bind(userId, adminId, at, at),
-      existing
-        ? env.DB.prepare(
-          `UPDATE influencers SET tier = ?, status = 'active', application_id = ?, admitted_by = ?, admitted_at = ?, updated_at = ?,
-                  partner_id = (SELECT id FROM referral_partners WHERE user_id = ?) WHERE id = ? AND status = 'ended'`,
-        ).bind(decision.tier, app.id, adminId, at, at, userId, existing.id)
-        : env.DB.prepare(
-          `INSERT INTO influencers (uid, user_id, tier, status, partner_id, application_id, admitted_by, admitted_at, updated_at)
-           SELECT ?, ?, ?, 'active', (SELECT id FROM referral_partners WHERE user_id = ?), ?, ?, ?, ?`,
-        ).bind(memberUid, userId, decision.tier, userId, app.id, adminId, at, at),
-      // Draft terms from the tier's defaults; the Super Admin approves them and the influencer signs (D958).
-      env.DB.prepare(
-        `INSERT INTO referral_partner_terms (uid, partner_id, segment, status, starts_on, currency, note, created_by, created_at, updated_at)
-         SELECT ?, p.id, p.segment, 'draft', ?, ?, ?, ?, ?, ? FROM referral_partners p WHERE p.user_id = ?`,
-      ).bind(termsUid, today, defaults?.currency ?? 'USD',
-        `Drafted when admitted as ${TIER_LABEL[decision.tier]}, from the tier's defaults.`, adminId, at, at, userId),
-      // Strategic Partner's rate is negotiated: its draft carries no trigger until HQ writes one.
-      ...(defaults?.percentage_bps != null ? [env.DB.prepare(
-        `INSERT INTO referral_partner_term_triggers (terms_id, rule_key, amount_cents, percentage_bps)
-         SELECT id, ?, NULL, ? FROM referral_partner_terms WHERE uid = ?`,
-      ).bind(INFLUENCER_RULE, defaults.percentage_bps, termsUid)] : []),
-    ]);
-    const member = (await memberOf(env, userId))!;
-    await env.DB.batch([
-      ...grantStatements(env, userId, member.id),
-      event(env, { userId, applicationId: app.id, influencerId: member.id, event: 'admitted', detail: { tier: decision.tier, terms_uid: termsUid }, actor: adminId, at }),
-    ]);
-    return {
-      application: applicationView((await env.DB.prepare('SELECT * FROM influencer_applications WHERE id = ?').bind(app.id).first<AppRow>())!),
-      membership: memberView((await memberOf(env, userId))!),
-      terms_uid: termsUid,
-    };
-  } catch (e) {
-    // The admission did not land whole: the application goes back to HQ undecided.
-    await env.DB.prepare(
-      `UPDATE influencer_applications SET status = ?, tier = NULL, reason = ?, decided_by = NULL, decided_at = NULL, updated_at = ?
-        WHERE id = ? AND status = 'admitted' AND decided_at = ?`,
-    ).bind(app.status, app.reason, at, app.id, at).run().catch(() => undefined);
-    throw e;
-  }
+  // Admitting: the application, the referral partner row, the membership, the draft terms, the Investor Pro
+  // grant, the history row and the notice are ONE batch. A failure anywhere leaves the application open and
+  // nothing else written, so there is no half-admitted member to find and no compensating write to get wrong.
+  const defaults = (await tierDefaults(env)).find((t) => t.tier === decision.tier) ?? null;
+  const memberUid = uidOf('inf');
+  const termsUid = `rpt_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
+  const today = dayOf(now);
+  const existing = await memberOf(env, userId);
+  const run = await runDecision(env, [
+    decide, decisionGuard(env),
+    // The referral partner row (D-b); a member already a partner keeps theirs.
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO referral_partners (user_id, segment, note, added_by, added_at, updated_at)
+       VALUES (?, 'influencers', 'Admitted as an influencer.', ?, ?, ?)`,
+    ).bind(userId, adminId, at, at),
+    existing
+      ? env.DB.prepare(
+        `UPDATE influencers SET tier = ?, status = 'active', application_id = ?, admitted_by = ?, admitted_at = ?, updated_at = ?,
+                partner_id = (SELECT id FROM referral_partners WHERE user_id = ?) WHERE id = ? AND status = 'ended'`,
+      ).bind(decision.tier, app.id, adminId, at, at, userId, existing.id)
+      : env.DB.prepare(
+        `INSERT INTO influencers (uid, user_id, tier, status, partner_id, application_id, admitted_by, admitted_at, updated_at)
+         SELECT ?, ?, ?, 'active', (SELECT id FROM referral_partners WHERE user_id = ?), ?, ?, ?, ?`,
+      ).bind(memberUid, userId, decision.tier, userId, app.id, adminId, at, at),
+    // Draft terms from the tier's defaults; the Super Admin approves them and the influencer signs (D958).
+    env.DB.prepare(
+      `INSERT INTO referral_partner_terms (uid, partner_id, segment, status, starts_on, currency, note, created_by, created_at, updated_at)
+       SELECT ?, p.id, p.segment, 'draft', ?, ?, ?, ?, ?, ? FROM referral_partners p WHERE p.user_id = ?`,
+    ).bind(termsUid, today, defaults?.currency ?? 'USD',
+      `Drafted when admitted as ${TIER_LABEL[decision.tier]}, from the tier's defaults.`, adminId, at, at, userId),
+    // Strategic Partner's rate is negotiated: its draft carries no trigger until HQ writes one.
+    ...(defaults?.percentage_bps != null ? [env.DB.prepare(
+      `INSERT INTO referral_partner_term_triggers (terms_id, rule_key, amount_cents, percentage_bps)
+       SELECT id, ?, NULL, ? FROM referral_partner_terms WHERE uid = ?`,
+    ).bind(INFLUENCER_RULE, defaults.percentage_bps, termsUid)] : []),
+    ...grantStatements(env, userId),
+    memberEvent(env, { userId, applicationId: app.id, event: 'admitted', detail: { tier: decision.tier, terms_uid: termsUid }, actor: adminId, at }),
+    noticeStatement(env, {
+      userId, type: 'influencer_admitted', title: 'You are an Axal influencer',
+      body: `HQ admitted you as ${TIER_LABEL[decision.tier]}. Your terms are being prepared for you to sign, and Investor Pro is yours while you are active.`, link: '/influencer',
+    }),
+    clearGuard(env),
+  ]);
+  if (run.lost) throw lost();
+  await deliverOutbox(env, userId);
+  return { application: await applicationAfter(), membership: memberView((await memberOf(env, userId))!), terms_uid: termsUid };
 }
 
 export type Change = { tier?: Tier; status?: MemberStatus; handle_takedown?: true; reason: string };
@@ -529,37 +551,40 @@ export async function changeInfluencer(env: Env, adminId: number, uid: string, c
   if (change.handle_takedown && !m.handle) throw refusal(409, 'no_handle', 'This influencer has no handle to take down.');
   if (tier === m.tier && status === m.status && !change.handle_takedown) throw refusal(409, 'nothing_changed', 'That is already this influencer\'s tier and status.');
   const at = sqlTime(now);
-  if (change.handle_takedown) {
-    const { takedownStatements } = await import('./influencerHandles');
-    const stmts = takedownStatements(env, m, adminId, now)!;
-    const out = await env.DB.batch([
-      ...stmts,
-      event(env, { userId: Number(m.user_id), influencerId: m.id, event: 'handle_taken_down', actor: adminId, at, detail: { handle: m.handle, reason: change.reason } }),
-    ]);
-    if (!Number(out[stmts.length - 1]?.meta?.changes)) throw refusal(409, 'influencer_changed', 'This influencer changed while you were looking. Read them again.');
-    if (tier === m.tier && status === m.status) {
-      return { membership: memberView((await memberOf(env, Number(m.user_id)))!), events: ['handle_taken_down'], before: { tier: m.tier, status: m.status, handle: m.handle } };
-    }
-    m.handle = null;
-  }
-  const moved = await env.DB.prepare(
-    'UPDATE influencers SET tier = ?, status = ?, updated_at = ? WHERE id = ? AND tier = ? AND status = ?',
-  ).bind(tier, status, at, m.id, m.tier, m.status).run();
-  if (!Number(moved.meta?.changes)) throw refusal(409, 'influencer_changed', 'This influencer changed while you were looking. Read them again.');
   const userId = Number(m.user_id);
+  const takedown = change.handle_takedown === true;
   const events: string[] = [];
+  if (takedown) events.push('handle_taken_down');
   if (tier !== m.tier) events.push('tier_changed');
   if (status !== m.status) events.push(status === 'active' ? 'resumed' : status);
-  await env.DB.batch([
-    ...(status !== 'active' && m.status === 'active' ? revokeStatements(env, userId, m.id) : []),
-    ...(status === 'active' && m.status !== 'active' ? grantStatements(env, userId, m.id) : []),
-    ...events.map((ev) => event(env, {
-      userId, influencerId: m.id, event: ev, actor: adminId, at,
-      detail: ev === 'tier_changed' ? { from: m.tier, to: tier, reason: change.reason } : { from: m.status, to: status, reason: change.reason },
+  const what = events.includes('ended') ? 'HQ ended your influencer membership.'
+    : events.includes('handle_taken_down') && events.length === 1 ? 'HQ took your handle down. Choose a new one in your Influencer section.'
+    : events.includes('paused') ? 'HQ paused your influencer membership. Your link does not earn while paused.'
+      : events.includes('resumed') ? 'HQ resumed your influencer membership.'
+        : `HQ changed your tier to ${TIER_LABEL[tier]}.`;
+  const { retireHandleStatements } = takedown ? await import('./influencerHandles') : { retireHandleStatements: null };
+  // One batch (D4805): the membership change that decides it, the handle's history, the Investor Pro grant or
+  // take-back, every history row and the notice. The UPDATE names the tier, status and handle it read.
+  const run = await runDecision(env, [
+    env.DB.prepare(
+      `UPDATE influencers SET tier = ?, status = ?, handle = CASE WHEN ? = 1 THEN NULL ELSE handle END, updated_at = ?
+        WHERE id = ? AND tier = ? AND status = ? AND (? = 0 OR handle = ?)`,
+    ).bind(tier, status, takedown ? 1 : 0, at, m.id, m.tier, m.status, takedown ? 1 : 0, m.handle ?? null),
+    decisionGuard(env),
+    ...(retireHandleStatements ? retireHandleStatements(env, { id: m.id, handle: String(m.handle) }, adminId, now) : []),
+    ...(status !== 'active' && m.status === 'active' ? revokeStatements(env, userId) : []),
+    ...(status === 'active' && m.status !== 'active' ? grantStatements(env, userId) : []),
+    ...events.map((ev) => memberEvent(env, {
+      userId, event: ev, actor: adminId, at,
+      detail: ev === 'handle_taken_down' ? { handle: m.handle, reason: change.reason }
+        : ev === 'tier_changed' ? { from: m.tier, to: tier, reason: change.reason } : { from: m.status, to: status, reason: change.reason },
     })),
+    noticeStatement(env, { userId, type: 'influencer_changed', title: 'Your influencer membership changed', body: `${what} Reason: ${change.reason}`, link: '/influencer' }),
+    clearGuard(env),
   ]);
-  if (change.handle_takedown) events.unshift('handle_taken_down');
-  return { membership: memberView((await memberOf(env, userId))!), events, before: { tier: m.tier, status: m.status } };
+  if (run.lost) throw refusal(409, 'influencer_changed', 'This influencer changed while you were looking. Read them again.');
+  await deliverOutbox(env, userId);
+  return { membership: memberView((await memberOf(env, userId))!), events, before: { tier: m.tier, status: m.status, ...(takedown ? { handle: m.handle } : {}) } };
 }
 
 /** `/me`'s `influencer_active`: 1 for an active membership, 0 otherwise or when it cannot be read. */

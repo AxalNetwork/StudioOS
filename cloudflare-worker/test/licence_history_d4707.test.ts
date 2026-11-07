@@ -54,7 +54,7 @@ function freshDb() {
     CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
       jwt_min_iat INTEGER, name TEXT, email TEXT);
     CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY);
-    CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
+    CREATE TABLE territory_licences ( revision INTEGER NOT NULL DEFAULT 0,id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
       legal_entity_name TEXT, brand_name TEXT, registered_address TEXT, signatory_name TEXT, signatory_title TEXT,
       status TEXT NOT NULL DEFAULT 'draft', term_years INTEGER, annual_fee_cents INTEGER, currency TEXT,
       revenue_share_bps INTEGER, token_split_bps INTEGER, starts_on TEXT, renews_on TEXT, suspended_at TEXT,

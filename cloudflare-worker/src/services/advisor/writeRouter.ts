@@ -453,7 +453,7 @@ const SLOT_INDEXES_READY = new WeakMap<object, boolean>();
 // Pull from the pure catalog module (NOT routes/spinout_lab) so this
 // file doesn't drag Hono / auth / db into non-route consumers (e.g.
 // the advisor scenario test under --experimental-strip-types).
-import { MILESTONES, weekMet as canonicalWeekMet } from '../spinoutLabCatalog.ts';
+import { MILESTONES } from '../spinoutLabCatalog.ts';
 import { bindingKey } from '../../util/schemaBootstrap';
 import { ensureDeckVersionColumns } from '../decks/deckVersionColumns';
 
@@ -467,44 +467,18 @@ function weekForMilestoneKey(key: string): number | null {
 export async function recordSpinoutMilestoneAndAdvance(
   env: Env, userId: number, key: string, _hintWeek: number,
 ): Promise<void> {
-  // Resolve the canonical week for this key. If the key isn't in
-  // the MILESTONES catalog (e.g. typo in a future bank entry) we
-  // bail out — never advance on an unknown milestone.
-  const week = weekForMilestoneKey(key);
-  if (!week) return;
-  // Insert is idempotent via UNIQUE(user_id, milestone_key).
-  const ins = await env.DB.prepare(
-    `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
-     VALUES (?, ?, ?)`,
-  ).bind(userId, week, key).run();
-  // D541 (#1104, question 1 A): a milestone Eadwyn records pays as the Lab
-  // page's would, and only from the answer that recorded it. The grant is
-  // idempotent on its own, and a failure here never blocks the week advance.
-  if (Number(ins?.meta?.changes ?? 0) === 1) {
-    try {
-      const { creditLabMilestone } = await import('../labMilestoneCredits');
-      await creditLabMilestone(env, userId, key);
-    } catch (e) {
-      console.warn('[writeRouter] lab milestone credit failed', key, (e as Error).message);
-    }
-  }
-  // Re-read user lab state. Bail if lab inactive — we never want to
-  // advance a non-active lab from a side-effect path.
-  const u = await env.DB.prepare(
-    `SELECT spinout_lab_active, spinout_lab_week FROM users WHERE id = ?`,
-  ).bind(userId).first<{ spinout_lab_active: number | null; spinout_lab_week: number | null }>();
-  if (!u || Number(u.spinout_lab_active) !== 1) return;
-  const rows = await env.DB.prepare(
-    `SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ?`,
-  ).bind(userId).all<{ milestone_key: string }>();
-  const completed = new Set<string>((rows.results || []).map((r) => r.milestone_key));
-  let newWeek = Math.max(1, Math.min(4, Number(u.spinout_lab_week ?? 1)));
-  while (newWeek < 4 && canonicalWeekMet(newWeek, completed)) newWeek += 1;
-  if (newWeek !== Number(u.spinout_lab_week)) {
-    await env.DB.prepare(`UPDATE users SET spinout_lab_week = ? WHERE id = ?`).bind(newWeek, userId).run();
-  }
-  if (newWeek === 4 && canonicalWeekMet(4, completed)) {
-    await env.DB.prepare(`UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ?`).bind(userId).run();
+  // An unknown key (a typo in a future bank entry) never advances anything.
+  if (!weekForMilestoneKey(key)) return;
+  // D4657: Eadwyn records through the same recorder as the Lab page: the
+  // enrollment policy, the cohort calendar, the saved-work evidence (the
+  // answer this router just wrote), the insert-once, the week advance and the
+  // D541 credit, paid only from the call whose insert recorded the milestone.
+  // A refusal or a failure never fails the answer that was saved.
+  try {
+    const { recordLabMilestone } = await import('../labProgress');
+    await recordLabMilestone(env, userId, key, 'advisor');
+  } catch (e) {
+    console.warn('[writeRouter] lab milestone not recorded', key, (e as Error).message);
   }
 }
 
