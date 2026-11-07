@@ -115,20 +115,26 @@ test('every tab in DISTRIBUTION_TABS is either mounted or on the explicit not-bu
   const mounted = new Set(arrayMatch[1].split(',').map((s) => s.trim().replace(/'/g, '')));
   assert.match(src, /distributionTab === 'overview' \|\| projectStatus !== 'ready' \? body/);
   assert.match(src, /distributionTab === 'campaigns' \? <CampaignsTab/);
-  // D4491 (#4778) and D4495 (#4777) mounted Results and Newsletter in their own branches of the switch.
-  assert.match(src, /distributionTab === 'results' \? <ResultsTab/);
-  assert.match(src, /distributionTab === 'newsletter' \? <NewsletterTab/);
-  mounted.add('overview'); mounted.add('campaigns'); mounted.add('results'); mounted.add('newsletter');
-  // Every tab in distributionModel.js has a built screen now. A tab added there without one goes
-  // here, and keeps showing "Coming in this module soon" until a task builds it.
-  const NOT_BUILT_YET = new Set();
+  mounted.add('overview'); mounted.add('campaigns');
+  // Newsletter (D4495, #4777) and Results (D4491, #4778) are mounted as their own branches of the
+  // same switch: `distributionTab === 'results' ? <ResultsTab …/>`, each before the <ComingSoon /> tail.
+  const switchLine = src.split('\n').find((line) => line.includes("].includes(distributionTab) && projectStatus === 'ready' ? body"));
+  for (const [, key] of switchLine.matchAll(/distributionTab === '([a-z]+)' \? <[A-Z][A-Za-z]+Tab\b/g)) mounted.add(key);
+  assert.match(src, /distributionTab === 'results' \? <ResultsTab key=\{projectId\} projectId=\{projectId\} \/>/);
+  assert.match(src, /distributionTab === 'newsletter' \? <NewsletterTab \/> : <ComingSoon \/>/);
+  // D4484/D4489/D4490/D4492/D4494/D4486/D4491/D4495: every tab now has a built screen. A tab added
+  // to distributionModel.js without one goes here, and keeps showing "Coming in this module soon".
+  const NOT_BUILT_YET = new Set([]);
   for (const { key } of DISTRIBUTION_TABS) {
     if (NOT_BUILT_YET.has(key)) assert.ok(!mounted.has(key), `${key} has no screen yet; it must keep showing Coming in this module soon, not be added to the mounted set without a screen`);
     else assert.ok(mounted.has(key), `${key} has a built screen but falls through to <ComingSoon /> — mount it in CycleRoute.jsx's distribution switch`);
   }
-  for (const key of NOT_BUILT_YET) {
+  for (const { key } of DISTRIBUTION_TABS) {
     const guess = key[0].toUpperCase() + key.slice(1);
-    assert.ok(!existsSync(new URL(`../src/pages/cycles/distribution/${guess}Tab.jsx`, import.meta.url)), `${key} now has a screen (${guess}Tab.jsx) — mount it and move it off the allowlist above`);
+    if (existsSync(new URL(`../src/pages/cycles/distribution/${guess}Tab.jsx`, import.meta.url))) {
+      assert.ok(!NOT_BUILT_YET.has(key), `${key} now has a screen (${guess}Tab.jsx) — mount it and move it off the allowlist above`);
+      assert.ok(mounted.has(key), `${guess}Tab.jsx exists but CycleRoute.jsx does not mount it`);
+    }
   }
 });
 

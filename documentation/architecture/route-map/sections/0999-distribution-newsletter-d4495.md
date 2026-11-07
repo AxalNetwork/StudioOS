@@ -2,8 +2,10 @@
 
 `/grow/distribution/newsletter` uses #4484's Distribution shell; `CycleRoute`
 renders `NewsletterTab.jsx` for `tab="newsletter"`. It is the not-connected
-state, the only one until the Beehiiv connector (#2407) exists: a "Connect
-Beehiiv" door marked "Not offered yet" and three results (opens, clicks,
-unsubscribes) that read "Not recorded". It makes no API call, so no list,
-editor or subscriber is drawn. Axal's own house newsletter (D810,
-`/api/newsletter`) is never used for a founder.
+state, the only one until the Beehiiv connector (#2407) exists: Connect
+Beehiiv is disabled with "Not offered yet", and Opens, Clicks and Unsubscribes
+each read "Not recorded". The tab makes no request, so it has no Worker route
+and draws no list, editor, send or subscriber. A founder's newsletter never
+reads or writes `/api/newsletter` (D810, Axal's own newsletter). Lists, the
+editor, sends and Beehiiv-reported results each get a mounted Worker route
+once that connector exists.

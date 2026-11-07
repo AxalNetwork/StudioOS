@@ -70,9 +70,9 @@ creatives Ask reuses #4488/#4512's quote/run/accept contract, scoped to the
 selected campaign (`target: 'campaign'`), so Accept writes the creative row
 itself — AdsTab only re-reads afterwards. Results is the D4491 tab: read
 only, it writes no MRR. Newsletter is the D4495 tab, in its not-connected
-state until the Beehiiv connector exists. Every tab in `distributionModel.js`
-now has a screen; a tab added there without one shows Coming in this module
-soon until its task lands.
+state until the Beehiiv connector exists, and it makes no request. Every tab in
+`DISTRIBUTION_TABS` now has a screen; a tab added there without one shows Coming
+in this module soon until its task lands.
 Import `ProspectsTab` for the shell's Prospects slot, with its verified venture
 id and read/write state. The wizard may call `useProspectConsentSummary` once,
 draw `ConsentSummaryView` in Audience and `reachableLabel` in Schedule. A
