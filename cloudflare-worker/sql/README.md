@@ -19,6 +19,7 @@ and is not kept in sync.
 | `migrations/202611041613_grow_campaigns.sql` | D4447 (#4447): campaign plans, channel budgets and same-venture item links; Part A of #3722. |
 | `migrations/202611041438_team_allowlists.sql` | D4422 (#4422): per-company and standalone-project model/tool lists, with actor/time; company projects inherit their parent policy. |
 | `migrations/202611042009_distribution_inbox_reads.sql` | D4494: per-member, per-message Inbox receipts. |
+| `migrations/202611071547_advisor_engagement_events.sql` | D4695 (#4695): `advisor_engagement_events`, an engagement's append-only renewal history (`signed`, `renewed`, `ended`), with unique indexes that make a repeated decision on one term a no-op. New table, re-runnable. |
 
 ## Adding a change
 
