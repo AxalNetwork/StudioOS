@@ -74,7 +74,9 @@ import { readBackupHeartbeat, readRestoreDrill } from '../services/backup';
 import { branchBindings } from '../services/branches';
 import {
   HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
+  dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE,
 } from '../services/dsrRequests';
+import { ensureAdminAuditLogTable } from './admin';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -326,10 +328,14 @@ r.get('/overview', async (c) => {
   const ledger = await loadDsrHistory(env);
   const ledgerAvailable = ledger.available;
   const ledgerReason = ledger.available ? null : ledger.reason;
+  // D4675 — the exact request each row is, so a close names what was reviewed.
+  const openIds = await loadOpenDsrRequestIds(env);
 
   const now = Date.now();
   const dsr = (dsrRows.results || []).map((u) => {
     const seen = ledger.available ? ledger.byUser.get(u.id) : undefined;
+    const open = openIds?.get(u.id);
+    const requestedMs = dsrStampMs(u.deletion_requested_at);
     return {
       id: u.id, email: u.email, name: u.name, role: u.role,
       // D481 — the kind comes from the store that holds the row. Every row
@@ -337,10 +343,16 @@ r.get('/overview', async (c) => {
       // request, and the page prints this field rather than a literal.
       kind: 'erasure',
       requested_at: u.deletion_requested_at,
+      // D4675 — the ledger row a close targets, only when it holds THIS
+      // request's stamp; null for a request the ledger does not hold yet.
+      request_id: open && open.requested_at === u.deletion_requested_at ? open.id : null,
       // null when the timestamp cannot be parsed: an unknown clock is not a
       // clock at zero. The arithmetic lives in the service so it can fail a
       // test — it had never had one.
-      days_left: dsrDaysLeft(parseSqlTs(u.deletion_requested_at), now),
+      days_left: dsrDaysLeft(requestedMs, now),
+      // D4675 — the instant the clock runs out, in UTC, so the rule is stated
+      // rather than inferred from a day count.
+      deadline_at: dsrDeadlineIso(requestedMs),
       // null rather than 0 whenever the ledger could not be read — see above.
       prior_requests: ledgerAvailable ? (seen?.prior ?? 0) : null,
       last_outcome: ledgerAvailable ? (seen?.outcome ?? null) : null,
@@ -1321,20 +1333,20 @@ r.post('/force-reauth', async (c) => {
  * was written only by the subject (routes/settings.ts request and cancel),
  * read here against a statutory 30-day clock, and rendered by SecurityPage in
  * amber with an overdue count — and this file declared four handlers, none of
- * which could act on one. The only way a row left HQ's list was the subject
- * cancelling. HQ watched a legal deadline it had no way to stop.
+ * which could act on one. HQ watched a legal deadline it had no way to stop.
  *
  * SAME BAR AS FORCE RE-AUTH, and for a reason of its own rather than by
  * symmetry: closing a request stops a statutory clock and writes the record
- * a regulator would read. A cheaper gate would make the one act whose whole
- * value is its trustworthiness the easiest one in this file to perform.
+ * a regulator would read.
  *
- * BOTH HALVES MOVE IN ONE BATCH. The ledger row and `users.deletion_requested_at`
- * are the record and the open flag; if either moved alone they would disagree,
- * and the disagreement would be invisible — one screen would show a closed
- * request still open, or an open request nobody can see. If the batch cannot
- * run, NOTHING moves and the refusal says why: clearing the flag with no
- * record is strictly worse than failing.
+ * D4675 — THE REVIEWED REQUEST, ONCE. The body names the request the operator
+ * reviewed (`requested_at`, and `request_id` when the list had one) and a
+ * `close_key` the page made once for this close. The service applies the
+ * close only to that request while it is still open, writes the decision, the
+ * subject's notice and both audit rows in one batch, and answers a retry of
+ * the same key with the record it already made. Every answer says what is on
+ * record: closed, already closed by this act, nothing written because the
+ * request changed or was closed first, or unconfirmed.
  */
 r.post('/dsr/:userId/close', async (c) => {
   const actor = await requireSuperAdminWriteBar(c);
@@ -1348,6 +1360,10 @@ r.post('/dsr/:userId/close', async (c) => {
   try { body = (await c.req.json()) as Record<string, unknown>; } catch { body = {}; }
   const outcome = String(body?.outcome ?? '').trim();
   const reason = String(body?.reason ?? '').trim();
+  const requestedAt = typeof body?.requested_at === 'string' ? body.requested_at : '';
+  const rawId = body?.request_id;
+  const requestId = rawId === null || rawId === undefined ? null : Number(rawId);
+  const closeKey = typeof body?.close_key === 'string' ? body.close_key : '';
 
   if (!isHqDsrOutcome(outcome)) {
     return c.json({
@@ -1362,60 +1378,91 @@ r.post('/dsr/:userId/close', async (c) => {
       code: 'reason_required',
     }, 400);
   }
+  if (!requestedAt || !DSR_CLOSE_KEY_RE.test(closeKey)
+      || (requestId !== null && (!Number.isInteger(requestId) || requestId <= 0))) {
+    return c.json({
+      error: 'This close does not say which request was reviewed. Reload the Security page and close it again.',
+      code: 'review_required',
+    }, 400);
+  }
 
-  // REFUSE AN ABSENT TARGET rather than reporting a close of nobody — the same
-  // rule /force-reauth/:userId states above, and it bites harder here: the
+  // REFUSE AN ABSENT TARGET rather than reporting a close of nobody: the
   // audit row would name a subject who does not exist against a statutory act.
   const target = await c.env.DB.prepare(
-    'SELECT id, email, name, deletion_requested_at FROM users WHERE id = ?',
-  ).bind(uid).first<{ id: number; email: string; name: string | null; deletion_requested_at: string | null }>();
+    'SELECT id, email, name FROM users WHERE id = ?',
+  ).bind(uid).first<{ id: number; email: string; name: string | null }>();
   if (!target) {
     return c.json({ error: 'No account holds that id.', code: 'user_not_found' }, 404);
   }
-  if (!target.deletion_requested_at) {
-    return c.json({
-      error: 'That account has no open erasure request. One may have been closed already, or the subject '
-        + 'may have cancelled it themselves.',
-      code: 'no_open_request',
-    }, 409);
-  }
 
   const subject = target.name || target.email;
+  let result;
   try {
-    await closeDsrRequest(c.env, { userId: uid, actorUserId: actor.id, outcome, reason });
+    await ensureAdminAuditLogTable(c.env);
+    // `target_user_id: uid` is how the audit row names the subject (D159);
+    // the service writes it in the same batch as the decision.
+    result = await closeDsrRequest(c.env, {
+      userId: uid, actorUserId: actor.id, actorEmail: actor.email, outcome, reason,
+      requestedAt, requestId, closeKey,
+    });
   } catch (e) {
     return c.json({
-      error: 'The request ledger could not be written, so nothing was changed — the request is still open. '
+      error: 'The close could not be confirmed. As far as this server can tell nothing was recorded and the '
+        + 'request is still open; repeating it records it at most once. '
         + `Migration 272 creates \`dsr_requests\`. (${(e as Error).message})`,
       code: 'ledger_unavailable',
     }, 503);
   }
 
-  // `target_user_id` is the key `logAdminAction` reads for `viewed_user_id`,
-  // and it is what lets the governance feed's LEFT JOIN name the subject.
-  // Spelt `user_id` it would record a statutory act with a blank Target —
-  // which is why D159's guard refuses that spelling at every call site.
-  await logAdminAction(c.env, actor.id, actor.email, 'dsr_request_closed', {
-    reason,
-    target_user_id: uid,
-    outcome,
-  });
+  if (result.status === 'unconfirmed') {
+    return c.json({
+      ok: false,
+      code: 'outcome_unconfirmed',
+      error: 'The close was sent, but whether it was recorded could not be read back. Try again: repeating '
+        + 'this close records it at most once.',
+    }, 202);
+  }
+  if (result.status === 'key_conflict') {
+    return c.json({
+      error: 'This close carries a key already used for a different close. Reload the page and close it again.',
+      code: 'idempotency_key_conflict',
+    }, 409);
+  }
+  if (result.status === 'stale') {
+    return c.json({
+      error: 'Nothing was recorded. The request you reviewed is no longer the open one: the subject withdrew it '
+        + 'and asked again. Reload to review the current request.',
+      code: 'stale_request',
+      current_requested_at: result.current_requested_at,
+    }, 409);
+  }
+  if (result.status === 'not_open') {
+    return c.json({
+      error: 'Nothing was recorded. That account has no open erasure request: it was closed first, or the '
+        + 'subject cancelled it themselves.',
+      code: 'no_open_request',
+      last_outcome: result.last?.outcome ?? null,
+      last_outcome_at: result.last?.closed_at ?? null,
+    }, 409);
+  }
 
   return c.json({
     ok: true,
+    replayed: result.replayed,
     user_id: uid,
+    request_id: result.row.id,
     email: target.email,
     outcome,
-    requested_at: target.deletion_requested_at,
+    requested_at: result.row.requested_at,
     // THE RESPONSE SAYS WHAT WAS AND WAS NOT DONE. `fulfilled` records that
     // the manual erasure happened; this platform performs none, and a message
     // implying otherwise would be the false claim the outcome list exists to
     // avoid.
-    message: outcome === 'fulfilled'
+    message: (result.replayed ? 'Already on record from your earlier attempt. ' : '') + (outcome === 'fulfilled'
       ? `Recorded: ${subject}'s erasure request was fulfilled. This stops the statutory clock and records who `
         + 'closed it and why. It does not itself erase anything — the erasure is the manual act you are recording.'
       : `Recorded: ${subject}'s erasure request was denied, with your reason stored against it. The statutory `
-        + 'clock has stopped; they can make a new request.',
+        + 'clock has stopped; they can make a new request.'),
   });
 });
 

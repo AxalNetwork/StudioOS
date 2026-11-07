@@ -43,6 +43,24 @@ const SETTINGS = read('cloudflare-worker/src/routes/settings.ts');
 const SERVICE = read('cloudflare-worker/src/services/dsrRequests.ts');
 const MIGRATION = read('cloudflare-worker/sql/migrations/272_dsr_requests.sql');
 
+const KEYS_MIGRATION = read('cloudflare-worker/sql/migrations/202611072219_dsr_close_key.sql');
+let keySeq = 0;
+/**
+ * D4675 — HQ's close as the page sends it: the request it reviewed (the flag's
+ * current stamp and ledger row) and a fresh close key.
+ */
+async function closeAsReviewed(db: any, env: any, opts: { userId: number; actorUserId: number; outcome: any; reason: string }) {
+  const flag = (db.prepare('SELECT deletion_requested_at AS t FROM users WHERE id = ?').get(opts.userId) as any)?.t ?? '';
+  let open: any = null;
+  try { open = db.prepare('SELECT id, requested_at FROM dsr_requests WHERE user_id = ? AND outcome IS NULL').get(opts.userId); } catch { open = null; }
+  keySeq += 1;
+  return closeDsrRequest(env, {
+    ...opts, actorEmail: 'hq@axal.vc', requestedAt: flag,
+    requestId: open && open.requested_at === flag ? open.id : null,
+    closeKey: `test-close-key-${String(keySeq).padStart(6, '0')}`,
+  });
+}
+
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
@@ -88,7 +106,11 @@ function fresh(withLedger = true) {
   db.exec(`CREATE TABLE activity_logs (
              id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT,
              user_id INTEGER, created_at TEXT DEFAULT (datetime('now')))`);
-  if (withLedger) db.exec(MIGRATION);
+  // Narrowed like the two above: the columns the close's audit row binds.
+  db.exec(`CREATE TABLE admin_audit_log (
+             id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL, action TEXT NOT NULL,
+             viewed_user_id INTEGER, filters_json TEXT, exported_at TEXT DEFAULT (datetime('now')))`);
+  if (withLedger) { db.exec(MIGRATION); db.exec(KEYS_MIGRATION); }
   db.exec(`INSERT INTO users (id, email, name) VALUES
              (1, 'subject@example.com', 'A Subject'),
              (2, 'hq@axal.vc', 'HQ Holder'),
@@ -134,7 +156,7 @@ test('closing as fulfilled records the decision, stops the clock, and tells the 
   const { db, env } = fresh();
   await subjectRequests(db, env, 1);
 
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'purged on 2026-09-19, DSR-14' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'purged on 2026-09-19, DSR-14' });
 
   const rows = rowsFor(db, 1);
   assert.equal(rows.length, 1, 'closing must not open a second row');
@@ -161,7 +183,7 @@ test('closing as fulfilled records the decision, stops the clock, and tells the 
 test('closing as denied is recorded, and the subject can then ask again', async () => {
   const { db, env } = fresh();
   await subjectRequests(db, env, 1);
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'open legal hold, DSR-15' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'open legal hold, DSR-15' });
 
   assert.equal(rowsFor(db, 1)[0].outcome, 'denied');
   assert.equal(requestedAtOf(db, 1), null);
@@ -196,7 +218,7 @@ test('a request made before migration 272 is derived on close, carrying its ORIG
   db.prepare("UPDATE users SET deletion_requested_at = '2026-08-02 11:30:00' WHERE id = 1").run();
   assert.equal(rowsFor(db, 1).length, 0, 'fixture is wrong: there should be no ledger row yet');
 
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'legacy request, DSR-09' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'legacy request, DSR-09' });
 
   const rows = rowsFor(db, 1);
   assert.equal(rows.length, 1, 'the close did not derive the missing row, so the decision has no record');
@@ -223,9 +245,9 @@ test('a withdrawal is the subject\'s own act and names no operator', async () =>
 test('the history reports how often each subject asked — and its own failure', async () => {
   const { db, env } = fresh();
   await subjectRequests(db, env, 1, '2026-07-01 09:00:00');
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'first refusal' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'first refusal' });
   await subjectRequests(db, env, 1, '2026-08-01 09:00:00');
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'second, granted' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'second, granted' });
 
   const h = await loadDsrHistory(env);
   assert.equal(h.available, true);
@@ -255,7 +277,7 @@ test('NOTHING moves when the ledger cannot be written', async () => {
   db.prepare("UPDATE users SET deletion_requested_at = '2026-08-02 11:30:00' WHERE id = 1").run();
 
   await assert.rejects(
-    () => closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'should not land' }),
+    () => closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'should not land' }),
     'the close succeeded against a database with no ledger',
   );
   assert.equal(requestedAtOf(db, 1), '2026-08-02 11:30:00',
@@ -290,16 +312,18 @@ test('"fulfilled" never claims the platform deleted anything', () => {
     'the service no longer states that an outcome is a decision record rather than a deletion');
 });
 
-test('the member\'s own two handlers write the ledger, best-effort', () => {
-  // Best-effort is the point: a member must be able to request and to cancel
-  // whatever state HQ's ledger is in, so neither may throw into their path.
-  for (const [fn, label] of [['openDsrRequest', 'request'], ['withdrawDsrRequest', 'cancel']] as const) {
-    const at = SETTINGS.indexOf(`await ${fn}(c.env, user.id)`);
-    assert.ok(at > 0, `the ${label} handler no longer writes the ledger`);
-    const around = SETTINGS.slice(Math.max(0, at - 200), at + 200);
-    assert.match(around, /try \{/, `the ${label} handler's ledger write is not best-effort`);
-    assert.match(around, /catch/, `the ${label} handler's ledger write has no catch`);
-  }
+test('the member\'s own two handlers write the ledger through the service, which never blocks them', () => {
+  // D4675: the flag and the ledger now move in one batch inside the service
+  // (`requestErasure`, `cancelErasure`), and the service — not a try/catch in
+  // the handler — falls back to the flag alone, so a member can still request
+  // and cancel whatever state HQ's ledger is in. That fallback is exercised
+  // against a real database in dsr_lifecycle_d4675.test.ts.
+  assert.match(SETTINGS, /await requestErasure\(c\.env, user\.id\)/, 'the request handler no longer writes the ledger');
+  assert.match(SETTINGS, /await cancelErasure\(c\.env, user\.id\)/, 'the cancel handler no longer writes the ledger');
+  assert.match(SERVICE, /export async function requestErasure[\s\S]{0,1400}catch \(e\)[\s\S]{0,300}deletion_requested_at = COALESCE/,
+    'the request no longer falls back to the flag alone when the ledger cannot be written');
+  assert.match(SERVICE, /export async function cancelErasure[\s\S]{0,1400}catch \(e\)[\s\S]{0,300}deletion_requested_at = NULL/,
+    'the cancel no longer falls back to clearing the flag alone when the ledger cannot be written');
 });
 
 test('migration 272 enforces one OPEN request per subject, and admits three outcomes', () => {
@@ -352,6 +376,9 @@ test('the clock constant is defined once, and the route reads it from there', ()
   // arithmetic behind `days_left` come to disagree.
   assert.doesNotMatch(SECURITY, /const DSR_CLOCK_DAYS\s*=/,
     'DSR_CLOCK_DAYS is declared in the route again — one of the two copies will drift');
-  assert.match(SECURITY, /dsrDaysLeft\(parseSqlTs\(u\.deletion_requested_at\), now\)/,
+  // D4675: through `dsrStampMs`, the service's own UTC parse, so the parse is tested too.
+  assert.match(SECURITY, /const requestedMs = dsrStampMs\(u\.deletion_requested_at\)/,
+    'the route no longer parses the receipt stamp through the tested helper');
+  assert.match(SECURITY, /days_left: dsrDaysLeft\(requestedMs, now\)/,
     'the route no longer computes days_left through the tested helper');
 });

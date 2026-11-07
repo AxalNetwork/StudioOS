@@ -34,6 +34,24 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 const SETTINGS = read('cloudflare-worker/src/routes/settings.ts');
 const MIGRATION = read('cloudflare-worker/sql/migrations/272_dsr_requests.sql');
 
+const KEYS_MIGRATION = read('cloudflare-worker/sql/migrations/202611072219_dsr_close_key.sql');
+let keySeq = 0;
+/**
+ * D4675 — HQ's close as the page sends it: the request it reviewed (the flag's
+ * current stamp and ledger row) and a fresh close key.
+ */
+async function closeAsReviewed(db: any, env: any, opts: { userId: number; actorUserId: number; outcome: any; reason: string }) {
+  const flag = (db.prepare('SELECT deletion_requested_at AS t FROM users WHERE id = ?').get(opts.userId) as any)?.t ?? '';
+  let open: any = null;
+  try { open = db.prepare('SELECT id, requested_at FROM dsr_requests WHERE user_id = ? AND outcome IS NULL').get(opts.userId); } catch { open = null; }
+  keySeq += 1;
+  return closeDsrRequest(env, {
+    ...opts, actorEmail: 'hq@axal.vc', requestedAt: flag,
+    requestId: open && open.requested_at === flag ? open.id : null,
+    closeKey: `test-close-key-${String(keySeq).padStart(6, '0')}`,
+  });
+}
+
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
@@ -72,7 +90,11 @@ function fresh(withLedger = true) {
   db.exec(`CREATE TABLE activity_logs (
              id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT,
              user_id INTEGER, created_at TEXT DEFAULT (datetime('now')))`);
-  if (withLedger) db.exec(MIGRATION);
+  // Narrowed like the two above: the columns the close's audit row binds.
+  db.exec(`CREATE TABLE admin_audit_log (
+             id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL, action TEXT NOT NULL,
+             viewed_user_id INTEGER, filters_json TEXT, exported_at TEXT DEFAULT (datetime('now')))`);
+  if (withLedger) { db.exec(MIGRATION); db.exec(KEYS_MIGRATION); }
   db.exec(`INSERT INTO users (id, email, name) VALUES
              (1, 'subject@example.com', 'A Subject'),
              (2, 'hq@axal.vc', 'HQ Holder'),
@@ -111,7 +133,7 @@ test('an OPEN request is not an outcome — the amber line still owns that state
 test('a denial reaches the subject, with the reason HQ typed, verbatim', async () => {
   const { db, env } = fresh();
   await subjectRequests(db, env, 1);
-  await closeDsrRequest(env, {
+  await closeAsReviewed(db, env, {
     userId: 1, actorUserId: 2, outcome: 'denied',
     reason: 'Retention obligation under the partnership agreement until 2027.',
   });
@@ -133,7 +155,7 @@ test('a denial reaches the subject, with the reason HQ typed, verbatim', async (
 test('a fulfilment reaches the subject too', async () => {
   const { db, env } = fresh();
   await subjectRequests(db, env, 1);
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'Erasure carried out manually.' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'Erasure carried out manually.' });
   const last = (await loadOwnDsrOutcome(env, 1) as any).last_closed;
   assert.equal(last.outcome, 'fulfilled');
 });
@@ -154,7 +176,7 @@ test('DENIED, ASKED AGAIN, WITHDRAWN — the subject sees the withdrawal, never 
   // NEXT row down, which is the old denial — presented as their current state.
   const { db, env } = fresh();
   await subjectRequests(db, env, 1);
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'Not this time, sorry.' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'Not this time, sorry.' });
   await subjectRequests(db, env, 1);          // asking again opens a NEW row
   await subjectCancels(db, env, 1);
 
