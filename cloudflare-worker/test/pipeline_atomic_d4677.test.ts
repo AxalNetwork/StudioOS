@@ -252,9 +252,10 @@ test('rejected and spun-out ventures leave the active board; their history stays
   db.prepare("INSERT INTO projects (id, name, stage, status) VALUES (43, 'Gone', 'idea', 'rejected'), (44, 'Out', 'spun_out', 'spinout')").run();
   const board = await call(db, 'GET', '/api/pipeline/active');
   assert.equal(board.status, 200, JSON.stringify(board.body));
-  assert.deepEqual(board.body.map((p: any) => p.id), [42]);
+  assert.deepEqual(board.body.items.map((p: any) => p.id), [42]);
+  assert.equal(board.body.total, 1, 'the total counts the same population the page does');
   const all = await call(db, 'GET', '/api/pipeline/active?include_closed=1');
-  assert.deepEqual(all.body.map((p: any) => p.id).sort(), [42, 43, 44]);
+  assert.deepEqual(all.body.items.map((p: any) => p.id).sort(), [42, 43, 44]);
 });
 
 // ──────────────────────────────────────────────────────────────── spin-out
@@ -333,7 +334,7 @@ test('going independent needs the recorded evidence, has no force, and moves the
   assert.equal(rows(db, 'SELECT spinout_status FROM subsidiaries')[0].spinout_status, 'independent');
   assert.equal(rows(db, 'SELECT stage FROM projects')[0].stage, 'spun_out');
   assert.equal(rows(db, "SELECT id FROM project_stages WHERE status = 'active'").length, 0);
-  assert.deepEqual((await call(db, 'GET', '/api/pipeline/active')).body, [], 'off the active board');
+  assert.deepEqual((await call(db, 'GET', '/api/pipeline/active')).body.items, [], 'off the active board');
 });
 
 test('a need that already has an accepted quote takes no second one, even if a rival is still submitted', async () => {

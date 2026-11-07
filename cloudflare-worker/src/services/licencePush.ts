@@ -44,6 +44,22 @@ export type LicencePushResult = {
   reason?: string;
   /** The branch this licence deploys to, when it has one. */
   code?: string | null;
+  /**
+   * #4686 — the HQ revision this attempt carried (null when HQ could not
+   * allocate one, i.e. a database without the revision migration).
+   */
+  revision?: number | null;
+  /** #4686 — a short machine word for why not; the screen maps it to a sentence. */
+  failure_code?: string;
+  /** #4686 — true when the failure must be retried (intent is persisted). */
+  retry?: boolean;
+  /** #4686 — true when there is cleanly no deployment: nothing to push, nothing owed. */
+  no_deployment?: boolean;
+  /** #4686 — the branch took the copy but not every section of it. */
+  partial?: boolean;
+  failed_sections?: string[];
+  /** #4686 — the revision the branch reports holding, when it says. */
+  branch_revision?: number | null;
 };
 
 type Row = Record<string, unknown>;
@@ -104,6 +120,15 @@ export function licenceRecord(
 }
 
 /**
+ * #4686 — a store whose migration this database has not applied holds nothing,
+ * which is not the same as a store that failed to answer. The first is omitted
+ * from the copy (HQ has recorded none); the second makes the push partial.
+ */
+function isMissingTable(e: unknown): boolean {
+  return /no such table|no such column/i.test(String((e as Error)?.message ?? e));
+}
+
+/**
  * The whole copy of one licence, read fresh from HQ's ledger — the record the
  * push SENDS and the pull RETURNS (D206).
  *
@@ -123,8 +148,20 @@ export function licenceRecord(
  * caller decides what a failure means for it.
  */
 export async function assembleLicenceRecord(
-  env: Env, licence: Row, pushedAt: string,
+  env: Env, licence: Row, pushedAt: string, revision?: number | null,
 ): Promise<Record<string, unknown>> {
+  return (await assembleLicenceRecordDetailed(env, licence, pushedAt, revision)).record;
+}
+
+/**
+ * #4686 — the same record, and WHICH optional sections HQ could not read. The
+ * push used to omit an unreadable section and report the whole copy as
+ * delivered; the caller now sees the list and answers partial.
+ */
+export async function assembleLicenceRecordDetailed(
+  env: Env, licence: Row, pushedAt: string, revision?: number | null,
+): Promise<{ record: Record<string, unknown>; unreadable: string[] }> {
+  const unreadable: string[] = [];
   const licenceId = Number(licence.id);
   const t = await env.DB.prepare(
     'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
@@ -140,6 +177,9 @@ export async function assembleLicenceRecord(
   ).bind(String(licence.uid)).first<{ template_version: number }>();
   const templateVersion = ct ? Number(ct.template_version) : null;
   const record = licenceRecord(licence, territories, seats, templateVersion, pushedAt);
+  // #4686 — the revision the branch orders this copy by. Absent when HQ has none
+  // to give, in which case the branch falls back to `pushed_at` as before.
+  if (revision !== undefined && revision !== null) record.hq_revision = revision;
   // D797 — the terms schedule (migration 512), as a row-shaped JSON string; the
   // JSON `null` says HQ has recorded none. Read in its own try: a ledger whose
   // terms cannot be read omits the key, so the branch keeps the terms it has
@@ -148,6 +188,7 @@ export async function assembleLicenceRecord(
     const rec = await readLicenceTerms(env, String(licence.uid));
     record.terms_json = JSON.stringify(rec ? { ...rec.terms, sections_json: JSON.stringify(rec.sections) } : null);
   } catch (e) {
+    if (!isMissingTable(e)) unreadable.push('terms');
     console.warn('[licencePush] licence_terms unreadable; the copy goes without them', (e as Error).message);
   }
   // D984 — the licence's program grants (migration 554), the same way: their
@@ -156,6 +197,7 @@ export async function assembleLicenceRecord(
   try {
     record.program_grants_json = JSON.stringify(await programCopy(env, licenceId));
   } catch (e) {
+    if (!isMissingTable(e)) unreadable.push('program_grants');
     console.warn('[licencePush] program_grants unreadable; the copy goes without them', (e as Error).message);
   }
   // D986 — the partner deal types this licence may offer (migration 555), the
@@ -164,9 +206,37 @@ export async function assembleLicenceRecord(
   try {
     record.partner_deal_types_json = await dealTypesForPush(env, licenceId);
   } catch (e) {
+    if (!isMissingTable(e)) unreadable.push('partner_deal_types');
     console.warn('[licencePush] partner deal types unreadable; the copy goes without them', (e as Error).message);
   }
-  return record;
+  return { record, unreadable };
+}
+
+/**
+ * #4686 — allocate the next HQ revision for this licence, ATOMICALLY: one
+ * statement increments and returns, so two concurrent pushes can never hold the
+ * same number. Allocated BEFORE the licence is read, so a higher revision always
+ * carries content read no earlier than a lower one.
+ *
+ * Returns null when the revision store is unavailable (a database without the
+ * migration). The push then goes out unnumbered and the branch orders it by
+ * `pushed_at`, exactly as it did before — a missing store loses the ordering,
+ * never the push.
+ */
+export async function allocateRevision(env: Env, licenceId: number): Promise<number | null> {
+  try {
+    const row = await env.DB.prepare(
+      `INSERT INTO licence_sync_state (licence_id, hq_revision) VALUES (?, 1)
+       ON CONFLICT(licence_id) DO UPDATE SET hq_revision = licence_sync_state.hq_revision + 1,
+                                             updated_at = datetime('now')
+       RETURNING hq_revision`,
+    ).bind(licenceId).first<{ hq_revision: number }>();
+    const n = Number(row?.hq_revision);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  } catch (e) {
+    console.warn('[licencePush] could not allocate a revision', licenceId, (e as Error).message);
+    return null;
+  }
 }
 
 /**
@@ -181,36 +251,88 @@ export async function pushLicenceToBranch(
   licenceId: number,
   pushedAt: string = new Date().toISOString(),
 ): Promise<LicencePushResult> {
-  const result = await pushOnce(env, licenceId, pushedAt);
-  await recordPushOutcome(env, licenceId, result, pushedAt);
+  const revision = await allocateRevision(env, licenceId);
+  const result = { ...(await pushOnce(env, licenceId, pushedAt, revision)), revision };
+  await recordPushOutcome(env, licenceId, result, pushedAt, revision);
   return result;
 }
 
 /**
- * D272 — WHAT A FAILED PUSH LEAVES BEHIND. A push that lands clears the
- * licence's `licence_push_pending` row; one that fails for a DEPLOYED branch
- * (it has a code: no binding yet, unreachable, refused, or HQ could not
- * assemble the record) writes or bumps it, and HQ's scheduled handler retries
- * it (`retryPendingLicencePushes`). A licence with no deployment writes
- * nothing: the branch it will one day run under pulls on its first read.
+ * D272 / #4686 — WHAT A PUSH LEAVES BEHIND, BOUND TO ITS REVISION.
  *
- * Never throws, like the push itself (D111). A database without migration 295
+ * A push the branch acknowledged records that revision as the branch's and
+ * deletes every pending row at or below it — never one above it, so an older
+ * success cannot clear newer failed work. A push that failed leaves a row
+ * carrying ITS revision; an older failure never overwrites a newer row's
+ * revision or reason, and is not recorded at all once the branch has
+ * acknowledged that revision or a later one (a late failure for a superseded
+ * push). The row is written whenever the failure is retryable, including when
+ * the deployment lookup or the licence reread was itself unavailable (the code
+ * is then the empty string and the retry resolves it afresh). A licence with
+ * cleanly no deployment writes nothing: the branch it will one day run under
+ * pulls on its first read.
+ *
+ * Never throws, like the push itself (D111). A database without the migration
  * loses the retry, not the push.
  */
-async function recordPushOutcome(env: Env, licenceId: number, result: LicencePushResult, at: string): Promise<void> {
+async function recordPushOutcome(
+  env: Env, licenceId: number, result: LicencePushResult, at: string, revision: number | null,
+): Promise<void> {
   try {
-    if (result.ok) {
-      await env.DB.prepare('DELETE FROM licence_push_pending WHERE licence_id = ?').bind(licenceId).run();
+    if (result.ok || result.no_deployment) {
+      if (revision === null) {
+        await env.DB.prepare('DELETE FROM licence_push_pending WHERE licence_id = ?').bind(licenceId).run();
+        return;
+      }
+      const acked = result.ok ? Math.max(revision, Number(result.branch_revision) || 0) : null;
+      if (acked !== null) {
+        await env.DB.prepare(
+          `UPDATE licence_sync_state
+              SET branch_revision = ?, last_success_at = ?, updated_at = datetime('now')
+            WHERE licence_id = ? AND (branch_revision IS NULL OR branch_revision <= ?)`,
+        ).bind(acked, at, licenceId, acked).run();
+      }
+      await env.DB.prepare('DELETE FROM licence_push_pending WHERE licence_id = ? AND revision <= ?')
+        .bind(licenceId, acked ?? revision).run();
       return;
     }
-    if (!result.code) return;
+    if (!result.retry && !result.code) return;
+    const code = result.code ?? '';
+    const reason = result.reason ?? null;
+    if (revision === null) {
+      // No revision store: the D272 shape, one row per licence.
+      if (!result.code) return;
+      await env.DB.prepare(
+        `INSERT INTO licence_push_pending (licence_id, code, reason, attempts, first_failed_at, last_attempt_at)
+         VALUES (?, ?, ?, 1, ?, ?)
+         ON CONFLICT(licence_id) DO UPDATE SET
+           code = excluded.code, reason = excluded.reason,
+           attempts = licence_push_pending.attempts + 1, last_attempt_at = excluded.last_attempt_at`,
+      ).bind(licenceId, code, reason, at, at).run();
+      return;
+    }
+    // A stale answer means the branch holds a LATER revision than HQ believes it
+    // allocated (HQ's counter was lost or restored): raise the counter so the
+    // next attempt is numbered above the branch, or every push would be refused.
+    if (result.failure_code === 'stale_revision' && Number(result.branch_revision) > 0) {
+      await env.DB.prepare(
+        `UPDATE licence_sync_state SET hq_revision = ?, updated_at = datetime('now')
+          WHERE licence_id = ? AND hq_revision < ?`,
+      ).bind(Number(result.branch_revision), licenceId, Number(result.branch_revision)).run();
+    }
     await env.DB.prepare(
-      `INSERT INTO licence_push_pending (licence_id, code, reason, attempts, first_failed_at, last_attempt_at)
-       VALUES (?, ?, ?, 1, ?, ?)
+      `INSERT INTO licence_push_pending
+         (licence_id, code, reason, attempts, first_failed_at, last_attempt_at, revision, failure_code)
+       SELECT ?, ?, ?, 1, ?, ?, ?, ?
+        WHERE NOT EXISTS (SELECT 1 FROM licence_sync_state WHERE licence_id = ? AND branch_revision >= ?)
        ON CONFLICT(licence_id) DO UPDATE SET
-         code = excluded.code, reason = excluded.reason,
-         attempts = licence_push_pending.attempts + 1, last_attempt_at = excluded.last_attempt_at`,
-    ).bind(licenceId, result.code, result.reason ?? null, at, at).run();
+         attempts = licence_push_pending.attempts + 1,
+         last_attempt_at = excluded.last_attempt_at,
+         code = CASE WHEN excluded.revision >= licence_push_pending.revision THEN excluded.code ELSE licence_push_pending.code END,
+         reason = CASE WHEN excluded.revision >= licence_push_pending.revision THEN excluded.reason ELSE licence_push_pending.reason END,
+         failure_code = CASE WHEN excluded.revision >= licence_push_pending.revision THEN excluded.failure_code ELSE licence_push_pending.failure_code END,
+         revision = MAX(licence_push_pending.revision, excluded.revision)`,
+    ).bind(licenceId, code, reason, at, at, revision, result.failure_code ?? null, licenceId, revision).run();
   } catch (e) {
     console.warn('[licencePush] could not record the push outcome', licenceId, (e as Error).message);
   }
@@ -250,10 +372,10 @@ export type LicencePushRetry =
  * Called from HQ's scheduled handler. Each row whose last attempt is older
  * than the window is pushed again through `pushLicenceToBranch`, which reads
  * the licence FRESH — so the retry carries the current record, not the one
- * that failed — and clears or bumps the row. A row attempted inside the
- * window is left alone, which is the throttle: a binding that stays broken
- * costs one call per licence per window, not one per tick. Reports, never
- * throws.
+ * that failed — under a NEW revision, and clears or bumps the row. A row
+ * attempted inside the window is left alone, which is the throttle: a binding
+ * that stays broken costs one call per licence per window, not one per tick.
+ * Reports, never throws.
  */
 export async function retryPendingLicencePushes(env: Env, now: Date = new Date()): Promise<LicencePushRetry> {
   let rows: { licence_id: number }[];
@@ -272,15 +394,29 @@ export async function retryPendingLicencePushes(env: Env, now: Date = new Date()
   let failed = 0;
   for (const row of rows) {
     const res = await pushLicenceToBranch(env, Number(row.licence_id), now.toISOString());
-    if (res.ok) ok += 1; else failed += 1;
+    if (res.ok || res.no_deployment) ok += 1; else failed += 1;
   }
   return { available: true, tried: rows.length, ok, failed };
+}
+
+/** #4686 — the code a licence deploys to; null when it cleanly has none. Throws when the registry is unreadable. */
+export async function deploymentCodeFor(env: Env, licenceUid: string): Promise<string | null> {
+  try {
+    const dep = await env.DB.prepare('SELECT code FROM licence_deployments WHERE licence_uid = ?')
+      .bind(licenceUid).first<{ code: string }>();
+    return dep?.code ?? null;
+  } catch (e) {
+    // A database that never created the registry has no branch to reach.
+    if (isMissingTable(e)) return null;
+    throw e;
+  }
 }
 
 async function pushOnce(
   env: Env,
   licenceId: number,
   pushedAt: string,
+  revision: number | null,
 ): Promise<LicencePushResult> {
   let licence: Row | null = null;
   try {
@@ -288,7 +424,10 @@ async function pushOnce(
       'SELECT * FROM territory_licences WHERE id = ?',
     ).bind(licenceId).first<Row>();
   } catch (e) {
-    return { ok: false, reason: `HQ could not re-read the licence to push it: ${(e as Error).message}` };
+    return {
+      ok: false, retry: true, failure_code: 'licence_unreadable',
+      reason: `HQ could not re-read the licence to push it: ${(e as Error).message}`,
+    };
   }
   if (!licence) return { ok: false, reason: 'No such licence at HQ.' };
 
@@ -297,20 +436,21 @@ async function pushOnce(
   // sentence says so.
   let code: string | null = null;
   try {
-    const dep = await env.DB.prepare(
-      'SELECT code FROM licence_deployments WHERE licence_uid = ?',
-    ).bind(String(licence.uid)).first<{ code: string }>();
-    code = dep?.code ?? null;
-  } catch {
-    // The table is missing on this database. Same answer as no row: there is
-    // no branch to reach. Distinguishing them would be a claim about
-    // provisioning that this function is not the place to make.
-    code = null;
+    code = await deploymentCodeFor(env, String(licence.uid));
+  } catch (e) {
+    // #4686 — a lookup that FAILED is not "no deployment". The old code treated
+    // both as nothing-to-do and wrote no retry, so a transient registry error
+    // during a termination left the branch unsynchronised with nothing owed.
+    return {
+      ok: false, code: null, retry: true, failure_code: 'deployment_unreadable',
+      reason: `HQ could not read which branch this licence deploys to: ${(e as Error).message}`,
+    };
   }
   if (!code) {
     return {
       ok: false,
       code: null,
+      no_deployment: true,
       // D244 — the second sentence used to promise the change "will reach the
       // branch when one is provisioned", and nothing did that: provisioning
       // pushes nothing, and until D244 a branch never asked. It asks now — a
@@ -328,6 +468,8 @@ async function pushOnce(
     return {
       ok: false,
       code,
+      retry: true,
+      failure_code: 'not_bound',
       // D244 — "will reach the branch when a binding exists" was the same
       // promise: nothing re-sends a change when HQ gains a binding. What is true
       // depends on the branch. One that holds no copy pulls it the first time
@@ -341,13 +483,17 @@ async function pushOnce(
   }
 
   let record: Record<string, unknown>;
+  let unreadable: string[] = [];
   try {
-    record = await assembleLicenceRecord(env, licence, pushedAt);
+    ({ record, unreadable } = await assembleLicenceRecordDetailed(env, licence, pushedAt, revision));
   } catch (e) {
     // A partial record is worse than a late one: a copy pushed without its
     // territory would tell the branch it holds no country.
     mirrorBranchAction(env, LICENCE_PUSH_ACTION, 'failed', code);
-    return { ok: false, code, reason: `HQ could not assemble the licence copy: ${(e as Error).message}` };
+    return {
+      ok: false, code, retry: true, failure_code: 'assemble_failed',
+      reason: `HQ could not assemble the licence copy: ${(e as Error).message}`,
+    };
   }
 
   try {
@@ -355,18 +501,55 @@ async function pushOnce(
     // The branch answers with its own object. `{ok:false, reason}` from there is
     // a real state — a branch that refused the copy — and an operator should
     // read the branch's own sentence rather than a generic success.
-    if (res && typeof res === 'object' && 'ok' in (res as Record<string, unknown>)) {
+    const ans = (res && typeof res === 'object' ? res : null) as Record<string, unknown> | null;
+    const branchRevision = ans && Number.isFinite(Number(ans.hq_revision)) && ans.hq_revision !== null
+      ? Number(ans.hq_revision) : null;
+    // #4686 — the branch holds a LATER revision than this push: it kept its
+    // copy. Superseded by a newer acknowledged push, or HQ's counter is behind.
+    if (ans && ans.stale === true) {
+      mirrorBranchAction(env, LICENCE_PUSH_ACTION, 'failed', code);
+      return {
+        ok: false, code, retry: true, failure_code: 'stale_revision', branch_revision: branchRevision,
+        reason: 'The branch already holds a later revision of this licence, so it kept its copy.',
+      };
+    }
+    if (ans && 'ok' in ans) {
       const answered = { ...(res as LicencePushResult), code };
       // D163 — the branch's OWN verdict, not the fact that it answered. A
       // refusal reaching HQ is a landed call and a failed push, and the mirror
       // records the second.
       mirrorBranchAction(env, LICENCE_PUSH_ACTION, answered.ok ? 'ok' : 'failed', code);
-      return answered;
+      if (!answered.ok) {
+        return {
+          ...answered, retry: true,
+          failure_code: ans.partial === true ? 'partial' : 'refused',
+          branch_revision: branchRevision,
+        };
+      }
+      return unreadable.length ? partialAtHq(code, unreadable, branchRevision) : { ...answered, branch_revision: branchRevision };
     }
-    mirrorBranchAction(env, LICENCE_PUSH_ACTION, 'ok', code);
-    return { ok: true, code };
+    mirrorBranchAction(env, LICENCE_PUSH_ACTION, unreadable.length ? 'failed' : 'ok', code);
+    if (unreadable.length) return partialAtHq(code, unreadable, branchRevision);
+    return { ok: true, code, branch_revision: branchRevision };
   } catch (e) {
     mirrorBranchAction(env, LICENCE_PUSH_ACTION, 'failed', code);
-    return { ok: false, code, reason: `The branch did not accept the licence: ${(e as Error).message}` };
+    return {
+      ok: false, code, retry: true, failure_code: 'unreachable',
+      reason: `The branch did not accept the licence: ${(e as Error).message}`,
+    };
   }
+}
+
+/**
+ * #4686 — the branch took the copy, but HQ could not read some optional
+ * sections to put in it. The copy is NOT reported as delivered: it is a partial
+ * push, and stays pending until HQ can send the whole.
+ */
+function partialAtHq(code: string, sections: string[], branchRevision: number | null): LicencePushResult {
+  return {
+    ok: false, code, retry: true, partial: true, failed_sections: sections, failure_code: 'partial',
+    branch_revision: branchRevision,
+    reason: `HQ could not read ${sections.join(', ')}, so the branch received the licence without `
+      + `${sections.length === 1 ? 'that section' : 'those sections'}. It is not reported as fully delivered.`,
+  };
 }

@@ -1,3 +1,4 @@
+import { withMentorEligible } from '../services/mentorEligibility';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
 /**
  * T13 — Advisors + office-hour slots + bookings + reviews.
@@ -40,7 +41,7 @@ import {
 } from '../services/advisorMoney';
 import {
   PayoutAccountNotReady, SettlementDisabled,
-  chargeSession, connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount,
+  chargeSession, FeeSnapshotMissing, connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount,
 } from '../services/advisorConnect';
 // The platform customer the destination charge is made against. Reused rather
 // than re-derived: `routes/wellbeing.ts` charges its own bookings through this
@@ -2000,13 +2001,13 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
     const row = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
       .bind(Number(c.req.param('id'))).first<BookingRow & {
         amount_cents: number | null; billing_state: string;
+        platform_cut_cents: number | null; take_rate_bps: number | null;
       }>();
     if (!row || row.advisor_id !== m.id) return c.json({ detail: 'Booking not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
 
-    const amount_cents = 'amount_cents' in body
-      ? parsePriceCents(body.amount_cents)
-      : (row.amount_cents ?? null);
+    const stored = row.amount_cents == null ? null : Number(row.amount_cents);
+    const amount_cents = 'amount_cents' in body ? parsePriceCents(body.amount_cents) : stored;
 
     let billing_state = body.billing_state == null
       ? row.billing_state
@@ -2026,29 +2027,70 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
       billing_state = 'billed';
     }
 
-    // 241 — THE CUT IS STAMPED HERE, SERVER-SIDE, AND THE RATE WITH IT.
+    // #4679 — THE PRICE, THE RATE AND THE CUT ARE A SNAPSHOT, AND A STATUS
+    // UPDATE DOES NOT TOUCH THEM.
     //
-    // Two reasons it is a stored column rather than something the page
-    // multiplies. The client never computes money: a rounding choice made in a
-    // component is a rounding choice nobody can audit. And the RATE is stored
-    // beside the amount because an operator may change it — a line divided at
-    // 15% must still read 15% after the setting moves to 12%, or a quarter an
-    // advisor already reconciled restates itself.
-    //
-    // Clearing the price clears both. A line with no amount has no cut, and
-    // leaving a stale cut behind would be a figure with nothing under it.
-    const rate = await takeRate(c.env);
-    const cut = cutCents(amount_cents, rate.bps);
-    await c.env.DB.prepare(
+    // This route used to re-stamp `platform_cut_cents` and `take_rate_bps` from
+    // today's setting on every call, so marking a line 15%-priced as collected
+    // after the operator moved the rate to 12% rewrote history. Now the
+    // snapshot is written in exactly two cases, both a price decision:
+    //   * the line had no price and now has one (first pricing), and
+    //   * the advisor said `reprice: true` (explicit repricing).
+    // Anything else keeps the stored amount, rate and cut as they are.
+    const pricing = amount_cents !== stored;
+    const repricing = body.reprice === true;
+    if (body.reprice != null && typeof body.reprice !== 'boolean') {
+      return c.json({ detail: 'reprice must be true or false' }, 400);
+    }
+    if ((pricing && stored != null) && !repricing) {
+      return c.json({
+        detail: 'This session already has a price. Send reprice: true to change it on purpose.',
+        code: 'reprice_required',
+      }, 409);
+    }
+    if (repricing && !('amount_cents' in body)) {
+      return c.json({ detail: 'reprice needs the new amount_cents' }, 400);
+    }
+    if ((pricing || repricing) && stored != null
+      && (row.billing_state === 'collected' || row.billing_state === 'written_off')) {
+      // Money was taken, or the line was closed: a price change would restate
+      // a settled figure. Refused rather than allowed with a flag.
+      return c.json({
+        detail: 'This session is already settled, so its price cannot be changed.',
+        code: 'settled_price',
+      }, 409);
+    }
+
+    let cut: number | null;
+    let bps: number | null;
+    if (amount_cents == null) {
+      cut = null; bps = null;
+    } else if (pricing || repricing) {
+      const rate = await takeRate(c.env);
+      cut = cutCents(amount_cents, rate.bps);
+      bps = rate.bps;
+    } else {
+      cut = row.platform_cut_cents == null ? null : Number(row.platform_cut_cents);
+      bps = row.take_rate_bps == null ? null : Number(row.take_rate_bps);
+    }
+
+    // COMPARE-AND-SWAP on the state this request read: an edit that lands
+    // between the read and the write is a 409, not a silent overwrite.
+    const res = await c.env.DB.prepare(
       `UPDATE advisor_bookings
           SET amount_cents = ?, billing_state = ?,
               platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
-        WHERE id = ?`
+        WHERE id = ? AND billing_state = ? AND amount_cents IS ?`
     ).bind(
-      amount_cents, billing_state,
-      cut, amount_cents == null ? null : rate.bps,
-      nowIso(), row.id,
+      amount_cents, billing_state, cut, bps, nowIso(),
+      row.id, row.billing_state, stored,
     ).run();
+    if (Number((res as any)?.meta?.changes ?? 0) !== 1) {
+      return c.json({
+        detail: 'This session changed while you were editing it. Reload and try again.',
+        code: 'booking_changed',
+      }, 409);
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
       .bind(row.id).first<BookingRow & { amount_cents: number | null; billing_state: string }>();
     return c.json(bookingDto(fresh!, advisorMoney(fresh!)));
@@ -2180,6 +2222,16 @@ advisors.post('/bookings/:id/pay', async (c) => {
       }, 409);
     }
 
+    // #4679 — refused BEFORE a Stripe customer is created: a line with no
+    // stored fee cannot be charged, and finding that out after a side effect
+    // is the ordering mistake the guards above exist to avoid.
+    if ((row as any).take_rate_bps == null || (row as any).platform_cut_cents == null) {
+      return c.json({
+        detail: 'This session has no recorded fee, so it cannot be charged yet. Your advisor needs to confirm its price.',
+        code: 'fee_snapshot_missing',
+      }, 409);
+    }
+
     const customerId = await ensurePaymentsCustomer(c.env, user as TierUser);
     const intent = await chargeSession(c.env, {
       account,
@@ -2191,6 +2243,11 @@ advisors.post('/bookings/:id/pay', async (c) => {
       // the cut against this figure; charging anything else would divide a
       // number the ledger does not hold.
       amountCents: gross,
+      // #4679 — THE FEE IS THE LINE'S OWN SNAPSHOT, not today's setting.
+      feeSnapshot: {
+        bps: (row as any).take_rate_bps == null ? null : Number((row as any).take_rate_bps),
+        cutCents: (row as any).platform_cut_cents == null ? null : Number((row as any).platform_cut_cents),
+      },
       description: row.topic ? `Advisory session · ${row.topic}` : 'Advisory session',
       customerId,
     });
@@ -2229,6 +2286,12 @@ advisors.post('/bookings/:id/pay', async (c) => {
         settlement: e.mode,
       }, 503);
     }
+    if (e instanceof FeeSnapshotMissing) {
+      return c.json({
+        detail: 'This session has no recorded fee, so it cannot be charged yet. Your advisor needs to confirm its price.',
+        code: 'fee_snapshot_missing',
+      }, 409);
+    }
     if (e instanceof PayoutAccountNotReady) {
       return c.json({
         detail: 'This advisor cannot take payment yet.',
@@ -2258,6 +2321,7 @@ advisors.get('/me/earnings', async (c) => {
               SUM(COALESCE(amount_cents, 0)) AS total_cents
          FROM advisor_bookings
         WHERE advisor_id = ?
+          AND NOT (status IN ('cancelled', 'no_show') AND billing_state != 'collected')
         GROUP BY billing_state`
     ).bind(m.id).all<{ billing_state: string; bookings: number; total_cents: number }>();
     const by = new Map((rows.results || []).map((r) => [r.billing_state, r]));
@@ -2365,7 +2429,8 @@ advisors.get('/me/ledger', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT b.founder_user_id AS client_user_id, u.name AS client_name,
               b.amount_cents AS amount_cents, b.platform_cut_cents AS platform_cut_cents,
-              b.take_rate_bps AS take_rate_bps
+              b.take_rate_bps AS take_rate_bps, b.billing_state AS billing_state,
+              b.status AS status, b.id AS booking_id
          FROM advisor_bookings b
          LEFT JOIN users u ON u.id = b.founder_user_id
         WHERE b.advisor_id = ?
@@ -2376,10 +2441,19 @@ advisors.get('/me/ledger', async (c) => {
     ).bind(m.id, from, from, until, until).all<{
       client_user_id: number | null; client_name: string | null;
       amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null;
+      billing_state: string | null; status: string | null; booking_id: number;
     }>();
 
     const rate = await takeRate(c.env);
-    const lines = rows.results || [];
+    // #4679 — A CANCELLED OR MISSED SESSION THAT WAS NEVER COLLECTED OWES
+    // NOTHING, whatever price was typed on it. It leaves every money total and
+    // is counted on its own. One that WAS collected stays, because the money is
+    // real, and `refunds_owed` says it is owed back.
+    const all = rows.results || [];
+    const voided = (l: { status: string | null; billing_state: string | null }) =>
+      (l.status === 'cancelled' || l.status === 'no_show') && l.billing_state !== 'collected';
+    const lines = all.filter((l) => !voided(l));
+    const voidSessions = all.length - lines.length;
 
     // Grouped in the worker rather than by SQL, because the cut of a line
     // recorded before 241 has to be DERIVED from its stored rate (or the
@@ -2463,6 +2537,79 @@ advisors.get('/me/ledger', async (c) => {
       lines.map((l) => ({ amount_cents: l.amount_cents, take_rate_bps: l.take_rate_bps })),
       rate.bps,
     );
+    // #4679 — WHAT HAPPENED TO THE MONEY, one total per state, each summed from
+    // the same stored per-line snapshot as `totals`. `totals` is what was
+    // PRICED; only `collected` is money the advisor was paid, so only that is
+    // ever labelled "received". A line is in exactly one of unpriced, billed,
+    // collected or written_off.
+    const stateOf = (l: { amount_cents: number | null; billing_state: string | null }) =>
+      l.amount_cents == null ? 'unpriced'
+        : l.billing_state === 'collected' ? 'collected'
+          : l.billing_state === 'written_off' ? 'written_off' : 'billed';
+    const bucket = (state: string) => totalLines(
+      lines.filter((l) => stateOf(l) === state)
+        .map((l) => ({ amount_cents: l.amount_cents, take_rate_bps: l.take_rate_bps })),
+      rate.bps,
+    );
+    const stateTotals = (state: string) => {
+      const t = bucket(state);
+      return {
+        sessions: t.priced, gross_cents: t.gross_cents,
+        cut_cents: t.cut_cents, net_cents: t.net_cents,
+      };
+    };
+    // Refund rows are read on their own and tolerated: a collected charge on a
+    // cancelled or missed session is owed back (open) or was refunded
+    // (resolved by an operator). Nothing here moves money.
+    const refundByBooking = new Map<number, { cents: number; resolved: boolean }>();
+    try {
+      const rr = await c.env.DB.prepare(
+        `SELECT r.booking_id AS booking_id, r.amount_cents AS amount_cents, r.resolved_at AS resolved_at
+           FROM advisory_refunds_due r
+           JOIN advisor_bookings b ON b.id = r.booking_id
+          WHERE b.advisor_id = ?`
+      ).bind(m.id).all<{ booking_id: number; amount_cents: number | null; resolved_at: string | null }>();
+      for (const r of rr.results || []) {
+        if (r.amount_cents != null) {
+          refundByBooking.set(Number(r.booking_id), {
+            cents: Number(r.amount_cents), resolved: r.resolved_at != null,
+          });
+        }
+      }
+    } catch { /* table absent or unreadable: no refund figure, never a guess */ }
+    const refundsFor = (resolved: boolean) => all
+      .map((l) => refundByBooking.get(Number(l.booking_id)))
+      .filter((r): r is { cents: number; resolved: boolean } => !!r && r.resolved === resolved);
+    // PAID OUT is the provider paying the advisor, which is a separate event
+    // from collecting. Read from the payout ledger in the same window; null
+    // (never 0) when it could not be read.
+    let paidOutCents: number | null = null;
+    try {
+      const po = await c.env.DB.prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS cents
+           FROM advisor_payouts
+          WHERE advisor_id = ? AND state = 'paid'
+            AND (? IS NULL OR datetime(COALESCE(paid_at, scheduled_for, created_at)) >= datetime(?))
+            AND (? IS NULL OR datetime(COALESCE(paid_at, scheduled_for, created_at)) < datetime(?))`
+      ).bind(m.id, from, from, until, until).first<{ cents: number }>();
+      paidOutCents = Number(po?.cents ?? 0);
+    } catch { paidOutCents = null; }
+    const states = {
+      billed: stateTotals('billed'),
+      collected: stateTotals('collected'),
+      written_off: stateTotals('written_off'),
+      unpriced: { sessions: bucket('unpriced').unpriced },
+      refunds_owed: {
+        sessions: refundsFor(false).length,
+        amount_cents: refundsFor(false).reduce((n, r) => n + r.cents, 0),
+      },
+      refunded: {
+        sessions: refundsFor(true).length,
+        amount_cents: refundsFor(true).reduce((n, r) => n + r.cents, 0),
+      },
+      paid_out_cents: paidOutCents,
+      void_sessions: voidSessions,
+    };
     const clients = [...byClient.values()]
       .sort((a, b) => b.gross_cents - a.gross_cents)
       .map(clientLineDto);
@@ -2483,7 +2630,10 @@ advisors.get('/me/ledger', async (c) => {
         // the sessions nobody priced would be a smaller number presented as a
         // complete one.
         unpriced_sessions: totals.unpriced,
+        // The money actually received: collected lines only, net of the cut.
+        received_cents: states.collected.net_cents,
       },
+      states,
       // NULL WHEN THERE IS NOTHING TO CONCENTRATE. A share of zero gross is
       // not 0% — it is a question with no answer, and 0% reads as "well
       // spread", which is the opposite of what an empty quarter means.
@@ -2545,6 +2695,16 @@ advisors.put('/me/period-notes/:key', async (c) => {
     const key = String(c.req.param('key') || '');
     if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
     const body = await c.req.json().catch(() => ({} as any));
+    // #4679 — A NOTE IS FILED AGAINST THE PERIOD IT WAS WRITTEN FOR. The page
+    // names that period in the body; if it is not the period in the URL (a
+    // slow response from an earlier quarter saved after the reader moved on),
+    // nothing is written. Absent is allowed so older clients keep working.
+    if (body.period_key != null && String(body.period_key) !== key) {
+      return c.json({
+        detail: `This note was written for ${String(body.period_key).slice(0, 16)}, not ${key}. Nothing was saved.`,
+        code: 'period_mismatch',
+      }, 409);
+    }
     const text = trimOrNull(body.body, 8000);
     if (!text) return c.json({ detail: 'A note needs some text. Use DELETE to remove one.' }, 400);
     const source = ['advisor', 'ai', 'edited'].includes(String(body.source))
@@ -2737,7 +2897,8 @@ advisors.get('/me/tax-summary', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT amount_cents, platform_cut_cents, take_rate_bps, founder_user_id
          FROM advisor_bookings
-        WHERE advisor_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`
+        WHERE advisor_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)
+          AND NOT (status IN ('cancelled', 'no_show') AND billing_state != 'collected')`
     ).bind(m.id, `${year}-01-01T00:00:00.000Z`, `${year + 1}-01-01T00:00:00.000Z`)
       .all<{ amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null; founder_user_id: number | null }>();
     const lines = rows.results || [];
@@ -3455,14 +3616,14 @@ advisors.get('/admin/cohort-assignments/assignable', async (c) => {
   try {
     await requireAdmin(c);
     await ensureAdvisorStoresSchema(c.env);
-    const rows = await c.env.DB.prepare(
+    // D4807: the one mentor-eligibility rule (services/mentorEligibility.ts), shared with the catalogue's counts.
+    const rows = await c.env.DB.prepare(await withMentorEligible(c.env,
       `SELECT u.id AS id, u.name AS name, u.email AS email, a.id AS advisor_profile_id
          FROM users u
          LEFT JOIN advisors a ON a.user_id = u.id
-        WHERE u.is_active = 1 AND (LOWER(u.role) = 'advisor' OR EXISTS (
-          SELECT 1 FROM account_licences l WHERE l.user_id = u.id AND l.licence = 'advisor' AND l.revoked_at IS NULL))
+        WHERE {ELIGIBLE}
         ORDER BY u.name ASC
-        LIMIT 500`
+        LIMIT 500`)
     ).all<{ id: number; name: string | null; email: string | null; advisor_profile_id: number | null }>();
     return c.json({
       items: (rows.results || []).map((r) => ({
@@ -3501,15 +3662,15 @@ async function hiddenFounderCounts(env: Env): Promise<{ byRow: Map<number, numbe
                        WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)
         GROUP BY a.id`
     ).all<{ id: number; n: number }>();
-    const total = await env.DB.prepare(
+    const total = await env.DB.prepare(await withMentorEligible(env,
       `SELECT COUNT(DISTINCT o.founder_user_id) AS n
          FROM advisor_cohort_assignments a
          JOIN users u ON u.id = a.advisor_user_id
          JOIN cohort_advisor_optouts o
            ON o.advisor_user_id = a.advisor_user_id AND o.withdrawn_at IS NULL
-        WHERE a.is_active = 1 AND LOWER(u.role) = 'advisor' AND u.is_active = 1
+        WHERE a.is_active = 1 AND {ELIGIBLE}
           AND EXISTS (SELECT 1 FROM company_week_status w
-                       WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)`
+                       WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)`)
     ).first<{ n: number }>();
     return {
       byRow: new Map((rows.results || []).map((r) => [Number(r.id), Number(r.n) || 0])),
@@ -3552,7 +3713,7 @@ advisors.get('/admin/cohort-assignments', async (c) => {
   try {
     await requireAdmin(c);
     await ensureAdvisorStoresSchema(c.env);
-    const rows = await c.env.DB.prepare(
+    const rows = await c.env.DB.prepare(await withMentorEligible(c.env,
       // `advisor_role` is the target's CURRENT role, not the one they had when
       // the row was written. That is what turns this list from a log into
       // something that can answer "who has access who should not": a still
@@ -3564,16 +3725,18 @@ advisors.get('/admin/cohort-assignments', async (c) => {
               a.cohort_cycle_id AS cohort_cycle_id, a.assigned_at AS assigned_at,
               a.unassigned_at AS unassigned_at, a.is_active AS is_active,
               a.note AS note, u.name AS advisor_name, u.email AS advisor_email,
-              u.role AS advisor_role, u.is_active AS advisor_is_active
+              u.role AS advisor_role, u.is_active AS advisor_is_active,
+              -- D4807: eligibility is the one rule, not the role string: an additional Advisor licence counts, a revoked one does not.
+              COALESCE({ELIGIBLE}, 0) AS advisor_eligible
          FROM advisor_cohort_assignments a
          LEFT JOIN users u ON u.id = a.advisor_user_id
         ORDER BY a.assigned_at DESC
-        LIMIT 500`
+        LIMIT 500`)
     ).all<{
       id: number; uid: string; advisor_user_id: number; cohort_cycle_id: number;
       assigned_at: string; unassigned_at: string | null; is_active: number;
       note: string | null; advisor_name: string | null; advisor_email: string | null;
-      advisor_role: string | null; advisor_is_active: number | null;
+      advisor_role: string | null; advisor_is_active: number | null; advisor_eligible: number;
     }>();
     const hidden = await hiddenFounderCounts(c.env);
     const founders = await activatedFounderCounts(c.env);
@@ -3583,6 +3746,8 @@ advisors.get('/admin/cohort-assignments', async (c) => {
         is_active: !!r.is_active,
         // A deleted user has no account to be active: null, not false.
         advisor_is_active: r.advisor_is_active == null ? null : Number(r.advisor_is_active) === 1,
+        // D4807: the one mentor-eligibility rule, so the page's role-change warning agrees with the counts.
+        advisor_eligible: Number(r.advisor_eligible) === 1,
         founders_hidden: hidden ? hidden.byRow.get(Number(r.id)) ?? 0 : null,
         founders_in_cohort: founders ? founders.get(Number(r.cohort_cycle_id)) ?? 0 : null,
       })),
