@@ -1,7 +1,7 @@
 /** #3708: the owner's staged diagnostic, against fakes: each stage, in order, and where it stops. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runDiagnosis, joinStop, diagnoseCallbacks, type DiagnoseDeps, type DiagnoseReport } from '../src/diagnose.ts';
+import { runDiagnosis, joinStop, diagnoseCallbacks, DIAGNOSE_STAGES, REPORT_TRIES, FINAL_REPORT_TRIES, reportBackoffMs, type DiagnoseDeps, type DiagnoseEvent, type DiagnoseSnapshot, type DiagnoseReport } from '../src/diagnose.ts';
 import { RuntimeHost } from '../src/runtime.ts';
 import { signRequest } from '../src/callback.ts';
 import { FakeAdapter } from '../src/fakeAdapter.ts';
@@ -30,20 +30,28 @@ class ScriptedMeet implements MeetingAdapter {
   diagnostic() { return this.step; }
 }
 
-function harness(meet: ScriptedMeet | null, opts: { fetch?: typeof fetch; launch?: DiagnoseDeps['launch']; probe?: DiagnoseDeps['probe'] } = {}) {
-  const clock = new FakeClock(), reports: DiagnoseReport[] = [], shots: Uint8Array[] = [], probes: Uint8Array[] = [];
+const ID = '00000000-0000-4000-8000-000000004857';
+function harness(meet: ScriptedMeet | null, opts: { fetch?: typeof fetch; launch?: DiagnoseDeps['launch']; probe?: DiagnoseDeps['probe']; report?: DiagnoseDeps['report'] } = {}) {
+  const clock = new FakeClock(), reports: DiagnoseEvent[] = [], snapshots: DiagnoseSnapshot[] = [], shots: Uint8Array[] = [], probes: Uint8Array[] = [];
+  const seen = new Set<string>();
   let closed = 0;
   const deps: DiagnoseDeps = {
-    clock, report: async (r) => { reports.push(r); },
+    clock, diagnosisId: ID,
+    // Acknowledged snapshots only; `reports` is each stage event once, in the order it ran.
+    report: async (s) => {
+      await opts.report?.(s);
+      snapshots.push(s);
+      for (const e of [...s.events].sort((a, b) => a.rev - b.rev)) if (!seen.has(`${e.stage}:${e.rev}`)) { seen.add(`${e.stage}:${e.rev}`); reports.push(e); }
+    },
     screenshot: async (png) => { shots.push(png); },
     probe: opts.probe ?? (async (wav) => { probes.push(wav); }),
     fetch: opts.fetch ?? (async () => new Response(null, { status: 302 })),
     launch: opts.launch ?? (async () => ({ page: { screenshot: async () => new Uint8Array([137, 80, 78, 71]), url: () => 'https://meet.google.com/x' }, meet: meet!, close: async () => { closed += 1; } })),
     admitMs: 60_000, audioMs: 5_000,
   };
-  return { clock, deps, reports, shots, probes, closed: () => closed };
+  return { clock, deps, reports, snapshots, shots, probes, closed: () => closed };
 }
-const table = (reports: DiagnoseReport[]) => reports.filter((r) => r.result !== 'running').map((r) => `${r.stage}:${r.result}:${r.code}`);
+const table = (reports: readonly DiagnoseReport[]) => reports.filter((r) => r.result !== 'running').map((r) => `${r.stage}:${r.result}:${r.code}`);
 
 test('admitted with frames: every stage passes in order and a silent probe the frames’ length uploads', async () => {
   const meet = new ScriptedMeet({ join: async () => 'meet_join_result:lobby' });
@@ -131,6 +139,113 @@ test('Zoom: container and egress to Zoom only; the join is the Worker’s to rea
     'join:skipped:zoom_joins_with_run_credentials', 'admission:skipped:zoom_joins_with_run_credentials', 'audio:skipped:zoom_joins_with_run_credentials']);
 });
 
+// ── #4857: running a stage and telling the Worker about it are separate facts ──
+
+/** A Meet whose frames start the moment the probe listens, so a delayed retry never misses them. */
+class AutoMeet extends ScriptedMeet {
+  joins = 0;
+  override async join() { this.joins += 1; await super.join(); }
+  override audio(on: (f: AudioFrame) => void) { const off = super.audio(on); queueMicrotask(() => this.frame()); return off; }
+}
+const SCENARIOS: Array<[string, () => AutoMeet]> = [
+  ['admitted with frames', () => new AutoMeet({ join: async () => 'meet_join_result:lobby' })],
+  ['stopped at the sign-in wall', () => { const m: AutoMeet = new AutoMeet({ join: async () => { m.step = 'meet_page_signin'; throw new AdapterFailure('platform_blocked'); } }); return m; }],
+];
+const URL_ = 'https://meet.google.com/abc-defg-hij';
+/** What the Worker would hold: each stage's highest event revision across the acknowledged snapshots. */
+const held = (snaps: DiagnoseSnapshot[]) => {
+  const out = new Map<string, DiagnoseEvent>();
+  for (const s of snaps) for (const e of s.events) if (!out.has(e.stage) || out.get(e.stage)!.rev < e.rev) out.set(e.stage, e);
+  return out;
+};
+const heldTable = (snaps: DiagnoseSnapshot[]) => DIAGNOSE_STAGES.map((st) => { const e = held(snaps).get(st); return e ? `${st}:${e.result}:${e.code}` : `${st}:none`; });
+/** Fail the first `times` sends that carry `stage` finished (not merely running). */
+const failing = (stage: string, times: number) => { let left = times; return async (s: DiagnoseSnapshot) => {
+  if (left > 0 && s.events.some((e) => e.stage === stage && e.result !== 'running')) { left -= 1; throw new Error('diagnose_503'); }
+}; };
+async function run(make: () => AutoMeet, report?: DiagnoseDeps['report']) {
+  const meet = make(), h = harness(meet, { ...(report ? { report } : {}) });
+  const outcome = await h.clock.until(runDiagnosis('google_meet', URL_, h.deps), 250);
+  return { meet, h, outcome };
+}
+
+for (const [name, make] of SCENARIOS) {
+  const baseline = async () => heldTable((await run(make)).h.snapshots);
+  for (const stage of DIAGNOSE_STAGES) {
+    for (const [kind, times] of [['one transient failure', 1], ['a whole report budget failing', REPORT_TRIES]] as const) {
+      test(`${name}: ${kind} after ${stage} completes never loses it, and nothing reruns`, async () => {
+        const expected = await baseline();
+        assert.ok(expected.every((r) => !r.endsWith(':none')), expected.join());
+        const { meet, h, outcome } = await run(make, failing(stage, times));
+        // The stage reached the Worker, with the same result as an undisturbed run.
+        assert.deepEqual(heldTable(h.snapshots), expected);
+        assert.deepEqual(outcome.undelivered, []);
+        // Ran once: the injected failure repeated sends, never actions.
+        assert.equal(meet.joins, 1); assert.equal(h.probes.length <= 1, true); assert.ok(h.shots.length <= 1);
+        assert.equal(h.closed(), 1); assert.equal(meet.left, 1);
+        // The event keeps its identity across resends, and says it was resent.
+        const revs = new Set(h.snapshots.flatMap((s) => s.events.filter((e) => e.stage === stage && e.result !== 'running').map((e) => e.rev)));
+        assert.equal(revs.size, 1, `${stage} changed revision`);
+        assert.equal(held(h.snapshots).get(stage)!.attempts, times, `${stage} attempts`);
+      });
+    }
+  }
+}
+
+test('every callback carries every stage run so far, with one diagnosis id and revisions that only rise', async () => {
+  const { h } = await run(SCENARIOS[0][1]);
+  let seen = new Set<string>(), last = 0;
+  for (const s of h.snapshots) {
+    assert.equal(s.diagnosis_id, ID);
+    assert.ok(s.revision >= last); last = s.revision;
+    for (const e of s.events) assert.ok(e.rev >= 1 && e.rev <= s.revision && Number.isFinite(e.at));
+    // Nothing run earlier drops out of a later snapshot.
+    const now = new Set(s.events.map((e) => e.stage));
+    for (const st of seen) assert.ok(now.has(st as never), `${st} dropped from revision ${s.revision}`);
+    seen = now;
+  }
+  assert.equal(h.snapshots.at(-1)!.events.length, DIAGNOSE_STAGES.length);
+  // Stage times come from the injected clock, not the real one.
+  assert.ok(h.snapshots.at(-1)!.events.every((e) => e.at >= 1_000_000 && e.at < 2_000_000));
+});
+
+test('a callback that never answers: the run still finishes, bounded, and the stages come back as undelivered, not as failed', async () => {
+  let calls = 0;
+  const { meet, h, outcome } = await run(SCENARIOS[0][1], async () => { calls += 1; throw new Error('diagnose_503'); });
+  // Ran: every action happened once and the checks themselves passed.
+  assert.equal(meet.joins, 1); assert.equal(h.probes.length, 1);
+  assert.deepEqual(outcome.undelivered, [...DIAGNOSE_STAGES]);
+  assert.equal(h.snapshots.length, 0);
+  // Bounded: a short budget per stage event (there are 7: admission reported twice), then one long final flush.
+  assert.equal(calls, 7 * REPORT_TRIES + FINAL_REPORT_TRIES);
+});
+
+test('the bot says in its log how many stages it could not deliver, and nothing else', async () => {
+  const lines: Array<[string, Record<string, unknown>]> = [];
+  const meet = new AutoMeet({ join: async () => 'meet_join_result:in_call' }), h = harness(meet, { report: async () => { throw new Error('x'); } });
+  await h.clock.until(runDiagnosis('google_meet', URL_, { ...h.deps, log: (e, f) => { lines.push([e, f]); } }), 250);
+  assert.deepEqual(lines, [['diagnose_delivery_failed', { undelivered: 6 }]]);
+});
+
+test('the retry backs off on the injected clock: 0.5 s, 1 s, 2 s, 4 s, 8 s, and never reads the real one', async () => {
+  const stamps: number[] = [];
+  const meet = new AutoMeet({ join: async () => 'meet_join_result:in_call' }), h = harness(meet, { report: async () => { stamps.push(h.clock.now()); throw new Error('x'); } });
+  const real = Date.now; Date.now = () => { throw new Error('the real clock was read'); };
+  try { await h.clock.until(runDiagnosis('google_meet', URL_, h.deps), 250); } finally { Date.now = real; }
+  const final = stamps.slice(-FINAL_REPORT_TRIES);
+  assert.deepEqual(final.slice(1).map((t, i) => t - final[i]), [500, 1000, 2000, 4000, 8000]);
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(reportBackoffMs), [500, 1000, 2000, 4000, 8000, 8000]);
+});
+
+test('a late acknowledgement is a delivery, not a duplicate action: the same snapshot may be sent twice', async () => {
+  // The Worker stores it but the answer is lost: the bot sends again; the stage still ran once.
+  const seenRevs: number[] = [];
+  const { meet, h } = await run(SCENARIOS[0][1], async (s) => { seenRevs.push(s.revision); if (seenRevs.length === 3) throw new Error('lost answer'); });
+  assert.equal(seenRevs[2], seenRevs[3]);
+  assert.equal(meet.joins, 1);
+  assert.equal(heldTable(h.snapshots).at(-1), 'audio:pass:chunk_uploaded');
+});
+
 test('callbacks are signed with the run key to the diagnostic’s own paths', async () => {
   const sent: Array<{ path: string; raw: string; sig: string; ts: string }> = [];
   const KEY = 'k'.repeat(64), ID = '00000000-0000-4000-8000-0000000000aa';
@@ -139,7 +254,7 @@ test('callbacks are signed with the run key to the diagnostic’s own paths', as
     sent.push({ path: new URL(String(url)).pathname, raw: String(init!.body), sig: h.get('x-meeting-bot-signature')!, ts: h.get('x-meeting-bot-timestamp')! });
     return new Response('{}');
   }, () => 1_700_000_000_000);
-  await cb.report({ stage: 'join', result: 'pass', code: 'asked_to_join' });
+  await cb.report({ diagnosis_id: ID, revision: 1, events: [{ stage: 'join', result: 'pass', code: 'asked_to_join', rev: 1, at: 1_700_000_000_000, attempts: 0 }] });
   await cb.probe(new Uint8Array([1, 2]));
   assert.deepEqual(sent.map((s) => s.path), [`/api/meeting-bots/diagnostics/${ID}/report`, `/api/meeting-bots/diagnostics/${ID}/probe`]);
   const expected = await signRequest(KEY, sent[0].path, sent[0].raw, 1_700_000_000_000);

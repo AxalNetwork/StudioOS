@@ -29,6 +29,7 @@ import { SignJWT } from 'jose';
 import companyEin from '../src/routes/company_ein.ts';
 import { decryptColumn } from '../src/services/columnCipher.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { labEnrollmentSchema } from './_lab_evidence.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const SYNTHETIC = '12-3456789';
@@ -71,6 +72,7 @@ function fixture({ labActive = 1 } = {}) {
     invitation_id INTEGER, cofounder_connection_id INTEGER, added_by_user_id INTEGER, accepted_at TEXT, removed_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')));
     INSERT INTO project_members (project_id, user_id, role, status) VALUES (1, ${COFOUNDER}, 'cofounder', 'accepted'), (1, ${ADVISOR}, 'advisor', 'accepted');`);
+  labEnrollmentSchema(db); // D4657: the fixture's Lab founders, enrolled as the migration would
   return db;
 }
 

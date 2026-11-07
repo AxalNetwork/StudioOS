@@ -878,6 +878,18 @@ export function myAttemptRows(attempts) {
   return [...by.values()];
 }
 
+/**
+ * #4648: what each "Your progress" figure is: where it comes from, what it counts and over what time. Every tile carries
+ * its entry, and a test holds the two lists equal. There is no "watch time": the player saves where a video stopped (a
+ * resume position, which moves back on a rewind), not how long it was watched, so no duration is claimed (D4648).
+ */
+export const STAT_DEFINITIONS = Object.freeze({
+  courses: { source: 'your course progress records', definition: 'Courses you have started and not completed.', window: 'Right now' },
+  lessons: { source: 'your lesson progress records', definition: 'Lessons whose completion was recorded this month.', window: 'This calendar month (UTC)' },
+  videos: { source: 'where the video player saved your position', definition: 'Videos you played: each video whose position was saved this month, counted once. This is not time watched.', window: 'This calendar month (UTC)' },
+  exams: { source: 'your submitted exam attempts', definition: 'Exams you passed, of the exams you have submitted an attempt for.', window: 'All time' },
+});
+
 /** lr1: the "Your progress" strip's four figures; a figure not recorded reads "Not recorded", never 0. */
 export function statsTiles(stats) {
   const nr = 'Not recorded';
@@ -886,9 +898,9 @@ export function statsTiles(stats) {
   return [
     { key: 'courses', label: 'Courses in progress', value: n(stats?.courses_in_progress) },
     { key: 'lessons', label: 'Lessons completed this month', value: n(stats?.lessons_completed_this_month) },
-    { key: 'watch', label: 'Watch time this month', value: durationLabel(stats?.watch_seconds_this_month) || nr },
+    { key: 'videos', label: 'Videos played this month', value: n(stats?.videos_played_this_month) },
     { key: 'exams', label: 'Exams passed', value: exams && Number.isFinite(Number(exams.sat)) && Number.isFinite(Number(exams.passed)) ? `${Number(exams.passed)} of ${Number(exams.sat)}` : nr },
-  ];
+  ].map((t) => ({ ...t, ...STAT_DEFINITIONS[t.key] }));
 }
 
 // ---------------------------------------------------------------------------
