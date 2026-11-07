@@ -22,7 +22,6 @@
     "cloudflare-worker/src/routes/projects.ts": 16,
     "cloudflare-worker/src/routes/wellbeing.ts": 42,
     "cloudflare-worker/src/services/advisor/guardrails.ts": 5,
-    "cloudflare-worker/src/services/advisorStoresSchema.ts": 20,
     "cloudflare-worker/src/services/aiRouter.ts": 3,
     "cloudflare-worker/src/services/authBlockersSchema.ts": 4,
     "cloudflare-worker/src/services/authSms.ts": 1,

@@ -107,7 +107,7 @@ test('D264: HQ\'s route, HQ\'s Deploy step and the workflow default to the same 
   const input = wf.slice(wf.indexOf('      do_jurisdiction:'), wf.indexOf('options:', wf.indexOf('      do_jurisdiction:')));
   const wfDefault = /default: '([a-z]+)'/.exec(input)?.[1];
   const routeDefault = /String\(body\.do_jurisdiction \?\? '([a-z]+)'\)/.exec(read('cloudflare-worker/src/routes/admin_deployments.ts'))?.[1];
-  const uiDefault = /const \[doJur, setDoJur\] = useState\('([a-z]+)'\);/.exec(read('frontend/src/pages/admin/AdminLicences.jsx'))?.[1];
+  const uiDefault = /const \[doJur, setDoJur\] = useState\('([a-z]+)'\);/.exec(read('frontend/src/pages/admin/licences/DeployStep.jsx'))?.[1];
   assert.ok(wfDefault && routeDefault && uiDefault, `a default could not be read: ${wfDefault} ${routeDefault} ${uiDefault}`);
   assert.deepEqual([wfDefault, routeDefault], [uiDefault, uiDefault], 'the three places that choose a DO jurisdiction disagree on the default');
 });
