@@ -60,8 +60,8 @@ import {
   mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
 } from './_t13t14t15_helpers';
 import {
-  daysBetween, mergePatch, parseCents, parseHours, parsePeriod,
-  requireOwnEngagement, requireOwnQuote, requirePartnerRole, utilisationFor,
+  currentMonthlyCents, daysBetween, mergePatch, parseCents, parseHours, parsePeriod,
+  requireOwnEngagement, requireOwnQuote, requirePartnerRole, retainerProjection, utilisationFor,
 } from './_partner_workspace_helpers';
 
 const partnerPipeline = new Hono<{ Bindings: Env }>();
@@ -1112,13 +1112,6 @@ partnerPipeline.delete('/negotiation-terms/:id', async (c) => {
 const SHAPES = ['retainer', 'embedded_seat'];
 const CADENCES = ['monthly', 'quarterly'];
 
-/** The current period label for a cadence, from the server clock. */
-function currentPeriod(cadence: string, now = new Date()): string {
-  const y = now.getUTCFullYear();
-  if (cadence === 'quarterly') return `${y}-Q${Math.floor(now.getUTCMonth() / 3) + 1}`;
-  return `${y}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
 /**
  * One chunk of the firm's engagements with their retainer, and the usage rows
  * of exactly those retainers (#4701).
@@ -1138,9 +1131,15 @@ function currentPeriod(cadence: string, now = new Date()): string {
  * Usage rides a bound `json_each(?)` of the returned retainer ids and is
  * joined back to `engagements.partner_id`, so a usage row can only come back
  * for a retainer on one of this firm's engagements.
+ *
+ * THE RETAINER RULE IS #4690's. `retainerProjection` (cadence, current period,
+ * usage, utilisation, the monthly amount and the active predicate) is the one
+ * Delivery's Health and Board reads call too. This read does not derive a
+ * period, a utilisation or a monthly amount of its own.
  */
 async function readRetainers(env: Env, partnerId: number, cursor: string | null, limit: number) {
   const cur = decodeCursor(cursor, 4);
+  const now = new Date();
   const rows = await env.DB.prepare(
     `SELECT e.id AS engagement_id, e.uid AS engagement_uid, e.status AS engagement_status,
             e.price, e.founder_id, e.delivered_at, e.cancelled_at,
@@ -1195,36 +1194,15 @@ async function readRetainers(env: Env, partnerId: number, cursor: string | null,
       founder_name: r.founder_name ?? null,
       need_title: r.need_title ?? null,
     };
-    if (!r.retainer_id) {
-      // Not a gap in a retainer — an engagement that is not one. The zone
-      // offers it as something to record against; it is not counted as an
-      // unpriced retainer, because it is not a retainer at all.
-      return { ...base, retainer: null, current_period: null, usage: [], ...utilisationFor(null, null) };
-    }
-    const period = currentPeriod(String(r.cadence));
-    const usage = usageByRetainer.get(Number(r.retainer_id)) || [];
-    const thisPeriod = usage.find((u: any) => u.period === period) || null;
-    const u = utilisationFor(
-      { retained_hours: r.retained_hours === null ? null : Number(r.retained_hours) },
-      thisPeriod,
+    const proj = retainerProjection(
+      r.retainer_id ? r : null,
+      r.retainer_id ? (usageByRetainer.get(Number(r.retainer_id)) || []) : [],
+      now,
     );
-    return {
-      ...base,
-      retainer: {
-        id: Number(r.retainer_id),
-        uid: r.retainer_uid,
-        shape: r.shape,
-        cadence: r.cadence,
-        amount_cents: r.amount_cents === null ? null : Number(r.amount_cents),
-        retained_hours: r.retained_hours === null ? null : Number(r.retained_hours),
-        renews_at: r.renews_at ?? null,
-        ended_at: r.ended_at ?? null,
-        days_to_renewal: r.renews_at ? -(daysBetween(r.renews_at) ?? 0) : null,
-      },
-      current_period: period,
-      usage,
-      ...u,
-    };
+    // The monthly figure is #4690's helper, called on the row the page read.
+    // A quarterly amount is divided there, once, and an ended retainer is null.
+    if (proj.retainer) proj.retainer.current_monthly_cents = currentMonthlyCents(r, now);
+    return { ...base, ...proj };
   });
   const last = list[list.length - 1];
   return {
@@ -1246,34 +1224,31 @@ partnerPipeline.get('/retainers', async (c) => {
 
     // EVERY FIGURE BELOW IS OVER THE WHOLE BOOK (#4701): the walk reads every
     // engagement, so a firm with 300 retainers is not told its MRR from the
-    // soonest-renewing 200.
+    // soonest-renewing 200. An ended retainer (the shared active predicate,
+    // #4690) leaves the live counts before a shape or a consumption count.
     let mrrCents = 0;
     let counted = 0;
     let unpriced = 0;
     let withRetainer = 0;
+    let activeRetainers = 0;
     let under = 0;
     let over = 0;
     let atRiskCents = 0;
     let atRiskPriced = false;
     const byShape: Record<string, number> = { retainer: 0, embedded_seat: 0 };
-    const monthlyOf = (x: any) => {
-      const cents = x.retainer?.amount_cents;
-      if (cents == null) return null;
-      return x.retainer.cadence === 'quarterly' ? Math.round(Number(cents) / 3) : Number(cents);
-    };
     const walk = await scanAll(
       (cur) => readRetainers(c.env, partnerId, cur, 200),
       (rows) => {
         for (const x of rows) {
           if (!x.retainer) continue;
           withRetainer += 1;
-          const monthly = monthlyOf(x);
-          // A quarterly amount is not a monthly one. Dividing here rather than
-          // summing raw is the difference between MRR and a number that is three
-          // times too big for every quarterly line.
+          if (!x.retainer.active) continue;
+          activeRetainers += 1;
+          const monthly = x.retainer.current_monthly_cents;
           if (monthly == null) unpriced += 1;
           else { mrrCents += monthly; counted += 1; }
-          // ── The `p4` strip ─────────────────────────────────────────────
+          const shape = x.retainer.shape;
+          if (shape && shape in byShape) byShape[shape] += 1;
           // UNDER-CONSUMING IS THE PAGE'S WHOLE ARGUMENT: "a client using 34% of
           // retained hours is a churn risk that no complaint has surfaced yet, and a
           // client at 118% is unbilled work." Both are read off the same utilisation
@@ -1282,9 +1257,6 @@ partnerPipeline.get('/retainers', async (c) => {
           // A RETAINER WITH NO RETAINED HOURS IS IN NEITHER. It has no utilisation at
           // all — a different shape of deal, not a badly-consumed one — and sweeping
           // it into `under` would report a fee-based retainer as a churn risk.
-          if (x.retainer.ended_at) continue;
-          const shape = x.retainer.shape;
-          if (shape && shape in byShape) byShape[shape] += 1;
           if (x.utilisation_pct != null && x.utilisation_pct < 60) {
             under += 1;
             if (monthly != null) { atRiskCents += monthly; atRiskPriced = true; }
@@ -1294,12 +1266,14 @@ partnerPipeline.get('/retainers', async (c) => {
       },
     );
 
+
     return c.json({
       items,
       next_cursor: pageRead.next,
       has_more: pageRead.next !== null,
       totals_complete: walk.complete,
       retainer_count: withRetainer,
+      active_retainer_count: activeRetainers,
       mrr_cents: counted ? mrrCents : null,
       // COUNTED BY SHAPE, because an embedded seat is recurring revenue and is
       // not a retainer — and this is the page that exists to tell those
@@ -1314,13 +1288,15 @@ partnerPipeline.get('/retainers', async (c) => {
       // retainer with no amount is skipped, never counted as zero — zero would
       // claim the client pays nothing.
       mrr_basis: counted
-        ? `${counted} retainer${counted === 1 ? '' : 's'} with a recorded amount; quarterly amounts divided by three.`
+        ? `${counted} retainer${counted === 1 ? '' : 's'} with a recorded amount; normalised to a month (quarterly divided by three); ended retainers are not counted.`
         : null,
       mrr_note: counted
         ? (unpriced ? `${unpriced} retainer${unpriced === 1 ? ' has' : 's have'} no amount recorded and ${unpriced === 1 ? 'is' : 'are'} not in this total.` : null)
-        : (withRetainer
+        : (activeRetainers
           ? 'No retainer has an amount recorded, so there is no monthly total to state.'
-          : 'No engagement is recorded as a retainer yet, so there is no recurring total to state.'),
+          : (withRetainer
+            ? 'Every recorded retainer has ended, so there is no current recurring total to state.'
+            : 'No engagement is recorded as a retainer yet, so there is no recurring total to state.')),
     });
   } catch (e) { return mapError(c, e); }
 });

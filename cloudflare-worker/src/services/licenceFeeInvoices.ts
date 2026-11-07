@@ -28,6 +28,7 @@ import { figuresDigest, noticePaperInput, territoryLicenceInvoice, type NoticeFi
 import { licenceFeeReference, licensorRefusal } from './licenceAccount';
 import { paperModel } from './legalPaper';
 import { renderLegalPdf } from './legalPaperRender';
+import { parseExpectedRevision } from './licenceTerms';
 
 /** Days from issue to due when D797's `payment_terms_days` is not recorded. */
 export const DEFAULT_PAYMENT_TERMS_DAYS = 30;
@@ -90,6 +91,8 @@ export type FeeInvoiceRow = {
   status: 'issued' | 'paid' | 'void'; paid_cents: number; paid_at: string | null; paid_note: string | null;
   void_note: string | null; figures_json: string; figures_sha256: string;
   issued_by_user_id: number | null; recorded_by_user_id: number | null; created_at: string; updated_at: string;
+  /** Write count (migration 202611071531): a payment or a void names the one it read (D4694). */
+  revision: number;
 };
 
 const money = (r: FeeInvoiceRow) => ({
@@ -102,7 +105,7 @@ export function hqInvoiceView(r: FeeInvoiceRow, licenceUid: string) {
   return {
     uid: r.uid, licence_uid: r.licence_uid, period_label: r.period_label, period_start: r.period_start, period_end: r.period_end,
     ...money(r), reference: r.reference, issued_at: r.issued_at, due_at: r.due_at, status: r.status,
-    paid_at: r.paid_at, paid_note: r.paid_note, void_note: r.void_note,
+    paid_at: r.paid_at, paid_note: r.paid_note, void_note: r.void_note, revision: Number(r.revision ?? 0),
     pdf_url: r.status === 'void' ? null : `/api/admin/licences/${encodeURIComponent(licenceUid)}/fee-invoices/${encodeURIComponent(r.uid)}/pdf`,
   };
 }
@@ -186,18 +189,29 @@ export async function issueFeeInvoice(
   return (await feeInvoiceOf(env, licence.uid, uid))!;
 }
 
-/** What a PATCH records: a running paid total with its note, or a void with its reason. */
+export type FeeInvoiceUpdate =
+  { kind: 'payment'; paid_cents: number; paid_note: string | null; expected_revision: number }
+  | { kind: 'void'; void_note: string; expected_revision: number };
+
+/**
+ * What a PATCH records: a running paid total with its note, or a void with its
+ * reason. Either names `expected_revision`, the invoice revision the caller
+ * read (D4694): the write applies only to that revision.
+ */
 export function parseFeeInvoiceUpdate(body: unknown, inv: FeeInvoiceRow):
-  { ok: true; kind: 'payment'; paid_cents: number; paid_note: string | null } | { ok: true; kind: 'void'; void_note: string }
+  ({ ok: true } & FeeInvoiceUpdate)
   | { ok: false; status: 400 | 409; code: string; field: string; message: string } {
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   if (inv.status === 'void') return { ok: false, status: 409, code: 'invoice_void', field: 'status', message: 'This invoice is void; nothing more is recorded on it.' };
+  const rev = parseExpectedRevision(b.expected_revision);
+  if (!rev.ok) return { ok: false, status: 400, code: 'revision_required', field: 'expected_revision', message: rev.message };
+  const expected_revision = rev.value;
   if (b.status === 'void') {
     if ('paid_cents' in b) return { ok: false, status: 400, code: 'bad_request', field: 'paid_cents', message: 'Void an invoice, or record a payment on it, not both at once.' };
     if (Number(inv.paid_cents) > 0) return { ok: false, status: 409, code: 'paid_not_void', field: 'status', message: 'A payment is recorded on this invoice. Set the paid total to zero before voiding it.' };
     const note = typeof b.void_note === 'string' ? b.void_note.trim() : '';
     if (note.length < 10) return { ok: false, status: 400, code: 'void_note_required', field: 'void_note', message: 'Say why it is void, in at least 10 characters.' };
-    return { ok: true, kind: 'void', void_note: note.slice(0, 500) };
+    return { ok: true, kind: 'void', void_note: note.slice(0, 500), expected_revision };
   }
   const paid = b.paid_cents;
   if (typeof paid !== 'number' || !Number.isSafeInteger(paid) || paid < 0) {
@@ -207,25 +221,41 @@ export function parseFeeInvoiceUpdate(body: unknown, inv: FeeInvoiceRow):
     return { ok: false, status: 409, code: 'over_amount', field: 'paid_cents', message: 'The total received cannot be more than the invoice amount.' };
   }
   const note = typeof b.paid_note === 'string' ? b.paid_note.trim().slice(0, 300) : '';
-  return { ok: true, kind: 'payment', paid_cents: paid, paid_note: note || null };
+  return { ok: true, kind: 'payment', paid_cents: paid, paid_note: note || null, expected_revision };
 }
 
-/** Record what `parseFeeInvoiceUpdate` accepted. The status follows the paid total. */
+/**
+ * Record what `parseFeeInvoiceUpdate` accepted, on the revision the caller read.
+ *
+ * THE WRITE IS CONDITIONAL AND ITS ROW COUNT IS READ. The UPDATE names the
+ * revision, and a void also names "not void and nothing paid". When it changes
+ * no row, someone got there first: this throws a 409 carrying the invoice as it
+ * now stands, and the route neither answers success nor writes an audit row for
+ * a change that did not commit (D4694).
+ */
 export async function recordFeeInvoiceUpdate(
-  env: Env, inv: FeeInvoiceRow, update: { kind: 'payment'; paid_cents: number; paid_note: string | null } | { kind: 'void'; void_note: string },
-  actorId: number, now: string,
+  env: Env, inv: FeeInvoiceRow, update: FeeInvoiceUpdate, actorId: number, now: string,
 ): Promise<FeeInvoiceRow> {
+  let res: { meta?: { changes?: number } };
   if (update.kind === 'void') {
-    await env.DB.prepare(
-      `UPDATE licence_fee_invoices SET status = 'void', void_note = ?, recorded_by_user_id = ?, updated_at = ?
-        WHERE uid = ? AND status != 'void' AND paid_cents = 0`,
-    ).bind(update.void_note, actorId, now, inv.uid).run();
+    res = await env.DB.prepare(
+      `UPDATE licence_fee_invoices SET status = 'void', void_note = ?, recorded_by_user_id = ?, updated_at = ?, revision = revision + 1
+        WHERE uid = ? AND revision = ? AND status != 'void' AND paid_cents = 0`,
+    ).bind(update.void_note, actorId, now, inv.uid, update.expected_revision).run();
   } else {
     const status = update.paid_cents === Number(inv.amount_cents) ? 'paid' : 'issued';
-    await env.DB.prepare(
-      `UPDATE licence_fee_invoices SET paid_cents = ?, paid_note = ?, paid_at = ?, status = ?, recorded_by_user_id = ?, updated_at = ?
-        WHERE uid = ? AND status != 'void'`,
-    ).bind(update.paid_cents, update.paid_note, update.paid_cents > 0 ? now : null, status, actorId, now, inv.uid).run();
+    res = await env.DB.prepare(
+      `UPDATE licence_fee_invoices SET paid_cents = ?, paid_note = ?, paid_at = ?, status = ?, recorded_by_user_id = ?, updated_at = ?, revision = revision + 1
+        WHERE uid = ? AND revision = ? AND status != 'void'`,
+    ).bind(update.paid_cents, update.paid_note, update.paid_cents > 0 ? now : null, status, actorId, now, inv.uid, update.expected_revision).run();
+  }
+  if (Number(res?.meta?.changes ?? 0) !== 1) {
+    const current = await feeInvoiceOf(env, inv.licence_uid, inv.uid);
+    throw new FeeInvoiceRefusal(
+      409, 'invoice_changed',
+      'This invoice changed since you opened it, so nothing was recorded. Reload it and check the current total and status.',
+      { current_revision: current ? Number(current.revision ?? 0) : null, current_status: current?.status ?? null, current_paid_cents: current ? Number(current.paid_cents) : null },
+    );
   }
   return (await feeInvoiceOf(env, inv.licence_uid, inv.uid))!;
 }

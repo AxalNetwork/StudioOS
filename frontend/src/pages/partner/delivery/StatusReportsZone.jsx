@@ -284,7 +284,7 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
                   {draft.shipped_from_log.map((x, i) => (
                     <li key={`${x.title}-${i}`}>
                       {x.title}{x.version ? ` (${x.version})` : ''}
-                      {!x.opened && <span className="text-axal-faint"> · not opened</span>}
+                      {x.opened === false && <span className="text-axal-faint"> · not opened</span>}
                     </li>
                   ))}
                 </ul>

@@ -4298,10 +4298,15 @@ export const api = {
     request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorEngagement: (id, data) =>
     request(`/advisors/me/engagements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  advanceMyAdvisorEngagement: (id, lane) =>
-    request(`/advisors/me/engagements/${id}/advance`, { method: 'POST', body: JSON.stringify({ lane }) }),
+  // D4695: `expectedLane` is the lane the board showed; a row that has moved since is a 409 `lane_changed`.
+  advanceMyAdvisorEngagement: (id, lane, expectedLane) =>
+    request(`/advisors/me/engagements/${id}/advance`, {
+      method: 'POST', body: JSON.stringify({ lane, ...(expectedLane ? { expected_lane: expectedLane } : {}) }),
+    }),
   // `decision` is 'renewed' or 'ended'. Ending a SIGNED engagement goes through
   // here rather than through `advance`, so the loss lands in the denominator.
+  // D4695: `data.expected_cycles` is the cycle count the board showed, i.e. the term being decided. The same
+  // decision sent twice is one cycle (the answer says `replayed`); a term that moved on is a 409 `cycles_changed`.
   recordMyAdvisorEngagementRenewal: (id, data) =>
     request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
 
