@@ -1624,7 +1624,7 @@ advisors.post('/proof-consents/:token/code', async (c) => {
     if (!to) return refuse(c, 409, { code: 'attester_email_missing', message: 'This request names no email address, so no code can be sent. Ask the advisor to send a new request.' });
     const now = Date.now();
     const recent = await c.env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM advisor_proof_consent_codes WHERE consent_id = ? AND created_at > ?'
+      'SELECT COUNT(*) AS n FROM advisor_proof_consent_codes WHERE consent_id = ? AND datetime(created_at) > datetime(?)'
     ).bind(row.id, new Date(now - 3600_000).toISOString()).first<{ n: number }>();
     if (Number(recent?.n || 0) >= CODES_PER_HOUR) {
       return refuse(c, 429, { code: 'code_rate_limited', message: 'Several codes were sent in the last hour. Use the latest one, or try again later.' });
