@@ -91,11 +91,19 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, not
   const head = (row || notice) ? <>{row}{notice}</> : null;
   const wrap = (body) => (head ? <>{head}{body}</> : body);
   if (loading) {
-    return wrap(<div className="space-y-3" aria-busy="true"><Skeleton className="h-9" /><Skeleton className="h-28" /></div>);
+    // D4711: a skeleton is shapes; the sentence is what a screen reader hears.
+    return wrap(
+      <div className="space-y-3" aria-busy="true" role="status">
+        <span className="sr-only">Loading…</span>
+        <Skeleton className="h-9" /><Skeleton className="h-28" />
+      </div>,
+    );
   }
   if (error) {
+    // D4711: `role="alert"` so a read that fails after the page is open is
+    // announced, not only drawn.
     return wrap(
-      <Card variant="dashed" padding="lg">
+      <Card variant="dashed" padding="lg" role="alert">
         <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           Source unavailable
         </div>
@@ -155,6 +163,23 @@ export function MoreRows({ line, onMore, busy = false, error = '', testid }) {
   );
 }
 
+/**
+ * D4711: a re-read after a write failed. The rows already on screen stay; this
+ * line says they may be out of date, and offers the re-read again. The write
+ * itself is reported by the zone's own SaveNote.
+ */
+export function StaleNote({ error, onRetry, testid }) {
+  if (!error) return null;
+  return (
+    <p role="alert" className="mb-3 flex flex-wrap items-center gap-3 text-[12px] font-semibold text-amber-800 dark:text-amber-300" data-testid={testid}>
+      <span>{error}</span>
+      {onRetry ? (
+        <button type="button" onClick={onRetry} className="font-semibold text-emerald-700 hover:underline dark:text-emerald-300">Read it again</button>
+      ) : null}
+    </p>
+  );
+}
+
 export function StatedLimit({ title, children }) {
   return (
     <Card variant="sunken" padding="md" className="mt-3">
@@ -187,22 +212,32 @@ export function StatedLimit({ title, children }) {
  * trigger never lands in the box.
  */
 export function Field({ label, hint, fill = null, children }) {
+  // D4711: the hint is the control's description, not only text beside it. A
+  // hint such as "blank reads as not recorded, not as free" is the rule the
+  // field follows, so a screen reader hears it on the field itself.
+  const hintId = React.useId();
+  const described = hint && React.isValidElement(children)
+    ? React.cloneElement(children, {
+      'aria-describedby': [children.props['aria-describedby'], hintId].filter(Boolean).join(' '),
+    })
+    : children;
+  const hintNode = hint ? <span id={hintId} className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span> : null;
   if (fill?.ctl) {
     return (
       <div className="block">
         <FillLabel fill={fill.ctl} name={fill.name} label={label} value={fill.value}>
           <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint" aria-hidden="true">{label}</span>
         </FillLabel>
-        <label className="block"><span className="sr-only">{label}</span>{children}</label>
-        {hint && <span className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span>}
+        <label className="block"><span className="sr-only">{label}</span>{described}</label>
+        {hintNode}
       </div>
     );
   }
   return (
     <label className="block">
       <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</span>
-      {children}
-      {hint && <span className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span>}
+      {described}
+      {hintNode}
     </label>
   );
 }
@@ -228,13 +263,28 @@ export const ghostButtonClass =
   'rounded-lg border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold '
   + 'hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800';
 
-/** Saved / failed, said once, above the thing that was saved. */
-export function SaveNote({ note }) {
-  if (!note) return null;
+/**
+ * Saved / failed, said once, above the thing that was saved.
+ *
+ * D4711: THE REGION IS ALWAYS THERE, EMPTY OR NOT. A screen reader announces a
+ * live region's changes, not its arrival: a `role="status"` mounted together
+ * with its sentence is read by some readers and silently skipped by others. So
+ * the region renders empty from the start and the sentence lands in it. A
+ * failure's sentence is `role="alert"` (it interrupts: the person has to
+ * act); a save is the polite status. Empty, it draws nothing visible.
+ */
+export function SaveNote({ note, testid }) {
+  // A failure is also `role="alert"` (#4698, D4924's Delivery forms): an alert
+  // interrupts, and it is how a refusal is found by role. A save stays the
+  // polite status around it.
   return (
-    <p role={note.ok ? 'status' : 'alert'} className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
-      {note.text}
-    </p>
+    <div role="status" aria-live="polite" aria-atomic="true" data-testid={testid}>
+      {note ? (
+        <p role={note.ok ? undefined : 'alert'} className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+          {note.text}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
