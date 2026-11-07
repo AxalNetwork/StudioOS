@@ -743,6 +743,12 @@ export interface JWTPayload {
   exp: number;
   iat: number;
   jti?: string;
+  /**
+   * D4669 — the `impersonation_sessions` row a support-session token was
+   * minted for. Every request re-reads that row, so ending the session ends
+   * the token.
+   */
+  sid?: number;
 }
 
 export interface UserSessionRow {

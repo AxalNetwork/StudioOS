@@ -10,8 +10,10 @@
  *   GET  /governance      canvas H23's ledger (which completes H7's
  *                         privileged-action feed), unioned across the five
  *                         stores that actually record one
- *   POST /force-reauth    sign every active account out, everywhere, with a
- *                         typed reason; recorded in admin_audit_log
+ *   POST /force-reauth    sign every active account on THIS deployment out,
+ *                         with a typed reason; recorded in admin_audit_log.
+ *                         D4669: branches are not reached, and the answer
+ *                         lists each (services/emergencyScope.ts)
  *   POST /dsr/:userId/close   close a data-subject erasure request as
  *                         fulfilled or denied, with a typed reason (D168)
  *   GET  /sessions        D481 — active sessions and live support sessions,
@@ -72,6 +74,7 @@ import {
 import { screeningSummary } from '../services/sanctions';
 import { readBackupHeartbeat, readRestoreDrill } from '../services/backup';
 import { branchBindings } from '../services/branches';
+import { emergencyScope, deploymentOutcomes } from '../services/emergencyScope';
 import {
   HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
 } from '../services/dsrRequests';
@@ -1034,6 +1037,8 @@ r.get('/sessions', async (c) => {
     rows: list.rows,
     impersonations,
     expiry_minutes: IMPERSONATION_EXPIRY_MINUTES,
+    // D4669 — every act on this list reaches this deployment only.
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1089,6 +1094,7 @@ r.post('/sessions/:id/revoke', async (c) => {
     revoked_at: out.revoked_at,
     message: 'Revoked. That session\'s token is refused from its next request; the account\'s other sessions '
       + 'are untouched.',
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1149,6 +1155,7 @@ r.post('/sessions/revoke', async (c) => {
     message: revoked === results.length
       ? `Revoked ${revoked} session${revoked === 1 ? '' : 's'}.`
       : `Revoked ${revoked} of ${results.length}. The rest were already revoked or no longer exist; each is listed.`,
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1194,12 +1201,12 @@ r.post('/impersonations/:id/end', async (c) => {
     ok: true,
     impersonation_session_id: id,
     target_user_id: out.row.target_user_id,
-    // THE RESPONSE SAYS WHAT ENDING DID NOT DO. The support token carries no
-    // session id, so it cannot be revoked one by one; it expires on its own
-    // clock. Saying "ended" alone would claim the access stopped now.
-    message: 'The support session is closed and can no longer be extended. Its token carries no session id, so '
-      + `it stays valid until it expires — at most ${IMPERSONATION_EXPIRY_MINUTES} minutes after it was minted. `
-      + 'To cut it now, sign the account out, which also ends that account holder\'s own sessions.',
+    // D4669 — ENDING NOW ENDS THE ACCESS. The support token names this
+    // record and every request re-reads it (auth.ts `sessionStanding`), so the
+    // message no longer has to explain a token outliving its session.
+    message: 'The support session is ended. Its token is refused from its next request, and it can no longer '
+      + 'be extended. The account holder\'s own sessions are untouched.',
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1247,7 +1254,22 @@ r.post('/force-reauth/:userId', async (c) => {
     return c.json({ error: 'No account holds that id.', code: 'user_not_found' }, 404);
   }
 
-  const revokedAt = await bumpJwtMinIat(c.env, uid);
+  // D4669 — A FAILED WRITE IS SAID, NOT THROWN. The floor is the whole act;
+  // if it could not be raised nothing changed, and the operator must know
+  // that rather than meet a generic error mid-incident.
+  let revokedAt: number;
+  try {
+    revokedAt = await bumpJwtMinIat(c.env, uid);
+  } catch (e) {
+    console.error('[admin_security] force-reauth/:userId failed', (e as Error).message);
+    return c.json({
+      error: 'The sign-out could not be written, so nothing was changed: the account\'s sessions are still valid. '
+        + 'Try again; if it keeps failing, revoke its sessions one by one.',
+      code: 'sign_out_failed',
+      outcomes: deploymentOutcomes(c.env, { outcome: 'failed' }),
+      scope: emergencyScope(c.env),
+    }, 503);
+  }
 
   // `target_user_id` is the key `logAdminAction` reads for `viewed_user_id`, and
   // it is what lets the governance feed's LEFT JOIN name WHO was signed out.
@@ -1264,7 +1286,12 @@ r.post('/force-reauth/:userId', async (c) => {
     user_id: uid,
     email: target.email,
     revoked_at: revokedAt,
-    message: `${target.name || target.email} has been signed out of every session. They will need to sign in again.`,
+    // D4669 — "every session" on THIS deployment. An account of the same
+    // person on a branch is a different account in a different database.
+    message: `${target.name || target.email} has been signed out of every session on this deployment, including `
+      + 'any support session opened as them. They will need to sign in again.',
+    outcomes: deploymentOutcomes(c.env, { outcome: 'done', affected: 1 }),
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1289,10 +1316,23 @@ r.post('/force-reauth', async (c) => {
   // +1s so tokens issued in this same second are bounced too, exactly as the
   // per-account primitive does. Inactive accounts cannot sign in anyway.
   const nowSec = Math.floor(Date.now() / 1000) + 1;
-  const result = await c.env.DB.prepare(
-    'UPDATE users SET jwt_min_iat = ? WHERE is_active = 1',
-  ).bind(nowSec).run();
-  const affected = Number(result.meta?.changes ?? 0);
+  let affected: number;
+  try {
+    const result = await c.env.DB.prepare(
+      'UPDATE users SET jwt_min_iat = ? WHERE is_active = 1',
+    ).bind(nowSec).run();
+    affected = Number(result.meta?.changes ?? 0);
+  } catch (e) {
+    // D4669 — one statement, so a failure changed nothing. Said, with the
+    // per-deployment answer, rather than a generic 500.
+    console.error('[admin_security] force-reauth failed', (e as Error).message);
+    return c.json({
+      error: 'The sign-out could not be written, so nothing was changed: every session is still valid. Try again.',
+      code: 'sign_out_failed',
+      outcomes: deploymentOutcomes(c.env, { outcome: 'failed' }),
+      scope: emergencyScope(c.env),
+    }, 503);
+  }
 
   // D165 — was a raw INSERT into admin_audit_log, which is the third copy D159
   // set out to end and missed. `filters_json` carries the same payload, so the
@@ -1310,7 +1350,13 @@ r.post('/force-reauth', async (c) => {
     ok: true,
     affected,
     revoked_at: nowSec,
-    message: 'Every active account has been signed out everywhere, including yours. Sign in again with your authenticator.',
+    // D4669 — THIS DEPLOYMENT, and the answer says which branches it did not
+    // reach. The old sentence ("everywhere") read as platform-wide while the
+    // write touched one database.
+    message: 'Every active account on this deployment has been signed out, including yours. Branch deployments '
+      + 'are not reached by this action; each is listed. Sign in again with your authenticator.',
+    outcomes: deploymentOutcomes(c.env, { outcome: 'done', affected }),
+    scope: emergencyScope(c.env),
   });
 });
 

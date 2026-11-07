@@ -371,7 +371,24 @@ deckShareActions.post('/share/:token/signup', async (c) => {
   // feedback / deal-pack without a separate login step. The cookie is
   // short-lived (JWT TTL is 7d project-wide); the viewer can complete
   // verification later from /settings.
-  const jwt = await createJWT(c.env, userId, email, role);
+  //
+  // D4669 — with a `jti` and its `user_sessions` row, like every other
+  // sign-in, so this session appears in the account's own list and can be
+  // revoked on its own. It was the one mint path issuing a token no row
+  // answered for. The factor is not 'totp', so `requireFactor` stays shut.
+  const jti = crypto.randomUUID();
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO user_sessions (user_id, jti, user_agent, factor, assurance_level) VALUES (?, ?, ?, 'deck_share', 'email_only')`,
+    ).bind(userId, jti, (c.req.header('user-agent') || '').slice(0, 500) || null).run();
+  } catch (e) {
+    console.error('[deck_share] session row failed', e);
+    return c.json({
+      ok: false, requires_login: true, email, user_id: userId,
+      message: 'Your account was created, but signing you in failed. Please sign in to continue.',
+    }, 503);
+  }
+  const jwt = await createJWT(c.env, userId, email, role, undefined, jti);
   const csrf = generateCsrfToken();
   setAuthCookies(c, jwt, csrf);
 

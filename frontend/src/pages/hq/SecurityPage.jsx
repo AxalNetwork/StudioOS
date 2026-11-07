@@ -389,6 +389,7 @@ export function SessionsPanel({ list, onAct, onRetry }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [outcomes, setOutcomes] = useState(null);
 
   if (list === UNAVAILABLE) {
     return (
@@ -404,9 +405,11 @@ export function SessionsPanel({ list, onAct, onRetry }) {
     setBusy(true);
     setError(null);
     setNotice(null);
+    setOutcomes(null);
     try {
       const res = await onAct(kind, arg, reason.trim());
       setNotice(res?.message || 'Done.');
+      setOutcomes(Array.isArray(res?.outcomes) ? res.outcomes : null);
       if (kind === 'revoke_selected') setSelected([]);
     } catch (err) {
       setError(writeBarMessage(err));
@@ -430,6 +433,7 @@ export function SessionsPanel({ list, onAct, onRetry }) {
       </label>
       {error && <p role="alert" className="mt-2 text-[12px] text-red-700 dark:text-red-300">{error}</p>}
       {notice && <p role="status" className="mt-2 text-[12px] text-axal-muted">{notice}</p>}
+      {outcomes && <DeploymentOutcomes outcomes={outcomes} />}
 
       {imp?.available === false ? (
         <div className="mt-3" data-testid="hq-live-impersonations-unreadable">
@@ -514,11 +518,54 @@ export function SessionsPanel({ list, onAct, onRetry }) {
       )}
       <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
         Revoke ends one session; its token is refused from its next request. Sign out account ends every session that
-        account holds. Ending a support session closes its record and stops it being extended — its token carries no
-        session id, so it lapses at its own expiry, within {list.expiry_minutes} minutes. Each act is recorded with its
-        reason and the account it touched.
+        account holds, including any support session opened as them. Ending a support session ends it: its token is
+        refused from its next request. Each act is recorded with its reason and the account it touched.
+      </p>
+      <p className="mt-1 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-sessions-scope">
+        {scopeSentence(list.scope)}
       </p>
     </div>
+  );
+}
+
+/**
+ * D4669 — what an emergency act reaches. Session acts write this deployment's
+ * database; a branch keeps its own accounts and sessions. The server states
+ * the scope; when it does not, the sentence says the scope is unknown rather
+ * than implying the act is platform-wide.
+ */
+export function scopeSentence(scope) {
+  if (scope && typeof scope.summary === 'string' && scope.summary) return `Scope · ${scope.summary}`;
+  return 'Scope · not stated by the server. Treat every act here as reaching this deployment only.';
+}
+
+const OUTCOME_LABEL = {
+  done: 'done',
+  failed: 'failed — nothing changed',
+  not_reached: 'not reached',
+  unknown: 'unknown',
+};
+
+/** One line per deployment, as the server reported it. Pure, for the tests. */
+export function outcomeLines(outcomes) {
+  if (!Array.isArray(outcomes)) return [];
+  return outcomes.map((o) => {
+    const where = o?.deployment === 'hq' ? 'HQ' : String(o?.deployment ?? 'unnamed deployment');
+    const what = OUTCOME_LABEL[o?.outcome] || `unrecognised outcome (${String(o?.outcome)})`;
+    const n = typeof o?.affected === 'number' ? ` · ${num(o.affected)} account${o.affected === 1 ? '' : 's'}` : '';
+    return `${where} · ${what}${n}${o?.reason ? ` — ${o.reason}` : ''}`;
+  });
+}
+
+export function DeploymentOutcomes({ outcomes }) {
+  const lines = outcomeLines(outcomes);
+  if (lines.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-0.5 text-[11px] text-axal-muted" data-testid="hq-deployment-outcomes">
+      {lines.map((l, i) => (
+        <li key={i} className="font-mono">{l}</li>
+      ))}
+    </ul>
   );
 }
 
@@ -708,10 +755,11 @@ function ForceReauth({ onDone }) {
   };
   if (done) {
     return (
-      <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+      <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" data-testid="hq-force-reauth-done">
         {done.message} {num(done.affected) !== null ? `${num(done.affected)} accounts affected.` : ''}{' '}
         <a href="/login" className="underline">Sign in again →</a>
-      </p>
+        <DeploymentOutcomes outcomes={done.outcomes} />
+      </div>
     );
   }
   return (
@@ -727,7 +775,10 @@ function ForceReauth({ onDone }) {
       </label>
       <label className="flex items-start gap-2 text-[11.5px] text-axal-muted">
         <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5" />
-        <span>I understand this signs out every active account on every tenant, including my own session.</span>
+        <span>
+          I understand this signs out every active account on this deployment, including my own session. Branch
+          deployments keep their own sessions and are not signed out by this action.
+        </span>
       </label>
       {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{error}</p>}
       <button
@@ -735,7 +786,7 @@ function ForceReauth({ onDone }) {
         disabled={busy || !ack || reason.trim().length < 8}
         className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-red-700 bg-white px-3 py-1.5 text-[12px] font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-500 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30"
       >
-        {busy ? <Loader2 size={13} className="animate-spin" /> : <AlertTriangle size={13} />} Force re-auth · all tenants
+        {busy ? <Loader2 size={13} className="animate-spin" /> : <AlertTriangle size={13} />} Force re-auth · this deployment
       </button>
     </form>
   );
@@ -1176,8 +1227,8 @@ export default function HqSecurityPage() {
             <ForceReauth onDone={load} />
             <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
               An impersonation is a session like any other, which is why it sits in this list. Each account can
-              also revoke its own devices under Settings. The platform-wide action above bumps every
-              account&apos;s token floor.
+              also revoke its own devices under Settings. The sign-out-everyone action above bumps the token
+              floor of every account on this deployment; branch deployments keep their own sessions.
             </p>
           </Zone>
 
