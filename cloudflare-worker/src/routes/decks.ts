@@ -2453,6 +2453,9 @@ decks.put('/brand/watermark', async (c) => {
     if (e?.message === 'INVALID_WATERMARK_URL') {
       return c.json({ error: 'watermark_url must be https URL ≤1000 chars' }, 400);
     }
+    if (e?.message === 'WATERMARK_HOST_NOT_PUBLIC') {
+      return c.json({ error: 'watermark_url must be on a public host' }, 400);
+    }
     return c.json({ error: 'failed' }, 500);
   }
   if (pid != null) {

@@ -12,7 +12,7 @@
 import { Plus } from 'lucide-react';
 import ModuleMapLightbox from './ModuleMapLightbox';
 import StudioModuleGrid from './StudioModuleGrid';
-import { ModuleLockedSheet, ResetDialog, SavedLine, StudioEditBar, StudioLayoutNotice, StudioNoProfile } from './StudioParts';
+import { LeaveDialog, ModuleLockedSheet, ResetDialog, SavedLine, StudioEditBar, StudioLayoutNotice, StudioNoProfile } from './StudioParts';
 import { placedLine } from './studioLayoutModel';
 import { fallbackTitle } from './studioFallback';
 import './studioModules.css';
@@ -79,6 +79,7 @@ export default function StudioModules({ studio, tiles, extra = [], withheld = fa
       {studio.editing && <ModuleMapLightbox studio={studio} />}
       <ModuleLockedSheet studio={studio} />
       <ResetDialog studio={studio} />
+      <LeaveDialog studio={studio} />
     </section>
   );
 }

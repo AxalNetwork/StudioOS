@@ -22,7 +22,9 @@ const JWT_SECRET = randomBytes(32).toString('hex');
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const MIGRATION = readFileSync(new URL('../sql/migrations/687_studio_layouts.sql', import.meta.url), 'utf8');
 // D1594 (#3863): the layout's revision.
-const REVISION = readFileSync(new URL('../sql/migrations/750_studio_layout_revision.sql', import.meta.url), 'utf8');
+const REVISION = readFileSync(new URL('../sql/migrations/750_studio_layout_revision.sql', import.meta.url), 'utf8')
+  // D4621: the reset tombstone, applied after 750 as production applies it.
+  + '\n' + readFileSync(new URL('../sql/migrations/202611070916_studio_layout_reset_tombstone.sql', import.meta.url), 'utf8');
 
 const USERS: Array<[number, string, number]> = [
   [1, 'founder', 0], [2, 'investor', 0], [3, 'advisor', 0], [4, 'partner', 0],
@@ -228,7 +230,7 @@ test('a saved key later removed from the registry is left out and named; a corru
   } finally { w.db.close(); }
 });
 
-test('reset deletes the row and answers the default; reset with no row is still 200', async () => {
+test('reset answers the default and keeps a tombstone row (D4621); reset with no row is still 200', async () => {
   const w = world();
   try {
     await call(w.env, 1, '/layout', 'PUT', { layout: [{ key: 'lab_tools', size: '1/3' }] });
@@ -236,7 +238,9 @@ test('reset deletes the row and answers the default; reset with no row is still 
     const r = await call(w.env, 1, '/layout/reset', 'POST');
     assert.deepEqual([r.status, r.body.source], [200, 'default']);
     assert.deepEqual(r.body.layout.map(({ key, size }: any) => ({ key, size })), STUDIO_DEFAULTS.founder);
-    assert.equal(w.db.prepare('SELECT COUNT(*) n FROM studio_layouts WHERE user_id = 1').get().n, 0);
+    // D4621: the row stays, emptied and marked, so its revision keeps counting.
+    const tomb = w.db.prepare('SELECT layout, reset_at, revision FROM studio_layouts WHERE user_id = 1').get();
+    assert.deepEqual([tomb.layout, tomb.reset_at !== null, tomb.revision], ['[]', true, 2]);
     assert.equal(w.db.prepare('SELECT COUNT(*) n FROM studio_layouts WHERE user_id = 8').get().n, 1, 'another member keeps theirs');
     assert.equal((await call(w.env, 1, '/layout/reset', 'POST')).status, 200);
   } finally { w.db.close(); }
