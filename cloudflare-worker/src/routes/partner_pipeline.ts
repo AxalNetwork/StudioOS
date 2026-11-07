@@ -55,22 +55,31 @@ import { LOSS_REASONS } from '../services/bdAnalytics';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import { railFor, refuseRun } from '../util/railContext';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { isAdmin } from './_t13t14t15_helpers';
+import {
+  companyBinds, isActiveRetainer, monthlyCents, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
+} from '../services/partnerPipelineRules';
 import {
   mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
 } from './_t13t14t15_helpers';
 import {
   daysBetween, mergePatch, parseCents, parseHours, parsePeriod,
-  requireOwnEngagement, requireOwnQuote, requirePartnerRole, utilisationFor,
+  outsideCompany, requireOwnEngagement, requireOwnQuote, requirePartnerRole, utilisationFor,
 } from './_partner_workspace_helpers';
 
 const partnerPipeline = new Hono<{ Bindings: Env }>();
 
 /** The partner row for the caller, or a throw `mapError` will shape. */
-async function actingPartner(c: any): Promise<{ user: User; partnerId: number }> {
+async function actingPartner(c: any): Promise<{ user: User; partnerId: number; companyId: number | null }> {
   const user = (await requireAuth(c)) as User;
   requirePartnerRole(user);
   const partner = await requirePartnerProfile(c.env, user);
-  return { user, partnerId: Number(partner.id) };
+  // D4693: THE SELECTED COMPANY, verified, resolved once and handed to every read and write below. The overview
+  // (`/quotes/me`, `/quotes/analytics`) already narrows to it; the zones did not, so a firm saw one agency's win rate
+  // beside another's proposals. An admin's oversight view stays wide, as it does there.
+  const companyId = isAdmin(user) ? null : await activeCompanyFor(c, user);
+  return { user, partnerId: Number(partner.id), companyId };
 }
 
 async function body<T>(c: any): Promise<T> {
@@ -506,7 +515,7 @@ partnerPipeline.delete('/leads/:needId/pass', async (c) => {
  */
 partnerPipeline.get('/proposals', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const [rows, versions] = await Promise.all([
       c.env.DB.prepare(
         `SELECT q.id, q.uid, q.need_id, q.price, q.timeline_weeks, q.deliverables,
@@ -518,17 +527,17 @@ partnerPipeline.get('/proposals', async (c) => {
            LEFT JOIN founders f ON f.id = n.founder_id
            LEFT JOIN engagements e ON e.quote_id = q.id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
-          WHERE q.partner_id = ?
+          WHERE q.partner_id = ? AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
           ORDER BY q.created_at DESC
           LIMIT 200`,
-      ).bind(partnerId).all<any>(),
+      ).bind(partnerId, ...companyBinds(companyId)).all<any>(),
       c.env.DB.prepare(
         `SELECT v.id, v.quote_id, v.version, v.change_summary, v.note, v.price_cents, v.created_at
            FROM quote_versions v
            JOIN quotes q ON q.id = v.quote_id
-          WHERE q.partner_id = ?
+          WHERE q.partner_id = ? AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
           ORDER BY v.quote_id, v.version`,
-      ).bind(partnerId).all<any>(),
+      ).bind(partnerId, ...companyBinds(companyId)).all<any>(),
     ]);
 
     const byQuote = new Map<number, any[]>();
@@ -547,7 +556,10 @@ partnerPipeline.get('/proposals', async (c) => {
 
     const items = (rows.results || []).map((q: any) => {
       const trail = byQuote.get(Number(q.id)) || [];
-      const decided = Boolean(q.decided_at) || q.status === 'accepted' || q.status === 'rejected';
+      // D4693: decided means won or lost, as `quoteOutcome` says everywhere; a `decided_at` stamp alone (a withdrawn
+      // quote can carry one) does not make a quote a decision.
+      const outcome = quoteOutcome(q.status);
+      const decided = outcome === 'won' || outcome === 'lost';
       return {
         quote_id: Number(q.id),
         uid: q.uid,
@@ -585,7 +597,8 @@ partnerPipeline.get('/proposals', async (c) => {
       };
     });
 
-    const live = items.filter((x: any) => !x.decided && x.status !== 'withdrawn');
+    const live = items.filter((x: any) => quoteOutcome(x.status) === 'open');
+    const withdrawnCount = items.filter((x: any) => quoteOutcome(x.status) === 'withdrawn').length;
     const decidedItems = items.filter((x: any) => x.decided);
     const won = decidedItems.filter((x: any) => x.state === 'Won');
     const lost = decidedItems.filter((x: any) => x.state === 'Lost');
@@ -607,8 +620,10 @@ partnerPipeline.get('/proposals', async (c) => {
       // NULL WITH NOTHING DECIDED. A rate over an empty denominator is not zero
       // per cent, and the analytics zone reports the same figure from the same
       // rule rather than a second one.
-      win_rate_pct: decidedItems.length
-        ? Math.round((won.length / decidedItems.length) * 100) : null,
+      win_rate_pct: winRate(won.length, lost.length).pct,
+      // The sentence `/quotes/analytics` prints for the same figure, from the same function.
+      win_rate_basis: winRateBasis(won.length, lost.length, live.length, withdrawnCount),
+      withdrawn_count: withdrawnCount,
       loss_reasons: LOSS_REASONS.map((reason) => ({ reason, count: lossCounts[reason] })),
       // A LOSS WITH NO REASON IS THE CHART'S REAL FINDING, so it is counted
       // rather than folded into `other`: "we did not ask" and "they said other"
@@ -632,9 +647,9 @@ partnerPipeline.get('/proposals', async (c) => {
  */
 partnerPipeline.post('/proposals/:quoteId/versions', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const quoteId = Number(c.req.param('quoteId'));
-    await requireOwnQuote(c.env, partnerId, quoteId);
+    await requireOwnQuote(c.env, partnerId, quoteId, companyId);
     const b = await body<any>(c);
     const summary = trimOrNull(b.change_summary, 400);
     if (!summary) return c.json({ detail: 'A version needs to say what changed' }, 400);
@@ -671,9 +686,9 @@ partnerPipeline.post('/proposals/:quoteId/versions', async (c) => {
  */
 partnerPipeline.put('/proposals/:quoteId/outcome', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const quoteId = Number(c.req.param('quoteId'));
-    const quote = await requireOwnQuote(c.env, partnerId, quoteId);
+    const quote = await requireOwnQuote(c.env, partnerId, quoteId, companyId);
     const b = await body<any>(c);
 
     if (b.loss_reason === null) {
@@ -735,7 +750,7 @@ const TERM_STATES = ['open', 'agreed', 'conceded', 'refused'];
 
 partnerPipeline.get('/negotiations', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const rows = await c.env.DB.prepare(
       `SELECT q.id AS quote_id, q.uid AS quote_uid, q.price, q.status AS quote_status,
               q.need_id, n.title AS need_title, n.category AS need_category,
@@ -746,10 +761,10 @@ partnerPipeline.get('/negotiations', async (c) => {
          LEFT JOIN founder_needs n ON n.id = q.need_id
          LEFT JOIN founders f ON f.id = n.founder_id
          LEFT JOIN quote_negotiations g ON g.quote_id = q.id
-        WHERE q.partner_id = ?
+        WHERE q.partner_id = ? AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
         ORDER BY q.created_at DESC
         LIMIT 200`,
-    ).bind(partnerId).all<any>();
+    ).bind(partnerId, ...companyBinds(companyId)).all<any>();
 
     const list = rows.results || [];
 
@@ -767,9 +782,9 @@ partnerPipeline.get('/negotiations', async (c) => {
          FROM quote_terms t
          JOIN quote_negotiations g ON g.id = t.negotiation_id
          JOIN quotes q ON q.id = g.quote_id
-        WHERE q.partner_id = ?
+        WHERE q.partner_id = ? AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
         ORDER BY t.negotiation_id, t.id`,
-    ).bind(partnerId).all<any>();
+    ).bind(partnerId, ...companyBinds(companyId)).all<any>();
     const termsByNegotiation = new Map<number, any[]>();
     for (const t of terms.results || []) {
       const k = Number(t.negotiation_id);
@@ -789,7 +804,12 @@ partnerPipeline.get('/negotiations', async (c) => {
       // is who it is for, and a board of scopes with no names on it is a board
       // nobody can act from.
       founder_name: r.founder_name ?? null,
-      negotiation: r.negotiation_id ? negotiationDto(r) : null,
+      // D4693: `open` and `label` are the rule every count and every printed state uses. The stage alone is not
+      // enough: a quote that was accepted, rejected or withdrawn is not being negotiated whatever stage its thread
+      // was left in.
+      negotiation: r.negotiation_id
+        ? { ...negotiationDto(r), open: negotiationIsOpen(r.stage, r.quote_status), label: negotiationLabel(r.stage, r.quote_status) }
+        : null,
       terms: r.negotiation_id ? (termsByNegotiation.get(Number(r.negotiation_id)) || []) : [],
     }));
 
@@ -798,12 +818,14 @@ partnerPipeline.get('/negotiations', async (c) => {
     // here at all, and a closed one is not live — neither belongs in a count
     // of what is in play, and folding either in would make the board look
     // busier than the work is.
-    const open = items.filter(
-      (x: any) => x.negotiation && x.negotiation.stage !== 'closed',
-    );
+    const open = items.filter((x: any) => x.negotiation?.open);
     return c.json({
       items,
       live_count: open.length,
+      // The same number under the name the board prints, so no screen counts "open" from the rows itself.
+      open_count: open.length,
+      tracked_count: items.filter((x: any) => x.negotiation).length,
+      count_basis: `${open.length} open of ${items.filter((x: any) => x.negotiation).length} tracked. A negotiation is open when it is not closed and its quote is still waiting.`,
       // `quotes.price` is grandfathered REAL dollars — named, not guessed at.
       live_value_dollars: open.reduce((a: number, x: any) => a + (Number(x.price) || 0), 0),
       awaiting_us_count: open.filter((x: any) => x.negotiation.ball === 'us').length,
@@ -831,9 +853,9 @@ partnerPipeline.get('/negotiations', async (c) => {
  */
 partnerPipeline.put('/negotiations/:quoteId', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const quoteId = Number(c.req.param('quoteId'));
-    await requireOwnQuote(c.env, partnerId, quoteId);
+    await requireOwnQuote(c.env, partnerId, quoteId, companyId);
     const b = await body<any>(c);
 
     const existing = await c.env.DB.prepare(
@@ -883,9 +905,9 @@ partnerPipeline.put('/negotiations/:quoteId', async (c) => {
 
 partnerPipeline.post('/negotiations/:quoteId/terms', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const quoteId = Number(c.req.param('quoteId'));
-    await requireOwnQuote(c.env, partnerId, quoteId);
+    await requireOwnQuote(c.env, partnerId, quoteId, companyId);
     const b = await body<any>(c);
     const label = trimOrNull(b.label, 160);
     if (!label) return c.json({ detail: 'A term needs a label — what is being negotiated' }, 400);
@@ -925,7 +947,7 @@ partnerPipeline.post('/negotiations/:quoteId/terms', async (c) => {
 });
 
 /** The term, if it hangs off a negotiation on a quote this partner owns. */
-async function ownTerm(env: Env, partnerId: number, termId: number) {
+async function ownTerm(env: Env, partnerId: number, termId: number, companyId: number | null = null) {
   const row = await env.DB.prepare(
     `SELECT t.*, q.partner_id
        FROM quote_terms t
@@ -933,7 +955,13 @@ async function ownTerm(env: Env, partnerId: number, termId: number) {
        JOIN quotes q ON q.id = g.quote_id
       WHERE t.id = ?`,
   ).bind(termId).first<any>();
-  if (!row || Number(row.partner_id) !== Number(partnerId)) {
+  const company = row && companyId !== null
+    ? (await env.DB.prepare(
+      `SELECT q.company_id FROM quote_terms t JOIN quote_negotiations g ON g.id = t.negotiation_id
+         JOIN quotes q ON q.id = g.quote_id WHERE t.id = ?`,
+    ).bind(termId).first<{ company_id: number | null }>())?.company_id
+    : null;
+  if (!row || Number(row.partner_id) !== Number(partnerId) || outsideCompany(company, companyId)) {
     throw new Response(JSON.stringify({ detail: 'Term not found' }), {
       status: 404, headers: { 'Content-Type': 'application/json' },
     });
@@ -943,9 +971,9 @@ async function ownTerm(env: Env, partnerId: number, termId: number) {
 
 partnerPipeline.patch('/negotiation-terms/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    const row = await ownTerm(c.env, partnerId, id);
+    const row = await ownTerm(c.env, partnerId, id, companyId);
     const b = await body<any>(c);
     const merged = mergePatch(row, b, ['label', 'our_position', 'their_position', 'landing', 'state']);
     if (!trimOrNull(merged.label, 160)) return c.json({ detail: 'A term needs a label' }, 400);
@@ -968,9 +996,9 @@ partnerPipeline.patch('/negotiation-terms/:id', async (c) => {
 
 partnerPipeline.delete('/negotiation-terms/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    await ownTerm(c.env, partnerId, id);
+    await ownTerm(c.env, partnerId, id, companyId);
     await c.env.DB.prepare('DELETE FROM quote_terms WHERE id = ?').bind(id).run();
     return c.json({ ok: true, id });
   } catch (e) { return mapError(c, e); }
@@ -992,7 +1020,7 @@ function currentPeriod(cadence: string, now = new Date()): string {
 
 partnerPipeline.get('/retainers', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     // LEFT JOIN, matching `/negotiations` above: every engagement this firm
     // holds comes back, with `retainer: null` where none is recorded. An inner
     // join would return only the retainers that already exist, which reads as
@@ -1008,10 +1036,10 @@ partnerPipeline.get('/retainers', async (c) => {
          LEFT JOIN founder_needs n ON n.id = e.need_id
          LEFT JOIN founders f ON f.id = e.founder_id
          LEFT JOIN partner_retainers r ON r.engagement_id = e.id
-        WHERE e.partner_id = ?
+        WHERE e.partner_id = ? AND (? IS NULL OR e.company_id IS NULL OR e.company_id = ?)
         ORDER BY r.id IS NULL, r.renews_at IS NULL, r.renews_at, e.created_at DESC
         LIMIT 200`,
-    ).bind(partnerId).all<any>();
+    ).bind(partnerId, ...companyBinds(companyId)).all<any>();
 
     const list = rows.results || [];
 
@@ -1023,9 +1051,9 @@ partnerPipeline.get('/retainers', async (c) => {
          FROM retainer_usage u
          JOIN partner_retainers r ON r.id = u.retainer_id
          JOIN engagements e ON e.id = r.engagement_id
-        WHERE e.partner_id = ?
+        WHERE e.partner_id = ? AND (? IS NULL OR e.company_id IS NULL OR e.company_id = ?)
         ORDER BY u.retainer_id, u.period DESC`,
-    ).bind(partnerId).all<any>();
+    ).bind(partnerId, ...companyBinds(companyId)).all<any>();
     const usageByRetainer = new Map<number, any[]>();
     for (const u of usageRows.results || []) {
       const k = Number(u.retainer_id);
@@ -1039,6 +1067,7 @@ partnerPipeline.get('/retainers', async (c) => {
     let counted = 0;
     let unpriced = 0;
     let withRetainer = 0;
+    let endedCount = 0;
     const items = list.map((r: any) => {
       const base = {
         engagement_id: Number(r.engagement_id),
@@ -1063,16 +1092,14 @@ partnerPipeline.get('/retainers', async (c) => {
         { retained_hours: r.retained_hours === null ? null : Number(r.retained_hours) },
         thisPeriod,
       );
-      if (r.amount_cents === null || r.amount_cents === undefined) unpriced += 1;
-      else {
-        // A quarterly amount is not a monthly one. Dividing here rather than
-        // summing raw is the difference between MRR and a number that is three
-        // times too big for every quarterly line.
-        mrrCents += r.cadence === 'quarterly'
-          ? Math.round(Number(r.amount_cents) / 3)
-          : Number(r.amount_cents);
-        counted += 1;
-      }
+      // D4693: CURRENT RECURRING REVENUE IS AN ACTIVE RETAINER'S MONTHLY AMOUNT. An ended retainer, or one on a
+      // cancelled engagement, is history and is counted nowhere in the total; a quarterly amount is divided by three;
+      // a cadence this code does not know is not assumed to be monthly.
+      const active = isActiveRetainer({ ended_at: r.ended_at }, { status: r.engagement_status, cancelled_at: r.cancelled_at });
+      const monthly = monthlyCents(r.amount_cents === null || r.amount_cents === undefined ? null : Number(r.amount_cents), r.cadence);
+      if (!active) endedCount += 1;
+      else if (monthly === null) unpriced += 1;
+      else { mrrCents += monthly; counted += 1; }
       return {
         ...base,
         retainer: {
@@ -1081,6 +1108,9 @@ partnerPipeline.get('/retainers', async (c) => {
           shape: r.shape,
           cadence: r.cadence,
           amount_cents: r.amount_cents === null ? null : Number(r.amount_cents),
+          // What the zone prints under a "Monthly" heading, so a quarterly amount is never shown raw there.
+          monthly_cents: monthly,
+          active,
           retained_hours: r.retained_hours === null ? null : Number(r.retained_hours),
           renews_at: r.renews_at ?? null,
           ended_at: r.ended_at ?? null,
@@ -1101,14 +1131,10 @@ partnerPipeline.get('/retainers', async (c) => {
     // A RETAINER WITH NO RETAINED HOURS IS IN NEITHER. It has no utilisation at
     // all — a different shape of deal, not a badly-consumed one — and sweeping
     // it into `under` would report a fee-based retainer as a churn risk.
-    const live = items.filter((x: any) => x.retainer && !x.retainer.ended_at);
+    const live = items.filter((x: any) => x.retainer && x.retainer.active);
     const under = live.filter((x: any) => x.utilisation_pct != null && x.utilisation_pct < 60);
     const over = live.filter((x: any) => x.utilisation_pct != null && x.utilisation_pct > 100);
-    const monthlyOf = (x: any) => {
-      const cents = x.retainer?.amount_cents;
-      if (cents == null) return null;
-      return x.retainer.cadence === 'quarterly' ? Math.round(Number(cents) / 3) : Number(cents);
-    };
+    const monthlyOf = (x: any) => x.retainer?.monthly_cents ?? null;
     const byShape: Record<string, number> = { retainer: 0, embedded_seat: 0 };
     for (const x of live) {
       const shape = x.retainer?.shape;
@@ -1117,7 +1143,10 @@ partnerPipeline.get('/retainers', async (c) => {
 
     return c.json({
       items,
+      // Every retainer on record, active or not; the two figures below split it.
       retainer_count: withRetainer,
+      active_count: withRetainer - endedCount,
+      ended_count: endedCount,
       mrr_cents: counted ? mrrCents : null,
       // COUNTED BY SHAPE, because an embedded seat is recurring revenue and is
       // not a retainer — and this is the page that exists to tell those
@@ -1134,7 +1163,7 @@ partnerPipeline.get('/retainers', async (c) => {
       // retainer with no amount is skipped, never counted as zero — zero would
       // claim the client pays nothing.
       mrr_basis: counted
-        ? `${counted} retainer${counted === 1 ? '' : 's'} with a recorded amount; quarterly amounts divided by three.`
+        ? `${counted} active retainer${counted === 1 ? '' : 's'} with a recorded amount; quarterly amounts divided by three${endedCount ? `; ${endedCount} ended not counted` : ''}.`
         : null,
       mrr_note: counted
         ? (unpriced ? `${unpriced} retainer${unpriced === 1 ? ' has' : 's have'} no amount recorded and ${unpriced === 1 ? 'is' : 'are'} not in this total.` : null)
@@ -1147,9 +1176,9 @@ partnerPipeline.get('/retainers', async (c) => {
 
 partnerPipeline.put('/retainers/:engagementId', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
-    await requireOwnEngagement(c.env, partnerId, engagementId);
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
     const b = await body<any>(c);
 
     const existing = await c.env.DB.prepare(
@@ -1208,9 +1237,9 @@ partnerPipeline.put('/retainers/:engagementId', async (c) => {
 
 partnerPipeline.delete('/retainers/:engagementId', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
-    await requireOwnEngagement(c.env, partnerId, engagementId);
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
     const row = await c.env.DB.prepare(
       'SELECT id FROM partner_retainers WHERE engagement_id = ?',
     ).bind(engagementId).first<any>();
@@ -1223,9 +1252,9 @@ partnerPipeline.delete('/retainers/:engagementId', async (c) => {
 
 partnerPipeline.put('/retainers/:engagementId/usage/:period', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
-    await requireOwnEngagement(c.env, partnerId, engagementId);
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
     const retainer = await c.env.DB.prepare(
       'SELECT * FROM partner_retainers WHERE engagement_id = ?',
     ).bind(engagementId).first<any>();
@@ -1274,9 +1303,9 @@ partnerPipeline.put('/retainers/:engagementId/usage/:period', async (c) => {
 
 partnerPipeline.delete('/retainers/:engagementId/usage/:period', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
-    await requireOwnEngagement(c.env, partnerId, engagementId);
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
     const retainer = await c.env.DB.prepare(
       'SELECT id FROM partner_retainers WHERE engagement_id = ?',
     ).bind(engagementId).first<any>();

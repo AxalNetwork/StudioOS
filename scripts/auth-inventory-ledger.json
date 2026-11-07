@@ -65,26 +65,6 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "DELETE /api/partner/pipeline/leads/:needId/pass": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "DELETE /api/partner/pipeline/negotiation-terms/:id": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "DELETE /api/partner/pipeline/retainers/:engagementId": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "DELETE /api/partner/pipeline/retainers/:engagementId/usage/:period": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "DELETE /api/partner/testing/programmes/:uid/logo": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
@@ -740,11 +720,6 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "PATCH /api/partner/pipeline/negotiation-terms/:id": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "PATCH /api/partner/testing/programmes/:uid": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
@@ -1212,21 +1187,6 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "POST /api/partner/pipeline/leads/:needId/pass": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "POST /api/partner/pipeline/negotiations/:quoteId/terms": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "POST /api/partner/pipeline/proposals/:quoteId/versions": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "POST /api/partner/testing/applications/:uid/decline": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
@@ -1397,26 +1357,6 @@
       "state": "unreviewed"
     },
     "PUT /api/partner/offers/engagements/:engagementId/source": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "PUT /api/partner/pipeline/negotiations/:quoteId": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "PUT /api/partner/pipeline/proposals/:quoteId/outcome": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "PUT /api/partner/pipeline/retainers/:engagementId": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "PUT /api/partner/pipeline/retainers/:engagementId/usage/:period": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
       "state": "unreviewed"

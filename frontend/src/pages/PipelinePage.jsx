@@ -301,7 +301,7 @@ function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, 
       )}
       {deal.latest_metrics?.key_metrics && Object.keys(deal.latest_metrics.key_metrics).length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
-          {Object.entries(deal.latest_metrics.key_metrics).slice(0, 3).map(([k, v]) => (
+          {Object.entries(deal.latest_metrics.key_metrics).filter(([k]) => !k.startsWith('_')).slice(0, 3).map(([k, v]) => (
             <span key={k} className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-700 px-1.5 py-0.5 rounded dark:text-gray-300">{k}: {String(v)}</span>
           ))}
         </div>
@@ -653,7 +653,7 @@ function MetricsTab({ data, canEdit, dealId, reload }) {
               <ScorePill score={m.traction_score} small />
             </div>
             <div className="flex flex-wrap gap-1">
-              {Object.entries(m.key_metrics).map(([k, v]) => <span key={k} className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{k}: {String(v)}</span>)}
+              {Object.entries(m.key_metrics).filter(([k]) => !k.startsWith('_')).map(([k, v]) => <span key={k} className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{k}: {String(v)}</span>)}
             </div>
           </div>
         ))}

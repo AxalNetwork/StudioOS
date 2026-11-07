@@ -111,12 +111,15 @@ test('the win rate is null with nothing decided, and Analytics reads the same on
     'a win rate is drawn over an empty denominator');
   assert.ok(flat(strip).includes('nothing decided yet, so there is no rate'));
   const read = between(worker, "partnerPipeline.get('/proposals'", 'Append a version');
-  assert.ok(/win_rate_pct: decidedItems\.length\s*\n?\s*\? Math\.round\(\(won\.length \/ decidedItems\.length\) \* 100\) : null,/.test(read),
+  // D4693: the same function `/quotes/analytics` uses, so the two cannot disagree: won over won-plus-lost, null with none decided.
+  assert.ok(/win_rate_pct: winRate\(won\.length, lost\.length\)\.pct,/.test(read),
     'the win rate is no longer won-over-decided, or no longer null when nothing is decided');
+  assert.ok(/win_rate_basis: winRateBasis\(/.test(read), 'the win rate stopped saying what it was counted from');
   // DECIDED IS ACCEPTED PLUS REJECTED — a proposal still waiting is not a loss,
   // and a withdrawn one was never lost to anyone.
   assert.ok(/const decidedItems = items\.filter\(\(x: any\) => x\.decided\);/.test(read));
-  assert.ok(/const decided = Boolean\(q\.decided_at\) \|\| q\.status === 'accepted' \|\| q\.status === 'rejected';/.test(read),
+  // D4693: a decided_at stamp alone no longer decides a quote (a withdrawn one can carry it).
+  assert.ok(/const outcome = quoteOutcome\(q\.status\);\s*\n\s*const decided = outcome === 'won' \|\| outcome === 'lost';/.test(read),
     'the decided test changed shape');
 });
 
@@ -160,7 +163,7 @@ test('a version trail is append-only and self-numbering', () => {
   // NO EDIT AND NO DELETE. A history that can be rewritten is not one.
   assert.ok(!/UPDATE quote_versions|DELETE FROM quote_versions/.test(worker),
     'a version can now be edited or deleted');
-  assert.ok(/requireOwnQuote\(c\.env, partnerId, quoteId\)/.test(post),
+  assert.ok(/requireOwnQuote\(c\.env, partnerId, quoteId, companyId\)/.test(post),
     'a version can be appended to another firm’s quote');
 
   const inst = between(zone, 'testid="version-history"', '/>');

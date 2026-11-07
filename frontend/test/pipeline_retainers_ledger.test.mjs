@@ -143,14 +143,15 @@ test('the MRR note is a shape breakdown, because a seat is not a retainer', () =
 test('the counts and their own chips narrow the same live book', () => {
   // WORKER: `live` is the base for both consumption counts.
   const readRoute = between(worker, "partnerPipeline.get('/retainers'", 'mrr_basis:');
-  assert.ok(/const live = items\.filter\(\(x: any\) => x\.retainer && !x\.retainer\.ended_at\);/.test(readRoute),
+  assert.ok(/const live = items\.filter\(\(x: any\) => x\.retainer && x\.retainer\.active\);/.test(readRoute),
     'the worker stopped excluding ended retainers from its counts');
   assert.ok(/const under = live\.filter/.test(readRoute) && /const over = live\.filter/.test(readRoute),
     'a consumption count went back to counting the whole book');
 
   // ZONE: the same list, so the tile and the chip beside it cannot disagree.
   const liveDef = between(zone, 'const live = useMemo(', '  );');
-  assert.ok(/items\.filter\(\(r\) => r\.retainer && !r\.retainer\.ended_at\)/.test(liveDef),
+  // D4693: the zone narrows by the Worker's own `retainer.active` (falling back to `ended_at` for an older answer).
+  assert.ok(/items\.filter\(\(r\) => r\.retainer && \(r\.retainer\.active \?\? !r\.retainer\.ended_at\)\)/.test(liveDef),
     'the zone’s live book stopped excluding ended retainers');
   for (const name of ['renewingSoon', 'overScope', 'underConsuming']) {
     const def = between(zone, `const ${name} = useMemo(`, '  );');
@@ -288,7 +289,8 @@ test('utilisation is the artboard’s bar, capped, and quarterly is divided by t
   // QUARTERLY IS NOT MONTHLY. Dividing is the difference between MRR and a
   // figure three times too big for every quarterly line — and the row and the
   // total have to divide the same way or the column will not add up.
-  assert.ok(/Math\.round\(Number\(r\.amount_cents\) \/ 3\)/.test(worker),
+  // D4693: the division lives in `monthlyCents` (services/partnerPipelineRules.ts), and the route calls it for the row and the total.
+  assert.ok(/Math\.round\(cents \/ 3\)/.test(raw('cloudflare-worker/src/services/partnerPipelineRules.ts')) && /monthlyCents\(/.test(worker),
     'the worker stopped converting a quarterly amount to a monthly one');
   assert.ok(/Math\.round\(Number\(r\.retainer\.amount_cents\) \/ 3\)/.test(inst),
     'the ledger row stopped converting a quarterly amount to a monthly one');
