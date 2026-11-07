@@ -38,7 +38,7 @@ export function amountToCents(input) {
       whole = head.replace(/\s/g, ''); frac = tail;
     } else if (raw[mark] === '.' && !several && /^\d{3}$/.test(tail)) {
       // "1.500" is 1,500 where a dot groups and 1.5 where it is the decimal mark.
-      return { error: 'A dot followed by three digits could mean thousands or a decimal. Write the amount without it, such as 1500 or 1.50.' };
+      return { error: 'Enter an amount like 1500 or 1500.50. A dot followed by three digits could mean thousands or a decimal, so write the amount without one.' };
     } else if (GROUPED.test(raw) && raw.replace(/\d|\s/g, '') === raw[mark].repeat((raw.match(new RegExp(`\\${raw[mark]}`, 'g')) || []).length)) {
       whole = raw.replace(/[.,\s]/g, '');
     } else return bad;
