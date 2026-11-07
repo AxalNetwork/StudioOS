@@ -176,14 +176,20 @@ export async function startLab(sql: Sql, userId: number): Promise<StartResult> {
     return { ok: false, status: 409, error: 'This account has already been through the Lab' };
   }
   // Idempotent: COALESCE preserves an existing started_at and a non-zero
-  // week so re-calling start() doesn't reset progress.
-  await sql`
+  // week so re-calling start() doesn't reset progress. D4658: the write
+  // itself refuses a graduate, so an exit that lands between the probe above
+  // and this statement cannot be reopened by a start that read before it.
+  const started: Array<{ id: number }> = await sql`
     UPDATE users
     SET spinout_lab_active = 1,
         spinout_lab_week = COALESCE(NULLIF(spinout_lab_week, 0), 1),
         spinout_lab_started_at = COALESCE(spinout_lab_started_at, datetime('now'))
-    WHERE id = ${userId}
+    WHERE id = ${userId} AND COALESCE(is_incorporated, 0) = 0
+    RETURNING id
   `;
+  if (started.length === 0) {
+    return { ok: false, status: 409, error: 'This account has already been through the Lab' };
+  }
   return { ok: true, state: await getLabState(sql, userId) };
 }
 
@@ -229,15 +235,18 @@ export async function recordMilestone(
   while (newWeek < 4 && weekMet(newWeek, completed)) {
     newWeek += 1;
   }
+  // D4658: the week only moves forward, and only while the Lab is on. Two
+  // requests that each computed a week from their own read cannot write the
+  // lower one over the higher, and a sprint that closed meanwhile stays closed.
   if (newWeek !== Number(u.spinout_lab_week)) {
-    await sql`UPDATE users SET spinout_lab_week = ${newWeek} WHERE id = ${userId}`;
+    await sql`UPDATE users SET spinout_lab_week = MAX(COALESCE(spinout_lab_week, 1), ${newWeek}) WHERE id = ${userId} AND spinout_lab_active = 1`;
   }
   if (newWeek === 4 && weekMet(4, completed)) {
     // Single statement so a partial failure can't half-incorporate the user.
     // SQLite/D1 statement execution is atomic; either both columns flip or
     // neither does. Mirrors the explicit /exit route's effect.
     await sql`
-      UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ${userId}
+      UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ${userId} AND spinout_lab_active = 1
     `;
   }
 
@@ -725,32 +734,41 @@ spinoutLab.post('/apply/withdraw', async (c) => {
     return refusal(c, 409, 'not_withdrawable',
       'This application has already been decided, so there is nothing to withdraw. Contact the programme team if you need to step back.');
   }
-  let upd: { meta?: { changes?: number } };
+  // D4658: one decision wins. The withdrawal, the pool row and the interview
+  // are one batch (one D1 transaction), and the application is withdrawn only
+  // while no admin decision has landed on its pool row — the approval checks
+  // the same thing from its side (labDecisions.decideApplicant). The answers
+  // are deleted, and the interview cancelled, only by the withdrawal that won.
+  let changed = 0;
   try {
-    upd = await c.env.DB.prepare(
-      `UPDATE spinout_applications
-          SET status = 'withdrawn', withdrawn_at = datetime('now'), answers_json = NULL, idea = ''
-        WHERE id = ? AND user_id = ? AND status = 'pending'`,
-    ).bind(app.id, user.id).run();
+    const [upd] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE spinout_applications
+            SET status = 'withdrawn', withdrawn_at = datetime('now'), answers_json = NULL, idea = ''
+          WHERE id = ? AND user_id = ? AND status = 'pending'
+            AND NOT EXISTS (SELECT 1 FROM cohort_applicants ca
+                             WHERE ca.application_id = spinout_applications.id
+                               AND ca.status IN ('approved', 'activated', 'rejected'))`,
+      ).bind(app.id, user.id),
+      c.env.DB.prepare(
+        `UPDATE cohort_applicants SET status = 'withdrawn', decided_at = datetime('now'), decided_by = ?
+          WHERE application_id = ? AND status IN ('pending', 'waitlisted')
+            AND (SELECT status FROM spinout_applications WHERE id = ?) = 'withdrawn'`,
+      ).bind(`user:${user.id}`, app.id, app.id),
+      c.env.DB.prepare(
+        `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
+          WHERE application_id = ? AND status = 'scheduled' AND outcome IS NULL
+            AND (SELECT status FROM spinout_applications WHERE id = ?) = 'withdrawn'`,
+      ).bind(app.id, app.id),
+    ]);
+    changed = Number(upd?.meta?.changes ?? 0);
   } catch (err) {
-    console.error('[spinout-lab/apply/withdraw] update failed', err);
+    console.error('[spinout-lab/apply/withdraw] update failed', (err as Error)?.message);
     return refusal(c, 503, 'withdraw_unavailable', 'Your application could not be withdrawn just now. Try again in a moment.');
   }
-  if ((upd.meta?.changes ?? 0) === 0) {
+  if (changed === 0) {
     return refusal(c, 409, 'not_withdrawable', 'This application changed while you were withdrawing it. Refresh and check its status.');
   }
-  try {
-    await c.env.DB.prepare(
-      `UPDATE cohort_applicants SET status = 'withdrawn', decided_at = datetime('now'), decided_by = ?
-        WHERE application_id = ? AND status IN ('pending', 'waitlisted')`,
-    ).bind(`user:${user.id}`, app.id).run();
-  } catch { /* pool not migrated */ }
-  try {
-    await c.env.DB.prepare(
-      `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
-        WHERE application_id = ? AND status = 'scheduled' AND outcome IS NULL`,
-    ).bind(app.id).run();
-  } catch { /* interviews not migrated */ }
   return c.json({ ok: true, applicant: await loadApplicantBlock(c.env, user.id) });
 });
 

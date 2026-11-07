@@ -249,3 +249,10 @@ advisor CTA and stored search-result URLs after redirect retirement (#4415).
 - every completion rule run on the real schema.
 
 `_lab_evidence.ts` is its helper, and the helper other Lab tests use: it applies the enrollment migration and writes the invented saved work that proves a milestone.
+
+`lab_lifecycle_4658.test.ts` (D4658) runs the Lab's lifecycle services and routes on the migrated template. It covers:
+- a stale week never written over a higher one;
+- a graduate never reopened by a start, a reinstatement or the activation;
+- the cycle activation interrupted at its batch, then resumed until it converges, completing only when every applicant is done and duplicating nothing on a rerun;
+- approval against withdrawal in both orders, including the race where the approval lands between the withdrawal's read and its write;
+- notification retry: failed and cut-off sends, the conditional re-claim, and abandonment.

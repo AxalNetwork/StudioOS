@@ -33,6 +33,7 @@ import {
 import adminCohort from '../src/routes/admin_cohort.ts';
 import certificates from '../src/routes/spinout_certificates.ts';
 import { BRANCH_SUSPENDED } from '../src/util/branch.ts';
+import { labEnrollmentSchema } from './_lab_evidence.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 900, FOUNDER = 117;
@@ -52,6 +53,7 @@ function freshDb() {
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   u.run(ADMIN, 'admin', 'Admin One', 'admin@example.test');
   u.run(FOUNDER, 'founder', 'Ada Graduate', 'ada@example.test');
+  labEnrollmentSchema(db); // D4657: the activation writes the founder's enrollment
   return db;
 }
 
