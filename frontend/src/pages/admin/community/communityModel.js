@@ -38,14 +38,15 @@
  */
 
 export { SCOPE_LABEL, SCOPE_TITLE } from '../insights/insightsModel';
-export { AS_ENTERED_TIP, CHECKINS_WITHHELD, COMMUNITY_PATH, EMPTY_LINE, MIN_CHECKIN_COHORT, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, OVERDUE_HOURS, PAGE_LINE, PAGE_UNREADABLE, RECENT_ROWS } from './model/constants.js';
+export { AS_ENTERED_TIP, BUILD_LINE, BUILD_TITLE, CHECKINS_WITHHELD, COMMUNITY_PATH, INSIGHTS_EMPTY_LEAD, MANAGE_LINE, MANAGE_TITLE, MIN_CHECKIN_COHORT, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, OVERDUE_HOURS, PAGE_LINE, PAGE_UNREADABLE, QUEUE_CLEAR, RECENT_ROWS, insightsLabel } from './model/constants.js';
 export { DEFAULT_WEEKS, PERIODS, searchWithWeeks, weeksFrom } from './model/period.js';
 export { blockOf, clockOf, laneOf, readAllPages } from './model/read.js';
 export { asOfLabel, beforeLabel, dayLabel, daysOpenText, deltaText, jobDaysOpen, seatsText, stamp, waitText, weekLabel } from './model/format.js';
-export { buildNeeds, oldestWait } from './model/queues.js';
+export { NEEDS_ROWS, buildNeeds, oldestWait } from './model/queues.js';
 export { buildEventsFunnel, buildNextUp } from './model/events.js';
 export { buildJobs } from './model/jobs.js';
 export { buildCircles, rosterOf } from './model/people.js';
 export { biggestChange, buildActivity, buildWho } from './model/activity.js';
 export { buildWellbeing } from './model/wellbeing.js';
-export { buildConsoles, buildTiles, isEmptyCommunity, pageFailed } from './model/page.js';
+export { KPI_KEYS, buildConsoles, buildKpis, buildTiles, pageFailed } from './model/page.js';
+export { activityEmpty, bookingsEmpty, circlesEmpty, eventsEmpty, expertsEmpty, funnelEmpty, isEmptyCommunity, jobsEmpty, rosterEmpty } from './model/empty.js';
