@@ -111,7 +111,13 @@ export function SeatScopeEditor({ seat, busy = false, onSave, initialEditing = f
         <input id={`seat-scope-${seat.id}`} className={inputClass} value={draft} maxLength={400}
           placeholder="In the client's words" onChange={(e) => setDraft(e.target.value)} />
         <button type="button" className={buttonClass} disabled={busy}
-          onClick={async () => { await onSave?.(draft.trim()); setEditing(false); }}>
+          onClick={async () => {
+            // #4698: close only on a confirmed save. `onSave` answers `false`
+            // for a refusal (the typed scope stays in the box); a caller that
+            // answers nothing keeps the earlier close-on-return behaviour.
+            const ok = await onSave?.(draft.trim());
+            if (ok !== false) setEditing(false);
+          }}>
           Save
         </button>
         <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => setEditing(false)}>
@@ -127,7 +133,7 @@ export function SeatScopeEditor({ seat, busy = false, onSave, initialEditing = f
  * A month with no entry reads "Not recorded" with its reason; an entry can be
  * deleted, after which it reads the same.
  */
-export function HoursEntries({ read, busy = false, onDelete, onRetry }) {
+export function HoursEntries({ read, busy = false, isBusy, onDelete, onRetry }) {
   if (read.kind === 'loading') {
     return <p className="text-[12.5px] text-axal-faint" data-testid="hours-entries-loading">Loading hours…</p>;
   }
@@ -168,7 +174,7 @@ export function HoursEntries({ read, busy = false, onDelete, onRetry }) {
                     ) : (
                       <span className="inline-flex items-center gap-1.5">
                         <span className="tabular-nums">{h} h</span>
-                        <button type="button" disabled={busy} onClick={() => onDelete?.(e, p)}
+                        <button type="button" disabled={busy || isBusy?.(e, p) || undefined} onClick={() => onDelete?.(e, p)}
                           aria-label={`Delete ${h} hours for ${e.person_name || 'this person'} in ${p}`}
                           className="text-[11px] text-red-700 underline hover:text-red-900 disabled:opacity-50 dark:text-red-300 dark:hover:text-red-200">
                           Delete

@@ -47,6 +47,18 @@ page in a child component inside it:
   PG19b in the page. It also holds `ProgramsTabs`, the strip "Catalogue ·
   Proposals [n]" the catalogue draws for a Super Admin.
 
+- `GenericProgramPage.jsx` — D4808 (#4808), workspace "Programs":
+  `/admin/programs/:key` (with `/how-it-runs` and `/activity`), registered by
+  `frontend/src/routes/adminProgramsGeneric.jsx`. Draws any program the
+  registry holds, so a program an approval or New program made needs no route
+  of its own: About, Availability, Declared capabilities, the Approved
+  proposal exactly as approved, How it runs and Activity. The literal
+  addresses above rank higher, so the nine keep their pages.
+- `ProposalReviewPage.jsx` — D4808: `/admin/programs/proposals/:uid`, a
+  proposal's review before Decide. The queue's Review leads here; Decide opens
+  from it.
+- `genericProgramModel.js` — D4808: both pages' words and rows. Pure.
+
 The pieces they draw with:
 
 - `ProgramFrame.jsx` — every program page's crumb, header, facts strip and
