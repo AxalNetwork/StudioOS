@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { adminCircles, adminEvents, adminJobs, adminNetworkProfiles } from '../../../lib/api';
+import { adminCircles, adminEvents, adminJobs } from '../../../lib/api';
 import { communityApi } from '../../../lib/api/community';
 import { reportError } from '../../../lib/log';
 import {
@@ -13,7 +13,7 @@ import {
   AS_ENTERED_TIP, EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, OVERDUE_HOURS, PAGE_LINE, PAGE_UNREADABLE,
   PERIODS, RECENT_ROWS, SCOPE_LABEL, SCOPE_TITLE,
   asOfLabel, buildActivity, buildCircles, buildConsoles, buildEventsFunnel, buildJobs, buildNeeds, buildNextUp, buildTiles,
-  buildWellbeing, buildWho, isEmptyCommunity, pageFailed, readAllPages, searchWithWeeks, weeksFrom,
+  buildWellbeing, buildWho, clockOf, isEmptyCommunity, pageFailed, readAllPages, searchWithWeeks, weeksFrom,
 } from './communityModel';
 import { ACTIVITY_KINDS, activityPage, openFrom, searchWith } from './lightboxModel';
 import ActivityLightbox from './ActivityLightbox';
@@ -70,13 +70,13 @@ const PAGE = 200;
  * holds back only its blocks. `reload()` makes them all again.
  */
 function useCommunityReads(weeks) {
-  const [reads, setReads] = useState({ glance: idle, events: idle, analytics: idle, jobs: idle, circles: idle, roster: idle, overview: idle });
+  const [reads, setReads] = useState({ glance: idle, events: idle, analytics: idle, jobs: idle, circles: idle, overview: idle });
   const [asOf, setAsOf] = useState(null);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let live = true;
-    setReads({ glance: idle, events: idle, analytics: idle, jobs: idle, circles: idle, roster: idle });
+    setReads((r) => ({ ...r, glance: idle, events: idle, analytics: idle, jobs: idle, circles: idle }));
     const settle = (key, work) => work.then(
       (data) => { if (live) { setReads((r) => ({ ...r, [key]: { status: 'ready', data } })); setAsOf(Date.now()); } },
       (e) => { reportError(`admin-community:${key}`, e); if (live) setReads((r) => ({ ...r, [key]: { status: 'error', data: null } })); },
@@ -95,11 +95,8 @@ function useCommunityReads(weeks) {
       if (!Array.isArray(a?.circles)) throw new Error('The circles were not returned');
       return a.circles;
     }));
-    settle('roster', adminNetworkProfiles.list().then((a) => {
-      if (!Array.isArray(a?.profiles)) throw new Error('The roster was not returned');
-      // Counts only: the kind and whether the row is active. No name leaves this read.
-      return a.profiles.map((p) => ({ kind: p.kind, is_active: Boolean(p.is_active) }));
-    }));
+    // #4717: the roster is the Community read's network block, counted on the
+    // server over every row; the page no longer counts a capped list.
     return () => { live = false; };
   }, [tick]);
 
@@ -547,7 +544,9 @@ export default function AdminCommunity() {
   const weeks = weeksFrom(loc.search);
   const { reads, asOf, reload, tick } = useCommunityReads(weeks);
   const moved = new URLSearchParams(loc.search).get('moved') === MOVED_KEY;
-  const [now] = useState(() => Date.now());
+  // #4717: one clock for every time-relative figure, the Community read's own
+  // `as_of`, so Refresh moves days open, waits and Overdue with the rows.
+  const now = useMemo(() => clockOf(reads, asOf), [reads, asOf]);
   const phone = usePhoneWidth();
   const box = openFrom(loc.search);
   const Box = box ? BOXES[box] : null;

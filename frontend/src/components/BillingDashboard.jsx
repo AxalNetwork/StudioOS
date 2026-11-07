@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { CreditCard, Loader2, FileText, AlertTriangle, RotateCcw, Plus, Lock, X, Star, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSettings } from '../contexts/SettingsContext';
 import { getStripe, buildAppearance } from '../lib/stripe';
 import { cancelWords, openCheckout, planKeyOfProduct } from './checkout/checkoutEntry';
+import { useAccountRead } from '../pages/account/AccountCenter';
 
 /**
  * Task #5 — In-app billing dashboard.
@@ -38,37 +39,19 @@ const fmtMoney = (amt, cur) =>
       }).format(amt / 100);
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—');
-export default function BillingDashboard({ scope = 'founder', variant = 'subscriber', flash, onChanged }) {
-  const [overview, setOverview] = useState(null);
-  const [loading, setLoading] = useState(true);
+export default function BillingDashboard({ scope = 'founder', variant = 'subscriber', flash, onChanged, overviewRead = null }) {
+  const localOverview = useAccountRead(() => api.billingOverview(scope), { enabled: !overviewRead });
+  const sharedOverview = overviewRead || localOverview;
+  const overview = sharedOverview.status === 'ready' ? sharedOverview.data : null;
+  const loading = sharedOverview.status === 'loading';
   const [plans, setPlans] = useState([]);
   const [busy, setBusy] = useState(null);          // action key in flight
-  const [loadError, setLoadError] = useState(null); // overview load failed (inline panel)
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setLoadError(null);
-    api.billingOverview(scope)
-      .then((res) => {
-        setOverview(res);
-        setLoadError(null);
-      })
-      .catch((e) => {
-        // The whole tab failed to load. A transient toast disappears; show a
-        // calm inline panel instead. `billing_unavailable` is the server's
-        // explicit "Stripe is reachable but a call failed" signal — never leak
-        // the raw error code to the user.
-        const unavailable = e?.status === 502 || e?.data?.error === 'billing_unavailable';
-        setLoadError(
-          unavailable
-            ? 'Billing details are temporarily unavailable. Please try again in a moment.'
-            : (e?.message || 'Could not load billing details.'),
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [scope]);
-
-  useEffect(() => { load(); }, [load]);
+  const loadError = sharedOverview.status === 'unreadable'
+    ? (sharedOverview.httpStatus === 502 || sharedOverview.code === 'billing_unavailable'
+      ? 'Billing details are temporarily unavailable. Please try again in a moment.'
+      : (sharedOverview.message || 'Could not load billing details.'))
+    : null;
+  const load = sharedOverview.reload;
 
   // Catalog → swap-able plan options for this scope. Founder products carry
   // metadata.tier; investor products carry metadata.investor_tier (with
@@ -92,7 +75,7 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
     return () => { cancelled = true; };
   }, [scope]);
 
-  const refreshAll = () => { load(); onChanged?.(); };
+  const refreshAll = () => { sharedOverview.reload(); onChanged?.(); };
 
   // PAYX11: Cancel asks in the page's own dialog; "Keep plan" changes nothing.
   const [asking, setAsking] = useState(null); // { sub, name }
@@ -155,6 +138,7 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
   };
 
   const subs = overview?.subscriptions || [];
+  const paymentMethodsUnreadable = overview?.degraded?.includes('payment_methods') === true;
   const currentProducts = useMemo(
     () => new Set(subs.flatMap((s) => (s.items || []).map((i) => i.product_id))),
     [subs],
@@ -327,7 +311,17 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
             <Plus className="w-3.5 h-3.5" /> Add card
           </button>
         </div>
-        {(overview?.payment_methods || []).length === 0 ? (
+        {paymentMethodsUnreadable ? (
+          <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2" data-testid="billing-payment-methods-unreadable">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <span>Your saved cards could not be read. This is not a claim that no card is saved.</span>
+              <button type="button" onClick={load} className="ml-2 inline-flex items-center gap-1 font-medium underline hover:no-underline">
+                <RotateCcw className="w-3.5 h-3.5" /> Retry
+              </button>
+            </div>
+          </div>
+        ) : (overview?.payment_methods || []).length === 0 ? (
           <div className="text-sm text-gray-500 dark:text-gray-400">
             {variant === 'general'
               ? 'No card on file. Add one to use for your purchases.'
