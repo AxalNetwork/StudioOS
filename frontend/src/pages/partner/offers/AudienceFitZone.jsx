@@ -6,7 +6,7 @@ import {
   // own composition now, and `FitTile` below carries the artboard's note under
   // each figure and can draw an absence as a chip rather than an em dash.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
+  Section, Field, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyCents, dollarsToCents,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -14,6 +14,7 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
 
 /**
  * Offers · Audience fit — `/offers/audience-fit`.
@@ -229,7 +230,7 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
             busy={busy}
             submitLabel="Save rule"
             onCancel={() => setEdit(false)}
-            onSubmit={async (data) => { await onSave(rule, data); setEdit(false); }}
+            onSubmit={(data) => onSave(rule, data, () => setEdit(false))}
           />
           <div className="mt-2 flex">
             <button
@@ -239,7 +240,7 @@ function RuleRow({ rule, onSave, onDelete, busy, note }) {
               Delete rule
             </button>
           </div>
-          <SaveNote note={note?.scope === `rule:${rule.id}` ? note : null} />
+          <WriteNote note={scopedNote(note, `rule:${rule.id}`)} busy={busy} />
         </div>
       )}
     </div>
@@ -324,8 +325,6 @@ function PassReasons({ rules, onClose }) {
 
 export default function PartnerAudienceFitZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null });
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
   const [showingPasses, setShowingPasses] = useState(false);
   const [view, setView] = useState('all');
@@ -335,25 +334,22 @@ export default function PartnerAudienceFitZone() {
     try {
       const r = await api.listPartnerFitRules();
       setState({ loading: false, error: '', data: r || {} });
+      return true;
     } catch (e) {
       setState({ loading: false, error: e?.message || 'The fit rules did not load.', data: null });
+      return false;
     }
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
-    }
-  }, [load]);
+  // #4688: one write mechanism, shared with Visibility and Proof. See
+  // `useGuardedWrite.jsx` for what "saved" means and what Retry repeats.
+  const { busy, note, save, reload, clearNote } = useGuardedWrite(load);
+  const run = useCallback(
+    (write, saved, scope, onSaved) => save(write, { saved, scope, onSaved }),
+    [save],
+  );
+  const toggleAdding = (open) => { clearNote(); setAdding(open); };
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -400,7 +396,7 @@ export default function PartnerAudienceFitZone() {
   // With nothing loaded the export renders disabled and says so itself,
   // which is what makes a header row over an unreadable store honest.
   const handlers = {
-    passReasons: () => { setNote(null); setShowingPasses(true); },
+    passReasons: () => { clearNote(); setShowingPasses(true); },
   };
   const rowActions = partnerZoneActions('offers/audience-fit', { handlers, view: { header: ['Profile or exclusion', 'Kind', 'Signal', 'Why', 'Referred to', 'In use'], rows: visible, cells: (r) => [r.kind === 'budget_floor' && r.floor_cents != null ? moneyCents(r.floor_cents) : r.value, r.kind, r.signal, r.statement, r.referred_to, r.is_active] } });
 
@@ -433,10 +429,29 @@ export default function PartnerAudienceFitZone() {
         filters={unlinked ? [] : partnerZoneFilters('offers/audience-fit', { value: view, onChange: setView })}
         actions={rowActions}
       />
+      {/* THE EDITOR IS NOT A CHILD OF `ZoneBody` (#4688): with no rows `ZoneBody`
+          draws only its empty state, so "Write the first rule" set `adding`
+          and no form ever mounted. Mounted by `adding` alone, it also survives
+          a refresh and an unreadable list. */}
+      {adding && (
+        <div className="mb-6" data-testid="rule-editor">
+          <RuleForm
+            busy={busy}
+            submitLabel="Add rule"
+            onCancel={() => toggleAdding(false)}
+            onSubmit={(data) => run(
+              () => api.createPartnerFitRule(data), 'Rule added.', 'new',
+              () => setAdding(false),
+            )}
+          />
+          <WriteNote note={scopedNote(note, 'new')} busy={busy} />
+        </div>
+      )}
+      <WriteNote note={zoneNote(note)} busy={busy} onReload={reload} />
       <ZoneBody
         loading={state.loading}
         error={unlinked ? null : state.error}
-        onRetry={load}
+        onRetry={reload}
         notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || (items.length === 0)}
         empty={(
@@ -449,7 +464,7 @@ export default function PartnerAudienceFitZone() {
               + 'do not do, and who to send them to instead.'
             }
             action={(
-              <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
+              <button type="button" className={buttonClass} onClick={() => toggleAdding(true)}>
                 Write the first rule
               </button>
             )}
@@ -464,7 +479,7 @@ export default function PartnerAudienceFitZone() {
               + 'quotes, so a founder hears a reason rather than nothing.'
             }
             action={(
-              <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
+              <button type="button" className={ghostButtonClass} onClick={() => toggleAdding(!adding)}>
                 {adding ? 'Cancel' : 'Add a rule'}
               </button>
             )}
@@ -580,21 +595,6 @@ export default function PartnerAudienceFitZone() {
             </p>
           )}
 
-          {adding && (
-            <div>
-              <RuleForm
-                busy={busy}
-                submitLabel="Add rule"
-                onCancel={() => setAdding(false)}
-                onSubmit={async (data) => {
-                  await run(() => api.createPartnerFitRule(data), 'Rule added.', 'new');
-                  setAdding(false);
-                }}
-              />
-              <SaveNote note={note?.scope === 'new' ? note : null} />
-            </div>
-          )}
-
           <Section title="Rules">
             {/* A narrowed view that finds nothing says which view it is: a bare
                 empty list under a selected chip reads as "you have written no
@@ -613,9 +613,9 @@ export default function PartnerAudienceFitZone() {
                   rule={rule}
                   busy={busy}
                   note={note}
-                  onSave={(r, data) => run(
+                  onSave={(r, data, onSaved) => run(
                     () => api.updatePartnerFitRule(r.id, data),
-                    'Saved.', `rule:${r.id}`,
+                    'Saved.', `rule:${r.id}`, onSaved,
                   )}
                   onDelete={(r) => run(
                     () => api.deletePartnerFitRule(r.id),

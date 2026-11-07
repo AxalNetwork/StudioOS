@@ -297,7 +297,7 @@ test('Pass reasons runs, and its reason was wrong about its own store', () => {
     'the retired reason is no longer recorded, so the next reader re-adds it');
   assert.ok(doc.includes('partner_fit_rules .statement is exactly that field'),
     'the correction no longer names the field the reason denied');
-  assert.match(zone, /passReasons: \(\) => \{ setNote\(null\); setShowingPasses\(true\); \}/,
+  assert.match(zone, /passReasons: \(\) => \{ clearNote\(\); setShowingPasses\(true\); \}/,
     'the page no longer supplies the handler');
   assert.match(zone, /partnerZoneActions\('offers\/audience-fit', \{ handlers, view: \{/,
     'the action row drops handlers, so the op renders nowhere');
