@@ -12,7 +12,8 @@ const PAGE_SIZE = 50;
  * statuses, read by the icon and the label alike, so the two cannot disagree.
  */
 const DONE = new Set(['completed', 'ok', 'deduped']);
-const NOT_DONE = new Set(['failed', 'error', 'skipped']);
+// D4703: `partial` is a tick whose sub-task failed; it is not done.
+const NOT_DONE = new Set(['failed', 'error', 'skipped', 'partial']);
 
 function StatusIcon({ status }) {
   if (DONE.has(status)) return <CheckCircle size={14} className="text-emerald-600" />;

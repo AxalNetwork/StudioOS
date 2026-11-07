@@ -169,6 +169,19 @@ until D167 it created its throwaway database with no `--jurisdiction`, so it
 was quietly exercising the wrong shape every month. The create now carries the
 flag, which makes the drill rehearse what a real recovery must do.
 
+**No run has passed yet.** The 2026-11-01 run imported 274 of 276 chunks and
+failed at chunk 275 with `SQLITE_CONSTRAINT_FOREIGNKEY` (run 41307767798).
+
+**Since D4558 the drill restores only a backup its manifest vouches for.**
+`backup-d1.yml` writes `<key minus .sql>.manifest.json` beside each export,
+holding sha256, size, the export's start time, every table's row count and the
+last migration. The drill checks the backup against it before creating any
+database, and compares every restored table's row count after. A missing or
+stale manifest, a mismatch, or a migration the checkout does not know ends the
+drill red, with the reason in `drill-d1.json`. A failed chunk now names the
+tables it writes. The marker records the recovery point, its age and the
+drill's duration: the RPO and RTO the drill actually measured.
+
 It also does not exercise Time Travel at all — Time Travel needs no backup
 file and cannot be drilled against a throwaway database, because it only ever
 acts on the real one.

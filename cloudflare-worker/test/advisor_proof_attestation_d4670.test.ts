@@ -182,6 +182,7 @@ test('a confirmation is bound to the claim as it read, and one from before D4670
   db.prepare("UPDATE advisor_proof_items SET detail = 'Rebuilt it alone.' WHERE id = ?").run(item.id);
   let list = await call(env, 'GET', '/me/proof', ada);
   assert.deepEqual([list.body.items[0].attested, list.body.items[0].consents[0].state], [false, 'needs_reconfirmation']);
+  assert.equal(list.body.counts.attested, 0, 'and the whole-list count (#4689) follows the same rule');
   // A row confirmed through the old flow (no pinned claim) is kept and shown, and does not count.
   db.prepare("INSERT INTO advisor_proof_consents (uid, proof_item_id, attester_name, consent_given, consent_given_at, consent_text) VALUES ('legacy', ?, 'Old', 1, '2026-01-01', 'Yes')").run(item.id);
   list = await call(env, 'GET', '/me/proof', ada);
