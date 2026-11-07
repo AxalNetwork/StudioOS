@@ -208,6 +208,10 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const [refusal, setRefusal] = useState(refused);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
+  // D4600: what a write that half succeeded leaves behind. `memory` outlives one Save (a submit keeps there the
+  // id of the record it made); `partial` freezes the form to the one operation left.
+  const memory = useRef({});
+  const [partial, setPartial] = useState(null);
   const [loaded, setLoaded] = useState(refused ? null : loadOptions ? undefined : {});
   // D969: a failed read of the choices says so with Try again, and reads them again.
   const [readFailed, setReadFailed] = useState(false);
@@ -321,13 +325,16 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     saving.current = true; setBusy(true);
     try {
       const sent = { ...submittedValues(fields, values), ...picked() };
-      const result = await onSubmit(sent);
+      const result = await onSubmit(sent, memory.current);
       await afterSave(result, sent);
       const completion = base.done?.(result);
       if (completion) setDone(completion);
       onSaved?.(result);
       if (!completion) onClose?.();
     } catch (error) {
+      // The record exists; one follow-up failed. Refresh the page behind (the saved record shows) and keep only that operation open.
+      if (error?.partial && !partial) onSaved?.(error.partial.result);
+      if (error?.partial) setPartial(error.partial);
       const sentence = error?.message || 'This could not be saved. Try again.';
       if (error?.field && leaves(fields, values).some((field) => field.name === error.field)) setErrors({ [error.field]: sentence });
       else setRefusal(sentence);
@@ -338,7 +345,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     {!readOnly && base.foot && <p className="m-0 text-xs text-axal-muted dark:text-gray-400">{cleanFormCopy(base.foot)}</p>}
     <div className="flex justify-end gap-2 max-lg:flex-col">
       <button type="button" onClick={onClose} className="rounded-[9px] border border-axal-hairline bg-white px-3.5 py-[9px] text-[12.5px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{done || (readOnly && loaded) ? 'Close' : 'Cancel'}</button>
-      {!done && !readOnly && <button type="submit" form={id} disabled={busy || !loaded || blocked} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-[9px] text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600 dark:text-white max-lg:h-[52px] max-lg:w-full">{busy ? 'Saving…' : base.cta || base.button || 'Save'}</button>}
+      {!done && !readOnly && <button type="submit" form={id} disabled={busy || !loaded || blocked} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-[9px] text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600 dark:text-white max-lg:h-[52px] max-lg:w-full">{busy ? 'Saving…' : partial?.cta || base.cta || base.button || 'Save'}</button>}
     </div>
   </div>;
   // D1443 part 4 (#3992, S1's B = a): the rail and the Ask panel stay live beside the open form, so Ask opens next to it.
@@ -370,7 +377,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
             : fill.aiOff ? 'Ask fills the blank fields from your sources only.' : 'Ask Eadwyn to fill the blank fields, or fill them from your sources.'}</span>
           {fillable ? <FillFormTrigger aiOff={!!fill.aiOff || sourcesOnly} disabled={busy} onOpen={() => setFillOpen(true)} /> : null}
         </div> : null}
-        {loaded && fields.map((field) => <Field key={field.name} field={readOnly ? { ...field, note: null, hint: null } : field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy || !!readOnly} search={finder} fill={fillCtl} />)}
+        {loaded && fields.map((field) => <Field key={field.name} field={readOnly ? { ...field, note: null, hint: null } : field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy || !!readOnly || (!!partial && field.name !== partial.only)} search={finder} fill={fillCtl} />)}
         {loaded && !readOnly && renderAssistant?.({ fields, values, setValue, busy })}
       </>}
     </form>}
