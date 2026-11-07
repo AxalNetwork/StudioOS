@@ -180,6 +180,26 @@ function advisorDto(m: AdvisorRow): any {
     ...advisorProfileDto(m),
   };
 }
+/**
+ * #4715 — an advisor as the directory and the match list show them to another
+ * member. The account's email is the advisor's own; the public profile
+ * (`GET /:uid`) never carried it either. `id` and `user_id` stay: the pages key
+ * advisors by `id`, and the trust badge and booking button read `user_id`.
+ */
+function directoryAdvisorDto(m: AdvisorRow): any {
+  const { email: _email, ...listed } = advisorDto(m);
+  return listed;
+}
+/**
+ * #4715 — a slot as anyone but its advisor sees it. The meeting link and the
+ * advisor's slot notes are for the advisor and for a founder whose booking on
+ * the slot was confirmed; to everyone else a slot says only whether it has a
+ * link (`has_meeting_link`), which is all the booking page shows.
+ */
+function publicSlotDto(s: SlotRow, taken = 0): any {
+  const { meeting_url: _url, notes: _notes, ...shown } = slotDto(s, taken);
+  return { ...shown, has_meeting_link: !!s.meeting_url };
+}
 function slotDto(s: SlotRow, taken = 0): any {
   return {
     id: s.id, uid: s.uid, advisor_id: s.advisor_id,
@@ -309,7 +329,7 @@ advisors.get('/', async (c) => {
            AND (nms.paused_at IS NOT NULL OR nms.directory_hidden_at IS NOT NULL))
        ORDER BY display_name ASC`
     ).all<AdvisorRow>();
-    let items = (rows.results || []).map(advisorDto);
+    let items = (rows.results || []).map(directoryAdvisorDto);
     if (q) items = items.filter((m: any) =>
       (m.display_name || '').toLowerCase().includes(q) ||
       (m.bio || '').toLowerCase().includes(q));
@@ -542,7 +562,7 @@ advisors.get('/match', async (c) => {
       );
 
       return {
-        advisor: advisorDto(m),
+        advisor: directoryAdvisorDto(m),
         match_score: total,
         breakdown: { domain_overlap: domainScore, values_alignment: valScore, skill_complementarity: compScore },
         reasons: [
@@ -700,7 +720,7 @@ advisors.get('/me/slots', async (c) => {
 // ---------------------------------------------------------------------------
 advisors.get('/:uid/slots', async (c) => {
   try {
-    await requireAuth(c);
+    const viewer = await requireAuth(c);
     const m = await loadAdvisorByUid(c.env, c.req.param('uid'));
     if (!m) return c.json({ detail: 'Advisor not found' }, 404);
     const upcoming = (c.req.query('upcoming_only') || 'true').toLowerCase() === 'true';
@@ -712,9 +732,21 @@ advisors.get('/:uid/slots', async (c) => {
     const rows = upcoming
       ? await c.env.DB.prepare(sql).bind(m.id, nowIso()).all<SlotRow>()
       : await c.env.DB.prepare(sql).bind(m.id).all<SlotRow>();
+    // #4715: the advisor (and an admin) see their own slots whole; a founder
+    // sees the link and notes only on a slot they hold a confirmed booking on.
+    const whole = viewer.id === m.user_id || isAdmin(viewer);
+    const held = new Set<number>();
+    if (!whole) {
+      const mine = await c.env.DB.prepare(
+        `SELECT slot_id FROM advisor_bookings
+          WHERE advisor_id = ? AND founder_user_id = ? AND status IN ('confirmed', 'completed')`,
+      ).bind(m.id, viewer.id).all<{ slot_id: number }>();
+      for (const r of mine.results || []) held.add(Number(r.slot_id));
+    }
     const items: any[] = [];
     for (const s of (rows.results || []) as SlotRow[]) {
-      items.push(slotDto(s, await takenForSlot(c.env, s.id)));
+      const taken = await takenForSlot(c.env, s.id);
+      items.push(whole || held.has(Number(s.id)) ? slotDto(s, taken) : publicSlotDto(s, taken));
     }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
