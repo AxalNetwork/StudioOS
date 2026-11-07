@@ -15,6 +15,8 @@
  *   POST   /send                           { account_uid, to, subject, body, draft_uid?, nonce } → one `mail_sent` row
  *                                          `intro_uid?` (D4329): the intro for an accepted introduction request;
  *                                          only its teammate may send it, and the send records it as made
+ *                                          D4493: a sequence step's draft must be due, to that prospect, keep its
+ *                                          opt-out line; its voice note is attached; the send moves the step on
  *   GET    /sent?page=&person=             D1344: the member's own sent log, newest first, 20 a page, with the refs each quoted;
  *                                          `person` keeps the rows sent from that person's drafts
  *
@@ -30,7 +32,8 @@ import { ADAPTERS } from '../services/mail/adapters';
 import { checkSettings } from '../services/mail/adapters/imap';
 import { headerSafe } from '../services/mail/adapters/mime';
 import { authorizeUrl, configured, exchangeCode, gmailEnabled, OUTLOOK_READ_SCOPE, type OAuthProvider } from '../services/mail/adapters/oauth';
-import { AdapterError } from '../services/mail/adapters/types';
+import { AdapterError, type Attachment } from '../services/mail/adapters/types';
+import { SequenceRefused, sequenceAdvance, sequenceSendGate, VOICE_MIME } from '../services/distribution/sequences';
 import {
   accountOf, accountView, forget, issueNonce, listAccounts, markError, markExpired, markUsed, openCreds, saveAccount,
   spendOauthState, spendSendNonce, type AccountRow,
@@ -236,6 +239,22 @@ mailAccounts.post('/send', async (c) => {
       throw e;
     }
   }
+  // D4493 (#4493): a sequence step's draft must still be due, go to that prospect's own
+  // address and keep its opt-out line. Checked before the nonce is spent, like the intro.
+  let sequence: Awaited<ReturnType<typeof sequenceSendGate>> = null;
+  try { sequence = await sequenceSendGate(c.env, user, draftUid, to, text); } catch (e) {
+    if (e instanceof SequenceRefused) return refuse(c, e.status, { code: e.code, message: e.sentence });
+    throw e;
+  }
+  let attachments: Attachment[] | undefined;
+  if (sequence?.attachmentKey) {
+    if (row.provider === 'mcp') return refuse(c, 409, { code: 'attachment_unsupported', message: 'This mailbox’s mail server cannot send a voice note. Send this step from another mailbox.' });
+    const obj = sequence.attachmentKey.startsWith(`grow-voice/${sequence.projectId}/`) ? await c.env.FILES?.get(sequence.attachmentKey) : null;
+    if (!obj) return refuse(c, 409, { code: 'recording_missing', message: 'The voice note could not be read. Record it again before sending.' });
+    const mime = obj.httpMetadata?.contentType || 'audio/webm';
+    const ext = VOICE_MIME[mime] || 'webm';
+    attachments = [{ filename: `voice-note.${ext}`, mime, bytes: new Uint8Array(await obj.arrayBuffer()) }];
+  }
   const since = new Date(Date.now() - 3600_000).toISOString().replace('T', ' ').slice(0, 19);
   const sent = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM mail_sent WHERE user_id = ? AND created_at > ?').bind(user.id, since).first<{ n: number }>();
   if (Number(sent?.n ?? 0) >= SENDS_PER_HOUR) return refuse(c, 429, { code: 'send_rate_limited', message: `You have sent ${SENDS_PER_HOUR} emails in the last hour. Try again later.` });
@@ -257,9 +276,10 @@ mailAccounts.post('/send', async (c) => {
     return refuse(c, 409, { code: 'mailbox_expired', message: sentence });
   }
   try {
-    const out = await adapter.send(c.env, creds, { from: row.address, fromName: row.display_name, to, subject, body: text });
+    const out = await adapter.send(c.env, creds, { from: row.address, fromName: row.display_name, to, subject, body: text, ...(attachments ? { attachments } : {}) });
     await markUsed(c.env, row, out.creds);
     await log(out.messageId, null);
+    if (sequence) await sequenceAdvance(c.env, sequence).catch(() => null);
     // The email has gone, so the reply says so whatever the record does next; a failed record leaves the request accepted.
     const intro = introUid ? await markMadeOnSend(c.env, user, introUid, uid).catch(() => null) : null;
     return c.json({

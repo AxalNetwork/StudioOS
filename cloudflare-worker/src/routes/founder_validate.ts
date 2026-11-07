@@ -39,7 +39,7 @@ import {
 } from './_founder_validate_exports';
 import { ensureDiscoveryEvidenceColumns, ensureDiscoveryRecordingColumns } from '../services/discoveryInterviewSchema';
 import {
-  recordVerdictChanges, loadVerdictHistory, type VerdictObservation,
+  recordVerdictChanges, loadVerdictHistory,
 } from '../services/verdictHistory';
 import {
   canReadBoard, canReadDecision, canWrite,
@@ -222,13 +222,20 @@ async function buildBoard(env: Env, projectId: number) {
   // see. Writes only on a change, so this is one SELECT in the steady state.
   //
   // Never allowed to cost the board: a history that cannot be written or read
-  // leaves `history: []` and `verdict_history_since: null`, and the chips refuse
-  // rather than drawing an empty answer.
+  // leaves `history: []`, a null start and unavailable coverage, and the chips
+  // refuse rather than drawing an empty answer.
   await recordVerdictChanges(env, projectId, items.map((h: any) => ({
     hypothesis_id: Number(h.id), verdict: h.verdict ?? null, lane: String(h.lane),
   }))).catch(() => 0);
-  const history = await loadVerdictHistory(env, projectId)
-    .catch(() => ({ byClaim: new Map<number, VerdictObservation[]>(), since: null as string | null }));
+  const now = new Date();
+  const history = await loadVerdictHistory(env, projectId, {
+    claimIds: items.map((h: any) => Number(h.id)),
+    boundaries: [
+      new Date(now.getTime() - 7 * 86_400_000),
+      new Date(now.getTime() - 14 * 86_400_000),
+      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+    ],
+  });
   for (const h of items as any[]) {
     h.history = (history.byClaim.get(Number(h.id)) || []).map((o) => ({
       verdict: o.verdict, lane: o.lane, observed_at: o.observed_at,
@@ -259,6 +266,7 @@ async function buildBoard(env: Env, projectId: number) {
     // than as "nothing changed". `/build/this-week` returns `history_since` for
     // exactly this reason and this is the same seam.
     verdict_history_since: history.since,
+    verdict_history_coverage: history.coverage,
     // False when `fill_provenance` could not be read: every `filled` is then
     // unknown, not "typed by hand", and the page says which.
     fills_recorded: fillsRecorded,

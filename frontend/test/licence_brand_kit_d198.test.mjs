@@ -28,16 +28,20 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const NAV_MODEL = readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8');
+
 import { codeOnly } from './_codeOnly.mjs';
+import { licencePageSource } from './_licencePage.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
-const PAGE = codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx'));
+const PAGE = codeOnly(licencePageSource());
 const SETTINGS = codeOnly(read('frontend/src/pages/branch/BranchSettings.jsx'));
 const STUDIO = codeOnly(read('frontend/src/pages/admin/AdminStudioOverview.jsx'));
 const API = codeOnly(read('frontend/src/lib/api.js'));
-const ROUTE = read('cloudflare-worker/src/routes/admin_licences.ts');
+const ROUTE = licenceRoutesSource();
 const BRAND = read('cloudflare-worker/src/routes/brand.ts');
 const MIGRATION = read('cloudflare-worker/sql/migrations/281_licence_brand_kits.sql');
 
@@ -63,7 +67,11 @@ test('the brand kit is an UNNUMBERED tab, and it is gated on the kind in both ha
     'the brand kit is not an unnumbered tab beside History, Administrators and Notices');
 
   // THE TAB — drawn only for a white-label.
-  assert.match(PAGE, /\{d\.kind === 'white_label' && \(\s*<button[\s\S]{0,240}?data-testid="licence-brand-tab"/,
+  // D4707: the tab bar is drawn from licenceNavModel; the brand tab carries
+  // `whiteLabelOnly` and the page draws `tabsFor(d.kind)`, which drops it for
+  // every other kind (asserted on the model in licence_navigation_d4707).
+  assert.match(NAV_MODEL, /key: 'brand'[^}]*whiteLabelOnly: true/, 'the Brand kit tab is drawn for every licence, which H26 forbids in its own words');
+  assert.match(PAGE, /\{tabsFor\(d\.kind\)\.map\(/,
     'the Brand kit tab is drawn for every licence, which H26 forbids in its own words');
   // THE MOUNT — re-checked, so a kind that changed while the tab was open
   // falls back to nothing rather than to an editor for a store it has no row in.

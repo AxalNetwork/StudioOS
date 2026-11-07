@@ -161,7 +161,8 @@ function freshDb({ withKits = true } = {}) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER, event TEXT,
       detail_json TEXT, note TEXT, actor_user_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+    ,
+      before_json TEXT, after_json TEXT, outcome TEXT);
   `);
   // withKits: false is the database that has NOT applied 281. Every reader has
   // to render that as unreadable rather than as "this licence has no kit".

@@ -550,7 +550,7 @@ function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
         </select>
         <p className="mt-1 text-[9.5px] leading-relaxed text-axal-faint">
           {e.founder_user_id
-            ? 'Linked. Work products can be sent to them, and they can record having opened one.'
+            ? 'Linked. Work products can be sent to them, and they can record having opened one. Changing the account never moves work already sent: it stays with the person it went to.'
             : options.length === 0
               ? 'Nobody has booked you yet, so there is no account to link. The contract works either way.'
               : 'Only a linked client can be sent a work product, or record that they opened one.'}

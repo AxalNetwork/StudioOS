@@ -480,9 +480,20 @@ test('the one route that dispatches a deploy is super-admin only — "a branch c
   const sites = callSites('dispatchWorkflow');
   assert.deepEqual(sites.map((s) => s.file), ['routes/admin_deployments.ts'], 'a second route can dispatch a deploy');
   const src = FILES.find((f) => f.file === 'routes/admin_deployments.ts')!.src;
-  const handler = bodyAfter(src, "r.post('/licences/:uid/deploy', async (c) =>");
-  assert.match(handler, /^\s*const admin = await requireSuperAdmin\(c\);/, 'the gate is the handler\'s first statement');
-  assert.ok(handler.includes('dispatchWorkflow('), 'the dispatch sits inside that handler');
+  // D4706: the dispatch sits in ONE helper, `dispatchAttempt`, so a first
+  // deploy and a retry send exactly the same request. The guard follows it:
+  // dispatchWorkflow is called only there, and dispatchAttempt only from the
+  // two handlers whose first statement is the super-admin gate.
+  const helper = fnBody(src, 'async function dispatchAttempt(');
+  assert.ok(helper.includes('dispatchWorkflow('), 'the dispatch sits inside dispatchAttempt');
+  assert.equal((src.match(/dispatchWorkflow\(/g) || []).length, 1, 'dispatchWorkflow is called from one place');
+  const callers = ["r.post('/licences/:uid/deploy', async (c) =>", "r.post('/licences/:uid/deploy/retry', async (c) =>"];
+  for (const sig of callers) {
+    const handler = bodyAfter(src, sig);
+    assert.match(handler, /^\s*const admin = await requireSuperAdmin\(c\);/, `${sig}: the gate is the handler's first statement`);
+    assert.ok(handler.includes('dispatchAttempt('), `${sig} dispatches through the helper`);
+  }
+  assert.equal((src.match(/dispatchAttempt\(/g) || []).length, 1 + callers.length, 'no other handler reaches dispatchAttempt');
 });
 
 // ── 8 · the payload, on each tier ───────────────────────────────────────────

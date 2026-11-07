@@ -24,10 +24,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { licencePageSource } from './_licencePage.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
-const HQ_RAW = read('frontend/src/pages/admin/AdminLicences.jsx');
+const HQ_RAW = licencePageSource();
 const HQ = codeOnly(HQ_RAW);
 const MINE_RAW = read('frontend/src/pages/subsidiary/MyLicencePage.jsx');
 const MINE = codeOnly(MINE_RAW);
@@ -48,7 +49,10 @@ const AUTH_ERRORS = read('cloudflare-worker/src/util/authErrors.ts');
 function noticesEditor(src) {
   const at = src.indexOf('function NoticesEditor(');
   assert.ok(at > 0, 'NoticesEditor is gone — re-point this guard rather than deleting it');
-  const end = src.indexOf('function Detail(', at);
+  // #4707: NoticesEditor is its own file; the window ends where the next file
+  // of the concatenated page source (`_licencePage.mjs`) begins — its first
+  // import, since the comments that head each file are stripped here.
+  const end = src.indexOf('import React', at);
   assert.ok(end > at, 'the marker after NoticesEditor moved — re-point the window');
   return src.slice(at, end);
 }

@@ -179,7 +179,7 @@ test('WK7: Workload draws rows and weeks, amber over capacity; a drop reassigns 
     ],
     agents: [],
   };
-  const m = await mount(h(WorkloadView, { projectId: 7, onOpenItem() {}, onNotice() {} }), [
+  const m = await mount(h(WorkloadView, { projectId: 7, viewer: { can_manage: true, user_uid: 'u-1' }, onOpenItem() {}, onNotice() {} }), [
     [/GET .*\/api\/teams\/project\/7\/work\/workload/, () => json(DATA)],
     [/PATCH .*\/api\/teams\/tasks\/t\d$/, () => json({ task: { uid: 't1' } })],
   ]);

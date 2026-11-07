@@ -5,7 +5,7 @@ From `design/incoming/Settings Page.dc.html` (ST1–ST6). The sidebar's
 
 | Address | Board | Backend today |
 | --- | --- | --- |
-| `/account/portfolio/:uid/settings` | ST2 General | `GET /api/company/:uid`, `PATCH /api/company/:uid` (only what changed). Logo waits for G1 (#4201). |
+| `/account/portfolio/:uid/settings` | ST2 General | `GET /api/company/:uid`, `PATCH /api/company/:uid` (only what changed, `default_currency` included, #4736), `POST`, `DELETE` and `GET /api/company/:uid/logo` (the logo tile, #4201 and #4320). A company the member cannot open (the Worker's 404) is "This company is not yours to open." with Back to Portfolio, no Try again (#4736). |
 | `/account/portfolio/:uid/settings/legal` | ST4 Legal | `GET /api/company/:uid/legal` and the existing sheet (D1415, D1593). |
 | `/account/portfolio/:uid/settings/projects[/:id]` | ST5 Projects | The settings scope's projects (D1415). |
 | `/account/companies/:uid/settings/team` | Team tab | D1497's Team page. |

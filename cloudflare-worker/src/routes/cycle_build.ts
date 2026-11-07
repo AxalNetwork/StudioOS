@@ -52,8 +52,28 @@ type Sort = NonNullable<BuildRecords['sorts']>[number];
  * sort by their list and never by the alphabet.
  */
 type ListSpec = { filters: Filter[]; sort: Sort; orders?: Record<string, readonly string[]> };
-type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; list?: ListSpec; facts?: Record<string, unknown>; add?: BuildRecords['add']; parts?: Record<string, unknown> };
+type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; list?: ListSpec; facts?: Record<string, unknown>; add?: BuildRecords['add']; parts?: Record<string, unknown>;
+  /** #4603 part 2: set when the reader paged its rows in SQL; `rows` is then that page. */
+  paged?: { total: number; page: number; page_size: number } };
 type Query = { q?: string; filter?: string; sort?: string; page?: string };
+/**
+ * #4603 (D4603): what a module read is for. A module page needs everything,
+ * its integration `parts` included (GitHub, Vercel, Lovable, proposals,
+ * releases). The overview shows each module's card and facts and the phone's
+ * focus, meter and index, which read cards, facts and rows only, so it reads
+ * without the parts: that was 31 of its 52 statements, every one of them a
+ * read the overview never showed.
+ */
+type ReadOpts = { parts: boolean; rows: boolean; query?: Query };
+const FULL: ReadOpts = Object.freeze({ parts: true, rows: true });
+/** #4603 part 2: the overview needs no record rows from a module that says its counts in facts. */
+const OVERVIEW: ReadOpts = Object.freeze({ parts: false, rows: false });
+const PAGE_SIZE = 25;
+/** The page number exactly as `pageBuildRows` reads it. */
+function pageOf(raw: unknown): number {
+  const n = Number(raw ?? 1);
+  return Number.isSafeInteger(n) && n > 0 ? Math.min(n, 100000) : 1;
+}
 
 function number(v: unknown): number { return Number(v ?? 0); }
 function rows<T>(r: { results?: T[] | null }): T[] { return r.results ?? []; }
@@ -186,41 +206,110 @@ function reconnect(providerKey: string, failedAt: unknown, projectId: number, fa
   return { text: `Reconnect ${name}${since ? ` · failing since ${since}` : ''}`, href: connectHref(providerKey, projectId) };
 }
 
-async function solution(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
-  const features = rows(await env.DB.prepare(
+const FEATURE_FROM = `FROM mvp_features f
+       LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
+       LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
+      WHERE f.project_id = ?`;
+const FEATURE_COLS = `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
+            pg.title AS pain_theme, h.claim AS hypothesis`;
+/**
+ * #4603 part 2 (D4603): Solution design's list keys as SQL, each the exact
+ * stored-value mapping the row's `keys` use (`LEVEL`, `IMPACT_KEY`, `EFFORT_KEY`).
+ * A key that is not one of these, a search, or a sort on a text column reads
+ * every feature and pages in memory, as before.
+ */
+const FEATURE_KEY_SQL: Record<string, string> = {
+  linked: "(CASE WHEN pg.title IS NOT NULL THEN 'yes' ELSE 'no' END)",
+  impact: "(CASE f.added_value WHEN 'High' THEN 'high' WHEN 'Medium' THEN 'medium' WHEN 'Low' THEN 'low' END)",
+  effort: "(CASE f.effort WHEN 'S' THEN 'low' WHEN 'M' THEN 'medium' WHEN 'L' THEN 'high' WHEN 'XL' THEN 'high' END)",
+};
+const FEATURE_ORDERS = { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } as const;
+
+/** The SQL that answers this query's page, or null when it must be paged in memory. */
+function featurePageSql(query: Query): { where: string; binds: string[]; order: string; page: number } | null {
+  if ((query.q ?? '').trim()) return null;
+  const where: string[] = []; const binds: string[] = [];
+  for (const part of (query.filter ?? '').split(',').filter(Boolean)) {
+    const at = part.indexOf(':');
+    if (at <= 0) continue;
+    const key = part.slice(0, at);
+    if (!Object.hasOwn(FEATURE_KEY_SQL, key)) return null;
+    where.push(`COALESCE(${FEATURE_KEY_SQL[key]}, '') = ?`);
+    binds.push(part.slice(at + 1).toLocaleLowerCase());
+  }
+  const sort = query.sort || 'impact';
+  const desc = sort.startsWith('-'); const key = desc ? sort.slice(1) : sort;
+  if (!Object.hasOwn(FEATURE_ORDERS, key)) return null;
+  const rank = `(CASE ${FEATURE_KEY_SQL[key]} ${FEATURE_ORDERS[key as keyof typeof FEATURE_ORDERS].map((v, i) => `WHEN '${v}' THEN ${i}`).join(' ')} END)`;
+  // Unknown values last either way; ties in read order (sort_order, then id), as `pageBuildRows` keeps them.
+  return { where: where.map(w => ` AND ${w}`).join(''), binds, order: `(${rank} IS NULL), ${rank} ${desc ? 'DESC' : 'ASC'}, f.sort_order, f.id`, page: pageOf(query.page) };
+}
+
+function featureRow(f: any): RecordRow {
+  const impact = known(IMPACT_KEY, f.added_value), effort = known(EFFORT_KEY, f.effort);
+  // A feature with neither a pain theme nor a hypothesis links to nothing.
+  // keys.linked is the chart's linked count: a stored pain theme.
+  return record(f.id, {
+    feature: f.title, pain_theme: f.pain_theme ?? (f.hypothesis == null ? { text: 'Links to nothing', tone: 'bad' } : null), hypothesis: f.hypothesis,
+    impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null,
+  }, { linked: f.pain_theme != null ? 'yes' : 'no', impact, effort },
+  { title: f.title, description: f.description ?? null, pain_group_id: f.pain_group_id ?? null, hypothesis_id: f.hypothesis_id ?? null,
+    added_value: f.added_value ?? null, effort: f.effort ?? null, scope: f.scope ?? null });
+}
+
+/** Every feature, in read order. The in-memory path, and what part 2's tests compare the SQL page against. */
+export async function solutionFeatureRows(env: Env, projectId: number): Promise<RecordRow[]> {
+  // A literal, so the schema guard reads its columns (the paged reads below are built and are not read by it).
+  return rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
             pg.title AS pain_theme, h.claim AS hypothesis
        FROM mvp_features f
        LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
        LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
       WHERE f.project_id = ? ORDER BY f.sort_order, f.id`,
-  ).bind(p.id).all<any>());
-  const risks = rows(await env.DB.prepare(
-    'SELECT id, title, severity, owner_user_id, mitigation, state FROM venture_risks WHERE project_id = ? ORDER BY id',
-  ).bind(p.id).all<any>());
-  const linked = features.filter(f => f.pain_theme != null).length;
-  const unlinked = features.length - linked;
-  const severity = ['high', 'medium', 'low'].map(s => risks.filter(r => r.severity === s).length);
+  ).bind(projectId).all<any>()).map(featureRow);
+}
+
+async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+  // #4603 part 2: the card's counts are aggregates; neither the overview nor the card reads a feature row.
+  const counts = await env.DB.prepare(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN pg.title IS NOT NULL THEN 1 ELSE 0 END), 0) AS linked
+       FROM mvp_features f LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
+      WHERE f.project_id = ?`,
+  ).bind(p.id).first<{ n: number; linked: number }>();
+  const featureCount = number(counts?.n), linked = number(counts?.linked);
+  const unlinked = featureCount - linked;
+  // Risks are counted, never listed: the owner dropped the module page's `facts.risks` list (#4603 part 2, 2026-11-07).
+  const bySeverity = new Map(rows(await env.DB.prepare(
+    'SELECT severity, COUNT(*) AS n FROM venture_risks WHERE project_id = ? GROUP BY severity',
+  ).bind(p.id).all<{ severity: string | null; n: number }>()).map(r => [r.severity, number(r.n)]));
+  const severity = ['high', 'medium', 'low'].map(s => bySeverity.get(s) ?? 0);
+  const riskCount = [...bySeverity.values()].reduce((a, b) => a + b, 0);
   const series: ChartSpec[] = [];
-  if (features.length) series.push({ kind: 'stack', rows: [{ label: 'Features', parts: [linked, unlinked] }], tones: ['v1', 'grey'], legend: [{ label: 'Linked', tone: 'v1' }, { label: 'Unlinked', tone: 'grey' }] });
-  if (risks.length) series.push({ kind: 'stack', rows: [{ label: 'Risks', parts: severity }], tones: ['bad', 'warn', 'grey'], legend: ['High', 'Medium', 'Low'].map((label, i) => ({ label, tone: ['bad', 'warn', 'grey'][i] })) });
-  // A feature with neither a pain theme nor a hypothesis links to nothing.
-  // keys.linked is the chart's linked count: a stored pain theme.
-  const featureRows = features.map(f => {
-    const impact = known(IMPACT_KEY, f.added_value), effort = known(EFFORT_KEY, f.effort);
-    return record(f.id, {
-      feature: f.title, pain_theme: f.pain_theme ?? (f.hypothesis == null ? { text: 'Links to nothing', tone: 'bad' } : null), hypothesis: f.hypothesis,
-      impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null,
-    }, { linked: f.pain_theme != null ? 'yes' : 'no', impact, effort },
-    { title: f.title, description: f.description ?? null, pain_group_id: f.pain_group_id ?? null, hypothesis_id: f.hypothesis_id ?? null,
-      added_value: f.added_value ?? null, effort: f.effort ?? null, scope: f.scope ?? null });
-  });
+  if (featureCount) series.push({ kind: 'stack', rows: [{ label: 'Features', parts: [linked, unlinked] }], tones: ['v1', 'grey'], legend: [{ label: 'Linked', tone: 'v1' }, { label: 'Unlinked', tone: 'grey' }] });
+  if (riskCount) series.push({ kind: 'stack', rows: [{ label: 'Risks', parts: severity }], tones: ['bad', 'warn', 'grey'], legend: ['High', 'Medium', 'Low'].map((label, i) => ({ label, tone: ['bad', 'warn', 'grey'][i] })) });
+  let featureRows: RecordRow[] = [];
+  let paged: ModuleRead['paged'];
+  if (opts.rows) {
+    const sql = opts.query ? featurePageSql(opts.query) : null;
+    if (sql) {
+      // Built from fixed fragments and FEATURE_KEY_SQL only; every value is bound.
+      const countSql = 'SELECT COUNT(*) AS n ' + FEATURE_FROM + sql.where;
+      const pageSql = `${FEATURE_COLS} ${FEATURE_FROM}${sql.where} ORDER BY ${sql.order} LIMIT ? OFFSET ?`;
+      const total = sql.where ? number((await env.DB.prepare(countSql).bind(p.id, ...sql.binds).first<{ n: number }>())?.n) : featureCount;
+      featureRows = rows(await env.DB.prepare(pageSql)
+        .bind(p.id, ...sql.binds, PAGE_SIZE, (sql.page - 1) * PAGE_SIZE).all<any>()).map(featureRow);
+      paged = { total, page: sql.page, page_size: PAGE_SIZE };
+    } else featureRows = await solutionFeatureRows(env, p.id);
+  }
   const levels = options([['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]);
-  return { card: card('solution-design', features.length || risks.length ? 'ok' : 'empty', series, 'Now', features.length || risks.length ? null : 'No features yet. Linked and unlinked features appear here.', features.length || risks.length ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme` : null) : next(p, 'solution-design', 'Add feature', true)),
+  const any = featureCount || riskCount;
+  return { card: card('solution-design', any ? 'ok' : 'empty', series, 'Now', any ? null : 'No features yet. Linked and unlinked features appear here.', any ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme` : null) : next(p, 'solution-design', 'Add feature', true)),
     cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
     list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
-      sort: { key: 'impact', label: 'Impact' }, orders: { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } },
-    facts: { features: features.length, risks }, parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } };
+      sort: { key: 'impact', label: 'Impact' }, orders: { impact: [...FEATURE_ORDERS.impact], effort: [...FEATURE_ORDERS.effort] } },
+    ...(paged ? { paged } : {}),
+    facts: { features: featureCount, linked }, ...(opts.parts ? { parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } } : {}) };
 }
 
 /** D1097 (#2962): Solution design's "Runs on" from Vercel (VC4a). Its own read, Unreadable on its own. */
@@ -245,7 +334,7 @@ async function fromCode(env: Env, projectId: number) {
   }
 }
 
-async function prototype(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.is_must_have, f.delivery_status, f.done_at, f.updated_at,
             f.hypothesis_id, f.due_date, u.name AS owner, h.claim AS test_hypothesis
@@ -284,12 +373,12 @@ async function prototype(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
     // D1083 (#2948): From Lovable, the project's one app link, under From GitHub.
     // D1098 (#2963): From Vercel, the Live strip and each must-have's preview.
-    parts: {
+    ...(opts.parts ? { parts: {
       github: await prototypeGithub(env, p),
       // D1082 (#2947, LV7): Build in Lovable's launch data rides under the same key, as `launch`.
       lovable: { ...(await lovablePart(env, p.id, 'build', [{ id: p.id, label: 'Prototype / MVP' }])), launch: await prototypeLovable(env, p, viewer) },
       vercel: await fromVercel('prototype_mvp', async () => mvpVercel(env, p.id, await projectMember(env, p, viewer))),
-    } };
+    } } : {}) };
 }
 
 /**
@@ -361,7 +450,7 @@ async function prototypeGithub(env: Env, p: Project) {
   }
 }
 
-async function roadmap(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const items = rows(await env.DB.prepare(
     `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id,
             u.name AS owner
@@ -399,7 +488,7 @@ async function roadmap(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead
     list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
       sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
     facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 },
-    parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } };
+    ...(opts.parts ? { parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } } : {}) };
 }
 
 /** How many releases the strip shows, newest first; `releases_total` gives the rest's count. */
@@ -479,7 +568,7 @@ async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; s
   return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? { pct: null, source: null } : { pct: Number(pool), source: 'model' };
 }
 
-async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // Vesting belongs to a holder, but its own row is user-keyed. Both keys
   // must agree; a founder's other company's schedule must never be joined.
   const holders = rows(await env.DB.prepare(
@@ -516,8 +605,8 @@ async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRea
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
     facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source }))),
       agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
-    parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
-      founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } };
+    ...(opts.parts ? { parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
+      founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } } : {}) };
 }
 
 /**
@@ -556,7 +645,7 @@ async function fromVercel(module: 'prototype_mvp' | 'product_roadmap' | 'company
   }
 }
 
-async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
@@ -600,10 +689,10 @@ async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null },
-    parts: {
+    ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
-    } };
+    } } : {}) };
 }
 
 const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'] as const;
@@ -620,7 +709,7 @@ async function workspaceConnected(env: Env, userId: number, providerKey: string)
   if (providerKey === 'microsoft_365') return !!await env.DB.prepare('SELECT 1 FROM microsoft_oauth_tokens WHERE user_id = ?').bind(userId).first();
   return false;
 }
-async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // The company's enabled mapping is the only source. A member's personal
   // connector list would include tools withheld from this company.
   const mapped = p.company_id == null ? 0 : number((await env.DB.prepare(
@@ -684,11 +773,14 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
     });
   });
   const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));
-  const code = p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
+  // Code and Hosting are shown only in the Tools part, so the overview (OVERVIEW) does not read them.
+  const code = !opts.parts || p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
   // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
-  let hosting: any;
-  try { hosting = await hostingSystems(env, p, viewer, viewerMember, connectHref('vercel', p.id)); }
-  catch { hosting = { state: 'unreadable', systems: [], reason: VERCEL_UNREADABLE, syncs: { state: 'unreadable', rows: [], reason: null } }; }
+  let hosting: any = null;
+  if (opts.parts) {
+    try { hosting = await hostingSystems(env, p, viewer, viewerMember, connectHref('vercel', p.id)); }
+    catch { hosting = { state: 'unreadable', systems: [], reason: VERCEL_UNREADABLE, syncs: { state: 'unreadable', rows: [], reason: null } }; }
+  }
 
   const rituals = rows(await env.DB.prepare(
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?
@@ -713,7 +805,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       orders: { state: ['failing', 'connected', 'not_connected'] } },
     facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
       tools_failing: p.company_id == null ? null : tools.filter(tool => tool.status === 'error').length, tools_total: p.company_id == null ? null : tools.length },
-    parts: { tools: {
+    ...(opts.parts ? { parts: { tools: {
       cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
       state: p.company_id == null ? 'not_recorded' : 'ok', reason: p.company_id == null ? 'This project has no company scope for connectors.' : null,
@@ -721,7 +813,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       code: code?.code ?? { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.' },
       syncs: code?.syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
       hosting,
-    } } };
+    } } } : {}) };
 
 }
 
@@ -800,13 +892,13 @@ async function codeSystems(env: Env, p: Project, viewer: Viewer, viewerMember: b
   return { code, syncs: { state: lines.length ? 'ok' : 'empty', rows: lines, reason: lines.length ? null : 'No GitHub sync yet.' } };
 }
 
-const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer) => Promise<ModuleRead>> = {
+const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer, opts?: ReadOpts) => Promise<ModuleRead>> = {
   'solution-design': solution, 'prototype-mvp': prototype, 'product-roadmap': roadmap,
   'founding-team': founding, 'company-creation': company, 'operating-systems': operating,
 };
 
-async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer): Promise<ModuleRead> {
-  try { return await READS[slug](env, project, viewer); }
+async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+  try { return await READS[slug](env, project, viewer, opts); }
   catch (error) {
     const spec = MODULES.find(m => m[0] === slug)!;
     console.error('[cycle_build] %s read failed', spec[2], error);
@@ -830,7 +922,8 @@ app.get('/overview', async c => {
   const project = await context(c);
   if (project instanceof Response) return project;
   const viewer = await requireAuth(c);
-  const results = await Promise.all(MODULES.map(m => safeRead(m[0], c.env, project, viewer)));
+  // #4603: cards, facts and rows only; no module's integration parts (the overview never shows them).
+  const results = await Promise.all(MODULES.map(m => safeRead(m[0], c.env, project, viewer, OVERVIEW)));
   const prototype = results[1], roadmap = results[2], systems = results[5];
   const pFacts = prototype.facts, rFacts = roadmap.facts, sFacts = systems.facts;
   const pBad = prototype.card.state === 'unreadable';
@@ -862,9 +955,9 @@ app.get('/modules/:slug', async c => {
   if (!Object.hasOwn(READS, slug)) return c.json({ detail: 'Module not found' }, 404);
   const project = await context(c);
   if (project instanceof Response) return project;
-  const result = await safeRead(slug, c.env, project, await requireAuth(c));
-  const spec = MODULES.find(m => m[0] === slug)!;
   const query: Query = { q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: c.req.query('page') };
+  const result = await safeRead(slug, c.env, project, await requireAuth(c), { ...FULL, query });
+  const spec = MODULES.find(m => m[0] === slug)!;
   // The canvas's filters, then its default sort first (the page shows
   // sorts[0] as the current one), then each column both ways.
   const list = result.cols.length ? result.list : undefined;
@@ -872,7 +965,7 @@ app.get('/modules/:slug', async c => {
   const bySort = result.cols.flatMap(col => [{ key: col.key, label: col.label }, { key: `-${col.key}`, label: `${col.label} descending` }]);
   const sorts = list ? [list.sort, ...bySort.filter(s => s.key !== list.sort.key).map(s => s.label === list.sort.label ? { ...s, label: `${s.label} ascending` } : s)] : bySort;
   return c.json({ module: { slug, name: spec[1], records_title: spec[4] }, card: result.card, records: { cols: result.cols,
-    ...pageBuildRows(result.rows, query, 25, { orders: list?.orders, defaultSort: list?.sort.key }), filters, sorts,
+    ...(result.paged ? { rows: result.rows, ...result.paged } : pageBuildRows(result.rows, query, PAGE_SIZE, { orders: list?.orders, defaultSort: list?.sort.key })), filters, sorts,
     ...(result.add ? { add: result.add } : {}), linkable: hasRecords('build') }, ...(result.facts ? { facts: result.facts } : {}), ...(result.parts ? { parts: result.parts } : {}) });
 });
 

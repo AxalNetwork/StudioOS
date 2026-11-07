@@ -41,6 +41,8 @@ function fromCustom(e: unknown): never {
 
 export const mcpAdapter: MailAdapter = {
   async send(env, creds, msg) {
+    // D4493: an MCP send tool takes text only; a voice note is never dropped silently.
+    if (msg.attachments?.length) throw new AdapterError('refused', 'This mailbox’s mail server cannot send a voice note. Send this step from another mailbox.');
     const row = await rowOf(env, creds);
     try { return { messageId: (await sendThroughCustom(env, row, { to: msg.to, subject: msg.subject, body: msg.body }, mcpMailDeps.current())).messageId }; }
     catch (e) { return fromCustom(e); }

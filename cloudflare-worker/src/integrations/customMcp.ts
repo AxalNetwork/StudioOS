@@ -109,10 +109,13 @@ export function customUrlRefusal(raw: unknown, ownHost: string | null = null): U
   if (u.hash) return 'fragment';
   // A query string could carry a key; nothing secret is kept in a connection's config or a log.
   if (u.search) return 'query';
-  const host = u.hostname.toLowerCase();
+  // A fully qualified name may end in the root's dot (`name.`); the name rules below compare without it,
+  // or `localhost.` and `axal.vc.` would pass checks written for `localhost` and `axal.vc`.
+  const host = u.hostname.toLowerCase().replace(/\.+$/, '');
+  if (!host) return 'bad_url';
   if (host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) return 'ip_literal';
   if (!host.includes('.') || PRIVATE_SUFFIXES.some((s) => host === s || host.endsWith(`.${s}`))) return 'private_name';
-  const own = ownHost ? ownHost.toLowerCase().replace(/:\d+$/, '') : null;
+  const own = ownHost ? ownHost.toLowerCase().replace(/:\d+$/, '').replace(/\.+$/, '') || null : null;
   if ([...AXAL_HOSTS, ...(own ? [own] : [])].some((h) => host === h || host.endsWith(`.${h}`))) return 'axal_host';
   return null;
 }

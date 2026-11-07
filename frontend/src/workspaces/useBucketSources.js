@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * Fetch a bucket board's sources in parallel, one state per source.
@@ -24,50 +24,67 @@ import { useEffect, useMemo, useRef, useState } from 'react';
  * the same sentence. It also means this whole feature adds no route, no query
  * and nothing for `check-api-drift.mjs` to see.
  *
- * PER-SOURCE STATE, NOT PER-BOARD. `Promise.allSettled`, and each section reads
- * only its own key. One store being down greys one section; it does not blank
- * a page of five.
+ * PER-SOURCE STATE, NOT PER-BOARD. Each section reads only its own key, and
+ * one store being down greys one section; it does not blank a page of five.
+ *
+ * EACH SOURCE PUBLISHES WHEN IT SETTLES (#4697). It used to wait for
+ * `Promise.allSettled`, so the slowest source (Proof, one read per claim)
+ * held every other section on its skeleton. Now a section draws as soon as
+ * its own read answers.
+ *
+ * NO STALE ANSWER LANDS. A board switches when the reader moves between
+ * bucket roots, and the old board's promises can still be in flight. Every
+ * read carries the run it started in and its own attempt number; an answer
+ * from an earlier run, or from a retry that was superseded, is dropped, so a
+ * section never renders another bucket's rows under this bucket's heading.
+ *
+ * A FAILED SECTION RETRIES ON ITS OWN. Each state carries `retry()`, which
+ * reads that source again and leaves the others as they are. A failure reads
+ * as one fixed sentence (`SOURCE_UNREADABLE`), never the raw error text, and
+ * never as an empty list.
  *
  * @param {Record<string, () => Promise<any>>} sources
- * @returns {Record<string, {state:'loading'|'error'|'ready', data:any, error:string|null}>}
+ * @returns {Record<string, {state:'loading'|'error'|'ready', data:any, error:string|null, retry:() => void}>}
  */
+export const SOURCE_UNREADABLE = 'This section could not be read.';
 const LOADING = { state: 'loading', data: null, error: null };
 
 export default function useBucketSources(sources) {
   const keys = useMemo(() => Object.keys(sources || {}), [sources]);
   const [byKey, setByKey] = useState(() =>
     Object.fromEntries(keys.map((k) => [k, LOADING])));
-
-  // A board switches when the reader moves between bucket roots, and the old
-  // board's promises can still be in flight. Without this the slower one wins
-  // and a section renders another bucket's rows under this bucket's heading.
+  // The registry rebuilds `sources` every render; a retry reads the latest.
+  const latest = useRef(sources);
+  latest.current = sources;
   const run = useRef(0);
+  const attempts = useRef({});
+
+  const read = useCallback((key, mine) => {
+    const attempt = (attempts.current[key] = (attempts.current[key] || 0) + 1);
+    const current = () => run.current === mine && attempts.current[key] === attempt;
+    Promise.resolve()
+      .then(() => latest.current[key]())
+      .then(
+        (data) => { if (current()) setByKey((prev) => ({ ...prev, [key]: { state: 'ready', data, error: null } })); },
+        () => { if (current()) setByKey((prev) => ({ ...prev, [key]: { state: 'error', data: null, error: SOURCE_UNREADABLE } })); },
+      );
+  }, []);
 
   useEffect(() => {
     const mine = (run.current += 1);
+    attempts.current = {};
     setByKey(Object.fromEntries(keys.map((k) => [k, LOADING])));
-    if (!keys.length) return undefined;
-    let live = true;
-    Promise.allSettled(keys.map((k) => sources[k]())).then((settled) => {
-      if (!live || run.current !== mine) return;
-      setByKey(Object.fromEntries(settled.map((r, i) => [
-        keys[i],
-        r.status === 'fulfilled'
-          ? { state: 'ready', data: r.value, error: null }
-          : { state: 'error', data: null, error: message(r.reason) },
-      ])));
-    });
-    return () => { live = false; };
+    for (const k of keys) read(k, mine);
+    // Leaving the board (or switching it) retires every read still in flight.
+    return () => { if (run.current === mine) run.current += 1; };
     // `sources` is rebuilt per render by the registry, so the key list is the
     // stable identity. A board's key set changes only when the board does.
   }, [keys.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return byKey;
-}
+  const retry = useCallback((key) => {
+    setByKey((prev) => ({ ...prev, [key]: LOADING }));
+    read(key, run.current);
+  }, [read]);
 
-function message(reason) {
-  const raw = reason?.detail || reason?.message || String(reason || '');
-  const text = String(raw).trim();
-  if (!text || /^\[object/.test(text)) return 'The source did not respond.';
-  return /[.!?]$/.test(text) ? text : `${text}.`;
+  return useMemo(() => Object.fromEntries(Object.entries(byKey).map(([k, v]) => [k, { ...v, retry: () => retry(k) }])), [byKey, retry]);
 }

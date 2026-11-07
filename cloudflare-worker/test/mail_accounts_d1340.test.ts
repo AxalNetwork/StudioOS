@@ -21,6 +21,10 @@ import { openCreds, saveAccount } from '../src/services/mail/accounts.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { __setPublicResolverForTest } from '../src/services/webFetch.ts';
+// #4572 follow-up: a member-given URL's host is resolved before any fetch or socket; these tests answer DNS
+// with a public address (the private cases are refused by name, before DNS, as before).
+__setPublicResolverForTest(async () => ['93.184.216.34']);
 
 after(removeMigratedDatabases);
 const JWT_SECRET = 'synthetic-d1340-only-not-a-real-credential'.repeat(2);

@@ -60,3 +60,11 @@ page-1 thumbnail, kind and state, and opens `?preview=<slug>`.
 templates". `TemplatePreviewPhone.jsx` shows the saved version's PDF one page
 at a time through `PdfPages.jsx`, read-only. `TemplateThumbnail.jsx` is the
 page-1 thumbnail and its queue of four, shared with `TemplateCatalog.jsx`.
+
+D4563 (#4563): Corporate Governance is the desk's tab after Templates, at its own address `/admin/contracts/governance` (`ContractsDesk section="governance"`). It is HQ only.
+- `GovernanceTab.jsx` draws the three entity collections, grouped by category. Each document opens in the side panel, which holds:
+  - its status moves, each asked first;
+  - its details and links;
+  - its versions, with preview (`PdfPages`), download and upload.
+- `governanceModel.js` holds the tab's pure rules.
+- A confidential document is only counted for an admin who is not the Super Admin. The ownership panel is the Super Admin's alone.

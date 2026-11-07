@@ -38,6 +38,10 @@ test('Grow never turns canvas fixtures into product data or claims', () => {
     'a canvas fixture has been transcribed onto the page as data');
   assert.doesNotMatch(grow, /Move to screen|Generate 4 more|Edit touch 1|See all 14 ranked/i,
     'a control promises something no route performs');
-  assert.match(grow, /accept: 'Accept sequence'/,
-    'the artboard’s own accept label is gone from the band that does exactly that');
+  // D4493 retired the band; the artboard's accept label now heads the sequence
+  // builder's proposal, which saves exactly a draft sequence.
+  assert.doesNotMatch(grow, /accept: 'Accept sequence'/, 'the retired outreach-sequence band is back');
+  const builder = readFileSync('frontend/src/pages/cycles/distribution/SequenceBuilder.jsx', 'utf8');
+  assert.match(builder, /title="Accept sequence · proposal"/,
+    'the artboard’s own accept label is gone from the proposal that does exactly that');
 });

@@ -1,14 +1,21 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Check, Copy, Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, ghostButtonClass, inputClass,
+  ASK_REFUSALS, Field, MoreRows, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
+  buttonClass, ghostButtonClass, inputClass, refusalText,
 } from './kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import {
+  PROOF_DELETE_FAILED, PROOF_NOT_PUBLIC, proofDeleteLines, proofDeleteTitle, proofDeletedLine,
+} from './expertiseModel';
+import { usePagedList } from './pages';
+
+const readProofPage = (page) => api.listMyAdvisorProof(page);
 
 /**
  * Expertise · Proof — what you claim, and who has confirmed it.
@@ -23,15 +30,29 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
  * self-stated. It becomes attested only when the named person answers through
  * their own link.
  *
- * THE LINK IS SHOWN ONCE. The worker returns `request_token` on the request and
- * on no later read — an advisor who could read the token back could answer on
- * the attester's behalf, which would make every attestation here self-issued.
- * So the link lives in this component's state until the page is left, and the
- * copy says so rather than letting someone discover it by coming back.
+ * THE LINK IS AN INVITATION (D4670). Each pending ask carries `invite_token`
+ * on every read, so the link is drawn from the list and a refresh never loses
+ * it. Holding it lets someone read the claim, not answer it: answering needs a
+ * code that Axal emails, when the attester asks for one, to the address named
+ * here. That is why the address is required and cannot be the advisor's own.
  *
- * NOTHING IS SENT FROM HERE. Recording the ask and delivering it are separate,
- * and a page that quietly emailed an address someone typed would be deciding
- * the second one on its own.
+ * NOTHING IS SENT FROM HERE. Recording the ask and handing over the link are
+ * the advisor's; the only mail is the attester's own code, sent on their
+ * request.
+ *
+ * A REFUSAL READS AS A FIXED SENTENCE keyed on its code (`ASK_REFUSALS` in
+ * the kit), never the raw error text.
+ *
+ * D4681 (#4681): DELETING IS DELIBERATE AND WHOLE. The trash button asks
+ * first and says what goes with the claim (every consent record, names and
+ * statements, and any link still out), that it cannot be undone and that no
+ * copy is kept. The Worker deletes the claim and its consents in one batch,
+ * so a failure leaves both as they were, and the page says so.
+ *
+ * NOTHING HERE IS PUBLIC. `is_public` is stored, but no page shows a proof item
+ * to anyone else; publishing waits on the attestation rules (P1). The header's
+ * Public preview opens the public profile as a founder sees it, which is how
+ * the advisor can check that for themselves.
  */
 
 const KINDS = [
@@ -43,17 +64,27 @@ const KINDS = [
 
 const BLANK = { kind: 'engagement', title: '', organization: '', period_note: '', detail: '' };
 
+/** What a consent row says, as the advisor reads it (`state` from the Worker). */
+export const CONSENT_STATES = Object.freeze({
+  pending: 'Waiting for an answer',
+  confirmed: 'Confirmed',
+  declined: 'Declined',
+  withdrawn: 'Withdrawn',
+  needs_reconfirmation: 'Confirmed before verification, or about an earlier wording: ask again',
+});
+
 function ConsentLink({ token }) {
   const [copied, setCopied] = useState(false);
   const url = `${window.location.origin}/attest/${token}`;
   return (
     <Card variant="accent" padding="md" className="mt-3">
       <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-        Send this link yourself — shown once
+        Send this link yourself
       </div>
       <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
         Nothing was emailed. Give this to the person you named, through whatever channel you
-        already have with them. It will not be shown again after you leave this page.
+        already have with them. It shows them the claim; to answer, they ask for a code that Axal
+        emails to the address you gave, so the link alone cannot confirm anything.
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-lg bg-white/70 px-2 py-1.5 text-[11.5px] dark:bg-gray-900/70">{url}</code>
@@ -75,28 +106,33 @@ function AskForm({ item, onDone }) {
   const [draft, setDraft] = useState({ attester_name: '', attester_email: '', attester_role: '', relationship: '' });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
-  const [token, setToken] = useState(null);
 
   const submit = async (e) => {
     e.preventDefault();
     setNote(null);
     if (!draft.attester_name.trim()) {
-      setNote({ ok: false, text: 'Name the person you are asking.' });
+      setNote({ ok: false, text: ASK_REFUSALS.attester_name_required });
+      return;
+    }
+    if (!draft.attester_email.trim()) {
+      setNote({ ok: false, text: ASK_REFUSALS.attester_email_required });
       return;
     }
     setBusy(true);
     try {
       const res = await api.requestAdvisorProofConsent(item.id, {
         attester_name: draft.attester_name.trim(),
-        attester_email: draft.attester_email.trim() || null,
+        attester_email: draft.attester_email.trim(),
         attester_role: draft.attester_role.trim() || null,
         relationship: draft.relationship.trim() || null,
       });
-      setToken(res?.request_token || null);
-      setNote({ ok: true, text: 'Request recorded. The claim stays self-stated until they answer.' });
+      setDraft({ attester_name: '', attester_email: '', attester_role: '', relationship: '' });
+      setNote({ ok: true, text: res?.invite_token
+        ? 'Request recorded. Its link is on the claim below. The claim stays self-stated until they answer.'
+        : 'Request recorded. The claim stays self-stated until they answer.' });
       onDone?.();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'The request could not be recorded.' });
+      setNote({ ok: false, text: refusalText(err, 'The request could not be recorded. Nothing was saved.') });
     } finally {
       setBusy(false);
     }
@@ -109,8 +145,8 @@ function AskForm({ item, onDone }) {
           <input className={inputClass} value={draft.attester_name}
             onChange={(e) => setDraft({ ...draft, attester_name: e.target.value })} />
         </Field>
-        <Field label="Their email" hint="Optional. Recorded for your reference; nothing is sent.">
-          <input className={inputClass} value={draft.attester_email}
+        <Field label="Their email" hint="Required. When they answer, Axal emails their code here. It cannot be your own.">
+          <input type="email" className={inputClass} value={draft.attester_email}
             onChange={(e) => setDraft({ ...draft, attester_email: e.target.value })} />
         </Field>
         <Field label="Their role">
@@ -126,28 +162,34 @@ function AskForm({ item, onDone }) {
         {busy ? 'Recording…' : 'Record the ask'}
       </button>
       <SaveNote note={note} />
-      {token && <ConsentLink token={token} />}
     </form>
   );
 }
 
 export default function ProofZone() {
-  const [state, setState] = useState({ loading: true, error: '', items: [] });
+  // #4689: a page at a time; the tiles read `counts`, the whole record's figures.
+  const list = usePagedList(readProofPage, { errorText: 'Your proof record could not be read.' });
+  const state = { loading: list.loading, error: list.error, items: list.rows };
+  const counts = list.res?.counts || null;
+  const load = list.load;
   const [draft, setDraft] = useState(BLANK);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [asking, setAsking] = useState(null);
   const [view, setView] = useState('all');
+  const [confirming, setConfirming] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [uid, setUid] = useState(null);
+  const navigate = useNavigate();
 
-  const load = useCallback(async () => {
-    setState((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorProof();
-      setState({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [] });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your proof record could not be read.', items: [] });
-    }
+  // The public profile's address, for Public preview. A read that fails leaves
+  // the preview disabled rather than guessing a link.
+  useEffect(() => {
+    let live = true;
+    api.getMyAdvisor?.().then((p) => { if (live) setUid(p?.uid || null); }, () => {});
+    return () => { live = false; };
   }, []);
+
 
   useEffect(() => { load(); }, [load]);
 
@@ -168,7 +210,7 @@ export default function ProofZone() {
       setNote({ ok: true, text: 'Added — self-stated until someone confirms it.' });
       await load();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be saved.' });
+      setNote({ ok: false, text: refusalText(err, 'That could not be saved.') });
     } finally {
       setBusy(false);
     }
@@ -176,17 +218,31 @@ export default function ProofZone() {
 
   const remove = async (row) => {
     setNote(null);
+    setDeleting(true);
     try {
-      await api.deleteMyAdvisorProof(row.id);
+      const res = await api.deleteMyAdvisorProof(row.id);
+      setConfirming(null);
+      setNote({ ok: true, text: proofDeletedLine(Number(res?.consents_removed) || 0) });
       await load();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be removed.' });
+      setNote({ ok: false, text: refusalText(err, PROOF_DELETE_FAILED) });
+    } finally {
+      setDeleting(false);
     }
+  };
+
+  // Public preview: the public profile, as a founder sees it. Disabled until a
+  // saved profile gives it an address.
+  const previewPath = uid ? `/advisors/${encodeURIComponent(uid)}` : null;
+  const preview = {
+    onClick: () => previewPath && navigate(previewPath),
+    disabled: !previewPath,
+    title: previewPath ? 'Your public profile, as a founder sees it' : 'Save your profile first: there is no public page yet',
   };
 
   const attested = state.items.filter((p) => p.attested);
   const selfStated = state.items.filter((p) => !p.attested);
-  const awaiting = state.items.filter((p) => (p.consents || []).some((c) => !c.consent_given && !c.withdrawn_at));
+  const awaiting = state.items.filter((p) => (p.consents || []).some((c) => c.state === 'pending'));
   // D392 — the chips are the strip's three counts, as views.
   const PROOF_VIEWS = { attested: attested, awaiting: awaiting, self: selfStated };
   const shown = PROOF_VIEWS[view] || state.items;
@@ -204,9 +260,9 @@ export default function ProofZone() {
       {state.items.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: 'Attested', value: String(attested.length), note: 'named client, dated' },
-            { label: 'Awaiting consent', value: String(awaiting.length), note: 'asked, no answer yet' },
-            { label: 'Self-stated', value: String(selfStated.length), note: 'no external attestation' },
+            { label: 'Attested', value: String(counts?.attested ?? attested.length), note: 'named client, dated' },
+            { label: 'Awaiting consent', value: String(counts?.awaiting ?? awaiting.length), note: 'asked, no answer yet' },
+            { label: 'Self-stated', value: String(counts?.self_stated ?? selfStated.length), note: 'no external attestation' },
             // No verifying body is connected, so this is absent — never a dash
             // that reads like a value somebody chose (D392).
             { label: 'Credential verified', value: null, note: 'no verifying body connected' },
@@ -225,6 +281,7 @@ export default function ProofZone() {
           title="Add a claim"
           blurb="Your own statement of your work. It renders as self-stated until a named person confirms it through their own link."
         />
+        <p className="-mt-1 mb-3 max-w-2xl text-[12px] leading-relaxed text-axal-muted" data-testid="advisor-proof-not-public">{PROOF_NOT_PUBLIC}</p>
         <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="What">
             <input className={inputClass} value={draft.title}
@@ -265,18 +322,19 @@ export default function ProofZone() {
         className="mb-3"
         role="advisor"
         filters={advisorZoneFilters('expertise/proof', { value: view, onChange: setView })}
-        actions={advisorZoneActions('expertise/proof', { view: { header: ['Proof', 'Kind', 'Detail', 'Attested', 'Consents recorded'], rows: shown, cells: (r) => [r.title, r.kind, r.detail, r.attested ? 'yes' : 'no', (r.consents || []).length] } })}
+        actions={advisorZoneActions('expertise/proof', { handlers: { openPublicPreview: preview }, view: { header: ['Proof', 'Kind', 'Detail', 'Attested', 'Consents recorded'], rows: shown, cells: (r) => [r.title, r.kind, r.detail, r.attested ? 'yes' : 'no', (r.consents || []).length] } })}
       />
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
         isEmpty={state.items.length === 0} empty={empty}>
         {shown.length === 0 && (
-          <p className="text-[12.5px] text-axal-muted">{`No claim is in this state. ${state.items.length} in total.`}</p>
+          <p className="text-[12.5px] text-axal-muted">{`No claim is in this state. ${counts?.total ?? state.items.length} in total.`}</p>
         )}
         <div className="space-y-3">
           {shown.map((row) => {
-            const live = (row.consents || []).filter((c) => c.consent_given && !c.withdrawn_at);
-            const pending = (row.consents || []).filter((c) => !c.consent_given && !c.withdrawn_at);
-            const withdrawn = (row.consents || []).filter((c) => c.withdrawn_at);
+            const live = (row.consents || []).filter((c) => c.state === 'confirmed');
+            const pending = (row.consents || []).filter((c) => c.state === 'pending');
+            const withdrawn = (row.consents || []).filter((c) => c.state === 'withdrawn' || c.state === 'declined');
+            const stale = (row.consents || []).filter((c) => c.state === 'needs_reconfirmation');
             return (
               <Card key={row.id} padding="md">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -303,12 +361,29 @@ export default function ProofZone() {
                       onClick={() => setAsking(asking === row.id ? null : row.id)}>
                       {asking === row.id ? 'Close' : 'Ask someone to confirm'}
                     </button>
-                    <button type="button" className={ghostButtonClass} onClick={() => remove(row)}
-                      aria-label={`Remove ${row.title}`}>
+                    <button type="button" className={ghostButtonClass} onClick={() => setConfirming(confirming === row.id ? null : row.id)}
+                      aria-label={`Delete ${row.title}`} data-testid={`advisor-proof-delete-${row.id}`}>
                       <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
+
+                {confirming === row.id && (
+                  <div role="alertdialog" aria-label={proofDeleteTitle(row)} data-testid={`advisor-proof-confirm-${row.id}`}
+                    className="mt-3 rounded-[10px] border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
+                    <div className="text-[12.5px] font-bold">{proofDeleteTitle(row)}</div>
+                    <ul className="m-0 mt-1 list-disc pl-5 text-[12px] leading-relaxed text-axal-muted">
+                      {proofDeleteLines(row).map((l) => <li key={l}>{l}</li>)}
+                    </ul>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" className={ghostButtonClass} onClick={() => setConfirming(null)} data-testid={`advisor-proof-keep-${row.id}`}>Keep it</button>
+                      <button type="button" disabled={deleting} onClick={() => remove(row)} data-testid={`advisor-proof-delete-confirm-${row.id}`}
+                        className="inline-flex min-h-[32px] items-center rounded-lg bg-axal-destructive px-3 text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-50">
+                        {deleting ? 'Deleting…' : 'Delete for good'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {live.map((c) => (
                   <blockquote key={c.id} className="mt-3 border-l-2 border-emerald-400 pl-3">
@@ -328,6 +403,19 @@ export default function ProofZone() {
                     told yes — this stays self-stated until they answer.
                   </p>
                 )}
+                {/* D4670: each pending ask's link, from the list, so a refresh never loses it. */}
+                {pending.filter((c) => c.invite_token).map((c) => (
+                  <div key={`link-${c.id}`}>
+                    <p className="mt-2 text-[11px] font-semibold">For {c.attester_name}</p>
+                    <ConsentLink token={c.invite_token} />
+                  </div>
+                ))}
+                {stale.length > 0 && (
+                  <p className="mt-2 text-[11.5px] text-amber-700 dark:text-amber-300" data-testid="proof-needs-reconfirmation">
+                    {stale.map((c) => c.attester_name).join(', ')}: {CONSENT_STATES.needs_reconfirmation}. Their earlier
+                    answer is kept on the record and no longer counts as confirmed.
+                  </p>
+                )}
                 {withdrawn.length > 0 && (
                   <p className="mt-2 text-[11.5px] text-axal-faint">
                     {withdrawn.map((c) => c.attester_name).join(', ')} declined or withdrew. The
@@ -341,6 +429,7 @@ export default function ProofZone() {
             );
           })}
         </div>
+        <MoreRows line={list.line} onMore={list.more} busy={list.moreBusy} error={list.moreError} testid="advisor-proof-more" />
       </ZoneBody>
     </div>
   );

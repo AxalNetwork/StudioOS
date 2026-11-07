@@ -97,7 +97,7 @@ export function useConnectors({ companyId = null } = {}) {
   }, [attempt, companyId]);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const catalogue = state.status === 'ready'
-    ? buildCatalogue({ providers: state.providers, items: state.items || [], waitlist: state.waitlist, firstParty: state.firstParty, firstPartyCards: state.firstPartyCards, companies: state.companies })
+    ? buildCatalogue({ providers: state.providers, items: state.items || [], waitlist: state.waitlist, firstParty: state.firstParty, firstPartyCards: state.firstPartyCards, companies: state.companies, connectionsReadable: !state.itemsFailed })
     : [];
   return { ...state, catalogue, reload };
 }
@@ -838,6 +838,7 @@ const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'r
  */
 export function openingView(p) {
   if (p.connection) return 'detail';
+  if (p.connectionUnreadable || p.unreadable) return 'setup_unreadable';
   if (p.oauthOff && !p.supports_pat) return 'unconfigured';
   if (p.locked) return 'pro';
   return 'pre';

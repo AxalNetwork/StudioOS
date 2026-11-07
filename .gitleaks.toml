@@ -41,6 +41,9 @@ paths = [
   '''(?i)cloudflare-worker/test/calendar\.google-oauth\.test\.ts$''',
 ]
 regexes = [
+  # D4559 (#4559): platform capacity metric ids such as `key: 'd1.size_ratio'`
+  # in services/platformCapacity.ts are metric dictionary names, not secrets.
+  '''\bd1\.size_(bytes|ratio)\b''',
   # D1135: this exact synthetic signing seed belongs only to the SQLite test's
   # locally minted JWTs. It is no deployed credential. Pin the literal rather
   # than exempting the test file or rewriting published branch history.

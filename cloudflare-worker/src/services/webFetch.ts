@@ -19,6 +19,7 @@
  * signal text to feed the LLM synthesis step.
  */
 import type { Env } from '../types';
+import { dohResolver, guardHost, isPublicAddress, type Resolver } from '../integrations/customMcp';
 
 const MAX_BYTES = 1_500_000; // 1.5 MB cap on a fetched document
 const FETCH_TIMEOUT_MS = 8_000;
@@ -73,7 +74,9 @@ export function isSafePublicUrl(url: string): boolean {
     return false;
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-  const host = u.hostname.toLowerCase();
+  // The root's trailing dot (`name.`) is dropped first, or `localhost.` would pass the rules below.
+  const host = u.hostname.toLowerCase().replace(/\.+$/, '');
+  if (!host) return false;
   // No bare hostnames (localhost) or *.local / *.internal.
   if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return false;
   if (!host.includes('.')) return false;
@@ -271,6 +274,52 @@ export interface FetchPageOptions {
   noCache?: boolean;
 }
 
+// ── #4572 follow-up: the name rules above, then DNS ─────────────────────────
+//
+// `isSafePublicUrl` reads only the name: a public name that resolves to a
+// private, loopback, link-local or metadata address passes it. Every server-side
+// fetch of a member-given URL therefore also resolves the host (DNS over HTTPS,
+// `dohResolver`) and refuses unless EVERY address is public (`guardHost`), and
+// follows redirects by hand, checking each hop the same way.
+
+let resolverForTest: Resolver | null = null;
+/** Tests answer DNS themselves; production always uses DNS over HTTPS. */
+export function __setPublicResolverForTest(r: Resolver | null): void { resolverForTest = r; }
+/** The resolver every member-URL fetch uses. */
+export const publicResolver = (): Resolver => resolverForTest ?? dohResolver(fetch);
+
+/** Why a URL may not be fetched from the server, or null: the name rules, then every resolved address public. */
+export async function publicHostRefusal(url: string, resolve: Resolver = publicResolver()): Promise<'unsafe_url' | 'host_refused' | null> {
+  if (!isSafePublicUrl(url)) return 'unsafe_url';
+  const host = new URL(url).hostname.toLowerCase().replace(/\.+$/, '');
+  if (host.startsWith('[')) return isPublicAddress(host.slice(1, -1)) ? null : 'host_refused';
+  if (/^\d+(\.\d+){3}$/.test(host)) return isPublicAddress(host) ? null : 'host_refused';
+  return (await guardHost(host, resolve)) === 'ok' ? null : 'host_refused';
+}
+
+/** At most this many redirects are followed, each one checked. */
+export const PUBLIC_FETCH_HOPS = 5;
+
+/**
+ * GET a member-given URL from the server: each hop (the first and every
+ * redirect's target) must pass `publicHostRefusal`; redirects are followed by
+ * hand, never by the runtime.
+ */
+export async function publicFetch(url: string, init: RequestInit, resolve: Resolver = publicResolver(), fetcher: typeof fetch = fetch):
+  Promise<{ ok: true; res: Response; url: string } | { ok: false; code: 'unsafe_url' | 'host_refused' | 'too_many_redirects' }> {
+  let at = url;
+  for (let hop = 0; hop <= PUBLIC_FETCH_HOPS; hop += 1) {
+    const refused = await publicHostRefusal(at, resolve);
+    if (refused) return { ok: false, code: refused };
+    const res = await fetcher(at, { ...init, redirect: 'manual' });
+    const next = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+    if (!next) return { ok: true, res, url: at };
+    try { await res.body?.cancel(); } catch { /* nothing to release */ }
+    at = new URL(next, at).toString();
+  }
+  return { ok: false, code: 'too_many_redirects' };
+}
+
 /**
  * Fetch + normalize a single public page. Returns a structured result even on
  * failure (ok:false, error set) so callers can degrade gracefully.
@@ -319,9 +368,9 @@ export async function fetchPage(env: Env, rawUrl: string, opts: FetchPageOptions
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    // #4572 follow-up: every hop's host resolves to public addresses only; redirects are followed by hand.
+    const got = await publicFetch(url, {
       method: 'GET',
-      redirect: 'follow',
       signal: controller.signal,
       headers: {
         'User-Agent': 'StudioOS-CompetitorBot/1.0 (+https://axal.vc; respectful public-page reader)',
@@ -329,6 +378,13 @@ export async function fetchPage(env: Env, rawUrl: string, opts: FetchPageOptions
       },
       cf: opts.noCache ? { cacheTtl: 0 } : { cacheTtl: 3600, cacheEverything: true },
     } as RequestInit);
+    if (!got.ok) {
+      return {
+        url, ok: false, status: 0, title: '', description: '', text: '', headings: [], pricingHints: [],
+        fetched_at: nowIso, cached: false, error: got.code === 'too_many_redirects' ? 'too_many_redirects' : 'blocked_or_invalid_url',
+      };
+    }
+    const res = got.res;
 
     const contentType = res.headers.get('content-type') || '';
     if (!/text\/html|application\/xhtml|text\/plain/i.test(contentType)) {

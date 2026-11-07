@@ -119,7 +119,7 @@ const CYCLES = {
     cycle: 'grow',
     bands: [
       [/ranks applicants/i, 'grow/talent'],
-      [/outreach sequence/i, 'grow/customers'],
+      // D4493: the outreach-sequence band is retired; the sequence builder's Ask replaces it.
       // D691 (#1698): the feedback-theme fill on Product improvement, over the
       // propose route every kind runs through; its fourth item is the kind.
       [/proposes a theme/i, /founderValidate\.post\('\/propose\/:projectId'/, 'theme proposal', 'feedback_theme'],

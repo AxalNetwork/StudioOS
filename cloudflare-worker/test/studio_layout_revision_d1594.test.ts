@@ -20,7 +20,9 @@ import { PLAN_KEY as INVESTOR_PLAN_KEY } from '../src/middleware/requireInvestor
 const JWT_SECRET = randomBytes(32).toString('hex');
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M687 = readFileSync(new URL('../sql/migrations/687_studio_layouts.sql', import.meta.url), 'utf8');
-const M750 = readFileSync(new URL('../sql/migrations/750_studio_layout_revision.sql', import.meta.url), 'utf8');
+const M750 = readFileSync(new URL('../sql/migrations/750_studio_layout_revision.sql', import.meta.url), 'utf8')
+  // D4621: the reset tombstone, applied after 750 as production applies it.
+  + '\n' + readFileSync(new URL('../sql/migrations/202611070916_studio_layout_reset_tombstone.sql', import.meta.url), 'utf8');
 
 function world({ before750 }: { before750?: (db: any) => void } = {}) {
   const fx = makeD1(stripForeignKeys(tableFromBaseline(baseline, 'users')));
@@ -42,7 +44,7 @@ async function call(env: any, id: number, path: string, method = 'GET', body?: u
   return out;
 }
 const save = (env: any, id: number, layout: unknown, expected: unknown) => call(env, id, '/layout', 'PUT', { layout, expected_revision: expected });
-const row = (db: any, id: number) => db.prepare('SELECT layout, revision FROM studio_layouts WHERE user_id = ?').get(id);
+const row = (db: any, id: number) => db.prepare('SELECT layout, revision, reset_at FROM studio_layouts WHERE user_id = ?').get(id);
 const A = [{ key: 'today', size: '1/2' }];
 const B = [{ key: 'earnings', size: 'full' }];
 
@@ -72,17 +74,21 @@ test('saving: null creates revision 1 once; each save names the revision it read
     const stale = await save(w.env, 3, A, 1);
     assert.deepEqual([stale.status, stale.body.error, stale.body.revision], [409, 'stale_layout', 2]);
     assert.deepEqual([JSON.parse(row(w.db, 3).layout), row(w.db, 3).revision], [B, 2]);
+    // D4621: a reset keeps the row and raises the revision, so the count goes on.
     const reset = await call(w.env, 3, '/layout/reset', 'POST');
-    assert.deepEqual([reset.body.source, reset.body.revision], ['default', null]);
+    assert.deepEqual([reset.body.source, reset.body.revision], ['default', 3]);
     const afterReset = await save(w.env, 3, A, 2);
-    assert.deepEqual([afterReset.status, afterReset.body.error, afterReset.body.revision], [409, 'stale_layout', null]);
-    assert.equal(row(w.db, 3), undefined, 'nothing written');
-    const fresh = await save(w.env, 3, A, null);
-    assert.deepEqual([fresh.status, fresh.body.revision], [200, 1]);
+    assert.deepEqual([afterReset.status, afterReset.body.error, afterReset.body.revision], [409, 'stale_layout', 3]);
+    assert.deepEqual([JSON.parse(row(w.db, 3).layout), row(w.db, 3).revision, row(w.db, 3).reset_at !== null], [[], 3, true], 'nothing written');
+    const noRow = await save(w.env, 3, A, null);
+    assert.deepEqual([noRow.status, noRow.body.error, noRow.body.revision], [409, 'stale_layout', 3], 'null means no row ever existed; one does');
+    const fresh = await save(w.env, 3, A, 3);
+    assert.deepEqual([fresh.status, fresh.body.revision, fresh.body.source], [200, 4, 'saved']);
+    assert.equal(row(w.db, 3).reset_at, null, 'a save makes the row live again');
     // Two saves from one copy at once: one wins, the other is told.
-    const both = await Promise.all([save(w.env, 3, B, 1), save(w.env, 3, A, 1)]);
+    const both = await Promise.all([save(w.env, 3, B, 4), save(w.env, 3, A, 4)]);
     assert.deepEqual(both.map((r) => r.status).sort(), [200, 409]);
-    assert.equal(row(w.db, 3).revision, 2);
+    assert.equal(row(w.db, 3).revision, 5);
   } finally { w.db.close(); }
 });
 
@@ -171,4 +177,35 @@ test('one bound write statement per save, with no interpolated SQL', () => {
   for (const m of src.matchAll(/prepare\(\s*`([^`]*)`/g)) assert.doesNotMatch(m[1], /\$\{/);
   assert.doesNotMatch(src, /INSERT OR REPLACE/i);
   assert.match(src, /WHERE user_id = \?1 AND profile = \?2 AND revision = \?4/);
+});
+
+// D4621 (#4621): the revision outlives a reset.
+test('D4621: a draft read before a reset cannot overwrite a layout saved after it, and reset is idempotent', async () => {
+  // Mutation checked: reset back to DELETE → tab A's stale save is accepted, at revision 1 again;
+  // the `reset_at IS NULL` guard removed → a second reset raises the revision and breaks a draft made from the default.
+  const w = world();
+  try {
+    const first = await save(w.env, 3, A, null);
+    assert.equal(first.body.revision, 1);
+    const tabA = (await call(w.env, 3, '/layout')).body;            // tab A reads revision 1
+    assert.equal(tabA.revision, 1);
+    const reset = await call(w.env, 3, '/layout/reset', 'POST');     // tab B resets…
+    assert.equal(reset.body.revision, 2);
+    const tabBSave = await save(w.env, 3, B, reset.body.revision);   // …and saves a new layout
+    assert.deepEqual([tabBSave.status, tabBSave.body.revision], [200, 3], 'revision 1 is never issued twice');
+    const stale = await save(w.env, 3, A, tabA.revision);            // tab A saves its old draft
+    assert.deepEqual([stale.status, stale.body.error, stale.body.revision], [409, 'stale_layout', 3]);
+    assert.deepEqual(JSON.parse(row(w.db, 3).layout), B, 'the stale save changed nothing');
+
+    // Reset twice: the second changes nothing, so a draft made from the default still saves.
+    const r1 = await call(w.env, 3, '/layout/reset', 'POST');
+    const r2 = await call(w.env, 3, '/layout/reset', 'POST');
+    assert.deepEqual([r1.body.revision, r2.body.revision], [4, 4]);
+    assert.equal((await save(w.env, 3, A, r2.body.revision)).status, 200);
+
+    // A reset with no row at all is still the default, at no revision, and writes no row.
+    const none = await call(w.env, 4, '/layout/reset', 'POST');
+    assert.deepEqual([none.status, none.body.source, none.body.revision], [200, 'default', null]);
+    assert.equal(row(w.db, 4), undefined);
+  } finally { w.db.close(); }
 });

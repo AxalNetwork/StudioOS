@@ -36,8 +36,12 @@ import ChannelsTab from './distribution/ChannelsTab.jsx';
 import ProspectsPage from './distribution/ProspectsPage.jsx';
 import DistributionAskIntent from './distribution/DistributionAskIntent.jsx';
 import InboxTab, { InboxNeedsYou, useInboxUnread } from './distribution/InboxTab.jsx';
+import { SequenceNeedsYou } from './distribution/SequenceBuilder.jsx';
+import NewsletterTab from './distribution/NewsletterTab.jsx';
 import CampaignsTab from './distribution/CampaignsTab.jsx';
+import ResultsTab from './distribution/ResultsTab.jsx';
 import NewCampaignPage from './distribution/NewCampaignPage.jsx';
+import AdsTab from './distribution/AdsTab.jsx';
 import { ComingSoon } from './distribution/DistributionParts.jsx';
 import { distributionPrimary } from './distribution/distributionModel.js';
 import { EmailAction } from '../email/emailParts.jsx';
@@ -49,6 +53,7 @@ import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { CYCLE_GUTTER, RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
+import ValidateNextAction from './ValidateNextAction';
 import RaiseLead, { RaiseAsk } from './RaiseOverviewLead';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
@@ -366,21 +371,16 @@ const CYCLE_DEFS = {
     }),
     add: toFnMap({}),
     fills: { 'product-improvement': 'feedback_theme' },
-    // The Grow desk's two AI bands (ZoneDraft, D424), on the modules they
-    // read: the applicant ranking on Team expansion, the outreach sequence
-    // for sign-ups who have not converted on Distribution.
+    // The Grow desk's AI band (ZoneDraft, D424) on the module it reads: the
+    // applicant ranking on Team expansion. D4493 retired Distribution's
+    // outreach-sequence band: 'Ask Eadwyn for a sequence' in the sequence
+    // builder (Prospects) runs it through D4488's drafting task.
     drafts: new Map([
       ['team-expansion', [{
         surface: 'grow/talent', label: 'Match · why this one', run: 'Rank the applicants', accept: 'Keep this ranking',
         empty: 'Nothing proposed yet. Eadwyn will rank your applicants and give reasons for the top one — each a receipt you can open and check in their own application.',
         nothingToDraft: 'No live role has an applicant yet.',
         foot: 'A reading only. Nothing here moves an application to a screen.',
-      }]],
-      ['distribution', [{
-        surface: 'grow/customers', label: 'Proposal · outreach sequence', run: 'Draft a sequence', accept: 'Accept sequence',
-        empty: 'Nothing proposed yet. Eadwyn will draft a sequence for the signups who have gone furthest without converting, opening each touch on a pain you have actually recorded.',
-        nothingToDraft: 'No customer signup is recorded for this startup yet.',
-        foot: 'Each opener quotes a pain from your own map, or says none fits.',
       }]],
     ]),
     // A module's further parts, drawn under its table from the module read.
@@ -1238,7 +1238,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           action={action}
           search={q}
           // D1466 (#3714): Raise's lead row (Next steps, From your tools), drawn from the read's own parts.
-          lead={cycle === 'raise' ? <RaiseLead data={rawOverview} search={q} onRetry={() => setReload((n) => n + 1)} /> : null}
+          // D4589 (#4589): Validate's next action, the same Worker focus the phone root draws.
+          lead={cycle === 'raise' ? <RaiseLead data={rawOverview} search={q} onRetry={() => setReload((n) => n + 1)} />
+            : cycle === 'validate' && rawOverview ? <ValidateNextAction raw={rawOverview} search={q} openAction={openAction} /> : null}
           // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
           // D1321 (#3482): Publish to… from Grow's overview, on part 2's gate (D1333's `publish`).
@@ -1335,14 +1337,16 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D4484: Overview keeps the existing module body; unlanded tabs read no campaign data.
   // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
   if (distribution) {
-    if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} />{body}</>;
+    if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} /><SequenceNeedsYou projectId={projectId} search={q} />{body}</>;
     if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} />;
     if (distributionTab === 'channels' && projectStatus === 'ready') body = <ChannelsTab projectId={projectId} refresh={reload} onChanged={() => setReload((n) => n + 1)} fillFor={fillFor} />;
     if (distributionTab === 'prospects' && projectStatus === 'ready') body = <ProspectsPage key={projectId} projectId={projectId} />;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} DraftIntent={DistributionAskIntent} onUnreadChange={inboxUnread.acceptRead} />;
+    // D4490 integration (#4484): Ads was built in #4510 but never mounted; it reads its own campaign list and Ask.
+    if (distributionTab === 'ads' && projectStatus === 'ready') body = <AdsTab projectId={projectId} aiOff={!fillsOn} />;
     body = campaignNew ? (projectStatus === 'ready' ? <NewCampaignPage key={`${projectId}:${location.search}`} projectId={projectId} role={user?.role} search={q} aiOff={!fillsOn} /> : body) : <DistributionTabs projectId={projectStatus==='ready'?projectId:null} tab={distributionTab} search={q} action={action} aiOff={!fillsOn} inboxCount={inboxUnread.count}
       loading={projectStatus === 'loading' || (distributionTab === 'overview' && projectStatus === 'ready' && moduleStatus === 'loading')}>
-      {['channels', 'inbox', 'calendar', 'prospects'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : <ComingSoon />}
+      {['channels', 'inbox', 'calendar', 'prospects', 'ads'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : distributionTab === 'results' ? <ResultsTab key={projectId} projectId={projectId} /> : distributionTab === 'newsletter' ? <NewsletterTab /> : <ComingSoon />}
     </DistributionTabs>;
   }
 

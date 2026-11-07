@@ -92,6 +92,10 @@ function freshDb() {
       name TEXT NOT NULL, company TEXT, email TEXT UNIQUE NOT NULL,
       specialization TEXT, status TEXT NOT NULL DEFAULT 'active'
     );
+    -- An engagement's founder_id is a founder profile (founders.id); the client's name is read
+    -- from it. This fixture keeps the founder's id equal to the user's (FOUNDER_USER) on purpose;
+    -- founder_joins_research_offers.test.ts proves the two apart.
+    CREATE TABLE founders (id INTEGER PRIMARY KEY, uid TEXT, name TEXT NOT NULL, email TEXT);
     CREATE TABLE founder_needs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       project_id INTEGER NOT NULL, founder_id INTEGER NOT NULL,
@@ -124,6 +128,7 @@ function freshDb() {
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');
   u.run(THEIRS_USER, 'partner', 2, 'Theirs', 'theirs@example.com');
   u.run(FOUNDER_USER, 'founder', null, 'Fran', 'fran@example.com');
+  db.prepare('INSERT INTO founders (id, name, email) VALUES (?, ?, ?)').run(FOUNDER_USER, 'Fran', 'fran@example.com');
 
   const p = db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)');
   p.run(1, 'p-1', 'Ours', 'ours@example.com');
@@ -607,5 +612,48 @@ test('no route writes a value it computes', () => {
   for (const derived of ['is_published', 'engagement_count', 'won_value', 'unstated_count']) {
     assert.ok(!named.has(derived),
       `a write names \`${derived}\` — that value is derived and must not be stored`);
+  }
+});
+
+// ── The client is the founder profile, never a user who shares its id ─────────
+//
+// `engagements.founder_id` is a `founders.id` (copied from `projects.founder_id`).
+// Attribution and proof read the client's name from `founders`; joining `users`
+// on that id would name whichever account happens to have the same number.
+const KESTREL = 750;          // a founders.id that is also, by coincidence, the users.id of someone else
+const KESTREL_ENGAGEMENT = 951;
+
+function kestrelDb() {
+  const db = freshDb();
+  db.prepare("INSERT INTO founders (id, name, email) VALUES (?, 'Kestrel Founder', 'kestrel@example.test')").run(KESTREL);
+  db.prepare("INSERT INTO users (id, role, partner_id, name, email) VALUES (?, 'investor', NULL, 'Unrelated Person', 'unrelated@example.test')").run(KESTREL);
+  db.prepare("INSERT INTO founder_needs (id, uid, project_id, founder_id, category, title, description) VALUES (503, 'need-k', 12, ?, 'engineering', 'Ledger audit', 'z')").run(KESTREL);
+  db.prepare(`INSERT INTO engagements (id, uid, need_id, quote_id, partner_id, founder_id, project_id, price)
+              VALUES (?, 'e-kestrel', 503, 803, 1, ?, 12, 9000)`).run(KESTREL_ENGAGEMENT, KESTREL);
+  return db;
+}
+
+test('attribution names the founder profile, not the user who shares its id', async () => {
+  const r = await call(env(kestrelDb()), 'GET', '/attribution', ours);
+  assert.equal(r.status, 200);
+  const row = r.body.items.find((i: any) => i.engagement_id === KESTREL_ENGAGEMENT);
+  assert.equal(row.founder_name, 'Kestrel Founder');
+  assert.ok(!JSON.stringify(r.body).includes('Unrelated Person'));
+});
+
+test('proof names the founder profile, not the user who shares its id', async () => {
+  const e = env(kestrelDb());
+  const made = await call(e, 'POST', '/proof', ours, { title: 'Ledger reconciled', engagement_id: KESTREL_ENGAGEMENT });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  const list = (await call(e, 'GET', '/proof', ours)).body;
+  const row = list.items.find((i: any) => i.engagement_id === KESTREL_ENGAGEMENT);
+  assert.equal(row.founder_name, 'Kestrel Founder');
+  assert.ok(!JSON.stringify(list).includes('Unrelated Person'));
+});
+
+test('guard: research and offers never join a founder id to a user id', () => {
+  for (const file of ['research.ts', 'partner_offers.ts']) {
+    const src = readFileSync(resolve(HERE, `../src/routes/${file}`), 'utf8');
+    assert.doesNotMatch(src, /JOIN\s+users\s+\w+\s+ON\s+\w+\.id\s*=\s*\w+\.founder_id/, `${file} joins users on a founder_id`);
   }
 });

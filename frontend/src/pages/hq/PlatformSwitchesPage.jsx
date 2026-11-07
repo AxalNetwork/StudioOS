@@ -54,7 +54,7 @@ export function SwitchForm({ sw, action, propagationSeconds, reasonMin, onDone }
     setBusy(true);
     setError(null);
     try {
-      const res = await api.hqSetPlatformSwitch(sw.key, action, reason.trim());
+      const res = await api.hqSetPlatformSwitch(sw.key, action, reason.trim(), sw.operator?.revision);
       setReason('');
       setAck(false);
       onDone(res);

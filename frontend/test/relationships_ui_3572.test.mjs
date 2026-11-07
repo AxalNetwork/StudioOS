@@ -85,7 +85,8 @@ test('the strip: up to three teammates who shared, no count of anyone else; the 
     await press(m, 'wk-ask-0');
     assert.equal(m.props(by(m, 'wk-sheet-send')).disabled, true, 'a reason is required');
     assert.match(m.text(), /Axal sends your request to Lena only\. Nobody contacts Alex unless Lena does\./);
-    assert.equal(m.props(by(m, 'wk-sheet-draft')).disabled, true, 'Eadwyn\'s draft waits for 8b');
+    // #4740 (S1 audit): part 8b merged — "Ask Eadwyn to draft from this record" is live, not disabled.
+    assert.equal(m.props(by(m, 'wk-sheet-draft')).disabled, false, 'Eadwyn\'s draft is live now 8b merged');
     await type(m, 'wk-sheet-reason', 'A 20-minute call to see if it fits.');
     await type(m, 'wk-sheet-context', 'We lead logistics software.');
     await press(m, 'wk-sheet-send');

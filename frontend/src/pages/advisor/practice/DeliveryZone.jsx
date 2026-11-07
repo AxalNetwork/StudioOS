@@ -422,7 +422,7 @@ export default function DeliveryZone() {
                     {v.summary || <Unrecorded>No change note recorded</Unrecorded>}
                   </div>
                   <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-faint">
-                    {v.sent_at ? `${shortMoment(v.sent_at)} · sent` : 'Not sent'}
+                    {v.sent_at ? `${shortMoment(v.sent_at)} · sent${v.recipient_name ? ` to ${v.recipient_name}` : ''}` : 'Not sent'}
                     {v.opened_at ? ` · opened ${shortMoment(v.opened_at)}` : ''}
                   </div>
                 </div>

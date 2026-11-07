@@ -304,7 +304,7 @@ const statusOf = async (...a: Parameters<typeof draft>) => (await draft(...a)).s
 const SURFACES = [
   'build/this-week', 'build/roadmap', 'build/kpi', 'build/retro',
   'raise/capital', 'raise/legal', 'raise/data-room', 'raise/liquidity',
-  'grow/customers', 'grow/talent',
+  'grow/talent', // D4493: grow/customers is retired
 ];
 
 for (const surface of SURFACES) {
@@ -448,24 +448,8 @@ test('grow/talent never hands an applicant email to the model', async () => {
   assert.equal(await statusOf(db, MINE, 'grow/talent', String(MY_PROJECT)), 409);
 });
 
-test('grow/customers carries the founder’s own pains, or says there are none', async () => {
-  // "Opens on the handoff-opacity pain THEIR OWN SEGMENT NAMED" is the whole
-  // reason this band is worth its tokens. Without the pains in the material a
-  // model writes a generic cold email and the band is a worse version of a
-  // template.
-  const db = freshDb();
-  const withPain = await draft(db, MINE, 'grow/customers', String(MY_PROJECT));
-  assert.match(String(withPain.prompt), new RegExp(`Pain for ${MY_PROJECT}`));
-  assert.doesNotMatch(String(withPain.prompt), /NO PAIN IS RECORDED/);
-
-  db.prepare('DELETE FROM pain_groups WHERE project_id = ?').run(MY_PROJECT);
-  const without = await draft(db, MINE, 'grow/customers', String(MY_PROJECT));
-  assert.match(String(without.prompt), /NO PAIN IS RECORDED for this startup/,
-    'with no pain map the model is left to invent an opener');
-
-  // And with no signups there is nobody to write to.
-  db.prepare('DELETE FROM waitlist_signups WHERE project_id = ?').run(MY_PROJECT);
-  assert.equal(await statusOf(db, MINE, 'grow/customers', String(MY_PROJECT)), 409);
+test('D4493: the retired grow/customers surface is refused like any unknown surface', async () => {
+  assert.equal(await statusOf(freshDb(), MINE, 'grow/customers', String(MY_PROJECT)), 400);
 });
 
 test('a gather never reads a record belonging to another founder', async () => {

@@ -11,6 +11,7 @@
  */
 import { canReadDecision, canWrite, ownsVenture } from '../../routes/_founder_validate_helpers';
 import type { User } from '../../types';
+import { planBuildHref } from '../validateNextAction';
 import {
   addCommitment, completeCommitment, decisionById, earlierGivenInScope, evidenceFor, interviewEvidenceSince, openCommitments,
   DECISION_EVIDENCE_BAR, NO_EVIDENCE_REASON, VerdictError, type DecisionKind, type EvidenceSource,
@@ -206,7 +207,7 @@ export function verdictSpec({ evidenceSource = evidenceFor }: { evidenceSource?:
       if (d.state === 'given' && !d.superseded_at && (d.decision === 'proceed' || d.decision === 'pivot') && ownsVenture(ctx.project, ctx.user)) {
         actions.push({
           key: 'plan-build', label: 'Plan the build', kind: 'link',
-          href: `/build/plan?project_id=${ctx.projectId}${d.hypothesis_id == null ? '' : `&scope=h-${d.hypothesis_id}`}`,
+          href: planBuildHref(ctx.projectId, d.hypothesis_id),
         });
       }
       const open = await openCommitments(ctx.env, ctx.projectId, d.id);

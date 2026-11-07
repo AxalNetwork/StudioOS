@@ -31,7 +31,10 @@ import {
   type PainGroupModel, type PainGroupsView, type PainSeverityLevel,
 } from './painGroups';
 import { evidenceFor, verdictFor, laneFor, VALIDATION_BAR } from '../routes/_founder_validate_helpers';
-import { loadVerdictHistory, recordVerdictChanges, observationAt, changedWithin, parseObserved, RECENTLY_MOVED_DAYS } from './verdictHistory';
+import {
+  changedWithin, historyChangesAvailable, loadVerdictHistory, observationAt,
+  parseObserved, recordVerdictChanges, RECENTLY_MOVED_DAYS,
+} from './verdictHistory';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
 import { verdictCard, decisionRecords, DECISION_COLUMNS, DECISION_FILTERS, DECISION_SORTS } from './verdict';
@@ -1445,31 +1448,39 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   await recordVerdictChanges(ctx.env, ctx.projectId, openClaims.map((c) => ({
     hypothesis_id: c.id, verdict: c.verdict, lane: c.lane,
   }))).catch(() => 0);
-  const history = await loadVerdictHistory(ctx.env, ctx.projectId);
+  const now = new Date();
+  const movedSince = new Date(now.getTime() - RECENTLY_MOVED_DAYS * 86_400_000);
+  const lastWeek = new Date(now.getTime() - 7 * 86_400_000);
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const history = await loadVerdictHistory(ctx.env, ctx.projectId, {
+    claimIds: openClaims.map((c) => c.id), boundaries: [lastWeek],
+  });
 
   // FVW's views over the verdict history (decision 16), before paging.
-  const now = new Date();
   const historyOf = (id: number) => history.byClaim.get(id) || [];
-  const movedSince = new Date(now.getTime() - RECENTLY_MOVED_DAYS * 86_400_000);
+  const movedAvailable = historyChangesAvailable(history.coverage, movedSince);
+  const monthAvailable = historyChangesAvailable(history.coverage, monthStart);
+  const lastWeekAvailable = history.coverage.boundaries.some((value) => {
+    const at = parseObserved(value);
+    return at != null && Math.abs(at.getTime() - lastWeek.getTime()) < 1000;
+  });
   const f = rq.filter;
   type Row = { c: Claim; status: ClaimStatus; moved: 'recent' | null };
-  let rows: Row[] = claims.map((c) => ({ c, status: c.status, moved: changedWithin(historyOf(c.id), movedSince, 'lane') ? 'recent' : null }));
+  let rows: Row[] = claims.map((c) => ({ c, status: c.status, moved: movedAvailable && changedWithin(historyOf(c.id), movedSince, 'lane') ? 'recent' : null }));
   // The views read unretired claims only.
   if (retired && (f.moved || f.history)) rows = [];
-  if (f.moved === 'recent') rows = rows.filter((r) => r.moved === 'recent');
+  if (f.moved === 'recent') rows = movedAvailable ? rows.filter((r) => r.moved === 'recent') : [];
   if (f.history === 'last_week') {
     // Each claim's status in force seven days ago; a claim with no observation
     // that old is left out, never shown at today's status.
-    const at = new Date(now.getTime() - 7 * 86_400_000);
-    rows = rows.flatMap((r) => {
-      const o = observationAt(historyOf(r.c.id), at);
+    rows = lastWeekAvailable ? rows.flatMap((r) => {
+      const o = observationAt(historyOf(r.c.id), lastWeek);
       if (!o) return [];
       const marked = parseObserved(r.c.inconclusive_at);
-      return [{ ...r, status: statusOf(o.verdict, o.lane, marked != null && marked.getTime() <= at.getTime()) }];
-    });
+      return [{ ...r, status: statusOf(o.verdict, o.lane, marked != null && marked.getTime() <= lastWeek.getTime()) }];
+    }) : [];
   } else if (f.history === 'this_month') {
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    rows = rows.filter((r) => changedWithin(historyOf(r.c.id), monthStart, 'verdict'));
+    rows = monthAvailable ? rows.filter((r) => changedWithin(historyOf(r.c.id), monthStart, 'verdict')) : [];
   }
   rows = rows.filter((r) => has(rq.q, r.c.code, r.c.claim));
   if (f.status && !retired) rows = rows.filter((r) => r.status === f.status);
@@ -1516,6 +1527,10 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
           // When the record starts, or null with none: a window opening before
           // it is not an answer, and the page says where the record starts.
           history_since: history.since,
+          history_coverage: history.coverage,
+          history_filter_available: f.moved === 'recent' ? movedAvailable
+            : f.history === 'last_week' ? lastWeekAvailable
+              : f.history === 'this_month' ? monthAvailable : null,
         },
         // Per open claim, how far its ICP support is from the bar.
         fit_gap: openClaims.filter((c) => c.status !== 'supported' && c.status !== 'refuted').map((c) => ({

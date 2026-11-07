@@ -608,8 +608,20 @@ export function newThisWeek(rows, now = Date.now(), max = 4) {
     .map(({ r }) => r);
 }
 
-/** LR1 "Recommended for you": a marked future block, never rows. */
-export const RECOMMENDED_FUTURE = 'Waits on recommendations (#3724). Nothing is drawn here until then.';
+/** LR1 "Recommended for you" (#4650, D4650): the next learning action and why, from `GET /api/learning/plan/next`. */
+export const RECOMMENDED_TITLE = 'Recommended for you';
+export const NEXT_UNREADABLE_CLAIM = 'This is not a claim that nothing is waiting.';
+/** What a next action's rule says beside its reason, in the member's words. */
+export const NEXT_RULE_LABEL = Object.freeze({ continue_course: 'Continue', program: 'From your program', plan: 'Planned' });
+/** The answer as the card draws it: the action, or the server's own empty state; null while there is nothing to draw. */
+export function nextView(answer) {
+  if (!answer || answer.status !== 'ready') return null;
+  if (answer.next) {
+    const n = answer.next;
+    return { kind: 'action', title: n.title, href: n.href, reason: n.reason, label: NEXT_RULE_LABEL[n.rule] || null, plan: n.plan || null };
+  }
+  return { kind: 'empty', text: answer.empty || 'Nothing is waiting.' };
+}
 
 /** LR4 chapters: the item has none recorded. */
 export const NO_CHAPTERS = 'No chapters';
@@ -877,4 +889,34 @@ export function statsTiles(stats) {
     { key: 'watch', label: 'Watch time this month', value: durationLabel(stats?.watch_seconds_this_month) || nr },
     { key: 'exams', label: 'Exams passed', value: exams && Number.isFinite(Number(exams.sat)) && Number.isFinite(Number(exams.passed)) ? `${Number(exams.passed)} of ${Number(exams.sat)}` : nr },
   ];
+}
+
+// ---------------------------------------------------------------------------
+// D4650 (#4650, part 2): a course's metadata, as the course page shows it
+// ---------------------------------------------------------------------------
+
+export const COURSE_AUDIENCE_LABEL = Object.freeze({ founder: 'Founders', investor: 'Investors', advisor: 'Advisors', partner: 'Partners' });
+export const ABOUT_NOT_RECORDED = 'Who this course is for, what it teaches and what it assumes are not recorded yet.';
+
+/**
+ * The course page's "About this course": one row per field the author
+ * recorded, in a fixed order, and `missing` naming each field that is not.
+ * Nothing is inferred from the summary: a field not filled is listed as not
+ * recorded, and a course with none recorded says so in one sentence.
+ */
+export function courseAbout(meta) {
+  const m = meta || {};
+  const rows = [];
+  const missing = [];
+  const audience = (Array.isArray(m.audience) ? m.audience : []).map((a) => COURSE_AUDIENCE_LABEL[a]).filter(Boolean);
+  if (audience.length) rows.push({ key: 'audience', label: 'For', value: audience.join(', ') }); else missing.push('who it is for');
+  if (m.stage) rows.push({ key: 'stage', label: 'Stage', value: m.stage }); else missing.push('stage');
+  const outcomes = Array.isArray(m.outcomes) ? m.outcomes : [];
+  if (outcomes.length) rows.push({ key: 'outcomes', label: "You'll be able to", list: outcomes }); else missing.push('outcomes');
+  const prerequisites = Array.isArray(m.prerequisites) ? m.prerequisites : [];
+  if (prerequisites.length) rows.push({ key: 'prerequisites', label: 'Before you start', list: prerequisites }); else missing.push('prerequisites');
+  if (m.practical_output) rows.push({ key: 'practical_output', label: "You'll leave with", value: m.practical_output }); else missing.push('what you leave with');
+  const people = [m.author ? `Written by ${m.author}` : null, m.reviewer ? `reviewed by ${m.reviewer}${m.reviewed_on ? ` on ${m.reviewed_on}` : ''}` : null].filter(Boolean);
+  if (people.length) rows.push({ key: 'people', label: 'Responsibility', value: people.join(', ') }); else missing.push('author and reviewer');
+  return { rows, missing, empty: rows.length === 0 };
 }
