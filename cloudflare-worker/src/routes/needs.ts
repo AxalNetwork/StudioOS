@@ -682,14 +682,15 @@ async function engTransition(c: Context<{ Bindings: Env }>, target: 'start' | 'd
     // D4682 — A RETRY AFTER SUCCESS IS NOT AN ERROR. An engagement already
     // `invoiced` whose invoice exists answers 200 with that engagement and
     // issues nothing. (One that says `invoiced` with no invoice behind it,
-    // from before invoices were real documents, falls through and gets one.)
+    // from before invoices were real documents, is still refused here: that
+    // is a data repair, not a retry.)
     if (!isPartnerSide) return c.json({ detail: 'Partner-side action' }, 403);
     if (e.status === 'invoiced') {
       const have = await c.env.DB.prepare('SELECT invoice_number FROM engagement_invoices WHERE engagement_id = ?')
         .bind(id).first<{ invoice_number: string }>();
       if (have && e.invoice_id === have.invoice_number) return c.json({ ...engagementDto(e), already_invoiced: true });
     }
-    if (!['delivered', 'reviewed', 'invoiced'].includes(e.status)) return c.json({ detail: `Cannot invoice from ${e.status}` }, 409);
+    if (!['delivered', 'reviewed'].includes(e.status)) return c.json({ detail: `Cannot invoice from ${e.status}` }, 409);
     // This used to write `invoice_id = 'stub-<uid>'` and nothing else, with a
     // comment noting Stripe Connect was not ported. The effect in production
     // was a state that lied: the engagement went to `invoiced` permanently,
