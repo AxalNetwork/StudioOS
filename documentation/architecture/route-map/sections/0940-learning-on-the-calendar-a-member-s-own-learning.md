@@ -7,7 +7,7 @@
 - **Client:** `lib/api/learningPlan.js` (`learningPlanApi`), called only from `pages/learning/planReads.js`.
 - **Pages (D3959, the frontend half).** The owner chose to build them without new boards, from the existing Learning and Calendar boards:
   - **"Add to my plan"** is a header action on `/learning/courses/:slug`, `/learning/courses/:slug/:lesson`, `/learning/videos/:uid` (a video), `/learning/webinars/:slug`, `/learning/exercises/:slug` and `/learning/exams/:slug`. Its sheet is `PlanSheet.jsx`, from CAL7.
-  - **`/learning/plan`** is My learning plan (`LearningPlanPage.jsx`), from LR12 and LR1. My learning links to it.
+  - **`/learning/plan`** is My learning plan (`LearningPlanPage.jsx`), from LR12 and, since #4742, LR1: "My learning plan" sits in the progress strip (`ProgressStrip`'s `links`, `LearningPage.jsx`'s `learnerLinks()`) for every profile the gate admits, not only an admin, and unlabelled on the phone. My learning links to it too.
   - **The Calendar:** a Learning entry offers Mark done, Reschedule, Open in Learning and Remove (`PlanRowActions.jsx`, CAL19's dialogs). A webinar keeps its own time, and a webinar the member is only registered for just opens.
   - **"New ▾ › Plan learning"** opens the sheet with its picker (CAL6's menu).
 

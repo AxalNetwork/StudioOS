@@ -201,6 +201,19 @@ test('D4160: an HQ skill detail carries its eight-axis taxonomy graph', async ()
     .every((axis: any) => axis.level === null));
 });
 
+test('#4739: the detail names who can be asked to review: other active Super Admins, never the asker or the author, never an email', async () => {
+  const w = world();
+  const uid = await newSkill(w);
+  const detail = await call(w, SUPER, 'GET', `${HQ}/${uid}`);
+  assert.deepEqual(detail.body.reviewers, [{ uid: 'u-super2', name: 'Rex Reviewer' }, { uid: 'u-super3', name: 'Tia Third' }]);
+  assert.doesNotMatch(detail.text, /@example\.test/);
+  // A Super Admin who is switched off cannot be asked; the author of the last edit is not offered.
+  w.db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(SUPER3);
+  assert.deepEqual((await call(w, SUPER, 'GET', `${HQ}/${uid}`)).body.reviewers, [{ uid: 'u-super2', name: 'Rex Reviewer' }]);
+  await call(w, SUPER2, 'PATCH', `/api/teams/skills/${uid}`, { purpose: 'From recorded metrics, a draft monthly update for investors.' });
+  assert.deepEqual((await call(w, SUPER, 'GET', `${HQ}/${uid}`)).body.reviewers, [], 'the last author is not offered; an empty list is a fact');
+});
+
 test('D4160: no self-approval — the author never reviews or approves their own draft', async () => {
   const w = world();
   const uid = await newSkill(w);

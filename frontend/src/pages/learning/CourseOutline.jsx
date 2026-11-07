@@ -5,7 +5,7 @@ import { Pill, Unrecorded } from '../../ui';
 import { titleCase } from '../../lib/absence';
 import { LearningEmpty, NotLiveYet, SectionCard, stateBlock } from './LearningStates';
 import {
-  NOT_LIVE, byPosition, courseProgress, durationLabel, lessonDone, lessonHref, lessonKindLabel, minutesLabel, totalSeconds,
+  ABOUT_NOT_RECORDED, NOT_LIVE, byPosition, courseAbout, courseProgress, durationLabel, lessonDone, lessonHref, lessonKindLabel, minutesLabel, totalSeconds,
 } from './learningModel';
 
 /** One icon per lesson kind, so the kind reads at a glance; the label says it in words. */
@@ -128,7 +128,39 @@ function CourseSummary({ course, modules, ticks, progress }) {
           </Link>
         )}
       </div>
+      <CourseAbout meta={course?.meta} />
     </div>
+  );
+}
+
+/** D4650 (#4650, part 2): who the course is for, what it teaches and assumes, who wrote it, and what the learner leaves with. */
+function CourseAbout({ meta }) {
+  const about = courseAbout(meta);
+  return (
+    <section aria-label="About this course" className="space-y-2" data-testid="course-about">
+      <h3 className="text-[12px] font-semibold text-axal-ink dark:text-gray-200">About this course</h3>
+      {about.empty ? (
+        <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="course-about-empty"><Unrecorded>{ABOUT_NOT_RECORDED}</Unrecorded></p>
+      ) : (
+        <>
+          <dl className="grid gap-x-4 gap-y-1.5 text-[12.5px] sm:grid-cols-[10rem_1fr]">
+            {about.rows.map((row) => (
+              <React.Fragment key={row.key}>
+                <dt className="text-axal-muted dark:text-gray-400">{row.label}</dt>
+                <dd className="text-axal-ink dark:text-gray-200" data-testid={`course-about-${row.key}`}>
+                  {row.list ? <ul className="list-disc space-y-0.5 pl-4">{row.list.map((x, i) => <li key={i}>{x}</li>)}</ul> : row.value}
+                </dd>
+              </React.Fragment>
+            ))}
+          </dl>
+          {about.missing.length > 0 && (
+            <p className="text-[11.5px] text-axal-faint dark:text-gray-500" data-testid="course-about-missing">
+              <Unrecorded>Not recorded: {about.missing.join(', ')}.</Unrecorded>
+            </p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

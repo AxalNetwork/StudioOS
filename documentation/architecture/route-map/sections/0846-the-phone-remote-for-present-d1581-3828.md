@@ -1,6 +1,6 @@
 ### The phone remote for Present (D1581, #3828)
 
-`routes/deck_remote.ts` mounts itself at `/api/decks` before `decks`. Present's room and the pairing live in `DeckRemote` (`durable-objects/deck-remote.ts`), bound as `DECK_REMOTE` in all three `wrangler.toml` tables. Client: `lib/api/deckRemote.js` (`deckRemoteApi`). `PitchPresent.jsx` listens on the socket. The pairing screen and the phone remote are not drawn yet (needs-design on #3828).
+`routes/deck_remote.ts` mounts itself at `/api/decks` before `decks`. Present's room and the pairing live in `DeckRemote` (`durable-objects/deck-remote.ts`), bound as `DECK_REMOTE` in all three `wrangler.toml` tables. Client: `lib/api/deckRemote.js` (`deckRemoteApi`). `PitchPresent.jsx` listens on the socket. #4384 drew both screens: `RemotePair.jsx` (Present's code panel, with `remoteModel.js` for its words and rules) and `RemotePage.jsx`, the phone's screen, which `frontend/src/routes/remote.jsx` mounts at `/remote` for every visitor (signed out, it says "Sign in to Axal VC to control this presentation" and keeps the code). The `/remote` address is on the Pitch Deck Studio canvas row.
 
 | Route | Who | What it answers |
 | --- | --- | --- |

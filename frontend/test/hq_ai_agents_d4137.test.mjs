@@ -48,8 +48,8 @@ test('the HQ skill detail draws the shared taxonomy graph', () => {
 
 test('each build task names its issue, and none is live before its routes land', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['H1', 4158], ['H2', 4160], ['H3', 4161], ['H4', 4162], ['H5', 4163]]);
-  // Roster, company moderation, policies and operations are wired; the HQ editor still waits.
-  assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.live]), [['H1', true], ['H2', false], ['H3', true], ['H4', true], ['H5', true]]);
+  // #4739: every board is wired, H2's review, golden cases, evals and retire included.
+  assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.live]), [['H1', true], ['H2', true], ['H3', true], ['H4', true], ['H5', true]]);
   assert.equal(notYet('H4'), 'Not switched on yet. Platform AI policy and the kill switch arrives with #4162.');
 });
 
@@ -122,9 +122,8 @@ test('the page reads only routes that exist, and writes only through H1\'s roste
   const admin = [...PAGE.matchAll(/adminAiAgentsApi\.(\w+)/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(admin)].sort(), ['roster', 'rosterAgent', 'rosterDefaults', 'rosterUpdate']);
   assert.doesNotMatch(PAGE, /method: '(POST|PUT|PATCH|DELETE)'/);
-  for (const label of ['Publish…', 'Re-run evals', 'Retire…']) {
-    assert.match(PAGE, new RegExp(`<button type="button" disabled className=\\{BTN\\} title=\\{notYet\\('H2'\\)\\}>${label.replace('…', '…')}</button>`), label);
-  }
+  // #4739: the lifecycle buttons are live (SkillLifecycle.jsx), not disabled behind "arrives with #4160".
+  assert.doesNotMatch(PAGE, /notYet\('H2'\)|arrives with #4160|not connected on this page yet/);
 });
 
 test('people are never shown by email on this page', () => {

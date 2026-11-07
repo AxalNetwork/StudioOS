@@ -35,7 +35,9 @@ export default function teamRoutes({ guard, labRoles }) {
       <Route path="/projects/:id/settings/team" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <TeamAgentsPage form="project" />)} />
       <Route path="/projects/:id/settings" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <ProjectSettingsPage />)} />
       {/* D1614 (#3968): only projects have Work; a company has compliance tasks. */}
-      <Route path="/projects/:id/work" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <WorkPage />)} />
+      {/* #4735: an advisor holding a seat on the project reads its Work: the Worker's read rule (`canRead`) admits every
+          accepted project member, and My tasks and the Calendar link such an advisor here. The Worker decides the rest. */}
+      <Route path="/projects/:id/work" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <WorkPage />)} />
       <Route path="/account/companies/:uid/settings/compliance" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CompliancePage />)} />
     </>
   );

@@ -72,6 +72,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/ui',                 'the design-system primitives everything else composes'],
   ['frontend/src/pages/work',         'Work and company compliance (D1614): the board, backlog, burn-up, run sheet, activity feed and Workload, and the one adapter seam'],
   ['frontend/src/pages/hq',           'the Super Admin tier — one page per HQ sidebar row, and which canvas each draws'],
+  ['frontend/src/pages/hq/aiAgents', 'HQ › AI agents (D4137): the roster, the From Axal lifecycle (D4160), company skills, operations and the Policies controls (D4162), and the words for every refusal'],
   ['frontend/src/pages/branch',       'the subsidiary tier — the frame its eight rows share, and the one AI rail mount in it'],
   ['frontend/src/lib',                'API client, formatting, and browser-side helpers'],
   ['frontend/src/lib/api',            'one module per API domain, re-exported through the generated apiModules.generated.js (D527, #4105)'],

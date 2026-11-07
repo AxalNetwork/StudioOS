@@ -24,6 +24,7 @@
  * content (D558) is read with `enrolledSql`, selected `AS enrolled`, so the
  * check sees whether this caller is enrolled.
  */
+import { COURSE_META_SELECT, courseMetaView } from '../services/learningCourseMeta';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
@@ -270,7 +271,7 @@ r.get('/catalog', async (c) => {
   return c.json({ items: rows.slice(0, limit), sources, limit, offset });
 });
 
-const COURSE_SQL = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, status, visibility, published_at, updated_at, '
+const COURSE_SQL = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, status, visibility, published_at, updated_at, ' + COURSE_META_SELECT + ', '
   + COURSE_ENROLLED + ' AS enrolled FROM learning_courses WHERE slug = ?';
 
 r.get('/courses/:slug', async (c) => {
@@ -300,6 +301,8 @@ r.get('/courses/:slug', async (c) => {
     course: {
       uid: course.uid, slug: course.slug, title: course.title, summary: course.summary, cover_url: course.cover_url,
       level: course.level, estimated_minutes: course.estimated_minutes, resources, status: course.status, published_at: course.published_at,
+      // D4650 (#4650, part 2): what the author recorded; a field not filled is null or an empty list.
+      meta: courseMetaView(course),
     },
     modules: (mods.results || []).map((m) => ({
       uid: m.uid, title: m.title, position: m.position,
