@@ -183,6 +183,12 @@ jobs:
         run: npm ci
       - name: Install root deps
         run: npm ci || npm install --no-audit --no-fund
+      # D4558: dr_second_copy_d4558.test.mjs encrypts and decrypts with the
+      # real `age`, the tool backup-d1.yml installs for the independent copy.
+      # node's --test-shard decides which frontend part runs that file.
+      - name: Install age
+        if: startsWith(matrix.part, 'frontend')
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
       # docs/ is not committed (D529), and part of the suite reads the built
       # SPA (check-docs-assets-closure, the tests that open docs/), so build
       # it first — the same root build the deploy runs.

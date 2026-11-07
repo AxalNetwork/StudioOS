@@ -144,6 +144,8 @@ test('every band on the founder\'s boards is listed, under the Worker\'s own nam
   for (const match of read('cloudflare-worker/src/services/scoring/pmfExplain.ts').matchAll(/'draft:(raise\/pmf-[a-z]+)'/g)) surfaces.add(match[1]);
   // D1179: dedicated scoped previews, with Keep as their only persistence.
   for (const match of read('cloudflare-worker/src/services/useOfFunds/eadwyn.ts').matchAll(/'draft:(raise\/use-of-funds-[a-z]+)'/g)) surfaces.add(match[1]);
+  // D4493: the retired outreach-sequence band's option now names the sequence Ask's run on Distribution's own route.
+  surfaces.add(read('cloudflare-worker/src/services/distributionDrafts.ts').match(/^export const SEQUENCE_OPTION = 'draft:([a-z-]+\/[a-z/-]+)';$/m)?.[1]);
   const kinds = new Set([...FILLS.matchAll(/^ {2}kind: '([a-z_]+)',$/gm)].map((m) => m[1]));
   for (const o of FOUNDER_OPTIONS) {
     const [verb, object] = o.key.split(':');
