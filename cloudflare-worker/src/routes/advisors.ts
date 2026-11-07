@@ -3761,6 +3761,8 @@ type VersionRow = {
   id: number; uid: string; deliverable_id: number; version: number;
   label: string | null; summary: string | null; link_url: string | null;
   sent_at: string | null; opened_at: string | null; signed_off_at: string | null;
+  // #4684: who it was sent to and who recorded each receipt, each written once.
+  recipient_user_id?: number | null; opened_by_user_id?: number | null; signed_off_by_user_id?: number | null;
   created_at: string; updated_at: string;
 };
 
@@ -3778,6 +3780,18 @@ function versionDto(r: VersionRow): any {
     // All three are null until they happen. Never coalesced to a date.
     sent_at: r.sent_at, opened_at: r.opened_at, signed_off_at: r.signed_off_at,
     created_at: r.created_at, updated_at: r.updated_at,
+  };
+}
+
+/**
+ * #4684: the advisor's view of a version adds who it was sent to. The client's
+ * own read keeps `versionDto`: it never needs another account's name.
+ */
+function sentVersionDto(r: VersionRow & { recipient_name?: string | null }): any {
+  return {
+    ...versionDto(r),
+    recipient_user_id: r.recipient_user_id ?? null,
+    recipient_name: r.recipient_user_id == null ? null : (r.recipient_name ?? null),
   };
 }
 
@@ -3836,12 +3850,16 @@ advisors.get('/me/deliverables', async (c) => {
       ).bind(m.id).all<DeliverableRow & {
         client_user_id: number | null; client_user_name: string | null; client_user_email: string | null;
       }>(),
+      // #4684: each sent version names the account it went to, which may not be
+      // the engagement's client today: a relink moves nothing already sent.
       c.env.DB.prepare(
-        `SELECT v.* FROM advisor_deliverable_versions v
+        `SELECT v.*, r.name AS recipient_name, r.email AS recipient_email
+           FROM advisor_deliverable_versions v
            JOIN advisor_deliverables d ON d.id = v.deliverable_id
+           LEFT JOIN users r ON r.id = v.recipient_user_id
           WHERE d.advisor_id = ?
           ORDER BY v.deliverable_id, v.version DESC`
-      ).bind(m.id).all<VersionRow>(),
+      ).bind(m.id).all<VersionRow & { recipient_name?: string | null; recipient_email?: string | null }>(),
     ]);
 
     const byDeliverable = new Map<number, VersionRow[]>();
@@ -3866,8 +3884,11 @@ advisors.get('/me/deliverables', async (c) => {
         client_user_email: d.client_user_email ?? null,
         state: deliverableState(vs),
         version_count: vs.length,
-        latest_version: latest ? versionDto(latest) : null,
-        versions: vs.map(versionDto),
+        latest_version: latest ? sentVersionDto(latest) : null,
+        versions: vs.map(sentVersionDto),
+        // The address a nudge about unread work reaches: the latest sent
+        // version's recipient, not whoever the engagement names now.
+        recipient_email: (vs.find((v) => v.sent_at) as any)?.recipient_email ?? null,
         created_at: d.created_at, updated_at: d.updated_at,
       };
     });
@@ -3906,7 +3927,7 @@ advisors.get('/me/deliverables', async (c) => {
         oldest_never_opened: neverOpened[0] || null,
         // How many rows a nudge could actually reach. The zone reports the gap
         // rather than skipping rows quietly.
-        addressable: unopened.filter((i) => i.client_user_email).length,
+        addressable: unopened.filter((i) => i.recipient_email).length,
       },
     });
   } catch (e) { return mapError(c, e); }
@@ -4061,9 +4082,17 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
     }
 
     const now = nowIso();
-    await c.env.DB.prepare(
-      'UPDATE advisor_deliverable_versions SET sent_at = ?, updated_at = ? WHERE id = ?'
-    ).bind(now, now, v.id).run();
+    // #4684: THE RECIPIENT IS FIXED HERE, in the same UPDATE as `sent_at`. The
+    // client routes authorise against it, never against the engagement's current
+    // client, so a later relink can neither take this version from the person it
+    // went to nor hand it to someone else. `sent_at IS NULL` in the WHERE makes
+    // two concurrent sends one send.
+    await ensureAdvisorStoresSchema(c.env);
+    const sent: any = await c.env.DB.prepare(
+      `UPDATE advisor_deliverable_versions SET sent_at = ?, recipient_user_id = ?, updated_at = ?
+        WHERE id = ? AND sent_at IS NULL`
+    ).bind(now, client.id, now, v.id).run();
+    if (!sent.meta?.changes) return c.json({ detail: 'That version has already been sent' }, 409);
     await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
       .bind(now, row.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
@@ -4105,14 +4134,16 @@ advisors.get('/received/deliverables', async (c) => {
     const user = await requireAuth(c);
     await ensureAdvisorStoresSchema(c.env);
     const rows = await c.env.DB.prepare(
+      // #4684: BY RECIPIENT, NOT BY THE ENGAGEMENT'S CURRENT CLIENT. A version
+      // belongs to the account it was sent to, so relinking the engagement (or
+      // the work product) moves nothing that was already sent.
       `SELECT d.id, d.uid, d.title, d.client_name, d.created_at, d.updated_at,
               a.display_name AS advisor_name, a.uid AS advisor_uid
          FROM advisor_deliverables d
-         JOIN advisor_engagements e ON e.id = d.engagement_id
          JOIN advisors a ON a.id = d.advisor_id
-        WHERE e.founder_user_id = ?
-          AND EXISTS (SELECT 1 FROM advisor_deliverable_versions v
-                       WHERE v.deliverable_id = d.id AND v.sent_at IS NOT NULL)
+        WHERE EXISTS (SELECT 1 FROM advisor_deliverable_versions v
+                       WHERE v.deliverable_id = d.id AND v.sent_at IS NOT NULL
+                         AND v.recipient_user_id = ?)
         ORDER BY d.updated_at DESC LIMIT 200`
     ).bind(user.id).all<any>();
 
@@ -4120,9 +4151,9 @@ advisors.get('/received/deliverables', async (c) => {
     for (const d of rows.results || []) {
       const vs = await c.env.DB.prepare(
         `SELECT * FROM advisor_deliverable_versions
-          WHERE deliverable_id = ? AND sent_at IS NOT NULL
+          WHERE deliverable_id = ? AND sent_at IS NOT NULL AND recipient_user_id = ?
           ORDER BY version DESC`
-      ).bind(d.id).all<VersionRow>();
+      ).bind(d.id, user.id).all<VersionRow>();
       const versions = (vs.results || []).map(versionDto);
       items.push({
         uid: d.uid, title: d.title,
@@ -4174,16 +4205,17 @@ advisors.post('/received/deliverables/:uid/open', async (c) => {
     await ensureAdvisorStoresSchema(c.env);
     const v = await c.env.DB.prepare(
       `SELECT v.* FROM advisor_deliverable_versions v
-         JOIN advisor_deliverables d ON d.id = v.deliverable_id
-         JOIN advisor_engagements e ON e.id = d.engagement_id
-        WHERE v.uid = ? AND e.founder_user_id = ? AND v.sent_at IS NOT NULL`
+        WHERE v.uid = ? AND v.recipient_user_id = ? AND v.sent_at IS NOT NULL`
     ).bind(c.req.param('uid'), user.id).first<VersionRow>();
     if (!v) return c.json({ detail: 'Work product not found' }, 404);
 
     const now = nowIso();
+    // #4684: the receipt records who made it, and only the recipient can: the
+    // WHERE repeats the recipient so no other account's open can land here.
     await c.env.DB.prepare(
-      'UPDATE advisor_deliverable_versions SET opened_at = ?, updated_at = ? WHERE id = ? AND opened_at IS NULL'
-    ).bind(now, now, v.id).run();
+      `UPDATE advisor_deliverable_versions SET opened_at = ?, opened_by_user_id = ?, updated_at = ?
+        WHERE id = ? AND opened_at IS NULL AND recipient_user_id = ?`
+    ).bind(now, user.id, now, v.id, user.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
       .bind(v.id).first<VersionRow>();
     return c.json(versionDto(fresh!));
@@ -4194,18 +4226,20 @@ advisors.post('/received/deliverables/:uid/open', async (c) => {
 advisors.post('/received/deliverables/:uid/accept', async (c) => {
   try {
     const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
     const v = await c.env.DB.prepare(
       `SELECT v.* FROM advisor_deliverable_versions v
-         JOIN advisor_deliverables d ON d.id = v.deliverable_id
-         JOIN advisor_engagements e ON e.id = d.engagement_id
-        WHERE v.uid = ? AND e.founder_user_id = ? AND v.sent_at IS NOT NULL`
+        WHERE v.uid = ? AND v.recipient_user_id = ? AND v.sent_at IS NOT NULL`
     ).bind(c.req.param('uid'), user.id).first<VersionRow>();
     if (!v) return c.json({ detail: 'Work product not found' }, 404);
     const now = nowIso();
     const accepted: any = await c.env.DB.prepare(
-      `UPDATE advisor_deliverable_versions SET signed_off_at = ?, opened_at = COALESCE(opened_at, ?), updated_at = ?
-        WHERE id = ? AND signed_off_at IS NULL`
-    ).bind(now, now, now, v.id).run();
+      `UPDATE advisor_deliverable_versions
+          SET signed_off_at = ?, signed_off_by_user_id = ?,
+              opened_by_user_id = CASE WHEN opened_at IS NULL THEN ? ELSE opened_by_user_id END,
+              opened_at = COALESCE(opened_at, ?), updated_at = ?
+        WHERE id = ? AND signed_off_at IS NULL AND recipient_user_id = ?`
+    ).bind(now, user.id, user.id, now, now, v.id, user.id).run();
     if (accepted.meta?.changes) {
       await logAdminAction(c.env, user.id, user.email, 'advisor_deliverable_accepted', { version_id: v.id });
     }
