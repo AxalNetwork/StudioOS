@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 import { pushLicenceToBranch, licenceRecord } from '../src/services/licencePush.ts';
+import { licenceRoutesSource } from './_licenceRoutes.mjs';
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -204,7 +205,7 @@ test('a licence HQ cannot re-read does not push a partial copy', async () => {
 test('every licence transition reports the push beside its own outcome', () => {
   // Wiring, which the unit tests above cannot see: each of the five routes must
   // return `pushed`. The behaviour of `pushed` itself is asserted above.
-  const src = readFileSync(new URL('../src/routes/admin_licences.ts', import.meta.url), 'utf8');
+  const src = licenceRoutesSource();
   const calls = [...src.matchAll(/await pushLicenceToBranch\(c\.env, licence\.id\)/g)];
   // D272 — ten: the five status transitions, plus the five changes that alter
   // the copy without a status change (territories, seats, terms, a new
