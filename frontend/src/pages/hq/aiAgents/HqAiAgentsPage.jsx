@@ -8,6 +8,8 @@ import { Card } from '../../../ui';
 import AdminPageHeader, { HeaderTab } from '../../../ui/AdminPageHeader';
 import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
+import { AgentRadar } from '../../team/SkillParts';
+import { radarVector } from '../../team/skillsModel';
 import {
   COMPANY_COLUMNS, NOT_RECORDED, REASON_MIN,
   ROSTER_COLUMNS, SUBTITLE, areaTiles, notYet, skillRow, viewFor,
@@ -456,6 +458,10 @@ export function Editor({ view }) {
       <Card className="space-y-3 px-4 py-4">
         <h2 className={H2}>{row.name}</h2>
         <p className={MUTED}>{row.area} · {row.level} · {row.version} · <Chip tone={row.status.tone}>{row.status.label}</Chip></p>
+        <section className="space-y-2 border-y border-axal-hairline py-3 dark:border-gray-800" data-testid="hq-skill-graph">
+          <h3 className={H2}>Skill graph</h3>
+          <AgentRadar vector={radarVector(data.skill.radar)} radar={data.skill.radar} height={190} label="Computed from this skill’s taxonomy." empty="This skill has no taxonomy levels yet." />
+        </section>
         <h3 className={H2}>Purpose</h3><p className={MUTED}>{data.skill.purpose || 'Not recorded'}</p>
         <h3 className={H2}>Steps</h3>
         {data.skill.steps?.length ? <ol className="list-decimal space-y-2 pl-5">{data.skill.steps.map((step, i) => <li key={i} className="whitespace-pre-wrap">{show(step)}</li>)}</ol> : <p className={MUTED}>No steps recorded.</p>}

@@ -21,8 +21,8 @@
  * own answer here: a block D918 could not read is unreadable here too, and
  * nothing is recomputed. Only the keys are Community's.
  *
- * WELLBEING ANSWERS ARE NEVER READ. The check-in band counts distinct members
- * in `wellbeing_daily_pulses` and touches no other column, so no answer is
+ * WELLBEING ANSWERS ARE NEVER READ. The check-in band counts distinct founders
+ * in `wellbeing_daily_pulses` (#4717) and touches no other column of it, so no answer is
  * decrypted or summed. It is bucketed, and withheld below a cohort of seven.
  *
  * WEEKS ARE MONDAY WEEKS IN UTC, from `weekAxis`, as Insights draws them. The
@@ -228,20 +228,38 @@ async function circlesBlock(env: Env) {
   };
 }
 
+/**
+ * #4717 — THE ROSTER, COUNTED ON THE SERVER, ARCHIVED ROWS OUT. The page used
+ * to count `GET /api/admin/network-profiles`, which answers 200 rows by
+ * default, so a larger roster was counted short with nothing said. These are
+ * counts over the whole table. An archived row (migration 551,
+ * `archived_at` set) is off the roster's working list and is not counted
+ * anywhere here except as `archived`. Shown is `is_active = 1`; hidden is the
+ * rest of the unarchived rows.
+ */
 async function networkBlock(env: Env) {
   const q = await env.DB.prepare(
-    `SELECT kind, CASE WHEN is_active = 1 THEN 1 ELSE 0 END AS active, COUNT(*) AS n
+    `SELECT kind,
+            CASE WHEN archived_at IS NOT NULL THEN 'archived'
+                 WHEN is_active = 1 THEN 'active' ELSE 'hidden' END AS state,
+            COUNT(*) AS n
        FROM network_profiles GROUP BY 1, 2`,
-  ).all<{ kind: string; active: number; n: number }>();
+  ).all<{ kind: string; state: string; n: number }>();
   const by_kind: Record<string, number> = {};
+  const by_kind_state: Record<string, { active: number; hidden: number }> = {};
   let active = 0;
   let inactive = 0;
+  let archived = 0;
   for (const r of q.results || []) {
+    const count = n(r.n);
+    if (r.state === 'archived') { archived += count; continue; }
     const k = String(r.kind ?? '') === 'mentor' ? 'advisor' : String(r.kind ?? '');
-    by_kind[k] = (by_kind[k] ?? 0) + n(r.n);
-    if (n(r.active) === 1) active += n(r.n); else inactive += n(r.n);
+    by_kind[k] = (by_kind[k] ?? 0) + count;
+    by_kind_state[k] = by_kind_state[k] ?? { active: 0, hidden: 0 };
+    if (r.state === 'active') { active += count; by_kind_state[k].active += count; }
+    else { inactive += count; by_kind_state[k].hidden += count; }
   }
-  return { by_kind, active, inactive };
+  return { by_kind, by_kind_state, active, inactive, archived };
 }
 
 // ---------------------------------------------------------------------------
@@ -281,13 +299,22 @@ async function bookingsPart(env: Env, axis: WeekAxis, before: WeekAxis) {
 }
 
 /**
- * How many members checked in during the window, as a band. Reads `user_id`
+ * How many FOUNDERS checked in during the window, as a band. Reads `user_id`
  * and `day` only: no answer column is selected, so nothing is decrypted.
- * Under `MIN_CHECKIN_COHORT` the band is withheld.
+ * Under `MIN_CHECKIN_COHORT` founders the band is withheld.
+ *
+ * #4717 — THE POPULATION IS FOUNDERS, as the band's sentence says. It used to
+ * count every distinct `user_id`, so an investor's or an advisor's check-in
+ * could lift a cohort of five founders over the floor of seven and show a
+ * band the privacy rule meant to withhold. A pulse whose account is gone has
+ * no role and is not counted.
  */
 async function checkinsPart(env: Env, axis: WeekAxis) {
   const r = await env.DB.prepare(
-    `SELECT COUNT(DISTINCT user_id) AS members FROM wellbeing_daily_pulses WHERE day >= ? AND day < ?`,
+    `SELECT COUNT(DISTINCT p.user_id) AS members
+       FROM wellbeing_daily_pulses p
+       JOIN users u ON u.id = p.user_id
+      WHERE u.role = 'founder' AND p.day >= ? AND p.day < ?`,
   ).bind(axis.from.slice(0, 10), axis.to.slice(0, 10)).first<{ members: number }>();
   const members = n(r?.members);
   if (members < MIN_CHECKIN_COHORT) return { withheld: true, min_cohort: MIN_CHECKIN_COHORT, band: null };

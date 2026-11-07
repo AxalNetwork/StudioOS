@@ -32,8 +32,14 @@ export async function moduleRecipient(env: Env, user: User, kind: string, id: st
   if (!advisor) throw missing();
   const r = await env.DB.prepare(`SELECT d.title, d.updated_at, u.name, u.email AS address
     FROM advisor_deliverables d
-    JOIN advisor_engagements e ON e.id = d.engagement_id AND e.advisor_id = d.advisor_id
-    JOIN users u ON u.id = e.founder_user_id
+    LEFT JOIN advisor_engagements e ON e.id = d.engagement_id AND e.advisor_id = d.advisor_id
+    -- #4684: a note about a work product reaches the account its latest sent
+    -- version went to; before anything is sent, the engagement's client.
+    JOIN users u ON u.id = COALESCE(
+      (SELECT v.recipient_user_id FROM advisor_deliverable_versions v
+        WHERE v.deliverable_id = d.id AND v.sent_at IS NOT NULL AND v.recipient_user_id IS NOT NULL
+        ORDER BY v.version DESC LIMIT 1),
+      e.founder_user_id)
     WHERE d.id = ? AND d.advisor_id = ? LIMIT 1`)
     .bind(Number(id), advisor.id).first<any>();
   if (!r) throw missing();
