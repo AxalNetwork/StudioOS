@@ -544,11 +544,11 @@ export default function AdminCommunity() {
     navigate({ pathname: loc.pathname, search: q ? `?${q}` : '', hash: loc.hash }, { replace: true });
   }, [loc.search, loc.pathname, loc.hash, navigate]);
 
-  const tiles = useMemo(() => buildTiles(reads, now), [reads, now]);
-  const next = useMemo(() => buildNextUp(reads, now), [reads, now]);
-  const jobs = useMemo(() => buildJobs(reads, now), [reads, now]);
+  const tiles = useMemo(() => buildTiles(reads), [reads]);
+  const next = useMemo(() => buildNextUp(reads), [reads]);
+  const jobs = useMemo(() => buildJobs(reads), [reads]);
   const circ = useMemo(() => buildCircles(reads), [reads]);
-  const needs = useMemo(() => buildNeeds(reads, now), [reads, now]);
+  const needs = useMemo(() => buildNeeds(reads), [reads]);
   const activity = useMemo(() => buildActivity(reads), [reads]);
   const ev = useMemo(() => buildEventsFunnel(reads), [reads]);
   const who = useMemo(() => buildWho(reads), [reads]);
@@ -581,7 +581,7 @@ export default function AdminCommunity() {
 
   return (
     <RailFrame rail={rail} data-testid="admin-community">
-      {Box && phone ? <Box onClose={closeBox} /> : (
+      {Box && phone ? <Box onClose={closeBox} now={now} /> : (
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="admin-community-page">
         <AdminPageHeader
           title="Community"
@@ -681,7 +681,7 @@ export default function AdminCommunity() {
         </section>
       </div>
       )}
-      {Box && !phone ? <Box onClose={closeBox} /> : null}
+      {Box && !phone ? <Box onClose={closeBox} now={now} /> : null}
     </RailFrame>
   );
 }

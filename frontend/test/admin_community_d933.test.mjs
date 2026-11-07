@@ -124,7 +124,7 @@ test('deltas compare with the same weeks before, and never invent a percentage f
 });
 
 test('the period tiles: registrations and applications with deltas, show-up, and verified experts', () => {
-  const tiles = buildTiles(READS(), NOW);
+  const tiles = buildTiles(READS());
   assert.deepEqual([tile(tiles, 'registrations').value, tile(tiles, 'registrations').sub], ['60', '+50% on the 4 weeks before']);
   assert.deepEqual([tile(tiles, 'applications').value, tile(tiles, 'applications').sub], ['12', 'same as the 4 weeks before']);
   assert.deepEqual([tile(tiles, 'show-up').value, tile(tiles, 'show-up').sub], ['65%', '52 of 80 seats · 3 events ended']);
@@ -134,21 +134,21 @@ test('the period tiles: registrations and applications with deltas, show-up, and
 });
 
 test('show-up is a dash with its reason when no event ended or no seat was taken, never 0%', () => {
-  const none = buildTiles(READS(overview({ events: { show_up: { available: true, events: 0, seats_taken: 0, attended: 0, rate: null } } })), NOW);
+  const none = buildTiles(READS(overview({ events: { show_up: { available: true, events: 0, seats_taken: 0, attended: 0, rate: null } } })));
   assert.deepEqual([tile(none, 'show-up').value, tile(none, 'show-up').sub], ['—', 'No event ended in these 4 weeks.']);
-  const empty = buildTiles(READS(overview({ events: { show_up: { available: true, events: 2, seats_taken: 0, attended: 0, rate: null } } })), NOW);
+  const empty = buildTiles(READS(overview({ events: { show_up: { available: true, events: 2, seats_taken: 0, attended: 0, rate: null } } })));
   assert.deepEqual([tile(empty, 'show-up').value, tile(empty, 'show-up').sub], ['—', 'No seat was taken on the 2 events that ended.']);
 });
 
 test('each period tile answers alone: loading, a block that failed, and the whole read failing', () => {
-  const load = buildTiles({ ...READS(), overview: loading }, NOW);
+  const load = buildTiles({ ...READS(), overview: loading });
   for (const k of ['registrations', 'applications', 'show-up', 'experts']) assert.equal(tile(load, k).state, 'loading', k);
-  const whole = buildTiles({ ...READS(), overview: bad }, NOW);
+  const whole = buildTiles({ ...READS(), overview: bad });
   for (const k of ['registrations', 'applications', 'show-up', 'experts']) {
     assert.equal(tile(whole, k).state, 'unreadable', k);
     assert.equal(tile(whole, k).value, undefined, `${k} drew a value from a failed read`);
   }
-  const one = buildTiles(READS(overview({ jobs: gone('The job board') })), NOW);
+  const one = buildTiles(READS(overview({ jobs: gone('The job board') })));
   assert.equal(tile(one, 'applications').state, 'unreadable');
   assert.match(tile(one, 'applications').reason, /The job board could not be read.*not the same as none/);
   assert.equal(tile(one, 'registrations').state, 'ready', 'a failed jobs block cost the events tile');
@@ -158,7 +158,7 @@ test('each period tile answers alone: loading, a block that failed, and the whol
 });
 
 test('Waiting on you gains the oldest wait, and the amber dot past 72 hours', () => {
-  const t = tile(buildTiles(READS(), NOW), 'waiting');
+  const t = tile(buildTiles(READS()), 'waiting');
   assert.equal(t.sub, '2 events · 2 jobs · oldest 4 days', 'the oldest of both queues, 100 hours, whole days');
   assert.equal(t.overdue, true);
   assert.match(t.note, /1 jobs were submitted before waits were recorded, so they are not dated or marked overdue/);

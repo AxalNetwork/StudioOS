@@ -102,16 +102,16 @@ const tile = (tiles, key) => tiles.find((t) => t.key === key);
 // ---------------------------------------------------------------- the model
 
 test('#4717 Waiting on you adds the Community read\'s two queues, and a queue it could not read is no total', () => {
-  const t = tile(buildTiles(ALL, NOW), 'waiting');
+  const t = tile(buildTiles(ALL), 'waiting');
   assert.equal(t.state, 'ready');
   assert.equal(t.value, '7');
   assert.equal(t.sub, '4 events · 3 jobs · oldest 4 days');
   assert.equal(t.overdue, true);
   // A queue that failed is a missing total, never a partial sum; a count that is not a whole number is not read as one.
-  assert.equal(tile(buildTiles(withBlock('queue.events', UNREAD), NOW), 'waiting').state, 'unreadable');
-  assert.equal(tile(buildTiles(withBlock('queue.jobs', { ...FULL.blocks.queue.jobs, pending: '3' }), NOW), 'waiting').state, 'unreadable');
-  assert.equal(tile(buildTiles({ overview: bad }, NOW), 'waiting').state, 'unreadable');
-  assert.equal(tile(buildTiles({ overview: { status: 'loading', data: null } }, NOW), 'waiting').state, 'loading');
+  assert.equal(tile(buildTiles(withBlock('queue.events', UNREAD)), 'waiting').state, 'unreadable');
+  assert.equal(tile(buildTiles(withBlock('queue.jobs', { ...FULL.blocks.queue.jobs, pending: '3' })), 'waiting').state, 'unreadable');
+  assert.equal(tile(buildTiles({ overview: bad }), 'waiting').state, 'unreadable');
+  assert.equal(tile(buildTiles({ overview: { status: 'loading', data: null } }), 'waiting').state, 'loading');
 });
 
 // D1121: the Upcoming tile reads D918's next 30 days through the Community read
@@ -123,10 +123,10 @@ const OVERVIEW = ok({ weeks: 12, blocks: { events: {
 
 test('Upcoming events is D918\'s next 30 days and its seats, from the Community read (D1121)', () => {
   // Mutation checked: the tile back on the events list and analytics rows → 59 is not the seats; a failed block drawn as 0 → the unreadable check fails.
-  const t = tile(buildTiles({ ...ALL, overview: OVERVIEW }, NOW), 'upcoming');
+  const t = tile(buildTiles({ ...ALL, overview: OVERVIEW }), 'upcoming');
   assert.deepEqual([t.state, t.value, t.sub], ['ready', '3', 'next 30 days · 59 registered']);
-  assert.equal(tile(buildTiles({ ...ALL, overview: bad }, NOW), 'upcoming').state, 'unreadable', 'a failed Community read is drawn as a count');
-  assert.equal(tile(buildTiles({ ...ALL, overview: ok({ blocks: { events: { upcoming: { available: false, unreadable: true, reason: 'x' } } } }) }, NOW), 'upcoming').state, 'unreadable');
+  assert.equal(tile(buildTiles({ ...ALL, overview: bad }), 'upcoming').state, 'unreadable', 'a failed Community read is drawn as a count');
+  assert.equal(tile(buildTiles({ ...ALL, overview: ok({ blocks: { events: { upcoming: { available: false, unreadable: true, reason: 'x' } } } }) }), 'upcoming').state, 'unreadable');
 });
 
 test('seats text: a cap is taken of capacity, no cap says so, and a missing count is never 0', () => {
@@ -148,7 +148,7 @@ test('#4717 Next up is the events Upcoming counts: the soonest three, a waiting 
 
 test('the period figures wait for the Community read, and are never a zero before it answers (D933 draws them)', () => {
   const before = { ...ALL, overview: undefined }; // the Community read has not answered
-  const tiles = buildTiles(before, NOW);
+  const tiles = buildTiles(before);
   for (const key of ['registrations', 'applications', 'show-up', 'experts', 'roster']) {
     assert.equal(tile(tiles, key).state, 'loading', key);
     assert.equal(tile(tiles, key).value, undefined, key);
@@ -166,7 +166,7 @@ test('Jobs: postings by status in the canvas\'s order, and the five with most ap
   ]);
   assert.equal(buildJobs(withBlock('jobs', UNREAD)).state, 'unreadable');
   // #4717: a block without its applications figures is an unreadable tile, never 0 and never a crash.
-  assert.equal(tile(buildTiles(withBlock('jobs', { ...FULL.blocks.jobs, applications: undefined }), NOW), 'applications').state, 'unreadable');
+  assert.equal(tile(buildTiles(withBlock('jobs', { ...FULL.blocks.jobs, applications: undefined })), 'applications').state, 'unreadable');
   // #4717: a status count that is not a whole number is unreadable, never drawn as 0.
   assert.equal(buildJobs(withBlock('jobs', { ...FULL.blocks.jobs, by_status: { ...FULL.blocks.jobs.by_status, published: null } })).state, 'unreadable');
 });
@@ -178,14 +178,14 @@ test('Circles count as stored, members are as entered, and a legacy mentor is an
   assert.deepEqual(c.roster.rows, [
     { label: 'Advisor', active: 2, inactive: 1 }, { label: 'Partner', active: 1, inactive: 0 }, { label: 'Investor', active: 0, inactive: 1 },
   ]);
-  assert.equal(tile(buildTiles(ALL, NOW), 'circles').value, '3 of 4');
-  assert.equal(tile(buildTiles(ALL, NOW), 'roster').value, '3');
+  assert.equal(tile(buildTiles(ALL), 'circles').value, '3 of 4');
+  assert.equal(tile(buildTiles(ALL), 'roster').value, '3');
 });
 
 test('#4717 the roster is the server\'s count: archived rows out, and a missing or odd count is unreadable, never 0', () => {
   // 600 profiles on the roster: counted in full, whatever a list endpoint would cap at.
   const big = { ...ALL, overview: ok({ ...ROSTER_OVERVIEW, blocks: { network: { available: true, archived: 9, by_kind_state: { advisor: { active: 501, hidden: 99 } } } } }) };
-  assert.equal(tile(buildTiles(big, NOW), 'roster').value, '501');
+  assert.equal(tile(buildTiles(big), 'roster').value, '501');
   assert.equal(rosterOf(big).rows[0].inactive, 99, 'the 9 archived rows are in neither column');
   for (const bad of [{ advisor: { active: '3', hidden: 0 } }, { advisor: { active: 2 } }, { advisor: { active: -1, hidden: 0 } }, null]) {
     const r = rosterOf({ ...ALL, overview: ok({ ...ROSTER_OVERVIEW, blocks: { network: { available: true, by_kind_state: bad } } }) });
