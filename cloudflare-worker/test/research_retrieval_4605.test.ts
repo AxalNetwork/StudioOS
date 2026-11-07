@@ -34,7 +34,11 @@ const REV = '2026-11-07 10:00:00.000';
 function fixture(state = 'indexed', indexedAt: string | null = REV) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   const baseline = sql('schema_baseline.sql');
-  for (const t of ['users', 'projects', 'activity_logs']) db.exec(baseline.match(new RegExp(`CREATE TABLE ${t} \\([\\s\\S]*?;`))![0]);
+  // A plain string slice of each table's CREATE, not a RegExp built from its name.
+  for (const t of ['users', 'projects', 'activity_logs']) {
+    const at = baseline.indexOf(`CREATE TABLE ${t} (`);
+    db.exec(baseline.slice(at, baseline.indexOf(';', at) + 1));
+  }
   db.exec(sql('migrations/213_research_library.sql'));
   db.exec(sql('migrations/221_research_ask_sessions.sql'));
   db.exec(sql('migrations/385_research_disposition_collections.sql'));

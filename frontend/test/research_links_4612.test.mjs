@@ -24,9 +24,12 @@ const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 
 /** The roles App.jsx admits to one Research path, read off its own guard. */
 function admitted(path) {
-  const m = APP.match(new RegExp(`path="${path.replace(/[/:]/g, (c) => `\\${c}`)}" element=\\{guard\\(labRoles\\(\\[([^\\]]*)\\]\\)`));
-  assert.ok(m, `no guarded route for ${path}`);
-  return m[1].split(',').map((r) => r.trim().replace(/'/g, '')).sort();
+  // A plain string search, not a RegExp built from the path.
+  const head = `path="${path}" element={guard(labRoles([`;
+  const at = APP.indexOf(head);
+  assert.ok(at >= 0, `no guarded route for ${path}`);
+  const list = APP.slice(at + head.length, APP.indexOf(']', at + head.length));
+  return list.split(',').map((r) => r.trim().replace(/'/g, '')).sort();
 }
 
 test('the access table is App.jsx\'s own admissions, area by area', () => {

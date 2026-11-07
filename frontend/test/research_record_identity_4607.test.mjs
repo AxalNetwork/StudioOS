@@ -221,13 +221,13 @@ for (const [label, path, Page, method, make, a, b] of [
       await m.settle(() => m.gets[1].resolve(make('B')));
       // Mutation checked: without the generation check the late A replaces B.
       await m.settle(() => m.gets[0].resolve(make('A')));
-      assert.match(m.text(), new RegExp(b));
-      assert.doesNotMatch(m.text(), new RegExp(a));
+      assert.ok(m.text().includes(b), `${b} is drawn`);
+      assert.ok(!m.text().includes(a), `${a} is not drawn`);
       await m.go(`${base}/A`);
       await m.go(`${base}/B`);
       await m.settle(() => m.gets[3].resolve(make('B')));
       await m.settle(() => m.gets[2].reject(Object.assign(new Error('boom'), { status: 500 })));
-      assert.match(m.text(), new RegExp(b), 'a late failed A does not replace B');
+      assert.ok(m.text().includes(b), 'a late failed A does not replace B');
     } finally { await m.close(); }
   });
 }
