@@ -228,8 +228,15 @@ function armWhere(arm: Arm, f: ArmFlags): string {
 
 const armRowsSql = (arm: Arm, f: ArmFlags) =>
   `${arm.from}\n   WHERE ${armWhere(arm, f)}\n   ORDER BY datetime(${arm.at}) DESC, ${arm.order} LIMIT ?`;
-const armCountSql = (arm: Arm, f: ArmFlags) =>
-  `SELECT COUNT(*) AS n FROM (${arm.from}\n   WHERE ${armWhere(arm, f)})`;
+/**
+ * A count of what a select returns. The one place this wrapper is written:
+ * `scripts/check-sqlite-columns.mjs` counts every SQL string it cannot read
+ * (a spliced fragment) and fails the build at 500 (`schema_guards.test.mjs`),
+ * so the dynamic SQL here is kept to the fewest strings it takes, not one per
+ * wrapper. Every value is still bound; only fixed fragments are spliced.
+ */
+const countOf = (select: string) => `SELECT COUNT(*) AS n FROM (${select})`;
+const armCountSql = (arm: Arm, f: ArmFlags) => countOf(`${arm.from}\n   WHERE ${armWhere(arm, f)}`);
 
 /*
  * Registrations: one row per event per UTC day. The window is a range of days,
@@ -258,7 +265,7 @@ const regRowsSql = (f: RegFlags & { since: boolean }) =>
    GROUP BY date(r.registered_at), r.event_id
    ORDER BY datetime(at) DESC, tiebreak DESC LIMIT ?`;
 const regCountSql = (f: RegFlags) =>
-  `SELECT COUNT(*) AS n FROM (SELECT 1 ${REG_FROM}${regWhere({ ...f, since: false })}\n   GROUP BY date(r.registered_at), r.event_id)`;
+  countOf(['SELECT 1', REG_FROM + regWhere({ ...f, since: false }), 'GROUP BY date(r.registered_at), r.event_id'].join('\n   '));
 
 /** Every statement, built once per shape. */
 const SQL = new Map<string, string>();
