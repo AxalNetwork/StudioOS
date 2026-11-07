@@ -314,7 +314,8 @@ test('ROW EDITS: a row the route can change draws Edit, the sheet starts from th
     ['build/company-creation', 'build/founding-team', 'build/operating-systems', 'build/product-roadmap', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'grow/revenue-and-traction', 'grow/team-expansion', 'raise/cap-table', 'raise/capital-relationships', 'raise/data-room', 'raise/investor-narrative', 'raise/pitch-deck', 'raise/use-of-funds', 'validate/demand-signals', 'validate/experiments', 'validate/ideal-customer-profile', 'validate/market-intelligence', 'validate/problem-discovery']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /rowAction=\{!narrativeAdmin && edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
-  assert.match(route, /<FormLightbox key=\{`edit-\$\{editing\.id\}`\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
+  // D4630: the key names the venture too, so a venture change remounts the form.
+  assert.match(route, /<FormLightbox key=\{`edit-\$\{projectId\}-\$\{editing\.id\}`\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => edit\.submit\(cyclesWrite, projectId, edit\.idOf\(editing\), values\)\}/);
   // D695: the open Add is the address's and the open Edit the history entry's, so neither follows the founder to another module.
   assert.match(route, /const formOpen = adding && forms\.length && !capTableAdding \? forms\.find\(\(f\) => f\.key === searchParams\.get\('form'\)\) \|\| forms\[0\] : null;/);
