@@ -735,10 +735,17 @@ r.patch('/:uid/entity', async (c) => {
     if (!keys.length) return c.json({ error: 'nothing_to_change', message: 'Send at least one of: ' + Object.keys(ENTITY_FIELDS).join(', ') + '.' }, 400);
     const before: Record<string, string | null> = {};
     for (const k of keys) before[k] = (licence as any)[k] ?? null;
-    // Column names come from the fixed ENTITY_FIELDS list above, never from the request.
+    // One fixed statement: a field not sent binds NULL and keeps its column.
     await c.env.DB.prepare(
-      `UPDATE territory_licences SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`,
-    ).bind(...keys.map((k) => next[k]), nowIso(), licence.id).run();
+      `UPDATE territory_licences
+          SET legal_entity_name = COALESCE(?, legal_entity_name), brand_name = COALESCE(?, brand_name),
+              registered_address = COALESCE(?, registered_address), signatory_name = COALESCE(?, signatory_name),
+              signatory_title = COALESCE(?, signatory_title), updated_at = ?
+        WHERE id = ?`,
+    ).bind(
+      next.legal_entity_name ?? null, next.brand_name ?? null, next.registered_address ?? null,
+      next.signatory_name ?? null, next.signatory_title ?? null, nowIso(), licence.id,
+    ).run();
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     await logEvent(c.env, licence.id, 'terms_changed', admin.id, { entity: keys }, 'Entity and signatory details completed',
       { before, after: next }, pushOutcome(pushed));
