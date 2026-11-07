@@ -77,8 +77,12 @@ test('the strip is the artboard’s four, counted over what is in play', () => {
   // tracking is not a negotiation at all — folding either in would make the
   // board look busier than the work is.
   const read = between(worker, "partnerPipeline.get('/negotiations'", 'PUT because');
-  assert.ok(/const open = items\.filter\(\s*\(x: any\) => x\.negotiation && x\.negotiation\.stage !== 'closed',\s*\);/.test(read),
+  // D4693: "open" is one shared rule (tracked, not closed, and the quote behind it
+  // still waiting), decided by negotiationIsOpen and read off each item.
+  assert.ok(/const open = items\.filter\(\(x: any\) => x\.negotiation\?\.open\);/.test(read),
     'the counts stopped excluding untracked and closed negotiations');
+  assert.ok(/open: negotiationIsOpen\(r\.stage, r\.quote_status\)/.test(worker),
+    'a negotiation is no longer open by the shared rule');
   for (const field of ['live_count', 'awaiting_us_count', 'awaiting_them_count', 'stalled_count']) {
     assert.ok(read.includes(`${field}:`), `the read stopped returning ${field}`);
   }
@@ -189,7 +193,8 @@ test('the AI band is the artboard’s, and the counter is built from the clauses
   const band = between(zone, '<ZoneDraft', '/>');
   assert.ok(band.includes('surface="pipeline/negotiations"'));
   assert.ok(band.includes('label="Proposal · counter drafted"'));
-  assert.ok(band.includes('accept="Send counter"'));
+  // D4693: the band saves a draft; nothing is sent from here, so it does not say "Send".
+  assert.ok(band.includes('accept="Save counter draft"'));
 
   assert.ok(spec.includes("'pipeline/negotiations': {"), 'the draft surface is not allow-listed');
   const surface = between(spec, "'pipeline/negotiations': {", "'pipeline/proposals': {");
