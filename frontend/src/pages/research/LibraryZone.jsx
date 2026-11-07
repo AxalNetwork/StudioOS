@@ -11,6 +11,8 @@ import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Instrument, PairNote, SourceLegend } from '../../workspaces/canvasKit';
 import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
+import { createRecordGate } from './recordGate.js';
+import { MAX_POLLS, batchSummary, hasPending, nextStep, pollDelay, reindexTargets, runBatch } from './libraryIndexing.js';
 
 /**
  * Research · Library — the documents you hold, and how far Ask can see into them.
@@ -122,10 +124,15 @@ const LIBRARY_STRIP = {
   founder: [
     { label: 'Documents', value: (x) => x.total, note: (x) => `${x.indexed} answerable by Ask` },
     { label: 'Primary sources', value: (x) => x.primary, note: () => 'classified as primary by their owner' },
-    { label: 'Questions asked', value: (x) => x.asked, note: (x) => `${x.noSource} came back with no source` },
+    // D4612: a failed read of the Ask history is Unreadable, never "0 asked".
+    {
+      label: 'Questions asked',
+      value: (x) => (x.askState === 'ready' ? x.asked : x.askState === 'unreadable' ? 'Unreadable' : 'Reading…'),
+      note: (x) => (x.askState === 'ready' ? `${x.noSource} came back with no source` : x.askState === 'unreadable' ? 'the Ask history could not be read; that is not a count of zero' : 'reading the Ask history'),
+    },
     {
       label: 'Cost per question',
-      value: (x) => (x.asked ? formatCost(x.spend / x.asked) : null),
+      value: (x) => (x.askState === 'ready' && x.asked ? formatCost(x.spend / x.asked) : null),
       note: () => 'mean over the questions on record',
       mono: true,
     },
@@ -179,15 +186,46 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   }, []);
   useEffect(() => { loadCollections(); }, [loadCollections]);
 
+  // D4612: a read answers only if it is still the latest, and the page is still here.
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
   const load = useCallback(async () => {
+    const fresh = gate.current.begin();
     setState((c) => ({ ...c, loading: true, error: '' }));
     try {
-      setState({ loading: false, error: '', payload: await api.research.documents() });
+      const payload = await api.research.documents();
+      if (fresh()) setState({ loading: false, error: '', payload });
     } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your library could not be read.', payload: null });
+      if (fresh()) setState({ loading: false, error: e?.message || 'Your library could not be read.', payload: null });
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // D4612: while a document is being read, re-read the library on a bounded
+  // schedule, quietly (the table stays on screen), until nothing is pending,
+  // the schedule runs out, or the page leaves. A failed re-read keeps the last
+  // good table and tries again on the same schedule.
+  const polls = useRef(0);
+  const [watching, setWatching] = useState('idle'); // idle | watching | stopped
+  const pending = hasPending(state.payload?.items);
+  useEffect(() => {
+    if (!pending) { polls.current = 0; setWatching('idle'); return undefined; }
+    const delay = pollDelay(polls.current);
+    if (delay == null) { setWatching('stopped'); return undefined; }
+    setWatching('watching');
+    const timer = setTimeout(async () => {
+      polls.current += 1;
+      const fresh = gate.current.begin();
+      try {
+        const payload = await api.research.documents();
+        if (fresh()) setState({ loading: false, error: '', payload });
+      } catch {
+        if (fresh()) setState((c) => ({ ...c, payload: c.payload ? { ...c.payload } : c.payload }));
+      }
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [pending, state.payload]);
+  useEffect(() => () => gate.current.invalidate(), []);
   useEffect(() => {
     if (!state.loading && window.location.hash.startsWith('#document-')) {
       window.document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: 'center' });
@@ -200,16 +238,21 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // Library page, because the two zones are one system and the artboards say so
   // from both ends. A failure here leaves those two tiles undrawn rather than
   // failing the page: the documents are what this zone is for.
+  // D4612: the Ask figures are their own read, with their own state. A failed
+  // read draws them Unreadable with a retry, never as 0 questions asked.
   const [ask, setAsk] = useState(null);
+  const [askState, setAskState] = useState('loading'); // loading | ready | unreadable
   const wantsAsk = LIBRARY_STRIP[role] === LIBRARY_STRIP.founder;
+  const [askTry, setAskTry] = useState(0);
   useEffect(() => {
     if (!wantsAsk) return undefined;
     let live = true;
+    setAskState('loading');
     api.research.askSessions('all')
-      .then((r) => { if (live) setAsk(r?.totals || null); })
-      .catch(() => {});
+      .then((r) => { if (live) { setAsk(r?.totals || null); setAskState(r?.totals ? 'ready' : 'unreadable'); } })
+      .catch(() => { if (live) { setAsk(null); setAskState('unreadable'); } });
     return () => { live = false; };
-  }, [wantsAsk]);
+  }, [wantsAsk, askTry]);
 
   const upload = async (e) => {
     e.preventDefault();
@@ -287,9 +330,11 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
     fromClients: payload?.from_clients ?? 0,
     clientDocs: items.filter((d) => d.kind === 'client').length,
     reusable: items.filter((d) => d.kind === 'playbook').length,
-    asked: ask?.asked ?? 0,
-    noSource: ask?.no_source ?? 0,
-    spend: ask?.cost_usd ?? 0,
+    // Null, never 0, until the Ask history has been read (D4612).
+    asked: askState === 'ready' ? ask.asked : null,
+    noSource: askState === 'ready' ? ask.no_source : null,
+    spend: askState === 'ready' ? ask.cost_usd : null,
+    askState,
   };
 
   const reindex = async (uid) => {
@@ -307,15 +352,27 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // is what the ops row means on a page listing the whole library. It is
   // disabled with a reason rather than hidden when there is nothing to re-run —
   // a control that vanishes leaves a reader wondering whether it ever existed.
-  const stale = items.filter((d) => d.source !== 'client' && d.index_state !== 'indexed');
+  // D4612: what is already being read is left alone, at most two go at once,
+  // the page stays busy until every one has answered, and the note says what
+  // each did.
+  const stale = reindexTargets(items);
+  const reindexAll = async () => {
+    setBusy(true); setNote(null); setRunning('reindex');
+    try {
+      const results = await runBatch(stale.map((d) => d.uid), (uid) => api.research.reindex(uid), 2);
+      const title = (uid) => items.find((d) => d.uid === uid)?.title || 'Untitled document';
+      setNote(batchSummary(results, title));
+      await load();
+    } finally { setBusy(false); setRunning(null); }
+  };
   const handlers = {
     newCollection: () => { setNewCollectionOpen(true); collectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
     addDocument: () => fileRef.current?.click(),
     reindex: {
-      onClick: () => stale.forEach((d) => reindex(d.uid)),
+      onClick: reindexAll,
       disabled: busy || stale.length === 0,
       title: stale.length === 0
-        ? 'every document you own is already indexed'
+        ? (pending ? 'the documents Ask cannot see yet are already being read' : 'every document you own is already indexed')
         : `re-read ${stale.length} document${stale.length === 1 ? '' : 's'} Ask cannot currently see`,
     },
   };
@@ -383,6 +440,19 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           );
         })}
       </div>
+
+      {ctx.askState === 'unreadable' && wantsAsk && (
+        <p className="text-[11.5px] text-axal-muted" data-testid="library-ask-unreadable">
+          The Ask figures could not be read.{' '}
+          <button type="button" className="font-semibold text-violet-700 underline dark:text-violet-300" onClick={() => setAskTry((n) => n + 1)}>Try again</button>
+        </p>
+      )}
+      {watching === 'stopped' && (
+        <p className="text-[11.5px] text-axal-muted" data-testid="library-watch-stopped">
+          Some documents are still being read. This page stopped checking after {MAX_POLLS} tries.{' '}
+          <button type="button" className="font-semibold text-violet-700 underline dark:text-violet-300" onClick={() => { polls.current = 0; load(); }}>Check again</button>
+        </p>
+      )}
 
       {/* Cyan is theirs, amber is ours — rendered only where the table can
           actually carry both marks. A legend over rows that are all one source
@@ -454,10 +524,12 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
               // are separate.
               {
                 text: d.in_ask
-                  ? 'Answerable in Ask'
+                  ? (d.index_state === 'partial' ? 'Answerable in Ask, in part' : 'Answerable in Ask')
                   : (d.source === 'client'
                     ? 'Indexed in their library, not yours'
-                    : 'Not answerable until indexed'),
+                    : d.index_state === 'pending' ? 'Being read now' : 'Not answerable until indexed'),
+                // D4612: the recorded reason, and the step that would help.
+                sub: nextStep(d) ? `${nextStep(d).note} ${nextStep(d).action === 'Replace the file' ? 'Remove it and add a version with readable text.' : 'Re-index to try again.'}` : null,
                 node: (
                   <>
                     <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)}>
