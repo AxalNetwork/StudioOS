@@ -195,3 +195,95 @@ acts on the real one.
   problem from data that is wrong.
 - `INCIDENT_RESPONSE.md` — severity, comms, and the RTO/RPO commitments this
   runbook corrects.
+
+---
+
+## 7. The independent encrypted copy (D4558)
+
+The owner's answers on #4558 (2026-11-07, A on Q1–Q4) set the targets and the
+copy:
+
+- **RPO 24 h**, from the export's real start. **RTO 4 h** for an export
+  restore. The drill's marker records both targets, `rpo_met` and `rto_met`,
+  and a passing run that misses one pages. A backup more than 30 h old fails
+  the drill: the 24 h cadence plus GitHub's scheduling delay.
+- **The copy:** an S3-compatible bucket with object lock in compliance mode,
+  in an account **outside the production Cloudflare account**.
+  `backup-d1.yml` writes to it with a write-only key.
+- **The key:** each export is encrypted on the runner with `age` to the
+  owner's **public** key. The private key never reaches CI.
+- **Retention:** 35 daily and 12 monthly recovery points.
+
+Until the owner finishes step 1 below, `DR_SECOND_COPY_ENABLED` is unset and
+nothing is copied.
+
+### 7.1 Owner: provisioning, once
+
+1. **Open the account.** Create a storage account that production's Cloudflare
+   account and its API tokens cannot administer: a separate Cloudflare
+   account's R2, or another S3-compatible provider. Before choosing, check in
+   that provider's current documentation that it supports object lock in
+   compliance mode and conditional writes (`If-None-Match`).
+2. **Create the bucket** with versioning and object lock on, in compliance
+   mode, with a default retention of **35 days**. Add lifecycle rules:
+   - expire `d1/*/daily/` objects after 35 days;
+   - keep `d1/*/monthly/` 365 days, by setting a 365-day retention on that
+     prefix or a rule the provider offers for it.
+3. **Make a write-only key** that can only put objects and read their metadata
+   (`PutObject`, `HeadObject`) in that bucket. It must not be able to delete,
+   list or read object content. Store it as the repository secrets
+   `DR_COPY_ACCESS_KEY_ID` and `DR_COPY_SECRET_ACCESS_KEY`.
+4. **Make the owner's key, offline:** `age-keygen -o d1-recovery.key`.
+   - Keep the file on two offline media in two places, never in the
+     repository, a CI secret or the copy's bucket.
+   - Put its **public** line (`age1…`) in the repository variable
+     `DR_AGE_RECIPIENT`.
+5. **Set the repository variables** `DR_COPY_ENDPOINT` (an `https://` origin),
+   `DR_COPY_BUCKET` and, if needed, `DR_COPY_REGION`. Then set
+   `DR_SECOND_COPY_ENABLED` to `true`.
+
+   From the next run, `backup-d1.yml` puts each export under
+   `d1/<db>/daily/<recovery point>/` (`backup.sql.age` and `manifest.json`),
+   and the month's first export also under `d1/<db>/monthly/<YYYY-MM>/`. It
+   writes `heartbeat-d1-independent.json` to the primary bucket. The monthly
+   drill then fails if that heartbeat is missing or older than 30 h.
+
+### 7.2 Owner: rotating or recovering the key
+
+- **Rotate:** make a new key as in 7.1 step 4 and replace `DR_AGE_RECIPIENT`.
+  Keep the old private key for as long as copies made with it are retained,
+  which is 12 months. Each copy manifest names the recipient it was encrypted
+  to.
+- **Lost key:** copies made to it cannot be read by anyone, Axal included.
+  Make a new key at once. The primary R2 backups and Time Travel are
+  unaffected.
+
+### 7.3 Owner: the drill of the independent copy
+
+Run it from a checkout, with the private key on a local disk only for the
+run:
+
+```bash
+DR_SOURCE=independent \
+DR_INDEPENDENT_POINT=d1/studioos-db/daily/2026-11-07T08-12-00Z \
+DR_AGE_IDENTITY_FILE=/path/to/d1-recovery.key \
+DR_COPY_ENDPOINT=https://… DR_COPY_BUCKET=… \
+AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=… \
+CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… \
+bash scripts/dr-drill.sh
+```
+
+- **Credentials:** the `AWS_*` key is a **read** key for that bucket, made for
+  the drill and revoked after it. The write-only CI key cannot read.
+- **What the drill does:**
+  - checks the ciphertext against its manifest;
+  - decrypts it;
+  - verifies the export against its manifest;
+  - restores it into a throwaway EU database, compares every table's row
+    count, and deletes the database;
+  - writes `drill-d1.json` with `copy: "independent"`.
+- **A failure is named in the marker's `reason`:** `decrypt_failed` (the wrong
+  key), `ciphertext_mismatch` or `key_missing`. It always happens before any
+  database is created.
+- The script never prints or copies the key file. Delete it from the disk
+  afterwards.
