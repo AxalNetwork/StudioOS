@@ -44,5 +44,7 @@ test('the module is one line in api.js\'s alphabetical block, and calls only Com
   assert.deepEqual(lines, [...lines].sort(), 'alphabetical');
   const client = read('frontend/src/lib/api/community.js');
   // D931 (#2715) adds the overview read to the same module.
-  assert.deepEqual([...client.matchAll(/request\(`([^`$]+)/g)].map((m) => m[1]), ['/admin/community/activity', '/admin/community/overview']);
+  // #4717 package 4 adds the Jobs and Circles lightboxes' paged lists.
+  assert.deepEqual([...client.matchAll(/request\(`([^`$]+)/g)].map((m) => m[1]),
+    ['/admin/community/activity', '/admin/community/overview', '/admin/community/jobs', '/admin/community/circles']);
 });

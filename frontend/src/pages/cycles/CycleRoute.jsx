@@ -36,7 +36,9 @@ import ChannelsTab from './distribution/ChannelsTab.jsx';
 import ProspectsPage from './distribution/ProspectsPage.jsx';
 import DistributionAskIntent from './distribution/DistributionAskIntent.jsx';
 import InboxTab, { InboxNeedsYou, useInboxUnread } from './distribution/InboxTab.jsx';
+import NewsletterTab from './distribution/NewsletterTab.jsx';
 import CampaignsTab from './distribution/CampaignsTab.jsx';
+import ResultsTab from './distribution/ResultsTab.jsx';
 import NewCampaignPage from './distribution/NewCampaignPage.jsx';
 import AdsTab from './distribution/AdsTab.jsx';
 import { ComingSoon } from './distribution/DistributionParts.jsx';
@@ -1348,7 +1350,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     if (distributionTab === 'ads' && projectStatus === 'ready') body = <AdsTab projectId={projectId} aiOff={!fillsOn} />;
     body = campaignNew ? (projectStatus === 'ready' ? <NewCampaignPage key={`${projectId}:${location.search}`} projectId={projectId} role={user?.role} search={q} aiOff={!fillsOn} /> : body) : <DistributionTabs projectId={projectStatus==='ready'?projectId:null} tab={distributionTab} search={q} action={action} aiOff={!fillsOn} inboxCount={inboxUnread.count}
       loading={projectStatus === 'loading' || (distributionTab === 'overview' && projectStatus === 'ready' && moduleStatus === 'loading')}>
-      {['channels', 'inbox', 'calendar', 'prospects', 'ads'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : <ComingSoon />}
+      {['channels', 'inbox', 'calendar', 'prospects', 'ads'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : distributionTab === 'results' ? <ResultsTab key={projectId} projectId={projectId} /> : distributionTab === 'newsletter' ? <NewsletterTab /> : <ComingSoon />}
     </DistributionTabs>;
   }
 

@@ -166,7 +166,23 @@ test('queue: the jobs waiting, Overdue after 72 hours from submission, and a wai
   assert.deepEqual(q.jobs, {
     available: true, pending: 3, overdue: 1, wait_not_recorded: 1,
     oldest_submitted_at: at(NOW - 100 * HOUR), oldest_wait_hours: 100,
+    // #4717: the rows behind `pending`, oldest first; the one submitted before migration 550 last, undated.
+    review: [
+      { posting_id: 103, title: 'Ops Lead', company: null, waiting_since: new Date(NOW - 100 * HOUR).toISOString(), waiting_hours: 100, overdue: true },
+      { posting_id: 104, title: 'PM', company: null, waiting_since: new Date(NOW - 10 * HOUR).toISOString(), waiting_hours: 10, overdue: false },
+      { posting_id: 105, title: 'Analyst', company: null, waiting_since: null, waiting_hours: null, overdue: false },
+    ],
   });
+});
+
+test('#4717 jobs: the five postings with most applications of all time, each with its days open', async () => {
+  const j = (await read()).blocks.jobs as any;
+  // All time, not the window: 101 five (one in the period before), 102 three (one before both), 103 one.
+  assert.deepEqual(j.most_applied.map((m: any) => [m.posting_id, m.title, m.company, m.applications]), [
+    [101, 'Staff Engineer', 'Acme Robotics', 5], [102, 'Designer', null, 3], [103, 'Ops Lead', null, 1],
+  ]);
+  assert.equal(j.most_applied[0].days_open, 10);
+  assert.deepEqual(j.most_applied[1].days_open, { recorded: false, reason: DAYS_OPEN_REASON });
 });
 
 test('jobs: applications in the window and before, weekly with the current week to date, postings by status, the top five', async () => {
@@ -284,6 +300,22 @@ function withEvents(db = seeded()) {
   return db;
 }
 
+test('#4717 the rows behind the counts: next up is the soonest of Upcoming, waiting is the oldest of the queue', async () => {
+  const b = (await read(withEvents())).blocks as any;
+  // Upcoming counts published AND waiting events in the next 30 days; its rows are those same events, soonest first.
+  // Mutation checked: list published events only and the waiting one (501) drops out while Upcoming still counts it.
+  assert.equal(b.events.next_up.total, b.events.upcoming.events);
+  assert.deepEqual(b.events.next_up.rows.map((r: any) => [r.event_id, r.status, r.seats_taken, r.capacity]), [
+    [503, 'published', 1, 1], [501, 'pending_review', 0, 10],
+  ]);
+  // The queue's oldest waiting event, from its submission, Overdue past 72 hours.
+  assert.equal(b.queue.event_rows.total, b.queue.events.count);
+  assert.deepEqual(b.queue.event_rows.rows.map((r: any) => [r.event_id, r.from_created, r.overdue]), [[501, false, true]]);
+  // Every event by status, for the page's empty rule, from the same rows.
+  assert.equal(b.events.by_status.counts.published, 2);
+  assert.equal(b.events.by_status.counts.pending_review, 1);
+});
+
 test('the events parts are D918\'s own blocks, in Community\'s keys, and nothing is recomputed', async () => {
   const db = withEvents();
   const b = (await read(db)).blocks as any;
@@ -362,8 +394,12 @@ test('a failed store fails its own blocks only, never as a zero', async () => {
 
 test('counts only: no name, email or account id anywhere in the answer', async () => {
   for (const r of [await read(), await read(withEvents())]) {
-    const text = JSON.stringify(r);
-    assert.doesNotMatch(text, /@|Private|secret|fixture/, 'no person, and no event title');
+    // #4717: an event's title travels only in the rows behind a count (next up, waiting for review).
+    const b = (r as any).blocks;
+    const titled = { next: b.events?.next_up, review: b.queue?.event_rows };
+    const rest = { ...r, blocks: { ...b, events: { ...b.events, next_up: null }, queue: { ...b.queue, event_rows: null } } };
+    assert.doesNotMatch(JSON.stringify(rest), /@|Private|secret|fixture/, 'no person, and no event title outside its rows');
+    assert.doesNotMatch(JSON.stringify(titled), /@|Private|secret/, 'no person in the event rows');
     const walk = (v: unknown, path: string) => {
       if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${path}[${i}]`));
       if (v && typeof v === 'object') {

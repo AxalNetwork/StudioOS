@@ -18,22 +18,22 @@
  */
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { FLOWS, categoryOf, harness, repeats } from './_perf_harness.ts';
+import { AUTH_SQL, FLOWS, categoryOf, harness, repeats } from './_perf_harness.ts';
 
-/** flow → [status, auth, telemetry, route] at the baseline. */
+/** flow → [status, auth, telemetry, route]. Auth is 4 from H1 on (it was 7, and 13 on /api/funds, at the baseline). */
 export const BUDGETS: Record<string, [number, number, number, number]> = {
   health: [200, 0, 0, 0],
-  'auth.me': [200, 7, 2, 3],
-  'projects.list': [200, 7, 2, 2],
-  'projects.read': [200, 7, 2, 3],
-  dashboard: [200, 7, 2, 0],
-  notifications: [200, 7, 2, 1],
-  search: [200, 7, 2, 0],
-  'decks.by_project': [200, 7, 2, 4],
-  'data_room.shared': [200, 7, 2, 1],
-  'research.overview': [200, 7, 2, 21],
-  'funds.list': [200, 13, 2, 2],
-  'projects.read.other_tenant': [403, 7, 2, 2],
+  'auth.me': [200, 4, 2, 3],
+  'projects.list': [200, 4, 2, 2],
+  'projects.read': [200, 4, 2, 3],
+  dashboard: [200, 4, 2, 0],
+  notifications: [200, 4, 2, 1],
+  search: [200, 4, 2, 0],
+  'decks.by_project': [200, 4, 2, 4],
+  'data_room.shared': [200, 4, 2, 1],
+  'research.overview': [200, 4, 2, 21],
+  'funds.list': [200, 4, 2, 2],
+  'projects.read.other_tenant': [403, 4, 2, 2],
 };
 
 let h: Awaited<ReturnType<typeof harness>>;
@@ -67,9 +67,12 @@ test('the counts are deterministic: the same request twice runs the same stateme
   }
 });
 
-test('the known repeat: an authenticated request resolves its caller more than once (hotspot H1, not yet fixed)', async () => {
-  // Recorded, not endorsed: this pins today's shape so the fix (#4573's candidate PR) lowers it on purpose.
-  const r = await h.request(FLOWS.find((f) => f.name === 'projects.list')!);
-  const userReads = repeats(r.statements).find((x) => x.sql === 'SELECT * FROM users WHERE id = ?');
-  assert.equal(userReads?.times, 2);
+test('H1: every authenticated flow resolves its caller once', async () => {
+  // Mutation checked: the memo in getCurrentUser removed → the caller's reads repeat and this fails.
+  // Before H1 the user row was read twice per signed-in request, and four times on /api/funds.
+  for (const flow of FLOWS.filter((f) => f.who)) {
+    const r = await h.request(flow);
+    const callerRepeats = repeats(r.statements).filter((x) => AUTH_SQL.includes(x.sql));
+    assert.deepEqual(callerRepeats, [], `${flow.name} resolves its caller more than once`);
+  }
 });

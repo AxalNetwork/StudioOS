@@ -28,6 +28,7 @@ starting ads.
 | `WaitingForYou.jsx` | D4488: venture-scoped header count, loading/empty/error states and individual or safe bulk decisions. |
 | `distributionAskModel.js` | D4488: labels, actual listed counts, exact safe kinds and recorded hold/charge copy. |
 | `InboxTab.jsx` | D4494: scoped reply threads, personal unread read, Needs-you row and the composer; only final confirmation sends. |
+| `NewsletterTab.jsx` | D4495: the Newsletter tab's not-connected state only (Connect Beehiiv disabled, 'Not offered yet'; Opens, Clicks and Unsubscribes Not recorded); makes no request until the Beehiiv connector (#2407) exists. |
 | `inboxModel.js` | D4494: recorded reply labels, local proposal text, Calendar link and existing mail confirmation/send boundary. |
 | `inbox.css` | D4494: DS8 thread columns, phone stacking and directional message bubbles using shared tokens. |
 | `ChannelsTab.jsx` | D4486: venture channel readings, existing Add/Edit forms and Ask, read-only connection cards, settings confirmation and existing tool doors. |
@@ -52,6 +53,8 @@ starting ads.
 | `distributionStates.css` | D4496: shared state theme, phone/tablet targets and responsive Overview treatment. |
 | `useDistributionLayout.js` | D4496: reactive phone/tablet layout using the shared media hook. |
 | `useDistributionAccess.js` | D4496: existing form-options writer permission, fail closed while unknown. |
+| `ResultsTab.jsx` | D4491: read-only funnels, Campaigns, Attribution and Spend per channel with source chips, the window, the MRR note, skeleton and read-error card. |
+| `resultsModel.js` | D4491: Not recorded reasons, money and cost-per-lead rounding, funnel widths and the window label. |
 
 CycleRoute still owns the module page. Overview retains its charts,
 outreach draft, This week calendar summary, update-ask replies, Mercury, Notion and tool
@@ -64,6 +67,8 @@ selected campaign (`target: 'campaign'`), so Accept writes the creative row
 itself — AdsTab only re-reads afterwards. Newsletter and Results have no
 built screen yet and still show Coming in this module soon until their
 tasks land.
+Prospects is the D4492 tab. Results is the D4491 tab: read only, it writes no MRR. Other tabs show Coming in this module soon until
+their tasks land.
 Import `ProspectsTab` for the shell's Prospects slot, with its verified venture
 id and read/write state. The wizard may call `useProspectConsentSummary` once,
 draw `ConsentSummaryView` in Audience and `reachableLabel` in Schedule. A

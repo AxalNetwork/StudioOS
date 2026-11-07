@@ -128,6 +128,9 @@ function safe(label: string, friendlyError: string, handler: (c: any) => Promise
       return await handler(c);
     } catch (e: any) {
       const msg = e?.message || String(e);
+      // #4570: a refusal from a gate (`requireAuth`'s 'Unauthorized', a step-up, a frozen admin) is not an
+      // unhandled error. Re-thrown, app.onError answers it with its own status (401, 403, 423) and body.
+      if (AUTH_ERROR_STATUSES[msg]) throw e;
       console.error('[AUTH] unhandled error', label, msg, e?.stack || '');
       const hit = SAFE_ERROR_CODES.find(s => s.re.test(msg));
       if (hit) {
@@ -153,6 +156,7 @@ async function readJson(c: any): Promise<{ ok: boolean; body: any; res: any }> {
 // here so existing call sites (register/verify/login/referral) keep
 // working unchanged.
 import { hashEmail } from '../util/hashEmail';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 // Task #9 follow-up — every fresh signup now lands directly in the
 // 'exploring' holding state instead of the lane role (founder/partner/
 // investor) it used to get. ensureExploringSchema guarantees the
