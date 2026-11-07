@@ -232,3 +232,43 @@ export function noteIsStale(note, totals) {
   }
   return false;
 }
+
+/**
+ * #4713 (D4713): a gate that lets only the LATEST period request commit.
+ *
+ * Every period-specific read (ledger, note) takes a token from `begin(key)`
+ * and commits only if `isCurrent(token)` is still true. Switching period
+ * begins a new token, so a slow response for the period the reader has left
+ * is dropped rather than painted under the new period's label, and responses
+ * arriving in reverse order cannot misalign figures and labels.
+ */
+export function createPeriodGate() {
+  let latest = 0;
+  let latestKey = null;
+  return {
+    begin(key) { latest += 1; latestKey = key; return { id: latest, key }; },
+    isCurrent(token) { return token != null && token.id === latest && token.key === latestKey; },
+    get key() { return latestKey; },
+  };
+}
+
+/**
+ * Whether the note editor holds text that is not filed: the advisor typed or
+ * drafted something that differs from the stored note for the period shown.
+ * Resolved (filed or discarded) before the period changes.
+ */
+export function noteIsDirty(note, draft) {
+  const typed = String(draft ?? '').trim();
+  if (!typed) return false;
+  return typed !== String(note?.body ?? '').trim();
+}
+
+/**
+ * The money the advisor has RECEIVED in a ledger window: lines they recorded
+ * as collected, net of the platform cut. `null` when the response carries no
+ * figures (an older worker): an absence, never a 0 (D56/D68).
+ */
+export function receivedCents(figures) {
+  const v = figures?.collected?.net_cents;
+  return v == null ? null : Number(v);
+}

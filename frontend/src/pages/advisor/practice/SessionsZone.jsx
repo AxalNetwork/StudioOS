@@ -108,6 +108,7 @@ const EMPTY_RULES = Object.freeze({
   blackouts: [],
   timezone: null,
   configured: false,
+  revision: '',
 });
 
 /** D1424 / D1596: the Block form's shape, closed. Never null (a ZoneBody child reads it on first render). */
@@ -121,7 +122,10 @@ export default function SessionsZone() {
   // unreadable rule set and an unset one both arrive as nulls, and they are
   // different absences. The card names which one it is, and the editor is
   // withheld for the first (see RulesBody).
-  const [rulesRead, setRulesRead] = useState(true);
+  // #4713 (D4713): 'loading' until the first read settles, then 'read' or
+  // 'unreadable'. The editor exists ONLY for 'read': before that the form would
+  // hold the empty defaults, and the route replaces the whole rule set.
+  const [rulesRead, setRulesRead] = useState('loading');
   const [types, setTypes] = useState([]);
   const [links, setLinks] = useState([]);
   // D571 — the same distinction for the two lists the cards now edit. A failed
@@ -166,7 +170,7 @@ export default function SessionsZone() {
       api.listMyAdvisorBookingLinks().catch(() => null),
     ]);
     setRules(r || EMPTY_RULES);
-    setRulesRead(r != null);
+    setRulesRead(r != null ? 'read' : 'unreadable');
     setTypes(Array.isArray(t?.items) ? t.items : []);
     setTypesRead(Array.isArray(t?.items));
     setLinks(Array.isArray(l?.items) ? l.items : []);
@@ -353,10 +357,12 @@ export default function SessionsZone() {
             answered, and rendering it as a number would put words in the
             advisor's mouth (D56/D68). */}
         <Stat label="Weekly cap"
-          value={capValue ?? <Unrecorded>{rulesRead ? 'Not set' : 'Not recorded'}</Unrecorded>}
-          note={rulesRead
-            ? (capValue ? 'paid sessions, self-set' : 'no cap on paid sessions')
-            : 'your rules could not be read'} />
+          value={rulesRead === 'loading' ? <Unrecorded>Reading…</Unrecorded>
+            : (capValue ?? <Unrecorded>{rulesRead === 'read' ? 'Not set' : 'Not recorded'}</Unrecorded>)}
+          note={rulesRead === 'loading' ? 'reading your rules'
+            : rulesRead === 'read'
+              ? (capValue ? 'paid sessions, self-set' : 'no cap on paid sessions')
+              : 'your rules could not be read'} />
       </div>
 
       <ZoneBody loading={slots.loading} error={slots.error} onRetry={() => loadSlots(view)}
@@ -547,7 +553,9 @@ function SlotCard({ slot }) {
   );
 }
 
-function RulesBody({ rules, read, onSaved }) {
+function RulesBody({ rules, read: readState, onSaved }) {
+  const loadingRules = readState === 'loading';
+  const read = readState === 'read';
   const [open, setOpen] = useState(false);
   const [cap, setCap] = useState('');
   const [buffer, setBuffer] = useState('');
@@ -576,10 +584,14 @@ function RulesBody({ rules, read, onSaved }) {
         min_notice_hours: notice === '' ? null : Number(notice),
         blackouts: rules?.blackouts || [],
         timezone: rules?.timezone || null,
+        // The revision these rules were read at: if another tab changed them
+        // since, the worker refuses (409 rules_changed) instead of overwriting.
+        expected_revision: rules?.revision ?? '',
       });
       setOpen(false);
       onSaved();
     } catch (err) {
+      if (err?.status === 409 || err?.code === 'rules_changed' || /changed somewhere else/.test(String(err?.message))) onSaved();
       setNote({ ok: false, text: err?.message || 'Those rules were not saved.' });
     } finally { setBusy(false); }
   };
@@ -598,12 +610,12 @@ function RulesBody({ rules, read, onSaved }) {
           <div key={k} className="flex items-baseline justify-between gap-3">
             <dt className="text-[11.5px] text-axal-faint">{k}</dt>
             <dd className="text-[12px] font-bold tabular-nums">
-              {v ?? <Unrecorded>{read ? 'Not set' : 'Not recorded'}</Unrecorded>}
+              {loadingRules ? <Unrecorded>Reading…</Unrecorded> : (v ?? <Unrecorded>{read ? 'Not set' : 'Not recorded'}</Unrecorded>)}
             </dd>
           </div>
         ))}
       </dl>
-      {read ? (
+      {loadingRules ? null : read ? (
         <button type="button" className={`${ghostButtonClass} mt-3`} onClick={() => setOpen((v) => !v)}>
           {open ? 'Close' : 'Change the rules'}
         </button>

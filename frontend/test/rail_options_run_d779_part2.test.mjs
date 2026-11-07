@@ -144,7 +144,9 @@ test('Earnings’ narrative is held on the page until Accept, which files it wit
   assert.doesNotMatch(narrate, /saveMyAdvisorPeriodNote|request\(/, 'the draft is filed before Accept');
   // Accept is the only write, and it says who wrote what is filed.
   const accept = zone.slice(zone.indexOf('const accept = useCallback'), zone.indexOf('const discard = useCallback'));
-  assert.match(accept, /api\.saveMyAdvisorPeriodNote\(window_\.key, \{\s*body: draft,\s*source: periodNoteSource\(draft, modelText, note\?\.source\),/);
+  // #4713: filed against the period the displayed note was read for (`key`, captured from `noteKey`), not the selected chip.
+  assert.match(accept, /const key = noteKey;/);
+  assert.match(accept, /api\.saveMyAdvisorPeriodNote\(key, \{\s*body: draft,\s*source: periodNoteSource\(draft, modelText, note\?\.source\),/);
   assert.equal(zone.split('api.saveMyAdvisorPeriodNote(').length - 1, 1);
   // The Worker's read-back writes nothing for a page's coverage lines: its one
   // write is the audit of a named branch, which Earnings never sends.
