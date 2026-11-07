@@ -30,7 +30,6 @@
  * next state read tries again.
  */
 import type { Env } from '../types';
-import { getSQL } from '../db';
 
 export const INCORPORATION_MILESTONE = 'incorporation_completed';
 
@@ -42,7 +41,7 @@ const PAID_ORDER_SQL =
 
 export type IncorporationMilestoneOutcome =
   | { recorded: true; milestone_credit: unknown; graduation_credit: unknown }
-  | { recorded: false; reason: 'not_paid' | 'already_recorded' | 'week_locked' | 'frozen' | 'lab_inactive' | 'error' };
+  | { recorded: false; reason: 'not_paid' | 'already_recorded' | 'week_locked' | 'frozen' | 'lab_inactive' | 'ineligible' | 'unavailable' | 'error' };
 
 /** True when the user has an incorporation order at or past payment. */
 export async function hasPaidIncorporation(env: Env, userId: number): Promise<boolean> {
@@ -59,31 +58,15 @@ export async function syncIncorporationMilestone(env: Env, userId: number): Prom
     if (done) return { recorded: false, reason: 'already_recorded' };
     if (!(await hasPaidIncorporation(env, userId))) return { recorded: false, reason: 'not_paid' };
 
-    // The cohort calendar and a frozen sprint gate this milestone as they gate
-    // every other one (POST /milestone). A locked week is caught up on the
-    // next state read.
-    try {
-      const { getCohortGate } = await import('./cohortTiming');
-      const gate = await getCohortGate(env, userId);
-      if (gate?.frozen) return { recorded: false, reason: 'frozen' };
-      if (gate && gate.max_week < 4) return { recorded: false, reason: 'week_locked' };
-    } catch { /* gate tables not yet migrated: legacy behaviour, no gate */ }
-
-    const { recordMilestone } = await import('../routes/spinout_lab');
-    const sql = getSQL(env);
-    const r = await recordMilestone(sql, userId, INCORPORATION_MILESTONE);
-    await sql.end();
-    if (!r.ok) return { recorded: false, reason: r.status === 409 ? 'lab_inactive' : 'error' };
-
-    const { creditLabMilestone, creditLabGraduation } = await import('./labMilestoneCredits');
-    const milestone_credit = await creditLabMilestone(env, userId, INCORPORATION_MILESTONE);
-    let graduation_credit: unknown = null;
-    try {
-      const { issueOnGraduation } = await import('./certificateIssuance');
-      if ((await issueOnGraduation(env, userId)) === 'issued') {
-        graduation_credit = await creditLabGraduation(env, userId);
-      }
-    } catch { /* issuance is best-effort; the backfill picks up what it misses */ }
+    // D4657: the shared recorder applies the enrollment policy, the cohort
+    // calendar (a locked week is caught up on the next state read or by the
+    // reconciler), the paid-order evidence, the insert-once and the credits.
+    const { recordLabMilestone, outcomeReason } = await import('./labProgress');
+    const r = await recordLabMilestone(env, userId, INCORPORATION_MILESTONE, 'order');
+    if (!r.ok) return { recorded: false, reason: outcomeReason(r) };
+    if (!r.inserted) return { recorded: false, reason: 'already_recorded' };
+    const milestone_credit = r.milestone_credit;
+    const graduation_credit = r.graduation_credit;
     return { recorded: true, milestone_credit, graduation_credit };
   } catch (e) {
     console.warn('[lab] incorporation milestone not recorded', (e as Error).message);

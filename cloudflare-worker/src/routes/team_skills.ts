@@ -347,6 +347,10 @@ router.post('/skills', async (c) => {
     if (!parsed) return say(c, 400, 'skill_md_invalid', SKILL_MESSAGES.skill_md_invalid);
     fields = parsed;
   }
+  // #4733: v2 has no role picker ("any skill can go to any agent"), so a skill written without roles (a body with no `roles`, or a
+  // SKILL.md with none) is held to every agent role. An explicit empty list on a JSON body is still refused (`roles_missing`).
+  const f = fields as Record<string, unknown>;
+  if (f.roles === undefined || (b.skill_md !== undefined && Array.isArray(f.roles) && f.roles.length === 0)) fields = { ...f, roles: [...ROLE_KEYS] };
   const checked = checkDraft(fields, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
   if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
   const d = checked.draft;

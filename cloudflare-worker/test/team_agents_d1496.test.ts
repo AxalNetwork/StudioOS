@@ -31,7 +31,7 @@ import { agentRun } from '../src/services/agents/agentRun.ts';
 import { meteredCall } from '../src/services/metering.ts';
 import { CustomMcpError } from '../src/integrations/customMcp.ts';
 import { TOOL_DATA_NOTICE } from '../src/services/eadwynTools.ts';
-import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, optionsIn, roleOf } from '../src/services/agents/catalogue.ts';
+import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '../src/services/agents/catalogue.ts';
 import { checkRules, diffRules } from '../src/services/agents/rulebook.ts';
 import { MODULES as VALIDATE } from '../src/services/cycleValidate.ts';
 import { MODULES as RAISE } from '../src/services/raiseCycle.ts';
@@ -1023,4 +1023,15 @@ test('a company-wide list does not grant decision controls for a project the cal
     assert.equal((await call(w, EDITOR, 'POST', '/queue/q-project-permission/decide', { decision: 'accept' })).status, 403);
     assert.equal((await call(w, PROJECT_OWNER, 'GET', '/queue/q-project-permission')).body.item.can_decide, true);
   } finally { w.db.close(); }
+});
+
+test('#4733: the agent list carries reads_line from the role\'s effective works_in', async () => {
+  const w = world();
+  const added = await call(w, EDITOR, 'POST', `${CO}/agents`, cfo());
+  assert.equal(added.status, 201, added.text);
+  const labels = roleOf('cfo')!.default_rules.works_in.map((k) => moduleOf(k)?.label ?? k);
+  const list = await call(w, MEMBER, 'GET', `${CO}/agents`);
+  assert.equal(list.body.agents[0].reads_line, `Works in ${labels.join(', ')}`);
+  assert.equal(added.body.agent.reads_line, `Works in ${labels.join(', ')}`);
+  assert.ok(!/@example\.test/.test(list.text));
 });

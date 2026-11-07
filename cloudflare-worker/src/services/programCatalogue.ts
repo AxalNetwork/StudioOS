@@ -37,7 +37,7 @@ import { ownScope, previousAxis, scopeLabel } from './adminInsights';
 import { SLA_PAST_HOURS, SLA_DUE_SOON_HOURS } from './approvalSources';
 import { branchRead } from './branches';
 import { countsOnly, insightsScopes } from './insightsScope';
-import { listPrograms, type ProgramKey, type ProgramRow, PROGRAM_KEYS, PROGRAM_STATUSES } from './programRegistry';
+import { listPrograms, isRegistryKey, type ProgramKey, type ProgramRow, PROGRAM_STATUSES } from './programRegistry';
 import { grantFieldOf, grantStates, type GrantViewer } from './programGrantStates';
 
 export const PROGRAM_WEEKS = [4, 12, 52] as const;
@@ -47,7 +47,7 @@ export const DEFAULT_PROGRAM_WEEKS: ProgramWeeks = 12;
 
 export const HQ_READS_REASON = 'HQ reads these figures.';
 export const LAB_PEOPLE_REASON =
-  'The Lab is left out until O-FND and #2374 say who a cohort\'s founders are.';
+  'The Lab is left out until a cohort\'s founders are defined.';
 export const REFERRAL_REWARDS_REASON = 'Referral rewards are not paid in perk credits yet.';
 export const PRODUCT_TESTING_HQ_ONLY = 'Runs at HQ. Its figures are for HQ only.';
 
@@ -719,6 +719,14 @@ export function unreadablePrograms(scope: Record<string, unknown>, reason: strin
 }
 
 /**
+ * D4808: the rows of a branch's answer HQ keeps. A program an approval or New program made carries a registry key and is
+ * kept with the nine; only a row with no valid key (a malformed answer) is dropped.
+ */
+export function keepRegistryRows(rows: unknown[]): any[] {
+  return rows.filter((x: any) => isRegistryKey(x?.key));
+}
+
+/**
  * HQ's read of one subsidiary: the branch's own answer, counts only, with
  * HQ's label on its scope and HQ's registry names on its rows (`countsOnly`
  * drops `name`, so a branch answers program keys and counts). Never throws.
@@ -740,8 +748,7 @@ export async function branchScopedPrograms(env: Env, code: string, params: Progr
   const clean = countsOnly(read) as Record<string, any>;
   const names = await listPrograms(env).then((rows) => new Map(rows.map((x) => [x.key, x.name])), () => new Map<string, string>());
   if (clean.programs?.available && Array.isArray(clean.programs.rows)) {
-    clean.programs.rows = clean.programs.rows
-      .filter((x: any) => (PROGRAM_KEYS as readonly string[]).includes(x?.key))
+    clean.programs.rows = keepRegistryRows(clean.programs.rows)
       .map((x: any) => ({ ...x, name: names.get(x.key) ?? null }));
   }
   return { ...clean, scope, as_of: r.as_of ?? clean.as_of ?? null, branch: { status: 'ok' } };
