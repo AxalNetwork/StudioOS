@@ -127,7 +127,9 @@ function stubReaders(over: Partial<Record<keyof PlatformSummaryReaders, () => Pr
 
 test('the summary keeps the response\'s own shape, key for key', async () => {
   const out: any = await readPlatformSummary(envOf(fresh()), { readers: stubReaders() });
-  assert.deepEqual(Object.keys(out), ['integrations', 'jobs', 'monitoring', 'broadcast', 'integration_keys', 'github_sync', 'payments_catalog', 'promo_codes', 'switches']);
+  assert.deepEqual(Object.keys(out), ['integrations', 'jobs', 'monitoring', 'broadcast', 'integration_keys', 'github_sync', 'payments_catalog', 'promo_codes', 'switches', 'reads']);
+  // D4858 added `reads`, one meta per reader; every block before it is unchanged.
+  assert.deepEqual(Object.keys(out.reads).sort(), Object.keys(stubReaders()).sort());
   assert.deepEqual(Object.keys(out.monitoring), ['dlq', 'incidents']);
   assert.deepEqual(Object.keys(out.broadcast), ['telegram', 'x']);
 });
