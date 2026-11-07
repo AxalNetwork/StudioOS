@@ -28,6 +28,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import advisors from '../src/routes/advisors.ts';
+import { d1Over } from './_d1_sqlite.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(HERE, '../sql');
@@ -401,6 +402,35 @@ test('a service edit merges — an unmentioned price is not cleared', async () =
   assert.equal(cleared.body.price_cents, null, 'but an explicit null does clear it');
 });
 
+test('D4681: one edit changes every field at once, without delete and recreate', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', price_cents: 500000 });
+  const edited = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, {
+    title: 'Design sprint', kind: 'package', price_cents: 650000, currency: 'eur',
+    duration_note: 'Two weeks', scope: 'Discovery and a prototype', is_active: false,
+  });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.body.id, made.body.id, 'the same record, edited in place');
+  assert.equal(edited.body.uid, made.body.uid);
+  assert.deepEqual(
+    [edited.body.title, edited.body.kind, edited.body.price_cents, edited.body.currency, edited.body.duration_note, edited.body.scope, edited.body.is_active],
+    ['Design sprint', 'package', 650000, 'EUR', 'Two weeks', 'Discovery and a prototype', false]);
+});
+
+test('D4681: a blank title or a malformed currency is refused, and nothing changes', async () => {
+  // Mutation checked: the blank-title guard removed → 200 with the old title kept;
+  // parseCurrency accepting anything → 'DOLLARS' stored.
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', price_cents: 500000 });
+  for (const body of [{ title: '   ' }, { currency: 'dollars' }, { currency: 'US' }, { kind: 'subscription' }]) {
+    const r = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { ...body, scope: 'should not land' });
+    assert.equal(r.status, 400, JSON.stringify(body));
+  }
+  assert.equal((await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'usd$' })).status, 400);
+  const row = (await call(e, 'GET', '/me/services', ada)).body.items.find((s: any) => s.id === made.body.id);
+  assert.deepEqual([row.title, row.currency, row.scope], ['Sprint', 'USD', null]);
+});
+
 // ---------------------------------------------------------------------------
 // 204 — proof and consent
 // ---------------------------------------------------------------------------
@@ -463,6 +493,50 @@ test('a withdrawn consent leaves the record that it was given', async () => {
   assert.equal(after.body.items[0].attested, false, 'the claim is no longer attested');
   assert.equal(after.body.items[0].consents.length, 1, 'and the row is still there');
   assert.ok(after.body.items[0].consents[0].withdrawn_at, 'saying when it was withdrawn');
+});
+
+/**
+ * D4681 (#4681): deleting a proof item is one transaction. `d1Over` runs a
+ * batch the way D1 does, all or nothing; the item's DELETE is made to fail
+ * here, after the consent DELETE has run inside the same batch.
+ */
+function failingItemDelete(db: InstanceType<typeof DatabaseSync>) {
+  const real = d1Over(db);
+  return {
+    ...real,
+    prepare(sql: string) {
+      const st = real.prepare(sql);
+      if (!/^DELETE FROM advisor_proof_items/.test(sql)) return st;
+      const fail = () => { throw new Error('D1_ERROR: injected failure'); };
+      return { ...st, bind: () => ({ ...st, run: async () => fail(), runSync: fail }) };
+    },
+  };
+}
+
+test('D4681: a failed proof delete keeps the claim and every consent behind it', async () => {
+  // Mutation checked: the two awaited DELETEs restored → the consents are gone and the item stays.
+  const db = freshDb();
+  const ok = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
+  const item = await call(ok, 'POST', '/me/proof', ada, { title: 'Led the payments rebuild' });
+  const req = await call(ok, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam Example' });
+  await advisors.request(`/proof-consents/${req.body.request_token}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ consent_text: 'I confirm this.' }),
+  }, ok);
+
+  const broken = { ...ok, DB: failingItemDelete(db) };
+  const res = await call(broken, 'DELETE', `/me/proof/${item.body.id}`, ada);
+  assert.notEqual(res.status, 200, 'the failure is reported');
+  const after = await call(ok, 'GET', '/me/proof', ada);
+  assert.equal(after.body.items.length, 1, 'the claim stands');
+  assert.equal(after.body.items[0].consents.length, 1, 'and so does its consent');
+  assert.equal(after.body.items[0].status, 'attested', 'still attested: nothing half-deleted');
+
+  const done = await call(ok, 'DELETE', `/me/proof/${item.body.id}`, ada);
+  assert.equal(done.status, 200);
+  assert.equal(done.body.consents_removed, 1);
+  assert.equal((await call(ok, 'GET', '/me/proof', ada)).body.items.length, 0);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM advisor_proof_consents').get() as any).n, 0, 'no stranger left behind');
 });
 
 test('a proof item an advisor does not own is not theirs to delete', async () => {

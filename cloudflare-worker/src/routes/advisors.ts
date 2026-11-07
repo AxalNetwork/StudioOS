@@ -1246,6 +1246,18 @@ function parsePriceCents(v: unknown): number | null {
   return n;
 }
 
+/**
+ * D4681 (#4681): a currency is three letters (ISO 4217's shape), or the write
+ * is refused. It used to be cut to eight characters and upper-cased, so a
+ * typo was stored and shown beside the price as if it were a currency.
+ */
+function parseCurrency(v: unknown, fallback: string): string {
+  if (v == null || v === '') return fallback;
+  const code = String(v).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) throw new Error('currency must be a three-letter code, such as USD');
+  return code;
+}
+
 advisors.get('/me/services', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -1287,7 +1299,7 @@ advisors.post('/me/services', async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(uid, m.id, title, kind,
            trimOrNull(body.duration_note, 200), price_cents,
-           String(body.currency || 'USD').trim().slice(0, 8).toUpperCase(),
+           parseCurrency(body.currency, 'USD'),
            trimOrNull(body.scope, 2000),
            body.is_active === false ? 0 : 1, now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_services WHERE id = ?')
@@ -1310,18 +1322,23 @@ advisors.patch('/me/services/:id', async (c) => {
     if (!SERVICE_KINDS.includes(kind)) {
       return c.json({ detail: 'kind must be one of: fixed, package, retainer' }, 400);
     }
-    // Merge, not replace: the Services zone edits one field at a time.
+    // D4681: a title sent blank is refused rather than quietly kept, so an edit
+    // that clears it says so instead of reporting a save that changed nothing.
+    if (body.title != null && !String(body.title).trim()) {
+      return c.json({ detail: 'A service needs a title' }, 400);
+    }
+    // Merge, not replace: an unmentioned field keeps its value.
     const price_cents = 'price_cents' in body ? parsePriceCents(body.price_cents) : row.price_cents;
     await c.env.DB.prepare(
       `UPDATE advisor_services SET title = ?, kind = ?, duration_note = ?,
          price_cents = ?, currency = ?, scope = ?, is_active = ?, updated_at = ?
        WHERE id = ?`
     ).bind(
-      body.title == null ? row.title : String(body.title).trim().slice(0, 200) || row.title,
+      body.title == null ? row.title : String(body.title).trim().slice(0, 200),
       kind,
       'duration_note' in body ? trimOrNull(body.duration_note, 200) : row.duration_note,
       price_cents,
-      body.currency == null ? row.currency : String(body.currency).trim().slice(0, 8).toUpperCase(),
+      parseCurrency(body.currency, row.currency),
       'scope' in body ? trimOrNull(body.scope, 2000) : row.scope,
       body.is_active == null ? row.is_active : (body.is_active ? 1 : 0),
       nowIso(), row.id,
@@ -1473,10 +1490,19 @@ advisors.delete('/me/proof/:id', async (c) => {
     // The consents go with the item they attest to. A consent row whose subject
     // no longer exists attests to nothing, and leaving it would leave a
     // stranger's name and email in the database with no claim attached to it.
-    await c.env.DB.prepare('DELETE FROM advisor_proof_consents WHERE proof_item_id = ?')
-      .bind(row.id).run();
-    await c.env.DB.prepare('DELETE FROM advisor_proof_items WHERE id = ?').bind(row.id).run();
-    return c.json({ ok: true, id: row.id });
+    //
+    // D4681 (#4681): ONE BATCH, so both go or neither does. These were two
+    // awaited statements, and a failure between them left the claim standing
+    // with every consent behind it gone: an attested item turned self-stated
+    // with nothing to say why. D1 runs a batch as one transaction. The item's
+    // DELETE re-checks the owner, and the consent DELETE names only that item.
+    const consents = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_proof_consents WHERE proof_item_id = ?')
+      .bind(row.id).first<{ n: number }>();
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM advisor_proof_consents WHERE proof_item_id = ?').bind(row.id),
+      c.env.DB.prepare('DELETE FROM advisor_proof_items WHERE id = ? AND advisor_id = ?').bind(row.id, m.id),
+    ]);
+    return c.json({ ok: true, id: row.id, consents_removed: Number(consents?.n ?? 0) });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -2957,7 +2983,7 @@ advisors.get('/me/thinking', async (c) => {
       return c.json({ detail: 'Only an advisor has a thinking shelf' }, 403);
     }
     const rows = await c.env.DB.prepare(
-      `SELECT id, slug, title, subtitle, status, published_at, word_count,
+      `SELECT id, slug, title, subtitle, status, published_at, publish_at, word_count,
               read_minutes, views, sector, created_at, updated_at
          FROM articles
         WHERE author_user_id = ?
@@ -2965,7 +2991,7 @@ advisors.get('/me/thinking', async (c) => {
         LIMIT 100`
     ).bind(user.id).all<{
       id: number; slug: string; title: string; subtitle: string | null;
-      status: string; published_at: string | null; word_count: number;
+      status: string; published_at: string | null; publish_at: string | null; word_count: number;
       read_minutes: number; views: number; sector: string | null;
     }>();
     const items = rows.results || [];
