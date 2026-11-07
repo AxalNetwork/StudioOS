@@ -6,7 +6,7 @@ import { AUDIO_PREFIX, MAX_CHUNK_BYTES, UPLOAD_BYTES_PER_SECOND, WAV_HEADER_BYTE
 import { assembleBotTranscript, BOT_NAME, type BotEvent, type BotPassage } from './channels/botTranscript';
 import { NOVA_3 } from './sttFormats';
 import { writableSession } from './interviewIntake';
-import { ensureDiscoveryTranscriptProjectionOwnerColumn } from './discoveryInterviewSchema';
+import { ensureDiscoveryTranscriptProjectionOwnerColumn } from './discoveryTranscriptOwnerSchema';
 
 export class BotAssemblyError extends Error {
   readonly code: string;

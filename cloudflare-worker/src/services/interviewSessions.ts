@@ -30,7 +30,7 @@ import { markInterviewHeld } from './sessionSetup';
 import { closeAttachedRefs } from './channels/meetings';
 import { consentRequired } from './channels/types';
 import { presentTables } from './interviewFindings';
-import { ensureDiscoveryTranscriptProjectionOwnerColumn } from './discoveryInterviewSchema';
+import { ensureDiscoveryTranscriptProjectionOwnerColumn } from './discoveryTranscriptOwnerSchema';
 
 export const CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
 export type Channel = typeof CHANNELS[number];
