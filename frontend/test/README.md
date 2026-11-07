@@ -162,6 +162,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
 | `distribution_integration_4488.test.mjs` | Mounted campaign Ask acceptance, manual Save and canonical creative retries (D4488). |
 | `distribution_states_4496.test.mjs` | D4496 cross-tab triggers, fixed error copy, manual/AI separation and responsive Overview. |
+| `dashboard_lazy_panels_d4574.test.mjs` | D4574 (#4574 H6): the Studio radar and Product testing panels mount through their lazy boundaries, the imports stay dynamic, and `/studio` keeps its route and mounts. |
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
 
