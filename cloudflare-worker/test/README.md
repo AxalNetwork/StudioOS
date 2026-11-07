@@ -232,3 +232,5 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 
 `redirect_links_d2319.test.ts` exercises canonical checklist, calendar, promo,
 advisor CTA and stored search-result URLs after redirect retirement (#4415).
+
+`ai_gateway_slice_4556.test.ts` (D4556) runs one third-party model through AI Gateway on a stubbed binding over the real AI budget migrations: every switch, config, task, data-class and Advisor refusal makes no call, success settles once from the exact reported usage, missing usage is never zero, retries honour `retry-after` within a bound, a timeout is unknown completion and is not retried, payload logging is off on every call, and no Advisor module can import the provider path.

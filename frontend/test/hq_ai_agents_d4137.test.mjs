@@ -39,6 +39,13 @@ test('viewFor maps each address to its board, and an unknown sub-path to its tab
   assert.deepEqual(viewFor('/hq/ai-agents/operations/nope'), { tab: 'operations', sub: 'runs' });
 });
 
+test('the HQ skill detail draws the shared taxonomy graph', () => {
+  assert.match(PAGE, /data-testid="hq-skill-graph"/);
+  assert.match(PAGE, /<AgentRadar vector=\{radarVector\(data\.skill\.radar\)\} radar=\{data\.skill\.radar\}/);
+  assert.match(PAGE, /Computed from this skill’s taxonomy\./);
+  assert.match(PAGE, /This skill has no taxonomy levels yet\./);
+});
+
 test('each build task names its issue, and none is live before its routes land', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['H1', 4158], ['H2', 4160], ['H3', 4161], ['H4', 4162], ['H5', 4163]]);
   // Roster, company moderation, policies and operations are wired; the HQ editor still waits.

@@ -11,6 +11,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | --- | --- |
 | `D1_BASELINE_2026-11-06.md`, `D1_BASELINE_2026-11-06.json` | The D1 contention benchmark's first results (simulated): statements per operation and stage, the scans that grow with the platform, load steps, growth, invariants, and what production's baseline must still supply (D4567). |
 | `SCALE_1000_DAU_AUDIT_2026-09-18.md` | Worker + D1 + SPA load for the first 1,000 daily users, with a Claude Code implementation plan. |
+| `PERFORMANCE_BASELINE_2026-11-06.md` | #4573 part 1: what is measured on main, the frontend shell and lazy-chunk composition, lab Web Vitals for the anonymous pages, D1 statements per API flow, ten proven hotspots and the budgets now in CI. Local and read-only; production metrics are marked unavailable. |
 | `PLATFORM-DELIVERY-AUDIT.md` | The most recent canvas-by-canvas delivery sweep. Start here for “what shipped.” |
 | `BETA_READINESS_AUDIT_2026-05-20.md`, `BETA_READINESS_AUDIT_2026-06-03.md`, `BETA_READINESS_AUDIT_2026-07-03.md` | Three successive beta-readiness passes. |
 | `BETA_READINESS_ISSUES_2026-05-20.md` | The issue list from the first of those. |
@@ -28,6 +29,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | `MY_EVENTS_MAP_2026-10-25.md` | The My events canvas (MEV1–MEV18) read board by board against the code that day: #2387's eleven broken items re-checked (six fixed by #2623 and #2626), the three reads the page draws from, and what `registered` means (D1030). |
 | `APPROVALS_MAP_2026-10-25.md` | The Approvals canvas (APR1–APR16) read board by board against the code that day: #2390's nine gaps re-checked (three fixed by D938 and D1038), the three reads the page draws from, and what each board waits for (D1038). |
 | `VALIDATE_BUILD_MAP_2026-10-25.md` | The Validate → Build canvas (VB1–VB22) read against the code that day: #2426's four findings re-checked (all open), the one read the plan draws from, what is stored nowhere yet, and what each board waits for (D1063). |
+| `SECURITY_CONTROL_MATRIX_2026-11-06.md` | #4571 (Security S2): the GitHub, Cloudflare, storage and deploy controls read from the repository that day, each VERIFIED (repo), OBSERVED (repo) or UNVERIFIED; the risk register SC-01 to SC-09; the migration and deploy tabletop; the owner-only checklist. Its register ids are read by `frontend/test/workflow_security_4571.test.mjs` (D4571). |
 | `TRUST_MAP_2026-10-25.md` | The Trust center canvas (TRU1–TRU20) read against the code that day: #2425's eleven findings re-checked (one fixed by D1072, the sanctions fail-open fixed on main), what each public tab can read, and what waits (D1072). |
 | `DATA_ROOM_MAP_2026-10-25.md` | The Data room canvas (DR1–DR24) read against the code that day: #2456's broken items re-checked (three fixed on main, one half fixed), what each tab can read, and what waits (D1101). |
 | `COMPANIES_MAP_2026-10-25.md` | The Companies and projects canvas (CMP1–CMP19) read against the code that day: #2422's eleven broken items re-checked (the Operating Partner power fixed by D889), what each tab can read, and what waits (D1134). |

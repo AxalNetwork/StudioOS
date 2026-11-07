@@ -4495,21 +4495,22 @@ function ConnectorsHubTab() {
 function BillingTab({ data, flash }) {
   const role = String(data?.role || '').toLowerCase();
   const billing = useBillingStatus(role);
+  const reads = useBillingReads({ role });
   let panel;
   if (role === 'investor') {
-    panel = <InvestorBillingPanel data={data} flash={flash} billing={billing} />;
+    panel = <InvestorBillingPanel data={data} flash={flash} billing={billing} overview={reads.overview} />;
   } else if (role === 'founder') {
-    panel = <FounderBillingPanel data={data} flash={flash} billing={billing} />;
+    panel = <FounderBillingPanel data={data} flash={flash} billing={billing} overview={reads.overview} />;
   } else {
     // Every other signed-in role (partner, advisor, …) gets the generic
     // account-plan pipeline: a persona plan ladder + native subscription
     // management. Roles with no plan_group / no persona plans fall back inside
     // PersonaBillingPanel to the saved-cards-and-receipts view — no regression.
-    panel = <PersonaBillingPanel data={data} flash={flash} billing={billing} />;
+    panel = <PersonaBillingPanel data={data} flash={flash} billing={billing} overview={reads.overview} />;
   }
   return (
     <>
-      <BillingConsole key={role} role={role} billing={billing} />
+      <BillingConsole key={role} role={role} billing={billing} reads={reads} />
       {panel}
     </>
   );
@@ -4519,8 +4520,7 @@ function BillingTab({ data, flash }) {
 // order: Token balance and Included with your plan; Buy tokens; the plan and
 // Payment details beside Auto-reload (D794); then the orders, each with its
 // invoice. The role's panel follows as before.
-function BillingConsole({ role, billing }) {
-  const reads = useBillingReads({ role });
+function BillingConsole({ role, billing, reads }) {
   return (
     <div className="flex flex-col gap-3" data-testid="billing-console">
       <div className="grid gap-3 md:grid-cols-2">
@@ -4547,10 +4547,10 @@ function BillingConsole({ role, billing }) {
 // reads the user's general `stripe_customer_id` — the same customer that backs
 // one-off purchases — so receipts for incorporation, expert sessions, and
 // other à la carte buys appear here.
-function GenericBillingPanel({ flash }) {
+function GenericBillingPanel({ flash, overview }) {
   return (
     <Card title="Billing" description="Your saved cards, payments, and receipts.">
-      <BillingDashboard scope="founder" variant="general" flash={flash} />
+      <BillingDashboard scope="founder" variant="general" flash={flash} overviewRead={overview} />
       <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
         Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
       </div>
@@ -4589,7 +4589,7 @@ const PERSONA_PLANS = {
 // (the persona subscription lives on the general Stripe customer, which
 // scope="founder" reads). Falls back to the saved-cards view for any role that
 // has no persona plan.
-export function PersonaBillingPanel({ flash, billing }) {
+export function PersonaBillingPanel({ flash, billing, overview }) {
   // D568 — the plan read is BillingTab's (`billing`, GET /billing/plan/status),
   // shared with the plan line above. A failed read leaves `status` null, which
   // falls back to the saved-cards view exactly as the panel's own read did.
@@ -4618,7 +4618,7 @@ export function PersonaBillingPanel({ flash, billing }) {
   }
   // No persona plan for this role → saved cards + receipts only (no regression).
   if (!group || !defs) {
-    return <GenericBillingPanel flash={flash} />;
+    return <GenericBillingPanel flash={flash} overview={overview} />;
   }
 
   const subStatus = String(status?.status || 'free').toLowerCase();
@@ -4657,7 +4657,7 @@ export function PersonaBillingPanel({ flash, billing }) {
       {/* Manage existing subscription, or the plan ladder + inline checkout. */}
       {isSubscribed && hasCustomer ? (
         <Card title="Manage subscription" description="Change card, cancel, and review invoices without leaving Axal VC.">
-          <BillingDashboard scope="founder" flash={flash} onChanged={refresh} />
+          <BillingDashboard scope="founder" flash={flash} onChanged={refresh} overviewRead={overview} />
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
             Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
           </div>
@@ -4707,7 +4707,7 @@ export function PersonaBillingPanel({ flash, billing }) {
   );
 }
 
-function FounderBillingPanel({ flash, billing }) {
+function FounderBillingPanel({ flash, billing, overview }) {
   // D568 — the tier read is BillingTab's (`billing`, GET /billing/tier/status),
   // shared with the plan line above. It used to fall back to
   // `data.subscription_tier` on a failed read, a field the root settings
@@ -4819,7 +4819,7 @@ function FounderBillingPanel({ flash, billing }) {
           the plan ladder + inline checkout to subscribe. */}
       {hasCustomer && tier !== 'free' ? (
         <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal VC.">
-          <BillingDashboard scope="founder" flash={flash} onChanged={refreshStatus} />
+          <BillingDashboard scope="founder" flash={flash} onChanged={refreshStatus} overviewRead={overview} />
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
             Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
           </div>
@@ -4977,7 +4977,7 @@ function EmbeddedCheckoutCard({ flash, onPaid }) {
 //      toggle and Stripe-checkout buttons.
 //   3. Quotas card — warm intros / quarter (used vs cap) and deal-room cap.
 //   4. Seat management — only for Institutional plans (list/invite/revoke).
-export function InvestorBillingPanel({ flash, billing }) {
+export function InvestorBillingPanel({ flash, billing, overview }) {
   // D568 — the status read is BillingTab's (`billing`, GET
   // /billing/investor/status), shared with the plan line above. A failed read
   // used to raise a toast and then draw the Free ladder and zero quotas below
@@ -5060,7 +5060,7 @@ export function InvestorBillingPanel({ flash, billing }) {
           + inline checkout to subscribe. */}
       {hasCustomer && tier !== 'free' ? (
         <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal VC.">
-          <BillingDashboard scope="investor" flash={flash} onChanged={refresh} />
+          <BillingDashboard scope="investor" flash={flash} onChanged={refresh} overviewRead={overview} />
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
             See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing?for=investor">investor pricing page</a>.
           </div>
