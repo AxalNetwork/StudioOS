@@ -127,8 +127,16 @@ test('days open: only a published posting is open, counted in whole days from it
   assert.equal(daysOpenText(byTitle('Before 609'), NOW), 'Days open not recorded');
   assert.equal(daysOpenText(byTitle('Closed since'), NOW), null);
 
-  // The Jobs card's most-applications rows carry it.
-  const card = buildJobs({ jobs: { status: 'ready', data: POSTINGS } }, NOW);
+  // #4717: the Jobs card's most-applications rows carry the Community read's own days open
+  // (counted at its as_of by the same rule, admin_community_d931), worded the same way.
+  const most = [
+    { posting_id: 2, title: 'One day', status: 'published', applications: 9, days_open: 1 },
+    { posting_id: 3, title: 'Before 609', status: 'published', applications: 4, days_open: { recorded: false, reason: 'x' } },
+    { posting_id: 1, title: 'Ten days', status: 'published', applications: 3, days_open: 10 },
+    { posting_id: 4, title: 'Closed since', status: 'closed', applications: 1, days_open: null },
+  ];
+  const overview = { status: 'ready', data: { blocks: { jobs: { available: true, by_status: { published: 3, closed: 2, draft: 1 }, most_applied: most } } } };
+  const card = buildJobs({ overview });
   assert.deepEqual(card.most.map((j) => [j.title, j.daysOpen]), [
     ['One day', '1 day open'], ['Before 609', 'Days open not recorded'], ['Ten days', '10 days open'], ['Closed since', null],
   ]);

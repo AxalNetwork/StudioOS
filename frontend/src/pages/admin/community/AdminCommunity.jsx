@@ -1,19 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { adminCircles, adminEvents, adminJobs } from '../../../lib/api';
 import { communityApi } from '../../../lib/api/community';
 import { reportError } from '../../../lib/log';
 import {
   AdminPageHeader, Bar100, Chart, ChartTable, Columns, HBars, Legend, RailFrame, StackBars, WorkerRail,
 } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
-import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
 import {
   AS_ENTERED_TIP, EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, OVERDUE_HOURS, PAGE_LINE, PAGE_UNREADABLE,
   PERIODS, RECENT_ROWS, SCOPE_LABEL, SCOPE_TITLE,
   asOfLabel, buildActivity, buildCircles, buildConsoles, buildEventsFunnel, buildJobs, buildNeeds, buildNextUp, buildTiles,
-  buildWellbeing, buildWho, clockOf, isEmptyCommunity, pageFailed, readAllPages, searchWithWeeks, weeksFrom,
+  buildWellbeing, buildWho, clockOf, isEmptyCommunity, pageFailed, searchWithWeeks, weeksFrom,
 } from './communityModel';
 import { ACTIVITY_KINDS, activityPage, openFrom, searchWith } from './lightboxModel';
 import ActivityLightbox from './ActivityLightbox';
@@ -63,42 +61,18 @@ function Opener({ box, onOpen, children }) {
 }
 
 const idle = { status: 'loading', data: null };
-const PAGE = 200;
 
 /**
- * The page's six reads. Each sets its own state, so a slow or failed read
- * holds back only its blocks. `reload()` makes them all again.
+ * #4717 package 2: THE PAGE'S ONE READ, the Community overview for the period,
+ * and every figure and row on the page under its `as_of`. Recent activity reads
+ * its own rows. The Studio glance, the events and jobs lists, the analytics and
+ * the circles list are the lightboxes' and consoles' reads, not this page's.
+ * `reload()` reads it again.
  */
 function useCommunityReads(weeks) {
-  const [reads, setReads] = useState({ glance: idle, events: idle, analytics: idle, jobs: idle, circles: idle, overview: idle });
+  const [reads, setReads] = useState({ overview: idle });
   const [asOf, setAsOf] = useState(null);
   const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    let live = true;
-    setReads((r) => ({ ...r, glance: idle, events: idle, analytics: idle, jobs: idle, circles: idle }));
-    const settle = (key, work) => work.then(
-      (data) => { if (live) { setReads((r) => ({ ...r, [key]: { status: 'ready', data } })); setAsOf(Date.now()); } },
-      (e) => { reportError(`admin-community:${key}`, e); if (live) setReads((r) => ({ ...r, [key]: { status: 'error', data: null } })); },
-    );
-    settle('glance', loadStudioGlance().then((payload) => {
-      const hq = glancesFromStudioGlance(payload, null).hq;
-      if (!hq) throw new Error('The glance carried no HQ block');
-      return hq;
-    }));
-    settle('events', Promise.all(['published', 'pending_review'].map((status) => readAllPages(
-      (offset) => adminEvents.list({ status, limit: PAGE, offset }), 'events',
-    ))).then(([published, waiting]) => [...published, ...waiting]));
-    settle('analytics', adminEvents.analytics());
-    settle('jobs', readAllPages((offset) => adminJobs.list({ limit: PAGE, offset }), 'jobs'));
-    settle('circles', adminCircles.list().then((a) => {
-      if (!Array.isArray(a?.circles)) throw new Error('The circles were not returned');
-      return a.circles;
-    }));
-    // #4717: the roster is the Community read's network block, counted on the
-    // server over every row; the page no longer counts a capped list.
-    return () => { live = false; };
-  }, [tick]);
 
   // D931's Community read: the period figures. A new period reads it alone again.
   useEffect(() => {
@@ -257,18 +231,25 @@ function FunnelParts({ ev, weeks, onRetry }) {
 }
 
 function EventsCard({ next, ev, weeks, onRetry, onOpen }) {
+  // #4717: the card is drawn whenever the Community read answered. Next up,
+  // the funnel and events by type each answer alone, so one that could not be
+  // read never hides the others.
   return (
-    <Card id="events" title="Events" state={next.state} reason={next.reason} onRetry={onRetry}
+    <Card id="events" title="Events" state="ready" onRetry={onRetry}
       foot={<span className="flex flex-wrap gap-4"><Opener box="events" onOpen={onOpen}>See all events</Opener><Link to="/admin/events" className={LINK}>Open events</Link></span>}>
       {() => (<>
       <FunnelParts ev={ev} weeks={weeks} onRetry={onRetry} />
       <span className={EYE}>Next up</span>
-      {next.rows?.length ? (
+      {next.state !== 'ready' ? <PartState part={next} onRetry={onRetry} /> : next.rows?.length ? (
         <ul className="m-0 flex list-none flex-col gap-2.5 p-0" data-testid="community-next-up">
           {next.rows.map((r) => (
             <li key={r.id} className="flex flex-col gap-1">
               <span className="flex items-baseline justify-between gap-3">
-                <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.title}</span>
+                <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">
+                  {r.title}
+                  {/* #4717: Next up is the events Upcoming counts, so a waiting one is listed and says so. */}
+                  {r.waiting ? <span className={`${TAG} ml-2`} data-testid={`community-next-up-waiting-${r.id}`}>Waiting for review</span> : null}
+                </span>
                 <span className={`${MONO} text-[12px] text-axal-muted dark:text-gray-400`}>{r.day}</span>
               </span>
               {typeof r.seats.fill === 'number' ? (
@@ -280,7 +261,7 @@ function EventsCard({ next, ev, weeks, onRetry, onOpen }) {
             </li>
           ))}
         </ul>
-      ) : <span className={SUB}>No published event starts in the next 30 days.</span>}
+      ) : <span className={SUB}>No published or waiting event starts in the next 30 days.</span>}
       </>)}
     </Card>
   );
@@ -586,7 +567,7 @@ export default function AdminCommunity() {
       stance="What members did in Community, as counts"
       note="This rail reads HQ’s own database, the accounts HQ holds on axal.vc, and no other."
       coverage={[
-        'Approvals waiting, events in the next 30 days and their seats, job postings by status, circles by type and the advisors and partners roster, from the consoles’ own reads',
+        'Approvals waiting, events in the next 30 days and their seats, job postings by status, circles by type and the advisors and partners roster, from the Community read',
         'Registrations, applications and expert bookings by week, show-up, events by type, who takes part, experts by state and the check-in band, as counts, from the Community read',
         'The ten newest community items, with no member named, from the activity read',
       ]}

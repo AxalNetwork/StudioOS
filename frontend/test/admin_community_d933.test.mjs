@@ -44,7 +44,11 @@ function overview(over = {}) {
   const blocks = {
     queue: {
       events: { available: true, count: 2, oldest_since: at(-100), oldest_hours: 100, overdue: 1, overdue_after_hours: 72, waiting_from_created_at: 0 },
-      jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, oldest_submitted_at: at(-30), oldest_wait_hours: 30 },
+      // #4717 package 2: the rows behind the queue's count, the server's own waits.
+      event_rows: { available: true, total: 2, rows: [
+        { event_id: 9, title: 'Pricing Clinic', waiting_since: at(-100), from_created: false, waiting_hours: 100, overdue: true },
+      ] },
+      jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, oldest_submitted_at: at(-30), oldest_wait_hours: 30, review: [] },
       overdue_hours: 72,
     },
     events: {
@@ -95,8 +99,7 @@ function overview(over = {}) {
   return { weeks: 4, week_starts: WEEKS4, current_week: '2026-10-19', as_of: at(0), blocks: merge(blocks, over) };
 }
 
-const GLANCE = { approvals: { lanes: [{ key: 'events', count: 2 }, { key: 'jobs', count: 2 }] } };
-const READS = (o = overview()) => ({ glance: ok(GLANCE), events: ok([]), analytics: ok({ events: [], unreadable: [] }), jobs: ok([]), circles: ok([]), overview: ok(o) });
+const READS = (o = overview()) => ({ overview: ok(o) });
 const tile = (tiles, key) => tiles.find((t) => t.key === key);
 
 // ---------------------------------------------------------------- the period
@@ -275,24 +278,27 @@ test('wellbeing: under seven founders the band is withheld with the canvas\'s se
 
 // ---------------------------------------------------------------- Needs a decision
 
-test('Needs a decision: each row says how long it waited, and is Overdue past 72 hours', () => {
-  const reads = {
-    events: ok([
-      { id: 1, title: 'Pricing Clinic', status: 'pending_review', submitted_at: at(-80), created_at: at(-200) },
-      { id: 2, title: 'Legacy Talk', status: 'pending_review', submitted_at: null, created_at: at(-10) },
-    ]),
-    jobs: ok([
-      { id: 3, title: 'Backend Engineer', status: 'pending_review', submitted_at: at(-72), created_at: at(-300) },
-      { id: 4, title: 'Old Posting', status: 'pending_review', submitted_at: null, created_at: at(-500) },
-    ]),
-  };
-  const n = buildNeeds(reads, NOW);
+test('#4717 Needs a decision: each row\'s wait and Overdue are the Community read\'s, measured at its as_of', () => {
+  // The server measured these at its `as_of`; the page words them and never recomputes them.
+  const o = overview({ queue: {
+    event_rows: { available: true, total: 2, rows: [
+      { event_id: 1, title: 'Pricing Clinic', waiting_since: at(-80), from_created: false, waiting_hours: 80, overdue: true },
+      { event_id: 2, title: 'Legacy Talk', waiting_since: at(-10), from_created: true, waiting_hours: 10, overdue: false },
+    ] },
+    jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, review: [
+      { posting_id: 3, title: 'Backend Engineer', company: null, waiting_since: at(-72), waiting_hours: 72, overdue: false },
+      { posting_id: 4, title: 'Old Posting', company: null, waiting_since: null, waiting_hours: null, overdue: false },
+    ] },
+  } });
+  const n = buildNeeds({ overview: ok(o) });
   assert.deepEqual(n.rows.map((r) => [r.title, r.wait, r.overdue]), [
     ['Pricing Clinic', 'waiting 3 days', true],
     ['Backend Engineer', 'waiting 3 days', false],
     ['Legacy Talk', 'waiting 10 hours · since created', false],
     ['Old Posting', 'wait not recorded', false],
-  ], 'exactly 72 hours is not overdue, and a job with no submission stamp is never dated');
+  ], 'a job with no submission stamp is never dated');
+  // The queues' own counts: 2 events (1 overdue) and 2 jobs (none overdue).
+  assert.equal(n.total, 4);
   assert.equal(n.overdue, 1);
 });
 
@@ -435,23 +441,35 @@ test('mounted: a filter chip reads Recent activity again for its kind only', asy
   } finally { await m.unmount(); }
 });
 
-test('mounted CM10a: the Community read failing costs only its blocks, and none is drawn as zero', async () => {
-  const m = await mount(COMMUNITY_PATH, { fail: ['overview', 'activity'] });
+test('#4717 mounted: the page\'s one read failing draws no figure at all, and says nothing is a zero', async () => {
+  const m = await mount(COMMUNITY_PATH, { fail: ['overview'] });
   try {
-    assert.match(m.of('community-tile-registrations'), /Unreadable.*Community read could not be read/s);
-    assert.match(m.of('community-card-activity'), /could not be read\. That is not the same as no activity\./);
+    assert.match(m.of('community-unreadable'), /Community figures could not be read\. Nothing here is a zero\./);
+    assert.ok(!m.has('community-tiles'), 'a tile drawn without its read');
+    assert.ok(!m.has('community-card-jobs'), 'a card drawn without its read');
+  } finally { await m.unmount(); }
+});
+
+test('mounted CM10a: a block the Community read could not read costs only that block, and Recent activity fails alone', async () => {
+  const answer = () => overview({ jobs: gone('The job board'), events: { weekly: gone('The weekly registrations') } });
+  const m = await mount(COMMUNITY_PATH, { fail: ['activity'], answer });
+  try {
+    assert.match(m.of('community-tile-registrations'), /Unreadable.*could not be read/s);
+    assert.match(m.of('community-tile-applications'), /Unreadable.*could not be read/s);
     assert.match(m.of('community-card-recent'), /Community activity could not be read\. That is not the same as nothing happening\./);
-    assert.match(m.of('community-card-wellbeing'), /could not be read/);
-    assert.match(m.of('community-tile-waiting'), /4.*2 events · 2 jobs/s, 'the glance stopped answering');
-    assert.ok(!m.has('community-unreadable'), 'the page banner needs every read to fail');
+    assert.match(m.of('community-tile-waiting'), /4.*2 events · 2 jobs/s, 'the queues stopped answering');
+    assert.match(m.of('community-card-wellbeing'), /9 verified|verified/);
+    assert.ok(!m.has('community-unreadable'), 'one block\'s failure is not the page\'s');
   } finally { await m.unmount(); }
 });
 
 test('mounted: an answer for another period is refused, never drawn as this one', async () => {
   const m = await mount(`${COMMUNITY_PATH}?weeks=52`, { answer: () => ({ ...overview(), weeks: 4 }), pin: true });
   try {
-    assert.match(m.of('community-tile-registrations'), /Unreadable/);
-    assert.doesNotMatch(m.of('community-tile-registrations'), /60/);
+    // #4717: the page's one read refused, so no figure of another period is drawn as this one's.
+    assert.match(m.of('community-unreadable'), /Nothing here is a zero/);
+    assert.ok(!m.has('community-tiles'));
+    assert.doesNotMatch(m.text(), /60 registrations|\b60\b.*on the 4 weeks/);
   } finally { await m.unmount(); }
 });
 

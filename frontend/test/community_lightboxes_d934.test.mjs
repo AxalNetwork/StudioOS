@@ -100,6 +100,8 @@ function worker(opt = {}) {
     if (p === '/api/admin/jobs') return down('jobs') ? json({ detail: 'down' }, 503) : json({ jobs: JOBS_ROWS.slice(offset, offset + limit) });
     if (p === '/api/admin/circles') return down('circles') ? json({ detail: 'down' }, 503) : json({ circles: CIRCLES_ROWS });
     if (p === '/api/admin/network-profiles') return json({ profiles: [] });
+    // #4717 package 2: the page's one read. Its blocks are not under test here, only the lightboxes their openers open.
+    if (p === '/api/admin/community/overview') return json({ weeks: Number(u.searchParams.get('weeks') || 12), as_of: new Date(NOW).toISOString(), blocks: {} });
     if (p === '/api/admin/community/activity') {
       if (down('activity')) return json({ detail: 'down' }, 503);
       const total = opt.activityTotal ?? 60;
