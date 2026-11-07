@@ -10,6 +10,7 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
 import { mergeValues, renderContract } from '../services/licenceContract';
 import { COUNSEL_REVIEW_SLUGS } from '../services/templateFormat';
+import { templateSafety, templateUseRefusal } from '../services/templateSafety';
 import { createAndSendEnvelope, templateBodyRefusal, TemplateBodyError } from './esign';
 import { refuse } from '../util/refusal';
 import { pushLicenceToBranch } from '../services/licencePush';
@@ -131,6 +132,8 @@ r.get('/:uid/contract', async (c) => {
         slug: t.slug, title: t.title, category: t.category, version: t.version,
         // D803: a body counsel has not reviewed, said where HQ picks it.
         counsel_review: COUNSEL_REVIEW_SLUGS.has(t.slug),
+        // D4811: the overlays the instantiate route refuses on.
+        safety: templateSafety(t),
       })),
       ...(templates.length ? {} : {
         templates_reason:
@@ -161,9 +164,11 @@ r.post('/:uid/contract', async (c) => {
     const tpl = await getTemplate(c.env, slug);
     if (!tpl) return c.json({ error: 'template_not_found', template_slug: slug }, 404);
     // D758 — a row with no body is refused before anything is written, so the
-    // current draft is not superseded by an empty one.
-    if (Number(tpl.is_stub) === 1 || !String(tpl.body_md || '').trim()) {
-      const r = templateBodyRefusal(new TemplateBodyError('no_body', tpl.slug), 'admin')!;
+    // current draft is not superseded by an empty one. D4811 — so is a
+    // restricted one (legal review required), through the shared predicate.
+    const blocked = templateUseRefusal(tpl);
+    if (blocked) {
+      const r = templateBodyRefusal(new TemplateBodyError(blocked.code === 'template_restricted' ? 'restricted' : 'no_body', tpl.slug), 'admin')!;
       return refuse(c, r.status, { code: r.code, message: r.message });
     }
 
