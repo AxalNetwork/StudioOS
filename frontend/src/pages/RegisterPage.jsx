@@ -9,6 +9,7 @@ import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
 import AxalLogo from '../components/AxalLogo';
 import AuthShell, { AuthCard } from '../components/auth/AuthShell';
+import { usePageMeta } from '../lib/seo';
 import { normaliseRef, readRefCookie } from '../lib/referralRef';
 import { planIntentFrom } from '../lib/planIntent';
 import { LANES, LANE_ROLE, registerHeading } from '../lib/registerCopy';
@@ -18,6 +19,8 @@ const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
 export default function RegisterPage() {
   useForcedLightTheme();
+  // D4582: this route's own head, also when reached by a redirect from a protected page.
+  usePageMeta({ analytics: false });
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ email: '', name: '' });
   const [loading, setLoading] = useState(false);

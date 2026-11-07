@@ -425,6 +425,10 @@ const ROUTES = [
       'Join the Axal VC network as a founder, investor, advisor, or service partner.',
     type: 'website',
     section: 'company',
+    // D4582: the sign-up and sign-in pages are public entry points, listed in
+    // sitemap.xml and allowed by robots.txt, so they are indexable. Said here
+    // so the prerendered head and a client-side visit agree.
+    robots: 'index, follow',
   },
   {
     path: '/login',
@@ -432,6 +436,7 @@ const ROUTES = [
     description: 'Sign in to Axal VC StudioOS.',
     type: 'website',
     section: 'company',
+    robots: 'index, follow', // D4582, as for /register
   },
 
   // ---- The Spin-Out demo day's landing page (/lp/*) ----------------------
@@ -554,5 +559,7 @@ export function ogTagsFor(pathname, overrides = {}) {
     siteName: SITE_NAME,
     card: 'summary_large_image',
     imageAlt: title,
+    // D4582: every route states its indexing policy; the default is indexable.
+    robots: entry?.robots || 'index, follow',
   };
 }

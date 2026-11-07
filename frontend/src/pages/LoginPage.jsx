@@ -13,6 +13,7 @@ import {
   popupRequestBody, applyGoogleSession, popupShouldRedirect, wantsGoogleCanary,
 } from '../lib/googlePopup';
 import AuthShell, { AuthCard, authV2 } from '../components/auth/AuthShell';
+import { usePageMeta } from '../lib/seo';
 
 // Single-page sign-in: email + authenticator code + Cloudflare Turnstile.
 // SMS is intentionally NOT offered as a primary sign-in factor — it lives
@@ -119,6 +120,8 @@ function safeNextPath() {
 
 export default function LoginPage() {
   useForcedLightTheme();
+  // D4582: this route's own head, also when reached by a redirect from a protected page.
+  usePageMeta({ analytics: false });
   const [email, setEmail] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');

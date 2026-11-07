@@ -58,6 +58,58 @@ export function fireAnalytics(path) {
 }
 
 /**
+ * D4582 (#4582): write one route's head onto `doc` and return the function that
+ * puts it back. It sets the same tags `scripts/prerender-og.mjs` bakes into the
+ * route's HTML, including the canonical link and the robots policy, so a visit
+ * reached by client-side navigation (for example /grow redirecting to /login)
+ * carries the destination's head, never the page it came from.
+ */
+export function applyHeadTags(doc, tags) {
+  const { title: fullTitle, description: desc, url, image: ogImage } = tags;
+  const prevTitle = doc.title;
+  doc.title = fullTitle;
+  const refs = [
+    setMeta('meta[name="description"]', 'content', desc),
+    setMeta('meta[name="robots"]', 'content', tags.robots || 'index, follow'),
+    setMeta('meta[property="og:title"]', 'content', fullTitle),
+    setMeta('meta[property="og:description"]', 'content', desc),
+    setMeta('meta[property="og:type"]', 'content', tags.type),
+    setMeta('meta[property="og:url"]', 'content', url),
+    setMeta('meta[property="og:image"]', 'content', ogImage),
+    setMeta('meta[property="og:image:alt"]', 'content', tags.imageAlt),
+    setMeta('meta[property="og:site_name"]', 'content', tags.siteName),
+    setMeta('meta[name="twitter:card"]', 'content', tags.card),
+    setMeta('meta[name="twitter:title"]', 'content', fullTitle),
+    setMeta('meta[name="twitter:description"]', 'content', desc),
+    setMeta('meta[name="twitter:image"]', 'content', ogImage),
+    setMeta('meta[name="twitter:image:alt"]', 'content', tags.imageAlt),
+    setCanonical(url),
+  ].filter(Boolean);
+  return () => {
+    doc.title = prevTitle;
+    // Restore previous values; if we created the tag, remove it.
+    refs.forEach((r) => {
+      if (r.created) r.el.remove();
+      else r.el.setAttribute(r.attr || 'content', r.prev);
+    });
+  };
+}
+
+function setCanonical(href) {
+  if (typeof document === 'undefined') return null;
+  let el = document.head.querySelector('link[rel="canonical"]');
+  const created = !el;
+  if (!el) {
+    el = document.createElement('link');
+    el.setAttribute('rel', 'canonical');
+    document.head.appendChild(el);
+  }
+  const prev = el.getAttribute('href') || '';
+  el.setAttribute('href', href);
+  return { el, prev, created, attr: 'href' };
+}
+
+/**
  * Apply a route's metadata to document.head.
  *
  * IMPORTANT — this is a progressive enhancement, NOT the fix for link previews.
@@ -72,48 +124,21 @@ export function fireAnalytics(path) {
  * a client-side visit and a cold load advertise identical values.
  *
  * All arguments are optional overrides; anything omitted comes from the route's
- * registry entry.
+ * registry entry. `analytics: false` skips the pageview beacon (the sign-in and
+ * sign-up pages set their head without adding a new beacon, D4582).
  */
-export function usePageMeta({ title, description, path, image, type } = {}) {
+export function usePageMeta({ title, description, path, image, type, analytics = true } = {}) {
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
-    const prevTitle = document.title;
-
     const pathname =
       path || (typeof window !== 'undefined' ? window.location.pathname : '/');
-    const tags = ogTagsFor(pathname, { title, description, image, type });
-    const { title: fullTitle, description: desc, url, image: ogImage } = tags;
-
-    document.title = fullTitle;
-    const refs = [
-      setMeta('meta[name="description"]', 'content', desc),
-      setMeta('meta[property="og:title"]', 'content', fullTitle),
-      setMeta('meta[property="og:description"]', 'content', desc),
-      setMeta('meta[property="og:type"]', 'content', tags.type),
-      setMeta('meta[property="og:url"]', 'content', url),
-      setMeta('meta[property="og:image"]', 'content', ogImage),
-      setMeta('meta[property="og:image:alt"]', 'content', tags.imageAlt),
-      setMeta('meta[property="og:site_name"]', 'content', tags.siteName),
-      setMeta('meta[name="twitter:card"]', 'content', tags.card),
-      setMeta('meta[name="twitter:title"]', 'content', fullTitle),
-      setMeta('meta[name="twitter:description"]', 'content', desc),
-      setMeta('meta[name="twitter:image"]', 'content', ogImage),
-      setMeta('meta[name="twitter:image:alt"]', 'content', tags.imageAlt),
-    ].filter(Boolean);
+    const restore = applyHeadTags(document, ogTagsFor(pathname, { title, description, image, type }));
 
     // Fire pageview beacon once per mount.
-    fireAnalytics(path || window.location.pathname);
+    if (analytics) fireAnalytics(path || window.location.pathname);
 
-    return () => {
-      document.title = prevTitle;
-      // Restore previous values; if we created the tag, remove it.
-      refs.forEach((r) => {
-        if (!r) return;
-        if (r.created) r.el.remove();
-        else r.el.setAttribute('content', r.prev);
-      });
-    };
-  }, [title, description, path, image, type]);
+    return restore;
+  }, [title, description, path, image, type, analytics]);
 }
 
 export function injectJsonLd(id, payload) {
