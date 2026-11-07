@@ -109,6 +109,17 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
   const gen = useRef(0);
   const busy = useRef(false);
 
+  // The catalogue. Its retry leaves the layout, and any save in flight, alone.
+  useEffect(() => {
+    let live = true;
+    setModules(undefined);
+    Promise.resolve().then(() => api.modules(sent)).then(
+      (value) => { if (live) setModules(value); },
+      (reason) => { if (!live) return; reportError('Studio:modules', reason); setModules(failed(reason, readFailureOf(reason))); },
+    );
+    return () => { live = false; };
+  }, [api, sent, nm]);
+
   // The saved layout. A new read (first, retry, profile change) ends whatever the page was doing with the old one.
   useEffect(() => {
     let live = true;
@@ -125,17 +136,6 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
     );
     return () => { live = false; gen.current += 1; busy.current = false; };
   }, [api, sent, n]);
-
-  // The catalogue. Its retry leaves the layout, and any save in flight, alone.
-  useEffect(() => {
-    let live = true;
-    setModules(undefined);
-    Promise.resolve().then(() => api.modules(sent)).then(
-      (value) => { if (live) setModules(value); },
-      (reason) => { if (!live) return; reportError('Studio:modules', reason); setModules(failed(reason, readFailureOf(reason))); },
-    );
-    return () => { live = false; };
-  }, [api, sent, nm]);
 
   useEffect(() => () => clearTimeout(savedTimer.current), []);
 
