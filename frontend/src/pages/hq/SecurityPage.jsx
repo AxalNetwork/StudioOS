@@ -1,10 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import SecurityTabs from './security/SecurityTabs.jsx';
+import OverviewWorkspace from './security/OverviewWorkspace.jsx';
+import SourceAvailability from './security/SourceAvailability.jsx';
+import { buildOverview, clockOf } from './security/overviewModel.js';
+import { tabFromSearch, tabOf } from './security/securityTabs.js';
 
 /**
  * HQ · Security — canvas H23 (Admin · Super), which "completes Y2/H7".
@@ -839,11 +844,37 @@ function DsrClose({ row, onDone }) {
   );
 }
 
+/** A read as the Overview model takes it: in flight, failed, or answered. */
+const readOf = (v, at) => (v === null ? { state: 'loading' } : v === UNAVAILABLE ? { state: 'unreadable' } : { state: 'ready', value: v, at });
+
+/**
+ * D4800 (#4800, D4803) — the page is Security v2's shell: one header, seven
+ * workspaces (`security/securityTabs.js`) at `?tab=`, and the three reads it
+ * has always made. The reads live HERE, once, so moving between workspaces
+ * never re-reads and every workspace sees the same answer. The view below
+ * (`SecurityConsole`) takes them as props so a test can render any workspace
+ * with a payload.
+ */
 export default function HqSecurityPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = tabFromSearch(searchParams.get('tab'));
+  const onTab = useCallback((key) => {
+    setSearchParams((cur) => {
+      const next = new URLSearchParams(cur);
+      next.set('tab', key);
+      return next;
+    });
+  }, [setSearchParams]);
+
+  // When each read answered, in the browser — the "Observed" time. The
+  // platform records no per-store collection time (#4800 question C).
+  const [readAt, setReadAt] = useState({ overview: null, feed: null });
+  const stampRead = (k) => setReadAt((cur) => ({ ...cur, [k]: new Date().toISOString() }));
+
   const [data, setData] = useState(null);
   const load = useCallback(() => {
     setData(null);
-    api.hqSecurityOverview().then(setData, (e) => { reportError('hq-security', e); setData(UNAVAILABLE); });
+    api.hqSecurityOverview().then((r) => { setData(r); stampRead('overview'); }, (e) => { reportError('hq-security', e); setData(UNAVAILABLE); });
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -872,13 +903,35 @@ export default function HqSecurityPage() {
   const loadFeed = useCallback(() => {
     setFeed(null);
     api.hqGovernance(filter).then(
-      (r) => setFeed(r),
+      (r) => { setFeed(r); stampRead('feed'); },
       (e) => { reportError('hq-governance', e); setFeed(UNAVAILABLE); },
     );
   }, [filter]);
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  return (
+    <SecurityConsole
+      tab={tab}
+      onTab={onTab}
+      data={data}
+      load={load}
+      feed={feed}
+      filter={filter}
+      setFilter={setFilter}
+      loadFeed={loadFeed}
+      sessionList={sessionList}
+      loadSessions={loadSessions}
+      onSessionAct={onSessionAct}
+      readAt={readAt}
+    />
+  );
+}
+
+export function SecurityConsole({
+  tab = 'overview', onTab = () => {}, data, load, feed, filter, setFilter, loadFeed, sessionList, loadSessions, onSessionAct, readAt = {},
+}) {
   const feedReady = feed && feed !== UNAVAILABLE;
   const access = feedReady ? feed.data_access : null;
 
@@ -979,6 +1032,388 @@ export default function HqSecurityPage() {
     />
   );
 
+  // D4800 — the Overview workspace's findings, clear row, areas and sources,
+  // from the two reads above and nothing else.
+  const overviewModel = buildOverview({ overview: readOf(data, readAt.overview), feed: readOf(feed, readAt.feed) });
+  const filterLabel = feedReady && feed.filter && feed.filter !== 'all'
+    ? (feed.filters || GOV_FILTERS).find((f) => f.key === feed.filter)?.label || feed.filter
+    : null;
+  const refreshAll = () => { load(); loadFeed(); loadSessions(); };
+  const observed = clockOf(readAt.overview);
+  const here = tabOf(tab);
+
+  // The implementation notes that used to open the page. They are true and
+  // they stay, behind "Source details" (#4800: out of the primary reading path).
+  const sourceNotes = (
+    <>
+      <p>
+        Was Governance, which described the audit log and nothing else. The ledger here is H23&apos;s: five
+        stores — the security_events ledger of refusals and step-ups, the admin action log, the activity log,
+        impersonation sessions and licence events — merged newest-first into one monospace feed. Sanctions and
+        backup read their own stores; the restore drill reads the marker each run writes. Only a licence
+        event names a subsidiary and only a security event names its deployment — nothing else here is
+        scoped per subsidiary yet, the guardrail counters included.
+      </p>
+      <p>
+        Freshness is the time this browser received each read. No store records when it was last collected,
+        so no source here can be marked Stale yet.
+      </p>
+    </>
+  );
+
+  /**
+   * D4800 — THE WORKSPACES, keyed by `securityTabs.js`. Overview is Security
+   * v2's; the other six hold today's zones for their area, moved here intact
+   * so nothing the page did before has gone. #4801 to #4803 replace an entry
+   * (Access first) rather than adding a second switch.
+   */
+  const workspaces = {
+    overview: (
+      <OverviewWorkspace
+        model={overviewModel}
+        onRetry={{ overview: load, feed: loadFeed }}
+        filterLabel={filterLabel}
+        sourceNotes={sourceNotes}
+      />
+    ),
+    events: (
+      <>
+        {/* Canvas H23's ledger. ts · actor · branch · event · outcome, one
+            filter bar, monospace on every cell, and NO tile above it — H7's
+            rule, which H23 restates: a summary tile over an audit log is a
+            dashboard, and legibility is not the property you want from a
+            log. */}
+        <Zone
+          title="Security events"
+          sub={feedReady
+            ? `${feed.rows.length} newest${feed.more ? ' of more' : ''} · ${feed.sources.filter((x) => x.available).length} of ${feed.sources.length} stores read`
+            : 'five stores, one ledger · append-only'}
+        >
+          <div className="flex flex-wrap items-center gap-2" data-testid="hq-gov-filters">
+            {(feedReady ? feed.filters : GOV_FILTERS).map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                aria-pressed={filter === f.key}
+                title={f.reads ? `reads ${f.reads}` : undefined}
+                className={`rounded-lg border px-3 py-1.5 text-[11.5px] font-semibold ${
+                  filter === f.key
+                    ? 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
+                    : 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:bg-gray-900 dark:hover:bg-gray-800'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {feed === UNAVAILABLE && (
+            <div className="mt-3">
+              <Unreadable
+                what="The security ledger"
+                claim="This is not a claim that nobody did anything."
+                onRetry={() => setFilter((f) => f)}
+              />
+            </div>
+          )}
+          {feed === null && <p className="mt-3 text-[12px] text-axal-faint">Loading…</p>}
+
+          {feedReady && feed.rows.length === 0 && (
+            <p className="mt-3 text-[12px] text-axal-faint" data-testid="hq-gov-empty">
+              No event matches this filter. Every store below was read and none held a row —
+              which is a different fact from a store that could not be read.
+            </p>
+          )}
+
+          {feedReady && feed.rows.length > 0 && (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full font-mono text-[11px]" data-testid="hq-gov-feed">
+                <thead>
+                  <tr className="text-left text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
+                    <th className="py-1 pr-3">ts</th>
+                    <th className="py-1 pr-3">actor</th>
+                    <th className="py-1 pr-3">branch</th>
+                    <th className="py-1 pr-3">event</th>
+                    <th className="py-1">outcome</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {feed.rows.map((r) => (
+                    <tr key={r.key} className={`border-t border-axal-hairline align-top ${ROW_TINT[r.tone] || ''}`}>
+                      <td className="py-1.5 pr-3 font-mono text-[10.5px] text-axal-faint">
+                        {day(r.at) || <Unrecorded>no timestamp</Unrecorded>}
+                      </td>
+                      <td className="py-1.5 pr-3 font-mono font-semibold">{r.actor || <Unrecorded>unnamed</Unrecorded>}</td>
+                      <td className="py-1.5 pr-3 font-mono text-axal-muted">{r.tenant || <Unrecorded />}</td>
+                      <td className={`py-1.5 pr-3 font-mono font-bold ${ACTION_INK[r.tone] || ACTION_INK.note}`}>
+                        {r.action}
+                        {r.target ? <span className="ml-2 font-normal text-axal-muted">{r.target}</span> : null}
+                      </td>
+                      <td className={`py-1.5 font-mono font-semibold ${OUTCOME_INK[r.outcome] || 'text-axal-muted'}`}>
+                        {r.outcome || <Unrecorded />}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {feedReady && (
+            <>
+              <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-reason">
+                <b>Branch.</b> {feed.tenant_reason}
+              </p>
+              <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-axal-faint" data-testid="hq-gov-sources">
+                {feed.sources.map((src) => (
+                  <li key={src.table} className={src.available ? 'font-mono' : 'font-mono text-red-700 dark:text-red-300'}>
+                    {src.table} ·{' '}
+                    {src.available ? `${num(src.rows)} read` : (src.reason || 'unreadable')}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+                Newest first, no pagination above the fold, and no summary tile over it: the first question of
+                an audit log is what just happened, never page four, and a count of refusals is a dashboard
+                where the refusals themselves are the record. Refused sign-ins, impersonations and suspensions
+                carry a tint — the only decoration here, and it is there to be scanned for. A refusal is one row
+                per minute per email address and network, carrying the first reason in that minute: the ledger records
+                that someone was refused, not how many times. Whether an HQ act landed on its branch is on
+                Platform → Deployments, which reads the audit mirror.
+              </p>
+              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-view">
+                <b>Viewing as a branch.</b> {feed.tenant_view_reason}
+              </p>
+            </>
+          )}
+          {(se?.not_counted || []).length > 0 && (
+            <ul className="mt-3 space-y-1.5" data-testid="hq-security-events-not-counted">
+              {se.not_counted.map((n) => (
+                <li key={n.what} className="text-[11px] leading-relaxed text-axal-faint">
+                  <b className="text-axal-muted">{n.what}</b> — <Unrecorded />. {n.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+          {se && !se.available && (
+            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-unreadable">
+              The ledger&apos;s counts could not be read: {se.reason} The feed above still shows what the other
+              stores hold; a security_events row absent from it is a store that answered nothing, not a quiet day.
+            </p>
+          )}
+          {se?.available && (
+            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-retention">
+              Kept for {se.retention_days} days, and the ledger&apos;s own seal refuses any delete inside that window.
+            </p>
+          )}
+        </Zone>
+
+      </>
+    ),
+    access: (
+      <>
+        <Zone title="Sessions and access" sub="each act recorded with its reason">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `token under ${sessions.token_hours}h old, not revoked or signed out` : (sessions?.reason || 'unreadable')} />
+            <Stat label="Impersonations live" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'no ended_at yet' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
+            <Stat label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+            {/* D200 — this tile was `value={null}` under "no security_events".
+                It reads the ledger now: refused sign-ins in the last 24
+                hours, and its reason when the ledger could not be read. */}
+            <Stat label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+          </div>
+          <SessionsPanel list={sessionList} onAct={onSessionAct} onRetry={loadSessions} />
+          <ForceReauth onDone={load} />
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+            An impersonation is a session like any other, which is why it sits in this list. Each account can
+            also revoke its own devices under Settings. The platform-wide action above bumps every
+            account&apos;s token floor.
+          </p>
+        </Zone>
+
+
+        {/* H7's own zone. Not "what changed" — who read rows they do not
+            own. The two halves are separate blocks so one unreadable store
+            cannot make the other half look like the whole answer. */}
+        <Zone title="Data access" sub="impersonations and exports">
+          {feed === UNAVAILABLE && (
+            <Unreadable
+              what="The security ledger"
+              claim="This is not a claim that nothing happened."
+              onRetry={loadFeed}
+            />
+          )}
+          {feed === null && <p className="text-[12px] text-axal-faint">Loading…</p>}
+          {access && (
+            <div className="grid gap-3 md:grid-cols-2" data-testid="hq-data-access">
+              <div>
+                <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
+                  Impersonations · {access.expiry_minutes}-minute limit
+                </div>
+                {access.impersonations.available ? (
+                  access.impersonations.items.length === 0
+                    ? <p className="mt-1.5 text-[12px] text-axal-faint">No support session is on record.</p>
+                    : (
+                      <ul className="mt-1.5 space-y-1.5">
+                        {access.impersonations.items.map((d) => (
+                          <li
+                            key={d.what + d.meta}
+                            className={`rounded-lg border px-3 py-2 text-[11.5px] ${
+                              d.live
+                                ? 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
+                                : 'border-axal-hairline bg-axal-ground'
+                            }`}
+                          >
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="min-w-0 truncate font-semibold">{d.what}</span>
+                              <span className={`shrink-0 font-mono text-[10px] ${d.overdue ? 'text-red-700 dark:text-red-300' : 'text-axal-faint'}`}>
+                                {d.dur || <Unrecorded>clock unknown</Unrecorded>}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                ) : (
+                  <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.impersonations.reason}</p>
+                )}
+              </div>
+              <div>
+                <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Exports</div>
+                {access.exports.available ? (
+                  access.exports.items.length === 0
+                    ? <p className="mt-1.5 text-[12px] text-axal-faint">No export is on record.</p>
+                    : (
+                      <ul className="mt-1.5 space-y-1.5">
+                        {access.exports.items.map((d) => (
+                          <li key={d.what + d.meta} className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="min-w-0 truncate font-semibold">{d.what}</span>
+                              <span className="shrink-0 font-mono text-[10px] text-axal-faint">{d.dur}</span>
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                ) : (
+                  <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.exports.reason}</p>
+                )}
+              </div>
+            </div>
+          )}
+          <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
+            A session that ran to its limit is recorded exactly like one ended early — the log does not
+            distinguish diligence from the clock running out, and it should not. A row still open past the
+            limit reads <b>not closed</b>: the token expired on time, the closing write is best-effort, and
+            &ldquo;0m left&rdquo; would say somebody is still inside.
+          </p>
+        </Zone>
+      </>
+    ),
+    privacy: (
+      <>
+        <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
+          {/* D200 — H23 draws the DSR clocks "by territory · runs against the
+              holding branch". Every request this database holds is HQ-held
+              by construction, so the grouping has one group and the sentence
+              below says why there is not a second, from the server. */}
+          {ready && dsrGroups.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold text-axal-muted" data-testid="hq-dsr-groups">
+              {dsrGroups.map((g) => (
+                <span key={g.branch} className="font-mono">{g.branch} · {num(g.open)} open</span>
+              ))}
+            </div>
+          )}
+          {ready && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
+          {ready && dsr.length > 0 && (
+            <ul className="space-y-1.5" data-testid="hq-dsr">
+              {dsr.map((d) => (
+                <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
+                  <div className="flex items-center justify-between gap-3">
+                    <DsrSubject row={d} />
+                    <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
+                      {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
+                    </span>
+                  </div>
+                  {/* D168 — HAS THIS SUBJECT ASKED BEFORE? `prior_requests` is
+                      null, never 0, when the ledger could not be read: "never
+                      asked before" is a claim, and an unreadable store has not
+                      made it. A third ask read as a first is the thing this
+                      line exists to prevent. */}
+                  {d.prior_requests === null ? (
+                    <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history-unreadable">
+                      <Unrecorded>earlier requests unknown</Unrecorded>
+                    </p>
+                  ) : d.prior_requests > 0 ? (
+                    <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history">
+                      {num(d.prior_requests)} earlier request{d.prior_requests === 1 ? '' : 's'}
+                      {d.last_outcome ? ` · last ${d.last_outcome}` : ''}
+                      {d.last_outcome_at ? ` on ${String(d.last_outcome_at).slice(0, 10)}` : ''}
+                    </p>
+                  ) : null}
+                  <DsrClose row={d} onDone={load} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
+          {/* D481 — the zone printed "erasure" as a literal on every row.
+              The kinds the ledger does NOT hold are named here, from the
+              payload, each Not recorded with its reason. */}
+          {ready && <DsrKindsNotRecorded kinds={data.dsr?.kinds} />}
+          {ready && dsrBranches && (
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-dsr-branches">
+              {dsrBranchesSentence(dsrBranches)}
+            </p>
+          )}
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+            The clock is statutory — one month from receipt, not from triage. Requests come from each account&apos;s own
+            Settings; <b>erasure itself is still a manual act</b>, and closing a request here records that act rather
+            than performing one. A withdrawal is the subject&apos;s own and is recorded when they cancel.
+          </p>
+        </Zone>
+
+      </>
+    ),
+    trust: (
+      <div className="grid gap-4 md:grid-cols-2">
+        <Zone title="Sanctions review" sub="from the store's own runs">
+          <Sanctions block={ready ? data.sanctions : null} unreadable={data === UNAVAILABLE} />
+        </Zone>
+        <Zone title="KYC" sub="the review queue">
+          <div className="grid grid-cols-2 gap-2">
+            <Stat label="KYC pending" value={ready ? num(kyc.pending) ?? '0' : null} note="documents submitted, unverified" tone={kyc.pending ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+            <Stat label="KYC approved" value={ready ? num(kyc.approved) ?? '0' : null} note="active accounts" />
+            <Stat label="KYC rejected" value={ready ? num(kyc.rejected) ?? '0' : null} note="active accounts" />
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+            KYC status is one trust fact; sanctions screening is another and has its own card above, because the
+            two are different stores that fail apart.
+          </p>
+          {ready && <NotRecordedList items={data.kyc_not_recorded} testid="hq-kyc-not-recorded" />}
+        </Zone>
+      </div>
+    ),
+    'ai-safety': (
+      <>
+        <Zone title="AI safety" sub="guardrail hits · Advisor-AI outputs the screen caught">
+          <AiSafety block={ready ? data.ai_safety : null} />
+        </Zone>
+      </>
+    ),
+    resilience: (
+      <>
+        <Zone title="Backup / DR drill" sub="two facts, each its own state">
+          <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
+          {ready && <NotRecordedList items={data.backup_dr?.not_recorded} testid="hq-dr-not-recorded" />}
+        </Zone>
+      </>
+    ),
+  };
+
   return (
     <RailFrame rail={rail} data-testid="hq-security-page">
       <div className="min-w-0">
@@ -996,348 +1431,39 @@ export default function HqSecurityPage() {
 
         <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-            <ShieldCheck size={13} /> HQ · Security
+            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+              <ShieldCheck size={13} /> HQ · Security
+            </div>
+            <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">
+              {tab === 'overview' ? 'Security' : here.label}
+            </h1>
+            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted" data-testid="security-workspace-sub">{here.sub}</p>
+            <p className="mt-1 text-[12.5px]">
+              <Link to="/admin/security/obligations" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Trust obligations by role</Link>
+              {' · '}
+              {/* D1079 (#2971): TRU14, the public trust center's content. */}
+              <Link to="/admin/security/trust-center" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="security-trust-content-link">Trust center content</Link>
+            </p>
           </div>
-          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Security</h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Was Governance, which described the audit log and nothing else. The ledger here is H23&apos;s: five
-            stores — the security_events ledger of refusals and step-ups, the admin action log, the activity log,
-            impersonation sessions and licence events — merged newest-first into one monospace feed. Sanctions and
-            backup read their own stores; the restore drill reads the marker each run writes. Only a licence
-            event names a subsidiary and only a security event names its deployment — nothing else here is
-            scoped per subsidiary yet, the guardrail counters included.
-          </p>
-          <p className="mt-1 text-[12.5px]">
-            <Link to="/admin/security/obligations" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Trust obligations by role</Link>
-            {' · '}
-            {/* D1079 (#2971): TRU14, the public trust center's content. */}
-            <Link to="/admin/security/trust-center" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="security-trust-content-link">Trust center content</Link>
-          </p>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <HeaderAsk />
+            {/* SE01's freshness and scope line: when the overview was read,
+                Refresh, and the scope every figure here is drawn from. */}
+            <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-axal-muted" data-testid="security-observed">
+              <span aria-live="polite">{observed ? <>Observed <b>{observed}</b></> : (data === UNAVAILABLE ? 'Not read' : 'Reading…')}</span>
+              <button type="button" onClick={refreshAll} className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Refresh</button>
+              <span className="rounded-md border border-axal-hairline px-1.5 py-0.5 text-[10.5px] font-semibold dark:border-gray-700" title="Scope">HQ-held accounts</span>
+            </div>
+            <SourceAvailability sources={overviewModel.sources} onRetry={loadFeed} filterLabel={filterLabel} compact data-testid="security-header-sources" />
           </div>
-          <HeaderAsk />
         </header>
 
-        {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
+        <SecurityTabs current={tab} onSelect={onTab} marks={overviewModel.marks} />
 
-        <div className="mt-4 space-y-4">
-          {/* Canvas H23's ledger. ts · actor · branch · event · outcome, one
-              filter bar, monospace on every cell, and NO tile above it — H7's
-              rule, which H23 restates: a summary tile over an audit log is a
-              dashboard, and legibility is not the property you want from a
-              log. */}
-          <Zone
-            title="Security events"
-            sub={feedReady
-              ? `${feed.rows.length} newest${feed.more ? ' of more' : ''} · ${feed.sources.filter((x) => x.available).length} of ${feed.sources.length} stores read`
-              : 'five stores, one ledger · append-only'}
-          >
-            <div className="flex flex-wrap items-center gap-2" data-testid="hq-gov-filters">
-              {(feedReady ? feed.filters : GOV_FILTERS).map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setFilter(f.key)}
-                  aria-pressed={filter === f.key}
-                  title={f.reads ? `reads ${f.reads}` : undefined}
-                  className={`rounded-lg border px-3 py-1.5 text-[11.5px] font-semibold ${
-                    filter === f.key
-                      ? 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
-                      : 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:bg-gray-900 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
+        {data === UNAVAILABLE && tab !== 'overview' && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
 
-            {feed === UNAVAILABLE && (
-              <div className="mt-3">
-                <Unreadable
-                  what="The security ledger"
-                  claim="This is not a claim that nobody did anything."
-                  onRetry={() => setFilter((f) => f)}
-                />
-              </div>
-            )}
-            {feed === null && <p className="mt-3 text-[12px] text-axal-faint">Loading…</p>}
-
-            {feedReady && feed.rows.length === 0 && (
-              <p className="mt-3 text-[12px] text-axal-faint" data-testid="hq-gov-empty">
-                No event matches this filter. Every store below was read and none held a row —
-                which is a different fact from a store that could not be read.
-              </p>
-            )}
-
-            {feedReady && feed.rows.length > 0 && (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full font-mono text-[11px]" data-testid="hq-gov-feed">
-                  <thead>
-                    <tr className="text-left text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-                      <th className="py-1 pr-3">ts</th>
-                      <th className="py-1 pr-3">actor</th>
-                      <th className="py-1 pr-3">branch</th>
-                      <th className="py-1 pr-3">event</th>
-                      <th className="py-1">outcome</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {feed.rows.map((r) => (
-                      <tr key={r.key} className={`border-t border-axal-hairline align-top ${ROW_TINT[r.tone] || ''}`}>
-                        <td className="py-1.5 pr-3 font-mono text-[10.5px] text-axal-faint">
-                          {day(r.at) || <Unrecorded>no timestamp</Unrecorded>}
-                        </td>
-                        <td className="py-1.5 pr-3 font-mono font-semibold">{r.actor || <Unrecorded>unnamed</Unrecorded>}</td>
-                        <td className="py-1.5 pr-3 font-mono text-axal-muted">{r.tenant || <Unrecorded />}</td>
-                        <td className={`py-1.5 pr-3 font-mono font-bold ${ACTION_INK[r.tone] || ACTION_INK.note}`}>
-                          {r.action}
-                          {r.target ? <span className="ml-2 font-normal text-axal-muted">{r.target}</span> : null}
-                        </td>
-                        <td className={`py-1.5 font-mono font-semibold ${OUTCOME_INK[r.outcome] || 'text-axal-muted'}`}>
-                          {r.outcome || <Unrecorded />}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {feedReady && (
-              <>
-                <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-reason">
-                  <b>Branch.</b> {feed.tenant_reason}
-                </p>
-                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-axal-faint" data-testid="hq-gov-sources">
-                  {feed.sources.map((src) => (
-                    <li key={src.table} className={src.available ? 'font-mono' : 'font-mono text-red-700 dark:text-red-300'}>
-                      {src.table} ·{' '}
-                      {src.available ? `${num(src.rows)} read` : (src.reason || 'unreadable')}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-                  Newest first, no pagination above the fold, and no summary tile over it: the first question of
-                  an audit log is what just happened, never page four, and a count of refusals is a dashboard
-                  where the refusals themselves are the record. Refused sign-ins, impersonations and suspensions
-                  carry a tint — the only decoration here, and it is there to be scanned for. A refusal is one row
-                  per minute per email address and network, carrying the first reason in that minute: the ledger records
-                  that someone was refused, not how many times. Whether an HQ act landed on its branch is on
-                  Platform → Deployments, which reads the audit mirror.
-                </p>
-                <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-view">
-                  <b>Viewing as a branch.</b> {feed.tenant_view_reason}
-                </p>
-              </>
-            )}
-            {(se?.not_counted || []).length > 0 && (
-              <ul className="mt-3 space-y-1.5" data-testid="hq-security-events-not-counted">
-                {se.not_counted.map((n) => (
-                  <li key={n.what} className="text-[11px] leading-relaxed text-axal-faint">
-                    <b className="text-axal-muted">{n.what}</b> — <Unrecorded />. {n.reason}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {se && !se.available && (
-              <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-unreadable">
-                The ledger&apos;s counts could not be read: {se.reason} The feed above still shows what the other
-                stores hold; a security_events row absent from it is a store that answered nothing, not a quiet day.
-              </p>
-            )}
-            {se?.available && (
-              <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-retention">
-                Kept for {se.retention_days} days, and the ledger&apos;s own seal refuses any delete inside that window.
-              </p>
-            )}
-          </Zone>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Zone title="Sanctions review" sub="from the store's own runs">
-              <Sanctions block={ready ? data.sanctions : null} unreadable={data === UNAVAILABLE} />
-            </Zone>
-            <Zone title="Backup / DR drill" sub="two facts, each its own state">
-              <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
-              {ready && <NotRecordedList items={data.backup_dr?.not_recorded} testid="hq-dr-not-recorded" />}
-            </Zone>
-          </div>
-
-          <Zone title="Sessions and access" sub="each act recorded with its reason">
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `token under ${sessions.token_hours}h old, not revoked or signed out` : (sessions?.reason || 'unreadable')} />
-              <Stat label="Impersonations live" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'no ended_at yet' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
-              <Stat label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-              {/* D200 — this tile was `value={null}` under "no security_events".
-                  It reads the ledger now: refused sign-ins in the last 24
-                  hours, and its reason when the ledger could not be read. */}
-              <Stat label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-            </div>
-            <SessionsPanel list={sessionList} onAct={onSessionAct} onRetry={loadSessions} />
-            <ForceReauth onDone={load} />
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-              An impersonation is a session like any other, which is why it sits in this list. Each account can
-              also revoke its own devices under Settings. The platform-wide action above bumps every
-              account&apos;s token floor.
-            </p>
-          </Zone>
-
-          <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
-            {/* D200 — H23 draws the DSR clocks "by territory · runs against the
-                holding branch". Every request this database holds is HQ-held
-                by construction, so the grouping has one group and the sentence
-                below says why there is not a second, from the server. */}
-            {ready && dsrGroups.length > 0 && (
-              <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold text-axal-muted" data-testid="hq-dsr-groups">
-                {dsrGroups.map((g) => (
-                  <span key={g.branch} className="font-mono">{g.branch} · {num(g.open)} open</span>
-                ))}
-              </div>
-            )}
-            {ready && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
-            {ready && dsr.length > 0 && (
-              <ul className="space-y-1.5" data-testid="hq-dsr">
-                {dsr.map((d) => (
-                  <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
-                    <div className="flex items-center justify-between gap-3">
-                      <DsrSubject row={d} />
-                      <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
-                        {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
-                      </span>
-                    </div>
-                    {/* D168 — HAS THIS SUBJECT ASKED BEFORE? `prior_requests` is
-                        null, never 0, when the ledger could not be read: "never
-                        asked before" is a claim, and an unreadable store has not
-                        made it. A third ask read as a first is the thing this
-                        line exists to prevent. */}
-                    {d.prior_requests === null ? (
-                      <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history-unreadable">
-                        <Unrecorded>earlier requests unknown</Unrecorded>
-                      </p>
-                    ) : d.prior_requests > 0 ? (
-                      <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history">
-                        {num(d.prior_requests)} earlier request{d.prior_requests === 1 ? '' : 's'}
-                        {d.last_outcome ? ` · last ${d.last_outcome}` : ''}
-                        {d.last_outcome_at ? ` on ${String(d.last_outcome_at).slice(0, 10)}` : ''}
-                      </p>
-                    ) : null}
-                    <DsrClose row={d} onDone={load} />
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
-            {/* D481 — the zone printed "erasure" as a literal on every row.
-                The kinds the ledger does NOT hold are named here, from the
-                payload, each Not recorded with its reason. */}
-            {ready && <DsrKindsNotRecorded kinds={data.dsr?.kinds} />}
-            {ready && dsrBranches && (
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-dsr-branches">
-                {dsrBranchesSentence(dsrBranches)}
-              </p>
-            )}
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-              The clock is statutory — one month from receipt, not from triage. Requests come from each account&apos;s own
-              Settings; <b>erasure itself is still a manual act</b>, and closing a request here records that act rather
-              than performing one. A withdrawal is the subject&apos;s own and is recorded when they cancel.
-            </p>
-          </Zone>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Zone title="AI safety" sub="guardrail hits · Advisor-AI outputs the screen caught">
-              <AiSafety block={ready ? data.ai_safety : null} />
-            </Zone>
-            <Zone title="KYC" sub="the review queue">
-              <div className="grid grid-cols-2 gap-2">
-                <Stat label="KYC pending" value={ready ? num(kyc.pending) ?? '0' : null} note="documents submitted, unverified" tone={kyc.pending ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-                <Stat label="KYC approved" value={ready ? num(kyc.approved) ?? '0' : null} note="active accounts" />
-                <Stat label="KYC rejected" value={ready ? num(kyc.rejected) ?? '0' : null} note="active accounts" />
-              </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-                KYC status is one trust fact; sanctions screening is another and has its own card above, because the
-                two are different stores that fail apart.
-              </p>
-              {ready && <NotRecordedList items={data.kyc_not_recorded} testid="hq-kyc-not-recorded" />}
-            </Zone>
-          </div>
-
-          {/* H7's own zone. Not "what changed" — who read rows they do not
-              own. The two halves are separate blocks so one unreadable store
-              cannot make the other half look like the whole answer. */}
-          <Zone title="Data access" sub="impersonations and exports">
-            {feed === UNAVAILABLE && (
-              <Unreadable
-                what="The security ledger"
-                claim="This is not a claim that nothing happened."
-                onRetry={loadFeed}
-              />
-            )}
-            {feed === null && <p className="text-[12px] text-axal-faint">Loading…</p>}
-            {access && (
-              <div className="grid gap-3 md:grid-cols-2" data-testid="hq-data-access">
-                <div>
-                  <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-                    Impersonations · {access.expiry_minutes}-minute limit
-                  </div>
-                  {access.impersonations.available ? (
-                    access.impersonations.items.length === 0
-                      ? <p className="mt-1.5 text-[12px] text-axal-faint">No support session is on record.</p>
-                      : (
-                        <ul className="mt-1.5 space-y-1.5">
-                          {access.impersonations.items.map((d) => (
-                            <li
-                              key={d.what + d.meta}
-                              className={`rounded-lg border px-3 py-2 text-[11.5px] ${
-                                d.live
-                                  ? 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
-                                  : 'border-axal-hairline bg-axal-ground'
-                              }`}
-                            >
-                              <div className="flex items-baseline justify-between gap-3">
-                                <span className="min-w-0 truncate font-semibold">{d.what}</span>
-                                <span className={`shrink-0 font-mono text-[10px] ${d.overdue ? 'text-red-700 dark:text-red-300' : 'text-axal-faint'}`}>
-                                  {d.dur || <Unrecorded>clock unknown</Unrecorded>}
-                                </span>
-                              </div>
-                              <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
-                            </li>
-                          ))}
-                        </ul>
-                      )
-                  ) : (
-                    <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.impersonations.reason}</p>
-                  )}
-                </div>
-                <div>
-                  <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Exports</div>
-                  {access.exports.available ? (
-                    access.exports.items.length === 0
-                      ? <p className="mt-1.5 text-[12px] text-axal-faint">No export is on record.</p>
-                      : (
-                        <ul className="mt-1.5 space-y-1.5">
-                          {access.exports.items.map((d) => (
-                            <li key={d.what + d.meta} className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
-                              <div className="flex items-baseline justify-between gap-3">
-                                <span className="min-w-0 truncate font-semibold">{d.what}</span>
-                                <span className="shrink-0 font-mono text-[10px] text-axal-faint">{d.dur}</span>
-                              </div>
-                              <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
-                            </li>
-                          ))}
-                        </ul>
-                      )
-                  ) : (
-                    <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.exports.reason}</p>
-                  )}
-                </div>
-              </div>
-            )}
-            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
-              A session that ran to its limit is recorded exactly like one ended early — the log does not
-              distinguish diligence from the clock running out, and it should not. A row still open past the
-              limit reads <b>not closed</b>: the token expired on time, the closing write is best-effort, and
-              &ldquo;0m left&rdquo; would say somebody is still inside.
-            </p>
-          </Zone>
+        <div className="mt-4 space-y-4" data-testid={`security-ws-${tab}`}>
+          {workspaces[tab] || workspaces.overview}
         </div>
       </div>
 
