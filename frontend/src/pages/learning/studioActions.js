@@ -250,6 +250,17 @@ export const generateCaptions = (uid, language) => adminLearningApi.generateCapt
 export const deleteCaptions = (uid, language) => adminLearningApi.deleteCaptions(uid, language);
 export const setStreamThumbnail = (uid, pct) => adminLearningApi.setStreamThumbnail(uid, pct);
 
+/**
+ * #4179 (D4179) / #4742 — start copying one uploaded file to Stream:
+ * `POST /admin/learning/stream/migrations`. Resolves to the copy
+ * (`{ stream_uid, state: 'copying' }`); a refusal (409 `not_r2`,
+ * 409 `already_copied`, 502 `stream_copy_failed`) is not caught, so the
+ * caller draws the route's own `error.data.message`.
+ */
+export async function copyToStream(uid) {
+  return (await adminLearningApi.migrateVideoToStream(uid)).copy;
+}
+
 /** Upload a WebVTT file: read, checked (WebVTT only, at most 1 MB), then `PUT …/captions/:lang`. */
 export async function uploadCaptionFile(uid, language, file) {
   const text = typeof file?.text === 'function' ? await file.text() : '';
