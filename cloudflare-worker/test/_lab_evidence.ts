@@ -60,7 +60,7 @@ const TABLES: Record<string, string> = {
   projects: 'id INTEGER PRIMARY KEY, uid TEXT, founder_id INTEGER, name TEXT, deleted_at TEXT, tam REAL, sam REAL, revenue REAL, mrr REAL, paying_customers INTEGER, paid_pilot_status TEXT, growth_signals TEXT, use_of_funds TEXT, funding_needed REAL, icp_definition_meta TEXT, created_at TEXT, updated_at TEXT',
   discovery_interviews: 'id INTEGER PRIMARY KEY, project_id INTEGER, interviewee_name TEXT, interviewee_role TEXT',
   roadmap_okrs: 'id INTEGER PRIMARY KEY, project_id INTEGER, objective TEXT, quarter TEXT',
-  landing_pages: 'id INTEGER PRIMARY KEY, project_id INTEGER, name TEXT, tagline TEXT, theme_color TEXT, archived_at TEXT',
+  landing_pages: 'id INTEGER PRIMARY KEY, project_id INTEGER, page_slug TEXT, name TEXT, tagline TEXT, theme_color TEXT, archived_at TEXT',
   pitch_decks: 'id INTEGER PRIMARY KEY, project_id INTEGER, is_current INTEGER, slides TEXT',
   score_snapshots: 'id INTEGER PRIMARY KEY, project_id INTEGER, total_score REAL, market_total REAL, team_total REAL, product_total REAL, capital_total REAL, fit_total REAL, distribution_total REAL',
   advisor_bookings: 'id INTEGER PRIMARY KEY, founder_user_id INTEGER, status TEXT',
