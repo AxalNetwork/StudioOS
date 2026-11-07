@@ -72,7 +72,8 @@ function freshDb() {
       created_at TEXT DEFAULT (datetime('now')));
     CREATE TABLE licence_events (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER NOT NULL,
       event TEXT NOT NULL, detail_json TEXT, note TEXT, actor_user_id INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      before_json TEXT, after_json TEXT, outcome TEXT);
     CREATE TABLE licence_contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       licence_uid TEXT NOT NULL, template_slug TEXT NOT NULL, template_version INTEGER NOT NULL,
       template_title TEXT NOT NULL, body_md TEXT NOT NULL, unfilled_fields TEXT NOT NULL DEFAULT '[]',

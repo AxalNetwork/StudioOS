@@ -10,6 +10,7 @@ its §1 records what each provider really offers, cited.
 | `types.ts` | The one adapter shape: `build(apiModel, request, apiKey)` returns the HTTP request; `read(status, body, header)` returns the answer and the provider's reported usage (null when it reported none), or a `ProviderErrorKind`. |
 | `anthropic.ts` | Anthropic's Messages API: `x-api-key`, `anthropic-version: 2023-06-01`, the text blocks as the answer, `input_tokens` / cache writes / cache reads / `output_tokens` as the usage, and the error kinds, including the 429 that is the account's spend cap. |
 | `index.ts` | `ADAPTERS`, one per `ProviderId` (`../catalogue.ts`). |
+| `gateway.ts` | D4556 (#4556): AI Gateway's chat-completions format for a third-party catalogue model on the Workers AI binding (Path A, no key): the model's own input, the raw response read into the answer, the exact usage (uncached input, cached input, output with reasoning inside), the served model, the key source and the log id, and the error kinds with whether the provider may have done work. `logCarriesNoPayload` is the owner's hosted check of a gateway log entry. `GATEWAY_ADAPTERS` in `index.ts`; `../../aiProviders.ts` `runGatewayTextModel` runs it. |
 
 **Adding here.** An adapter is pure, as everything in `services/ai/` is: no
 `env`, no D1, no hold, no log. `../../aiProviders.ts` holds, calls, settles

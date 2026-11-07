@@ -230,7 +230,7 @@ partnerPipeline.get('/leads', async (c) => {
                 n.budget_min, n.budget_max, n.timeline, n.created_at,
                 f.name AS founder_name, p.name AS project_name
            FROM founder_needs n
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
            LEFT JOIN projects p ON p.id = n.project_id
           WHERE n.status = 'open'
             AND NOT EXISTS (
@@ -272,7 +272,7 @@ partnerPipeline.get('/leads', async (c) => {
                 n.title AS need_title, f.name AS founder_name
            FROM partner_lead_passes lp
            JOIN founder_needs n ON n.id = lp.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
           WHERE lp.partner_id = ?
           ORDER BY lp.passed_at DESC
           LIMIT 200`,
@@ -515,7 +515,7 @@ partnerPipeline.get('/proposals', async (c) => {
                 e.id AS engagement_id, r.shape AS retainer_shape
            FROM quotes q
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
            LEFT JOIN engagements e ON e.quote_id = q.id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
           WHERE q.partner_id = ?
@@ -744,7 +744,7 @@ partnerPipeline.get('/negotiations', async (c) => {
               g.open_question, g.last_moved_at
          FROM quotes q
          LEFT JOIN founder_needs n ON n.id = q.need_id
-         LEFT JOIN users f ON f.id = n.founder_id
+         LEFT JOIN founders f ON f.id = n.founder_id
          LEFT JOIN quote_negotiations g ON g.quote_id = q.id
         WHERE q.partner_id = ?
         ORDER BY q.created_at DESC
@@ -1006,7 +1006,7 @@ partnerPipeline.get('/retainers', async (c) => {
               r.amount_cents, r.retained_hours, r.renews_at, r.ended_at
          FROM engagements e
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
          LEFT JOIN partner_retainers r ON r.engagement_id = e.id
         WHERE e.partner_id = ?
         ORDER BY r.id IS NULL, r.renews_at IS NULL, r.renews_at, e.created_at DESC

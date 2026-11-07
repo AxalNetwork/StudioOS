@@ -4,12 +4,14 @@
  * someone else's server (which could change the picture, or see who opened it).
  *
  * https only; the host must pass `isSafePublicUrl` (no private, loopback,
- * link-local or metadata address) at every redirect hop (at most three, each
- * re-checked); eight seconds; and the body is read to `maxBytes` and no
+ * link-local or metadata name or literal) AND resolve to public addresses only
+ * (`publicHostRefusal`, #4572 follow-up) at every redirect hop (at most three,
+ * each re-checked); eight seconds; and the body is read to `maxBytes` and no
  * further. The caller sniffs the bytes: the server's content type is not
  * trusted.
  */
-import { isSafePublicUrl } from '../webFetch';
+import type { Resolver } from '../../integrations/customMcp';
+import { publicHostRefusal, publicResolver } from '../webFetch';
 
 export const IMAGE_FETCH_TIMEOUT_MS = 8_000;
 export const IMAGE_FETCH_HOPS = 3;
@@ -17,7 +19,7 @@ export const IMAGE_FETCH_HOPS = 3;
 export type ImageFetch = { ok: true; bytes: Uint8Array; url: string } | { ok: false; code: 'unsafe_url' | 'fetch_failed' | 'too_large' | 'too_many_redirects' };
 
 export async function fetchExternalImage(
-  raw: string, maxBytes: number, fetcher: typeof fetch = fetch, timeoutMs = IMAGE_FETCH_TIMEOUT_MS,
+  raw: string, maxBytes: number, fetcher: typeof fetch = fetch, timeoutMs = IMAGE_FETCH_TIMEOUT_MS, resolve: Resolver = publicResolver(),
 ): Promise<ImageFetch> {
   let url = String(raw ?? '').trim();
   const ctl = new AbortController();
@@ -26,7 +28,9 @@ export async function fetchExternalImage(
     for (let hop = 0; hop <= IMAGE_FETCH_HOPS; hop += 1) {
       let u: URL;
       try { u = new URL(url); } catch { return { ok: false, code: 'unsafe_url' }; }
-      if (u.protocol !== 'https:' || u.username || u.password || !isSafePublicUrl(u.toString())) return { ok: false, code: 'unsafe_url' };
+      if (u.protocol !== 'https:' || u.username || u.password) return { ok: false, code: 'unsafe_url' };
+      // The name rules, then every resolved address public: a public name pointing inside is refused too.
+      if (await publicHostRefusal(u.toString(), resolve)) return { ok: false, code: 'unsafe_url' };
       let res: Response;
       try {
         res = await fetcher(u.toString(), { redirect: 'manual', signal: ctl.signal, headers: { Accept: 'image/png,image/jpeg,image/webp' } });

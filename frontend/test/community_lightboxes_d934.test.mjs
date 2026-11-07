@@ -19,7 +19,7 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import AdminCommunity from '../src/pages/admin/community/AdminCommunity.jsx';
 import {
-  ACTIVITY_CAP, EVENTS, JOBS, activityPage, activityQuery, eventsPage, eventsQuery, initialState, listView, openFrom, pageOf, searchWith,
+  ACTIVITY_CAP, CIRCLES, EVENTS, JOBS, SEARCH_WAIT_MS, activityPage, activityQuery, circlesQuery, eventsPage, eventsQuery, initialState, jobsQuery, listPage, openFrom, searchWith,
 } from '../src/pages/admin/community/lightboxModel.js';
 
 const h = React.createElement;
@@ -97,9 +97,39 @@ function worker(opt = {}) {
       if (sort === 'seats_taken') rows.sort((a, b) => b.seats_taken - a.seats_taken);
       return json({ events: rows.slice(offset, offset + limit), total: rows.length, limit, offset });
     }
-    if (p === '/api/admin/jobs') return down('jobs') ? json({ detail: 'down' }, 503) : json({ jobs: JOBS_ROWS.slice(offset, offset + limit) });
-    if (p === '/api/admin/circles') return down('circles') ? json({ detail: 'down' }, 503) : json({ circles: CIRCLES_ROWS });
+    // #4717 package 4: the Jobs and Circles lightboxes read one page of Community's lists. This stub
+    // does what services/communityLists.ts does (its own test: community_lists_4717), so the page's
+    // query is what decides the rows. The whole-list reads answer, so a regression to them is seen.
+    if (p === '/api/admin/community/jobs') {
+      if (down('jobs')) return json({ detail: 'down' }, 503);
+      const qp = u.searchParams;
+      const needle = (qp.get('q') || '').toLowerCase();
+      let rows = JOBS_ROWS.filter((j) => !needle || `${j.title} ${j.project_name}`.toLowerCase().includes(needle));
+      if (qp.get('status')) rows = rows.filter((j) => j.status === qp.get('status'));
+      if (qp.get('place')) rows = rows.filter((j) => j.remote === (qp.get('place') === 'remote'));
+      if (qp.get('seniority')) rows = rows.filter((j) => j.seniority === qp.get('seniority'));
+      const byTitle = (a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()) || a.id - b.id;
+      const sort = qp.get('sort') || 'applications';
+      rows = [...rows].sort(sort === 'applications' ? (a, b) => b.application_count - a.application_count || byTitle(a, b)
+        : sort === 'created' ? (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || byTitle(a, b) : byTitle);
+      return json({ rows: rows.slice(offset, offset + limit), total: rows.length, limit, offset });
+    }
+    if (p === '/api/admin/community/circles') {
+      if (down('circles')) return json({ detail: 'down' }, 503);
+      const qp = u.searchParams;
+      const needle = (qp.get('q') || '').toLowerCase();
+      let rows = CIRCLES_ROWS.filter((c) => !needle || c.name.toLowerCase().includes(needle));
+      for (const k of ['type', 'access']) if (qp.get(k)) rows = rows.filter((c) => c[k] === qp.get(k));
+      for (const k of ['published', 'featured']) if (qp.get(k)) rows = rows.filter((c) => c[k] === (qp.get(k) === 'yes'));
+      const byName = (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id - b.id;
+      rows = [...rows].sort(qp.get('sort') === 'members' ? (a, b) => b.members - a.members || byName(a, b) : byName);
+      return json({ rows: rows.slice(offset, offset + limit), total: rows.length, limit, offset });
+    }
+    if (p === '/api/admin/jobs') return json({ jobs: JOBS_ROWS.slice(offset, offset + limit) });
+    if (p === '/api/admin/circles') return json({ circles: CIRCLES_ROWS });
     if (p === '/api/admin/network-profiles') return json({ profiles: [] });
+    // #4717 package 2: the page's one read. Its blocks are not under test here, only the lightboxes their openers open.
+    if (p === '/api/admin/community/overview') return json({ weeks: Number(u.searchParams.get('weeks') || 12), as_of: new Date(NOW).toISOString(), blocks: {} });
     if (p === '/api/admin/community/activity') {
       if (down('activity')) return json({ detail: 'down' }, 503);
       const total = opt.activityTotal ?? 60;
@@ -181,6 +211,13 @@ async function mounted(url, handle, { phone = false } = {}) {
       await flush();
     },
     async change(id, value) { const p = props(byId(id)); assert.ok(p.onChange, `no ${id}`); await act(async () => { p.onChange({ target: { value } }); }); await flush(); },
+    /** #4717: a search reads once the typing stops, so typing waits that long before the next look. */
+    async type(id, value) {
+      const p = props(byId(id)); assert.ok(p.onChange, `no ${id}`);
+      await act(async () => { p.onChange({ target: { value } }); });
+      await act(async () => { await new Promise((r) => setTimeout(r, SEARCH_WAIT_MS + 20)); });
+      await flush();
+    },
     async key(k) { await act(async () => { for (const fn of listeners.get('keydown') || []) fn({ key: k, defaultPrevented: false, preventDefault() {} }); }); await flush(); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
@@ -201,14 +238,17 @@ test('the address: ?open= names one of four lightboxes, and opening or closing k
   assert.equal(searchWith('?open=jobs', null), '');
 });
 
-test('paging is 25 a page, clamped, and an unknown count sorts after every known one', () => {
-  const rows = Array.from({ length: 31 }, (_, i) => i);
-  assert.deepEqual({ ...pageOf(rows, 2), rows: undefined }, { rows: undefined, page: 2, pages: 2, from: 26, to: 31, total: 31 });
-  assert.equal(pageOf(rows, 9).page, 2, 'clamped to the last page');
-  assert.equal(pageOf([], 1).from, 0);
-  // A posting whose applications were not recorded is not ranked as 0.
-  const out = listView(JOBS, [{ id: 2, title: 'A', application_count: null }, { id: 1, title: 'B', application_count: 0 }], initialState(JOBS));
-  assert.deepEqual(out.rows.map((r) => r.id), [1, 2]);
+test('#4717 paging is 25 a page from the Worker; Jobs and Circles send only what is set; an answer with no total is not a list', () => {
+  assert.deepEqual({ ...listPage({ rows: [1, 2, 3, 4, 5, 6], total: 31 }, 2), rows: undefined }, { rows: undefined, page: 2, pages: 2, from: 26, to: 31, total: 31 });
+  assert.equal(listPage({ rows: [], total: 0 }, 1).from, 0);
+  for (const bad of [{ rows: [] }, { rows: [], total: '3' }, { rows: [], total: -1 }, { rows: null, total: 3 }, null]) {
+    assert.equal(listPage(bad, 1), null, `${JSON.stringify(bad)} read as a list`);
+  }
+  assert.deepEqual(jobsQuery(initialState(JOBS)), { limit: 25, offset: 0, sort: 'applications' });
+  assert.deepEqual(jobsQuery({ ...initialState(JOBS), page: 3, q: ' ops ', sort: 'days_open', filters: { status: 'published', place: '', seniority: 'lead' } }),
+    { limit: 25, offset: 50, sort: 'days_open', status: 'published', seniority: 'lead', q: 'ops' });
+  assert.deepEqual(circlesQuery({ ...initialState(CIRCLES), sort: 'members', filters: { type: 'city', access: '', published: 'yes', featured: '' } }),
+    { limit: 25, offset: 0, sort: 'members', type: 'city', published: 'yes' });
   // D918's list: only what is set travels, and the sort carries its own direction.
   assert.deepEqual(eventsQuery(initialState(EVENTS)), { limit: 25, offset: 0, sort: 'starts', dir: 'asc' });
   assert.deepEqual(eventsQuery({ ...initialState(EVENTS), page: 2, q: ' demo ', sort: 'fill', filters: { status: 'published', when: '', visibility: '', price: 'free', featured: 'no' } }),
@@ -263,14 +303,14 @@ test('CM3 Events: the search, each filter and each sort go to the Worker, and ea
   try {
     const last = () => v.requests.at(-1);
     await v.click('community-box-events-next');
-    await v.change('community-box-events-search', 'clinic');
+    await v.type('community-box-events-search', 'clinic');
     assert.equal(last(), '/api/admin/events?q=clinic&sort=starts&dir=asc&limit=25&offset=0');
     assert.equal(range(v, 'events'), '1–1 of 1');
     assert.deepEqual(v.titles('events'), ['Pricing Clinic']);
-    await v.change('community-box-events-search', 'zzz');
+    await v.type('community-box-events-search', 'zzz');
     assert.equal(range(v, 'events'), 'No events');
     assert.ok(v.has('community-box-events-empty'));
-    await v.change('community-box-events-search', '');
+    await v.type('community-box-events-search', '');
     await v.change('community-box-events-filter-status', 'published');
     assert.equal(last(), '/api/admin/events?status=published&sort=starts&dir=asc&limit=25&offset=0');
     assert.deepEqual(v.titles('events'), ['Last Week Social', 'Demo Night', 'Open Lab']);
@@ -353,9 +393,9 @@ test('CM4 Job postings: every page read, search, each filter and sort, paging, t
     assert.match(v.text(), /only a published posting has days open/);
     await v.click('community-box-jobs-next');
     assert.equal(range(v, 'jobs'), '26–28 of 28');
-    await v.change('community-box-jobs-search', 'northwind');
+    await v.type('community-box-jobs-search', 'northwind');
     assert.equal(range(v, 'jobs'), '1–2 of 2', 'role or company');
-    await v.change('community-box-jobs-search', '');
+    await v.type('community-box-jobs-search', '');
     await v.change('community-box-jobs-filter-status', 'closed');
     assert.deepEqual(v.titles('jobs'), ['Ops Lead']);
     await v.change('community-box-jobs-filter-status', '');
@@ -377,6 +417,32 @@ test('CM4 Job postings: every page read, search, each filter and sort, paging, t
     assert.ok(!v.has('community-box-jobs'));
     assert.equal(v.where(), '/admin/community');
     assert.equal(v.focused(), 'community-open-jobs');
+  } finally { await v.close(); }
+});
+
+test('#4717 CM4 and CM5 read one page from the Worker, never the whole list, and a search reads once the typing stops', async () => {
+  const v = await mounted('/admin/community', worker());
+  try {
+    // The lightboxes' own reads: those made once a lightbox is open (the dashboard's reads are package 2's, #4764).
+    const opened = v.requests.length;
+    await v.click('community-open-jobs');
+    const paths = () => v.requests.slice(opened).map((r) => new URL(r, 'http://x')).filter((u) => /\/api\/admin\/(community\/)?(jobs|circles)$/.test(u.pathname));
+    assert.ok(paths().every((u) => u.pathname.startsWith('/api/admin/community/')), 'a lightbox read the whole job board or circles list');
+    assert.equal(paths().at(-1).searchParams.get('limit'), '25');
+    // Three keystrokes in quick succession, then a pause: one read, for the whole word.
+    const before = paths().length;
+    for (const text of ['n', 'no', 'nor']) await v.change('community-box-jobs-search', text);
+    assert.equal(paths().length, before, 'a keystroke read the list before the typing stopped');
+    await v.type('community-box-jobs-search', 'north');
+    const reads = paths().slice(before);
+    // Mutation checked: build the query from state.q instead of the settled text → a read per keystroke.
+    assert.equal(reads.length, 1, `${reads.length} reads for one search`);
+    assert.equal(reads[0].searchParams.get('q'), 'north');
+    assert.equal(range(v, 'jobs'), '1–2 of 2');
+    await v.click('community-box-jobs-done');
+    await v.click('community-open-circles');
+    assert.equal(paths().at(-1).pathname, '/api/admin/community/circles');
+    assert.equal(paths().at(-1).searchParams.get('limit'), '25');
   } finally { await v.close(); }
 });
 
@@ -408,9 +474,9 @@ test('CM5 Circles: As entered on Members and Activity, search, each filter and s
     assert.ok(!v.hrefs('community-box-circles').includes('/admin/circles'), 'a circle opens the list, not itself');
     await v.click('community-box-circles-next');
     assert.equal(range(v, 'circles'), '26–27 of 27');
-    await v.change('community-box-circles-search', 'lisbon');
+    await v.type('community-box-circles-search', 'lisbon');
     assert.equal(range(v, 'circles'), '1–1 of 1');
-    await v.change('community-box-circles-search', '');
+    await v.type('community-box-circles-search', '');
     await v.change('community-box-circles-filter-type', 'investor');
     assert.match(v.rows('circles')[0], /^Seed Investors.*Invite-only/s);
     await v.change('community-box-circles-filter-type', '');

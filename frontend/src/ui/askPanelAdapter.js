@@ -15,11 +15,16 @@
  *                             no request without a conversation and a question, and
  *                             a refusal or a failed read is off, never a $0.00 hold
  *   waiting                   THROUGH (D1442): `GET /api/ai/rail/proposals?page=&status=proposed`,
- *                             the "N waiting" on Ask; a failed read is off, never "0 waiting"
+ *                             the "N waiting" on Ask; a failed read is off, never "0 waiting".
+ *                             #4737: it counts only the rows the panel lists (`RUN_CHIPS`'
+ *                             options), so every counted row is a card the opened panel
+ *                             shows. A page's form and module rows are acted on in the
+ *                             form or module that holds them, and never inflate it.
  */
 import { eadwynApi } from '../lib/api/eadwyn.js';
 import { railProposalsApi } from '../lib/api/railProposals.js';
 import { fillsApi } from '../lib/api/fills.js';
+import { RUN_CHIPS } from './askPanelModel.js';
 
 export const ASK_NOT_ON = 'The Worker part of the Ask panel (D1442) is not on yet.';
 
@@ -46,7 +51,8 @@ export const askPanelAdapter = {
   waiting: guarded(async (page) => {
     if (!page) return { available: false, reason: 'No rail page.' };
     const r = await railProposalsApi.list({ page, status: 'proposed' });
-    return Array.isArray(r?.proposals) ? { available: true, data: { count: r.proposals.length } }
+    // A row with no `rail_option` is not one the panel lists: unknown is not counted.
+    return Array.isArray(r?.proposals) ? { available: true, data: { count: r.proposals.filter((p) => RUN_CHIPS.includes(p?.rail_option)).length } }
       : { available: false, reason: 'The proposals could not be read.' };
   }),
 };

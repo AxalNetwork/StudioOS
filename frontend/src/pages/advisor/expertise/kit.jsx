@@ -137,6 +137,24 @@ export function NothingYet({ title, body, action }) {
  * which is the same absent-is-not-empty failure `ZoneBody` exists to prevent —
  * one level up, about the shape of the page instead of the state of a fetch.
  */
+/**
+ * #4689 — "Showing 100 of 101 · Show more" under a list that has more rows than
+ * it has read. Nothing is drawn once every row is on screen.
+ */
+export function MoreRows({ line, onMore, busy = false, error = '', testid }) {
+  if (!line) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 text-[11.5px] text-axal-faint" data-testid={testid}>
+      <span className="tabular-nums">{line}</span>
+      <button type="button" className="font-semibold text-emerald-700 hover:underline disabled:opacity-60 dark:text-emerald-300"
+        onClick={onMore} disabled={busy}>
+        {busy ? 'Loading…' : 'Show more'}
+      </button>
+      {error ? <span role="status" className="text-red-700 dark:text-red-300">{error}</span> : null}
+    </div>
+  );
+}
+
 export function StatedLimit({ title, children }) {
   return (
     <Card variant="sunken" padding="md" className="mt-3">
@@ -219,5 +237,17 @@ export function SaveNote({ note }) {
     </p>
   );
 }
+
+/**
+ * D4670: what a refused read or write says, by the Worker's code. Anything
+ * else is the caller's own fixed sentence: a zone never prints raw error text.
+ */
+export const ASK_REFUSALS = Object.freeze({
+  attester_email_required: 'Give their email address: their code is sent there when they answer.',
+  attester_is_requester: 'That address is your own. Someone else confirms your claim.',
+  attester_name_required: 'Name the person you are asking.',
+  advisor_licence_required: 'Expertise needs the Advisor licence on this account.',
+});
+export const refusalText = (err, fallback) => ASK_REFUSALS[err?.code] || fallback;
 
 export { Pill };

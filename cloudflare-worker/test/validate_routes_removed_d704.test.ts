@@ -277,7 +277,7 @@ test('11. the review focus opens the interview\'s record on its session, and no 
   const r = await readValidate(db, `/overview?project=${V_A}`);
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.focus.rule, 'review');
-  assert.deepEqual(r.body.focus.cta, { label: 'Review the interview', href: `/validate/customer-research/${iv}?session=${session}` });
+  assert.deepEqual(r.body.focus.cta, { label: 'Review the interview', href: `/validate/customer-research/${iv}?project_id=${V_A}&session=${session}` });
   const OLD = /^\/validate\/(interviews|pain-map|hypotheses)(?=$|[/?#])/;
   const hrefs = [r.body.focus?.cta?.href, ...(Array.isArray(r.body.index) ? r.body.index.map((x: any) => x.href) : []),
     ...r.body.cards.map((c: any) => c.next?.href)].filter(Boolean);

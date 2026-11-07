@@ -58,7 +58,7 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
-import { ATTACH_STATUS, checkSkillList, linkStatement } from '../services/agents/skillLinks';
+import { ATTACH_STATUS, checkSkillList, linkStatement, logSkillsChanged } from '../services/agents/skillLinks';
 import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
 import type { IntegrationRow } from '../integrations/registry';
 import { isAdmin, mapError, newUid } from './_t13t14t15_helpers';
@@ -752,7 +752,11 @@ router.post('/:scope/:id/agents', async (c) => {
     }
     const a = await c.env.DB.prepare('SELECT * FROM team_agents WHERE uid = ?').bind(uid).first<AgentRow>();
     await logEvent(c.env, a!.id, user.id, 'added', { role_key: role.key, persona_key: persona.key, model_id: b.model_id, monthly_cap_microusd: b.monthly_cap_microusd });
-    if (skillsChecked.wanted.length) await c.env.DB.batch(skillsChecked.wanted.map((w) => linkStatement(c.env, a!.id, w.s.id, w.version, user.id)));
+    if (skillsChecked.wanted.length) {
+      await c.env.DB.batch(skillsChecked.wanted.map((w) => linkStatement(c.env, a!.id, w.s.id, w.version, user.id)));
+      // D4534: the skills an agent was added with.
+      await logSkillsChanged(c.env, a!.id, user.id, { added: skillsChecked.wanted.map((w) => ({ uid: w.s.uid, version: w.version })), repinned: [], removed: [] });
+    }
     return c.json({ agent: await agentDto(c.env, a!) }, 201);
   } catch (e) { return mapError(c, e); }
 });

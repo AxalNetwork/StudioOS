@@ -17,6 +17,15 @@ import { request } from '../api.js';
 //                           wellbeing: { experts, bookings, checkins },
 //                           active_members, circle_discussions } }
 // Another `weeks` answers 400 `bad_weeks`.
+// #4717 package 4 — the Jobs and Circles lightboxes, one page and the total that matched, filtered and sorted in SQL.
+//   jobs     GET /admin/community/jobs     { q, status, place: 'remote'|'onsite', seniority,
+//                                           sort: 'applications'|'created'|'days_open'|'title', limit: 1–100 (25), offset }
+//            → { rows: [{ id, title, project_name, status, remote, seniority, created_at, published_at, application_count }],
+//                total, limit, offset }
+//   circles  GET /admin/community/circles  { q, type, access, published: 'yes'|'no', featured: 'yes'|'no',
+//                                           sort: 'name'|'members', limit: 1–100 (25), offset }
+//            → { rows: [{ id, name, type, access, published, featured, members, activity }], total, limit, offset }
+// A filter or sort it cannot read answers 400 `bad_<key>`.
 function query(params = {}) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -30,4 +39,6 @@ function query(params = {}) {
 export const communityApi = {
   activity: (params) => request(`/admin/community/activity${query(params)}`),
   overview: ({ weeks } = {}) => request(`/admin/community/overview${query({ weeks })}`),
+  jobs: (params) => request(`/admin/community/jobs${query(params)}`),
+  circles: (params) => request(`/admin/community/circles${query(params)}`),
 };

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { EMPTY_DRAFT, draftFrom, latestOnly, saveRequest } from './statusReportDraft';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
@@ -142,18 +143,8 @@ function ReportCard({ report, busy, onEdit, onSend, onDelete, note }) {
   );
 }
 
-/**
- * The shape a composed draft always has, so no field below is read off a null.
- * Every list is an array and every scalar is something the JSX can render.
- */
-const EMPTY_DRAFT = {
-  period: '',
-  existing: null,
-  shipped_from_log: [],
-  next_from_milestones: [],
-  blocked: [],
-  blocked_note: null,
-};
+// The shape a composed draft always has lives in `statusReportDraft.js` (#4673), with the
+// rule that a draft belongs to the engagement and period it was composed for.
 
 function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) {
   const [engagementId, setEngagementId] = useState('');
@@ -179,6 +170,10 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
   const [shipped, setShipped] = useState('');
   const [nextUp, setNextUp] = useState('');
   const [loadError, setLoadError] = useState('');
+  // #4673: which composition is current. A response for an older selection is
+  // dropped, so it can neither show nor be saved under another engagement.
+  const gate = useRef(null);
+  if (!gate.current) gate.current = latestOnly();
   // D1329 (#3490, AF19): Fill with Eadwyn on Shipped and Next, from the
   // engagement record at no AI tokens. A saved draft is its record; a new one
   // hangs under its engagement, for this month only (the record's month is the
@@ -188,8 +183,8 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
   const fill = useScopedFill({
     scope: SCOPED_FORMS.statusReport,
     record: reportId,
-    parent: reportId ? null : (engagementId && draft.period === thisMonth ? Number(engagementId) : null),
-    enabled: composed && (reportId != null || (engagementId && draft.period === thisMonth)),
+    parent: reportId ? null : (draft.engagement_id != null && draft.period === thisMonth ? Number(draft.engagement_id) : null),
+    enabled: composed && (reportId != null || (draft.engagement_id != null && draft.period === thisMonth)),
     values: { shipped, next_up: nextUp },
     onValues: (v) => { if (v.shipped != null) setShipped(v.shipped); if (v.next_up != null) setNextUp(v.next_up); },
   });
@@ -197,16 +192,22 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
   const compose = useCallback(async () => {
     if (!engagementId) return;
     setLoadError('');
+    const ticket = gate.current.start();
+    const asked = { engagement_id: Number(engagementId), period };
     try {
       const r = await api.getPartnerReportDraft(engagementId, period);
+      // #4673: the selection moved (or another compose started) while this one
+      // was in flight: drop it.
+      if (!gate.current.isCurrent(ticket)) return;
       // Spread over the empty shape rather than replacing it: a response that
       // omitted a list would otherwise reintroduce the undefined this exists
-      // to prevent.
-      setDraft({ ...EMPTY_DRAFT, ...(r || {}) });
+      // to prevent. The identity is the one ASKED for, whatever came back.
+      setDraft(draftFrom(r, asked));
       setComposed(true);
       setShipped(r?.existing?.shipped || '');
       setNextUp(r?.existing?.next_up || '');
     } catch (e) {
+      if (!gate.current.isCurrent(ticket)) return;
       setDraft(EMPTY_DRAFT);
       setComposed(false);
       setLoadError(e?.message || 'The draft could not be composed.');
@@ -218,7 +219,7 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Engagement">
           <select ref={engagementRef} className={inputClass} value={engagementId} data-testid="status-report-engagement"
-            onChange={(e) => { setEngagementId(e.target.value); setComposed(false); }}>
+            onChange={(e) => { gate.current.invalidate(); setEngagementId(e.target.value); setComposed(false); }}>
             <option value="">Choose one</option>
             {engagements.map((e) => (
               <option key={e.engagement_id} value={e.engagement_id}>
@@ -229,7 +230,7 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
         </Field>
         <Field label="Period" hint="YYYY-MM">
           <input className={inputClass} value={period} maxLength={7}
-            onChange={(e) => { setPeriod(e.target.value); setComposed(false); }} />
+            onChange={(e) => { gate.current.invalidate(); setPeriod(e.target.value); setComposed(false); }} />
         </Field>
         <div className="flex items-end">
           <button type="button" className={ghostButtonClass} disabled={!engagementId} onClick={compose}>
@@ -333,9 +334,9 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
             disabled={busy || draft.existing?.state === 'sent' || (!shipped.trim() && !nextUp.trim())}
             onClick={async () => {
               try {
-                const saved = await api.savePartnerStatusReport(engagementId, draft.period, {
-                  shipped, next_up: nextUp,
-                });
+                // #4673: saved against the draft's own engagement and period,
+                // which the Worker checks against the URL it is sent to.
+                const saved = await api.savePartnerStatusReport(...saveRequest(draft, { shipped, next_up: nextUp }));
                 await fill.afterSave(saved?.id);
                 await onSaved();
               } catch (e) { onError(e); }

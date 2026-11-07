@@ -28,14 +28,18 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const NAV_MODEL = readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8');
+
 import { codeOnly } from './_codeOnly.mjs';
+import { licencePageSource } from './_licencePage.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
-const PAGE = read('frontend/src/pages/admin/AdminLicences.jsx');
+const PAGE = licencePageSource();
 const SRC = codeOnly(PAGE);
-const ROUTE = codeOnly(read('cloudflare-worker/src/routes/admin_licences.ts'));
+const ROUTE = codeOnly(licenceRoutesSource());
 const CONTENT = read('frontend/src/pages/hq/ContentPage.jsx');
 
 /**
@@ -188,7 +192,11 @@ test('the brand kit is drawn only for a white-label, and still says whose mark i
   // THE GATE, ASSERTED AS A GATE. H26: "Unique to this kind · an Axal
   // subsidiary never sees this step." Both halves are load-bearing — the tab
   // is what an operator clicks, and the mount is what decides what renders.
-  assert.match(SRC, /\{d\.kind === 'white_label' && \(\s*<button[\s\S]{0,200}?data-testid="licence-brand-tab"/,
+  // D4707: the tab bar is drawn from licenceNavModel; the brand tab carries
+  // `whiteLabelOnly` and the page draws `tabsFor(d.kind)`, which drops it for
+  // every other kind (asserted on the model in licence_navigation_d4707).
+  assert.match(NAV_MODEL, /key: 'brand'[^}]*whiteLabelOnly: true/, 'the Brand kit tab is drawn for every licence, which H26 forbids in its own words');
+  assert.match(SRC, /\{tabsFor\(d\.kind\)\.map\(/,
     'the Brand kit tab is drawn for every licence, which H26 forbids in its own words');
   assert.match(SRC, /step === BRAND_STEP && d\.kind === 'white_label'/,
     'the brand-kit editor mounts without re-checking the kind');

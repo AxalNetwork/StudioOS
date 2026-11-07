@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { adminEvents } from '../../../lib/api';
-import { BoxShell, BoxTable, Failed, ListControls, Pager, Reading, useBoxRead } from './CommunityLightbox';
+import { BoxShell, BoxTable, Failed, ListControls, Pager, Reading, useBoxRead, useSettled } from './CommunityLightbox';
 import { EVENTS, EVENTS_LINE, eventRow, eventsPage, eventsQuery, initialState } from './lightboxModel';
 
 /**
@@ -32,7 +32,9 @@ const COLS = [
 export default function EventsLightbox({ onClose, now: at }) {
   const [now] = useState(() => at ?? Date.now());
   const [state, setState] = useState(() => initialState(EVENTS));
-  const query = useMemo(() => eventsQuery(state), [state]);
+  // #4717: a search reads once the typing stops, not on every keystroke.
+  const q = useSettled(state.q);
+  const query = useMemo(() => eventsQuery({ ...state, q }), [state, q]);
   const { read, retry } = useBoxRead(() => adminEvents.list(query), 'box-events', JSON.stringify(query));
   const view = useMemo(() => (read.status === 'ready' ? eventsPage(read.data, state.page) : null), [read, state.page]);
   const failed = read.status === 'error' || (read.status === 'ready' && !view);

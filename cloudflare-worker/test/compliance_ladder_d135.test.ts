@@ -130,7 +130,8 @@ function freshDb() {
                                            'reinstated','renewed','terminated')),
       detail_json TEXT, note TEXT, actor_user_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+    ,
+      before_json TEXT, after_json TEXT, outcome TEXT);
     CREATE TABLE licence_territories (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER, country_code TEXT);
   `);
   // Migration 264's own DDL, sliced from the file rather than retyped, so the

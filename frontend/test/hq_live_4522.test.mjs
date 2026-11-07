@@ -117,7 +117,7 @@ test('pause requires the typed confirmation and sends the operator reason', asyn
  api.policy=async()=>({policy:{area_models:{},locks:[],read_tools:[],paused:{on:false}},guardrails:[]});
  api.pauseAll=async(...args)=>{calls.push(args);};
  const ui=await mountContracts(h(Policies));try {
- await settle(ui);await ui.fill('Reason', 'Scheduled maintenance');
+ await settle(ui);await ui.fill('Reason to pause or resume', 'Scheduled maintenance');
  await assert.rejects(ui.click('Pause all AI agents'), /Disabled button/);
  await ui.fill('Type PAUSE', 'PAUSE');await ui.click('Pause all AI agents');await settle(ui);
  assert.deepEqual(calls,[['Scheduled maintenance','PAUSE']]);

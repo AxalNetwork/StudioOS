@@ -285,6 +285,14 @@ test('3: each history view draws its note only when its window opens before hist
   assert.deepEqual(historyNotes(moved, null, now), ['No lane history is on record yet.']);
   assert.deepEqual(historyNotes(lastWeek, null, now), ['No status history is on record yet.']);
   assert.deepEqual(historyNotes({}, null, now), [], 'no view chosen, no note');
+  assert.deepEqual(historyNotes(moved, '2026-10-10T09:00:00Z', now, {
+    filterAvailable: false,
+    coverage: { status: 'partial', since: '2026-10-10T09:00:00Z', recorded_since: '2026-01-01T00:00:00Z' },
+  }), ['History is continuous only from 2026-10-10. This earlier view is unavailable rather than showing an incomplete result.']);
+  assert.deepEqual(historyNotes(lastWeek, '2026-10-11T09:00:00Z', now, {
+    filterAvailable: true,
+    coverage: { status: 'partial', since: '2026-10-11T09:00:00Z' },
+  }), [], 'an exact as-of boundary remains available outside the contiguous change slice');
   const html = ssr(h(HypothesesSection, { parts: { ...HYP_PARTS, stats: { ...HYP_PARTS.stats, history_since: null } }, query: { filter: lastWeek }, openDialog: noop }));
   assert.match(html, /No status history is on record yet\./);
   assert.doesNotMatch(html, /It starts the first time this board is opened/);

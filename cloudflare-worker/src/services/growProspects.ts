@@ -130,7 +130,7 @@ export async function prospectDetail(env:Env,pid:number,uid:string) {
 export async function suppressionHash(env:Env,pid:number,address:string) {
   return indexHmac(env,'venture_suppressions','address_hash',`${pid}:${prospectEmail(address)}`);
 }
-const suppressionKeyTag=(env:Env,pid:number)=>indexHmac(env,'venture_suppressions','key_tag',String(pid));
+export const suppressionKeyTag=(env:Env,pid:number)=>indexHmac(env,'venture_suppressions','key_tag',String(pid));
 export async function suppressionList(env:Env,pid:number) {
   const [count,rows]=await Promise.all([
     env.DB.prepare('SELECT COUNT(*) AS n FROM venture_suppressions WHERE project_id=?').bind(pid).first<{n:number}>(),

@@ -119,73 +119,161 @@ export function isoOf(raw: unknown): string {
 }
 
 /* ------------------------------------------------------------------ *
- * The sources. Every statement is fixed text; the filters are bound:
- * `(? IS NULL OR …)` twice per filter, so an absent filter matches all.
+ * The sources, as ARMS (#4717 package 5). A source is one or two arms, and
+ * each arm is its own statement with every filter INSIDE it: the window, the
+ * title search and the admin filter are on the arm's own columns, before any
+ * UNION or GROUP BY, so an index can answer them and a row outside the window
+ * is never read. The arms used to be one UNION per source wrapped in an outer
+ * query that filtered and sorted the result, so every request read every
+ * row of history, and registrations were grouped across all time before the
+ * window was applied.
+ *
+ * A filter that is absent is absent from the text: `(? IS NULL OR …)` cannot
+ * use an index. Each statement is built once from fixed fragments below and
+ * held in a map; every value is bound.
+ *
+ * Indexes (migration 202611070900): `admin_audit_log (report_type,
+ * datetime(exported_at), action)` and `(action, datetime(exported_at))`, and
+ * `event_registrations (date(registered_at), event_id, datetime(registered_at))`.
+ * Query plans are pinned by `community_reads_4717.test.ts`.
  * ------------------------------------------------------------------ */
 
-const WINDOW = `(? IS NULL OR datetime(at) >= datetime(?)) AND (? IS NULL OR datetime(at) < datetime(?, '+1 day'))
-   AND (? IS NULL OR lower(coalesce(title, '')) LIKE ? ESCAPE '\\')`;
-
-const EVENTS_SQL = `
-  SELECT 'admin' AS actor, a.action AS action, a.exported_at AS at, e.title AS title,
-         json_extract(a.filters_json, '$.featured') AS featured, a.id AS tiebreak
-    FROM admin_audit_log a LEFT JOIN events e ON e.id = json_extract(a.filters_json, '$.event_id')
-   WHERE a.report_type = 'events'
-     AND a.action IN ('event_approved', 'event_rejected', 'event_unpublished', 'event_featured', 'event_cancelled')
-  UNION ALL
-  SELECT CASE WHEN u.role = 'admin' THEN 'admin' ELSE 'member' END, a.action, a.exported_at, e.title, NULL, a.id
-    FROM admin_audit_log a
-    LEFT JOIN events e ON e.id = json_extract(a.filters_json, '$.event_id')
-    LEFT JOIN users u ON u.id = a.admin_user_id
-   WHERE a.action = 'event_submitted'`;
-
-const JOBS_SQL = `
-  SELECT 'admin' AS actor, a.action AS action, a.exported_at AS at, j.title AS title, NULL AS featured, a.id AS tiebreak
-    FROM admin_audit_log a LEFT JOIN job_postings j ON j.id = json_extract(a.filters_json, '$.posting_id')
-   WHERE a.report_type = 'jobs' AND a.action IN ('job_approved', 'job_rejected', 'job_unpublished')
-  UNION ALL
-  SELECT 'member', CASE WHEN j.status = 'closed' THEN 'job_closed' ELSE 'job_submitted' END, j.updated_at, j.title, NULL, -j.id
-    FROM job_postings j
-   WHERE j.status IN ('pending_review', 'closed')`;
-
-const CIRCLES_SQL = `
-  SELECT 'admin' AS actor, a.action AS action, a.exported_at AS at, ci.name AS title,
-         json_extract(a.filters_json, '$.featured') AS featured, a.id AS tiebreak
-    FROM admin_audit_log a LEFT JOIN circles ci ON ci.id = json_extract(a.filters_json, '$.circle_id')
-   WHERE a.report_type = 'circles'
-     AND a.action IN ('circle_created', 'circle_published', 'circle_unpublished', 'circle_featured')`;
-
-const REGISTRATIONS_SQL = `
-  SELECT 'member' AS actor, 'registrations' AS action, MAX(r.registered_at) AS at, e.title AS title,
-         COUNT(*) AS n, -MIN(r.id) AS tiebreak
-    FROM event_registrations r JOIN events e ON e.id = r.event_id
-   GROUP BY r.event_id, date(r.registered_at)`;
-
-const WELLBEING_SQL = `
-  SELECT 'admin' AS actor, a.action AS action, a.exported_at AS at, NULL AS title, NULL AS featured, a.id AS tiebreak
-    FROM admin_audit_log a
-   WHERE a.report_type = 'wellbeing'
-     AND a.action IN ('expert_verified', 'expert_unverified', 'expert_hidden', 'expert_restored', 'expert_declined')`;
-
-const BASE: Record<ActivitySource, string> = {
-  events: EVENTS_SQL,
-  jobs: JOBS_SQL,
-  circles: CIRCLES_SQL,
-  event_registrations: REGISTRATIONS_SQL,
-  wellbeing: WELLBEING_SQL,
+type ArmFlags = { from: boolean; to: boolean; q: boolean; admin: boolean };
+type Arm = {
+  /** The arm's `at` column, the thing the window and the order are on. */
+  at: string;
+  /** SELECT … FROM … JOINs, without WHERE. */
+  from: string;
+  /** The arm's own fixed WHERE terms. */
+  where: string[];
+  /** The title the search reads; NULL for a source without one. */
+  title: string;
+  /** The order's tiebreak after the time. */
+  order: string;
+  /** With `admin`: a term that keeps admins' acts, or `skip` when the arm has none. */
+  admin: string | 'all' | 'skip';
 };
 
-/** `admin` narrows to admins' acts in every source; a source with none is not asked. */
-const ADMIN_FILTER = `(? IS NULL OR actor = 'admin')`;
+const EVENT_ACTS = `('event_approved', 'event_rejected', 'event_unpublished', 'event_featured', 'event_cancelled')`;
 
-function rowsSql(src: ActivitySource): string {
-  return `SELECT * FROM (${BASE[src]}) WHERE ${WINDOW} AND ${ADMIN_FILTER} ORDER BY datetime(at) DESC, tiebreak DESC LIMIT ?`;
+const ARMS: Record<Exclude<ActivitySource, 'event_registrations'>, Arm[]> = {
+  events: [
+    {
+      at: 'a.exported_at',
+      from: `SELECT 'admin' AS actor, a.action AS action, a.exported_at AS at, e.title AS title,
+         json_extract(a.filters_json, '$.featured') AS featured, a.id AS tiebreak
+    FROM admin_audit_log a LEFT JOIN events e ON e.id = json_extract(a.filters_json, '$.event_id')`,
+      where: [`a.report_type = 'events'`, `a.action IN ${EVENT_ACTS}`],
+      title: 'e.title', order: 'a.id DESC', admin: 'all',
+    },
+    {
+      at: 'a.exported_at',
+      from: `SELECT CASE WHEN u.role = 'admin' THEN 'admin' ELSE 'member' END AS actor, a.action AS action, a.exported_at AS at,
+         e.title AS title, NULL AS featured, a.id AS tiebreak
+    FROM admin_audit_log a
+    LEFT JOIN events e ON e.id = json_extract(a.filters_json, '$.event_id')
+    LEFT JOIN users u ON u.id = a.admin_user_id`,
+      where: [`a.action = 'event_submitted'`],
+      title: 'e.title', order: 'a.id DESC', admin: `u.role = 'admin'`,
+    },
+  ],
+  jobs: [
+    {
+      at: 'a.exported_at',
+      from: `SELECT 'admin' AS actor, a.action AS action, a.exported_at AS at, j.title AS title, NULL AS featured, a.id AS tiebreak
+    FROM admin_audit_log a LEFT JOIN job_postings j ON j.id = json_extract(a.filters_json, '$.posting_id')`,
+      where: [`a.report_type = 'jobs'`, `a.action IN ('job_approved', 'job_rejected', 'job_unpublished')`],
+      title: 'j.title', order: 'a.id DESC', admin: 'all',
+    },
+    {
+      // A host's acts, dated by the posting's last change; never an admin's, so `admin` skips the arm.
+      at: 'j.updated_at',
+      from: `SELECT 'member' AS actor, CASE WHEN j.status = 'closed' THEN 'job_closed' ELSE 'job_submitted' END AS action,
+         j.updated_at AS at, j.title AS title, NULL AS featured, -j.id AS tiebreak
+    FROM job_postings j`,
+      where: [`j.status IN ('pending_review', 'closed')`],
+      title: 'j.title', order: 'j.id ASC', admin: 'skip',
+    },
+  ],
+  circles: [
+    {
+      at: 'a.exported_at',
+      from: `SELECT 'admin' AS actor, a.action AS action, a.exported_at AS at, ci.name AS title,
+         json_extract(a.filters_json, '$.featured') AS featured, a.id AS tiebreak
+    FROM admin_audit_log a LEFT JOIN circles ci ON ci.id = json_extract(a.filters_json, '$.circle_id')`,
+      where: [`a.report_type = 'circles'`, `a.action IN ('circle_created', 'circle_published', 'circle_unpublished', 'circle_featured')`],
+      title: 'ci.name', order: 'a.id DESC', admin: 'all',
+    },
+  ],
+  wellbeing: [
+    {
+      at: 'a.exported_at',
+      from: `SELECT 'admin' AS actor, a.action AS action, a.exported_at AS at, NULL AS title, NULL AS featured, a.id AS tiebreak
+    FROM admin_audit_log a`,
+      where: [`a.report_type = 'wellbeing'`, `a.action IN ('expert_verified', 'expert_unverified', 'expert_hidden', 'expert_restored', 'expert_declined')`],
+      title: 'NULL', order: 'a.id DESC', admin: 'all',
+    },
+  ],
+};
+
+/** The WHERE terms an arm adds for the filters given, in bind order: from, to, then the search. */
+function armWhere(arm: Arm, f: ArmFlags): string {
+  const terms = [...arm.where];
+  if (f.from) terms.push(`datetime(${arm.at}) >= datetime(?)`);
+  if (f.to) terms.push(`datetime(${arm.at}) < datetime(?, '+1 day')`);
+  if (f.q) terms.push(`lower(coalesce(${arm.title}, '')) LIKE ? ESCAPE '\\'`);
+  if (f.admin && arm.admin !== 'all' && arm.admin !== 'skip') terms.push(arm.admin);
+  return terms.join('\n     AND ');
 }
-function countSql(src: ActivitySource): string {
-  return `SELECT COUNT(*) AS n FROM (${BASE[src]}) WHERE ${WINDOW} AND ${ADMIN_FILTER}`;
+
+const armRowsSql = (arm: Arm, f: ArmFlags) =>
+  `${arm.from}\n   WHERE ${armWhere(arm, f)}\n   ORDER BY datetime(${arm.at}) DESC, ${arm.order} LIMIT ?`;
+/**
+ * A count of what a select returns. The one place this wrapper is written:
+ * `scripts/check-sqlite-columns.mjs` counts every SQL string it cannot read
+ * (a spliced fragment) and fails the build at 500 (`schema_guards.test.mjs`),
+ * so the dynamic SQL here is kept to the fewest strings it takes, not one per
+ * wrapper. Every value is still bound; only fixed fragments are spliced.
+ */
+const countOf = (select: string) => `SELECT COUNT(*) AS n FROM (${select})`;
+const armCountSql = (arm: Arm, f: ArmFlags) => countOf(`${arm.from}\n   WHERE ${armWhere(arm, f)}`);
+
+/*
+ * Registrations: one row per event per UTC day. The window is a range of days,
+ * so it is applied to `date(registered_at)` BEFORE the GROUP BY, and the index
+ * on that expression answers it. Unfiltered, the newest N groups lie on the
+ * newest N days that have one (each day has at least one group, and a group
+ * is dated inside its day), so a first read finds that N-th day from the
+ * index and the grouping reads only the days from it on.
+ */
+const REG_FROM = `FROM event_registrations r JOIN events e ON e.id = r.event_id`;
+type RegFlags = { from: boolean; to: boolean; q: boolean };
+function regWhere(f: RegFlags & { since: boolean }): string {
+  const terms: string[] = [];
+  if (f.from) terms.push('date(r.registered_at) >= ?');
+  if (f.to) terms.push('date(r.registered_at) <= ?');
+  if (f.since) terms.push('date(r.registered_at) >= ?');
+  if (f.q) terms.push(`lower(coalesce(e.title, '')) LIKE ? ESCAPE '\\'`);
+  return terms.length ? `\n   WHERE ${terms.join(' AND ')}` : '';
 }
-const ROWS_SQL = Object.fromEntries(ACTIVITY_SOURCES.map((s) => [s, rowsSql(s)])) as Record<ActivitySource, string>;
-const COUNT_SQL = Object.fromEntries(ACTIVITY_SOURCES.map((s) => [s, countSql(s)])) as Record<ActivitySource, string>;
+const regDaysSql = (f: RegFlags) =>
+  `SELECT DISTINCT date(r.registered_at) AS d ${REG_FROM}${regWhere({ ...f, since: false })}\n   ORDER BY d DESC LIMIT ?`;
+const regRowsSql = (f: RegFlags & { since: boolean }) =>
+  `SELECT 'member' AS actor, 'registrations' AS action, MAX(r.registered_at) AS at, e.title AS title,
+         COUNT(*) AS n, -MIN(r.id) AS tiebreak
+    ${REG_FROM}${regWhere(f)}
+   GROUP BY date(r.registered_at), r.event_id
+   ORDER BY datetime(at) DESC, tiebreak DESC LIMIT ?`;
+const regCountSql = (f: RegFlags) =>
+  countOf(['SELECT 1', REG_FROM + regWhere({ ...f, since: false }), 'GROUP BY date(r.registered_at), r.event_id'].join('\n   '));
+
+/** Every statement, built once per shape. */
+const SQL = new Map<string, string>();
+const sqlOf = (key: string, build: () => string) => {
+  let s = SQL.get(key);
+  if (s === undefined) { s = build(); SQL.set(key, s); }
+  return s;
+};
 
 /** Which sources a kind asks. Registrations are members' acts, so `admin` skips them. */
 export function sourcesFor(kind: ActivityKind | null): ActivitySource[] {
@@ -242,27 +330,61 @@ export function shapeRow(src: ActivitySource, r: Raw): ActivityRow {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-function binds(q: ActivityQuery): unknown[] {
-  const like = likeNeedleLower(q.q, 1);
-  const admin = q.kind === 'admin' ? 1 : null;
-  return [q.from, q.from, q.to, q.to, like, like, admin];
-}
-
 const UNREADABLE = (src: ActivitySource, e: unknown) =>
   `The ${src.replace('_', ' ')} store could not be read: ${(e as Error)?.message || 'unknown'}.`;
 
-/** The read. Each source is asked for its first `offset + limit` rows and its count, alone. */
+type Ranked = { row: ActivityRow; tie: number };
+type Answer = { rows: Ranked[]; n: number };
+
+/** One audit or posting arm: its first `window` rows and its count, every filter inside it. */
+async function readArm(env: Env, src: ActivitySource, i: number, arm: Arm, q: ActivityQuery, window: number): Promise<Answer> {
+  const f: ArmFlags = { from: q.from !== null, to: q.to !== null, q: q.q !== null, admin: q.kind === 'admin' };
+  if (f.admin && arm.admin === 'skip') return { rows: [], n: 0 };
+  const key = `${src}.${i}.${Number(f.from)}${Number(f.to)}${Number(f.q)}${Number(f.admin)}`;
+  const b = [...(f.from ? [q.from] : []), ...(f.to ? [q.to] : []), ...(f.q ? [likeNeedleLower(q.q, 1)] : [])];
+  const [rows, count] = await Promise.all([
+    env.DB.prepare(sqlOf(`rows.${key}`, () => armRowsSql(arm, f))).bind(...b, window).all<Raw & { tiebreak: number }>(),
+    env.DB.prepare(sqlOf(`count.${key}`, () => armCountSql(arm, f))).bind(...b).first<{ n: number }>(),
+  ]);
+  return { rows: (rows.results || []).map((r) => ({ row: shapeRow(src, r), tie: Number(r.tiebreak) || 0 })), n: Number(count?.n) || 0 };
+}
+
+/**
+ * Registrations: the first `window` (event, day) groups and how many there are.
+ * Unfiltered by `from`, the grouping starts at the `window`-th newest day that
+ * has a registration (read from the index), never at the start of history.
+ */
+async function readRegistrations(env: Env, q: ActivityQuery, window: number): Promise<Answer> {
+  const f: RegFlags = { from: q.from !== null, to: q.to !== null, q: q.q !== null };
+  const key = `${Number(f.from)}${Number(f.to)}${Number(f.q)}`;
+  const b = [...(f.from ? [q.from] : []), ...(f.to ? [q.to] : []), ...(f.q ? [likeNeedleLower(q.q, 1)] : [])];
+  let since: string | null = null;
+  if (!f.from) {
+    const days = await env.DB.prepare(sqlOf(`reg.days.${key}`, () => regDaysSql(f))).bind(...b, window).all<{ d: string | null }>();
+    const ds = (days.results || []).map((r) => r.d);
+    // Fewer days than the window, or an undated group among them: every group can be in the page, so read them all.
+    if (ds.length === window && ds.every((d) => typeof d === 'string')) since = ds[ds.length - 1] as string;
+  }
+  const rf = { ...f, since: since !== null };
+  // regWhere's order: from, to, since, then the search.
+  const rb = [...(f.from ? [q.from] : []), ...(f.to ? [q.to] : []), ...(since !== null ? [since] : []), ...(f.q ? [likeNeedleLower(q.q, 1)] : [])];
+  const [rows, count] = await Promise.all([
+    env.DB.prepare(sqlOf(`reg.rows.${key}${Number(rf.since)}`, () => regRowsSql(rf))).bind(...rb, window).all<Raw & { tiebreak: number }>(),
+    env.DB.prepare(sqlOf(`reg.count.${key}`, () => regCountSql(f))).bind(...b).first<{ n: number }>(),
+  ]);
+  return { rows: (rows.results || []).map((r) => ({ row: shapeRow('event_registrations', r), tie: Number(r.tiebreak) || 0 })), n: Number(count?.n) || 0 };
+}
+
+/** The read. Each source is asked for its first `offset + limit` rows and its count, alone; a source is its arms together. */
 export async function communityActivity(env: Env, q: ActivityQuery) {
   const sources = sourcesFor(q.kind);
   const window = q.offset + q.limit;
-  const b = binds(q);
   const answers = await Promise.all(sources.map(async (src) => {
     try {
-      const [rows, count] = await Promise.all([
-        env.DB.prepare(ROWS_SQL[src]).bind(...b, window).all<Raw & { tiebreak: number }>(),
-        env.DB.prepare(COUNT_SQL[src]).bind(...b).first<{ n: number }>(),
-      ]);
-      return { src, ok: true as const, rows: (rows.results || []).map((r) => ({ row: shapeRow(src, r), tie: Number(r.tiebreak) || 0 })), n: Number(count?.n) || 0 };
+      const parts = src === 'event_registrations'
+        ? [await readRegistrations(env, q, window)]
+        : await Promise.all(ARMS[src].map((arm, i) => readArm(env, src, i, arm, q, window)));
+      return { src, ok: true as const, rows: parts.flatMap((p) => p.rows), n: parts.reduce((t, p) => t + p.n, 0) };
     } catch (e) {
       return { src, ok: false as const, reason: UNREADABLE(src, e) };
     }

@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { tableFromBaseline } from './_baseline.mjs';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
+import { grantWriteBar } from './_write_bar_session.mjs';
 import { Hono } from 'hono';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { ensureCatalogSchema } from '../src/services/catalog.ts';
@@ -292,6 +293,8 @@ test('every Super Admin route answers 403 to a plain Admin and 401 signed out', 
 
 test('pack creation is idempotent; a bad amount reaches no Stripe; adopt judges the price; archive archives it', async () => {
   const f = await world(); const s = stripeStub({ products: SEED_PRODUCTS, prices: SEED_PRICES });
+  // D4703: pack writes take the write bar; the Super Admin acts from a fresh TOTP session.
+  f.jti = grantWriteBar(f.db, 1);
   try {
     for (const amount of [4, 501, 12.5, '25', 0, -10, null])
       assert.equal((await call(f, 'POST', '/api/admin/catalog/token-packs', 1, { amount_usd: amount, idempotency_key: 'key-00000001' })).status, 400, String(amount));

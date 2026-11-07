@@ -74,11 +74,10 @@ export async function publishDraft(env: Env, s: SkillRow, user: User, reason: st
     ...(s.scope === 'company' ? [clearOnRepublish(env, s.id, version, user.id)] : []),
   ]).catch(() => null);
   if (!res || Number(res[0]?.meta?.changes ?? 0) !== 1) return { ok: false, status: 409, code: 'publish_conflict', message: 'This skill was published by someone else just now. Reload it and try again.' };
-  if (s.scope === 'hq') {
-    await logAdminAction(env, user.id, user.email, 'agent_skill_published', {
-      skill_uid: s.uid, skill_name: d.name, reason,
-      before: { status: s.status, version: s.current_version || null }, after: { status: 'published', version },
-    });
-  }
+  // D4534: a company skill's publish is audited too, under its own action name.
+  await logAdminAction(env, user.id, user.email, s.scope === 'hq' ? 'agent_skill_published' : 'company_skill_published', {
+    skill_uid: s.uid, skill_name: d.name, reason, ...(s.scope === 'company' ? { company_id: s.company_id } : {}),
+    before: { status: s.status, version: s.current_version || null }, after: { status: 'published', version },
+  });
   return { ok: true, version, skill_md: md };
 }

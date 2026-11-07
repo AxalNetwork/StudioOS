@@ -73,6 +73,12 @@ function freshDb() {
       name TEXT NOT NULL, company TEXT, email TEXT UNIQUE NOT NULL,
       specialization TEXT, status TEXT NOT NULL DEFAULT 'active'
     );
+    -- #4673: an engagement's founder_id is a FOUNDER PROFILE (founders.id), and the client's name is
+    -- read from it. These fixtures keep the founder's id equal to the user's (FOUNDER_USER) on purpose;
+    -- partner_delivery_report_access_4673.test.ts proves the two apart.
+    CREATE TABLE founders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, name TEXT NOT NULL, email TEXT
+    );
     CREATE TABLE founder_needs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       project_id INTEGER NOT NULL, founder_id INTEGER NOT NULL,
@@ -120,6 +126,7 @@ function freshDb() {
   u.run(THEIRS_USER, 'partner', 2, 'Theirs', 'theirs@example.com');
   u.run(THEIR_STAFF, 'partner', 2, 'Robin', 'robin@example.com');
   u.run(FOUNDER_USER, 'founder', null, 'Fran', 'fran@example.com');
+  db.prepare('INSERT INTO founders (id, name, email) VALUES (?, ?, ?)').run(FOUNDER_USER, 'Fran', 'fran@example.com');
 
   const p = db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)');
   p.run(1, 'p-1', 'Ours', 'ours@example.com');

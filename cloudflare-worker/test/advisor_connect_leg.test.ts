@@ -386,3 +386,25 @@ test('no advisory surface renders a charge as accomplished fact', () => {
   assert.match(money, /from '\.\.\/util\/paymentMode'/);
   assert.match(money, /isProductionEnv\(env\) \? 'live' : 'test'/);
 });
+
+// D4703 (#4703) part 3: a charge that lands on a cancelled or missed booking.
+test('D4703: a charge on a cancelled booking is collected and recorded as owed back, once', async () => {
+  // Mutation checked: the refunds-due INSERT removed → no row; ON CONFLICT dropped → a redelivery fails.
+  const db = freshDb();
+  db.exec(readFileSync(`${SQL}/migrations/202611070915_advisory_refunds_due.sql`, 'utf8'));
+  const e = env(db);
+  db.prepare(`INSERT INTO advisor_bookings (uid, advisor_id, slot_id, amount_cents, billing_state, status)
+     VALUES ('b_c', 1, 7, 30000, 'billed', 'cancelled'), ('b_ok', 1, 8, 30000, 'billed', 'completed')`).run();
+  const pi = (uid: string, id: string) => ({ id, currency: 'usd', amount_received: 30_000, application_fee_amount: 4_500, metadata: { booking_uid: uid, take_rate_bps: '1500' } });
+  await markSessionCharged(e, pi('b_c', 'pi_c'));
+  await markSessionCharged(e, pi('b_ok', 'pi_ok'));
+  assert.equal((db.prepare("SELECT billing_state FROM advisor_bookings WHERE uid = 'b_c'").get() as any).billing_state, 'collected',
+    'the money was collected, and the booking says so');
+  const due = db.prepare('SELECT booking_uid, booking_status, payment_intent_id, amount_cents, currency, resolved_at FROM advisory_refunds_due').all().map((r: any) => ({ ...r }));
+  assert.deepEqual(due, [{ booking_uid: 'b_c', booking_status: 'cancelled', payment_intent_id: 'pi_c', amount_cents: 30000, currency: 'usd', resolved_at: null }],
+    'owed back for the cancelled booking only');
+  // A redelivery after billing_state was reset (a retry before the first write landed) still writes one row.
+  db.prepare("UPDATE advisor_bookings SET billing_state = 'billed' WHERE uid = 'b_c'").run();
+  await markSessionCharged(e, pi('b_c', 'pi_c'));
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM advisory_refunds_due').get() as any).n, 1);
+});

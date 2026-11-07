@@ -166,7 +166,9 @@ export function imageUrlRefusal(raw: unknown): string | null {
   if (u.protocol !== 'https:') return 'not_https';
   if (u.username || u.password) return 'userinfo';
   if (u.port && u.port !== '443') return 'port';
-  const host = u.hostname.toLowerCase();
+  // The root's trailing dot (`name.`) is dropped before the name rules, as `customUrlRefusal` does.
+  const host = u.hostname.toLowerCase().replace(/\.+$/, '');
+  if (!host) return 'bad_url';
   // An address literal (IPv4, or IPv6 in brackets) is never fetched: only names, which `guardHost` resolves.
   if (host.startsWith('[') || host.includes(':') || /^\d+(\.\d+){3}$/.test(host)) return 'ip_literal';
   if (!host.includes('.') || PRIVATE_SUFFIXES.some((s) => host === s || host.endsWith(`.${s}`))) return 'private_name';
