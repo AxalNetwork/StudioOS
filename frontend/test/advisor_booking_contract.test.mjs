@@ -51,10 +51,12 @@ test('slotDto still emits the keys the frontend reads, and not the ones it used 
 
 test('a booking is born pending, and nothing in the worker writes "requested"', () => {
   // This is the whole of the Confirm/Decline bug, in two assertions.
-  assert.match(worker, /INSERT INTO advisor_bookings[\s\S]*?SELECT \?, \?, \?, \?, \?, \?, 'pending', \?, \?, \?, \?/,
+  assert.match(worker, /INSERT INTO advisor_bookings[\s\S]*?SELECT \?, s\.id, s\.advisor_id, \?, \?, \?, 'pending', \?, \?, \?, \?/,
     'the only INSERT into advisor_bookings writes pending');
-  assert.match(worker, /allowed: \['pending'\], nextStatus: 'confirmed'/,
-    'and confirm accepts pending');
+  // D4692: what each verb accepts is the booking graph's table (one place), not a per-route list.
+  assert.match(worker, /nextStatus: 'confirmed', whoCan: 'advisor'/);
+  assert.match(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/advisorLifecycle.ts'), 'utf8'),
+    /pending: \['confirmed', /, 'and confirm accepts pending');
   const requestedAsStatus = [...worker.matchAll(/'requested'/g)];
   assert.equal(requestedAsStatus.length, 0,
     'no booking is ever `requested`; a UI gating on it renders nothing');

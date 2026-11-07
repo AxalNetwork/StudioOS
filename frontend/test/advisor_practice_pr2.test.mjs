@@ -80,7 +80,9 @@ test('a signed engagement is never offered a move to Ended', () => {
     assert.ok(!laneMoves(lane).includes('ended'), lane);
   }
   // And the worker is the authority for that rule, not this test's memory of it.
-  assert.match(WORKER, /if \(lane === 'ended' && SIGNED_LANES\.has\(row\.lane\)\) \{/);
+  // D4692: the rule follows "ever signed", not the current lane, and lives in the lifecycle service.
+  assert.match(WORKER, /const refusal = advanceRefusal\(row, lane\);/);
+  assert.match(read('cloudflare-worker/src/services/advisorLifecycle.ts'), /if \(to === 'ended' && everSigned\(e\)\) \{/);
 });
 
 test('an unsigned engagement may be abandoned from the board, because that is not a lost renewal', () => {

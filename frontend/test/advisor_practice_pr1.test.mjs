@@ -75,7 +75,10 @@ test('the system-cancel set is exactly what the worker writes, not a guess', () 
   const written = new Set(
     [...worker.matchAll(/cancel_reason = (?:COALESCE\(cancel_reason, )?'([a-z_]+)'/g)].map((m) => m[1]),
   );
-  assert.deepEqual([...written].sort(), [...SYSTEM_CANCELS].sort());
+  // D4692: `capacity_race` is retired (the booking INSERT now refuses a full slot instead of
+  // cancelling the loser afterwards), but rows written under it stay in the table and stay withdrawn.
+  assert.deepEqual([...written].sort(), [...SYSTEM_CANCELS].filter((r) => r !== 'capacity_race').sort());
+  assert.ok(SYSTEM_CANCELS.has('capacity_race'));
 });
 
 test('the two cancellations the WORKER writes are withdrawn, not declined', () => {

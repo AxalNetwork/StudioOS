@@ -7,8 +7,9 @@ import {
 } from '../expertise/kit';
 import {
   BOARD_LANES, LANE_LABEL, OUTCOME_LABEL, OUTCOME_TONE, SHAPE_LABEL, SIGNED_LANES,
-  boardLaneOf, canDecideRenewal, clientNote, dueLine, laneMoves, shapeNote,
+  boardLaneOf, canDecideRenewal, clientNote, decisionsFor, dueLine, laneMoves, shapeNote,
 } from './engagementBoard';
+import { failureNote } from './lifecycleConflict';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
@@ -141,7 +142,8 @@ export default function EngagementsZone() {
       await fn();
       await load();
     } catch (error) {
-      setNote({ ok: false, text: error?.message || failure });
+      // D4692: the Worker's own words, and a reload when the record moved under us. Inputs stay as typed.
+      setNote(failureNote(error, failure));
     } finally { setBusy(''); }
   };
 
@@ -233,6 +235,12 @@ export default function EngagementsZone() {
       />
 
       <SaveNote note={note} />
+      {note?.stale && (
+        <button type="button" className={`${ghostButtonClass} mt-2`} data-testid="reload-pr2"
+          onClick={() => { setNote(null); load(); }}>
+          Reload the engagements
+        </button>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {/* ACTIVE COUNTS LANES, NOT OUTCOMES, and the canvas is explicit about
@@ -408,12 +416,12 @@ export default function EngagementsZone() {
           title="Record a renewal decision"
           blurb="The one write that moves a cycle and an outcome. A renewal starts a term and adds a cycle; ending records the loss and closes the lane."
         />
-        {ordered.filter((e) => canDecideRenewal(e.lane)).length === 0
+        {ordered.filter((e) => canDecideRenewal(e.lane, e.ever_signed === true)).length === 0
           ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
             Nothing is under contract, so there is no renewal to decide. A draft or a proposal has no term
             behind it — the worker refuses a decision on one rather than inventing an outcome for it.
           </p>
-          : <ul className="space-y-2">{ordered.filter((e) => canDecideRenewal(e.lane)).map((e) => (
+          : <ul className="space-y-2">{ordered.filter((e) => canDecideRenewal(e.lane, e.ever_signed === true)).map((e) => (
             <li key={e.id} data-testid={`row-pr2-decide-${e.id}`}
               className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -433,7 +441,7 @@ export default function EngagementsZone() {
                 <button type="button" className={ghostButtonClass} disabled={busy === e.id}
                   onClick={() => {
                     setDeciding(deciding === e.id ? null : e.id);
-                    setDecision({ decision: 'renewed', note: '', term_ends_at: '' });
+                    setDecision({ decision: decisionsFor(e.lane)[0], note: '', term_ends_at: '' });
                   }}>
                   {deciding === e.id ? 'Cancel' : 'Decide'}
                 </button>
@@ -443,7 +451,7 @@ export default function EngagementsZone() {
                   <Field label="Decision">
                     <select className={inputClass} value={decision.decision}
                       onChange={(ev) => setDecision({ ...decision, decision: ev.target.value })}>
-                      <option value="renewed">Renewed</option>
+                      {decisionsFor(e.lane).includes('renewed') && <option value="renewed">Renewed</option>}
                       <option value="ended">Ended</option>
                     </select>
                   </Field>
@@ -508,7 +516,7 @@ export default function EngagementsZone() {
  */
 function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
   const due = e.lane === 'renewal_due';
-  const moves = laneMoves(e.lane);
+  const moves = laneMoves(e.lane, e.ever_signed === true);
   // The linked account may not be among the candidates any more — a booking can
   // be removed after the link was made — so its own option is added rather than
   // letting the select fall back to "not linked" and read as though it were.
