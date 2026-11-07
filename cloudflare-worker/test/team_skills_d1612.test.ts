@@ -393,3 +393,18 @@ test('D1612: every route is off until TEAM_AGENTS_ENABLED is "true"', async () =
   assert.equal((await call(w, MEMBER, 'GET', '/skills')).body.error, 'team_agents_off');
   assert.equal((await call(w, EDITOR, 'GET', `/agents/${CFO}/skills`)).status, 404);
 });
+
+test('#4733: a skill written without roles is held to every agent role; an explicit empty list is still refused', async () => {
+  const w = world();
+  const { roles: _drop, ...noRoles } = update({ scope: 'company', company: 'co-uid-1', name: 'No roles given' });
+  const made = await call(w, EDITOR, 'POST', '/skills', noRoles);
+  assert.equal(made.status, 201);
+  const page = await call(w, EDITOR, 'GET', `/skills/${made.body.skill.uid}`);
+  assert.equal(page.status, 200);
+  assert.equal((await call(w, EDITOR, 'POST', '/skills', { ...noRoles, name: 'Empty list', roles: [] })).body.error, 'roles_missing');
+  // A pasted SKILL.md with no roles line lands as a draft held to every role.
+  const md = '---\nname: "Pasted one"\ndescription: "Reads it."\noutput: draft\ntaxonomy:\n  - fp_and_a: working\n---\n1. Read it';
+  const pasted = await call(w, EDITOR, 'POST', '/skills', { scope: 'company', company: 'co-uid-1', skill_md: md });
+  assert.ok([201, 400].includes(pasted.status));
+  assert.notEqual(pasted.body.error, 'roles_missing');
+});

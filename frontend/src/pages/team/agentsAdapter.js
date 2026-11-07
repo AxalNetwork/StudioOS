@@ -164,10 +164,10 @@ export const toolChoices = () => through(() => teamAgentsApi.toolChoices());
 
 // ---------------------------------------------------------------- D1612 skills: A1 (#3951) and A2 (#3956)
 //
-// Team › Skills (boards SK0–SK9). Every body stays `off()` until its route
-// lands; the builder replaces only the body with
-// `throughSkill(() => teamAgentsApi.<method>(…))` and adds the method to
-// `lib/api/teamAgents.js` in the same PR. The shapes are #3951's and #3956's.
+// Team › Skills (boards SK0–SK9). Reads and writes are wired to the Worker's
+// mounted routes (#4224, #4733); the shapes are #3951's and #3956's. There is
+// no `/:scope/:id/skills` or `/skills/import` route: a skill is created with
+// `POST /api/teams/skills` and an import is that route with `skill_md`.
 
 /** `through`, with the skill refusals (A1, A2) in their own words. */
 export async function throughSkill(call) {
@@ -186,14 +186,34 @@ const shaped = (out, fn) => (out.available ? { ...out, value: fn(out.value) } : 
 export const skillLibrary = async (companyUid) => shaped(await throughSkill(() => teamAgentsApi.skillLibrary(companyUid)), fromWorkerLibrary);
 /** `GET /api/teams/skills/:uid` (wired by #4224) → `{ skill (with steps, markdown, versions), can_edit }`. */
 export const skill = async (uid) => shaped(await throughSkill(() => teamAgentsApi.skill(uid)), fromWorkerSkillPage);
-/** `POST /api/teams/:scope/:id/skills` → 201 `{ skill }`, a draft. */
-export const createSkill = (/* scope, id, body */) => off();
+/**
+ * The Worker's skill body from the sheet's: the sheet's `taxonomy` rows are `{ skill_slug, level }`, the Worker's `tags` are
+ * `{ slug, level }`; the sheet's `description` is the Worker's `purpose`. No roles are sent (the Worker holds a skill with none to every role).
+ */
+export function toWorkerSkill(body = {}) {
+  const out = {};
+  if (body.name !== undefined) out.name = body.name;
+  if (body.description !== undefined || body.purpose !== undefined) out.purpose = body.purpose ?? body.description;
+  if (body.steps !== undefined) out.steps = body.steps;
+  if (body.tools !== undefined) out.tools = body.tools;
+  if (body.output_kind !== undefined) out.output_kind = body.output_kind;
+  if (Array.isArray(body.taxonomy)) out.tags = body.taxonomy.map((t) => ({ slug: t.skill_slug ?? t.slug, level: t.level }));
+  return out;
+}
+/** A company's skills only: the Worker has no project-scoped skill. */
+const notCompany = () => ({ available: false, refused: true, code: 'scope_invalid', reason: skillRefusalWords('scope_invalid') });
+/** `POST /api/teams/skills { scope: 'company', company, … }` → 201 `{ skill }`, a draft. */
+export const createSkill = (kind, id, body) => (kind === 'company'
+  ? throughSkill(() => teamAgentsApi.createSkill({ scope: 'company', company: id, ...toWorkerSkill(body) }))
+  : Promise.resolve(notCompany()));
 /** `PATCH /api/teams/skills/:uid` → `{ skill }`. */
-export const updateSkill = (/* uid, patch */) => off();
-/** `POST /api/teams/skills/:uid/publish` → `{ skill, version }`. */
-export const publishSkill = (/* uid, { note } */) => off();
-/** `POST /api/teams/:scope/:id/skills/import { markdown }` → 201 `{ skill, problems }`, always a draft. */
-export const importSkill = (/* scope, id, markdown */) => off();
+export const updateSkill = (uid, patch) => throughSkill(() => teamAgentsApi.updateSkill(uid, toWorkerSkill(patch)));
+/** `POST /api/teams/skills/:uid/publish` → `{ skill }` (no body: the Worker publishes the draft). */
+export const publishSkill = (uid) => throughSkill(() => teamAgentsApi.publishSkill(uid));
+/** `POST /api/teams/skills { scope: 'company', company, skill_md }` → 201 `{ skill }`, always a draft. There is no import route. */
+export const importSkill = (kind, id, markdown) => (kind === 'company'
+  ? throughSkill(() => teamAgentsApi.createSkill({ scope: 'company', company: id, skill_md: markdown }))
+  : Promise.resolve(notCompany()));
 
 // A2 #3956 — agents and skills: wired to `teamAgentsApi` with their routes (D1612 A2).
 /** `GET /api/teams/agents/:uid/skills` → `{ can_manage, skills, radar, values }`. */

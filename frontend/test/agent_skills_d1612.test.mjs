@@ -240,18 +240,14 @@ test('SK4, SK9b: the agent\'s skills with pinned versions, Update to v3, a retir
 
 // ---------------------------------------------------------------- the seam
 
-test('A1\'s writes stay unavailable behind the seam; its two reads (#4224) and A2\'s agent reads are wired to their routes (#3956)', async () => {
+test('A1\'s writes (#4733) and reads (#4224) and A2\'s agent reads (#3956) are wired to mounted routes; no invented route', async () => {
   const methods = ['createSkill', 'updateSkill', 'publishSkill', 'importSkill'];
-  for (const m of methods) {
-    assert.equal(typeof adapter[m], 'function', m);
-    const out = await adapter[m]('company', 'nw1', {});
-    assert.equal(out.available, false, m);
-    assert.equal(out.reason, adapter.AGENTS_OFF_REASON, m);
-  }
+  for (const m of methods) assert.equal(typeof adapter[m], 'function', m);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
-  for (const m of methods) assert.doesNotMatch(codeOnly(client), new RegExp(`\\b${m}\\s*:`), `no client method ${m} until its adapter is wired`);
+  for (const m of ['createSkill', 'updateSkill', 'publishSkill']) assert.match(codeOnly(client), new RegExp(`\\b${m}\\s*:`), `client method ${m}`);
+  assert.doesNotMatch(codeOnly(client), /\bimportSkill\s*:/, 'an import is POST /teams/skills with skill_md, never its own route');
+  assert.doesNotMatch(codeOnly(client), /skills\/import/, 'no invented import path');
   const src = codeOnly(read(`${TEAM}/agentsAdapter.js`));
-  for (const m of methods) assert.match(src, new RegExp(`export const ${m} = \\([^)]*\\) => off\\(\\);`), `${m} stays a one-line off()`);
   // A2: each body calls its client method, and each client method is on the Worker's path.
   const a2 = ['skillLibrary', 'skill', 'agentSkills', 'setAgentSkills', 'availableSkills', 'skillAgents', 'assignable', 'assignSkill', 'coverage'];
   for (const m of a2) assert.match(src, new RegExp(`export const ${m} = [^\\n]*throughSkill\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} is wired`);
