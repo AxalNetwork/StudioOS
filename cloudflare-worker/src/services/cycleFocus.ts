@@ -273,7 +273,11 @@ export async function buildPhone(env: Env, project: BuildProject, viewer: User, 
 // Raise
 // ---------------------------------------------------------------------------
 
-const raiseHref = (ctx: RaiseCtx, slug: string) => `/raise/${slug}?project=${ctx.projectId}`;
+// #4853: the deck's module page IS the Pitch Studio, which reads the venture as `project_id`
+// (the same address `raiseCycle.ts` gives it).
+const raiseHref = (ctx: RaiseCtx, slug: string) => (slug === 'pitch-deck'
+  ? `/raise/pitch?project_id=${ctx.projectId}`
+  : `/raise/${slug}?project=${ctx.projectId}`);
 
 /**
  * Nothing in Raise is recorded: no readiness item, no saved narrative version,
