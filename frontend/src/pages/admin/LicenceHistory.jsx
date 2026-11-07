@@ -8,8 +8,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { adminLicenceHistoryApi } from '../../lib/api/adminLicenceHistory';
 import { reportError } from '../../lib/log';
 import { actorLabel, changeRows, eventLabel, outcomeLabel } from './licenceHistoryModel';
+import { EVENTS_PAGE_DEFAULT } from '../../lib/licenceContracts';
 
-export const HISTORY_PAGE = 50;
+/** One page of history: the contract's default (#4707). */
+export const HISTORY_PAGE = EVENTS_PAGE_DEFAULT;
 
 export function HistoryRow({ e }) {
   const ch = changeRows(e.change);

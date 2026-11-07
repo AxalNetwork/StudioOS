@@ -20,6 +20,7 @@ import OutcomeNotice from '../src/components/OutcomeNotice.jsx';
 import { AttemptSummary } from '../src/pages/admin/LicenceDeploymentAttempts.jsx';
 import { adminDeploymentAttemptsApi } from '../src/lib/api/adminDeploymentAttempts.js';
 import { renderedText } from './_renderedText.mjs';
+import { licencePageSource } from './_licencePage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -149,7 +150,8 @@ test('the client reaches the three Worker routes, and a retry always names its a
 });
 
 test('no licence save or lifecycle action fails silently any more', () => {
-  const page = read('frontend/src/pages/admin/AdminLicences.jsx');
+  // #4707: the licence page is split by domain; read all of it.
+  const page = licencePageSource();
   // The three handlers that only reported to telemetry before D4706.
   assert.doesNotMatch(page, /catch \(e\) \{ reportError\('licence_(seats|terms|action)_failed', e\); \}/);
   for (const id of ['licence-seats-outcome', 'licence-terms-outcome', 'licence-action-outcome', 'deploy-outcome']) {
