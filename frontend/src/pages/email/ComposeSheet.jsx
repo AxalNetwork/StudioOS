@@ -13,10 +13,12 @@
  *     No "Copy to Gmail drafts" (D1347 §3): every draft is kept in Axal VC.
  *     Schedule is not drawn: nothing on the Worker schedules a send yet.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Sheet from '../../ui/Sheet';
 import Lightbox from '../../ui/Lightbox';
 import { mailApi } from '../../lib/api/mail.js';
+import SendUncertain from './SendUncertain.jsx';
+import { makeSendOperation, NOT_RECORDED_LINE, PENDING_LINE, readOutcome, sendFailure } from './sendOperation.js';
 import { ADD_TOKENS_PATH } from '../../lib/aiTokens';
 import { BLOCKS, bodyText, canDraft, cap, estimateLine, INTENTS, LENGTHS, TONES } from './emailModel.js';
 import { BODY, BTN, Chips, ERROR, EYEBROW, INPUT, MUTED, PRIMARY } from './emailParts.jsx';
@@ -36,6 +38,9 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [confirm, setConfirm] = useState(false);
+  const [unsure, setUnsure] = useState(null);
+  const operation = useRef(null);
+  if (!operation.current) operation.current = makeSendOperation();
   const [address, setAddress] = useState(to ?? '');
 
   const ask = useMemo(() => ({ person: person.ref, intent, tone, length, refs, blocks, ...(project ? { project } : {}) }),
@@ -66,10 +71,29 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
     setBusy(true); setError(null);
     try {
       const { nonce } = await api.confirmSend(account.uid);
-      const r = await api.send({ account_uid: account.uid, to: address.trim(), subject: edit.subject, body: edit.body, draft_uid: draft.uid, nonce });
+      const key = operation.current.keyFor([account.uid, address.trim(), edit.subject, edit.body, draft.uid]);
+      const r = await api.send({ account_uid: account.uid, to: address.trim(), subject: edit.subject, body: edit.body, draft_uid: draft.uid, operation_key: key, nonce });
       setConfirm(false);
-      onSent?.(r?.sent ?? null);
-    } catch (e) { setConfirm(false); setError(e?.message || 'The mail server refused it. Nothing was sent.'); }
+      const out = readOutcome(r);
+      if (out.state === 'accepted') { operation.current.forget(); onSent?.(out.sent); }
+      else if (out.state === 'uncertain') setUnsure(out.operation.uid);
+      else setError(out.state === 'pending' ? PENDING_LINE : NOT_RECORDED_LINE);
+    } catch (e) {
+      setConfirm(false);
+      const f = sendFailure(e);
+      if (f.ended) operation.current.forget();
+      setError(f.line);
+    }
+    finally { setBusy(false); }
+  };
+  const resolve = async (outcome) => {
+    setBusy(true); setError(null);
+    try {
+      await api.resolveSend(unsure, outcome);
+      operation.current.forget();
+      setUnsure(null);
+      if (outcome === 'arrived') onSent?.(null); else setError('Marked as not sent. You can send it again.');
+    } catch (e) { setError(e?.message || 'That could not be recorded. Try again.'); }
     finally { setBusy(false); }
   };
 
@@ -79,7 +103,7 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
   const sendable = !!(draft && edit?.subject?.trim() && edit?.body?.trim() && account && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address.trim()) && !questionNeedsEdit);
   const footer = draft
     ? <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={PRIMARY} disabled={!sendable || busy} onClick={() => setConfirm(true)} data-testid="compose-send">
+        <button type="button" className={PRIMARY} disabled={!sendable || busy || !!unsure} onClick={() => setConfirm(true)} data-testid="compose-send">
           {account ? `Send from ${account.address}` : 'Connect a mailbox to send'}
         </button>
         <span className={`text-[12px] ${MUTED}`}>Every draft is kept in Axal VC.</span>
@@ -138,6 +162,7 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
         {line && <p className={`text-[12px] ${MUTED}`}>{line}</p>}
       </section>}
 
+      {unsure && <SendUncertain busy={busy} onArrived={() => resolve('arrived')} onNotArrived={() => resolve('not_arrived')} testId="compose-unsure" />}
       {error && <div className={ERROR} role="alert" data-testid="compose-error">
         {typeof error === 'string' ? error : error.line}
         {typeof error === 'object' && error.topUp && <a href={ADD_TOKENS_PATH} className="ml-2 font-semibold underline">Top up</a>}
