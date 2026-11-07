@@ -63,6 +63,9 @@ import { LICENCE_REASONS } from './licenceReasonModel';
 import {
   DEFAULT_TAB, kindFromParam, ledgerSelection, stepOfTab, tabFromParam, tabKeyMove, tabOfStep, tabsFor,
 } from './licenceNavModel';
+import LicenceDeploymentAttempts from './LicenceDeploymentAttempts';
+import OutcomeNotice from '../../components/OutcomeNotice';
+import { describeOutcome, outcomeFromError, outcomeOfError } from '../../lib/mutationOutcome';
 
 const UNAVAILABLE = Symbol('unavailable');
 import {
@@ -331,17 +334,22 @@ function SeatEditor({ licence, onSaved }) {
     return s;
   });
   const [busy, setBusy] = useState(false);
+  // D4706 — a save says how it ended; a failed one keeps what was typed.
+  const [notice, setNotice] = useState(null);
   const total = SEAT_TYPES.reduce((a, t) => a + (Number(seats[t.k]) || 0), 0);
 
   async function save() {
-    setBusy(true);
+    setBusy(true); setNotice(null);
     try {
       const out = {};
       for (const t of SEAT_TYPES) out[t.k] = Number(seats[t.k]) || 0;
       await api.licenceSetSeats(licence.uid, out);
+      setNotice(describeOutcome('committed', { fallback: 'Seats saved.' }));
       onSaved?.();
-    } catch (e) { reportError('licence_seats_failed', e); }
-    finally { setBusy(false); }
+    } catch (e) {
+      reportError('licence_seats_failed', e);
+      setNotice(outcomeFromError(e, 'The seats were not saved.'));
+    } finally { setBusy(false); }
   }
 
   return (
@@ -369,6 +377,7 @@ function SeatEditor({ licence, onSaved }) {
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : 'Save seats'}
       </button>
+      <div className="mt-2"><OutcomeNotice notice={notice} testId="licence-seats-outcome" /></div>
     </div>
   );
 }
@@ -385,10 +394,12 @@ function TermsEditor({ licence, onSaved }) {
     renews_on: licence.renews_on || '',
   });
   const [busy, setBusy] = useState(false);
+  // D4706 — a save says how it ended; a failed one keeps what was typed.
+  const [notice, setNotice] = useState(null);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
 
   async function save() {
-    setBusy(true);
+    setBusy(true); setNotice(null);
     try {
       await api.licenceSetTerms(licence.uid, {
         term_years: f.term_years === '' ? null : Number(f.term_years),
@@ -400,9 +411,12 @@ function TermsEditor({ licence, onSaved }) {
         starts_on: f.starts_on,
         renews_on: f.renews_on,
       });
+      setNotice(describeOutcome('committed', { fallback: 'Terms saved.' }));
       onSaved?.();
-    } catch (e) { reportError('licence_terms_failed', e); }
-    finally { setBusy(false); }
+    } catch (e) {
+      reportError('licence_terms_failed', e);
+      setNotice(outcomeFromError(e, 'The terms were not saved.'));
+    } finally { setBusy(false); }
   }
 
   return (
@@ -452,6 +466,7 @@ function TermsEditor({ licence, onSaved }) {
           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
           {busy ? <Loader2 size={14} className="animate-spin" /> : 'Save terms'}
         </button>
+        <div className="mt-2"><OutcomeNotice notice={notice} testId="licence-terms-outcome" /></div>
         <p className="mt-2 text-[11px] text-gray-500">
           Rates are stored as integer basis points, not as a fraction — 3500 is 35%. The same
           reason money is stored in cents: 0.35 is not exactly representable in binary floating
@@ -640,7 +655,8 @@ function DeployStep({ licence }) {
   const [doJur, setDoJur] = useState('none');
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
+  // D4706 — how the last Deploy ended, in the shared outcome vocabulary.
+  const [notice, setNotice] = useState(null);
 
   const load = useCallback(() => {
     api.deployments()
@@ -656,16 +672,23 @@ function DeployStep({ licence }) {
   const codeOk = BRANCH_CODE_RE.test(code);
 
   async function deploy() {
-    setBusy(true); setErr(null);
+    setBusy(true); setNotice({ outcome: 'pending', message: 'Asking GitHub for the provisioning run…' });
     try {
-      await api.licenceDeploy(licence.uid, {
+      const r = await api.licenceDeploy(licence.uid, {
         code, d1_jurisdiction: d1, location_hint: hint, do_jurisdiction: doJur, principal_email: email,
       });
-      load();
+      setNotice({ outcome: 'pending', message: r?.note || 'The provisioning run was asked for.' });
     } catch (e) {
       reportError('licence_deploy_failed', e);
-      setErr(e?.message || 'The deploy request was refused.');
-    } finally { setBusy(false); }
+      // Refused, or unknown when no answer came: either way the form keeps
+      // what was typed, and the registry is re-read below — a refusal after
+      // the row was written shows its attempt and a Retry, and an unknown
+      // shows a status check rather than a second Deploy.
+      setNotice(outcomeFromError(e, 'The deploy request was refused.'));
+    } finally {
+      setBusy(false);
+      load();
+    }
   }
 
   if (mine) {
@@ -692,6 +715,9 @@ function DeployStep({ licence }) {
             ? 'bg-green-50 text-green-700 border-green-200'
             : 'bg-gray-100 text-gray-600 border-gray-200'}>{mine.live_state.replace(/_/g, ' ')}</Chip>
         </div>
+        {/* D4706 — the attempts: current, last failure, last success, and
+            the Retry or status check the attempt's state allows. */}
+        <LicenceDeploymentAttempts licence={licence} initialEmail={email} notice={notice} onChanged={load} />
         {mine.status_note && (
           <div
             data-testid="deploy-status-note"
@@ -836,7 +862,7 @@ function DeployStep({ licence }) {
       >
         Deploy this branch
       </button>
-      {err && <p className="text-sm text-red-600">{err}</p>}
+      <OutcomeNotice notice={notice} testId="deploy-outcome" />
     </div>
   );
 }
@@ -1583,11 +1609,22 @@ function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB, onTab 
 
   const refresh = () => { load(); onChanged?.(); };
 
+  // D4706 — every lifecycle action (activate, suspend, reinstate, renew,
+  // terminate) says how it ended. An unknown outcome re-reads the licence
+  // before anything is offered again, so the status shown is the one the
+  // server holds, not the one the operator hoped for.
+  const [actNotice, setActNotice] = useState(null);
   async function act(fn, ...args) {
-    setBusy(true);
-    try { await fn(...args); refresh(); }
-    catch (e) { reportError('licence_action_failed', e); }
-    finally { setBusy(false); }
+    setBusy(true); setActNotice(null);
+    try {
+      await fn(...args);
+      setActNotice(describeOutcome('committed', { fallback: 'Done. The licence below is as the server now holds it.' }));
+      refresh();
+    } catch (e) {
+      reportError('licence_action_failed', e);
+      setActNotice(outcomeFromError(e, 'That was refused. The licence is unchanged.'));
+      if (outcomeOfError(e) === 'unknown') refresh();
+    } finally { setBusy(false); }
   }
 
   if (d === false) return <p className="text-sm text-red-600">Could not load this licence.</p>;
@@ -1598,6 +1635,7 @@ function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB, onTab 
   return (
     <div>
       {reasonDialog}
+      <OutcomeNotice notice={actNotice} testId="licence-action-outcome" onDismiss={() => setActNotice(null)} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
