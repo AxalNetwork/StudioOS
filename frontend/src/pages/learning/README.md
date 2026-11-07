@@ -40,6 +40,7 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `planReads.js` | D3959: every client call the plan's pages make: `learningPlanApi`, and the picker's lists from Learning's own reads (a course resolves its uid on pick). |
 | `PlanSheet.jsx` | D3959: the "Add to my plan" sheet (from the Calendar's create dialog, CAL7), the button on each course, lesson, video, webinar, exercise and exam page, and the picker the Calendar's New › Plan learning opens. |
 | `PlanRowActions.jsx` | D3959: a plan item's Mark done, Reschedule, Open in Learning and Remove, with the Calendar's Reschedule and Cancel dialogs (CAL19). On `/learning/plan` and on a Learning entry in the Calendar. |
+| `NextForYou.jsx` | D4650 (#4650): My learning's "Next for you" card. It shows the member's next learning action from `GET /api/learning/plan/next` with the reason it was chosen and "Add to my plan" (D3959's sheet), or the empty state naming what was checked. |
 | `LearningPlanPage.jsx` | D3959: `/learning/plan`, My learning plan: goals, Upcoming and the past 30 days, and Add a study block (from LR12 "My learning" and LR1's "Your progress"). |
 | `VideosLibrary.jsx`, `videoLibraryModel.js` | D4477 LR7: recorded video filters, transcript-hit banner, poster cards and bounded open-at-time links. |
 | `LessonFooter.jsx`, `lessonFooterModel.js`, `lessonFooter.css` | D4478: the accessible lesson position/completion footer and its phone bar. |

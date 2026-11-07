@@ -16,6 +16,15 @@ name: Daily D1 Backup → R2
 #   - Lifecycle: transition to Standard-IA after 30 days.
 #   - Delete after 365 days.
 # See documentation/operations/INCIDENT_RESPONSE.md § Backups for the dashboard checklist.
+#
+# D4558 — EACH BACKUP HAS A MANIFEST, KEPT BESIDE IT, NOT IN IT:
+# `d1/<database>/backup-YYYY-MM-DD.manifest.json` (scripts/d1-backup-manifest.mjs):
+# sha256, size, the export's start time (the recovery point), the Time Travel
+# bookmark taken just before, every table's row count and the last applied
+# migration. The upload is read back and its sha256 compared before the
+# manifest and the heartbeat are written, so a truncated upload never becomes
+# "the latest backup". scripts/dr-drill.sh refuses a backup its manifest does
+# not vouch for.
 
 on:
   schedule:
@@ -40,6 +49,10 @@ env:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    env:
+      # D4558: a step's `if:` cannot see its own `env:` (the defect D263 fixed
+      # in dr-drill.yml), so the pager step reads this job-level flag.
+      PAGER_CONFIGURED: ${{ secrets.PAGER_WEBHOOK_URL != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -92,6 +105,23 @@ jobs:
           # backup at …". One prefix per database keeps them apart.
           echo "key=d1/${TARGET_DB}/backup-${DATE}.sql" >> "$GITHUB_OUTPUT"
 
+      - name: Record the Time Travel bookmark before the export
+        id: bookmark
+        # Read-only. The bookmark names the database's state just before the
+        # export started; D1 Time Travel can restore to it for 30 days. A
+        # bookmark that cannot be read is recorded as null, never invented.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "started_at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+          BOOKMARK=$(wrangler d1 time-travel info "${TARGET_DB}" --json 2>/dev/null | jq -r '.bookmark // empty' 2>/dev/null || true)
+          if [[ ! "${BOOKMARK}" =~ ^[0-9a-f-]{8,128}$ ]]; then
+            echo "::warning::The Time Travel bookmark could not be read; the manifest records none."
+            BOOKMARK=""
+          fi
+          echo "bookmark=${BOOKMARK}" >> "$GITHUB_OUTPUT"
+
       - name: Export D1 → SQL
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -105,6 +135,17 @@ jobs:
             --output "${BACKUP_FILENAME}"
           ls -lh "${BACKUP_FILENAME}"
 
+      - name: Build the backup's manifest
+        env:
+          BACKUP_KEY: ${{ steps.name.outputs.key }}
+          BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
+          EXPORT_STARTED_AT: ${{ steps.bookmark.outputs.started_at }}
+          BOOKMARK: ${{ steps.bookmark.outputs.bookmark }}
+        run: |
+          ARGS=(build "${BACKUP_FILENAME}" manifest.json --key "${BACKUP_KEY}" --db "${TARGET_DB}" --exported-at "${EXPORT_STARTED_AT}")
+          [[ -n "${BOOKMARK}" ]] && ARGS+=(--bookmark "${BOOKMARK}")
+          node scripts/d1-backup-manifest.mjs "${ARGS[@]}"
+
       - name: Upload to R2 (studioos-backups)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -116,6 +157,27 @@ jobs:
             "${BACKUP_BUCKET}/${BACKUP_KEY}" \
             --file "${BACKUP_FILENAME}" \
             --content-type 'application/sql' \
+            --remote
+
+      - name: Read the upload back and check it, then upload the manifest
+        # The manifest is written only for an object whose bytes match it.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BACKUP_KEY: ${{ steps.name.outputs.key }}
+        run: |
+          wrangler r2 object get "${BACKUP_BUCKET}/${BACKUP_KEY}" --file readback.sql --remote
+          WANT=$(jq -r '.sha256' manifest.json)
+          GOT=$(sha256sum readback.sql | cut -d' ' -f1)
+          if [[ "${WANT}" != "${GOT}" ]]; then
+            echo "::error::The uploaded backup does not match the export (sha256 differs); no manifest or heartbeat is written."
+            exit 1
+          fi
+          rm -f readback.sql
+          wrangler r2 object put \
+            "${BACKUP_BUCKET}/${BACKUP_KEY%.sql}.manifest.json" \
+            --file manifest.json \
+            --content-type 'application/json' \
             --remote
 
       - name: Write D1 heartbeat marker
@@ -134,7 +196,10 @@ jobs:
             "source": "gha",
             "kind": "d1",
             "key": "${BACKUP_KEY}",
-            "size_bytes": $(stat -c%s "${BACKUP_FILENAME}")
+            "size_bytes": $(stat -c%s "${BACKUP_FILENAME}"),
+            "sha256": "$(jq -r '.sha256' manifest.json)",
+            "manifest_key": "${BACKUP_KEY%.sql}.manifest.json",
+            "exported_at": "$(jq -r '.exported_at' manifest.json)"
           }
           EOF
           wrangler r2 object put \
@@ -144,7 +209,7 @@ jobs:
             --remote
 
       - name: Notify on failure
-        if: failure() && env.PAGER_WEBHOOK_URL != ''
+        if: failure() && env.PAGER_CONFIGURED == 'true'
         env:
           PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
         run: |

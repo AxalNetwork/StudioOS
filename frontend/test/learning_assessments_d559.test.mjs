@@ -200,7 +200,8 @@ test('the fixtures are what D559 sends, and the studio\'s frozen line is the rou
     'attempt: { uid: attempt.uid, started_at: attempt.started_at, deadline:',
     'questions: inOrder(all, attempt.question_order_json).map(memberQuestion),',
     'return c.json({ attempt: attemptView(after, exam, all), correct_count: g.correct, question_count: g.total, lesson_progress });',
-    "if (!a.submitted_at || exam.reveal !== 'score_and_answers') return { ...base, answers_revealed: false };",
+    // D4643: what a submitted attempt reveals is read from the attempt's own policy.
+    "if (!a.submitted_at || policyOf(a, exam).reveal !== 'score_and_answers') return { ...base, answers_revealed: false };",
     'return { ...base, answers_revealed: true, answers, correct: revealed(shown) };',
     'attempts_left: exam.max_attempts == null ? null : Math.max(0, Number(exam.max_attempts) - used),',
     'return c.json({ exercise: { uid: ex.uid, title: ex.title }, submissions: out });',

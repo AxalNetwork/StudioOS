@@ -5,6 +5,10 @@
  * COUNTS ONLY. No member's name, email or account id leaves the read. Every
  * query below groups, counts or sums; the strings that travel are statuses,
  * types, kinds, role keys, Monday weeks, and a posting's title and company.
+ * #4717 adds the rows behind three counts, records and never people: the next
+ * events and the oldest waiting ones (an event's title, time, capacity and
+ * seats taken, `event_id`), and the oldest waiting and most-applied postings
+ * (title, company, `posting_id`). Never a host, an applicant or a member.
  *
  * EACH BLOCK ANSWERS ALONE, in D893's shape:
  *   · `{ available: true, ... }` — read;
@@ -45,8 +49,10 @@ export const OVERDUE_HOURS = 72;
 export const MIN_CHECKIN_COHORT = 7;
 /** The check-in band's width: a count is shown as the multiple of this at or below it. */
 export const CHECKIN_BUCKET = 5;
-/** The postings `jobs.top` lists. */
+/** The postings `jobs.top` and `jobs.most_applied` list. */
 export const TOP_POSTINGS = 5;
+/** #4717: the oldest waiting postings `queue.jobs.review` lists, as many as the events' (D918's `REVIEW_ROWS`). */
+export const REVIEW_ROWS = 6;
 
 /** D1121: a published posting approved before migration 609 has no recorded day, so its days open are not known. */
 export const DAYS_OPEN_REASON = 'This posting was approved before the day was recorded, so how long it has been open is not known.';
@@ -116,7 +122,27 @@ async function jobsQueue(env: Env, nowMs: number) {
   ).bind(sqlTime(nowMs - OVERDUE_HOURS * 3_600_000)).first<{ pending: number; no_submitted_at: number; overdue: number; oldest: string | null }>();
   const oldest = r?.oldest ? String(r.oldest) : null;
   const waited = oldest ? Date.parse(`${oldest.replace(' ', 'T')}Z`) : NaN;
+  // #4717 — the oldest waiting postings, the rows behind `pending`. One
+  // submitted before migration 550 has no recorded wait: listed after every
+  // dated one, never Overdue and never a wait of 0.
+  const rows = await env.DB.prepare(
+    `SELECT j.id AS id, j.title AS title, p.name AS company, j.submitted_at AS submitted_at
+       FROM job_postings j LEFT JOIN projects p ON p.id = j.project_id
+      WHERE j.status = 'pending_review'
+      ORDER BY CASE WHEN j.submitted_at IS NULL THEN 1 ELSE 0 END, datetime(j.submitted_at), j.id
+      LIMIT ?`,
+  ).bind(REVIEW_ROWS).all<{ id: number; title: string; company: string | null; submitted_at: string | null }>();
+  const review = (rows.results || []).map((j) => {
+    const at = j.submitted_at ? Date.parse(`${String(j.submitted_at).replace(' ', 'T')}Z`) : NaN;
+    const hours = Number.isFinite(at) ? Math.max(0, Math.floor((nowMs - at) / 3_600_000)) : null;
+    return {
+      posting_id: Number(j.id), title: String(j.title ?? ''), company: j.company == null ? null : String(j.company),
+      waiting_since: Number.isFinite(at) ? new Date(at).toISOString() : null,
+      waiting_hours: hours, overdue: hours !== null && hours > OVERDUE_HOURS,
+    };
+  });
   return {
+    review,
     pending: n(r?.pending),
     overdue: n(r?.overdue),
     // Submitted before migration 550: waiting, with no recorded wait. Never counted as Overdue or as 0 hours.
@@ -166,7 +192,28 @@ async function jobsBlock(env: Env, axis: WeekAxis, before: WeekAxis, nowMs: numb
       ORDER BY applications DESC, j.id ASC
       LIMIT ?`,
   ).bind(axis.from, axis.to, TOP_POSTINGS).all<{ title: string; company: string | null; status: string; published_at: string | null; applications: number }>();
+  // #4717 — the Jobs card's "most applications": every posting's applications
+  // of all time, the five highest, with their days open. Counted here so the
+  // card needs no list of every posting.
+  const most = await env.DB.prepare(
+    `SELECT j.id AS id, j.title AS title, p.name AS company, j.status AS status, j.published_at AS published_at,
+            COUNT(a.id) AS applications
+       FROM job_postings j
+       JOIN job_applications a ON a.posting_id = j.id
+       LEFT JOIN projects p ON p.id = j.project_id
+      GROUP BY j.id
+      ORDER BY applications DESC, j.id ASC
+      LIMIT ?`,
+  ).bind(TOP_POSTINGS).all<{ id: number; title: string; company: string | null; status: string; published_at: string | null; applications: number }>();
   return {
+    most_applied: (most.results || []).map((r) => ({
+      posting_id: Number(r.id),
+      title: String(r.title ?? ''),
+      company: r.company == null ? null : String(r.company),
+      status: String(r.status ?? ''),
+      applications: n(r.applications),
+      days_open: daysOpen(r.status, r.published_at, nowMs),
+    })),
     applications: { window: n(apps?.window), previous: n(apps?.previous) },
     weekly: weekly(axis, byWeek.results || []),
     by_status,
@@ -371,10 +418,15 @@ export function showUpCounts(b: D918Block) {
 async function eventsParts(env: Env, weeks: CommunityWeeks, nowMs: number) {
   const o = await readOverview(env, weeks, nowMs);
   return {
+    // #4717: the queue's count and the oldest waiting events, the rows behind it.
     queue: o.queue,
+    review: o.review,
     events: {
       // D918's next 30 days (published or waiting) and their seats taken, counts only (D1121).
       upcoming: o.upcoming_30d,
+      // #4717: the soonest of the events `upcoming` counts, and every event by status (the page's empty rule).
+      next_up: o.next_up,
+      by_status: o.by_status,
       weekly: eventsWeekly(o.weekly as D918Block),
       show_up: showUpCounts(o.show_up as D918Block),
       by_type: o.by_type,
@@ -416,7 +468,7 @@ export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: 
     previous: { from: before.from, to: before.to },
     as_of: new Date(nowMs).toISOString(),
     blocks: {
-      queue: { events: ev.queue, jobs: jobsQ, overdue_hours: OVERDUE_HOURS },
+      queue: { events: ev.queue, event_rows: ev.review, jobs: jobsQ, overdue_hours: OVERDUE_HOURS },
       events: ev.events,
       jobs,
       participation_by_role: { events: ev.byRole, jobs: jobsRoles },

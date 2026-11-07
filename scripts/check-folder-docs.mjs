@@ -172,6 +172,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/incorporate',          'Incorporate: the formation flow, its review quote, the bank step, Done and HQ\'s read-only frame'],
   ['frontend/src/pages/learning',             'the Learning center: one routed page, its components, and the coming-soon gate'],
   ['frontend/src/pages/advisor',               'advisor workspace framing, public profiles and booking links'],
+  ['frontend/src/pages/advisor/expertise',     'one file per Expertise zone, the kit they share, and the pure modules they read'],
   ['frontend/src/pages/advisor/practice',      'one file per Practice artboard, plus the pure module each keeps its derivations in'],
   ['frontend/src/pages/advisor/advisory',      'the retained Clients and Contracts tabs, including private client notes'],
   ['frontend/src/templates/components',       'landing-page section blocks'],

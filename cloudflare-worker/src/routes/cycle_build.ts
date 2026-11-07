@@ -54,6 +54,17 @@ type Sort = NonNullable<BuildRecords['sorts']>[number];
 type ListSpec = { filters: Filter[]; sort: Sort; orders?: Record<string, readonly string[]> };
 type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; list?: ListSpec; facts?: Record<string, unknown>; add?: BuildRecords['add']; parts?: Record<string, unknown> };
 type Query = { q?: string; filter?: string; sort?: string; page?: string };
+/**
+ * #4603 (D4603): what a module read is for. A module page needs everything,
+ * its integration `parts` included (GitHub, Vercel, Lovable, proposals,
+ * releases). The overview shows each module's card and facts and the phone's
+ * focus, meter and index, which read cards, facts and rows only, so it reads
+ * without the parts: that was 31 of its 52 statements, every one of them a
+ * read the overview never showed.
+ */
+type ReadOpts = { parts: boolean };
+const FULL: ReadOpts = Object.freeze({ parts: true });
+const OVERVIEW: ReadOpts = Object.freeze({ parts: false });
 
 function number(v: unknown): number { return Number(v ?? 0); }
 function rows<T>(r: { results?: T[] | null }): T[] { return r.results ?? []; }
@@ -186,7 +197,7 @@ function reconnect(providerKey: string, failedAt: unknown, projectId: number, fa
   return { text: `Reconnect ${name}${since ? ` · failing since ${since}` : ''}`, href: connectHref(providerKey, projectId) };
 }
 
-async function solution(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
             pg.title AS pain_theme, h.claim AS hypothesis
@@ -220,7 +231,7 @@ async function solution(env: Env, p: Project, viewer: Viewer): Promise<ModuleRea
     cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
     list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
       sort: { key: 'impact', label: 'Impact' }, orders: { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } },
-    facts: { features: features.length, risks }, parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } };
+    facts: { features: features.length, risks }, ...(opts.parts ? { parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } } : {}) };
 }
 
 /** D1097 (#2962): Solution design's "Runs on" from Vercel (VC4a). Its own read, Unreadable on its own. */
@@ -245,7 +256,7 @@ async function fromCode(env: Env, projectId: number) {
   }
 }
 
-async function prototype(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.is_must_have, f.delivery_status, f.done_at, f.updated_at,
             f.hypothesis_id, f.due_date, u.name AS owner, h.claim AS test_hypothesis
@@ -284,12 +295,12 @@ async function prototype(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
     // D1083 (#2948): From Lovable, the project's one app link, under From GitHub.
     // D1098 (#2963): From Vercel, the Live strip and each must-have's preview.
-    parts: {
+    ...(opts.parts ? { parts: {
       github: await prototypeGithub(env, p),
       // D1082 (#2947, LV7): Build in Lovable's launch data rides under the same key, as `launch`.
       lovable: { ...(await lovablePart(env, p.id, 'build', [{ id: p.id, label: 'Prototype / MVP' }])), launch: await prototypeLovable(env, p, viewer) },
       vercel: await fromVercel('prototype_mvp', async () => mvpVercel(env, p.id, await projectMember(env, p, viewer))),
-    } };
+    } } : {}) };
 }
 
 /**
@@ -361,7 +372,7 @@ async function prototypeGithub(env: Env, p: Project) {
   }
 }
 
-async function roadmap(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const items = rows(await env.DB.prepare(
     `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id,
             u.name AS owner
@@ -399,7 +410,7 @@ async function roadmap(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead
     list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
       sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
     facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 },
-    parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } };
+    ...(opts.parts ? { parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } } : {}) };
 }
 
 /** How many releases the strip shows, newest first; `releases_total` gives the rest's count. */
@@ -479,7 +490,7 @@ async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; s
   return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? { pct: null, source: null } : { pct: Number(pool), source: 'model' };
 }
 
-async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // Vesting belongs to a holder, but its own row is user-keyed. Both keys
   // must agree; a founder's other company's schedule must never be joined.
   const holders = rows(await env.DB.prepare(
@@ -516,8 +527,8 @@ async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRea
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
     facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source }))),
       agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
-    parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
-      founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } };
+    ...(opts.parts ? { parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
+      founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } } : {}) };
 }
 
 /**
@@ -556,7 +567,7 @@ async function fromVercel(module: 'prototype_mvp' | 'product_roadmap' | 'company
   }
 }
 
-async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
@@ -600,10 +611,10 @@ async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null },
-    parts: {
+    ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
-    } };
+    } } : {}) };
 }
 
 const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'] as const;
@@ -620,7 +631,7 @@ async function workspaceConnected(env: Env, userId: number, providerKey: string)
   if (providerKey === 'microsoft_365') return !!await env.DB.prepare('SELECT 1 FROM microsoft_oauth_tokens WHERE user_id = ?').bind(userId).first();
   return false;
 }
-async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
+async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // The company's enabled mapping is the only source. A member's personal
   // connector list would include tools withheld from this company.
   const mapped = p.company_id == null ? 0 : number((await env.DB.prepare(
@@ -684,11 +695,14 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
     });
   });
   const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));
-  const code = p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
+  // Code and Hosting are shown only in the Tools part, so the overview (OVERVIEW) does not read them.
+  const code = !opts.parts || p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
   // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
-  let hosting: any;
-  try { hosting = await hostingSystems(env, p, viewer, viewerMember, connectHref('vercel', p.id)); }
-  catch { hosting = { state: 'unreadable', systems: [], reason: VERCEL_UNREADABLE, syncs: { state: 'unreadable', rows: [], reason: null } }; }
+  let hosting: any = null;
+  if (opts.parts) {
+    try { hosting = await hostingSystems(env, p, viewer, viewerMember, connectHref('vercel', p.id)); }
+    catch { hosting = { state: 'unreadable', systems: [], reason: VERCEL_UNREADABLE, syncs: { state: 'unreadable', rows: [], reason: null } }; }
+  }
 
   const rituals = rows(await env.DB.prepare(
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?
@@ -713,7 +727,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       orders: { state: ['failing', 'connected', 'not_connected'] } },
     facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
       tools_failing: p.company_id == null ? null : tools.filter(tool => tool.status === 'error').length, tools_total: p.company_id == null ? null : tools.length },
-    parts: { tools: {
+    ...(opts.parts ? { parts: { tools: {
       cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
       state: p.company_id == null ? 'not_recorded' : 'ok', reason: p.company_id == null ? 'This project has no company scope for connectors.' : null,
@@ -721,7 +735,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       code: code?.code ?? { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.' },
       syncs: code?.syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
       hosting,
-    } } };
+    } } } : {}) };
 
 }
 
@@ -800,13 +814,13 @@ async function codeSystems(env: Env, p: Project, viewer: Viewer, viewerMember: b
   return { code, syncs: { state: lines.length ? 'ok' : 'empty', rows: lines, reason: lines.length ? null : 'No GitHub sync yet.' } };
 }
 
-const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer) => Promise<ModuleRead>> = {
+const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer, opts?: ReadOpts) => Promise<ModuleRead>> = {
   'solution-design': solution, 'prototype-mvp': prototype, 'product-roadmap': roadmap,
   'founding-team': founding, 'company-creation': company, 'operating-systems': operating,
 };
 
-async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer): Promise<ModuleRead> {
-  try { return await READS[slug](env, project, viewer); }
+async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+  try { return await READS[slug](env, project, viewer, opts); }
   catch (error) {
     const spec = MODULES.find(m => m[0] === slug)!;
     console.error('[cycle_build] %s read failed', spec[2], error);
@@ -830,7 +844,8 @@ app.get('/overview', async c => {
   const project = await context(c);
   if (project instanceof Response) return project;
   const viewer = await requireAuth(c);
-  const results = await Promise.all(MODULES.map(m => safeRead(m[0], c.env, project, viewer)));
+  // #4603: cards, facts and rows only; no module's integration parts (the overview never shows them).
+  const results = await Promise.all(MODULES.map(m => safeRead(m[0], c.env, project, viewer, OVERVIEW)));
   const prototype = results[1], roadmap = results[2], systems = results[5];
   const pFacts = prototype.facts, rFacts = roadmap.facts, sFacts = systems.facts;
   const pBad = prototype.card.state === 'unreadable';

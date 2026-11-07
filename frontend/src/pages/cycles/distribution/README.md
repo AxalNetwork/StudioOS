@@ -28,6 +28,7 @@ starting ads.
 | `WaitingForYou.jsx` | D4488: venture-scoped header count, loading/empty/error states and individual or safe bulk decisions. |
 | `distributionAskModel.js` | D4488: labels, actual listed counts, exact safe kinds and recorded hold/charge copy. |
 | `InboxTab.jsx` | D4494: scoped reply threads, personal unread read, Needs-you row and the composer; only final confirmation sends. |
+| `NewsletterTab.jsx` | D4495: the Newsletter tab's not-connected state only (Connect Beehiiv disabled, 'Not offered yet'; Opens, Clicks and Unsubscribes Not recorded); makes no request until the Beehiiv connector (#2407) exists. |
 | `inboxModel.js` | D4494: recorded reply labels, local proposal text, Calendar link and existing mail confirmation/send boundary. |
 | `inbox.css` | D4494: DS8 thread columns, phone stacking and directional message bubbles using shared tokens. |
 | `ChannelsTab.jsx` | D4486: venture channel readings, existing Add/Edit forms and Ask, read-only connection cards, settings confirmation and existing tool doors. |
@@ -56,13 +57,15 @@ starting ads.
 | `ConsentByStep.jsx` | D4493: MK7b's per-prospect, per-step recorded consent table and its caption. |
 | `sequenceModel.js` | D4493: pure pills, fixed blocked reasons, 'There is no SMS step.', AI voice Not offered, subtitles, due counts and the hold line. |
 | `sequences.css` | D4493: sequence layout on the shared Distribution tokens, phone stacking. |
+| `ResultsTab.jsx` | D4491: read-only funnels, Campaigns, Attribution and Spend per channel with source chips, the window, the MRR note, skeleton and read-error card. |
+| `resultsModel.js` | D4491: Not recorded reasons, money and cost-per-lead rounding, funnel widths and the window label. |
 
 CycleRoute still owns the module page. Overview retains its charts,
 This week calendar summary (with D4493's STEP items), update-ask replies, Mercury, Notion and tool
 doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
 mounted D4486 tab; its table replaces Overview’s legacy channel records.
 Calendar is the D4489 tab, using the same scoped read as This week.
-Prospects is the D4492 tab. Other tabs show Coming in this module soon until
+Prospects is the D4492 tab. Results is the D4491 tab: read only, it writes no MRR. Other tabs show Coming in this module soon until
 their tasks land.
 Import `ProspectsTab` for the shell's Prospects slot, with its verified venture
 id and read/write state. The wizard may call `useProspectConsentSummary` once,
