@@ -177,3 +177,141 @@ test('the source: the commitments read never selects a note for staff or the fou
   assert.match(gate, /held: gate\.visible > 0 \|\| gate\.hidden > 0/);
   assert.match(gate, /console\.error\('\[deals\] transfer gate read failed:', \(e as Error\)\?\.name\)/, 'the log names the error, never its text');
 });
+
+// ───────────────────────────────────────────── D4631 (#4631): one deal-relative audience, whatever the licences
+
+const LICENCES = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611041822_account_licences.sql'), 'utf8');
+/** Combined-licence accounts. 8 is a founder of ANOTHER venture who also invests (invited here); 9 is an investor who
+ * also holds the founder licence of THIS venture; 10 is an investor who also holds the partner licence. */
+const BOTH_INVEST = 8, BOTH_OWN = 9, BOTH_PARTNER = 10;
+function licensedDb() {
+  const db = freshDb();
+  db.exec(LICENCES);
+  // The three users themselves are made by freshDb (ROLE and NAMES name them); here they get their ventures.
+  db.exec(`UPDATE users SET founder_id = 60 WHERE id = ${BOTH_INVEST}`);
+  db.exec(`UPDATE users SET founder_id = 50 WHERE id = ${BOTH_OWN}`);
+  const l = db.prepare(`INSERT INTO account_licences (user_id, licence, source) VALUES (?, ?, 'test')`);
+  l.run(BOTH_INVEST, 'investor'); l.run(BOTH_OWN, 'founder'); l.run(BOTH_PARTNER, 'partner');
+  db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (20, 'Other Venture', 60)`);
+  db.exec(`INSERT INTO deal_invitations (deal_id, investor_user_id, status, created_at) VALUES (1, ${BOTH_INVEST}, 'invited', '2026-10-04 09:00:00')`);
+  return db;
+}
+Object.assign(ROLE, { [BOTH_INVEST]: 'founder', [BOTH_OWN]: 'investor', [BOTH_PARTNER]: 'investor' });
+Object.assign(NAMES, { [BOTH_INVEST]: 'Ola Other-founder', [BOTH_OWN]: 'Ivy Investor-founder', [BOTH_PARTNER]: 'Pia Investor-partner' });
+
+test('D4631 · a founder of another venture who invests here reads this deal as an investor: no other investor named, no studio note', async () => {
+  const db = licensedDb();
+  try {
+    const commits = await get(db, BOTH_INVEST, '/commitments');
+    assert.equal(commits.status, 200, commits.text);
+    assert.deepEqual(commits.body, [], 'an investor with no commitment reads no rows, and certainly not everyone\'s');
+    for (const leak of ['Ada Angel', 'Ben Backer', '75000', '50000']) assert.ok(!commits.text.includes(leak), `reads ${leak}`);
+    const activity = await get(db, BOTH_INVEST, '/activity');
+    assert.equal(activity.status, 200, activity.text);
+    for (const leak of ['Ada Angel', 'Ben Backer']) assert.ok(!activity.text.includes(leak), `activity names ${leak}`);
+    const detail = await get(db, BOTH_INVEST, '');
+    assert.equal(detail.status, 200, detail.text);
+    assert.ok(!detail.text.includes(STUDIO_NOTE), 'the studio\'s note stays the studio\'s');
+  } finally { db.close(); }
+});
+
+test('D4631 · an investor who holds this venture\'s founder licence reads it as its owner: every investor named, still no studio note', async () => {
+  const db = licensedDb();
+  try {
+    const commits = await get(db, BOTH_OWN, '/commitments');
+    assert.equal(commits.status, 200, commits.text);
+    assert.deepEqual(commits.body.map((r: any) => r.investor_name).sort(), ['Ada Angel', 'Ben Backer'], 'the owner reads the round as the founder does');
+    for (const note of [ADA_NOTE, BEN_NOTE]) assert.ok(!commits.text.includes(note), 'never a note');
+    const activity = await get(db, BOTH_OWN, '/activity');
+    assert.ok(activity.text.includes('Ben Backer'), 'activity names investors for the owner');
+    assert.ok(!(await get(db, BOTH_OWN, '')).text.includes(STUDIO_NOTE));
+  } finally { db.close(); }
+});
+
+test('D4631 · an investor holding the partner licence is deal staff: the studio note leaves to them as to a primary partner', async () => {
+  const db = licensedDb();
+  try {
+    const detail = await get(db, BOTH_PARTNER, '');
+    assert.equal(detail.status, 200, detail.text);
+    assert.ok(detail.text.includes(STUDIO_NOTE), 'the partner licence, not the primary role, decides');
+    const primary = await get(db, OP, '');
+    assert.ok(primary.text.includes(STUDIO_NOTE), 'as for a primary partner');
+  } finally { db.close(); }
+});
+
+test('D4631 · a revoked licence takes its access with it: the invited founder-investor is refused once the investor licence is revoked', async () => {
+  const db = licensedDb();
+  try {
+    assert.equal((await get(db, BOTH_INVEST, '/commitments')).status, 200);
+    db.exec(`UPDATE account_licences SET revoked_at = '2026-11-07 10:00:00' WHERE user_id = ${BOTH_INVEST}`);
+    const after = await get(db, BOTH_INVEST, '/commitments');
+    assert.equal(after.status, 403, 'no licence, no relationship path, no read');
+    assert.ok(!after.text.includes('Ben Backer'));
+  } finally { db.close(); }
+});
+
+async function getAt(db: DatabaseSync, who: number, path: string) {
+  const tok = await new SignJWT({ user_id: who, role: ROLE[who] }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const res = await app.fetch(new Request(`http://x/api/deals${path}`, { headers: { Authorization: `Bearer ${tok}` } }),
+    { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+  const text = await res.text();
+  let body: any = null;
+  try { body = JSON.parse(text); } catch { /* asserted below */ }
+  return { status: res.status, body, text };
+}
+
+test('D4631 · the venture\'s documents are behind its NDA for an investor, a partner included; the founder and the admin are exempt', async () => {
+  const db = licensedDb();
+  try {
+    db.exec(ddl('documents'));
+    db.exec(ddl('pairwise_ndas'));
+    db.exec(`INSERT INTO documents (project_id, title, doc_type, status) VALUES (10, 'Synthetic SAFE draft', 'safe', 'draft')`);
+    for (const who of [BOTH_INVEST, OP]) {
+      const r = await get(db, who, '/documents');
+      assert.deepEqual([r.status, r.body?.error], [403, 'nda_required'], `${who}: told why, never an empty list`);
+      assert.ok(!r.text.includes('Synthetic SAFE draft'));
+    }
+    for (const who of [FOUNDER, BOTH_OWN, ADMIN]) {
+      const r = await get(db, who, '/documents');
+      assert.equal(r.status, 200, `${who}: ${r.text}`);
+      assert.deepEqual(r.body.map((d: any) => d.title), ['Synthetic SAFE draft']);
+    }
+    // An active NDA with the venture's founder opens the list; an expired one does not.
+    db.exec(`INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status, valid_until) VALUES (${FOUNDER}, ${BOTH_INVEST}, 'active', '2099-01-01')`);
+    assert.equal((await get(db, BOTH_INVEST, '/documents')).status, 200);
+    db.exec(`UPDATE pairwise_ndas SET valid_until = '2000-01-01' WHERE party_b_user_id = ${BOTH_INVEST}`);
+    assert.equal((await get(db, BOTH_INVEST, '/documents')).status, 403, 'an expired NDA no longer opens it');
+  } finally { db.close(); }
+});
+
+test('D4631 · the screening desk narrows anyone who is not deal staff to their own deals, whatever their primary role', async () => {
+  const db = licensedDb();
+  try {
+    db.exec(`INSERT INTO deals (id, project_id, status, created_at) VALUES (3, 10, 'active', '2026-10-09 09:00:00'), (4, 20, 'active', '2026-10-09 09:00:00')`);
+    const desk = await getAt(db, BOTH_INVEST, '/screening');
+    assert.equal(desk.status, 200, desk.text);
+    assert.deepEqual(desk.body.desk.rows.map((r: any) => r.deal_id), [1], 'a founder-primary investor reads the deals they are invited to, not the studio\'s desk');
+    const staff = await getAt(db, BOTH_PARTNER, '/screening');
+    assert.deepEqual(staff.body.desk.rows.map((r: any) => r.deal_id).sort(), [1, 3, 4], 'the partner licence reads the whole desk');
+  } finally { db.close(); }
+});
+
+test('D4631 · the pass taxonomy is a shared aggregate, but a pass\'s note and who passed are the studio\'s', async () => {
+  const db = licensedDb();
+  try {
+    db.exec(ddl('deal_stage_events'));
+    db.exec(ddl('activity_logs'));
+    // The route adds its pass columns on first use (ensureDealPassSchema); one read makes them.
+    await getAt(db, ADMIN, '/pass-analytics');
+    db.exec(`INSERT INTO deals (id, project_id, status, pass_reason, pass_note, passed_by_user_id, passed_at) VALUES (5, 10, 'rejected', 'team', 'Synthetic internal pass note', ${OP}, '2026-10-10 09:00:00')`);
+    const reason = 'team';
+    const staff = await getAt(db, ADMIN, `/pass-analytics?reason=${reason}`);
+    assert.equal(staff.status, 200, staff.text);
+    assert.ok(staff.text.includes('Synthetic internal pass note') && staff.text.includes('Pat Partner'), 'staff read the note and who passed');
+    const investor = await getAt(db, YOU, `/pass-analytics?reason=${reason}`);
+    assert.equal(investor.status, 200, investor.text);
+    assert.equal(investor.body.deals.length, 1, 'the investor still reads the taxonomy');
+    assert.ok(!investor.text.includes('Synthetic internal pass note') && !investor.text.includes('Pat Partner'), 'but not the note or who passed');
+  } finally { db.close(); }
+});
