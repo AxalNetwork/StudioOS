@@ -205,7 +205,7 @@ const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
 // D569 — the commissions-and-payouts console (canvas pea-commissions).
 const AdminCommissions = lazy(() => import('./pages/admin/AdminCommissions'));
 const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
-// D1140 (#3020): the full company settings live under Companies and projects; /company-settings forwards.
+// D1140 (#3020): the full company settings live under Portfolio; /company-settings is retired (D2319).
 const CompanySettingsAt = lazy(() => import('./pages/account/companies/CompanySettingsAt'));
 // D1413 (#3696, PF6c, PF8): Company settings › Legal and › Projects.
 const CompanySettingsTabs = lazy(() => import('./pages/account/companies/CompanySettingsTabs'));
@@ -3903,9 +3903,8 @@ function AppInner() {
           page /referrals would have shown them. */}
       <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferralsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferRedirect />)} />
-      {/* D1140 (#3020, CMP19b, owner question 2, A): one place for companies. /company-settings forwards to the
-          active company's page under Companies and projects with the moved notice, the query and hash kept; it is
-          counted for #2319. The full settings are at /account/portfolio/<uid>/settings. */}
+      {/* D1140 (#3020, CMP19b): one place for companies. /company-settings is retired (D2319): the full settings are at
+          /account/portfolio/<uid>/settings. */}
       {/* D651 — Integrations are Connectors now; both old addresses redirect
           to /account/connectors, keeping ?query= so OAuth returns still land.
           Available to every authenticated profile, as the Account center is. */}
