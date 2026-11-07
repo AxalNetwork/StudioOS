@@ -7,6 +7,7 @@ import { StatedLimit } from '../advisor/expertise/kit';
 import { companyHref } from '../../lib/companyDirectoryView.js';
 import { useRailOption } from '../../ui/railCrumbs';
 import { railPressHeaders } from '../../lib/railPage.js';
+import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
 import {
   categoryLabel,
   detailRows,
@@ -158,24 +159,46 @@ export default function CompanyCandidate({ role = 'founder' }) {
     return cand;
   }, [candidateId]);
 
+  // D4607: the company this page loaded, by its route identity (analysis and
+  // candidate). Writes go to it, and only while the route still names it.
+  const routeKey = recordKey(analysisId, candidateId);
+  const [loadedKey, setLoadedKey] = useState(null);
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
+  useEffect(() => () => gate.current.invalidate(), []);
+
   const load = useCallback(async () => {
+    const fresh = gate.current.begin();
+    const key = recordKey(analysisId, candidateId);
     setLoading(true);
     setError(null);
+    // The previous company's fields go with it, so nothing typed on A can be
+    // saved to B while B loads.
+    setAnalysis(null);
+    setCandidate(null);
+    setName('');
+    setSummary('');
+    setLoadedKey(null);
     try {
       const full = await api.competitors.get(analysisId);
-      adopt(full);
+      if (!fresh()) return;
+      if (adopt(full)) setLoadedKey(key);
     } catch (e) {
+      if (!fresh()) return;
       setAnalysis(null);
       setCandidate(null);
       setError(e?.status === 404
         ? 'This analysis is not on your list.'
         : (e?.message || 'The company did not load.'));
     } finally {
-      setLoading(false);
+      if (fresh()) setLoading(false);
     }
-  }, [analysisId, adopt]);
+  }, [analysisId, candidateId, adopt]);
 
   useEffect(() => { load(); }, [load]);
+  const current = sameRecord(loadedKey, routeKey);
+  // The identity every write on this page is sent to: the loaded one.
+  const [aId, cId] = current ? JSON.parse(loadedKey) : [null, null];
 
   const sources = (analysis?.sources || []).filter((s) => s.candidate_id === candidate?.id);
   const signals = (analysis?.signals || []).filter((g) => g.candidate_id === candidate?.id);
@@ -189,10 +212,12 @@ export default function CompanyCandidate({ role = 'founder' }) {
   // Opening another company (or leaving) moves this on; a press that comes back
   // after that is dropped with its result, its notice and its busy state.
   const runFor = useRef(0);
-  useEffect(() => { runFor.current += 1; setBusy(false); setCrawling(false); }, [analysisId, candidateId]);
+  // D4607: the notice, the preview, the source form and the remove prompt belong to the company they were made on.
+  useEffect(() => { runFor.current += 1; setBusy(false); setCrawling(false); setNotice(null); setPreview(''); setSourceUrl(''); setRemoving(false); }, [analysisId, candidateId]);
   useEffect(() => () => { runFor.current += 1; }, []);
 
   const run = async (fn) => {
+    if (!current) return null;
     const mine = ++runFor.current;
     setNotice(null);
     setBusy(true);
@@ -259,7 +284,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
           </Card>
         )}
 
-        {candidate && (
+        {candidate && current && (
           <>
             {notice && (
               <p className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
@@ -278,7 +303,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                         className={selectClass}
                         value={candidate.category === 'adjacent' ? 'adjacent' : 'direct'}
                         disabled={busy}
-                        onChange={(e) => run(() => api.competitors.candidateUpdate(analysisId, candidateId, { category: e.target.value }))}
+                        onChange={(e) => run(() => api.competitors.candidateUpdate(aId, cId, { category: e.target.value }))}
                       >
                         <option value="direct">Direct</option>
                         <option value="adjacent">Adjacent</option>
@@ -335,7 +360,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                     type="button"
                     className={primaryBtn}
                     disabled={busy}
-                    onClick={() => run(() => api.competitors.candidateUpdate(analysisId, candidateId, { name }))}
+                    onClick={() => run(() => api.competitors.candidateUpdate(aId, cId, { name }))}
                   >
                     Save
                   </button>
@@ -347,7 +372,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                       onClick={async () => {
                         setCrawling(true);
                         const pressed = runFor.current + 1;
-                        await run(() => api.competitors.crawlCandidate(analysisId, candidateId, railPressHeaders('extract:site')));
+                        await run(() => api.competitors.crawlCandidate(aId, cId, railPressHeaders('extract:site')));
                         if (runFor.current === pressed) setCrawling(false);
                       }}
                     >
@@ -373,7 +398,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                     type="button"
                     className={primaryBtn}
                     disabled={busy}
-                    onClick={() => run(() => api.competitors.candidateUpdate(analysisId, candidateId, { summary }))}
+                    onClick={() => run(() => api.competitors.candidateUpdate(aId, cId, { summary }))}
                   >
                     Save
                   </button>
@@ -469,7 +494,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                           throw err;
                         }
                         setSourceUrl('');
-                        return api.competitors.addSource(analysisId, candidateId, { url: page.url || sourceUrl.trim() });
+                        return api.competitors.addSource(aId, cId, { url: page.url || sourceUrl.trim() });
                       })}
                     >
                       Add URL
@@ -547,7 +572,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                   className="rounded-lg border border-violet-200 px-3 py-1.5 text-[12px] font-semibold text-violet-800 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-800 dark:text-violet-200 dark:hover:bg-violet-950/40"
                   disabled={!preview.trim() || busy}
                   onClick={async () => {
-                    const saved = await run(() => api.competitors.candidateUpdate(analysisId, candidateId, { summary: preview }));
+                    const saved = await run(() => api.competitors.candidateUpdate(aId, cId, { summary: preview }));
                     if (saved) setPreview('');
                   }}
                 >
@@ -573,7 +598,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
           </>
         )}
 
-        {removing && candidate && (
+        {removing && candidate && current && (
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-zinc-900/40 px-4" role="dialog" aria-modal="true" aria-labelledby="company-remove-title">
             <Card className="w-full max-w-md">
               <div id="company-remove-title" className="text-[15px] font-extrabold tracking-tight">Remove from this analysis?</div>
@@ -587,7 +612,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                   onClick={async () => {
                     setBusy(true);
                     try {
-                      await api.competitors.removeCandidate(analysisId, candidateId);
+                      await api.competitors.removeCandidate(aId, cId);
                       navigate(`/research/companies/${encodeURIComponent(analysisId)}`);
                     } catch (e) {
                       setBusy(false);

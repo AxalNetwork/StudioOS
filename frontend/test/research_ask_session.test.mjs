@@ -106,7 +106,8 @@ test('every outcome writes a row, and each writes its own reason', () => {
   // to write the failures down is precisely that they are the rows a later
   // "cleanup" would drop as noise, and dropping either still leaves the happy
   // path writing.
-  assert.equal(rows.length, 3, 'the ask handler no longer writes a row on all three outcomes');
+  // D4605 adds a fourth: the search itself could not run.
+  assert.equal(rows.length, 4, 'the ask handler no longer writes a row on all four outcomes');
 
   // THE THREE REASONS ARE DISTINCT, read off the calls themselves. A model
   // outage recorded as `no_source` would make `Unanswered` count outages as
@@ -115,12 +116,15 @@ test('every outcome writes a row, and each writes its own reason', () => {
   // written, and one a substring search over the handler cannot see, because
   // the JSON response below carries the same words.
   const reasons = rows.map((r) => r.match(/reason: '([a-z_]+)'/)?.[1]);
-  assert.deepEqual(reasons, ['no_source', 'model_unavailable', 'answered'],
-    'the three stored outcomes are no longer three distinct reasons in the handler’s own order');
+  assert.deepEqual(reasons, ['retrieval_unavailable', 'no_source', 'model_unavailable', 'answered'],
+    'the four stored outcomes are no longer four distinct reasons in the handler’s own order');
 });
 
 test('a question that never reached a model is stored as costing nothing', () => {
-  const [noSource] = recordedRows();
+  const [unsearched, noSource] = recordedRows();
+  // D4605: a search that could not run reached no model either, so it too is charged nothing.
+  assert.deepEqual(keysOf(unsearched), ['question', 'answer', 'reason', 'best_score', 'citations'],
+    'the retrieval-unavailable row writes a field it has no business writing');
   // THE WHOLE FIELD LIST, not a substring of it. No receipt is spread into this
   // row because no model ran — and appending a cost after the citation list is
   // exactly the mutation a "carries an empty citation list" assertion lets
@@ -131,7 +135,7 @@ test('a question that never reached a model is stored as costing nothing', () =>
 
   // The other two DO carry the receipt, spread from one object so the two
   // cannot report different money for the same run.
-  const [, unavailable, answered] = recordedRows();
+  const [, , unavailable, answered] = recordedRows();
   for (const [name, body] of [['model_unavailable', unavailable], ['answered', answered]]) {
     assert.ok(keysOf(body).includes('...receipt'),
       `the ${name} row no longer carries the router's receipt`);
