@@ -4,8 +4,9 @@ import { reportError } from '../../lib/log';
 import { applyRank } from '../../lib/rankByFit';
 import RankByFit from '../../ui/RankByFit.jsx';
 import Sheet from '../../ui/Sheet.jsx';
+import DraftFlow, { useDraftFlow } from './DraftFlow.jsx';
 import {
-  ASK_SENDS, CONTEXT_HELP, CONTEXT_LABEL, DRAFT_LATER, NOTE_MAX, REASON_HELP, REASON_LABEL, SENT_LINE, SENT_TITLE, STRIP_EMPTY, STRIP_MAX, STRIP_TITLE, STRIP_UNREAD,
+  ASK_DRAFT_FROM_RECORD, ASK_SENDS, CONTEXT_HELP, CONTEXT_LABEL, NOTE_MAX, REASON_HELP, REASON_LABEL, SENT_LINE, SENT_TITLE, STRIP_EMPTY, STRIP_MAX, STRIP_TITLE, STRIP_UNREAD,
   askReady, stripLine, stripRows,
 } from './relationshipsModel';
 
@@ -24,8 +25,11 @@ import {
  *
  * The ask (RI3) is the shared right Sheet: the reason (required; the teammate
  * reads it), the context for the person (optional; only the two of them read
- * it), and "Axal sends your request to … only". Eadwyn's "Draft from this
- * record" waits for part 8b and is drawn greyed.
+ * it), and "Axal sends your request to … only". "Ask Eadwyn to draft from
+ * this record" (D4330, part 8b, merged) quotes the run first
+ * (`relationshipsApi.draftAskReason`, `estimate: true`, runs nothing) and,
+ * once confirmed, places the drafted text into the reason field — D4330 §1's
+ * `note` — never the context field, which only the two of them read.
  */
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900';
 const INK = 'text-axal-ink dark:text-gray-100';
@@ -110,8 +114,16 @@ export function AskIntroSheet({ row, onClose, testId = 'who-knows-sheet' }) {
     try {
       const r = await relationshipsApi.requestIntro({ teammate: row.teammateId, ref: row.ref, note: reason.trim(), ...(context.trim() ? { context_note: context.trim() } : {}) });
       setSent(r?.request ?? { status: 'pending' });
-    } catch (e) { setError(e?.message || 'The request could not be sent. Nothing was sent.'); reportError('relationships:request', e); }
+    } catch (e) { setError(e?.data?.message || 'The request could not be sent. Nothing was sent.'); reportError('relationships:request', e); }
     finally { setBusy(false); }
+  };
+  // D4330 (RI3): the quote, then the run, over the same relationship this row already names.
+  const { state: draftState, ask: askDraft, confirm: confirmDraft, cancel: cancelDraft } = useDraftFlow(
+    (body) => relationshipsApi.draftAskReason({ teammate: row.teammateId, ref: row.ref, ...body }),
+  );
+  const onConfirmDraft = async () => {
+    const draft = await confirmDraft();
+    if (draft?.text) setReason(draft.text);
   };
   const footer = sent ? (
     <button type="button" className={GHOST} onClick={onClose} data-testid={`${testId}-done`}>Done</button>
@@ -140,7 +152,8 @@ export function AskIntroSheet({ row, onClose, testId = 'who-knows-sheet' }) {
             <textarea className={`${FIELD} min-h-[72px]`} maxLength={NOTE_MAX} value={context} onChange={(e) => setContext(e.target.value)} data-testid={`${testId}-context`} />
             <span className={MUTED}>{CONTEXT_HELP(row.teammate)}</span>
           </label>
-          <button type="button" className={`${GHOST} self-start`} disabled title="Eadwyn's drafts come with part 8b" data-testid={`${testId}-draft`}>{DRAFT_LATER}</button>
+          <button type="button" className={`${GHOST} self-start`} disabled={draftState.status === 'estimating' || draftState.status === 'running'} onClick={askDraft} data-testid={`${testId}-draft`}>{ASK_DRAFT_FROM_RECORD}</button>
+          <DraftFlow state={draftState} onConfirm={onConfirmDraft} onCancel={cancelDraft} testId={`${testId}-draft`} confirmLabel="Draft the reason" />
           <p className={`m-0 ${MUTED}`} data-testid={`${testId}-sends`}>{ASK_SENDS(row.teammate, row.person)}</p>
           {error ? <p className="m-0 text-[12.5px] font-semibold text-axal-destructive dark:text-red-400" role="alert">{error}</p> : null}
         </div>
