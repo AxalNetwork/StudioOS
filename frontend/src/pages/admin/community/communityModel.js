@@ -12,14 +12,12 @@
  * D930's `notyet` is gone: D933 reads every figure it stood for.
  *
  * THE READS (D930 §2). Each answers alone:
- *   - `glance`    GET /api/admin/studio/glance — the events and jobs lanes;
- *   - `events`    GET /api/admin/events, every page, published and waiting;
- *   - `analytics` GET /api/admin/events/analytics — its rows only, for CM8's
- *                 empty rule (every status). Its `summary` is all time and is
- *                 never read. Seats come from D918's service through the
- *                 Community read since D1121, never from these rows;
- *   - `jobs`      GET /api/admin/jobs, every page, every status;
- *   - `circles`   GET /api/admin/circles;
+ *   #4717 package 2: ONE SNAPSHOT. Every figure on the page, and every
+ *   row behind a figure (next up, needs a decision, most applications), is
+ *   the Community read's, under one `as_of`. The page used to read the Studio
+ *   glance, every page of the events list, the events analytics, every page
+ *   of the job board and the circles list beside it, and recompute what the
+ *   read already counted; those reads now belong to the lightboxes alone.
  *   - `overview`  GET /api/admin/community/overview?weeks= — D931's counts,
  *                 the roster's among them (#4717: counted on the server over
  *                 the whole table, archived rows out, never a capped list),
@@ -149,15 +147,8 @@ export async function readAllPages(fetchPage, key, { pageSize = 200, maxPages = 
   throw new Error(`More than ${nf(pageSize * maxPages)} ${key}; not counted here`);
 }
 
-const ready = (r) => r?.status === 'ready';
 const failed = (r) => r?.status === 'error';
 
-/** A tile or block whose read has not answered or failed, or null when it is ready. */
-function pending(read, reason) {
-  if (!read || read.status === 'loading') return { state: 'loading' };
-  if (failed(read)) return { state: 'unreadable', reason };
-  return null;
-}
 
 /**
  * One block of the Community read (D931), at `path` under `blocks`:
@@ -288,20 +279,64 @@ export function clockOf(reads, asOf) {
   return Number.isFinite(asOf) ? asOf : Date.now();
 }
 
+/**
+ * #4717 — how many wait in each review queue, from the Community read's
+ * `queue` (D918's queue for events, the job board's for postings). Null for a
+ * queue that could not be read, or whose count is not a whole number.
+ */
+function queueCounts(reads) {
+  const ev = blockOf(reads.overview, 'queue.events');
+  const jb = blockOf(reads.overview, 'queue.jobs');
+  return {
+    loading: ev.state === 'loading' || jb.state === 'loading',
+    events: ev.state === 'ready' ? count(ev.block.count) : null,
+    jobs: jb.state === 'ready' ? count(jb.block.pending) : null,
+  };
+}
+
+/** #4717 — the circles block's counts, strictly: a missing or odd count makes the block unreadable, never 0. */
+function circlesOf(reads) {
+  const reason = 'The circles could not be read. That is not the same as no circles.';
+  const b = blockOf(reads.overview, 'circles', reason);
+  if (b.state === 'loading') return { state: 'loading' };
+  if (b.state !== 'ready') return { state: 'unreadable', reason: b.reason || reason };
+  const [total, published, featured] = [count(b.block.total), count(b.block.published), count(b.block.featured)];
+  const members = count(b.block.members_entered?.value);
+  if ([total, published, featured, members].includes(null) || published > total) return { state: 'unreadable', reason };
+  const byType = new Map();
+  for (const [type, v] of Object.entries(b.block.by_type || {})) {
+    const c = count(v);
+    if (c === null) return { state: 'unreadable', reason };
+    const label = CIRCLE_TYPES[type] || 'Other';
+    byType.set(label, (byType.get(label) || 0) + c);
+  }
+  return {
+    state: 'ready', total, published, draft: total - published, featured, membersEntered: members,
+    byType: [...byType].map(([label, value]) => ({ label, value })).filter((r) => r.value > 0).sort((a, b) => b.value - a.value),
+  };
+}
+
+/** The server's days open (D1121) as the card's words; `{ recorded: false }` is "not recorded", never 0. */
+function daysOpenWords(d) {
+  if (d === null || d === undefined) return null;
+  if (typeof d === 'object' && d.recorded === false) return 'Days open not recorded';
+  const n = count(d);
+  return n === null ? 'Days open not recorded' : `${nf(n)} ${n === 1 ? 'day' : 'days'} open`;
+}
+
 /** The page's eight tiles, CM1 rows 1 and 2, in the canvas's order. */
-export function buildTiles(reads, now) {
-  const { glance, circles } = reads;
+export function buildTiles(reads) {
   const tiles = [];
 
-  // Waiting on you — the glance's two lanes, added.
+  // Waiting on you — the two review queues, added (#4717: the Community read's own counts).
   const wait = { key: 'waiting', label: 'Waiting on you' };
-  const wp = pending(glance, 'The Studio glance could not be read, so this is not a claim that nothing waits.');
-  if (wp) tiles.push({ ...wait, ...wp });
+  const q = queueCounts(reads);
+  if (q.loading) tiles.push({ ...wait, state: 'loading' });
   else {
-    const ev = laneOf(glance.data, 'events');
-    const jb = laneOf(glance.data, 'jobs');
-    if (!ev || !jb || ev.count === null || jb.count === null) {
-      tiles.push({ ...wait, state: 'unreadable', reason: 'The Events or Jobs lane could not be read, so there is no total.' });
+    const ev = { count: q.events };
+    const jb = { count: q.jobs };
+    if (ev.count === null || jb.count === null) {
+      tiles.push({ ...wait, state: 'unreadable', reason: 'The events or jobs queue could not be read, so there is no total.' });
     } else {
       const age = oldestWait(reads.overview);
       tiles.push({
@@ -325,7 +360,11 @@ export function buildTiles(reads, now) {
   const period = (key, label, path, pick) => {
     const b = blockOf(reads.overview, path);
     if (b.state !== 'ready') return { key, label, ...b };
-    const { window, previous } = pick(b.block);
+    // #4717: a figure the block does not carry as whole numbers is unreadable, never 0 and never a crash.
+    const fig = pick(b.block) || {};
+    const window = count(fig.window);
+    const previous = count(fig.previous);
+    if (window === null || previous === null) return { key, label, state: 'unreadable', reason: 'This figure could not be read. That is not the same as none.' };
     return { key, label, state: 'ready', value: nf(window), sub: deltaText(window, previous, weeks) };
   };
   tiles.push(period('registrations', 'Event registrations', 'events.weekly', (b) => b.registrations));
@@ -334,12 +373,9 @@ export function buildTiles(reads, now) {
 
   // Published circles — "[9] of [11]".
   const pc = { key: 'circles', label: 'Published circles' };
-  const pcp = pending(circles, 'The circles could not be read. That is not the same as no circles.');
-  if (pcp) tiles.push({ ...pc, ...pcp });
-  else {
-    const list = circles.data;
-    tiles.push({ ...pc, state: 'ready', value: `${nf(list.filter((c) => c.published).length)} of ${nf(list.length)}` });
-  }
+  const ci = circlesOf(reads);
+  if (ci.state !== 'ready') tiles.push({ ...pc, state: ci.state, ...(ci.reason ? { reason: ci.reason } : {}) });
+  else tiles.push({ ...pc, state: 'ready', value: `${nf(ci.published)} of ${nf(ci.total)}` });
 
   // Advisors & partners — active on the roster.
   const ro = { key: 'roster', label: 'Advisors & partners' };
@@ -404,106 +440,99 @@ function showUpTile(overview, weeks) {
 }
 
 /**
- * The Events card's Next up: the three soonest published events in the next
- * 30 days, from D918's list (`GET /api/admin/events`), whose rows carry their
- * own seats taken (D915's rule). The analytics rows are not read (D1121).
+ * The Events card's Next up: the three soonest events in the next 30 days, the
+ * Community read's `events.next_up`. They are the same events the Upcoming
+ * tile counts (published or waiting, D918's rule), so the list and the number
+ * cannot disagree (#4717); a waiting event says so. Seats are each event's own
+ * seats taken (D915's rule, D1121).
  */
-export function buildNextUp(reads, now) {
-  const p = pending(reads.events, 'The events list could not be read. That is not the same as no events.');
-  if (p) return p;
-  const rows = reads.events.data
-    .filter((e) => e.status === 'published')
-    .filter((e) => { const t = stamp(e.starts_at); return t >= now && t < now + 30 * 86_400_000; })
-    .sort((a, b) => stamp(a.starts_at) - stamp(b.starts_at))
-    .slice(0, 3)
-    .map((e) => ({ id: e.id, title: e.title, day: dayLabel(e.starts_at, e.timezone || 'UTC'), seats: seatsText(e) }));
+export function buildNextUp(reads) {
+  const b = blockOf(reads.overview, 'events.next_up', 'The next events could not be read. That is not the same as no events.');
+  if (b.state !== 'ready') return b;
+  if (!Array.isArray(b.block.rows)) return { state: 'unreadable', reason: 'The next events could not be read. That is not the same as no events.' };
+  const rows = b.block.rows.map((e) => ({
+    id: e.event_id,
+    title: e.title,
+    day: dayLabel(e.starts_at, e.timezone || 'UTC'),
+    seats: seatsText(e),
+    waiting: e.status === 'pending_review',
+  }));
   return { state: 'ready', rows };
 }
 
-/** The Jobs card: postings by status (a 100% bar), and the five with most applications, each with its days open. */
-export function buildJobs(reads, now = Date.now()) {
-  const p = pending(reads.jobs, 'The job board could not be read. That is not the same as no jobs.');
-  if (p) return p;
-  const jobs = reads.jobs.data;
-  const counts = new Map();
-  for (const j of jobs) counts.set(j.status, (counts.get(j.status) || 0) + 1);
+/**
+ * The Jobs card: postings by status (a 100% bar), and the five with most
+ * applications of all time, each with its days open — the Community read's
+ * `jobs.by_status` and `jobs.most_applied` (#4717). A status count that is
+ * missing or not a whole number makes the card unreadable, never 0.
+ */
+export function buildJobs(reads) {
+  const reason = 'The job board could not be read. That is not the same as no jobs.';
+  const b = blockOf(reads.overview, 'jobs', reason);
+  if (b.state === 'loading') return b;
+  if (b.state !== 'ready') return { state: 'unreadable', reason: b.reason || reason };
+  const by = b.block.by_status || {};
+  const values = Object.entries(by).map(([k, v]) => [k, count(v)]);
+  if (!values.length || values.some(([, v]) => v === null) || !Array.isArray(b.block.most_applied)) return { state: 'unreadable', reason };
+  const counts = new Map(values);
   const parts = JOB_PARTS.map(([key, label, tone]) => ({ label, tone, value: counts.get(key) || 0 }));
-  const other = jobs.length - parts.reduce((t, x) => t + x.value, 0);
+  const total = values.reduce((t, [, v]) => t + v, 0);
+  const other = total - parts.reduce((t, x) => t + x.value, 0);
   if (other > 0) parts.push({ label: 'Other', tone: 'muted', value: other });
-  const most = jobs
-    .filter((j) => Number(j.application_count) > 0)
-    .sort((a, b) => Number(b.application_count) - Number(a.application_count) || stamp(a.created_at) - stamp(b.created_at))
-    .slice(0, 5)
-    .map((j) => ({ id: j.id, title: j.title, company: j.project_name || null, applications: Number(j.application_count), daysOpen: daysOpenText(j, now) }));
-  return { state: 'ready', total: jobs.length, parts, most };
+  const most = b.block.most_applied.map((j) => ({
+    id: j.posting_id, title: j.title, company: j.company || null, applications: Number(j.applications), daysOpen: daysOpenWords(j.days_open),
+  }));
+  return { state: 'ready', total, parts, most };
 }
 
 /** The Circles and roster card. Members are as entered; the roster is counted, never named. */
 export function buildCircles(reads) {
-  const out = {};
-  const cp = pending(reads.circles, 'The circles could not be read. That is not the same as no circles.');
-  if (cp) out.circles = cp;
-  else {
-    const list = reads.circles.data;
-    const byType = new Map();
-    for (const c of list) {
-      const label = CIRCLE_TYPES[c.type] || 'Other';
-      byType.set(label, (byType.get(label) || 0) + 1);
-    }
-    out.circles = {
-      state: 'ready',
-      total: list.length,
-      byType: [...byType].map(([label, value]) => ({ label, value })).filter((r) => r.value > 0).sort((a, b) => b.value - a.value),
-      published: list.filter((c) => c.published).length,
-      draft: list.filter((c) => !c.published).length,
-      featured: list.filter((c) => c.featured).length,
-      membersEntered: list.reduce((t, c) => t + (Number(c.members) || 0), 0),
-    };
-  }
-  out.roster = rosterOf(reads);
-  return out;
+  return { circles: circlesOf(reads), roster: rosterOf(reads) };
 }
 
 /**
- * Needs a decision: pending events and jobs, oldest first, at most six rows.
- * Each says how long it has waited, and is Overdue past 72 hours (D915):
+ * Needs a decision: pending events and jobs, oldest first, at most six rows,
+ * from the Community read (#4717): `queue.event_rows` (D918's oldest waiting
+ * events) and `queue.jobs.review` (the job board's). Each row's wait and
+ * Overdue (past 72 hours, D915) are the server's, measured at its `as_of`:
  *   - an event waits from `submitted_at`, or from `created_at` when it was
- *     queued before submission was stamped, D918's rule, and it says so;
- *   - a job waits from `submitted_at` (migration 550). One submitted before
- *     that has no recorded wait, and is never Overdue or a wait of 0.
+ *     queued before submission was stamped, and it says so;
+ *   - a job submitted before migration 550 has no recorded wait, and is never
+ *     Overdue or a wait of 0.
+ * `total` and `overdue` are the queues' own counts, not the rows'.
  * Nothing is decided here: Review opens the console that decides.
  */
-export function buildNeeds(reads, now = Date.now()) {
-  const ep = pending(reads.events, 'The events list could not be read.');
-  const jp = pending(reads.jobs, 'The job board could not be read.');
-  if (ep?.state === 'loading' || jp?.state === 'loading') return { state: 'loading' };
-  if (ep && jp) return { state: 'unreadable', reason: 'Neither the events nor the job board could be read. That is not the same as nothing waiting.' };
+export function buildNeeds(reads) {
+  const er = blockOf(reads.overview, 'queue.event_rows');
+  const eq = blockOf(reads.overview, 'queue.events');
+  const jq = blockOf(reads.overview, 'queue.jobs');
+  if ([er, eq, jq].some((b) => b.state === 'loading')) return { state: 'loading' };
+  const evOk = er.state === 'ready' && eq.state === 'ready' && Array.isArray(er.block.rows);
+  const jbOk = jq.state === 'ready' && Array.isArray(jq.block.review);
+  if (!evOk && !jbOk) return { state: 'unreadable', reason: 'Neither the events nor the job board could be read. That is not the same as nothing waiting.' };
+  const wait = (hours, fromCreated) => (hours === null || hours === undefined
+    ? 'wait not recorded'
+    : `waiting ${waitText(Number(hours))}${fromCreated ? ' · since created' : ''}`);
   const items = [];
-  const waited = (since, fromCreated) => {
-    if (Number.isNaN(since)) return { wait: 'wait not recorded', overdue: false, since };
-    const hours = Math.max(0, (now - since) / 3_600_000);
-    return { wait: `waiting ${waitText(hours)}${fromCreated ? ' · since created' : ''}`, overdue: hours > OVERDUE_HOURS, since };
-  };
-  if (!ep) {
-    for (const e of reads.events.data.filter((x) => x.status === 'pending_review')) {
-      const sub = stamp(e.submitted_at);
-      const fromCreated = Number.isNaN(sub);
-      items.push({ kind: 'Event', id: `event-${e.id}`, title: e.title, sub: null, ...waited(fromCreated ? stamp(e.created_at) : sub, fromCreated) });
+  if (evOk) {
+    for (const e of er.block.rows) {
+      items.push({ kind: 'Event', id: `event-${e.event_id}`, title: e.title, sub: null, wait: wait(e.waiting_hours, e.from_created), overdue: e.overdue === true, since: stamp(e.waiting_since) });
     }
   }
-  if (!jp) {
-    for (const j of reads.jobs.data.filter((x) => x.status === 'pending_review')) {
-      items.push({ kind: 'Job', id: `job-${j.id}`, title: j.title, sub: j.project_name || null, ...waited(stamp(j.submitted_at), false) });
+  if (jbOk) {
+    for (const j of jq.block.review) {
+      items.push({ kind: 'Job', id: `job-${j.posting_id}`, title: j.title, sub: j.company || null, wait: wait(j.waiting_hours, false), overdue: j.overdue === true, since: stamp(j.waiting_since) });
     }
   }
   // Oldest first; a wait not recorded is listed after every dated one.
   items.sort((a, b) => (Number.isNaN(a.since) ? 1 : Number.isNaN(b.since) ? -1 : a.since - b.since));
+  const n = (v) => count(v) ?? 0;
   return {
     state: 'ready',
-    total: items.length,
-    overdue: items.filter((i) => i.overdue).length,
+    total: (evOk ? n(eq.block.count) : 0) + (jbOk ? n(jq.block.pending) : 0),
+    overdue: (evOk ? n(eq.block.overdue) : 0) + (jbOk ? n(jq.block.overdue) : 0),
     rows: items.slice(0, 6),
-    partial: ep ? 'The events list could not be read, so only jobs are listed.' : jp ? 'The job board could not be read, so only events are listed.' : null,
+    partial: !evOk ? 'The events queue could not be read, so only jobs are listed.' : !jbOk ? 'The job board could not be read, so only events are listed.' : null,
   };
 }
 
@@ -708,21 +737,16 @@ export function buildWellbeing(reads) {
 
 /** CM1 row 8: five console doors, one figure each. */
 export function buildConsoles(reads) {
+  const q = queueCounts(reads);
   const lane = (key) => {
-    if (!reads.glance || reads.glance.status === 'loading') return { state: 'loading' };
-    if (failed(reads.glance)) return { state: 'unreadable' };
-    const l = laneOf(reads.glance.data, key);
-    return l && l.count !== null ? { state: 'ready', text: `${nf(l.count)} pending` } : { state: 'unreadable' };
+    if (q.loading) return { state: 'loading' };
+    return q[key] === null ? { state: 'unreadable' } : { state: 'ready', text: `${nf(q[key])} pending` };
   };
-  const from = (read, f) => {
-    if (!read || read.status === 'loading') return { state: 'loading' };
-    if (failed(read)) return { state: 'unreadable' };
-    return { state: 'ready', text: f(read.data) };
-  };
+  const ci = circlesOf(reads);
   return {
     events: lane('events'),
     jobs: lane('jobs'),
-    circles: from(reads.circles, (list) => `${nf(list.filter((c) => !c.published).length)} drafts`),
+    circles: ci.state === 'ready' ? { state: 'ready', text: `${nf(ci.draft)} drafts` } : { state: ci.state },
     roster: (() => {
       const ro = rosterOf(reads);
       return ro.state === 'ready' ? { state: 'ready', text: `${nf(ro.active)} active` } : { state: ro.state === 'loading' ? 'loading' : 'unreadable' };
@@ -736,16 +760,21 @@ export function buildConsoles(reads) {
 
 /** CM10 variant B: every read failed. The consoles strip still works. */
 export function pageFailed(reads) {
-  return ['glance', 'events', 'analytics', 'jobs', 'circles', 'overview'].every((k) => failed(reads[k]));
+  // #4717: the page has one read; when it fails, nothing is drawn.
+  return failed(reads.overview);
 }
 
 /**
- * CM8: every read that feeds the page answered, and nothing has happened yet.
- * Zeros are real here. The events read covers only published and waiting
- * events, so the analytics rows (every status) must be empty too: a studio
- * with only drafts or cancelled events is not one where nothing happened.
+ * CM8: the Community read answered, and nothing has happened yet: no event in
+ * any status, no posting in any status and no circle. Zeros are real here,
+ * and only the read's own counts decide it (#4717); a block it could not read
+ * is never taken for an empty one.
  */
 export function isEmptyCommunity(reads) {
-  const noEvents = ready(reads.analytics) && Array.isArray(reads.analytics.data?.events) && reads.analytics.data.events.length === 0;
-  return noEvents && ['events', 'jobs', 'circles'].every((k) => ready(reads[k]) && reads[k].data.length === 0);
+  const ev = blockOf(reads.overview, 'events.by_status');
+  const jb = blockOf(reads.overview, 'jobs');
+  const ci = circlesOf(reads);
+  if (ev.state !== 'ready' || jb.state !== 'ready' || ci.state !== 'ready') return false;
+  const zero = (o) => o && typeof o === 'object' && Object.values(o).every((v) => count(v) === 0);
+  return zero(ev.block.counts) && zero(jb.block.by_status) && ci.total === 0;
 }

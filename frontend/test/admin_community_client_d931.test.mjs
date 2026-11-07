@@ -41,5 +41,7 @@ test('the module is one line in api.js\'s alphabetical block, and calls only Com
   assert.ok(lines.includes("export * from './api/community.js';"));
   assert.deepEqual(lines, [...lines].sort(), 'alphabetical');
   const client = read('frontend/src/lib/api/community.js');
-  assert.deepEqual([...client.matchAll(/request\(`([^`$?]+)/g)].map((m) => m[1]).sort(), ['/admin/community/activity', '/admin/community/overview']);
+  // #4717 package 4 adds the Jobs and Circles lightboxes' paged lists.
+  assert.deepEqual([...client.matchAll(/request\(`([^`$?]+)/g)].map((m) => m[1]).sort(),
+    ['/admin/community/activity', '/admin/community/circles', '/admin/community/jobs', '/admin/community/overview']);
 });

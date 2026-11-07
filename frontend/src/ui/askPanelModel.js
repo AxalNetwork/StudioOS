@@ -3,6 +3,7 @@ import { FOUNDER_ASK_CHIPS } from '../lib/railOptions/founder.js';
 import { INVESTOR_ASK_CHIPS } from '../lib/railOptions/investor.js';
 import { ADVISOR_ASK_CHIPS } from '../lib/railOptions/advisor.js';
 import { PARTNER_ASK_CHIPS } from '../lib/railOptions/partner.js';
+import { BLOCK_OPTION, blockDates, needsBlockPage } from './sessionsBlockHandoff.js';
 
 /**
  * D1443 (#3706, canvas AK) — the Ask panel's words and rules, as plain
@@ -168,6 +169,16 @@ export function proposalCard(row) {
   return { uid: String(row?.uid ?? ''), eyebrow, text, source, status: str(row?.status) || 'proposed', ...(typeof row?.disclaimer_key === 'string' ? { disclaimer_key: row.disclaimer_key } : {}) };
 }
 
+/**
+ * A card as the panel holds it: the row's words and the run chip it came from.
+ * A `sessions:block` card also carries the dates its Block form is filled with
+ * (`blockDates`, #4737), because it is accepted on the Sessions page.
+ */
+export function optionCard(row, option) {
+  const card = { ...proposalCard(row), option };
+  return option === BLOCK_OPTION ? { ...card, block: blockDates(row?.payload) } : card;
+}
+
 /** `free_afternoon` → "Free afternoon"; anything that is not a key gives nothing. */
 function words(v) {
   const k = str(v);
@@ -185,9 +196,14 @@ function dateRange(p) {
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
-/** "Accept all (n)" is offered for two or more open cards, and caps at 50 (`/api/fills/rows/accept`'s cap). */
+/**
+ * "Accept all (n)" is offered for two or more open cards, and caps at 50
+ * (`/api/fills/rows/accept`'s cap). A card accepted on its own page (a Block
+ * card, #4737) is never in it: accepting one means pressing Block on the
+ * page, so it is taken there one at a time.
+ */
 export function acceptAllLabel(cards) {
-  const open = (cards || []).filter((c) => c.status === 'proposed').length;
+  const open = (cards || []).filter((c) => c.status === 'proposed' && !needsBlockPage(c)).length;
   if (open < 2) return null;
   return `Accept all (${Math.min(open, 50)})`;
 }
