@@ -51,7 +51,11 @@ test('who may edit mirrors the route: platform admin, primary admin, Owner, Admi
 test('one header: the mark, the name, a "Settings" eyebrow and four tabs; no internal path, no back banner', () => {
   const html = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/account/portfolio/acme/settings'] }, h(SettingsHead, { uid: 'acme', name: 'Acme', tab: 'general' })));
   assert.equal((html.match(/<h1/g) || []).length, 1);
-  assert.deepEqual([...html.matchAll(/role="tab"[^>]*>([^<]+)</g)].map((m) => m[1]), ['Team', 'General', 'Legal', 'Projects']);
+  // #4964: a labelled navigation of links, the current page aria-current="page"; no ARIA tablist it cannot honour.
+  assert.deepEqual([...html.matchAll(/data-testid="company-settings-link-[a-z]+"[^>]*>([^<]+)</g)].map((m) => m[1]), ['Team', 'General', 'Legal', 'Projects']);
+  assert.match(html, /<nav aria-label="Company settings"/);
+  assert.doesNotMatch(html, /role="tab/);
+  assert.deepEqual([...html.matchAll(/aria-current="page"[^>]*>([^<]+)</g)].map((m) => m[1]), ['General']);
   assert.match(html, /href="\/account\/companies\/acme\/settings\/team"/);
   assert.doesNotMatch(html, /\/c\/|‹ Acme/);
 });

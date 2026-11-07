@@ -23,6 +23,9 @@
  *   international_presence   cite — so neither `restatement` nor `sourced` can
  *                            keep its promise, and `composition` may not occupy a
  *                            column holding a measured value.
+ *   region_codes             FACTS ONLY THE COMPANY HOLDS (#4964): the same
+ *                            fact as international_presence, as codes from a
+ *                            list. A list makes a guess look precise, not true.
  *   expansion_goals          INTENT, which only the founder has.
  *   default_currency         A CHOICE ONLY THE COMPANY MAKES (#3932, #3696 Q4):
  *                            the currency it reports and invoices in. Nothing to
@@ -72,6 +75,8 @@ const EDITABLE = [
   'logo_url', 'website', 'linkedin_url', 'description',
   // #3932 (migration 757): reasoned about in the header, refused like the rest.
   'default_currency',
+  // #4964 (migration 202611072325): regions as codes, reasoned about in the header beside international_presence.
+  'region_codes',
 ];
 
 test('the route still edits exactly the columns this refusal was reasoned about', () => {

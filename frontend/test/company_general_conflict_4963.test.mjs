@@ -66,7 +66,7 @@ test('the form sends its version with each save and rebuilds from the conflict i
   assert.match(save, /e\?\.code === VERSION_CONFLICT \? e\?\.data\?\.company : null/);
   assert.match(save, /rebaseOnConflict\(form, row, current\)/);
   assert.match(save, /setState\(\{ status: 'ready', row: current \}\)/, 'the current company becomes the row the next save is against');
-  assert.match(src, /canEditCompany\(row, safeReadJSON\('user', \{\}\)\) && !archived/, 'an archived company is read-only');
+  assert.match(src, /canEditCompany\(row, safeReadJSON\('user', \{\}\)\)\) && !archived/, 'an archived company is read-only');
   const logo = read('lib/api/companyLogo.js');
   assert.match(logo, /\?expected_version=\$\{v\}/);
 });
