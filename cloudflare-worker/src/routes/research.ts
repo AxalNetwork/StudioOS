@@ -3302,60 +3302,9 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
-  'grow/customers': {
-    // A5's band: "Segment: platform leads at 50-200 engineer orgs, cold, no
-    // reply in 14 days. + 3-touch sequence, each opening on the
-    // handoff-opacity pain THEIR OWN SEGMENT NAMED in your interviews."
-    //
-    // The italics are the artboard's and they are the whole instruction. A
-    // model asked for outreach copy writes a generic cold email; what makes
-    // this one worth the tokens is that it opens on something the recipient's
-    // own segment said. So the material carries the founder's recorded pains
-    // alongside the signups, and the instruction requires the opening line to
-    // come from one of them or to say that none applies.
-    //
-    // THE FUNNEL HAS FOUR STAGES, NOT THE ARTBOARD'S FIVE. `crm_status` is
-    // new / invited / followed_up / promoted (`routes/progress.ts`), and a
-    // model handed "Demo", "Trial" and "Paid" would place people in stages
-    // this product cannot record them in.
-    instruction: [
-      'Draft one outreach sequence for the signups below who have gone furthest without converting.',
-      'Open each touch on a pain the founder has actually recorded, quoting it. If no recorded pain fits the segment, say so and write no opener rather than inventing one.',
-      'Use only the four stages the record has — new, invited, followed up, promoted. Do not place anyone at a demo, a trial or a paid plan: none of those is recorded.',
-      'Name no company and no person the list below does not name.',
-    ].join(' '),
-    gather: async (c, userId, scope) => {
-      const pid = await founderProject(c, userId, scope);
-      if (pid == null) return [];
-      const stages = await c.env.DB.prepare(
-        `SELECT COALESCE(crm_status, 'new') AS stage, COALESCE(source, 'source not recorded') AS source,
-                COUNT(*) AS n, MAX(created_at) AS latest
-           FROM waitlist_signups WHERE project_id = ?
-          GROUP BY COALESCE(crm_status, 'new'), COALESCE(source, 'source not recorded')
-          ORDER BY n DESC LIMIT 40`
-      ).bind(pid).all<{ stage: string; source: string; n: number; latest: string | null }>();
-      const lines = (stages.results || []).map((r) =>
-        `${r.n} signup${r.n === 1 ? '' : 's'} at stage "${r.stage.replace('_', ' ')}" from ${r.source}; `
-        + `most recent ${r.latest ? String(r.latest).slice(0, 10) : 'not recorded'}`);
-      if (!lines.length) return [];
-      // The founder's OWN pain map: a group's title plus how many distinct
-      // phrases they have filed under it. Grouping is the founder's act — the
-      // Validate desk never names a theme for them — so a title here is
-      // something they wrote, not something a model decided.
-      const pains = await c.env.DB.prepare(
-        `SELECT g.title,
-                (SELECT COUNT(*) FROM pain_group_aliases a WHERE a.group_id = g.id) AS phrases
-           FROM pain_groups g WHERE g.project_id = ?
-          ORDER BY phrases DESC, g.sort_order LIMIT 12`
-      ).bind(pid).all<{ title: string; phrases: number }>();
-      const painLines = (pains.results || []).map((r) =>
-        `Recorded pain: "${r.title}" — ${r.phrases} phrase${r.phrases === 1 ? '' : 's'} grouped under it`);
-      lines.push(painLines.length
-        ? painLines.join('\n')
-        : 'NO PAIN IS RECORDED for this startup — there is nothing a touch can open on.');
-      return lines;
-    },
-  },
+  // D4493 (#4493): 'grow/customers' (A5's outreach-sequence band) is retired. The
+  // Distribution sequence builder's Ask drafts a sequence through D4488's task
+  // (kind `sequence`) and keeps the `draft:grow/customers` rail row's models.
 
   'grow/talent': {
     // A5's band: "Ranked first of 14 on three receipts you can check: shipped
@@ -3599,6 +3548,7 @@ export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'raise/narrative-fix': 'Founder · Raise · Investor narrative',
   'raise/capital': 'Founder · Raise · Cap table',
   'raise/liquidity': 'Founder · Raise · Cap table',
+  // D4493: kept for the moved rail row's page; the surface itself is retired above.
   'grow/customers': 'Founder · Grow · Distribution',
   'grow/talent': 'Founder · Grow · Team expansion',
   'network/re-engagement': 'Founder · Network',
