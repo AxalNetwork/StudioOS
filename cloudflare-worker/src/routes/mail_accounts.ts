@@ -334,7 +334,13 @@ mailAccounts.post('/send', async (c) => {
   const creds = await openCreds(c.env, row);
   if (!adapter || !creds) {
     const gone = await goneOrNot(c, user, row);
-    if (gone) { await log(null, 'The mailbox was disconnected before this email could be sent.'); return gone; }
+    if (gone) {
+      // The mailbox went between admission and send: the place is settled as refused and the attempt is logged, so a
+      // retry sees a final operation rather than a pending one.
+      await settleTo(c.env, op, 'refused', ['pending'], { code: 'not_found' }).catch(() => null);
+      await log(op, null, 'The mailbox was disconnected before this email could be sent.').catch(() => null);
+      return gone;
+    }
     const sentence = 'The mailbox’s saved access could not be opened. Connect it again.';
     await settleTo(c.env, op, 'refused', ['pending'], { code: 'mailbox_expired' });
     await markExpired(c.env, row, sentence).catch(() => null);
