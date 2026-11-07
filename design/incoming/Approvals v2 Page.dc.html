@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approvals v2 · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "1700px"}, "board": {"editor": "enum", "default": "AP01", "options": ["AP01", "AP02", "AP03", "AP04", "AP05", "AP06", "AP07", "AP08", "AP09a", "AP09b", "AP09c", "AP10", "AP11a", "AP11b", "AP12", "AP13a", "AP13b", "AP14", "AP15", "AP16", "AP17", "AP18a", "AP18b", "AP18c", "AP18d", "AP18e", "AP18f", "AP18g", "AP18i", "AP19"], "tsType": "string"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'AP01';
+    const dark = B === 'AP17';
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: '#221d3f', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937', s2: '#38bdf8', s3: '#2dd4bf', s4: '#4b5563', s5: '#6b7280' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d9d6e0', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#f59e0b', dim: 'rgba(24,24,27,.38)', skel: '#ececf1', s2: '#0369a1', s3: '#0f766e', s4: '#d4d4d8', s5: '#a1a1aa' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const fmt = (h) => { const d = Math.floor(h / 24), r = h % 24; return d ? d + ' d' + (r ? ' ' + r + ' h' : '') : h + ' h'; };
+    const pill = (tone, t) => '<span class="pl ' + (tone || '') + '">' + t + '</span>';
+    const sla = (h) => h > 72 ? pill('r', '! Overdue') : h >= 24 ? pill('a', '◷ Due soon') : '';
+    const note = (tone, icon, html, btn) => '<div class="nt ' + (tone || '') + '"><span class="ic" aria-hidden="true">' + icon + '</span><div style="min-width:0;flex:1">' + html + '</div>' + (btn ? '<span class="bt">' + btn + '</span>' : '') + '</div>';
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- data ---------- */
+    const DEST = { kyc: 'KYC & KYB', kyb: 'KYC & KYB', dd: 'Due diligence', wb: 'Wellbeing experts', pt: 'Product testers', cm: 'Co-marketing', sol: 'Spin-Out Lab', re: 'Refer & Earn', perk: 'Perks' };
+    const NATIVE = { wb: 1, pt: 1, cm: 1 };
+    const R = [
+      ['Firm Name', 'Due diligence · Northwind Labs seed round', 146, 'Admin A', 'dd'],
+      ['Harbor Robotics', 'Due diligence · Series A follow-on', 121, 0, 'dd'],
+      ['Eva Demo', 'Wellbeing expert verification', 103, 'Admin A', 'wb'],
+      ['Gus Demo', 'Product tester application', 96, 'Admin B', 'pt'],
+      ['Quill Analytics', 'Due diligence · Pre-seed round', 81, -1, 'dd'],
+      ['Ada Example', 'KYC · Identity verification', 76, 'Admin B', 'kyc'],
+      ['Ivy Example', 'Spin-Out Lab application · Dec 2026 cohort', 75, 0, 'sol'],
+      ['Finn Mock', 'KYC · Identity verification', 74, 0, 'kyc'],
+      ['Lena Sample', 'Refer & Earn review · Referral', 73, 0, 're'],
+      ['Ben Sample', 'Product tester application', 54, 0, 'pt'],
+      ['Northwind Labs', 'KYB · Business verification', 49, 'Admin B', 'kyb'],
+      ['Chloé Placeholder', 'Co-marketing pitch · Partner A', 26, 'Admin A', 'cm'],
+      ['Partner A', 'Perk listing · Cloud credits', 25, 0, 'perk']
+    ];
+    const RU = [['Dev Testcase', 'Due diligence · Firm Name', 18, 0, 'dd'], ['Ben Sample', 'Product tester application', 54, 0, 'pt'], ['Harbor Robotics', 'Due diligence · Series A follow-on', 121, 0, 'dd'], ['Finn Mock', 'KYC · Identity verification', 74, 0, 'kyc']];
+
+    /* ---------- cells ---------- */
+    const owner = (o) => o === -1 ? '<span class="pl" title="Assignment data could not be read for this item">? Not read</span>'
+      : o ? '<span class="own"><span class="ava' + (o === 'Admin A' ? ' me' : '') + '" aria-hidden="true">' + o.slice(-1) + '</span>' + o + (o === 'Admin A' ? ' <span class="mu">· you</span>' : '') + '</span>'
+      : '<span class="noown"><em>Unassigned</em><button type="button" class="btn bsm">Assign</button></span>';
+    const review = (lane) => '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:1px"><a class="btn bsm" href="#" style="font-weight:800">Review →</a><span class="foot" style="font-size:11px">in ' + DEST[lane] + (NATIVE[lane] ? ' · Approvals' : '') + '</span></div>';
+    const more = (name, open) => '<button type="button" class="mo3" aria-haspopup="true" aria-expanded="' + !!open + '" aria-label="More actions for ' + name + '">⋯</button>';
+    const qrow = (r, o) => { o = o || {}; return '<tr class="' + (o.sel ? 'sel' : '') + (o.open ? ' open' : '') + '"><td><input type="checkbox" aria-label="Select ' + r[0] + '"' + (o.sel ? ' checked' : '') + '></td>'
+      + '<td class="rq"><a href="#">' + r[0] + '</a><small>' + r[1] + '</small></td>'
+      + '<td class="wt"><b>' + fmt(r[2]) + '</b>' + sla(r[2]) + '</td><td>' + owner(r[3]) + '</td><td>' + review(r[4]) + '</td><td style="position:relative">' + more(r[0], o.menu) + (o.menu ? '<div class="pop" style="right:8px;top:40px" aria-label="Actions for ' + r[0] + '"><button type="button" class="fv">Assign…</button><button type="button">Copy link</button><a href="#">Open in ' + DEST[r[4]] + ' ↗</a></div>' : '') + '</td></tr>'; };
+    const band = (cls, t) => '<tr class="band ' + cls + '"><th colspan="6" scope="rowgroup">' + t + '</th></tr>';
+    const qhead = (selAll) => '<thead><tr><th scope="col"><input type="checkbox" aria-label="Select all on this page"' + (selAll ? ' data-mixed="true"' : '') + '></th><th scope="col">Request</th><th scope="col">Waiting ↓</th><th scope="col">Owner</th><th scope="col">Review</th><th scope="col"><span style="position:absolute;width:1px;height:1px;overflow:hidden">More</span></th></tr></thead>';
+
+    /* ---------- shell ---------- */
+    const NAV = ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'];
+    const spine = (open) => open
+      ? '<aside class="sp eadx" aria-label="Eadwyn"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:8px;align-items:center"><span class="e" style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span><b style="font-size:13.5px">Eadwyn</b></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div>'
+        + '<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:12.5px;flex:1"><span class="eye">About this queue</span><button type="button" class="btn" style="justify-content:flex-start">Which overdue items have no owner?</button><button type="button" class="btn" style="justify-content:flex-start">Summarise Ada Example’s KYC file</button><button type="button" class="btn" style="justify-content:flex-start">Who has capacity this week?</button><p class="foot">Eadwyn reads the queue and items you open. It never decides or assigns on its own.</p></div>'
+        + '<div style="padding:12px 16px;border-top:1px solid var(--hair)"><div class="inp" style="min-width:0;min-height:38px">Ask about Approvals…</div><p class="foot" style="margin-top:8px">Model and usage settings live in Account › AI tokens.</p></div></aside>'
+      : '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask about this queue</span></aside>';
+    const shell = (body, overlay, h, ead) => '<div class="sh" style="min-height:' + (h || 900) + 'px' + (ead ? ';grid-template-columns:196px minmax(0,1fr) 340px' : '') + '">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">Admin</span><nav aria-label="Admin">' + J(NAV.map(t => '<a href="#"' + (t === 'Approvals' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><span class="bdg">' + (B === 'AP18i' ? 'Studio Lisbon' : 'HQ-held · axal.vc') + '</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">A</span></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + spine(ead) + (overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o.overlay, o.h || 900, o.ead) + '</div>'; };
+
+    /* ---------- page header + tabs + summary ---------- */
+    const phead = (tab, o) => { o = o || {};
+      const copy = { Inbox: 'Every item waiting on an administrator, oldest first.', Lanes: 'Where admin decisions enter the platform and where each one is reviewed.', Decided: 'Recorded admin decisions across approval lanes.' }[tab];
+      return '<header style="display:flex;flex-direction:column;gap:6px"><span class="eye">Admin</span><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><h1 style="font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2">' + (tab === 'Lanes' ? 'Approval lanes' : tab === 'Decided' ? 'Decided' : 'Approvals') + '</h1><p style="font-size:13px;color:var(--mu);margin-top:3px">' + copy + '</p></div><span class="scp">' + (o.scope || 'HQ-held accounts · axal.vc') + '</span></div></header>'
+        + '<nav class="ptabs" aria-label="Approvals">' + J([['Inbox', o.inN || '133'], ['Lanes', '20'], ['Decided', '']].map(t => '<a href="#"' + (t[0] === tab ? ' aria-current="page"' : '') + '>' + t[0] + (t[1] ? '<span>' + t[1] + '</span>' : '') + '</a>')) + '</nav>'; };
+    const strip = (cells) => '<section class="us" aria-label="Urgency summary">' + J(cells.map(c => '<div class="' + (c[3] || '') + '"><span class="eye" style="width:100%">' + c[0] + '</span><span class="v">' + c[1] + '</span><span class="s">' + c[2] + '</span></div>')) + '</section>';
+    const S_DEF = [['Waiting', '133', 'across 20 lanes'], ['Overdue', '9', 'over 72 hours · 4 have no owner', 'ov'], ['Unassigned', '71', 'of 133 have no owner · <a href="#">Show</a>', 'ow'], ['Oldest', '6 d', 'waiting · Due diligence']];
+    const wviews = (cur, counts) => { const c = counts || { a: '<span class="r">9 overdue</span>', m: '14', u: '71', all: '133' };
+      return '<div role="radiogroup" aria-label="Work view" class="wv">' + J([['Needs attention', c.a], ['Assigned to me', c.m], ['Unassigned', c.u], ['All', c.all]].map(v => '<button type="button" role="radio" aria-checked="' + (v[0] === cur) + '" tabindex="' + (v[0] === cur ? 0 : -1) + '">' + v[0] + ' <span>' + v[1] + '</span></button>')) + '</div>'; };
+
+    /* ---------- queue card ---------- */
+    const toolbar = (nf, open) => '<div class="qtb"><label class="inp"><span aria-hidden="true">⌕</span><span>Search person, company or item</span></label><div style="display:flex;gap:8px;position:relative"><button type="button" class="dd' + (nf ? ' on' : '') + (open ? ' fv' : '') + '" aria-expanded="' + !!open + '" aria-controls="fpan">Filters' + (nf ? ' · ' + nf : '') + '</button><button type="button" class="dd">Sort: Oldest first ▾</button>' + (open ? fpanel() : '') + '</div></div>';
+    const chipsRow = () => '<div class="fchips" aria-label="Active filters">' + J(['Group: People & accounts', 'Age: Over 72 hours', 'Owner: Unassigned'].map(t => '<span class="fc">' + t + '<button type="button" aria-label="Remove ' + t + '">✕</button></span>')) + '<button type="button" class="btn t bsm">Clear all</button><span class="foot" style="margin-left:auto">2 results</span></div>';
+    const ownCallout = () => '<div class="ownc" role="note"><span class="ic" aria-hidden="true">!</span><span style="flex:1"><b>71</b> of <b>133</b> waiting items have no owner, including <b>4</b> overdue. Unowned items are the main reason this queue is ageing.</span><button type="button" class="btn bsm">Show unassigned</button><button type="button" class="btn p bsm">Assign overdue…</button></div>';
+    const qfoot = () => '<div class="qft"><span>1–25 of 133 · overdue first, then due soon, then oldest</span><span class="pb"><button type="button" aria-label="Previous page" disabled style="opacity:.5">‹</button><button type="button" aria-current="page">1</button><button type="button">2</button><button type="button">3</button><span>…</span><button type="button">6</button><button type="button" aria-label="Next page">›</button></span></div>';
+    const inboxRows = (o) => { o = o || {}; const sel = o.sel || [], op = o.open, mn = o.menu;
+      return band('o', '! Overdue · over 72 hours · 9') + J(R.slice(0, 9).map((r, i) => qrow(r, { sel: sel.indexOf(i) >= 0, open: op === i, menu: mn === i })))
+        + band('d', '◷ Due soon · 24–72 hours · 55') + J(R.slice(9).map((r, j) => qrow(r, { sel: sel.indexOf(j + 9) >= 0, open: op === j + 9 }))); };
+    const queue = (o) => { o = o || {};
+      return '<section class="qc" aria-labelledby="q-h"><h2 id="q-h" style="position:absolute;width:1px;height:1px;overflow:hidden">Approval queue</h2>' + toolbar(o.nf, o.fopen) + (o.chips ? chipsRow() : '') + (o.callout === false ? '' : ownCallout())
+        + '<table class="aq">' + qhead(o.sel && o.sel.length) + '<tbody>' + (o.rowsHtml || inboxRows(o)) + '</tbody></table>' + (o.foot === false ? '' : qfoot()) + (o.bulk ? bulkBar(o.bulk) : '') + '</section>'; };
+    const bulkBar = (n) => '<div class="bulk" role="region" aria-label="Bulk actions"><span><b>' + n + '</b> selected</span><button type="button" class="btn p">Assign…</button><button type="button" class="btn gh">Clear</button></div>';
+
+    /* ---------- workload ---------- */
+    const brow = (l, v, pct, col, sub) => '<div class="br" style="grid-template-columns:120px minmax(0,1fr) 70px"><span>' + l + '</span><span class="trk" aria-hidden="true"><span class="fil" style="width:' + pct + '%;background:' + col + '"></span></span><span class="bv">' + v + (sub ? ' <span>' + sub + '</span>' : '') + '</span></div>';
+    const vt = () => '<div role="radiogroup" aria-label="View as" class="seg"><button type="button" role="radio" aria-checked="true">Chart</button><button type="button" role="radio" aria-checked="false" tabindex="-1">View as table</button></div>';
+    const DAYS = [['Mon', 9], ['Tue', 7], ['Wed', 8], ['Thu', 6], ['Fri', 9], ['Sat', 2]];
+    const workload = (o) => { o = o || {};
+      return '<section aria-labelledby="wl-h" style="display:flex;flex-direction:column;gap:10px"><div class="s2"><h2 id="wl-h">Workload</h2><span class="foot">Secondary · the queue above is the work</span></div><div class="g">'
+        + '<section class="cd c6" aria-labelledby="wa-h"><div class="ch"><h2 id="wa-h">Waiting by age</h2>' + vt() + '</div><div role="img" aria-label="Waiting by age: under 24 hours 68, 24 to 72 hours 55, over 72 hours 9, one item has no arrival time." style="display:flex;flex-direction:column;gap:8px">'
+        + brow('Under 24 hours', '68', 51, P.s5) + brow('24–72 hours', '55', 41, P.amD, '') + brow('Over 72 hours', '9', 7, P.neg) + '</div><p class="foot">1 Articles item has no arrival time — not recorded, so it isn’t placed in a band.</p></section>'
+        + '<section class="cd c6" aria-labelledby="dw-h"><div class="ch"><div style="display:flex;gap:10px;align-items:baseline"><h2 id="dw-h">Decisions this week</h2><span class="sm">41 · median wait 1 d 9 h</span></div>' + vt() + '</div>'
+        + '<div role="img" aria-label="Decisions per day this week: Monday 9, Tuesday 7, Wednesday 8, Thursday 6, Friday 9, Saturday 2 so far." style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:end;height:96px">' + J(DAYS.map((d, i) => '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end;height:100%"><span class="mo" style="font-size:11px;font-weight:700">' + d[1] + '</span><span style="width:70%;height:' + (d[1] * 7) + 'px;border-radius:3px 3px 0 0;background:' + (i === 5 ? 'transparent;border:1.5px dashed ' + P.vi : P.vi) + '"></span><span class="mo mu" style="font-size:10.5px">' + d[0] + (i === 5 ? ' · so far' : '') + '</span></div>')) + '</div></section></div></section>'; };
+    const hqCard = () => '<section class="cd" aria-labelledby="hq-h"><div class="ch"><h2 id="hq-h">Waiting on HQ</h2><span class="sm">2 open</span></div><p class="sub">Requests this studio has sent to HQ that have not been answered yet. This is outbound — not approval work for you.</p><ol>'
+      + J([['Seat increase · 5 more Founder seats', 'Sent 3 Oct · waiting 35 d', 'Licences › Requests'], ['Program proposal · AI-native Venture', 'Sent 9 Oct · waiting 29 d', 'Programs › Your proposals']].map(r => '<li class="ar" style="grid-template-columns:minmax(0,1fr) auto"><span><b style="font-size:13px">' + r[0] + '</b><span class="ks" style="display:block">' + r[1] + '</span></span><a class="btn t" href="#">' + r[2] + ' →</a></li>')) + '</ol></section>';
+
+    /* ---------- filter panel ---------- */
+    const ck = (t, on, n) => '<label class="ck"><input type="checkbox"' + (on ? ' checked' : '') + '>' + t + (n != null ? '<small>' + n + '</small>' : '') + '</label>';
+    const rd = (t, on, n) => '<label class="ck"><input type="radio" name="own"' + (on ? ' checked' : '') + '>' + t + (n != null ? '<small>' + n + '</small>' : '') + '</label>';
+    const fpanel = () => '<div class="fpan" id="fpan" role="dialog" aria-label="Filters" style="right:0;top:42px"><div style="display:flex;justify-content:space-between;align-items:center;padding:13px 18px;border-bottom:1px solid var(--hair)"><b style="font-size:14px">Filters</b><span class="foot">Saved in the address, so this view can be shared</span></div><div class="fb">'
+      + '<fieldset><legend>Group</legend>' + ck('People & accounts', 1, 85) + ck('Programs', 0, 23) + ck('Community & content', 0, 17) + ck('Deals & portfolio', 0, 8) + '</fieldset>'
+      + '<fieldset><legend>Age</legend>' + ck('Under 24 hours', 0, 68) + ck('24–72 hours · Due soon', 0, 55) + ck('Over 72 hours · Overdue', 1, 9) + '</fieldset>'
+      + '<fieldset><legend>Owner</legend>' + rd('Anyone', 0) + rd('Me', 0, 14) + rd('Unassigned', 1, 71) + rd('A specific reviewer…', 0) + '</fieldset>'
+      + '<fieldset><legend>Lane</legend><div class="selb">KYC, KYB, Partner profiles… all 6 in group ▾</div><p class="foot" style="margin-top:4px">Lanes narrow within the chosen groups.</p></fieldset></div>'
+      + '<div class="ff"><button type="button" class="btn t">Clear all</button><div style="display:flex;gap:8px"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Show 2 approvals</button></div></div></div>';
+
+    /* ---------- drawer ---------- */
+    const drawer = (o) => '<div class="dim1" aria-hidden="true"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="dr-t">'
+      + '<div class="drh"><div class="tr"><span class="eye">Item · ' + o.lane + '</span><div style="display:flex;gap:6px;align-items:center"><span class="foot mo">' + (o.pos || '6 of 133') + '</span><button type="button" class="ib" aria-label="Previous item">‹</button><button type="button" class="ib" aria-label="Next item">›</button><button type="button" class="ib fv" aria-label="Close (Esc)">✕</button></div></div>'
+      + '<h2 id="dr-t">' + o.title + '</h2><div class="mt">' + o.meta + '</div></div>'
+      + '<div class="drb">' + o.body + '</div><div class="drf">' + o.foot + '</div></aside>';
+    const fx = (rows) => '<dl class="fx">' + J(rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl>';
+    const hist = (rows) => '<ol class="hist">' + J(rows.map(r => '<li><span>' + r[0] + '</span><span>' + r[1] + '</span></li>')) + '</ol>';
+    const ownBox = (o) => '<div class="ownbox">' + (o ? '<span class="ava" aria-hidden="true">' + o.slice(-1) + '</span><span style="flex:1"><b>' + o + '</b><span class="ks" style="display:block">Owner since 5 Nov, 09:30 · assigned by Admin A</span></span>' : '<span style="flex:1"><em style="font-style:normal;color:var(--amT);font-weight:700">Unassigned</em><span class="ks" style="display:block">Nobody owns this item yet</span></span>') + '<button type="button" class="btn bsm">Assign to me</button><button type="button" class="btn bsm">Change…</button></div>';
+    const adaDrawer = () => drawer({ lane: 'KYC', title: 'Ada Example', meta: '<span class="mu">Lane</span> <b>KYC</b> <span class="mu">·</span> <span class="mu">Waiting</span> <b class="mo">3 d 4 h</b> ' + pill('r', '! Overdue'),
+      body: '<div><h3>Owner</h3>' + ownBox('Admin B') + '</div><div><h3>Facts</h3>' + fx([['Submitted', '<span class="mo">4 Nov 2026 · 10:12</span>'], ['Profile / request', 'Investor · Identity verification<span class="ks" style="display:block;font-weight:500">ada@example.com · 2 documents uploaded</span>'], ['Item ID', '<span class="mo">KYC-2026-0412</span> <button type="button" class="btn t bsm">Copy</button>'], ['Lane', 'KYC · People & accounts'], ['Assigned', 'Admin B']]) + '</div>'
+        + '<div><h3>History</h3>' + hist([['4 Nov · 10:12', 'Submitted by Ada Example'], ['4 Nov · 10:14', 'Passport and proof of address uploaded'], ['5 Nov · 09:30', 'Assigned to Admin B by Admin A'], ['6 Nov · 10:12', 'Became due soon (over 24 hours)'], ['7 Nov · 10:12', 'Became overdue (over 72 hours)']]) + '</div>',
+      foot: '<div style="display:flex;gap:8px"><a class="btn p" href="#" style="flex:1;min-height:38px">Continue review in KYC & KYB →</a><button type="button" class="btn" style="min-height:38px">Copy link</button></div><p class="ln">This decision is completed in KYC & KYB, where its evidence and notification rules live. Your place in this queue is kept.</p>' });
+
+    /* ---------- modal ---------- */
+    const modal = (o) => '<div class="dim2" aria-hidden="true"></div><div class="mdl" role="dialog" aria-modal="true" aria-labelledby="md-t"' + (o.w ? ' style="width:' + o.w + 'px"' : '') + '><div class="mdh"><div><span class="eye">' + o.eye + '</span><h2 id="md-t" style="margin-top:2px">' + o.title + '</h2></div><button type="button" class="ib" aria-label="Close (Esc)">✕</button></div><div class="mdb">' + o.body + '</div><div class="mdf">' + o.foot + '</div></div>';
+    const explain = (a, b, c) => '<dl class="ex"><dt>What changes</dt><dd>' + a + '</dd><dt>Who is told</dt><dd>' + b + '</dd><dt>What is recorded</dt><dd>' + c + '</dd></dl>';
+    const REC = 'Your account, the time, the decision and any reason are recorded in Decided.';
+    const assignModal = () => modal({ eye: 'Assign', title: 'Assign 3 items', body: note('', 'i', '<b>Assigning changes ownership only.</b> It does not decide these items.') + '<p class="sub" style="color:var(--ink)">Ada Example, Harbor Robotics, Finn Mock</p><label class="inp" style="min-width:0"><span aria-hidden="true">⌕</span>Search reviewers</label>'
+      + '<div class="rv" role="radiogroup" aria-label="Reviewer">' + J([['Admin A', 'You · 14 assigned', 1, 'me'], ['Admin D', '2 assigned', 0], ['Admin B', '4 assigned', 0], ['Admin E', '4 assigned', 0], ['Admin C', '9 assigned', 0]].map(r => '<label class="' + (r[2] ? 'on' : '') + '"><input type="radio" name="rv"' + (r[2] ? ' checked' : '') + '><span class="ava' + (r[3] ? ' me' : '') + '" aria-hidden="true">' + r[0].slice(-1) + '</span><span><b>' + r[0] + '</b></span><small>' + r[1] + '</small></label>')) + '</div><p class="foot">Order: you, then lowest workload, then alphabetical. Counts are items currently owned.</p>',
+      foot: '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Assign to Admin A</button>' });
+
+    /* ---------- inbox bodies ---------- */
+    const inbox = (o) => { o = o || {}; return phead('Inbox') + strip(S_DEF) + '<div class="wvr">' + wviews(o.view || 'Needs attention') + '<span class="foot">Needs attention: overdue, then due soon, then everything else — oldest first in each band.</span></div>' + queue(o) + (o.noWl ? '' : workload()); };
+
+    /* ---------- lanes ---------- */
+    const LN = [
+      ['People & accounts', '85', [['KYC', '10', '3 d 4 h', 'Applicant notified', 'KYC & KYB', 0, 2], ['KYB', '2', '2 d 1 h', 'Business notified', 'KYC & KYB › Businesses', 0, 0], ['Partner profiles', '4', '1 d 7 h', 'Partner notified', 'Partner profiles', 0, 0], ['Explorers ready for a profile', '60', '1 d 20 h', 'Member notified', 'Exploring board', 0, 0], ['Product testers', '6', '4 d', 'Member notified', 'Product testers', 1, 1], ['LP applications', '3', '2 d 14 h', 'Applicant notified', 'LP applications', 0, 0]]],
+      ['Programs', '23', [['Spin-Out Lab applications', '7', '3 d 3 h', 'Founder notified', 'Spin-Out Lab', 0, 1], ['Office-hours hosts', '2', '1 d 8 h', 'Host notified', 'Spin-Out Lab › Hosts', 0, 0], ['Spin-Out moderation', '1', '14 h', 'Nobody yet', 'Spin-Out moderation', 0, 0], ['Refer & Earn reviews', '7', '3 d 1 h', 'Referrer notified', 'Refer & Earn', 0, 1], ['Strategic referral access', '2', '2 d 20 h', 'Member notified', 'Refer & Earn', 0, 0], ['Perk listings', '3', '1 d 1 h', 'Partner notified', 'Perks', 0, 0], ['Best-Fit consultations', '1', '1 d 22 h', 'Nobody yet', 'Best-Fit', 0, 0]]],
+      ['Community & content', '17', [['Events', '4', '2 d 3 h', 'Host notified', 'Events', 0, 0], ['Jobs', '3', '1 d 5 h', 'Poster notified', 'Jobs', 0, 0], ['Wellbeing experts', '3', '4 d 7 h', 'Expert notified', 'Wellbeing experts', 1, 1], ['Co-marketing pitches', '2', '1 d 6 h', 'Partner notified', 'Co-marketing', 1, 0], ['Articles', '5', 'NR', 'Author notified', 'Content queue', 0, 0]]],
+      ['Deals & portfolio', '8+', [['Due diligence', 'FAIL', 'FAIL', 'Founder notified', 'Due diligence', 0, 0], ['Score sign-off', '2', '1 d 3 h', 'Nobody yet · internal', 'Monitoring', 0, 0]]]];
+    const laneRow = (l) => { const fail = l[1] === 'FAIL';
+      return '<tr' + (fail ? ' class="fail"' : '') + '><td><b>' + l[0] + '</b>' + (l[5] ? ' <span class="pl v" style="margin-left:6px">Approvals board</span>' : '') + '</td>'
+        + '<td class="n">' + (fail ? '<span style="color:var(--neg);font-family:var(--sg);font-weight:700">Could not be read</span> <button type="button" class="btn t bsm">Try again</button>' : '<b>' + l[1] + '</b> waiting' + (l[6] ? ' <span class="pl r" style="margin-left:4px">' + l[6] + ' overdue</span>' : '')) + '</td>'
+        + '<td class="n">' + (fail ? '<span class="mu">— not read</span>' : l[2] === 'NR' ? '<span class="mu" style="font-family:var(--sg)">Not recorded</span><small>1 item has no arrival time</small>' : 'oldest ' + l[2]) + '</td>'
+        + '<td>' + l[3] + '</td><td><a href="#" style="font-weight:700">' + l[4] + ' →</a></td></tr>'; };
+    const lanes = () => phead('Lanes', { inN: '127+' })
+      + note('r', '!', '<b>127+ waiting · 1 lane could not be read.</b> Due diligence didn’t respond; every other lane is measured.', '<button type="button" class="btn bsm">Try again</button>')
+      + J(LN.map(g => '<section class="cd" style="padding:0;gap:0" aria-label="' + g[0] + '"><div class="ch" style="padding:12px 14px;border-bottom:1px solid var(--hair)"><h2>' + g[0] + '</h2><span class="sm">' + g[1] + ' waiting · ' + g[2].length + ' lanes</span></div><table class="lane"><thead><tr><th scope="col" style="width:30%">Lane</th><th scope="col" style="width:20%">Waiting</th><th scope="col" style="width:16%">Oldest</th><th scope="col" style="width:16%">Notifies / owner</th><th scope="col">Reviewed in</th></tr></thead><tbody>' + J(g[2].map(laneRow)) + '</tbody></table></section>'))
+      + '<section class="cd" style="padding:12px 14px;flex-direction:row;align-items:center;justify-content:space-between"><span style="display:flex;gap:10px;align-items:center"><span class="eye" style="color:var(--ink)">HQ decides — Super Admin only</span><span class="ks">9 HQ lanes are visible to Super Admins. You are signed in as Admin.</span></span><span class="pl">🔒 Super Admin</span></section>'
+      + '<button type="button" class="ai" aria-expanded="false"><b>Not approval queues · 5</b><span class="mu">Directory, Circles, Partner invitations, Mentor cohort access, 83(b) follow-ups — nothing in them waits on an admin.</span><span class="x">Show ▾</span></button>';
+
+    /* ---------- decided ---------- */
+    const OUT = { Approved: 'g', Verified: 'g', Declined: 'r', 'Sent back': 'a', Published: 'v', Removed: '' };
+    const DEC = [['7 Nov 2026 · 11:20', 'Demo Day', 'Events', 'Approved', 'Admin A', '1 d 2 h', 'Internal note'], ['6 Nov 2026 · 17:05', 'Partner B', 'Co-marketing · Fintech digest', 'Declined', 'Admin B', '2 d 9 h', 'Shown to partner'], ['6 Nov 2026 · 15:40', 'Mia Example', 'Product testers', 'Approved', 'Admin B', '2 d 4 h', '—'], ['5 Nov 2026 · 14:31', 'Ada Sample', 'KYC', 'Approved', 'Admin B', '1 d 3 h', 'Shown to applicant'], ['5 Nov 2026 · 10:30', 'Office Hours · Legal', 'Events', 'Sent back', 'Admin A', '3 d 1 h', 'Shown to host'], ['4 Nov 2026 · 16:02', 'Sam Example', 'Wellbeing experts', 'Verified', 'Admin A', '1 d 3 h', 'Internal note'], ['4 Nov 2026 · 09:12', 'Partner A', 'Co-marketing · Hiring webinar', 'Published', 'Admin A', '—', '—'], ['3 Nov 2026 · 13:30', 'Firm Name', 'Due diligence', 'Approved', 'Admin A', '8 d 4 h', 'Internal note'], ['3 Nov 2026 · 11:15', 'Rui Placeholder', 'Product testers', 'Removed', 'Admin B', '—', 'Shown to member']];
+    const decided = (empty) => phead('Decided')
+      + '<section class="qc" aria-label="Decision log"><div class="qtb"><div class="tools">' + J(['Lane: All', 'Outcome: All', 'Decided by: Anyone'].map(t => '<button type="button" class="dd">' + t + ' ▾</button>')) + '<label class="inp" style="min-width:150px"><span class="eye" style="margin-right:4px">From</span><span class="mo">12 Oct 2026</span></label><label class="inp" style="min-width:150px"><span class="eye" style="margin-right:4px">To</span><span class="mo">7 Nov 2026</span></label></div><label class="ck" style="color:var(--mu)"><input type="checkbox" disabled>Include HQ lanes <span class="pl" style="margin-left:6px">Super Admin</span></label></div>'
+      + (empty ? '<div style="padding:44px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center"><b style="font-size:15px">No recorded decisions match these filters.</b><button type="button" class="btn">Clear filters</button></div>'
+        : '<table class="aq"><thead><tr><th scope="col" style="padding-left:14px">Decided ↓</th><th scope="col">Request</th><th scope="col">Outcome</th><th scope="col">Decided by</th><th scope="col" style="text-align:right">Wait</th><th scope="col">Note</th><th scope="col"><span style="position:absolute;width:1px;height:1px;overflow:hidden">Open</span></th></tr></thead><tbody>'
+          + J(DEC.map(d => '<tr><td class="mo" style="padding-left:14px;font-size:12px;white-space:nowrap">' + d[0] + '</td><td class="rq"><a href="#">' + d[1] + '</a><small>' + d[2] + '</small></td><td>' + pill(OUT[d[3]], d[3]) + '</td><td>' + d[4] + '</td><td class="mo" style="text-align:right">' + (d[5] === '—' ? '<span class="mu" title="Wait is not recorded for this kind of decision">—</span>' : d[5]) + '</td><td>' + (d[6] === '—' ? '<span class="mu">No note</span>' : d[6].indexOf('Shown') === 0 ? '<span style="display:inline-flex;gap:5px;align-items:center">👁 ' + d[6] + '</span>' : '<span class="mu">🔒 ' + d[6] + '</span>') + '</td><td style="text-align:right"><a class="btn t bsm" href="#">Open ↗</a></td></tr>')) + '</tbody></table><div class="qft"><span>1–9 of 312 · newest first</span><span class="pb"><button type="button" aria-current="page">1</button><button type="button">2</button><button type="button">3</button><span>…</span><button type="button">35</button><button type="button" aria-label="Next page">›</button></span></div>')
+      + '</section>'
+      + (empty ? '' : '<section class="cd" style="background:transparent;border-style:dashed"><h2 style="font-size:13px;font-weight:800">About this history</h2><ul style="display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--mu)"><li>· Decisions before 12 Aug 2026 were recorded without wait times; they show a dash, not zero.</li><li>· Lanes added in October 2026 start their history on their launch day.</li><li>· Co-marketing publication is recorded separately from approval, so one pitch can appear twice.</li><li>· Open ↗ reopens the source item where it still exists.</li></ul></section>');
+
+    /* ---------- native boards ---------- */
+    const nb = (o) => '<header style="display:flex;flex-direction:column;gap:6px"><nav aria-label="Breadcrumb" class="eye"><a href="#">Approvals</a> › <a href="#">Lanes</a> › <span style="color:var(--ink)">' + o.crumb + '</span></nav><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px"><div><h1 style="font-size:24px;font-weight:800;letter-spacing:-.02em">' + o.title + '</h1><p style="font-size:13px;color:var(--mu);margin-top:3px;max-width:760px">' + o.copy + '</p></div><span class="scp">HQ-held accounts · axal.vc</span></div></header>'
+      + '<nav class="ptabs" aria-label="' + o.title + ' status">' + J(o.tabs.map((t, i) => '<a href="#"' + (!i ? ' aria-current="page"' : '') + '>' + t[0] + '<span>' + t[1] + '</span></a>')) + '</nav>'
+      + (o.extra || '') + strip(o.strip)
+      + '<section class="qc" aria-label="' + o.title + ' queue"><div class="qtb"><label class="inp"><span aria-hidden="true">⌕</span><span>' + o.search + '</span></label><div style="display:flex;gap:8px"><button type="button" class="dd">Filters</button><button type="button" class="dd">Sort: Oldest first ▾</button></div></div><table class="aq"><thead><tr><th scope="col"><input type="checkbox" aria-label="Select all"></th>' + J(o.cols.map(c => '<th scope="col">' + c + '</th>')) + '<th scope="col"><span style="position:absolute;width:1px;height:1px;overflow:hidden">More</span></th></tr></thead><tbody>' + J(o.rows.map((r, i) => '<tr' + (o.open === i ? ' class="open"' : '') + '><td><input type="checkbox" aria-label="Select ' + r[0].replace(/<[^>]+>/g, '') + '"></td>' + J(r.map((c, j) => '<td' + (j === 0 ? ' class="rq"' : '') + '>' + c + '</td>')) + '<td>' + more('item') + '</td></tr>')) + '</tbody></table><div class="qft"><span>' + o.count + '</span><span></span></div></section>';
+    const wcell = (h) => '<span class="wt"><b class="mo" style="font-weight:600;margin-right:7px">' + fmt(h) + '</b>' + sla(h) + '</span>';
+    const rv = (t) => '<a class="btn bsm" href="#" style="font-weight:800">' + (t || 'Review') + ' →</a>';
+    const ptBoard = (open) => nb({ crumb: 'Product testers', title: 'Product testers', copy: 'Members who asked to test partner products. Approving lets them join testing programs; nothing is published about them.', tabs: [['Pending', '6'], ['Active', '48'], ['Paused', '3'], ['Declined', '21'], ['Removed', '4']],
+      strip: [['Pending', '6', 'applications'], ['Overdue', '1', 'over 72 hours', 'ov'], ['Unassigned', '3', 'of 6', 'ow'], ['Oldest', '4 d', 'Gus Demo']], search: 'Search applicant or email', cols: ['Applicant', 'Applying as', 'Waiting', 'Owner', 'Review'], open,
+      rows: [['<a href="#">Gus Demo</a><small>gus@example.com</small>', 'Investor', wcell(96), owner('Admin B'), rv()], ['<a href="#">Ben Sample</a><small>ben@example.com</small>', 'Founder', wcell(54), owner(0), rv()], ['<a href="#">Mia Example</a><small>mia@example.com</small>', 'Operator', wcell(33), owner(0), rv()], ['<a href="#">Noah Sample</a><small>noah@example.com</small>', 'Founder', wcell(20), owner('Admin A'), rv()], ['<a href="#">Omar Demo</a><small>omar@example.com</small>', 'Advisor', wcell(9), owner(0), rv()], ['<a href="#">Pia Placeholder</a><small>pia@example.com</small>', 'Founder', wcell(2), owner('Admin A'), rv()]], count: '6 pending · oldest first' });
+    const cmBoard = (open) => nb({ crumb: 'Co-marketing pitches', title: 'Co-marketing pitches', copy: 'Partners propose content to run with the studio. Approving a pitch is one decision; publishing it later is another.', tabs: [['Proposed', '2'], ['Approved', '5'], ['Published', '12'], ['Rejected', '3'], ['Withdrawn', '1']],
+      extra: '<div class="stp" aria-label="Lifecycle"><span class="on">1 · Proposed — review here</span><span>2 · Approved — attribution code issued</span><span class="nx">3 · Published — a separate step, from Approved</span></div>',
+      strip: [['Proposed', '2', 'waiting for a decision'], ['Overdue', '0', 'measured · nothing over 72 h'], ['Unassigned', '1', 'of 2', 'ow'], ['Approved, not published', '5', 'oldest 9 d']], search: 'Search partner or pitch', cols: ['Pitch', 'Partner', 'Format', 'Waiting', 'Owner', 'Review'], open,
+      rows: [['<a href="#">Hiring your first engineer</a><small>Proposed by Chloé Placeholder</small>', 'Partner A', 'Webinar · 3 Dec', wcell(26), owner('Admin A'), rv()], ['<a href="#">Fintech founders digest</a><small>Proposed by Rafa Example</small>', 'Partner B', 'Newsletter feature', wcell(30), owner(0), rv()]], count: '2 proposed · oldest first' });
+    const wbBoard = (open) => nb({ crumb: 'Wellbeing experts', title: 'Wellbeing experts', copy: 'Professionals who asked to appear in the Wellbeing directory. Verify credentials before anyone is shown to founders. No founder check-in data is visible here.', tabs: [['Needs verification', '3'], ['Verified', '11'], ['Declined', '2'], ['Hidden', '1']],
+      strip: [['Needs verification', '3', 'experts'], ['Overdue', '1', 'over 72 hours', 'ov'], ['Unassigned', '1', 'of 3', 'ow'], ['Oldest', '4 d 7 h', 'Eva Demo']], search: 'Search expert or specialty', cols: ['Expert', 'Specialty', 'Credentials', 'Waiting', 'Owner', 'Review'], open,
+      rows: [['<a href="#">Eva Demo</a><small>eva@example.com</small>', 'Clinical psychologist', '3 documents · licence, insurance, degree', wcell(103), owner('Admin A'), rv('Verify')], ['<a href="#">Sam Testcase</a><small>sam@example.com</small>', 'Executive coach', '2 documents · insurance missing', wcell(27), owner(0), rv('Verify')], ['<a href="#">Jun Placeholder</a><small>jun@example.com</small>', 'Sleep specialist', '3 documents', wcell(6), owner('Admin B'), rv('Verify')]], count: '3 need verification · oldest first' });
+
+    const decFoot = (pri, sec) => '<div style="display:flex;gap:8px"><button type="button" class="btn p" style="flex:1;min-height:38px">' + pri + '</button><button type="button" class="btn" style="flex:1;min-height:38px">' + sec + '</button></div><p class="ln">Decided here, in Approvals. You’ll see what changes before anything is recorded.</p>';
+    const ptDrawer = () => drawer({ lane: 'Product testers', pos: '2 of 6', title: 'Ben Sample', meta: '<span class="mu">Lane</span> <b>Product testers</b> <span class="mu">·</span> <span class="mu">Waiting</span> <b class="mo">2 d 6 h</b> ' + pill('a', '◷ Due soon'),
+      body: '<div><h3>Owner</h3>' + ownBox(0) + '</div><div><h3>Application</h3>' + fx([['Applying as', 'Founder · Bluefern Health'], ['Interests', 'AI tools, fintech, B2B onboarding'], ['Devices', 'macOS, iOS'], ['Availability', '<span class="mo">3 h</span> a week'], ['Prior testing', '2 programs · both completed'], ['Email', 'ben@example.com'], ['Submitted', '<span class="mo">5 Nov 2026 · 09:40</span>'], ['Item ID', '<span class="mo">PT-2026-0188</span>']]) + '</div><div><h3>History</h3>' + hist([['5 Nov · 09:40', 'Applied'], ['6 Nov · 09:40', 'Became due soon']]) + '</div>',
+      foot: decFoot('Approve…', 'Decline…') });
+    const cmDrawer = () => drawer({ lane: 'Co-marketing', pos: '1 of 2', title: 'Hiring your first engineer', meta: '<span class="mu">Partner</span> <b>Partner A</b> <span class="mu">·</span> <span class="mu">Waiting</span> <b class="mo">1 d 2 h</b> ' + pill('a', '◷ Due soon'),
+      body: '<div><h3>Lifecycle</h3><div class="stp"><span class="on">Proposed</span><span>Approved</span><span class="nx">Published · later</span></div><p class="foot" style="margin-top:6px">Approving does not publish. Publishing happens from the Approved tab once the content is ready.</p></div><div><h3>Owner</h3>' + ownBox('Admin A') + '</div><div><h3>Pitch</h3>' + fx([['Format', 'Webinar · 45 min · 3 Dec 2026, 17:00'], ['Audience', 'Founders, pre-seed to Series A'], ['Abstract', 'How to write the first engineering job description, run a fair take-home and close candidates against bigger offers.'], ['Proposed by', 'Chloé Placeholder · chloe@example.com'], ['Item ID', '<span class="mo">CM-2026-0031</span>']]) + '</div>',
+      foot: decFoot('Approve…', 'Decline…') });
+    const wbDrawer = () => drawer({ lane: 'Wellbeing experts', pos: '1 of 3', title: 'Eva Demo', meta: '<span class="mu">Clinical psychologist</span> <span class="mu">·</span> <span class="mu">Waiting</span> <b class="mo">4 d 7 h</b> ' + pill('r', '! Overdue'),
+      body: '<div><h3>Credentials and evidence</h3><ul class="cred">' + J([['Professional licence', 'HCPC registered · PYL 041 207 · expires Mar 2028', 'Check register ↗'], ['Licence certificate.pdf', 'Uploaded 2 Nov · 1 page', 'Open'], ['Professional indemnity insurance', 'Policy to £2m · expires Jan 2027', 'Open'], ['DClinPsy, University of Example', 'Degree certificate · 2 pages', 'Open']].map(c => '<li><b>' + c[0] + '</b><small>' + c[1] + '</small><a class="btn bsm act" href="#">' + c[2] + '</a></li>')) + '</ul><p class="foot" style="margin-top:6px">Register lookups aren’t automated. Check the licence against the issuing register before verifying.</p></div>'
+        + '<div><h3>Owner</h3>' + ownBox('Admin A') + '</div><div><h3>Profile</h3>' + fx([['Directory listing', 'Burnout, founder stress, sleep · English, Portuguese'], ['Session format', 'Video · 50 min'], ['Email', 'eva@example.com'], ['Submitted', '<span class="mo">2 Nov 2026 · 15:12</span>']]) + '</div>',
+      foot: decFoot('Verify expert…', 'Decline…') });
+    const ptApprove = () => modal({ eye: 'Product testers · Ben Sample', title: 'Approve Ben Sample as a product tester?', body: explain('Ben Sample becomes an active product tester and can be invited to testing programs.', 'Ben Sample is notified by email at ben@example.com.', REC) + '<div class="fld"><label>Note to Ben <span>· optional, shown in the email</span></label><div class="ta mu">Welcome aboard — the next program opens on 16 Nov.</div></div>', foot: '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Approve</button>' });
+    const ptDecline = () => modal({ eye: 'Product testers · Ben Sample', title: 'Decline Ben Sample’s application?', body: explain('The application moves to Declined. Ben can apply again after 90 days.', 'Ben Sample is notified, with the reason below.', REC) + '<div class="fld"><label>Reason <span>· required, shown to the applicant</span></label><div class="selb">Not enough testing availability ▾</div><div class="ta">Thanks for applying. Our current programs need at least 5 hours a week; we’d welcome a new application if that changes.</div></div>', foot: '<button type="button" class="btn">Cancel</button><button type="button" class="btn dg">Decline application</button>' });
+    const cmApprove = () => modal({ eye: 'Co-marketing · Partner A', title: 'Approve “Hiring your first engineer”?', body: explain('The pitch becomes Approved and an attribution code is issued. It is <b>not published</b> — that happens later from the Approved tab.', 'Chloé Placeholder at Partner A is notified, with the attribution code.', REC) + '<div class="fld"><label>Note to the partner <span>· optional</span></label><div class="ta mu">Add a note…</div></div>', foot: '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Approve pitch</button>' });
+    const wbVerify = () => modal({ eye: 'Wellbeing experts · Eva Demo', title: 'Verify Eva Demo?', body: explain('This expert will become verified and may appear in the Wellbeing directory.', 'The expert will be notified.', 'Your account, time, decision and reason are recorded.') + '<label class="ack"><input type="checkbox" checked><span><b>I have checked the licence and insurance</b> against the issuing register and the documents above. Required to verify.</span></label>', foot: '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Verify expert</button>' });
+
+    /* ---------- phone ---------- */
+    const pTop = (back) => '<div class="pt">' + (back ? '<a class="pi" href="#" style="font-size:14px;color:var(--vt)"><span aria-hidden="true" style="font-size:20px">‹</span>' + back + '</a><span></span>' : '<button type="button" class="pi" aria-label="Menu">☰</button><span style="display:flex;align-items:center;gap:7px"><span class="logo" aria-hidden="true"></span><b style="font-size:13px">Axal VC</b></span><button type="button" class="pi" aria-label="Notifications">' + bell + '</button>') + '</div>';
+    const pcard = (r) => '<li class="pcard"><div class="r1"><div><a href="#" style="color:var(--ink)"><b>' + r[0] + '</b></a><span class="ks" style="display:block">' + r[1].split(' · ').reverse().join(' · ') + '</span></div></div><div class="r3"><b class="mo" style="font-size:12.5px">' + fmt(r[2]) + '</b>' + sla(r[2]) + '</div><div class="ks">' + (r[3] === -1 ? 'Owner not read' : r[3] ? 'Assigned to ' + r[3] + (r[3] === 'Admin A' ? ' (you)' : '') : '<em style="font-style:normal;color:var(--amT);font-weight:700">Unassigned</em>') + '</div><div class="r3" style="margin-top:2px"><a class="btn p" href="#" style="flex:1">Open</a>' + (r[3] ? '' : '<button type="button" class="btn">Assign</button>') + '<button type="button" class="btn" aria-label="More actions for ' + r[0] + '" style="width:44px;padding:0">⋯</button></div></li>';
+    const pInbox = (sheet) => '<div class="ph" style="height:844px;position:relative">' + pTop() + '<main class="pbd" style="gap:12px"><header><span class="eye">Admin</span><h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em">Approvals</h1><p class="ks">Every item waiting on an administrator, oldest first.</p></header>'
+      + '<nav class="ptabs" aria-label="Approvals" style="gap:0">' + J([['Inbox', '133'], ['Lanes', '20'], ['Decided', '']].map((t, i) => '<a href="#" style="flex:1;justify-content:center;min-height:44px"' + (!i ? ' aria-current="page"' : '') + '>' + t[0] + (t[1] ? '<span>' + t[1] + '</span>' : '') + '</a>')) + '</nav>'
+      + '<section class="us" aria-label="Urgency summary" style="grid-template-columns:1fr 1fr"><div style="border-bottom:1px solid var(--hair)"><span class="eye" style="width:100%">Waiting</span><span class="v">133</span></div><div class="ov" style="border-bottom:1px solid var(--hair);border-right:0"><span class="eye" style="width:100%">Overdue</span><span class="v">9</span></div><div class="ow"><span class="eye" style="width:100%">Unassigned</span><span class="v">71</span></div><div style="border-right:0"><span class="eye" style="width:100%">Oldest</span><span class="v">6 d</span></div></section>'
+      + '<div role="radiogroup" aria-label="Work view" class="wv" style="display:grid;grid-template-columns:1fr 1fr"><button type="button" role="radio" aria-checked="true" style="min-height:44px">Needs attention</button><button type="button" role="radio" aria-checked="false" style="min-height:44px">Assigned to me <span>14</span></button><button type="button" role="radio" aria-checked="false" style="min-height:44px">Unassigned <span>71</span></button><button type="button" role="radio" aria-checked="false" style="min-height:44px">All <span>133</span></button></div>'
+      + '<div style="display:flex;gap:8px"><label class="inp" style="min-width:0;flex:1;min-height:44px"><span aria-hidden="true">⌕</span>Search</label><button type="button" class="dd on" style="min-height:44px">Filters · 3</button></div>'
+      + '<span class="eye" style="color:var(--neg)">! Overdue · 9</span><ol class="cd" style="padding:0 14px;gap:0">' + J([R[0], R[2], R[5]].map(pcard)) + '</ol></main>' + (sheet || '') + '</div>';
+    const pSheet = () => '<div class="ph" style="height:844px;position:relative">' + pTop('Approvals') + '<main class="pbd" style="padding-bottom:150px"><div><span class="eye">Item · KYC · 6 of 133</span><h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin-top:2px">Ada Example</h1><div style="display:flex;gap:8px;align-items:center;margin-top:6px"><b class="mo">3 d 4 h</b>' + pill('r', '! Overdue') + '</div></div>'
+      + '<div><h3 class="eye" style="margin-bottom:8px">Owner</h3><div class="ownbox" style="flex-wrap:wrap"><span class="ava" aria-hidden="true">B</span><span style="flex:1"><b>Admin B</b><span class="ks" style="display:block">since 5 Nov, 09:30</span></span><div style="display:flex;gap:8px;width:100%"><button type="button" class="btn" style="flex:1">Assign to me</button><button type="button" class="btn" style="flex:1">Change…</button></div></div></div>'
+      + '<div><h3 class="eye" style="margin-bottom:8px">Facts</h3>' + fx([['Submitted', '<span class="mo">4 Nov · 10:12</span>'], ['Request', 'Investor · Identity verification'], ['Item ID', '<span class="mo">KYC-2026-0412</span>'], ['Lane', 'KYC'], ['History', '5 events · <a href="#">Show</a>']]).replace('class="fx"', 'class="fx" style="grid-template-columns:110px minmax(0,1fr)"') + '</div></main>'
+      + '<div class="pbar" style="flex-direction:column;gap:6px"><a class="btn p" href="#">Continue review in KYC & KYB →</a><p class="foot">This decision is completed in KYC & KYB, where its evidence and notification rules live.</p></div></div>';
+    const pFilters = () => '<div class="dim2" aria-hidden="true" style="z-index:7"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pf-t"><span class="grab" aria-hidden="true"></span><div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px 6px 16px;border-bottom:1px solid var(--hair)"><h2 id="pf-t" style="font-size:17px;font-weight:800">Filters · 3</h2><button type="button" class="pi" aria-label="Close filters">✕</button></div>'
+      + '<div style="padding:8px 16px;display:flex;flex-direction:column;gap:10px;overflow:hidden"><fieldset style="border:0;padding:0;margin:0"><legend class="eye" style="padding:6px 0">Group</legend>' + ck('People & accounts', 1, 85) + ck('Programs', 0, 23) + ck('Community & content', 0, 17) + ck('Deals & portfolio', 0, 8) + '</fieldset>'
+      + '<fieldset style="border:0;padding:0;margin:0"><legend class="eye" style="padding:6px 0">Age</legend>' + ck('24–72 hours · Due soon', 0, 55) + ck('Over 72 hours · Overdue', 1, 9) + '</fieldset>'
+      + '<fieldset style="border:0;padding:0;margin:0"><legend class="eye" style="padding:6px 0">Owner</legend>' + rd('Anyone', 0) + rd('Me', 0, 14) + rd('Unassigned', 1, 71) + '</fieldset></div>'
+      + '<div style="display:flex;gap:8px;padding:12px 16px 16px;border-top:1px solid var(--hair)"><button type="button" class="btn" style="flex:1">Clear all</button><button type="button" class="btn p" style="flex:2">Show 2 approvals</button></div></div>';
+
+    /* ---------- state crops ---------- */
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const emptyQ = (t, s, btn) => '<section class="qc"><div class="qtb"><label class="inp"><span aria-hidden="true">⌕</span><span>Search person, company or item</span></label><div style="display:flex;gap:8px"><button type="button" class="dd' + (btn ? ' on' : '') + '">Filters' + (btn ? ' · 2' : '') + '</button><button type="button" class="dd">Sort: Oldest first ▾</button></div></div><div role="status" style="padding:44px 20px;text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center"><b style="font-size:16px">' + t + '</b><span class="sub">' + s + '</span>' + (btn ? '<button type="button" class="btn" style="margin-top:6px">Clear filters</button>' : '') + '</div></section>';
+    const failStrip = [['Waiting', '127+', '1 lane could not be read'], ['Overdue', '6+', 'Due diligence not read', 'ov'], ['Unassigned', '68+', 'Due diligence not read', 'ow'], ['Oldest', '4 d 7 h', 'of lanes read · may be older']];
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'AP01') html = page(inbox(), { h: 1700 });
+    else if (B === 'AP02') html = page(phead('Inbox') + strip(S_DEF) + '<div class="wvr">' + wviews('Needs attention') + '</div>' + queue({ nf: 3, fopen: true, chips: true, callout: false, foot: false, rowsHtml: band('o', '! Overdue · over 72 hours · 2 match') + qrow(R[7]) + qrow(['Kai Example', 'KYB · Business verification', 80, 0, 'kyb']) }), { h: 900 });
+    else if (B === 'AP03') html = page(inbox({ sel: [1, 6, 7], bulk: 3, noWl: true }), { h: 1200 });
+    else if (B === 'AP04') html = page(inbox({ open: 5, noWl: true }), { h: 900, overlay: adaDrawer() });
+    else if (B === 'AP05') html = page(inbox({ sel: [1, 6, 7], noWl: true }), { h: 900, overlay: assignModal() });
+    else if (B === 'AP06') html = page(lanes(), { h: 1700 });
+    else if (B === 'AP07') html = page(decided(), { h: 1000 });
+    else if (B === 'AP08') html = page(ptBoard(), { h: 900 });
+    else if (B === 'AP09a') html = page(ptBoard(1), { h: 900, overlay: ptDrawer() });
+    else if (B === 'AP09b') html = page(ptBoard(1), { h: 900, overlay: ptDrawer() + ptApprove() });
+    else if (B === 'AP09c') html = page(ptBoard(1), { h: 900, overlay: ptDrawer() + ptDecline() });
+    else if (B === 'AP10') html = page(cmBoard(), { h: 900 });
+    else if (B === 'AP11a') html = page(cmBoard(0), { h: 900, overlay: cmDrawer() });
+    else if (B === 'AP11b') html = page(cmBoard(0), { h: 900, overlay: cmDrawer() + cmApprove() });
+    else if (B === 'AP12') html = page(wbBoard(), { h: 900 });
+    else if (B === 'AP13a') html = page(wbBoard(0), { h: 900, overlay: wbDrawer() });
+    else if (B === 'AP13b') html = page(wbBoard(0), { h: 900, overlay: wbDrawer() + wbVerify() });
+    else if (B === 'AP14') html = '<div class="cv" style="' + VARS + '">' + pInbox() + '</div>';
+    else if (B === 'AP15') html = '<div class="cv" style="' + VARS + '">' + pSheet() + '</div>';
+    else if (B === 'AP16') html = '<div class="cv" style="' + VARS + '">' + pInbox(pFilters()) + '</div>';
+    else if (B === 'AP17') html = page(inbox({ menu: 1 }), { h: 1700 });
+    else if (B === 'AP18a') html = crop(strip([['Waiting', '0', 'across 20 lanes · all read'], ['Overdue', '0', 'measured'], ['Unassigned', '0', 'measured'], ['Oldest', '—', 'nothing waiting']]) + emptyQ('Nothing needs approval', 'All approval queues currently read as clear.'));
+    else if (B === 'AP18b') html = crop(emptyQ('No approvals match these filters.', 'Group: Deals & portfolio · Owner: Me', true));
+    else if (B === 'AP18c') html = crop(note('r', '!', '<b>1 lane could not be read. The inbox may be incomplete.</b><div>Due diligence · Could not be read · <button type="button" class="btn t bsm" style="padding:0">Try again</button></div>', '<a class="btn bsm" href="#">View details</a>') + strip(failStrip));
+    else if (B === 'AP18d') html = crop('<div style="position:relative;height:200px">' + queue({ callout: false, foot: false, rowsHtml: band('o', '! Overdue · over 72 hours · 8') + qrow(R[6]) + qrow(R[7]) }) + '<div class="toast" role="status" style="bottom:4px">✓ <span>Ada Example was approved. Filters and page kept.</span><a href="#">View in Decided</a></div></div>');
+    else if (B === 'AP18e') html = crop(modal({ eye: 'Product testers · Ben Sample', title: 'Approve Ben Sample as a product tester?', body: note('a', '↻', '<b>This item changed while you were reviewing it.</b> The latest state has been loaded: Admin B declined it at 16:02. Nothing was recorded by you.'), foot: '<button type="button" class="btn">Close</button><button type="button" class="btn p">View latest</button>' }).replace('class="dim2"', 'class="dim2" style="display:none"').replace('class="mdl"', 'class="mdl" style="position:static;transform:none;width:100%"'), 620);
+    else if (B === 'AP18f') html = crop(note('a', '!', '<b>The decision may have been recorded, but the notification could not be delivered.</b><div>Check the item before trying again — Eva Demo may already show as verified.</div>', '<a class="btn bsm" href="#">Check item</a>'), 720);
+    else if (B === 'AP18g') html = crop(decided(true).split('<section class="qc"')[1] ? '<section class="qc"' + decided(true).split('<section class="qc"')[1] : '', 1100);
+    else if (B === 'AP18i') html = crop(hqCard(), 640);
+    else if (B === 'AP19') html = page(inbox({ noWl: true }), { h: 1000, ead: true });
+    else html = page(inbox(), { h: 1700 });
+    return { html: { __html: html } };
+  }
+}
+</script>
+</body>
+</html>

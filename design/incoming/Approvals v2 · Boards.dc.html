@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approvals v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Approvals · v2 redesign</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Approvals — the queue is the page</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:960px;line-height:1.55">Highest-value change first: the queue moves above analytics, drops to five working columns (Request · Waiting · Owner · Review · ⋯, with a selection checkbox), and ownership becomes a primary state — Unassigned is in the headline summary, has its own work view, an inline Assign button on every unowned row and a callout when unowned work is why the queue is ageing. The summary is Waiting · Overdue · Unassigned · Oldest; Assigned to me is a work view, not a headline figure. One Filters control, one Sort. Review buttons say where review continues (“in KYC & KYB”), never “Decided on” or “Here”. Waiting on HQ only appears in a studio shell. Eadwyn stays a collapsed 44px rail by default, so the queue gets the width; it can be expanded deliberately (AP-19).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#6b6577">Sample now: Sat 7 Nov 2026 · signed in as Admin A · HQ-held accounts · 133 waiting across 20 lanes · counts agree across tabs, summary and views</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="19">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Approvals v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab) => D(b, lab, 1440, 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh || 300);
+    const boards = [
+      ['AP-01', 'Inbox · Needs attention · desktop 1440', 'Shared admin header (title, copy, scope chip) and the violet-underline Inbox · Lanes · Decided tabs — no second dashboard header. The compact urgency strip (Waiting 133 · Overdue 9 · Unassigned 71 · Oldest 6 d) leads into the work views. The queue is the hero: overdue band first, then due soon, oldest first in each. The amber ownership callout appears because 71 of 133 items have no owner, 4 of them overdue. Workload charts sit below the queue, each with View as table. Waiting on HQ is not shown in the HQ-held shell.', [D('AP01', false, 1440, 1700)]],
+      ['AP-02', 'Inbox · filters open', 'One Filters button (Filters · 3 when active) opens a panel: group, age, owner and lane, with counts. Active-filter chips render only when filters exist, with Clear all and a result count. Sort is a single control; it is not repeated in the panel. Filters live in the address, e.g. /admin/approvals?view=attention&group=people&age=72h&owner=none.', [F('AP02')]],
+      ['AP-03', 'Inbox · three rows selected', 'Selecting rows floats a bulk bar over the bottom of the queue (3 selected · Assign… · Clear), so nothing below shifts. Rows keep their lavender selected state; the header checkbox shows partial selection.', [D('AP03', false, 1440, 1200)]],
+      ['AP-04', 'Item drawer · external lane', 'A 600px right drawer keeps the queue visible and the opened row marked. Prev/next and “6 of 133” let you step through the queue without closing. Owner is editable at the top (Assign to me, Change…), then facts, then history. The action names its destination: Continue review in KYC & KYB →, with the line explaining why it is completed there. Esc closes and returns focus to the row.', [F('AP04')]],
+      ['AP-05', 'Assign dialog · bulk', 'States plainly that assigning changes ownership only and doesn’t decide anything. Reviewers are a radio list: you first, then lowest workload, then alphabetical, each with their current load. The primary button names the person.', [F('AP05')]],
+      ['AP-06', 'Lanes · operational map', 'Grouped tables with Lane · Waiting · Oldest · Notifies / owner · Reviewed in. Native boards are tagged Approvals board and link to their board by name. Due diligence couldn’t be read: its row says so with Try again, the total reads 127+, and every other lane stays measured. Articles shows Not recorded with its reason. HQ decides is a locked line for Admins, and Not approval queues · 5 is collapsed at the bottom.', [D('AP06', false, 1440, 1700)]],
+      ['AP-07', 'Decided · audit trail', 'Filters for lane, outcome, decided by and a date range; Include HQ lanes is shown but disabled for Admins. Each row shows when it was decided, the request, outcome, who decided, the wait, and whether the note was shown to the person or kept internal, plus Open ↗ to reopen the source. History limits sit in About this history after the log.', [D('AP07', false, 1440, 1000)]],
+      ['AP-08', 'Product testers · Pending', 'Shared native-board grammar: breadcrumb, title and explanation, status tabs (Pending · Active · Paused · Declined · Removed), the same four-cell summary, toolbar, queue.', [F('AP08')]],
+      ['AP-09', 'Product tester drawer and decisions', 'A · The application in the drawer, unowned, with Approve… and Decline…. B · Approve explains what changes, who is told and what is recorded. C · Decline requires a reason the applicant sees.', [F('AP09a'), F('AP09b'), F('AP09c')]],
+      ['AP-10', 'Co-marketing · Proposed', 'A three-step lifecycle strip keeps approval and publication visibly separate; the summary counts approved-but-unpublished pitches as their own figure. Overdue reads 0 because it was measured, not because it was missing.', [F('AP10')]],
+      ['AP-11', 'Co-marketing pitch drawer and approval', 'The drawer repeats the lifecycle with Published shown as a later, separate step. The Approve dialog says the attribution code is issued and the pitch is not published.', [F('AP11a'), F('AP11b')]],
+      ['AP-12', 'Wellbeing experts · Needs verification', 'The queue shows credential completeness as text (“insurance missing”) and the Review button reads Verify →. No founder check-in data appears anywhere on this board.', [F('AP12')]],
+      ['AP-13', 'Expert drawer and verification', 'Credentials and evidence come first, each with an action to open or check it; the drawer says register lookups are manual. The Verify dialog uses the agreed copy and needs an explicit acknowledgement before Verify expert is enabled.', [F('AP13a'), F('AP13b')]],
+      ['AP-14', 'Phone · Inbox', 'Cards, not a shrunk table: name, request · lane, age and SLA in words, owner (Unassigned in amber), then Open, Assign when unowned, and ⋯ — every target 44px or more. Summary 2 × 2, work views 2 × 2, no horizontal scrolling.', [P('AP14')]],
+      ['AP-15', 'Phone · item sheet', 'Full-screen page with ‹ Approvals, owner controls up top, facts, and a pinned Continue review in KYC & KYB → with its explanation.', [P('AP15')]],
+      ['AP-16', 'Phone · filters sheet', 'Bottom sheet titled Filters · 3, 44px rows with counts, Clear all and Show 2 approvals.', [P('AP16')]],
+      ['AP-17', 'Inbox · dark', 'AP-01 in dark colours, with a row’s ⋯ open. ⋯ is a disclosure popover, not an ARIA menu: Tab moves through Assign…, Copy link and Open in Due diligence ↗; Esc closes and returns focus. Review is never only inside ⋯.', [D('AP17', false, 1440, 1700)]],
+      ['AP-18', 'Empty, error, success and failure states', 'A · True empty, shown only when every lane was read. B · Filtered empty. C · One lane failed: the banner, the lane state and figures marked + instead of zeros. D · After a decision the row leaves, filters and page stay, and the result is announced. E · The item changed while you were reviewing it. F · The decision may have been recorded but the notification failed. G · Decided with no matches. I · Waiting on HQ, which appears only in a studio shell (here Studio Lisbon): outbound requests, not approval work.', [C('AP18a', 'A · Nothing needs approval', 900, 260), C('AP18b', 'B · Filtered empty', 900, 220), C('AP18c', 'C · One lane failed', 900, 180), C('AP18d', 'D · Success', 900, 240), C('AP18e', 'E · Changed while reviewing', 620, 240), C('AP18f', 'F · Notification failed', 720, 110), C('AP18g', 'G · Decided, no matches', 1100, 220), C('AP18i', 'I · Studio shell only · Waiting on HQ', 640, 240)]],
+      ['AP-19', 'Eadwyn expanded on purpose', 'Collapsed by default to a 44px rail labelled Ask about this queue. Expanded, it offers queue-specific prompts and an input — no model picker, pricing or usage; those stay in Account › AI tokens.', [D('AP19', false, 1440, 1000)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

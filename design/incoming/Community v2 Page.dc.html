@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Community v2 · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  </style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":"1440px","height":"1800px"},"board":{"editor":"enum","default":"CM01","options":["CM01","CM02a","CM02b","CM02c","CM02d","CM03","CM04a","CM04b","CM05","CM06","CM07","CM08","CM09","CM10a","CM10b","CM11","CM12a","CM12b","CM12c","CM12d","CM12e"],"tsType":"string"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'CM01';
+    const dark = B === 'CM11';
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#182132', ink: '#e5e7eb', mu: '#9ca3af', hair: '#273244', hair2: '#3b475c', vi: '#a78bfa', vt: '#c4b5fd', lav: '#221d3f', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.08)', amE: 'rgba(252,211,77,.45)', amD: '#fcd34d', dim: 'rgba(3,7,18,.66)', skel: '#1f2937', s2: '#38bdf8', s3: '#2dd4bf', s4: '#4b5563', s5: '#6b7280' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d9d6e0', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.38)', skel: '#ececf1', s2: '#0369a1', s3: '#0f766e', s4: '#d4d4d8', s5: '#a1a1aa' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+
+    /* ---------- data ---------- */
+    const WK = ['17 Aug', '24 Aug', '31 Aug', '7 Sep', '14 Sep', '21 Sep', '28 Sep', '5 Oct', '12 Oct', '19 Oct', '26 Oct', '2 Nov'];
+    const REG = [26, 29, 31, 30, 34, 33, 38, 36, 41, 44, 47, 34];
+    const JOB = [18, 17, 16, 17, 15, 16, 15, 14, 16, 15, 14, 13];
+    const BKG = [5, 6, 4, null, 6, 5, 7, 6, 5, 7, 6, 3];
+    const Q = [
+      ['Event', 'AI Founder Dinner', 'Waiting for review · event is on 13 Nov', '4 days', true],
+      ['Job', 'Founding Product Designer', 'Waiting for review · Northwind Labs', '3 days', true],
+      ['Event', 'LP Briefing · Fund I', 'Waiting for review', '2 days', false],
+      ['Expert', 'Sarah M. · Executive coach', 'Verification pending', '2 days', false],
+      ['Job', 'Senior Data Engineer', 'Waiting for review · Harbor Robotics', '1 day', false],
+      ['Event', 'Climate Founders Meetup', 'Waiting for review', '1 day', false],
+      ['Expert', 'James K. · Sleep specialist', 'Verification pending', 'Today', false]
+    ];
+    const ACT = [
+      ['Event', 'Demo Day Rehearsal reached 58 of 60 seats', 'Today, 13:05'],
+      ['Event', 'Demo Day published', 'Today, 11:42'],
+      ['Job', 'Product Designer received 8 applications', 'Yesterday'],
+      ['Circle', 'Fintech Founders Circle published', '2 days ago'],
+      ['Wellbeing', 'An expert was submitted for verification', '2 days ago'],
+      ['Job', 'Head of Growth was closed by an admin', '3 days ago'],
+      ['Event', 'Pricing Workshop opened registration', '4 days ago'],
+      ['Circle', 'Climate Founders was featured', '5 days ago']
+    ];
+    const MG = [
+      ['Events', 'Review, publish and run events', '3 to review'],
+      ['Job board', 'Review and manage opportunities', '2 to review'],
+      ['Circles', 'Create, publish and feature circles', '2 drafts'],
+      ['Advisors & Partners', 'Manage the network roster', ''],
+      ['Wellbeing', 'Verify experts and manage the library', '2 to verify'],
+      ['Partner invitations', 'Invite and manage operating partners', '1 pending']
+    ];
+    const PART = [['Founders', 408], ['Investors', 94], ['Advisors', 60], ['Operating partners', 47], ['Other members', 60]];
+    const PARTX = [['Founders', 300], ['Investors', 72], ['Advisors', 49], ['Operating partners', 29], ['Other members', 33]];
+
+    /* ---------- atoms ---------- */
+    const seg = (label, opts, cur, extra) => '<div role="radiogroup" aria-label="' + label + '" class="seg"' + (extra || '') + '>' + J(opts.map(o => '<button type="button" role="radio" aria-checked="' + (o === cur) + '" tabindex="' + (o === cur ? 0 : -1) + '">' + o + '</button>')) + '</div>';
+    const pill = (tone, t) => '<span class="pl ' + (tone || '') + '">' + t + '</span>';
+    const kt = (t) => '<span class="kt">' + t + '</span>';
+    const note = (tone, icon, html, btn) => '<div class="nt ' + (tone || '') + '"><span class="ic" aria-hidden="true">' + icon + '</span><div style="min-width:0">' + html + '</div>' + (btn ? '<span class="bt">' + btn + '</span>' : '') + '</div>';
+    const card = (cls, head, body, foot, attrs) => '<section class="cd ' + (cls || '') + '"' + (attrs || '') + '>' + head + body + (foot ? '<div class="cf">' + foot + '</div>' : '') + '</section>';
+    const chead = (id, title, small, right) => '<div class="ch"><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><h2 id="' + id + '">' + title + '</h2>' + (small ? '<span class="sm">' + small + '</span>' : '') + '</div>' + (right || '') + '</div>';
+    const actions = (view, manage) => (view ? '<button type="button" class="btn">' + view + '</button>' : '<span></span>') + (manage ? '<a class="btn t" href="#">' + manage + '</a>' : '');
+    const VT = () => seg('Chart or table', ['Chart', 'Table'], 'Chart');
+    const sk = (w, h, mt) => '<span class="sk" style="width:' + w + ';height:' + (h || 12) + 'px' + (mt ? ';margin-top:' + mt + 'px' : '') + '"></span>';
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const lock = '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:3px"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+
+    /* ---------- shell ---------- */
+    const NAV = ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'];
+    const shell = (body, overlay, minH, busy) => '<div class="sh" style="min-height:' + (minH || 900) + 'px">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">Admin</span><nav aria-label="Admin">' + J(NAV.map(t => '<a href="/admin/' + t.toLowerCase().replace(/ /g, '-') + '"' + (t === 'Community' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><span class="bdg">HQ-held · axal.vc</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">N</span></div></div>'
+      + '<main class="bd"' + (busy ? ' aria-busy="true"' : '') + '>' + body + '</main></div>'
+      + '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Ask Eadwyn about Community">E</button><span class="vt" aria-hidden="true">Ask about Community</span></aside>'
+      + (overlay || '') + '</div>';
+
+    const TIP = '<div class="tip" role="tooltip" id="m-tip"><b>How periods are counted</b>Weeks run Monday to Sunday in UTC. Last 12 weeks is the twelve most recent Monday-weeks, including this unfinished one, compared with the twelve before. Figures are read when the page loads or you press Refresh.</div>';
+    const header = (o) => { o = o || {}; const ph = !!o.phone;
+      return '<header class="hd"' + (ph ? ' style="flex-direction:column;align-items:stretch;gap:12px"' : '') + '><div><h1>Community</h1><p>Community activity, participation and operations.</p></div>'
+        + '<div class="hr"' + (ph ? ' style="align-items:stretch"' : '') + '>' + seg('Reporting period', ['4 weeks', '12 weeks', '52 weeks'], '12 weeks')
+        + '<div class="meta"' + (ph ? ' style="justify-content:space-between"' : '') + '>' + (ph ? '' : '<span>Last 12 weeks · vs previous 12</span><span aria-hidden="true">·</span>') + '<span aria-live="polite">' + (o.upd || 'Updated 14:22') + '</span>' + (o.noRefresh ? '' : '<button type="button" class="lk">Refresh</button>') + '<button type="button" class="info' + (o.tip ? ' fv' : '') + '" aria-label="How periods are counted" aria-describedby="m-tip">i</button></div>'
+        + (o.tip ? TIP : '') + '</div></header>'; };
+
+    /* ---------- KPIs ---------- */
+    const kpi = (o) => '<div class="k' + (o.att ? ' att' : '') + '"><span class="eye">' + o.k + '</span>' + (o.sk ? sk('46%', 26, 2) + sk('78%', 11, 4) : '<span class="kv' + (o.un ? ' un' : '') + '">' + o.v + '</span><span class="ks">' + o.sub + '</span>' + (o.x || '')) + '</div>';
+    const kpis = (list, cols) => '<section aria-label="Operating pulse" class="kp"' + (cols ? ' style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))"' : '') + '>' + J(list.map(kpi)) + '</section>';
+    const K_ATT = { k: 'Waiting on you', v: '7', sub: '3 events · 2 jobs · 2 experts', x: pill('a', '<span class="dot" aria-hidden="true"></span>2 overdue · over 2 days'), att: true };
+    const K_UP = { k: 'Upcoming events', v: '14', sub: '3 in the next 7 days' };
+    const K_REG = { k: 'Event registrations', v: '423', sub: '<span class="dl up">▲ 28%</span> vs previous 12 weeks' };
+    const K_JOB = { k: 'Job applications', v: '186', sub: '<span class="dl dn">▼ 6%</span> vs previous · 23 open jobs' };
+    const K_JOBU = { k: 'Job applications', v: 'Unreadable', un: true, sub: 'The job board couldn’t be read. That isn’t the same as none.', x: '<button type="button" class="lk" style="padding:0">Try again</button>' };
+
+    /* ---------- Needs your attention ---------- */
+    const qrow = (r) => '<li><a class="qr" href="#">' + kt(r[0]) + '<span style="min-width:0"><span class="qt">' + r[1] + '</span><span class="qs">' + r[2] + '</span></span><span class="qa' + (r[4] ? ' o' : '') + '">' + (r[4] ? '<span class="dot" aria-hidden="true"></span>' : '') + r[3] + (r[4] ? ' · overdue' : '') + '</span><span class="chev" aria-hidden="true">›</span></a></li>';
+    const qrowP = (r) => '<li><a class="qr" href="#"><span style="min-width:0"><span class="eye" style="display:block;margin-bottom:2px">' + r[0] + '</span><span class="qt">' + r[1] + '</span><span class="qs">' + r[2] + '</span></span><span class="qa' + (r[4] ? ' o' : '') + '">' + (r[4] ? '<span class="dot" aria-hidden="true"></span>' : '') + r[3] + '</span><span class="chev" aria-hidden="true">›</span></a></li>';
+    const attCard = (list, show, o) => { o = o || {}; const n = o.total || list.length, over = list.filter(r => r[4]).length;
+      return card(o.cls || '', chead('att-h', 'Needs your attention', n + ' waiting' + (over ? ' · overdue first' : ' · oldest first'), o.right || ''),
+        (o.split ? '<div class="chips" aria-label="By kind" style="gap:6px">' + o.split + '</div>' : '')
+        + '<ol class="q" aria-labelledby="att-h">' + J(list.slice(0, show).map(o.phone ? qrowP : qrow)) + '</ol>'
+        + (n > show ? '<p class="foot">+ ' + (n - show) + ' more waiting in Approvals</p>' : '')
+        + (o.warn || ''),
+        '<a class="btn p" href="#"' + (o.phone ? ' style="flex:1"' : '') + '>Review all ' + n + ' in Approvals →</a>' + (o.phone ? '' : '<span class="foot">Opens Approvals. Nothing is decided on this page.</span>'), ' aria-labelledby="att-h"'); };
+    const attClear = (cls) => card(cls || '', chead('att-h', 'Needs your attention'), note('g', '✓', '<b>Nothing needs your attention</b><div class="mu">Approvals are currently clear.</div>', '<a class="btn t" href="#">Open Approvals →</a>'), '', ' aria-labelledby="att-h"');
+
+    /* ---------- chart ---------- */
+    const lineChart = (o) => { const W = o.w, H = o.h, L = 30, R = o.r == null ? 128 : o.r, T = 22, Bm = 24, iw = W - L - R, ih = H - T - Bm, n = WK.length, step = iw / (n - 1);
+      const X = (i) => +(L + i * step).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + o.sum + '" style="display:block;overflow:visible;font-family:Roboto Mono,monospace">';
+      s += '<rect x="' + (X(n - 1) - step / 2).toFixed(1) + '" y="' + (T - 4) + '" width="' + (step / 2 + 6).toFixed(1) + '" height="' + (ih + 4) + '" fill="' + P.raised + '"/>';
+      s += '<text x="' + X(n - 1) + '" y="' + (T - 9) + '" text-anchor="end" font-size="10" fill="' + P.mu + '">in progress</text>';
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + P.hair + '"/><text x="' + (L - 7) + '" y="' + (Y(v) + 3.5) + '" text-anchor="end" font-size="10" fill="' + P.mu + '">' + v + '</text>';
+      WK.forEach((t, i) => { if (i % (o.xe || 2) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="' + P.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false; se.vals.forEach((v, i) => { if (i === n - 1) return; if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; });
+        const da = se.dash ? ' stroke-dasharray="5 3"' : '';
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"' + da + '/>';
+        s += '<path d="M' + X(n - 2) + ' ' + Y(se.vals[n - 2]) + 'L' + X(n - 1) + ' ' + Y(se.vals[n - 1]) + '" fill="none" stroke="' + se.col + '" stroke-width="2" stroke-dasharray="2 3" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 3.8 : 2.4) + '" fill="' + (sf ? P.card : se.col) + '" stroke="' + se.col + '" stroke-width="' + (sf ? 2 : 0) + '"><title>Week of ' + WK[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        se.vals.forEach((v, i) => { if (v == null) s += '<text x="' + X(i) + '" y="' + (Y(0) - 5) + '" text-anchor="middle" font-size="9.5" fill="' + se.col + '">n/r</text>'; });
+        if (R > 40) labs.push({ y: Y(se.vals[n - 1]) + 4, t: se.short, v: se.tot, col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 16) labs[i].y = labs[i - 1].y + 16;
+      labs.forEach((l) => { s += '<text x="' + (L + iw + 10) + '" y="' + l.y + '" font-size="11" fill="' + l.col + '" font-weight="700">' + l.v + '</text><text x="' + (L + iw + 40) + '" y="' + l.y + '" font-size="11" fill="' + P.ink + '" font-family="Space Grotesk,sans-serif">' + l.t + '</text>'; });
+      return s + '</svg>'; };
+    const SER = (noJobs) => [{ name: 'Event registrations', short: 'Registrations', tot: 423, vals: REG, col: P.vi }].concat(noJobs ? [] : [{ name: 'Job applications', short: 'Applications', tot: 186, vals: JOB, col: P.s2 }]).concat([{ name: 'Expert bookings', short: 'Bookings', tot: 60, vals: BKG, col: P.s3, dash: true }]);
+    const legend = (noJobs) => '<div class="lgd" aria-hidden="true"><span><i class="sw" style="border-color:' + P.vi + '"></i>Event registrations</span>' + (noJobs ? '<span><i class="sw" style="border-top:2px dashed ' + P.mu + '"></i>Job applications · <b style="color:' + P.mu + ';font-family:var(--sg)">unreadable</b></span>' : '<span><i class="sw" style="border-color:' + P.s2 + '"></i>Job applications</span>') + '<span><i class="sw" style="border-top:3px dashed ' + P.s3 + '"></i>Expert bookings</span></div>';
+
+    /* ---------- Community activity ---------- */
+    const actCard = (o) => { o = o || {}; const nj = !!o.noJobs, w = o.w || 620;
+      return card(o.cls || '', chead('act-h', 'Community activity', '', VT()),
+        (nj ? '<p class="ins">Event registrations rose <b>28%</b> compared with the previous 12 weeks.</p><p class="sub">Total participation isn’t shown: job applications couldn’t be read, and leaving them out would understate it.</p>'
+            : '<p class="ins">Participation increased <b>18%</b> compared with the previous 12 weeks.</p><p class="sub">Event registrations drove the rise (▲ 28%); job applications eased (▼ 6%).</p>')
+        + legend(nj)
+        + lineChart({ w, h: o.h || 196, r: o.r, ymax: 50, ystep: 10, xe: o.xe || 2, series: SER(nj), sum: 'Weekly activity for the 12 weeks from 17 Aug: 423 event registrations, ' + (nj ? 'job applications unreadable, ' : '186 job applications, ') + '60 expert bookings. Week of 7 Sep expert bookings not recorded. Week of 2 Nov is in progress.' })
+        + '<p class="foot">Week of 2 Nov is in progress (hollow point). n/r · expert bookings weren’t recorded in the week of 7 Sep — a gap, not a zero.</p>', '', ' aria-labelledby="act-h"'); };
+
+    /* ---------- Events ---------- */
+    const NEXT = [['Tue', '10', 'Pricing Workshop', '22 registered · no seat cap', pill('g', '✓ Published')], ['Thu', '12', 'Demo Day Rehearsal', '58 of 60 seats · 6 waitlisted', pill('v', 'Nearly full')], ['Fri', '13', 'AI Founder Dinner', 'Registration opens after review', pill('a', '◷ Waiting for review · 4 days')]];
+    const nuRow = (r) => '<li class="nu"><span class="db" aria-hidden="true"><span>' + r[0] + '</span><b>' + r[1] + '</b><span>Nov</span></span><div style="min-width:0;display:flex;flex-direction:column;gap:3px"><a href="#" style="color:var(--ink);font-weight:700;font-size:13px">' + r[2] + '</a><span class="ks">' + r[0] + ' ' + r[1] + ' Nov · ' + r[3] + '</span><span>' + r[4] + '</span></div></li>';
+    const bar = (l, v, pct, sub, col) => '<div class="br"><span>' + l + '</span><span class="trk" aria-hidden="true"><span class="fil" style="width:' + pct + '%' + (col ? ';background:' + col : '') + '"></span></span><span class="bv">' + v + (sub ? ' <span>' + sub + '</span>' : '') + '</span></div>';
+    const evCard = (cls) => card(cls || '', chead('ev-h', 'Events', '14 upcoming · 423 registrations'),
+      '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px">'
+      + '<div><span class="eye">Next up</span><ol style="margin-top:6px">' + J(NEXT.map(nuRow)) + '</ol></div>'
+      + '<div style="display:flex;flex-direction:column;gap:9px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span class="eye">Participation · 11 ended events</span></div>'
+      + '<div role="img" aria-label="Of 319 registered for events that ended this period, 262 confirmed and 204 attended: a 64% show-up rate." style="display:flex;flex-direction:column;gap:8px">'
+      + bar('Registered', '319', 100) + bar('→ Confirmed', '262', 82, '82%') + bar('→ Attended', '204', 64, '64%') + '</div>'
+      + '<div style="display:flex;gap:18px;padding-top:9px;border-top:1px solid var(--hair);margin-top:2px"><div><span class="eye">Show-up rate</span><div class="mo" style="font-weight:700;font-size:17px">64%</div></div><div><span class="eye">Waitlisted</span><div class="mo" style="font-weight:700;font-size:17px">31</div><span class="ks">across 4 events · not a funnel step</span></div></div>'
+      + '<p class="foot">104 more are registered for upcoming events.</p></div></div>',
+      actions('View details', 'Manage events →'), ' aria-labelledby="ev-h"');
+
+    /* ---------- Who takes part ---------- */
+    const whoCard = (o) => { o = o || {}; const d = o.noJobs ? PARTX : PART, tot = d.reduce((a, x) => a + x[1], 0);
+      return card(o.cls || '', chead('who-h', 'Who takes part', '', VT()),
+        '<p class="ins">' + (o.noJobs ? 'Founders generated <b>62%</b> of registrations and bookings this period.' : 'Founders generated <b>61%</b> of recorded participation this period.') + '</p>'
+        + '<div role="img" aria-label="Participation by profile: ' + d.map(x => x[0] + ' ' + x[1]).join(', ') + '." style="display:flex;flex-direction:column;gap:8px">' + J(d.map(x => bar(x[0], x[1], Math.round(x[1] / tot * 100), Math.round(x[1] / tot * 100) + '%'))) + '</div>'
+        + '<p class="foot">' + (o.noJobs ? 'Excludes job applications, which couldn’t be read. ' : 'Registrations, applications and bookings. ') + 'Aggregated by profile; no member is named.</p>', '', ' aria-labelledby="who-h"'); };
+
+    /* ---------- Opportunities ---------- */
+    const STATUS = [['Open', 23, P.vi], ['Waiting for review', 2, P.amD], ['Draft', 4, P.s5], ['Closed', 9, P.s4]];
+    const TOP = [['Senior Backend Engineer', 'Northwind Labs · 21 days open', 31], ['Head of Growth', 'Bluefern Health · 18 days open', 24], ['Product Designer', 'Harbor Robotics · 30 days open', 19]];
+    const oppCard = (cls) => card(cls || '', chead('opp-h', 'Opportunities', '23 open jobs · 186 applications'),
+      '<div style="display:flex;flex-direction:column;gap:8px"><span class="eye">Postings by status · 38</span>'
+      + '<div role="img" aria-label="Postings by status: open 23, waiting for review 2, draft 4, closed 9." style="display:flex;gap:2px;height:12px;border-radius:4px;overflow:hidden">' + J(STATUS.map(s => '<span style="flex:' + s[1] + ';background:' + s[2] + '"></span>')) + '</div>'
+      + '<div class="lgd" aria-hidden="true">' + J(STATUS.map(s => '<span><i style="width:9px;height:9px;border-radius:2px;background:' + s[2] + '"></i>' + s[0] + ' <b>' + s[1] + '</b></span>')) + '</div></div>'
+      + '<div><span class="eye">Most applications</span><ol style="margin-top:4px">' + J(TOP.map((t, i) => '<li class="nu" style="grid-template-columns:18px minmax(0,1fr) auto;align-items:center"><span class="mo mu" style="font-weight:700">' + (i + 1) + '</span><div><a href="#" style="color:var(--ink);font-weight:700">' + t[0] + '</a><div class="ks">' + t[1] + '</div></div><span class="mo" style="font-weight:700;font-size:14px">' + t[2] + ' <span class="ks" style="font-family:var(--sg)">applications</span></span></li>')) + '</ol></div>',
+      actions('View details', 'Manage jobs →'), ' aria-labelledby="opp-h"');
+    const oppErr = (cls) => card(cls || '', chead('opp-h', 'Opportunities', '', pill('r', '! Unreadable')),
+      note('r', '!', '<b>Opportunities couldn’t be read.</b><div>This isn’t the same as having no jobs. Every other section on this page is unaffected.</div>', '<button type="button" class="btn">Try again</button>'),
+      actions('', 'Manage jobs →'), ' aria-labelledby="opp-h"');
+    const oppRetry = (cls) => card(cls || '', chead('opp-h', 'Opportunities', '', pill('', '↻ Reading…')),
+      '<div aria-live="polite" class="nt"><span class="ic" aria-hidden="true">↻</span><div><b>Trying again…</b><div class="mu">Only this section is being re-read.</div></div><span class="bt"><button type="button" class="btn" aria-disabled="true">Try again</button></span></div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px">' + sk('100%', 12) + sk('70%', 10, 4) + sk('86%', 10, 4) + '</div>',
+      actions('', 'Manage jobs →'), ' aria-labelledby="opp-h" aria-busy="true"');
+
+    /* ---------- Network ---------- */
+    const dl = (items, cols) => '<dl class="st" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))">' + J(items.map(x => '<div><dt>' + x[0] + '</dt><dd>' + x[1] + (x[2] ? '<small>' + x[2] + '</small>' : '') + '</dd></div>')) + '</dl>';
+    const netCard = (cls) => card(cls || '', chead('net-h', 'Network', '11 circles · 24 active advisors & partners'),
+      '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0">'
+      + '<div style="padding-right:18px"><span class="eye" style="color:var(--ink)">Circles</span><div style="margin-top:10px">' + dl([['Published', '9', 'of 11'], ['Draft', '2'], ['Featured', '3'], ['Members', '412', 'as entered by admins']], 2) + '</div></div>'
+      + '<div style="padding-left:18px;border-left:1px solid var(--hair)"><span class="eye" style="color:var(--ink)">Advisors & Partners</span><div style="margin-top:10px">' + dl([['Active advisors', '14'], ['Active partners', '7'], ['Active investors', '3'], ['Inactive', '6', 'across all three']], 2) + '</div></div></div>',
+      actions('View circles', 'Manage network →'), ' aria-labelledby="net-h"');
+
+    /* ---------- Wellbeing ---------- */
+    const wellCard = (cls) => card(cls || '', chead('wb-h', 'Wellbeing'),
+      dl([['Verified experts', '11', 'of 15 · 2 awaiting verification'], ['Expert bookings', '60', 'this period · 1 week not recorded'], ['Check-ins', '35–40', 'founders, last 30 days']], 3)
+      + '<p class="sub" style="display:flex;gap:7px;align-items:flex-start">' + lock + '<span>Check-ins are shown only as privacy-safe aggregate ranges. Under seven founders, no range is shown.</span></p>',
+      actions('', 'Manage wellbeing →'), ' aria-labelledby="wb-h"');
+
+    /* ---------- Recent activity ---------- */
+    const FILT = ['All', 'Events', 'Jobs', 'Circles', 'Wellbeing'];
+    const chips = (cur, counts) => '<div role="radiogroup" aria-label="Filter activity" class="chips">' + J(FILT.map((t, i) => '<button type="button" role="radio" aria-checked="' + (t === cur) + '" tabindex="' + (t === cur ? 0 : -1) + '">' + t + (counts ? '<span>' + counts[i] + '</span>' : '') + '</button>')) + '</div>';
+    const arow = (r) => '<li class="ar">' + kt(r[0]) + '<span style="font-weight:500">' + r[1] + '</span><span class="w">' + r[2] + '</span></li>';
+    const recCard = (o) => { o = o || {}; const rows = o.rows || ACT;
+      return card(o.cls || '', chead('ra-h', 'Recent activity', '', o.noChips ? '' : chips('All')),
+        '<ol aria-labelledby="ra-h">' + J(rows.map(arow)) + '</ol>' + (o.warn || ''),
+        '<span class="foot">No member is named. Admin actions read “an admin”.</span><a class="btn t" href="#">View all activity →</a>', ' aria-labelledby="ra-h"'); };
+
+    /* ---------- Additional insights + Manage ---------- */
+    const aiRow = (lead) => '<button type="button" class="ai" aria-expanded="false" aria-controls="ai-x"><b>Additional insights</b><span class="mu">' + (lead || '2 metrics aren’t currently recorded') + '</span><span class="x">See what’s missing ▾</span></button>';
+    const aiOpen = () => '<div class="aix"><button type="button" class="ai" aria-expanded="true" aria-controls="ai-x"><b>Additional insights</b><span class="mu">2 metrics aren’t currently recorded</span><span class="x">Hide ▴</span></button><dl id="ai-x"><dt>Active members</dt><dd>Not recorded. StudioOS doesn’t yet keep one authoritative count of active members, so it isn’t estimated here.</dd><dt>Circle discussions</dt><dd>Not recorded. Circle conversations happen outside StudioOS, so there is nothing to count.</dd></dl></div>';
+    const manage = () => '<section aria-labelledby="mg-h" style="display:flex;flex-direction:column;gap:10px"><div class="s2"><h2 id="mg-h">Manage Community</h2><span class="foot">Where decisions and changes happen</span></div><nav class="mg" aria-labelledby="mg-h">' + J(MG.map(m => '<a class="mi" href="#"><b>' + m[0] + '</b><span class="d">' + m[1] + '</span><span class="o">' + (m[2] ? pill('', m[2]) : '') + 'Open →</span></a>')) + '</nav></section>';
+
+    /* ---------- page bodies ---------- */
+    const row = (a) => '<div class="g">' + a + '</div>';
+    const full = (o) => { o = o || {}; const jx = !!o.jobsErr;
+      const Qx = Q.filter(r => r[0] !== 'Job');
+      return header({ tip: o.tip })
+        + kpis(jx ? [{ k: 'Waiting on you', v: '5', sub: '3 events · 2 experts · jobs not read', x: pill('a', '<span class="dot" aria-hidden="true"></span>1 overdue · over 2 days'), att: true }, K_UP, K_REG, K_JOBU] : [K_ATT, K_UP, K_REG, K_JOB])
+        + row((jx ? attCard(Qx, 5, { cls: 'c5', warn: note('a', '!', 'Job approvals couldn’t be read, so this queue may be incomplete.', '<button type="button" class="btn t">Try again</button>') }) : attCard(Q, 5, { cls: 'c5' })) + actCard({ cls: 'c7', noJobs: jx }))
+        + row(evCard('c7') + whoCard({ cls: 'c5', noJobs: jx }))
+        + row((jx ? oppErr('c6') : oppCard('c6')) + netCard('c6'))
+        + row(wellCard('c5') + recCard({ cls: 'c7', rows: jx ? ACT.filter(r => r[0] !== 'Job').concat([['Event', 'Founder Breakfast · Lisbon ended · 33 attended', '6 days ago']]) : ACT, warn: jx ? '<p class="foot" style="margin-top:-4px">Job activity couldn’t be read and isn’t listed.</p>' : '' }))
+        + (o.aiOpen ? aiOpen() : aiRow())
+        + manage(); };
+
+    const emptyBody = () => header()
+      + '<section class="cd" aria-labelledby="bc-h" style="padding:28px 30px;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:32px;align-items:center">'
+      + '<div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span class="eye">Get started</span><h2 id="bc-h" style="font-size:21px;font-weight:800;letter-spacing:-.02em">Build your community</h2><p class="sub" style="font-size:13.5px;max-width:520px">Create your first event or circle to start seeing participation, opportunities and community activity here.</p><div style="display:flex;gap:8px;margin-top:6px"><a class="btn p" href="#">Create an event</a><a class="btn" href="#">Create a circle</a></div></div>'
+      + '<div style="border-left:1px solid var(--hair);padding-left:28px;display:flex;flex-direction:column;gap:10px"><span class="eye">What appears here as it grows</span><ul style="display:flex;flex-direction:column;gap:7px;font-size:12.5px"><li>· Registrations, attendance and show-up for events</li><li>· Applications on job postings</li><li>· Who takes part, by profile — never by name</li><li>· Circles, the advisor and partner roster, and wellbeing</li></ul></div></section>'
+      + attClear()
+      + manage()
+      + aiRow('Activity analytics will appear once there is enough community activity · 2 metrics aren’t currently recorded');
+
+    const emptyMod = (id, t, line, foot) => card('', chead(id, t), '<p class="sub" style="font-size:13px;color:var(--ink)">' + line + '</p>', foot, ' aria-labelledby="' + id + '"');
+    const lowBody = () => header()
+      + kpis([{ k: 'Waiting on you', v: '1', sub: '1 event · nothing overdue' }, { k: 'Upcoming events', v: '1', sub: 'in the next 7 days' }, { k: 'Event registrations', v: '6', sub: 'No previous period to compare yet' }, { k: 'Job applications', v: '0', sub: 'No job postings yet' }])
+      + row(attCard([['Event', 'Office Hours · Legal', 'Waiting for review', 'Today', false]], 5, { cls: 'c5' })
+        + card('c7', chead('act-h', 'Community activity'), note('', 'i', '<b>Too early for a trend</b><div class="mu">6 event registrations so far, all this week. The weekly chart appears once two weeks have activity.</div>'), '', ' aria-labelledby="act-h"'))
+      + row(card('c7', chead('ev-h', 'Events', '1 upcoming · 6 registrations'), '<div><span class="eye">Next up</span><ol style="margin-top:6px">' + nuRow(['Thu', '19', 'Founders Welcome Breakfast', '6 of 30 seats', pill('g', '✓ Published')]) + '</ol></div><p class="sub">Participation and show-up appear after your first event ends.</p>', actions('View details', 'Manage events →'), ' aria-labelledby="ev-h"')
+        + card('c5', chead('who-h', 'Who takes part'), '<p class="sub" style="color:var(--ink)">Shown once there’s enough participation to group by profile without identifying anyone.</p>', '', ' aria-labelledby="who-h"'))
+      + row(emptyMod('opp-h', 'Opportunities', 'No job postings yet.', '<span></span><a class="btn t" href="#">Create or manage jobs →</a>') .replace('class="cd ', 'class="cd c6 ')
+        + emptyMod('net-h', 'Network', 'No circles, advisors or partners have been added yet.', '<a class="btn" href="#">Create a circle</a><a class="btn t" href="#">Manage network →</a>').replace('class="cd ', 'class="cd c6 '))
+      + row(emptyMod('wb-h', 'Wellbeing', 'No wellbeing experts or bookings yet.', '<span></span><a class="btn t" href="#">Manage wellbeing →</a>').replace('class="cd ', 'class="cd c5 ')
+        + recCard({ cls: 'c7', noChips: true, rows: [['Event', 'Founders Welcome Breakfast published', 'Today, 10:12'], ['Event', 'Office Hours · Legal submitted for review', 'Today, 09:40']] }))
+      + aiRow('Some analytics appear once there is more activity · 2 metrics aren’t currently recorded')
+      + manage();
+
+    const skCard = (cls, h, lines) => '<section class="cd ' + cls + '" aria-hidden="true">' + sk('34%', 14) + '<div style="display:flex;flex-direction:column;gap:9px;margin-top:4px">' + J((lines || ['92%', '76%', '84%', '60%']).map(w => sk(w, 11))) + '</div>' + (h ? '<span class="sk" style="width:100%;height:' + h + 'px;margin-top:6px"></span>' : '') + '</section>';
+    const loadBody = () => header({ upd: 'Reading community figures…', noRefresh: true })
+      + '<p class="foot" style="margin-top:-10px">Loading. Figures appear section by section; none are shown as zero while they load.</p>'
+      + kpis(['Waiting on you', 'Upcoming events', 'Event registrations', 'Job applications'].map(k => ({ k, sk: true })))
+      + row(skCard('c5', 0, ['90%', '80%', '86%', '74%', '82%']) + skCard('c7', 170, ['70%', '46%']))
+      + row(skCard('c7', 110) + skCard('c5', 0, ['100%', '84%', '70%', '56%', '50%']))
+      + row(skCard('c6', 60) + skCard('c6', 60))
+      + manage();
+    const failBody = () => header({ upd: 'Not updated · last tried 14:22' })
+      + '<section class="cd" role="alert" aria-labelledby="fail-h" style="padding:24px 26px;border-color:var(--negE)"><div style="display:flex;gap:14px;align-items:flex-start"><span class="ic" style="width:28px;height:28px;font-size:15px;background:var(--neg)" aria-hidden="true">!</span><div style="display:flex;flex-direction:column;gap:6px;flex:1"><h2 id="fail-h" style="font-size:17px;font-weight:800">Community couldn’t be loaded</h2><p class="sub" style="font-size:13px;max-width:640px">None of the figures could be read, so none are shown. The community isn’t empty — this page just couldn’t reach its sources. The management consoles below still work.</p><div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button type="button" class="btn p">Try again</button><a class="btn t" href="#">Open Approvals →</a><span class="foot" style="margin-left:8px">Last successful read: today, 13:58</span></div></div></div></section>'
+      + manage();
+
+    /* ---------- detail dialogs ---------- */
+    const strip = (items) => '<div class="strip" style="grid-template-columns:repeat(' + items.length + ',minmax(0,1fr))">' + J(items.map(x => '<div><span class="eye">' + x[0] + '</span><b>' + x[1] + '</b>' + (x[2] ? '<small>' + x[2] + '</small>' : '') + '</div>')) + '</div>';
+    const tbl = (cap, cols, rows) => '<div style="overflow-x:auto"><table class="tbl"><caption style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">' + cap + '</caption><thead><tr>' + J(cols.map(c => '<th scope="col"' + (c[1] ? ' class="n"' : '') + (c[2] ? ' aria-sort="' + c[2] + '"' : '') + '>' + c[0] + (c[2] ? ' ↓' : '') + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr' + (r.cls ? ' class="' + r.cls + '"' : '') + '>' + J(r.c.map((x, i) => { const num = cols[i][1]; const na = x === '—'; return '<td class="' + (num ? 'n' : '') + (na ? ' na' : '') + '"' + (na ? ' title="Not applicable yet"' : '') + '>' + x + '</td>'; })) + '</tr>')) + '</tbody></table></div>';
+    const pager = (t, pages) => '<div class="pg"><span>' + t + '</span><span class="pb"><span style="margin-right:6px">Rows per page</span><button type="button">25 ▾</button><button type="button" aria-label="Previous page" disabled style="opacity:.5">‹</button>' + J(pages.map((p, i) => '<button type="button"' + (i === 0 ? ' aria-current="page"' : '') + '>' + p + '</button>')) + '<button type="button" aria-label="Next page">›</button></span></div>';
+    const tools = (search, dds) => '<div class="tools"><label class="inp"><span aria-hidden="true">⌕</span><span>' + search + '</span></label>' + J(dds.map(d => '<button type="button" class="dd' + (d[1] ? ' on' : '') + '">' + d[0] + ' ▾</button>')) + '</div>';
+    const dialog = (o) => '<div class="dim" aria-hidden="true"></div><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">'
+      + '<div class="dh"><div><span class="eye">' + o.eye + '</span><h2 id="dlg-t">' + o.title + '</h2><p class="sub">' + o.sub + '</p></div><div style="display:flex;align-items:center;gap:10px">' + pill('', 'Last 12 weeks') + '<button type="button" class="ib fv" aria-label="Close details (Esc)">✕</button></div></div>'
+      + '<div class="dc">' + o.body + '</div>'
+      + '<div class="df"><span class="foot">Esc closes and returns focus to “' + o.opener + '”. Read-only: changes happen in the console.</span><a class="btn p" href="#">' + o.manage + '</a></div></div>';
+    const SP = (t, tone) => pill(tone, t);
+    const ST = { pub: SP('✓ Published', 'g'), rev: SP('◷ Waiting for review', 'a'), end: SP('Ended', ''), can: SP('✕ Cancelled', 'r'), open: SP('Open', 'v'), draft: SP('✎ Draft', ''), closed: SP('Closed', '') };
+    const evDlg = () => dialog({ eye: 'Community · Events', title: 'Events', sub: '41 events in the last 12 weeks · 14 upcoming', opener: 'View details', manage: 'Manage events →',
+      body: strip([['Upcoming', '14'], ['Registrations', '423'], ['Confirmed', '318', 'all events'], ['Attended', '204', '11 ended events'], ['Show-up', '64%'], ['Waitlisted', '31', 'across 4 events']])
+        + '<div role="tablist" aria-label="Events details" class="tabs"><button type="button" role="tab" aria-selected="true">Events<span>41</span></button><button type="button" role="tab" aria-selected="false" tabindex="-1">Participation</button><button type="button" role="tab" aria-selected="false" tabindex="-1">By type<span>12</span></button></div>'
+        + tools('Search events by title', [['Status: All'], ['Type: All'], ['Date: Last 12 weeks'], ['Sort: Date']])
+        + tbl('Events in the last 12 weeks', [['Event'], ['Type'], ['Date', 0, 'descending'], ['Status'], ['Seats', 1], ['Registered', 1], ['Waitlisted', 1], ['Attended', 1], ['Show-up', 1]], [
+          { c: ['<b>LP Briefing · Fund I</b>', 'LP briefing', 'Thu 19 Nov', ST.rev, '30', '—', '—', '—', '—'] },
+          { c: ['<b>AI Founder Dinner</b>', 'Dinner', 'Fri 13 Nov', ST.rev, '40', '—', '—', '—', '—'] },
+          { c: ['<b>Demo Day Rehearsal</b>', 'Demo day', 'Thu 12 Nov', ST.pub, '60', '58', '6', '—', '—'] },
+          { c: ['<b>Pricing Workshop</b>', 'Workshop', 'Tue 10 Nov', ST.pub, 'No cap', '22', '—', '—', '—'] },
+          { c: ['<b>Founder Breakfast · Lisbon</b>', 'Networking', 'Wed 28 Oct', ST.end, '60', '48', '0', '33', '69%'] },
+          { c: ['<b>Climate Founders Meetup</b>', 'Meetup', 'Thu 22 Oct', ST.end, '80', '71', '12', '41', '58%'] },
+          { c: ['<b>Office Hours · Legal</b>', 'Office hours', 'Mon 19 Oct', ST.end, '12', '12', '3', '11', '92%'] },
+          { c: ['<b>Fundraising Roundtable</b>', 'Roundtable', 'Wed 14 Oct', ST.can, '20', '9', '0', '—', '—'] }])
+        + pager('1–8 of 41 · — means not applicable yet', ['1', '2', '3', '…', '6']) });
+    const jobDlg = () => dialog({ eye: 'Community · Opportunities', title: 'Job postings', sub: '38 postings · 186 applications in the last 12 weeks', opener: 'View details', manage: 'Manage jobs →',
+      body: strip([['Open', '23'], ['Waiting for review', '2'], ['Draft', '4'], ['Closed', '9'], ['Applications', '186'], ['Median days open', '18']])
+        + tools('Search role or company', [['Status: All'], ['Company: All'], ['Location: All'], ['Sort: Applications', 1]])
+        + tbl('Job postings', [['Role'], ['Company'], ['Status'], ['Posted'], ['Days open', 1], ['Applications', 1, 'descending']], [
+          { c: ['<b>Senior Backend Engineer</b><small>Remote · EU</small>', 'Northwind Labs', ST.open, '17 Oct', '21', '31'] },
+          { c: ['<b>Head of Growth</b><small>Lisbon</small>', 'Bluefern Health', ST.open, '20 Oct', '18', '24'] },
+          { c: ['<b>Product Designer</b><small>Remote</small>', 'Harbor Robotics', ST.open, '8 Oct', '30', '19'] },
+          { c: ['<b>Sales Engineer</b><small>Berlin</small>', 'Northwind Labs', ST.closed, '2 Sep', '45', '17'] },
+          { c: ['<b>Data Engineer</b><small>Remote · EU</small>', 'Quill Analytics', ST.open, '24 Oct', '14', '12'] },
+          { c: ['<b>Customer Success Lead</b><small>London</small>', 'Bluefern Health', ST.open, '29 Oct', '9', '8'] },
+          { c: ['<b>Founding Product Designer</b><small>Lisbon</small>', 'Northwind Labs', ST.rev, '—', '—', '—'] },
+          { c: ['<b>Growth Marketer</b><small>Remote</small>', 'Tidewater Energy', ST.draft, '—', '—', '—'] }])
+        + pager('1–8 of 38', ['1', '2', '3', '4', '5']) });
+    const cirDlg = () => dialog({ eye: 'Community · Network', title: 'Circles', sub: '11 circles · members and activity are entered by admins', opener: 'View circles', manage: 'Manage circles →',
+      body: strip([['Circles', '11'], ['Published', '9'], ['Draft', '2'], ['Featured', '3'], ['Members', '412', 'as entered']])
+        + tools('Search circles by name', [['Type: All'], ['Access: All'], ['Status: All'], ['Featured: All'], ['Sort: Members', 1]])
+        + tbl('Circles', [['Circle'], ['Type'], ['Access'], ['Status'], ['Featured'], ['Members · as entered', 1, 'descending'], ['Activity · as entered']], [
+          { c: ['<b>Lisbon Founders</b>', 'City', 'Public', ST.pub, '★ Featured', '96', 'Weekly'] },
+          { c: ['<b>AI Builders</b>', 'Topic', 'Public', ST.pub, 'No', '72', 'Weekly'] },
+          { c: ['<b>Fintech Founders Circle</b>', 'Founder', 'Public', ST.pub, '★ Featured', '64', 'Weekly'] },
+          { c: ['<b>Climate Founders</b>', 'Topic', 'Public', ST.pub, '★ Featured', '58', 'Fortnightly'] },
+          { c: ['<b>Seed Investors Room</b>', 'Investor', 'Invite only', ST.pub, 'No', '41', 'Monthly'] },
+          { c: ['<b>Operating Partners</b>', 'Partner', 'Invite only', ST.pub, 'No', '23', 'Monthly'] },
+          { c: ['<b>Berlin Founders</b>', 'City', 'Public', ST.draft, 'No', '—', '<span class="mu">Not entered</span>'] },
+          { c: ['<b>Advisors Council</b>', 'Advisor', 'Invite only', ST.draft, 'No', '—', '<span class="mu">Not entered</span>'] }])
+        + pager('1–8 of 11', ['1', '2']) });
+    const AG = [['Today · Sat 7 Nov', [['13:05', 'Event', 'Demo Day Rehearsal reached 58 of 60 seats'], ['11:42', 'Event', 'Demo Day published by an admin'], ['09:20', 'Wellbeing', '3 expert bookings made']]],
+      ['Yesterday · Fri 6 Nov', [['17:48', 'Job', 'Product Designer received 8 applications'], ['15:02', 'Circle', 'Climate Founders membership updated to 58 (as entered)'], ['10:15', 'Event', 'AI Founder Dinner submitted for review']]],
+      ['Thu 5 Nov', [['16:30', 'Circle', 'Fintech Founders Circle published'], ['12:11', 'Wellbeing', 'An expert was submitted for verification']]]];
+    const actDlg = () => dialog({ eye: 'Community · Activity', title: 'Recent activity', sub: '148 events recorded in the last 12 weeks · newest first', opener: 'View all activity', manage: 'Open Approvals →',
+      body: '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">' + chips('All', ['148', '61', '44', '23', '12']) + '<div class="tools"><label class="inp" style="min-width:220px"><span aria-hidden="true">⌕</span><span>Search activity</span></label><button type="button" class="dd">Date: Last 12 weeks ▾</button></div></div>'
+        + J(AG.map(g => '<section aria-label="' + g[0] + '"><h3 class="eye" style="padding:6px 0;color:var(--ink)">' + g[0] + '</h3><ol>' + J(g[1].map(r => '<li class="ar" style="grid-template-columns:52px 78px minmax(0,1fr) auto"><span class="w">' + r[0] + '</span>' + kt(r[1]) + '<span style="font-weight:500">' + r[2] + '</span><a href="#" class="btn t" style="min-height:26px">Open ›</a></li>')) + '</ol></section>'))
+        + pager('1–8 of 148 · no member is named', ['1', '2', '3', '…', '19']) });
+
+    /* ---------- phone ---------- */
+    const pTop = (back) => '<div class="pt">' + (back ? '<a class="pi" href="#" style="font-size:14px;color:var(--vt)"><span aria-hidden="true" style="font-size:20px">‹</span>Community</a>' : '<button type="button" class="pi" aria-label="Menu">☰</button><span style="display:flex;align-items:center;gap:7px"><span class="logo" aria-hidden="true"></span><b style="font-size:13px">Axal VC</b></span>') + (back ? '<button type="button" class="pi" aria-label="Close" style="font-size:16px">✕</button>' : '<button type="button" class="pi" aria-label="Notifications">' + bell + '</button>') + '</div>';
+    const disc = (t, s, open, inner) => '<div><button type="button" class="disc" aria-expanded="' + !!open + '"><b>' + t + '</b><span>' + s + '</span><i aria-hidden="true">' + (open ? '▴' : '▾') + '</i></button>' + (open ? '<div style="padding:4px 0 14px;display:flex;flex-direction:column;gap:8px">' + inner + '</div>' : '') + '</div>';
+    const pbar = (l, v, pct) => '<div class="br" style="grid-template-columns:118px minmax(0,1fr) 64px"><span>' + l + '</span><span class="trk" aria-hidden="true"><span class="fil" style="width:' + pct + '%"></span></span><span class="bv">' + v + '</span></div>';
+    const phoneDash = () => '<div class="ph">' + pTop() + '<main class="pbd">' + header({ phone: true })
+      + kpis([K_ATT, K_UP, K_REG, K_JOB].map(k => Object.assign({}, k, k === K_ATT ? { sub: '3 events · 2 jobs · 2 experts', x: pill('a', '<span class="dot" aria-hidden="true"></span>2 overdue') } : k === K_JOB ? { sub: '<span class="dl dn">▼ 6%</span> vs previous' } : k === K_REG ? { sub: '<span class="dl up">▲ 28%</span> vs previous' } : {})))
+      + attCard(Q, 3, { phone: true })
+      + card('', '<div class="ch"><h2 id="nx-h" style="font-size:15px">Next event</h2><span class="sm">3 in the next 7 days</span></div>', '<ol>' + nuRow(NEXT[0]).replace('class="nu"', 'class="nu" style="border-top:0;padding-top:0"') + '</ol>', '<a class="btn" href="#" style="flex:1">See all 14 upcoming</a>', ' aria-labelledby="nx-h"')
+      + card('', chead('act-h', 'Community activity'), '<p class="ins" style="font-size:14px">Participation increased <b>18%</b> compared with the previous 12 weeks.</p>' + dl([['Registrations', '423', '▲ 28%'], ['Applications', '186', '▼ 6%'], ['Bookings', '60', '1 week n/r']], 3), '<a class="btn" href="#" style="flex:1">View chart</a>', ' aria-labelledby="act-h"')
+      + '<section aria-labelledby="more-h" class="cd" style="gap:0;padding-bottom:4px"><h2 id="more-h" class="eye" style="padding-bottom:6px">More analytics</h2>'
+      + disc('Events participation', '64% show-up · 31 waitlisted', false)
+      + disc('Who takes part', 'Founders 61% of participation', true, '<p class="sub" style="color:var(--ink)">Founders generated <b class="mo">61%</b> of recorded participation this period.</p>' + J(PART.map(x => pbar(x[0], x[1], Math.round(x[1] / 669 * 100)))) + '<p class="foot">Aggregated by profile; no member is named.</p>')
+      + disc('Opportunities', '23 open jobs · 186 applications', false)
+      + disc('Network', '9 published circles · 24 active advisors & partners', false)
+      + disc('Wellbeing', '11 verified experts · 60 bookings', false) + '</section>'
+      + card('', chead('ra-h', 'Recent activity'), '<div role="radiogroup" aria-label="Filter activity" class="chips">' + J(FILT.slice(0, 4).map((t, i) => '<button type="button" role="radio" aria-checked="' + !i + '">' + t + '</button>')) + '</div><ol>' + J(ACT.slice(0, 4).map(r => '<li class="ar"><span><span class="eye" style="display:block">' + r[0] + '</span><span style="font-weight:500">' + r[1] + '</span></span><span class="w">' + r[2].replace('Today, ', '') + '</span></li>')) + '</ol>', '<a class="btn" href="#" style="flex:1">View all activity</a>', ' aria-labelledby="ra-h"')
+      + '<section class="cd" aria-labelledby="mg-h" style="gap:4px"><h2 id="mg-h" style="font-size:15px;font-weight:800;padding-bottom:4px">Manage Community</h2><nav class="pl2" aria-labelledby="mg-h">' + J(MG.map(m => '<a href="#"><span><b>' + m[0] + '</b><small>' + m[1] + '</small></span>' + (m[2] ? pill('', m[2]) : '<span></span>') + '<span class="chev" aria-hidden="true">›</span></a>')) + '</nav></section>'
+      + aiRow('2 metrics aren’t recorded').replace('See what’s missing ▾', '▾')
+      + '</main></div>';
+    const phoneEvents = () => '<div class="ph" style="height:844px;position:relative">' + pTop(true) + '<main class="pbd" style="padding-bottom:90px"><div><span class="eye">Community · Last 12 weeks</span><h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin-top:2px">Events</h1></div>'
+      + '<div class="strip" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div style="border-bottom:1px solid var(--hair)"><span class="eye">Upcoming</span><b>14</b></div><div style="border-bottom:1px solid var(--hair);border-right:0"><span class="eye">Registrations</span><b>423</b></div><div><span class="eye">Show-up</span><b>64%</b></div><div style="border-right:0"><span class="eye">Waitlisted</span><b>31</b></div></div>'
+      + '<label class="inp" style="min-height:44px;min-width:0"><span aria-hidden="true">⌕</span><span>Search events</span></label><div style="display:flex;gap:8px"><button type="button" class="dd" style="min-height:44px;flex:1;justify-content:center">Filters · 0</button><button type="button" class="dd" style="min-height:44px;flex:1;justify-content:center">Sort: Date ▾</button></div>'
+      + '<ol class="cd" style="padding:2px 14px;gap:0">' + J([['AI Founder Dinner', 'Fri 13 Nov · Dinner', ST.rev, '40 seats'], ['Demo Day Rehearsal', 'Thu 12 Nov · Demo day', ST.pub, '58 / 60 · 6 waitlisted'], ['Pricing Workshop', 'Tue 10 Nov · Workshop', ST.pub, '22 · no cap'], ['Founder Breakfast · Lisbon', 'Wed 28 Oct · Networking', ST.end, '33 of 48 attended · 69%']].map((e, i) => '<li style="' + (i ? 'border-top:1px solid var(--hair);' : '') + 'padding:12px 0"><a href="#" style="display:flex;flex-direction:column;gap:5px;color:var(--ink);min-height:44px"><b style="font-size:14px">' + e[0] + '</b><span class="ks">' + e[1] + '</span><span style="display:flex;justify-content:space-between;align-items:center;gap:8px">' + e[2] + '<span class="mo" style="font-size:12px;font-weight:600">' + e[3] + '</span></span></a></li>')) + '</ol>'
+      + '<button type="button" class="btn">Show more · 4 of 41</button></main><div class="pbar"><a class="btn p" href="#">Manage events →</a></div></div>';
+    const phoneTable = () => '<div class="ph" style="height:844px;position:relative">' + pTop(true) + '<main class="pbd"><div><span class="eye">Community · Last 12 weeks</span><h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin-top:2px">Community activity</h1></div>'
+      + '<p class="ins" style="font-size:14px">Participation increased <b>18%</b> compared with the previous 12 weeks.</p>' + seg('Chart or table', ['Chart', 'Table'], 'Table')
+      + '<section class="cd" style="padding:4px 12px">' + tbl('Weekly community activity', [['Week'], ['Reg.', 1], ['Apps', 1], ['Book.', 1]], WK.map((w, i) => ({ cls: i === 11 ? 'cur' : '', c: [w + (i === 11 ? '<small>so far</small>' : ''), String(REG[i]), String(JOB[i]), BKG[i] == null ? '—' : String(BKG[i])] })).reverse()).replace(/<td class="n na" title="Not applicable yet">—/g, '<td class="n na" title="Not recorded">— <small style="display:inline">n/r</small>') + '</section>'
+      + '<p class="foot">Reg. event registrations · Apps job applications · Book. expert bookings. — n/r: not recorded that week, not zero.</p></main></div>';
+
+    /* ---------- crops ---------- */
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 560) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const QM = [['Event', 'AI Founder Dinner', 'Waiting for review · event is on 13 Nov', '4 days', true], ['Job', 'Founding Product Designer', 'Waiting for review · Northwind Labs', '3 days', true], ['Event', 'Pitch Night · Q4', 'Waiting for review', '3 days', true], ['Event', 'LP Briefing · Fund I', 'Waiting for review', '2 days', false], ['Expert', 'Sarah M. · Executive coach', 'Verification pending', '2 days', false]];
+
+    /* ---------- route ---------- */
+    let html = '';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o.overlay, o.h || 900, o.busy) + '</div>'; };
+    if (B === 'CM01' || B === 'CM11') html = page(full({ tip: dark }));
+    else if (B === 'CM03') html = page(full({ jobsErr: true, aiOpen: true }));
+    else if (B === 'CM04a') html = page(emptyBody());
+    else if (B === 'CM04b') html = page(lowBody());
+    else if (B === 'CM05') html = page(full(), { h: 900, overlay: evDlg() });
+    else if (B === 'CM06') html = page(full(), { h: 900, overlay: jobDlg() });
+    else if (B === 'CM07') html = page(full(), { h: 900, overlay: cirDlg() });
+    else if (B === 'CM08') html = page(full(), { h: 900, overlay: actDlg() });
+    else if (B === 'CM12a') html = page(loadBody(), { busy: true });
+    else if (B === 'CM12b') html = page(failBody());
+    else if (B === 'CM09') html = '<div class="cv" style="' + VARS + '">' + phoneDash() + '</div>';
+    else if (B === 'CM10a') html = '<div class="cv" style="' + VARS + '">' + phoneEvents() + '</div>';
+    else if (B === 'CM10b') html = '<div class="cv" style="' + VARS + '">' + phoneTable() + '</div>';
+    else if (B === 'CM02a') html = crop(kpis([{ k: 'Waiting on you', v: '3', sub: '2 events · 1 job · nothing overdue' }], 1) + attCard(Q.slice(2, 5), 5));
+    else if (B === 'CM02b') html = crop(kpis([{ k: 'Waiting on you', v: '4', sub: '2 events · 1 job · 1 expert', x: pill('a', '<span class="dot" aria-hidden="true"></span>1 overdue · over 2 days'), att: true }], 1) + attCard([Q[0], Q[2], Q[3], Q[4]], 5));
+    else if (B === 'CM02c') html = crop(kpis([{ k: 'Waiting on you', v: '12', sub: '6 events · 4 jobs · 2 experts', x: pill('a', '<span class="dot" aria-hidden="true"></span>3 overdue · over 2 days'), att: true }], 1) + attCard(QM, 5, { total: 12, split: pill('', 'Events 6') + pill('', 'Jobs 4') + pill('', 'Experts 2') + pill('a', '<span class="dot" aria-hidden="true"></span>Overdue 3') }));
+    else if (B === 'CM02d') html = crop(kpis([{ k: 'Waiting on you', v: '0', sub: 'Approvals are clear' }], 1) + attClear());
+    else if (B === 'CM12c') html = crop(oppErr(''));
+    else if (B === 'CM12d') html = crop(oppRetry(''));
+    else if (B === 'CM12e') html = crop(actCard({ noJobs: true, w: 520, r: 118 }));
+    else html = page(full());
+    return { html: { __html: html } };
+  }
+}
+</script>
+</body>
+</html>

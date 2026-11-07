@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform v2 · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "1500px"}, "board": {"editor": "enum", "default": "PL01", "options": ["PL01", "PL02a", "PL02b", "PL02c", "PL03a", "PL03b", "PL03c", "PL03d", "PL04", "PL05", "PL06", "PL07", "PL08a", "PL08b", "PL09a", "PL09b", "PL09c", "PL09d", "PL09e", "PL09f", "PL10a", "PL10b", "PL11", "PL12"], "tsType": "string"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'PL01';
+    const dark = B === 'PL11';
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1a2332', ink: '#e5e7eb', mu: '#9ca3af', hair: '#273244', hair2: '#3b475c', vi: '#34d399', vt: '#6ee7b7', lav: 'rgba(52,211,153,.1)', lavE: 'rgba(52,211,153,.35)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f4f3', card: '#ffffff', raised: '#f8f8f7', ink: '#18181b', mu: '#5f6368', hair: '#e7e7e4', hair2: '#d4d4d0', vi: '#047857', vt: '#065f46', lav: '#ecfdf5', lavE: '#a7f3d0', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.38)', skel: '#e7e7e4' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const pill = (tone, t) => '<span class="pl ' + (tone || '') + '">' + t + '</span>';
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- status vocabulary ---------- */
+    const SX = { Healthy: ['g', '✓'], Degraded: ['a', '◐'], Critical: ['rf', '✕'], Unknown: ['unk', '?'], Disabled: ['', '–'], 'Not configured': ['nc', '○'], Stale: ['a', '◷'], Partial: ['a', '◑'], Available: ['g', '✓'], Normal: ['g', '✓'], Enabled: ['g', '●'], Error: ['r', '✕'], Unbound: ['nc', '○'], 'Verified recently': ['g', '✓'], 'Verification stale': ['a', '◷'], Configured: ['', '●'], Connected: ['g', '✓'], 'Not active': ['', '–'], 'Not thrown': ['', '–'], Thrown: ['rf', '■'], 'Not set': ['nc', '○'], Set: ['', '●'], Failing: ['r', '✕'], 'Planned': ['nc', '◇'] };
+    const sx = (s, label) => { const x = SX[s] || ['', '•']; return pill(x[0], '<span aria-hidden="true">' + x[1] + '</span> ' + (label || s)); };
+    const fr = (k, t) => '<span class="fr ' + k + '"><i aria-hidden="true"></i>' + t + '</span>';
+    const SEV = { Critical: 'c', High: 'h', Medium: 'm', Low: '', Info: '' };
+    const sev = (s) => '<span class="sev ' + SEV[s] + '"><span aria-hidden="true">' + ({ Critical: '■', High: '▲', Medium: '◆', Low: '●', Info: 'i' })[s] + '</span>' + s + '</span>';
+    const scope = (t) => '<span class="scope" title="Scope">◎ ' + t + '</span>';
+    const how = (t, open) => open ? '<div class="how"><button type="button" class="disc2" aria-expanded="true">How this is measured ▴</button><div style="margin-top:4px">' + t + '</div></div>' : '<button type="button" class="disc2" aria-expanded="false">How this is measured ▾</button>';
+
+    /* ---------- shell ---------- */
+    const NAV = ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const spine = (open) => open
+      ? '<aside class="sp eadx" aria-label="Eadwyn" style="width:340px"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:8px;align-items:center"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--ink);color:var(--card);font-weight:800;font-size:12px">E</span><b style="font-size:13.5px">Eadwyn</b><span class="pl">Opened for an insight</span></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div>'
+        + '<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:12.5px;line-height:1.55;flex:1"><span class="eye">Operational insight</span><b style="font-size:13.5px">Stripe webhook silence began 9 minutes after deploy v2026.11.2</b><p>Deploy v2026.11.2 (2 Nov 22:22 UTC) changed the webhook route prefix. The last delivery was at 22:31 and none since. The historical HTTP 404s came from the same path.</p><p class="foot">Correlation from deploy and webhook logs. Not verified — check the endpoint before changing anything.</p><div style="display:flex;gap:6px;flex-wrap:wrap"><a class="btn p bsm" href="#">Open webhook console</a><button type="button" class="btn bsm">Compare deploys</button><button type="button" class="btn bsm">Dismiss</button></div></div>'
+        + '<div style="padding:12px 16px;border-top:1px solid var(--hair)"><div class="inp" style="min-width:0;min-height:38px">Ask about Platform…</div><label class="ck" style="margin-top:6px;font-size:12px;color:var(--mu)"><input type="checkbox">Pin open on this page</label></div></aside>'
+      : '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about Platform" aria-expanded="false" style="background:var(--ink);color:var(--card)">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const shell = (body, overlay, h, ead) => '<div class="sh" style="min-height:' + (h || 900) + 'px' + (ead ? ';grid-template-columns:196px minmax(0,1fr) 340px' : '') + '">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">HQ</span><nav aria-label="HQ">' + J(NAV.map(t => '<a href="#"' + (t === 'Platform' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><span class="bdg" style="background:#881337">HQ</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account" style="background:var(--raised);color:var(--ink)">S</span></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + spine(ead) + (overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o.overlay, o.h || 900, o.ead) + '</div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+
+    /* ---------- header + health ---------- */
+    const head = (o) => { o = o || {}; return '<header style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap"><div><span class="eye">HQ</span><h1 style="font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2">' + (o.title || 'Platform') + '</h1><p style="font-size:13px;color:var(--mu);margin-top:3px">' + (o.sub || 'Control plane for runtime, payments, AI, integrations and emergency controls.') + '</p></div>'
+      + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="ver"><span>Version <b>v2026.11.3</b></span><span>Commit <b>8f3a2c1</b></span><span>Environment <b>Production</b></span><span>Deployed <b>6 Nov 18:42 UTC</b></span></div><div class="ver"><span aria-live="polite">Observed <b>14:22 UTC</b></span><button type="button" class="lk" style="color:var(--vt)">Refresh</button>' + scope('Global HQ') + '</div></div></header>'; };
+    const HV = {
+      Degraded: { c: P.amD, t: P.amT, line: [['Telemetry', 'unavailable'], ['Integrations', '1 needs attention'], ['Scheduled jobs', '6/6 healthy'], ['DLQ', '0'], ['HQ overrides', '0']], conf: 'Confidence reduced: Analytics Engine telemetry has been unavailable since 4 Nov 02:00 UTC, so worker error rates and traffic can’t be confirmed.' },
+      Healthy: { c: P.pos, t: P.pos, line: [['Telemetry', 'reporting'], ['Integrations', '5/5 healthy'], ['Scheduled jobs', '6/6 healthy'], ['DLQ', '0'], ['HQ overrides', '0']], conf: 'Every core signal was read in the last 15 minutes.' },
+      Unknown: { c: P.mu, t: P.mu, line: [['Telemetry', 'unavailable'], ['Scheduled jobs', 'could not be read'], ['DLQ', 'could not be read'], ['Integrations', '1 needs attention'], ['HQ overrides', '0']], conf: 'Health can’t be determined: cron status and the queue couldn’t be read. Don’t treat this as healthy.' },
+      Critical: { c: P.neg, t: P.neg, line: [['Payments', 'webhooks failing · 12 consecutive HTTP 500'], ['Telemetry', 'reporting'], ['Scheduled jobs', '6/6 healthy'], ['DLQ', '47 · rising'], ['HQ overrides', '1 active']], conf: 'Payments kill switch thrown by an operator at 14:05 UTC: checkout is paused for all members.' } };
+    const health = (s) => { const h = HV[s]; return '<section class="hb" aria-labelledby="ph-h" style="--hbc:' + h.c + ';--hbt:' + h.t + '"><div class="st"><h2 id="ph-h">Platform health ·</h2><span class="sv">' + ({ Healthy: '✓', Degraded: '◐', Unknown: '?', Critical: '✕' })[s] + ' ' + s + '</span>' + scope('HQ + all subsidiaries') + '</div><div style="display:flex;gap:10px;align-items:center">' + how('') + '</div>'
+      + '<div class="ln2">' + J(h.line.map((l, i) => (i ? '<span aria-hidden="true">·</span>' : '') + '<span>' + l[0] + ' <b>' + l[1] + '</b></span>')) + '</div><p class="foot" style="grid-column:1/-1;font-size:12px">' + h.conf + '</p></section>'; };
+
+    /* ---------- needs attention ---------- */
+    const NA = [
+      ['High', 'Calendly integration error', 'OAuth token rejected (HTTP 401) on every sync. Advisor office-hours booking can’t sync.', 'Error', 'since 5 Nov 09:14', '14:20', 'Reconnect Calendly'],
+      ['Medium', 'Stripe webhooks silent', '0 deliveries in 24 h against an expected ≥ 1/day. Last delivery 2 Nov 22:31; earlier HTTP 404s on this endpoint.', 'Stale', '4 d 15 h silent', '14:19', 'Verify webhook endpoint'],
+      ['Medium', 'Telemetry unavailable', 'Analytics Engine returns no data; traffic by branch unavailable. Health confidence is reduced.', 'Unknown', 'since 4 Nov 02:00', '14:22', 'Check telemetry binding'],
+      ['Low', '5 managed integration keys not set', 'X, DocuSign, LinkedIn, Crunchbase, PitchBook. Features that depend on them are off.', 'Not configured', '—', '14:22', 'Review keys'],
+      ['Low', 'Telegram Advisors channel unbound', 'Advisor broadcasts have nowhere to post.', 'Unbound', 'since 28 Oct', '14:22', 'Bind channel'],
+      ['Low', 'X OAuth not provisioned', 'X broadcasting is unavailable.', 'Not configured', '—', '14:22', 'Provision X'],
+      ['Info', 'Stripe catalog partly inactive', '15 of 18 products and 31 of 37 prices active. Confirm the 3 inactive products are intentional.', 'Partial', 'synced 06:00', '06:00', 'Review catalog']];
+    const naRow = (r, i, focus) => '<li><span>' + sev(r[0]) + '</span><div style="min-width:0"><span class="t">' + r[1] + '</span><span class="d" style="display:block">' + r[2] + '</span></div><div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">' + sx(r[3]) + '<span class="o">' + r[4] + '<br>observed ' + r[5] + '</span></div><a class="btn bsm' + (i === 0 ? ' p' : '') + (focus ? ' fv' : '') + '" href="#">' + r[6] + ' →</a></li>';
+    const attention = (rows, o) => { o = o || {}; return '<section class="cd" aria-labelledby="na-h" style="gap:6px' + (o.style || '') + '"><div class="ch"><h2 id="na-h">Needs attention</h2><span class="sm">' + (o.sm || rows.length + ' items · most severe first') + '</span></div>' + (rows.length ? '<ol class="na">' + J(rows.map((r, i) => naRow(r, i, o.focus === i))) + '</ol>' : o.empty) + (o.foot || '') + '</section>'; };
+
+    /* ---------- core systems ---------- */
+    const kvs = (rows) => '<div class="kvs">' + J(rows.map(r => '<div><span>' + r[0] + '</span><span' + (r[2] ? ' class="m"' : '') + '>' + r[1] + '</span></div>')) + '</div>';
+    const sysBlock = (o) => '<section class="sb" aria-labelledby="' + o.id + '"><div class="h"><h3 id="' + o.id + '">' + o.t + '</h3>' + sx(o.s) + '</div><div class="km"><b>' + o.km + '</b><span>' + o.kms + '</span></div>' + kvs(o.rows) + '<div class="f">' + o.fr + '<a href="#" style="font:700 12px var(--sg)">' + o.link + ' →</a></div></section>';
+    const SYS = [
+      { id: 's-inf', t: 'Infrastructure', s: 'Degraded', km: '6/6', kms: 'scheduled jobs healthy · last run 14:15', rows: [['Workers', sx('Unknown', 'Error rate unknown')], ['Telemetry', sx('Unknown', 'Unavailable')], ['DLQ depth', '0', 1], ['Cloudflare Queue', sx('Enabled')], ['Detected incidents', sx('Unknown', 'Needs telemetry')], ['Published incidents', '0 · last 7 d', 1]], fr: fr('st', 'observed 14:22 · partial'), link: 'Infrastructure' },
+      { id: 's-pay', t: 'Payments', s: 'Stale', km: '15 / 18', kms: 'products active · 31 / 37 prices', rows: [['Stripe connection', sx('Healthy', 'Connected')], ['Webhooks', sx('Stale', 'Silent 4 d 15 h')], ['Catalog sync', 'today 06:00', 1], ['Stripe Tax', sx('Disabled')], ['Session charging', sx('Disabled')]], fr: fr('ok', 'observed 14:19 · fresh'), link: 'Payments' },
+      { id: 's-ai', t: 'AI', s: 'Healthy', km: '41%', kms: 'of monthly AI budget used', rows: [['Eadwyn', sx('Available')], ['AI budget protection', sx('Normal')], ['Model routing', sx('Healthy')], ['Allowances', '12 plans', 1], ['Last routing check', '14:18', 1]], fr: fr('ok', 'observed 14:18 · fresh'), link: 'AI' },
+      { id: 's-int', t: 'Integrations', s: 'Degraded', km: '4 / 5', kms: 'providers connected · 1 error', rows: [['Errors', sx('Error', 'Calendly')], ['Required keys', '6 / 6 set', 1], ['Other keys', '5 not set', 1], ['Broadcast', '2 verified / 3 configured', 1]], fr: fr('ok', 'observed 14:22 · fresh'), link: 'Integrations' }];
+    const systems = () => '<section aria-labelledby="cs-h" style="display:flex;flex-direction:column;gap:10px"><div class="s2"><h2 id="cs-h">Core systems</h2><span class="foot">Status · key metric · freshness · console</span></div><div class="sys">' + J(SYS.map(sysBlock)) + '</div></section>';
+
+    /* ---------- controls + coverage ---------- */
+    const controls = () => '<section class="cd" aria-labelledby="ct-h" style="gap:8px"><div class="ch"><h2 id="ct-h">Active controls</h2>' + scope('Global HQ') + '</div>' + kvs([['HQ operator overrides', sx('Not active', 'None active')], ['Kill switches', sx('Not thrown', '0 of 3 thrown')], ['AI budget protection', sx('Normal')], ['Maintenance mode', sx('Not active')]]) + '<a class="btn t" href="#" style="align-self:flex-start;padding:0">Flags & switches →</a></section>';
+    const COV = [['Market sources', '6 / 24', 'live', 25], ['Diligence connectors', '0 / 9', 'none enabled', 0], ['External integrations', '4', 'providers connected · 1 in error', null], ['Broadcast channels', '2 / 5', 'verified · 3 configured', 40], ['Branch deployments', '0', 'none provisioned', null]];
+    const coverage = () => '<section class="cd" aria-labelledby="cv-h" style="gap:4px"><div class="ch"><h2 id="cv-h">Capability coverage</h2></div><div class="cov">' + J(COV.map(c => '<div><b>' + c[0] + '</b><small>' + c[2] + '</small><span class="v">' + c[1] + '</span>' + (c[3] != null ? '<span class="bar" aria-hidden="true"><i style="width:' + c[3] + '%"></i></span>' : '') + '</div>')) + '</div></section>';
+
+    /* ---------- activity + consoles ---------- */
+    const FEED = [['Today 14:02', 'Credential', 'Resend API key rotated by an operator'], ['5 Nov 09:14', 'Integration', 'Calendly sync failed · HTTP 401 · still failing'], ['6 Nov 18:42', 'Deployment', 'v2026.11.3 to production · 8f3a2c1'], ['7 Nov 06:00', 'Catalog sync', 'Stripe: 15/18 products, 31/37 prices active'], ['4 Nov 16:05', 'Switch', 'Session-charging override released (HQ)'], ['2 Nov 22:31', 'Webhook', 'Last Stripe delivery — silent since'], ['1 Nov 10:30', 'Configuration', 'Cloudflare Queue enabled']];
+    const activity = (cls) => '<section class="cd ' + (cls || '') + '" aria-labelledby="oa-h" style="gap:6px"><div class="ch"><h2 id="oa-h">Operational activity</h2><div class="chips" role="radiogroup" aria-label="Filter"><button type="button" role="radio" aria-checked="true">Significant</button><button type="button" role="radio" aria-checked="false">All</button></div></div><ol class="feed">' + J(FEED.map(f => '<li><span class="w">' + f[0] + '</span><span class="otag">' + f[1] + '</span><span>' + f[2] + '</span><a href="#" class="btn t bsm">Details</a></li>')) + '</ol><p class="foot">No status incidents published in the last 7 days. This counts only incidents an operator published, not ones that were detected.</p></section>';
+    const CONS = [['Infrastructure', ['Workers & runtime', 'Cron & queues', 'Telemetry', 'Incidents', 'Deployments & branches']], ['Payments', ['Stripe connection', 'Webhooks', 'Catalog', 'Tax & charging']], ['AI', ['Eadwyn & models', 'Budget protection', 'Allowances', 'Usage']], ['Integrations', ['Providers', 'Integration keys', 'Broadcast channels']], ['Data sources', ['Market sources', 'Diligence connectors']], ['Controls', ['Flags & switches', 'Emergency controls', 'Audit log']]];
+    const BADGE = { 'Webhooks': sx('Stale'), 'Providers': sx('Error', '1'), 'Telemetry': sx('Unknown'), 'Integration keys': pill('nc', '5 not set'), 'Broadcast channels': sx('Unbound', '1') };
+    const consoles = (cls) => '<section class="' + (cls || '') + '" aria-labelledby="dc-h" style="display:flex;flex-direction:column;gap:10px"><div class="s2"><h2 id="dc-h">Detailed consoles</h2><span class="foot">Grouped by domain</span></div><nav class="cg" aria-labelledby="dc-h">' + J(CONS.map(g => '<section><h3>' + g[0] + '</h3>' + J(g[1].map(t => '<a href="#">' + t + '<span>' + (BADGE[t] || '<span aria-hidden="true" class="mu">›</span>') + '</span></a>')) + '</section>')) + '</nav>'
+      + '<div class="prev" role="note"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:13px">Preview / Planned</b>' + sx('Planned') + '</div><div class="ar" style="grid-template-columns:minmax(0,1fr) auto;border-top:0"><span><b>Event syndication</b><span class="ks" style="display:block">Not built yet: nothing posts. Shown here so nobody relies on it.</span></span><a href="#" class="btn t bsm">View plan</a></div></div></section>';
+
+    /* ---------- overview ---------- */
+    const overview = (hs) => head() + health(hs || 'Degraded')
+      + '<div class="g"><div class="c8">' + attention(NA) + '</div><div class="c4" style="display:flex;flex-direction:column;gap:16px">' + controls() + coverage() + '</div></div>'
+      + systems()
+      + '<div class="g"><div class="c7">' + activity() + '</div><div class="c5">' + consoles() + '</div></div>';
+
+    /* ---------- integrations ---------- */
+    const integrations = () => '<nav aria-label="Breadcrumb" class="eye"><a href="#">Platform</a> › <span style="color:var(--ink)">Integrations</span></nav>' + head({ title: 'Integrations', sub: 'Providers, managed credentials and broadcast channels. Secret values are never shown.' })
+      + '<section class="qc" aria-labelledby="pv-h"><div class="ch" style="padding:12px 14px;border-bottom:1px solid var(--hair)"><h2 id="pv-h">Providers</h2><span class="sm">4 connected · 1 error</span></div><table class="ctab"><thead><tr><th scope="col">Provider</th><th scope="col">Status</th><th scope="col">Scope</th><th scope="col">Last success</th><th scope="col">Last failure</th><th scope="col">Verified</th><th scope="col">Action</th></tr></thead><tbody>'
+      + J([['Stripe', 'Connected', 'HQ + all subsidiaries', 'today 14:19', '14 Oct · HTTP 404', fr('ok', 'fresh · 14:19'), 'Open'], ['Calendly', 'Error', 'Global HQ', '4 Nov 21:02', 'today 14:20 · HTTP 401', fr('st', 'failing · 38 in a row'), 'Reconnect'], ['Resend', 'Connected', 'HQ + all subsidiaries', 'today 14:11', '—', fr('ok', 'fresh · 14:11'), 'Open'], ['Google Workspace', 'Connected', 'Global HQ', 'today 13:58', '—', fr('ok', 'fresh · 13:58'), 'Open'], ['Telegram', 'Connected', 'Global HQ', 'today 12:04', '—', fr('st', 'stale · 2 h'), 'Verify']].map(r => '<tr><td><b>' + r[0] + '</b></td><td>' + sx(r[1]) + '</td><td>' + scope(r[2]) + '</td><td class="mo">' + r[3] + '</td><td class="mo">' + (r[4] === '—' ? '<span class="mu">none recorded</span>' : r[4]) + '</td><td>' + r[5] + '</td><td><a class="btn bsm' + (r[1] === 'Error' ? ' p' : '') + '" href="#">' + r[6] + '</a></td></tr>')) + '</tbody></table></section>'
+      + '<section class="qc" aria-labelledby="ky-h"><div class="ch" style="padding:12px 14px;border-bottom:1px solid var(--hair)"><h2 id="ky-h">Managed integration keys</h2><span class="sm">11 keys · 5 not set · values never displayed</span></div><table class="ctab"><thead><tr><th scope="col">Provider · key</th><th scope="col">Requirement</th><th scope="col">Configured</th><th scope="col">Last rotated</th><th scope="col">Expiry</th><th scope="col">Last successful use</th><th scope="col">Last failed use</th><th scope="col">Verification</th><th scope="col">Rotation due</th></tr></thead><tbody>'
+      + J([['Stripe · secret key', 'Required', 'Set', '12 Aug 2026', '—', 'today 14:19', '—', fr('ok', 'fresh'), '12 Feb 2027'], ['Stripe · webhook signing', 'Required', 'Set', '2 Nov 2026', '—', '2 Nov 22:31', '14 Oct 03:12', fr('st', 'stale · 4 d'), '2 May 2027'], ['Calendly · OAuth', 'Required', 'Set', '1 Sep 2026', 'revoked by provider', '4 Nov 21:02', 'today 14:20', '<span class="pl r">✕ failing</span>', '—'], ['Resend · API key', 'Required', 'Set', 'today 14:02', '—', 'today 14:11', '—', fr('ok', 'fresh'), '7 May 2027'], ['Google Workspace · service account', 'Required', 'Set', '3 Jun 2026', '3 Jun 2027', 'today 13:58', '—', fr('ok', 'fresh'), '<span style="color:var(--amT);font-weight:700">3 Dec 2026 · in 26 d</span>'], ['Telegram · bot token', 'Required', 'Set', '28 Oct 2026', '—', 'today 12:04', '—', fr('st', 'stale · 2 h'), '—'], ['X · OAuth app', 'Recommended', 'Not set', '—', '—', '—', '—', fr('un', 'never verified'), '—'], ['DocuSign · integration key', 'Recommended', 'Not set', '—', '—', '—', '—', fr('un', 'never verified'), '—'], ['LinkedIn · OAuth', 'Optional', 'Not set', '—', '—', '—', '—', fr('un', 'never verified'), '—'], ['Crunchbase · API key', 'Optional', 'Not set', '—', '—', '—', '—', fr('un', 'never verified'), '—'], ['PitchBook · API key', 'Optional', 'Not set', '—', '—', '—', '—', fr('un', 'never verified'), '—']].map(r => '<tr><td><b>' + r[0] + '</b></td><td>' + (r[1] === 'Required' ? '<b>Required</b>' : '<span class="mu">' + r[1] + '</span>') + '</td><td>' + sx(r[2]) + '</td>' + J(r.slice(3, 7).map(x => '<td class="mo">' + (x === '—' ? '<span class="mu">—</span>' : x) + '</td>')) + '<td>' + r[7] + '</td><td class="mo">' + (r[8] === '—' ? '<span class="mu">—</span>' : r[8]) + '</td></tr>')) + '</tbody></table></section>'
+      + '<section class="qc" aria-labelledby="bc-h"><div class="ch" style="padding:12px 14px;border-bottom:1px solid var(--hair)"><h2 id="bc-h">Broadcast channels</h2><span class="sm">2 verified · 3 configured · 5 total</span></div><table class="ctab"><thead><tr><th scope="col">Channel</th><th scope="col">State</th><th scope="col">Last verified</th><th scope="col">Last post</th><th scope="col">Action</th></tr></thead><tbody>'
+      + J([['Telegram · Founders', 'Verified recently', 'today 12:04', '6 Nov 17:30', 'Open'], ['Email digest · Resend', 'Verified recently', 'today 14:11', '5 Nov 08:00', 'Open'], ['Telegram · Advisors', 'Unbound', '—', 'never', 'Bind channel'], ['X', 'Not configured', '—', 'never', 'Provision OAuth'], ['LinkedIn', 'Disabled', '—', 'never', 'Enable']].map(r => '<tr><td><b>' + r[0] + '</b></td><td>' + sx(r[1]) + '</td><td class="mo">' + r[2] + '</td><td class="mo">' + r[3] + '</td><td><a class="btn bsm" href="#">' + r[4] + '</a></td></tr>')) + '</tbody></table><p class="foot" style="padding:10px 14px">A channel is “Verified recently” only after a test post succeeds within 24 h. Configured alone is not ready.</p></section>';
+
+    /* ---------- payments ---------- */
+    const DAYS = [3, 5, 2, 4, 6, 3, 4, 5, 2, 0, 0, 0, 0, 0];
+    const DL = ['25', '26', '27', '28', '29', '30', '31', '1', '2', '3', '4', '5', '6', '7'];
+    const payments = () => '<nav aria-label="Breadcrumb" class="eye"><a href="#">Platform</a> › <span style="color:var(--ink)">Payments</span></nav>' + head({ title: 'Payments', sub: 'Stripe connection, webhooks and catalog. Scope: HQ + all subsidiaries.' })
+      + '<div class="g"><section class="cd c8" aria-labelledby="wh-h"><div class="ch"><h2 id="wh-h">Stripe webhooks</h2>' + sx('Stale', 'Stale · silent past threshold') + '</div>'
+      + '<div class="whk">' + J([['Health', 'Stale', 'silent 4 d 15 h'], ['Last delivery', '2 Nov 22:31', 'checkout.session.completed'], ['Last success', '2 Nov 22:31', 'HTTP 200'], ['Last failure', '14 Oct 03:12', 'HTTP 404 · historical'], ['Consecutive failures', '0', 'no failures — no deliveries'], ['Silence threshold', '24 h', 'alerts after this'], ['Expected activity', '≥ 1 / day', 'from 30-day checkout volume'], ['Endpoint', '/api/stripe/webhook', 'verified 2 Nov']].map(c => '<div><span class="eye">' + c[0] + '</span><b>' + c[1] + '</b><small>' + c[2] + '</small></div>')) + '</div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center"><span class="eye">Deliveries per day · last 14 days</span><div role="radiogroup" aria-label="View as" class="seg"><button type="button" role="radio" aria-checked="true">Chart</button><button type="button" role="radio" aria-checked="false" tabindex="-1">View as table</button></div></div>'
+      + '<div class="days" role="img" aria-label="Webhook deliveries per day from 25 Oct to 7 Nov: 3, 5, 2, 4, 6, 3, 4, 5, 2, then zero on each of the last five days.">' + J(DAYS.map((d, i) => '<div><span class="mo" style="font-size:10px;font-weight:600;color:var(--ink)">' + d + '</span><i' + (d ? ' style="height:' + d * 8 + 'px"' : ' class="z"') + '></i><span>' + DL[i] + '</span></div>')) + '</div>'
+      + '<p class="foot">“0 failures in 24 h” alone would read as healthy. Zero deliveries against expected activity is silence, so this is marked Stale.</p><div style="display:flex;gap:8px"><a class="btn p" href="#">Verify webhook endpoint</a><button type="button" class="btn">Send test event</button>' + how('') + '</div></section>'
+      + '<div class="c4" style="display:flex;flex-direction:column;gap:16px"><section class="cd" aria-labelledby="sc-h" style="gap:8px"><div class="ch"><h2 id="sc-h">Stripe connection</h2>' + sx('Healthy', 'Connected') + '</div>' + kvs([['Mode', 'Live'], ['Last API success', 'today 14:19', 1], ['Last changed', '12 Aug 2026', 1], ['Stripe Tax', sx('Disabled')], ['Session charging', sx('Disabled')]]) + '<p class="foot">Stripe Tax disabled: tax is not calculated at checkout. Session charging disabled: no member is charged per session.</p></section>'
+      + '<section class="cd" aria-labelledby="ca-h" style="gap:8px"><div class="ch"><h2 id="ca-h">Catalog</h2>' + sx('Partial') + '</div>' + kvs([['Products active', '15 of 18', 1], ['Prices active', '31 of 37', 1], ['Last successful sync', 'today 06:00', 1], ['Freshness', fr('ok', 'fresh · daily')]]) + '<a class="btn bsm" href="#" style="align-self:flex-start">Review 3 inactive products</a></section></div></div>';
+
+    /* ---------- flags & switches ---------- */
+    const sw3 = (rows) => '<div class="sw3 hd"><span>Control</span><span>State</span><span>Current user impact</span><span>Last changed</span><span></span></div>' + J(rows.map(r => '<div class="sw3"><span><b>' + r[0] + '</b><span class="ks" style="display:block">' + scope(r[4]) + '</span></span><span>' + sx(r[1], r[5]) + '</span><span class="im">' + r[2] + '</span><span class="mo" style="font-size:11.5px;color:var(--mu)">' + r[3] + '</span><span>' + (r[6] || '') + '</span></div>'));
+    const flags = () => '<nav aria-label="Breadcrumb" class="eye"><a href="#">Platform</a> › <span style="color:var(--ink)">Flags & switches</span></nav>' + head({ title: 'Flags & switches', sub: 'What is overridden, what the deployment sets, and the safety systems that can stop things.' })
+      + '<section class="qc" aria-labelledby="ao-h"><div class="ch" style="padding:12px 14px;border-bottom:1px solid var(--hair)"><h2 id="ao-h">Active overrides</h2>' + sx('Not active', '0 active') + '</div><div style="padding:14px"><p style="font-size:13px"><b>No HQ operator overrides are active.</b> Every user gets the deployment configuration below.</p><p class="foot" style="margin-top:4px">Last override: Session charging forced off for HQ, released 4 Nov 16:05 by an operator after 2 d 3 h.</p></div></section>'
+      + '<section class="qc" aria-labelledby="dc2-h"><div class="ch" style="padding:12px 14px;border-bottom:1px solid var(--hair)"><h2 id="dc2-h">Deployment configuration</h2><span class="sm">set by v2026.11.3 · changing these needs a deploy</span></div>' + sw3([
+        ['Eadwyn', 'Available', 'All members and admins can ask Eadwyn, within plan allowances.', '6 Nov 18:42', 'Current deployment', 'Available', '<button type="button" class="btn bsm">Override…</button>'],
+        ['Session charging', 'Disabled', 'No member is charged per session. Sessions are covered by plans.', '12 Aug 2026', 'HQ + all subsidiaries', 'Disabled', '<button type="button" class="btn bsm">Override…</button>'],
+        ['Stripe Tax', 'Disabled', 'Tax is not calculated at checkout; prices are shown tax-exclusive.', '12 Aug 2026', 'HQ + all subsidiaries', 'Disabled', ''],
+        ['Cloudflare Queue', 'Enabled', 'Background jobs (emails, syncs) run through the queue with retries.', '1 Nov 2026', 'Current deployment', 'Enabled', '']]) + '</section>'
+      + '<section class="qc" aria-labelledby="rs-h"><div class="ch" style="padding:12px 14px;border-bottom:1px solid var(--hair)"><h2 id="rs-h">Runtime safety systems</h2><span class="sm">act immediately · every change is logged in Security</span></div>' + sw3([
+        ['AI budget protection', 'Normal', '41% of the monthly cap used. At 100%, Eadwyn pauses for non-HQ users until the cap resets.', 'auto · 1 Nov', 'Global HQ', 'Normal', ''],
+        ['Payments kill switch', 'Not thrown', 'Checkout works normally. Throwing it pauses all new payments.', '19 Sep 2026', 'HQ + all subsidiaries', 'Not thrown', '<button type="button" class="btn bsm" style="color:var(--neg)!important;border-color:var(--negE)">Throw…</button>'],
+        ['Broadcast kill switch', 'Not thrown', 'Channels post normally. Throwing it stops all outbound posts.', 'never', 'Global HQ', 'Not thrown', '<button type="button" class="btn bsm" style="color:var(--neg)!important;border-color:var(--negE)">Throw…</button>'],
+        ['Maintenance mode', 'Not active', 'Members can sign in and use StudioOS.', '2 Jul 2026', 'HQ + all subsidiaries', 'Not active', '<button type="button" class="btn bsm">Activate…</button>']]) + '</section>';
+
+    /* ---------- detail transition ---------- */
+    const calendly = () => '<nav aria-label="Breadcrumb" class="eye"><a href="#">Platform</a> › <a href="#">Integrations</a> › <span style="color:var(--ink)">Calendly</span></nav><a href="#" class="btn t bsm" style="align-self:flex-start;padding:0">‹ Back to Needs attention</a>'
+      + '<header style="display:flex;justify-content:space-between;align-items:flex-end;gap:14px"><div><div style="display:flex;gap:8px;align-items:center">' + sev('High') + sx('Error') + scope('Global HQ') + '</div><h1 style="font-size:24px;font-weight:800;letter-spacing:-.02em;margin-top:6px">Calendly</h1><p class="sub">OAuth token rejected (HTTP 401) on every sync since 5 Nov 09:14 UTC.</p></div><div style="display:flex;gap:8px"><button type="button" class="btn">Pause sync</button><a class="btn p fv" href="#">Reconnect Calendly</a></div></header>'
+      + '<div class="ef" style="grid-template-columns:repeat(4,minmax(0,1fr))">' + J([['Last success', '4 Nov 21:02', '38 syncs ago'], ['Last failure', 'today 14:20', 'HTTP 401 · invalid_grant'], ['Consecutive failures', '38', 'every 30 min'], ['User impact', 'Advisor bookings don’t sync', 'members can still book on Calendly directly']].map((f, i) => '<div' + (i === 3 ? ' style="background:var(--amBg)"' : '') + '><span class="eye">' + f[0] + '</span><b class="' + (i < 3 ? 'mo' : '') + '">' + f[1] + '</b><small>' + f[2] + '</small></div>')) + '</div>'
+      + '<div class="g"><section class="cd c7" aria-labelledby="fx-h"><h2 id="fx-h" style="font-size:15px;font-weight:800">How to fix</h2><ol style="display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:1.5"><li><b>1.</b> Reconnect Calendly with an account that owns the advisor event types. The provider revoked the previous token.</li><li><b>2.</b> Run a test sync. Status returns to Healthy after one success.</li><li><b>3.</b> Optional: backfill bookings missed since 4 Nov 21:02 (about 14).</li></ol>' + how('Health comes from the last 48 sync attempts. One success after a failure run returns it to Healthy; 3 consecutive failures mark it Error.', true) + '</section>'
+      + '<section class="qc c5" aria-labelledby="at-h"><div class="ch" style="padding:12px 14px;border-bottom:1px solid var(--hair)"><h2 id="at-h">Recent attempts</h2></div><table class="ctab"><thead><tr><th scope="col">Time (UTC)</th><th scope="col">Result</th><th scope="col">Detail</th></tr></thead><tbody>' + J([['14:20', 'Error', '401 invalid_grant'], ['13:50', 'Error', '401 invalid_grant'], ['13:20', 'Error', '401 invalid_grant'], ['4 Nov 21:02', 'Healthy', '200 · 6 bookings synced']].map(r => '<tr><td class="mo">' + r[0] + '</td><td>' + sx(r[1], r[1] === 'Healthy' ? 'Success' : 'Failed') + '</td><td class="mo">' + r[2] + '</td></tr>')) + '</tbody></table></section></div>';
+
+    /* ---------- mobile ---------- */
+    const pTop = () => '<div class="pt"><button type="button" class="pi" aria-label="Menu">☰</button><span style="display:flex;align-items:center;gap:7px"><span class="logo" aria-hidden="true"></span><b style="font-size:13px">Axal VC</b><span class="bdg" style="background:#881337">HQ</span></span><button type="button" class="pi" aria-label="Notifications">' + bell + '</button></div>';
+    const mA = () => '<div class="ph" style="height:844px;position:relative">' + pTop() + '<main class="pbd" style="gap:12px"><div><h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em">Platform</h1><div class="ver" style="margin-top:4px"><span><b>v2026.11.3</b> · Production</span><span>observed 14:22 UTC</span></div></div>'
+      + '<section class="hb" aria-labelledby="mh" style="--hbc:' + P.amD + ';--hbt:' + P.amT + ';grid-template-columns:1fr"><div class="st"><h2 id="mh" style="font-size:16px">Platform health ·</h2><span class="sv" style="font-size:16px">◐ Degraded</span></div><div class="ln2"><span>Telemetry <b>unavailable</b></span><span>1 integration <b>error</b></span><span>Jobs <b>6/6</b></span><span>DLQ <b>0</b></span></div></section>'
+      + '<section class="cd" aria-labelledby="mna" style="gap:0;padding-bottom:6px"><div class="ch" style="padding-bottom:6px"><h2 id="mna">Needs attention</h2><span class="sm">7</span></div>' + J(NA.slice(0, 3).map((r, i) => '<div style="display:flex;flex-direction:column;gap:6px;padding:11px 0;border-top:1px solid var(--hair)"><div style="display:flex;gap:8px;align-items:center">' + sev(r[0]) + sx(r[3]) + '</div><b style="font-size:14px">' + r[1] + '</b><span class="ks">' + r[4] + ' · observed ' + r[5] + '</span><a class="btn' + (i ? '' : ' p') + '" href="#">' + r[6] + ' →</a></div>')) + '<button type="button" class="disc" aria-expanded="false" style="min-height:48px"><b>4 more · Low and Info</b><i aria-hidden="true">▾</i></button></section></main></div>';
+    const mB = () => '<div class="ph" style="height:844px;position:relative">' + pTop() + '<main class="pbd" style="gap:12px"><section class="cd" aria-labelledby="mcs" style="gap:0;padding-bottom:4px"><h2 id="mcs" class="eye" style="padding-bottom:6px">Core systems</h2>'
+      + J(SYS.map((s, i) => '<div><button type="button" class="disc" aria-expanded="' + (i === 1) + '"><b>' + s.t + '</b><span style="display:flex;gap:6px;align-items:center">' + sx(s.s) + ' ' + s.km + ' ' + s.kms.split(' ·')[0] + '</span><i aria-hidden="true">' + (i === 1 ? '▴' : '▾') + '</i></button>' + (i === 1 ? '<div style="padding:0 0 12px">' + kvs(s.rows) + '<a class="btn" href="#" style="margin-top:8px;width:100%">Open Payments</a></div>' : '') + '</div>')) + '</section>'
+      + '<section class="cd" style="gap:0;padding-bottom:4px"><h2 class="eye" style="padding-bottom:6px">Controls & coverage</h2><button type="button" class="disc"><b>Active controls</b><span>No overrides · 0 switches thrown</span><i aria-hidden="true">›</i></button><button type="button" class="disc"><b>Capability coverage</b><span>Market 6/24 · Diligence 0/9 · Broadcast 2/5</span><i aria-hidden="true">›</i></button><button type="button" class="disc"><b>Consoles</b><span>6 domains · 1 preview</span><i aria-hidden="true">›</i></button></section></main></div>';
+
+    /* ---------- states ---------- */
+    const stTel = () => sysBlock(SYS[0]) + '<div class="how"><button type="button" class="disc2" aria-expanded="true">Why this may be unknown ▴</button><div style="margin-top:4px"><b>Analytics Engine returned no rows since 4 Nov 02:00 UTC.</b> Worker error rate and detected incidents depend on it, so they show Unknown rather than 0. Cron and DLQ are read separately and remain known.</div></div>';
+    const STATES = {
+      PL09a: () => crop(stTel(), 420),
+      PL09b: () => crop('<section class="cd" style="gap:6px"><div class="ch"><h2>Market sources</h2>' + sx('Partial') + '</div><div class="cov"><div><b>6 of 24 live</b><small>3 erroring · 15 not configured</small><span class="v">25%</span><span class="bar" aria-hidden="true"><i style="width:25%"></i></span></div></div>' + kvs([['Live', '6', 1], ['Erroring', '3 · last 13:40', 1], ['Not configured', '15', 1]]) + '<a class="btn bsm" href="#" style="align-self:flex-start">Open market sources</a></section>', 420),
+      PL09c: () => crop('<section class="cd" style="gap:6px"><div class="ch"><h2>Published status incidents</h2>' + sx('Not active', 'None published') + '</div><p class="sub" style="color:var(--ink)">No incidents were published in the last 7 days.</p><p class="foot">This counts only incidents an operator published to the status page. It says nothing about whether anything went wrong — see Detected incidents (currently Unknown).</p></section>', 420),
+      PL09d: () => crop('<section class="cd" style="gap:6px"><div class="ch"><h2>Diligence connectors</h2>' + sx('Not configured', '0 of 9') + '</div><p class="sub" style="color:var(--ink)">No diligence connectors are enabled. Diligence runs on uploaded documents only.</p><a class="btn bsm" href="#" style="align-self:flex-start">Configure connectors</a></section>', 420),
+      PL09e: () => crop('<section class="sb"><div class="h"><h3>Payments</h3>' + sx('Stale') + '</div><div class="km"><b>15 / 18</b><span>products active</span></div>' + kvs([['Last observed', '11:02 · 3 h 20 m ago', 1], ['Last successful', '11:02', 1], ['Last changed', '7 Nov 06:00', 1], ['Freshness', fr('st', 'stale · threshold 15 m')]]) + '<div class="f"><span>Figures may be out of date</span><button type="button" class="btn bsm">Refresh</button></div></section>', 420),
+      PL09f: () => crop('<section class="cd" style="gap:6px;border-color:var(--negE)"><div class="ch"><h2>AI</h2>' + sx('Unknown', 'Could not be read') + '</div><p class="sub" style="color:var(--ink)">The AI usage service didn’t respond. Budget protection still runs on its own and is not affected.</p><div style="display:flex;gap:8px"><button type="button" class="btn bsm">Try again</button><span class="foot">last good read 13:41</span></div></section>', 420),
+      PL02c: () => crop(attention([], { sm: '0 items', empty: '<div class="nt"><span class="ic" aria-hidden="true">?</span><div><b>Nothing needs attention among the signals we can read.</b><div class="mu">Telemetry is unavailable, so this isn’t an all-clear. 2 signals are Unknown.</div></div><span class="bt"><a class="btn bsm" href="#">See unknown signals</a></span></div>' }), 900),
+      PL02a: () => crop(attention(NA.slice(0, 4), { sm: '7 items · most severe first', foot: '<p class="foot" style="padding-top:6px">+ 3 more Low and Info · <a href="#">Show all</a></p>' }), 900),
+      PL02b: () => crop(attention([['Critical', 'Payments webhooks failing', '12 consecutive HTTP 500 responses from our endpoint. Checkout completions aren’t being recorded.', 'Critical', 'since 13:48', '14:21', 'Open webhook console'], ['High', 'DLQ depth rising', '47 messages, up from 0 at 13:50. Mostly payment events.', 'Degraded', 'since 13:50', '14:21', 'Inspect DLQ'], ['High', 'Calendly integration error', 'OAuth token rejected (HTTP 401).', 'Error', 'since 5 Nov 09:14', '14:20', 'Reconnect Calendly']], { sm: '3 items · 1 critical' }), 900) };
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'PL01' || B === 'PL11') html = page(overview(), { h: 1500 });
+    else if (B === 'PL03a') html = crop(health('Healthy'), 1100);
+    else if (B === 'PL03b') html = crop(health('Degraded'), 1100);
+    else if (B === 'PL03c') html = crop(health('Unknown'), 1100);
+    else if (B === 'PL03d') html = crop(health('Critical'), 1100);
+    else if (B === 'PL04') html = page(integrations(), { h: 1350 });
+    else if (B === 'PL05') html = page(payments(), { h: 900 });
+    else if (B === 'PL06') html = page(flags(), { h: 1000 });
+    else if (B === 'PL07') html = crop(consoles(), 760);
+    else if (B === 'PL08a') html = '<div class="cv" style="' + VARS + '">' + mA() + '</div>';
+    else if (B === 'PL08b') html = '<div class="cv" style="' + VARS + '">' + mB() + '</div>';
+    else if (B === 'PL10a') html = crop(attention(NA.slice(0, 3), { focus: 0 }), 900);
+    else if (B === 'PL10b') html = page(calendly(), { h: 900 });
+    else if (B === 'PL12') html = page(overview(), { h: 1100, ead: true });
+    else if (STATES[B]) html = STATES[B]();
+    else html = page(overview(), { h: 1500 });
+    return { html: { __html: html } };
+  }
+}
+</script>
+</body>
+</html>

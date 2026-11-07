@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Platform · v2 redesign</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Platform — an operator’s control plane</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">One overall health state that takes telemetry confidence into account, not just cron. Below it, a severity-ranked queue where every item has a state, an observed time and a fix-it action. Then four compact system blocks (status, key metric, freshness, console), active controls, capability coverage, a significant-events feed and consoles grouped by domain. The status vocabulary is fixed (Healthy, Degraded, Critical, Unknown, Disabled, Not configured, Stale, Partial, Available) and always pairs a symbol with words. Unknown never reads as zero. This console uses an emerald and neutral system palette with ink primary buttons — no violet accent. Eadwyn stays collapsed unless it has an insight, is asked or is pinned.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026, 14:22 UTC · Super Admin · content from the live-state examples in the brief</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Platform v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const boards = [
+      ['PL-01', 'Platform overview · desktop', 'Header with version context (version, commit, environment, deployed at), observed time and scope. Platform health · Degraded, with the one-line summary and the confidence note explaining why. Needs attention sits beside active controls and capability coverage, so problems never need a scroll. Then core systems, operational activity and grouped consoles, with Event syndication in Preview / Planned.', [F('PL01', false, 1500)]],
+      ['PL-02', 'Needs attention · states', 'A · Normal: severity, description, state, how long and when observed, and one fix-it action per item; overflow is counted. B · Critical: a filled Critical label leads, with related items (DLQ) beside it. C · No items, but signals unknown: this is deliberately not an all-clear.', [C('PL02a', 'A · Ranked queue', 900, 420), C('PL02b', 'B · Critical present', 900, 340), C('PL02c', 'C · Nothing readable is wrong', 900, 160)]],
+      ['PL-03', 'Health variants', 'The same header in four states. Healthy only when every core signal was read recently. Degraded when something is wrong or confidence is reduced. Unknown when core signals can’t be read — explicitly not healthy. Critical when user-facing capability is failing.', [C('PL03a', 'Healthy', 1100, 140), C('PL03b', 'Degraded', 1100, 150), C('PL03c', 'Unknown', 1100, 150), C('PL03d', 'Critical', 1100, 150)]],
+      ['PL-04', 'Integrations summary', 'Providers with status, scope, last success and failure, and verification freshness. Managed keys show only metadata — requirement, configured, rotated, expiry, last good and failed use, verification, rotation due — never a secret. Broadcast channels distinguish Verified recently from merely configured.', [F('PL04', false, 1350)]],
+      ['PL-05', 'Payments and webhook health', 'Webhook health has eight fields: health, last delivery, last success, last failure, consecutive failures, silence threshold, expected activity and endpoint. The 14-day strip shows real zeros after 2 Nov in red, so silence reads as a problem rather than as “0 failures”. Stripe Tax and session charging are described by what they mean for members.', [F('PL05')]],
+      ['PL-06', 'Flags and switches', 'Split into Active overrides (none, with the last one released), Deployment configuration (needs a deploy to change) and Runtime safety systems (act immediately). Every row states its scope, its impact on users right now and when it last changed. No “Eadwyn off: off” style labels.', [F('PL06', false, 1000)]],
+      ['PL-07', 'Navigation grouping', 'Consoles grouped by domain (Infrastructure, Payments, AI, Integrations, Data sources, Controls), each link carrying its live state where one applies. Features that don’t yet do what they advertise live in a dashed Preview / Planned section.', [C('PL07', false, 760, 520)]],
+      ['PL-08', 'Mobile / narrow', 'A · Health first, then Needs attention as stacked items with full-width actions; Low and Info items fold away. B · Core systems as disclosure rows showing status and key metric, with one open; controls, coverage and consoles become rows. No squeezed desktop columns.', [P('PL08a', 'A · Health and attention'), P('PL08b', 'B · Systems, collapsed')]],
+      ['PL-09', 'Empty, unavailable and partial', 'A · Unavailable telemetry, with “Why this may be unknown” open. B · Partial coverage. C · Zero published incidents, worded neutrally. D · Not configured, with the next step. E · Stale, showing last observed, last successful and last changed. F · A block that couldn’t be read, with Try again.', [C('PL09a', 'A · Unavailable', 420, 520), C('PL09b', 'B · Partial', 420, 260), C('PL09c', 'C · Empty, not green', 420, 200), C('PL09d', 'D · Not configured', 420, 180), C('PL09e', 'E · Stale', 420, 300), C('PL09f', 'F · Could not be read', 420, 180)]],
+      ['PL-10', 'Detail console transition', 'A · The operator activates Reconnect Calendly from Needs attention (focus shown). B · The Calendly console opens with the breadcrumb, a back link to Needs attention, the same severity and state, last success and failure, consecutive failures, user impact, fix steps, recent attempts and How this is measured.', [C('PL10a', 'A · From Needs attention', 900, 320), F('PL10b', 'B · Calendly console')]],
+      ['PL-11', 'Dark mode', 'PL-01 on #0b1220 / #111827 with emerald #34d399. Severity and status keep their words and symbols, so the dark version carries the same information.', [F('PL11', false, 1500)]],
+      ['PL-12', 'Eadwyn opened for an insight', 'Collapsed to a narrow Ask rail by default. It opens only when asked, pinned, or — as here — when it has an actionable operational insight. The insight is labelled as a correlation and links to the console; model and pricing details don’t appear.', [F('PL12', false, 1100)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
