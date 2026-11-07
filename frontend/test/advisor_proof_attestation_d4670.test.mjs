@@ -68,7 +68,7 @@ test('asking needs their email, and a refusal is a fixed sentence keyed on its c
     await type(view, 'Who confirms this', 'Sam');
     const form = view.nodes().find((n) => n.tagName === 'FORM' && /Record the ask/.test(walk(n)));
     await act(async () => { view.props(form).onSubmit({ preventDefault() {} }); });
-    assert.match(view.text(), new RegExp(ASK_REFUSALS.attester_email_required.replace(/[.:]/g, '.')));
+    assert.ok(view.text().includes(ASK_REFUSALS.attester_email_required), 'the fixed sentence for a missing address');
     assert.equal(calls.filter(([k]) => k === 'requestAdvisorProofConsent').length, 0, 'nothing is sent without an address');
     await type(view, 'Their email', 'me@example.com');
     await act(async () => { view.props(form).onSubmit({ preventDefault() {} }); });
@@ -110,7 +110,7 @@ test('the attester sees the exact claim and answers only with the emailed code',
     await press(view, 'Confirm'); await view.flush();
     const sent = calls.filter(([k]) => k === 'respondToAdvisorProofConsent').at(-1)[1][1];
     assert.deepEqual([sent.code, sent.claim_sha256], ['123456', 'abc'], 'the code and the claim it was shown travel with the answer');
-    assert.match(view.text(), new RegExp(ATTEST_REFUSALS.code_wrong.replace(/\./g, '\\.')));
+    assert.ok(view.text().includes(ATTEST_REFUSALS.code_wrong), 'the fixed sentence for a wrong code');
     assert.doesNotMatch(view.text(), /raw worker text/);
   } finally { await view.unmount(); restore(); }
 });

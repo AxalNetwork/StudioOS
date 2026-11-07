@@ -58,10 +58,22 @@ export const CODE_MAX_ATTEMPTS = 5;
 /** Codes one consent may send in an hour: enough for a mistyped address to be retried, not a mail cannon. */
 export const CODES_PER_HOUR = 5;
 
-/** A six-digit code from the platform CSPRNG. */
-export function newCode(): string {
-  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
-  return String(n).padStart(6, '0');
+/**
+ * A six-digit code from the platform CSPRNG, every code equally likely.
+ *
+ * `random32 % 1_000_000` is biased: 2^32 is not a multiple of a million, so the
+ * lowest 967,296 codes would come up slightly more often. Instead the draw is
+ * repeated while it falls in the partial range at the top, and the rest is
+ * split into a million equal spans of 4,294 values (4,294 x 1,000,000 is the
+ * largest multiple of a million that fits in 32 bits). Dividing by a span, not
+ * taking a remainder, maps each span to one code.
+ */
+const CODE_SPAN = 4294;
+const CODE_LIMIT = CODE_SPAN * 1_000_000;
+export function newCode(draw: () => number = () => crypto.getRandomValues(new Uint32Array(1))[0]): string {
+  let n = draw();
+  while (n >= CODE_LIMIT) n = draw();
+  return String(Math.floor(n / CODE_SPAN)).padStart(6, '0');
 }
 /** Bound to its consent, so a hash leaked from one row answers no other. */
 export const codeHash = (consentId: number, code: string) => sha256Hex(`advisor-proof:${consentId}:${code}`);

@@ -13,7 +13,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import advisors from '../src/routes/advisors.ts';
-import { attestationMailer, claimSha256, consentState, maskEmail } from '../src/services/advisorProofAttestation.ts';
+import { attestationMailer, claimSha256, consentState, maskEmail, newCode } from '../src/services/advisorProofAttestation.ts';
 
 const SQL = resolve(dirname(fileURLToPath(import.meta.url)), '../sql');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -233,4 +233,16 @@ test('the pure rules: masked addresses and the consent states', async () => {
   assert.equal(consentState({ consent_given: 1, withdrawn_at: null, consent_given_at: 'x', claim_sha256: null }, sha), 'needs_reconfirmation');
   assert.equal(consentState({ consent_given: 0, withdrawn_at: 'y', consent_given_at: 'x', claim_sha256: sha }, sha), 'withdrawn');
   assert.equal(consentState({ consent_given: 0, withdrawn_at: 'y', consent_given_at: null, claim_sha256: sha }, sha), 'declined');
+});
+
+test('a code is drawn without modulo bias: the top partial range is redrawn, and each span of 4,294 draws is one code', () => {
+  // Mutation checked: `% 1_000_000` restored (or the redraw removed) -> these exact codes differ.
+  const seq = (...n: number[]) => { let i = 0; return () => n[i++]; };
+  assert.equal(newCode(seq(4_294_000_000, 8_588_000)), '002000', 'a draw in the top partial range is thrown away, not used');
+  assert.equal(newCode(seq(4_294_967_295, 4_294_000_001, 0)), '000000', 'every draw at or above 4,294,000,000 is redrawn');
+  assert.equal(newCode(seq(0)), '000000');
+  assert.equal(newCode(seq(4_293)), '000000', 'the first span of 4,294 values is one code');
+  assert.equal(newCode(seq(4_294)), '000001', 'the next span is the next code');
+  assert.equal(newCode(seq(4_293_999_999)), '999999', 'the last value below the limit is the last code');
+  for (let i = 0; i < 200; i += 1) assert.match(newCode(), /^\d{6}$/);
 });
