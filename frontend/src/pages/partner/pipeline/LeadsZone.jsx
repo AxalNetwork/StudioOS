@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import RankByFit from '../../../ui/RankByFit';
@@ -8,6 +8,7 @@ import {
   Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
+import { usePipelineZone } from './usePipelineZone';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -188,7 +189,8 @@ function LeadCard({ row, busy, onPass, note }) {
             type="button" className={`${buttonClass} mt-3`}
             disabled={busy || !draft.reason}
             onClick={async () => {
-              await onPass(row, draft);
+              // Closed and cleared only once the server took the pass.
+              if (!(await onPass(row, draft))) return;
               setPassing(false);
               setDraft({ reason: '', note: '' });
             }}
@@ -203,37 +205,14 @@ function LeadCard({ row, busy, onPass, note }) {
 }
 
 export default function PartnerLeadsZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null });
+  const { state, load, run, busy, note } = usePipelineZone(
+    () => api.listPartnerLeads(), 'The lead list did not load.',
+  );
   const [view, setView] = useState('open');
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);
   // #3938 (IN10): Rank by fit orders the open leads against the firm's own audience fit, as a view.
   const [rank, setRank] = useState(null);
 
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      const r = await api.listPartnerLeads();
-      setState({ loading: false, error: '', data: r || {} });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'The lead list did not load.', data: null });
-    }
-  }, []);
-  useEffect(() => { load(); }, [load]);
 
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
-    }
-  }, [load]);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];

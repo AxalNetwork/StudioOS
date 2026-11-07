@@ -17,7 +17,7 @@ import DealFlow from '../src/pages/investor/dealflow/DealFlow.jsx';
 import { viewOf } from '../src/pages/investor/dealflow/dealFlowModel.js';
 import {
   BOARD_STAGES, DEFAULT_COLUMNS, SCOPE_KEYS, columnAsks, moneyText, defaultSettings, emptyFilters, filterChips, fitCell, flowRows, moveTargets, namesSettings,
-  passes, scopeCell, scoresOf, settingsHref, settingsOf, settingsOfSpec, sortRows, specOf, stripScopes, toggleCard, toggleColumn, viewChanged,
+  passes, scopeCell, scoresOf, settingsHref, settingsOf, settingsOfSpec, sortRows, specOf, stripScopes, toggleCard, toggleColumn, viewChanged, defaultHref,
 } from '../src/pages/investor/dealflow/flowModel.js';
 import { api } from '../src/lib/api.js';
 import { dealFlowApi } from '../src/lib/api/dealFlow.js';
@@ -451,4 +451,98 @@ test('wiring: no browser pop-up, no number for a score, dark pairs on every ligh
   assert.match(read('frontend/src/lib/api/ventureScores.js'), /batch: \(dealIds\) => request\('\/venture-scores\/batch'/);
   assert.match(read('frontend/src/lib/api/dealViews.js'), /fit: \(ids\) =>/);
   assert.ok(read(`${dir}README.md`).includes('flowModel.js'));
+});
+
+// ---------------------------------------------------------------- D4634 (#4634): phone reach and explicit addresses
+
+/** 30 rounds: 12 in the flow at mixed stages (3 of them passed), 18 listed but not on the member's deals. */
+const MANY = () => {
+  const stages = ['sourcing', 'screening', 'diligence', 'commit', 'passed'];
+  const items = Array.from({ length: 12 }, (_, i) => entry({ deal_id: 100 + i, venture: `Synthetic flow ${String(i).padStart(2, '0')}`, stage: i < 3 ? 'passed' : stages[i % 4] }));
+  const deals = Array.from({ length: 30 }, (_, i) => ({ id: 100 + i, project_name: `Synthetic ${i < 12 ? 'flow' : 'listed'} ${String(i).padStart(2, '0')}`, status: 'active', currency: 'EUR' }));
+  return { flow: { scope: 'firm', by_stage: {}, items }, deals };
+};
+
+test('D4634 phone table: every one of 27 matching rounds (of 30) is reachable a page at a time, with the same count as the desktop table', async () => {
+  const data = MANY();
+  for (const phone of [true, false]) {
+    const t = harness({ phone });
+    const s = stubs({ 'dealFlowApi.flow': async () => data.flow, 'api.listDeals': async () => data.deals, 'ventureScoresApi.batch': async () => ({ items: [] }), 'dealViewsApi.fit': async () => ({ items: [] }) });
+    try {
+      await act(async () => t.root.render(page('/deals?view=table&scope=all')));
+      await t.settle();
+      const rowIds = () => t.all(phone ? /^dealflow-phone-row-/ : /^dealflow-row-/).map((n) => t.props(n)['data-testid'].replace(/^dealflow-(phone-)?row-/, ''));
+      const seen = new Set(rowIds());
+      assert.equal(seen.size, 25, `${phone ? 'phone' : 'desktop'}: one page of 25`);
+      const pager = t.text(t.byId(phone ? 'dealflow-phone-pages' : 'dealflow-pages'));
+      // The default filter leaves the 3 passed rounds out: 27 of the 30 match, on either screen.
+      assert.match(pager, /1–25 of 27/, `${phone ? 'phone' : 'desktop'}: the count is the whole matching set`);
+      await t.click(phone ? 'dealflow-phone-next-page' : 'dealflow-next-page');
+      for (const id of rowIds()) seen.add(id);
+      assert.equal(seen.size, 27, `${phone ? 'phone' : 'desktop'}: the 26th and 27th rows are reachable`);
+      assert.match(t.text(t.byId(phone ? 'dealflow-phone-pages' : 'dealflow-pages')), /26–27 of 27/);
+      assert.equal(t.props(t.byId(phone ? 'dealflow-phone-next-page' : 'dealflow-next-page')).disabled, true, 'no page past the last');
+    } finally { s.restore(); await t.close(); }
+  }
+});
+
+test('D4634 phone table: a round not on the member\'s deals offers Add to my deal flow, and it completes', async () => {
+  const t = harness({ phone: true });
+  const s = stubs();
+  try {
+    await act(async () => t.root.render(page('/deals?view=table&scope=all')));
+    await t.settle();
+    assert.equal(t.byId('dealflow-phone-add-1'), undefined, 'a round already in the flow offers no Add');
+    await t.click('dealflow-phone-add-9');
+    await t.change('dealflow-add-stage', 'screening');
+    await t.click('dealflow-add-go');
+    assert.deepEqual(s.calls.filter((c) => c[0] === 'add').at(-1)?.[1]?.deal_id, 9, 'the add went to the API for that round');
+  } finally { s.restore(); await t.close(); }
+});
+
+test('D4634 phone board: a Passed filter shows the passed deals on a Passed tab, as the desktop board does', async () => {
+  const t = harness({ phone: true });
+  const s = stubs();
+  try {
+    await act(async () => t.root.render(page('/deals')));
+    await t.settle();
+    assert.equal(t.byId('dealflow-phone-stage-passed'), undefined, 'without the filter there is no Passed tab');
+    await act(async () => t.root.render(page('/deals?stage=diligence,passed')));
+    await t.settle();
+    assert.ok(t.byId('dealflow-phone-stage-passed'), 'the filter asks for Passed, so the phone board has its tab');
+    await t.click('dealflow-phone-stage-passed');
+    assert.ok(t.byId('dealflow-card-4'), 'the passed deal is on it');
+  } finally { s.restore(); await t.close(); }
+});
+
+test('D4634: an explicit view or scope survives a conflicting saved default; the bare root still takes the default', async () => {
+  const conflicting = async () => ({ ...VIEWS(), items: [{ ...VIEWS().items[1], uid: 'vb', spec: { version: 1, view: 'board', scope: 'mine', sort: { by: 'market', dir: 'desc' } } }], default_uid: 'vb' });
+  const cases = [
+    ['/deals?view=table', /view=table/, /scope=/],
+    ['/deals?scope=new', /scope=new/, /view=table/],
+    ['/deals?view=table&scope=all', /view=table.*scope=all|scope=all.*view=table/, null],
+  ];
+  for (const [url, keeps, notHas] of cases) {
+    const t = harness();
+    const s = stubs({ 'dealViewsApi.list': conflicting });
+    try {
+      await act(async () => t.root.render(page(url)));
+      await t.settle();
+      const now = t.text(t.byId('probe'));
+      assert.match(now, keeps, `${url} keeps its explicit choice (now ${now})`);
+      if (notHas) assert.doesNotMatch(now, notHas, `${url}: the default fills in only what the address does not name`);
+      assert.match(now, /v=vb/, `${url}: the default's other settings still apply`);
+    } finally { s.restore(); await t.close(); }
+  }
+  const t = harness();
+  const s = stubs({ 'dealViewsApi.list': conflicting });
+  try {
+    await act(async () => t.root.render(page('/deals')));
+    await t.settle();
+    assert.match(t.text(t.byId('probe')), /^\/deals\?.*v=vb/, 'the bare root opens on the default');
+    assert.doesNotMatch(t.text(t.byId('probe')), /view=table/, 'the default is a board');
+  } finally { s.restore(); await t.close(); }
+  // Refresh and back/forward re-enter with the address the default produced; it names a view, so nothing is reapplied.
+  assert.equal(defaultHref('?view=table&v=vb&sort=market&dir=desc', { uid: 'vb', spec: { view: 'board' } }), null);
+  assert.equal(defaultHref('?view=table', null), null);
 });

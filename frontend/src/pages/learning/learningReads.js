@@ -183,15 +183,17 @@ export async function recordItemPosition(uid, seconds, percent = null) {
 }
 
 /** #4180: one page of the exercises a member may open, with the route's total. */
-export async function readExercises({ offset = 0 } = {}) {
-  const reply = await learningApi.exercises({ limit: ALL_LIMIT, offset });
-  return { rows: listOf(reply, 'items', 'The exercise list').map(exerciseRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset };
+export async function readExercises({ offset = 0, q = '' } = {}) {
+  const query = String(q || '').trim();
+  const reply = await learningApi.exercises({ limit: ALL_LIMIT, offset, ...(query ? { q: query } : {}) });
+  return { rows: listOf(reply, 'items', 'The exercise list').map(exerciseRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset, q: query };
 }
 
 /** #4180: one page of the exams a member may open, with the route's total. */
-export async function readExams({ offset = 0 } = {}) {
-  const reply = await learningApi.exams({ limit: ALL_LIMIT, offset });
-  return { rows: listOf(reply, 'items', 'The exam list').map(examRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset };
+export async function readExams({ offset = 0, q = '' } = {}) {
+  const query = String(q || '').trim();
+  const reply = await learningApi.exams({ limit: ALL_LIMIT, offset, ...(query ? { q: query } : {}) });
+  return { rows: listOf(reply, 'items', 'The exam list').map(examRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset, q: query };
 }
 
 /** #4180: My learning's exercises, one row per exercise. */

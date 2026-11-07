@@ -1200,7 +1200,11 @@ test('a zone whose row can narrow hands the export the narrowed rows', () => {
 
     // The identifier must be DERIVED from the loaded list, not be it. A
     // `const visible = items.filter(…)` passes; handing over `items` does not.
-    const derived = new RegExp(`const ${named[1]} = [^;]*\\.(filter|sort)\\(`);
+    // A row set taken from a shared view-model function (`const { exportRows }
+    // = fitView(items, view)`, #4696) is derived too: the function is the one
+    // definition the table, the list and the export all read, and
+    // offers_reconcile_4696 pins what it returns.
+    const derived = new RegExp(`const ${named[1]} = [^;]*\\.(filter|sort)\\(|const \\{[^}]*\\b${named[1]}\\b[^}]*\\} = \\w+View\\(`);
     assert.match(src, derived,
       `${one.file} exports "${named[1]}", which is not narrowed — the file would not match the chips on screen`);
 

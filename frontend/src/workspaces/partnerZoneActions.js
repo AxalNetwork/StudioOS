@@ -163,9 +163,9 @@ export const PARTNER_ZONE_ACTIONS = {
     // The register was built for a different zone. `partner_fit_rules` (209,
     // plus 229's `signal`) is exactly it — what this firm takes, what it passes
     // on, and the budget below which it does not bid — and `service_offerings`
-    // is what it sells. `/offers/fit-rules` answered `enforcement: 'none'` all
-    // that time, accurately: nothing read them. `/pipeline/leads` now does, and
-    // every receipt on a lead names the rule it came from.
+    // is what it sells. `/offers/fit-rules` answered `enforcement: 'none'` while
+    // nothing read them. `/pipeline/leads` now does, the response says
+    // `score_and_rank` (#4696), and every receipt on a lead names its rule.
     //
     // So this op LINKS rather than opening an editor of its own. The rules are
     // edited where they are written and read everywhere they apply; a second

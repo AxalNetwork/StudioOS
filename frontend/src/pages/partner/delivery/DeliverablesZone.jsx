@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
@@ -15,6 +15,7 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { useMutations, useZoneRead, signature } from './useZoneMutations';
 
 /**
  * Delivery · Deliverables — `/delivery/deliverables`.
@@ -52,10 +53,16 @@ function OpenedState({ row }) {
   );
 }
 
-function DeliverableRow({ row, busy, onSave, onDelete, note }) {
+function DeliverableRow({ row, saving, deleting, onSave, onDelete, note }) {
   const [edit, setEdit] = useState(false);
   const [draft, setDraft] = useState(row);
-  useEffect(() => { setDraft(row); }, [row]);
+  const editButton = useRef(null);
+  // Re-seeded only when THIS record's saved values change. Keying on the row
+  // object reset the open editor on every refetch, including the one a save on
+  // another row triggers (#4698).
+  const seed = signature(row.title, row.version, row.link_url, row.sent_at);
+  useEffect(() => { setDraft(row); }, [seed]);
+  const busy = saving || deleting;
 
   return (
     <div className="border-t border-axal-hairline py-3 first:border-t-0">
@@ -78,7 +85,8 @@ function DeliverableRow({ row, busy, onSave, onDelete, note }) {
             )}
           </div>
         </div>
-        <button type="button" className={ghostButtonClass} onClick={() => setEdit((v) => !v)}>
+        <button type="button" ref={editButton} className={ghostButtonClass} aria-expanded={edit}
+          onClick={() => { if (edit) setDraft(row); setEdit((v) => !v); }}>
           {edit ? 'Cancel' : 'Edit'}
         </button>
       </div>
@@ -116,10 +124,20 @@ function DeliverableRow({ row, busy, onSave, onDelete, note }) {
             them.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className={buttonClass} disabled={busy}
-              onClick={async () => { await onSave(row, draft); setEdit(false); }}>Save</button>
+            {/* aria-disabled, not disabled, while a request is out: a disabled
+                button drops keyboard focus, and the person is still here when
+                the save is refused. The handler's own guard is what stops a
+                second request. */}
+            <button type="button" className={buttonClass} aria-disabled={busy || undefined}
+              onClick={async () => {
+                if (busy) return;
+                const ok = await onSave(row, draft);
+                // Close only on a confirmed save: a refused one leaves the
+                // typed values in the open editor, ready for another go.
+                if (ok) { setEdit(false); editButton.current?.focus?.(); }
+              }}>{saving ? 'Saving…' : 'Save'}</button>
             <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
-              disabled={busy} onClick={() => onDelete(row)}>Delete</button>
+              aria-disabled={busy || undefined} onClick={() => { if (!busy) onDelete(row); }}>Delete</button>
           </div>
           <SaveNote note={note?.scope === `dl:${row.id}` ? note : null} />
         </div>
@@ -144,53 +162,53 @@ function ShipTile({ label, value, note, nr = false }) {
 }
 
 export default function PartnerDeliverablesZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null, engagements: null });
+  const { state: read, load } = useZoneRead(async () => {
+    // The engagement list comes from the health read — it is the one endpoint
+    // that already returns every engagement this firm holds, and a second
+    // list route would be a third place the same set is assembled.
+    const [d, h] = await Promise.all([
+      api.listPartnerDeliverables(),
+      api.getPartnerDeliveryHealth(),
+    ]);
+    return { data: d || {}, engagements: Array.isArray(h?.items) ? h.items : [] };
+  }, 'The deliverables log did not load.');
+  const state = {
+    loading: read.loading,
+    error: read.error,
+    data: read.data?.data ?? null,
+    engagements: read.data?.engagements ?? null,
+  };
   const [view, setView] = useState('never_opened');
-  const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [newItem, setNewItem] = useState({ engagement_id: '', title: '', version: '', link_url: '', sent_at: '' });
+  const EMPTY_ITEM = { engagement_id: '', title: '', version: '', link_url: '', sent_at: '' };
+  const [newItem, setNewItem] = useState(EMPTY_ITEM);
+  const { run: runMutation, isPending } = useMutations();
+  const addToggle = useRef(null);
+  const [focusAdd, setFocusAdd] = useState(0);
 
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      // The engagement list comes from the health read — it is the one endpoint
-      // that already returns every engagement this firm holds, and a second
-      // list route would be a third place the same set is assembled.
-      const [d, h] = await Promise.all([
-        api.listPartnerDeliverables(),
-        api.getPartnerDeliveryHealth(),
-      ]);
-      setState({
-        loading: false,
-        error: '',
-        data: d || {},
-        engagements: Array.isArray(h?.items) ? h.items : [],
-      });
-    } catch (e) {
-      setState({
-        loading: false,
-        error: e?.message || 'The deliverables log did not load.',
-        data: null,
-        engagements: null,
-      });
-    }
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
+  // One operation, one key: a second click on the same operation while its
+  // request is out starts nothing, and a different row is not held up by it.
+  // Resolves true only for a CONFIRMED success, which is what lets a caller
+  // close or reset its editor afterwards.
+  const act = useCallback(async (key, fn, ok, scope) => {
     setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
+    const r = await runMutation(key, fn);
+    if (r.skipped) return false;
+    if (!r.ok) {
+      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      return false;
     }
-  }, [load]);
+    setNote({ ok: true, text: ok, scope });
+    load();
+    return true;
+  }, [runMutation, load]);
+
+  // After a confirmed create the form is gone; focus goes to the control that
+  // reopens it, so a keyboard user is not dropped onto the page.
+  useEffect(() => {
+    if (focusAdd) addToggle.current?.focus?.();
+  }, [focusAdd, read.data]);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -249,7 +267,73 @@ export default function PartnerDeliverablesZone() {
   // 400s, so `isEmpty` is forced rather than inferred from rows that never
   // arrived, and `error` is cleared so the shared "This did not load" card —
   // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  // The "log a deliverable" form. A function of state rather than a block in
+  // the populated body, because the FIRST deliverable is logged from the empty
+  // state, where the populated body is not drawn (#4698).
+  const creating = isPending('create');
+  const addForm = (
+    <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700" data-testid="deliverable-add-form">
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="Engagement">
+          <select className={inputClass} value={newItem.engagement_id}
+            onChange={(e) => setNewItem({ ...newItem, engagement_id: e.target.value })}>
+            <option value="">Choose one</option>
+            {engagements.map((e) => (
+              <option key={e.engagement_id} value={e.engagement_id}>
+                {e.founder_name || e.need_title || e.engagement_uid}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Title">
+          <input className={inputClass} value={newItem.title} maxLength={200}
+            onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} />
+        </Field>
+        <Field label="Version">
+          <input className={inputClass} value={newItem.version} maxLength={60}
+            onChange={(e) => setNewItem({ ...newItem, version: e.target.value })} />
+        </Field>
+        <Field label="Sent on" hint="Leave empty if it is not out yet.">
+          <input className={inputClass} value={newItem.sent_at} maxLength={40} placeholder="2026-09-04"
+            onChange={(e) => setNewItem({ ...newItem, sent_at: e.target.value })} />
+        </Field>
+      </div>
+      <button
+        type="button" className={`${buttonClass} mt-3`}
+        disabled={!newItem.title.trim() || !newItem.engagement_id}
+        aria-disabled={creating || undefined}
+        onClick={async () => {
+          if (creating) return;
+          const sending = newItem;
+          const ok = await act(
+            'create',
+            () => api.createPartnerDeliverable(sending.engagement_id, sending),
+            'Logged.', 'new',
+          );
+          // Reset and close only once the Worker has confirmed it. A refusal
+          // leaves every field as typed.
+          if (ok) {
+            setNewItem(EMPTY_ITEM);
+            setAdding(false);
+            setFocusAdd((n) => n + 1);
+          }
+        }}
+      >
+        {creating ? 'Logging…' : 'Log it'}
+      </button>
+      <SaveNote note={note?.scope === 'new' ? note : null} />
+    </div>
+  );
+
   const unlinked = isNoPartnerProfile(state.error);
+  // The confirmation for a create outlives the form it was made in: the form
+  // closes on success, and an announcement inside it would go with it.
+  const createdNote = !adding && note?.scope === 'new' ? <SaveNote note={note} /> : null;
+  const refreshNote = read.refreshError ? (
+    <p role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300">
+      The log could not be refreshed just now, so what is shown may be out of date. {read.refreshError}
+    </p>
+  ) : null;
 
   return (
     <>
@@ -273,6 +357,7 @@ export default function PartnerDeliverablesZone() {
       notice={unlinked ? <NoPartnerProfile /> : null}
       isEmpty={unlinked || (items.length === 0)}
       empty={(
+        <div className="space-y-4">
         <NothingYet
           title="Nothing logged yet"
           body={
@@ -281,12 +366,18 @@ export default function PartnerDeliverablesZone() {
             + 'reads the same rows to see what has been sent and not opened.'
           }
           action={engagements.length > 0
-            ? <button type="button" className={buttonClass} onClick={() => setAdding(true)}>Log a deliverable</button>
+            ? <button type="button" ref={addToggle} className={buttonClass} aria-expanded={adding} onClick={() => setAdding((v) => !v)}>{adding ? 'Cancel' : 'Log a deliverable'}</button>
             : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open proposals</Link>}
         />
+        {refreshNote}
+        {createdNote}
+        {adding && engagements.length > 0 && addForm}
+        </div>
       )}
     >
-      <div className="space-y-6">
+      <div className="space-y-6" aria-busy={read.refreshing || undefined}>
+        {refreshNote}
+        {createdNote}
         <ZoneHeading
           title="What was shipped"
           blurb={
@@ -295,7 +386,7 @@ export default function PartnerDeliverablesZone() {
             + 'this product lets them yet — so that column says so.'
           }
           action={engagements.length > 0 && (
-            <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
+            <button type="button" ref={addToggle} className={ghostButtonClass} aria-expanded={adding} onClick={() => setAdding((v) => !v)}>
               {adding ? 'Cancel' : 'Log a deliverable'}
             </button>
           )}
@@ -337,50 +428,7 @@ export default function PartnerDeliverablesZone() {
           <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.unopened_note}</p>
         )}
 
-        {adding && (
-          <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Engagement">
-                <select className={inputClass} value={newItem.engagement_id}
-                  onChange={(e) => setNewItem({ ...newItem, engagement_id: e.target.value })}>
-                  <option value="">Choose one</option>
-                  {engagements.map((e) => (
-                    <option key={e.engagement_id} value={e.engagement_id}>
-                      {e.founder_name || e.need_title || e.engagement_uid}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Title">
-                <input className={inputClass} value={newItem.title} maxLength={200}
-                  onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} />
-              </Field>
-              <Field label="Version">
-                <input className={inputClass} value={newItem.version} maxLength={60}
-                  onChange={(e) => setNewItem({ ...newItem, version: e.target.value })} />
-              </Field>
-              <Field label="Sent on" hint="Leave empty if it is not out yet.">
-                <input className={inputClass} value={newItem.sent_at} maxLength={40} placeholder="2026-09-04"
-                  onChange={(e) => setNewItem({ ...newItem, sent_at: e.target.value })} />
-              </Field>
-            </div>
-            <button
-              type="button" className={`${buttonClass} mt-3`}
-              disabled={busy || !newItem.title.trim() || !newItem.engagement_id}
-              onClick={async () => {
-                await run(
-                  () => api.createPartnerDeliverable(newItem.engagement_id, newItem),
-                  'Logged.', 'new',
-                );
-                setNewItem({ engagement_id: '', title: '', version: '', link_url: '', sent_at: '' });
-                setAdding(false);
-              }}
-            >
-              Log it
-            </button>
-            <SaveNote note={note?.scope === 'new' ? note : null} />
-          </div>
-        )}
+        {adding && addForm}
 
         <Instrument
           testid="shipped-log"
@@ -438,16 +486,19 @@ export default function PartnerDeliverablesZone() {
               <DeliverableRow
                 key={row.id}
                 row={row}
-                busy={busy}
+                saving={isPending(`save:${row.id}`)}
+                deleting={isPending(`delete:${row.id}`)}
                 note={note}
-                onSave={(r, draft) => run(
+                onSave={(r, draft) => act(
+                  `save:${r.id}`,
                   () => api.updatePartnerDeliverable(r.id, {
                     title: draft.title, version: draft.version,
                     link_url: draft.link_url, sent_at: draft.sent_at || null,
                   }),
                   'Saved.', `dl:${r.id}`,
                 )}
-                onDelete={(r) => run(
+                onDelete={(r) => act(
+                  `delete:${r.id}`,
                   () => api.deletePartnerDeliverable(r.id),
                   'Deleted.', `dl:${r.id}`,
                 )}
