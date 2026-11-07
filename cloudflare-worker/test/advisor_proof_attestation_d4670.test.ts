@@ -235,14 +235,17 @@ test('the pure rules: masked addresses and the consent states', async () => {
   assert.equal(consentState({ consent_given: 0, withdrawn_at: 'y', consent_given_at: null, claim_sha256: sha }, sha), 'declined');
 });
 
-test('a code is drawn without modulo bias: the top partial range is redrawn, and each span of 4,294 draws is one code', () => {
-  // Mutation checked: `% 1_000_000` restored (or the redraw removed) -> these exact codes differ.
+test('a code is six independent digits, each nibble 10 to 15 is redrawn, and no value is remapped', () => {
+  // Mutation checked: `nibble % 10` instead of the redraw, or no `< 10` filter -> these exact codes differ.
   const seq = (...n: number[]) => { let i = 0; return () => n[i++]; };
-  assert.equal(newCode(seq(4_294_000_000, 8_588_000)), '002000', 'a draw in the top partial range is thrown away, not used');
-  assert.equal(newCode(seq(4_294_967_295, 4_294_000_001, 0)), '000000', 'every draw at or above 4,294,000,000 is redrawn');
-  assert.equal(newCode(seq(0)), '000000');
-  assert.equal(newCode(seq(4_293)), '000000', 'the first span of 4,294 values is one code');
-  assert.equal(newCode(seq(4_294)), '000001', 'the next span is the next code');
-  assert.equal(newCode(seq(4_293_999_999)), '999999', 'the last value below the limit is the last code');
+  assert.equal(newCode(seq(0, 1, 2, 3, 4, 5)), '012345', 'a digit below 10 is itself');
+  assert.equal(newCode(seq(15, 0, 10, 1, 11, 2, 12, 3, 13, 4, 14, 5)), '012345', 'a nibble of 10 to 15 is thrown away, never remapped');
+  assert.equal(newCode(seq(9, 9, 9, 9, 9, 9)), '999999');
+  assert.equal(newCode(seq(0, 0, 0, 0, 0, 0)), '000000', 'leading zeros are kept');
+  // Each of 0 to 9 maps to itself and each of 10 to 15 is refused: 10 of 16 values are kept, equally.
+  for (let v = 0; v < 16; v += 1) {
+    const out = newCode(seq(v, 7, 7, 7, 7, 7, 7));
+    assert.equal(out, v < 10 ? `${v}77777` : '777777', `nibble ${v}`);
+  }
   for (let i = 0; i < 200; i += 1) assert.match(newCode(), /^\d{6}$/);
 });

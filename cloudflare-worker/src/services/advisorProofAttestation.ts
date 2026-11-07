@@ -61,19 +61,20 @@ export const CODES_PER_HOUR = 5;
 /**
  * A six-digit code from the platform CSPRNG, every code equally likely.
  *
- * `random32 % 1_000_000` is biased: 2^32 is not a multiple of a million, so the
- * lowest 967,296 codes would come up slightly more often. Instead the draw is
- * repeated while it falls in the partial range at the top, and the rest is
- * split into a million equal spans of 4,294 values (4,294 x 1,000,000 is the
- * largest multiple of a million that fits in 32 bits). Dividing by a span, not
- * taking a remainder, maps each span to one code.
+ * Each digit is a random nibble (0 to 15) kept only when it is below 10; the
+ * other six values are thrown away and drawn again. The six digits are
+ * independent and each of 0 to 9 is exactly as likely as any other, so every
+ * one of the million codes is. No remainder and no division is taken of the
+ * random value: `random % 10` and `floor(random / span)` both read as biased
+ * to CodeQL (js/biased-cryptographic-random), and the first one is.
  */
-const CODE_SPAN = 4294;
-const CODE_LIMIT = CODE_SPAN * 1_000_000;
-export function newCode(draw: () => number = () => crypto.getRandomValues(new Uint32Array(1))[0]): string {
-  let n = draw();
-  while (n >= CODE_LIMIT) n = draw();
-  return String(Math.floor(n / CODE_SPAN)).padStart(6, '0');
+export function newCode(draw: () => number = () => crypto.getRandomValues(new Uint8Array(1))[0] & 0x0f): string {
+  let code = '';
+  while (code.length < 6) {
+    const nibble = draw();
+    if (nibble < 10) code += String(nibble);
+  }
+  return code;
 }
 /** Bound to its consent, so a hash leaked from one row answers no other. */
 export const codeHash = (consentId: number, code: string) => sha256Hex(`advisor-proof:${consentId}:${code}`);
