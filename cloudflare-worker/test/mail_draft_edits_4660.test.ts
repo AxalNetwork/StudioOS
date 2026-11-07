@@ -55,12 +55,20 @@ async function fixture() {
 type F = Awaited<ReturnType<typeof fixture>>;
 const UID = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
-async function call(f: F, who: number, method: string, path: string, json?: unknown) {
+async function rawCall(f: F, who: number, method: string, path: string, json?: unknown) {
   const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await f.app.request(path, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: json === undefined ? undefined : JSON.stringify(json) }, f.env);
   const text = await res.text();
   let body: any = null; try { body = JSON.parse(text); } catch { body = text; }
   return { status: res.status, body };
+}
+/** D4666: a revision press brings its own estimate's quote, as the composer does; `rawCall` is the bare request. */
+async function call(f: F, who: number, method: string, path: string, json?: any) {
+  if (method === 'POST' && /\/revise$/.test(path) && json && !json.estimate && !('quote' in json)) {
+    const e = await rawCall(f, who, method, path, { ...json, estimate: true });
+    if (e.status === 200 && e.body?.estimate?.quote) json = { ...json, quote: e.body.estimate.quote };
+  }
+  return rawCall(f, who, method, path, json);
 }
 const save = (f: F, who: number, expected: unknown, edit: Record<string, unknown> = { to: 'ada@example.test', subject: 'My subject', body: 'My own words.\n\n  Indented, untrimmed.  ' }) =>
   call(f, who, 'PATCH', `/api/mail/drafts/${UID}`, { ...edit, expected_revision: expected });

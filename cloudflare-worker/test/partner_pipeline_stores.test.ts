@@ -559,7 +559,7 @@ test('a quarterly amount is divided by three rather than counted whole', async (
   const r = (await call(e, 'GET', '/retainers', ours)).body;
   // Summing raw would make MRR three times too big on every quarterly line.
   assert.equal(r.mrr_cents, 300000);
-  assert.match(r.mrr_basis, /quarterly amounts divided by three/);
+  assert.match(r.mrr_basis, /quarterly divided by three/);
 });
 
 test('a monthly retainer refuses a quarterly period label', async () => {
