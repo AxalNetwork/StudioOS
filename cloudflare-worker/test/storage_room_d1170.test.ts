@@ -282,7 +282,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'routes/admin_telegram.ts': 'HQ broadcast media',
   'routes/legal_83b.ts': 'an 83(b) receipt, never counted',
   'routes/company_documents.ts': 'company legal records in documents, not a measured D1169 store',
-  'routes/admin_licences.ts': 'licence documents',
+  'routes/admin_licences_brand.ts': 'a white-label licence\'s brand mark (#4707 moved it out of admin_licences.ts)',
   'routes/news.ts': 'HQ news',
   'routes/admin_programs.ts': 'an HQ export',
   'routes/kyb_admin.ts': 'identity documents, never counted',
@@ -374,7 +374,8 @@ test('HQ\'s read: Super Admin only, totals by kind, plan and state, and no name,
   const { owners } = await readStorageByOwner(f.env);
   const sum = [...owners.values()].reduce((n, t) => n + t.measured_bytes, 0);
   assert.equal(body.totals.measured_bytes, sum);
-  assert.equal(body.totals.members, 6);
+  const pops = body.populations;
+  assert.equal(pops.members.accounts + pops.staff.accounts, 6, 'D4856: members and staff are the six accounts');
   assert.deepEqual(body.by_kind.map((k: any) => k.key), [...STORAGE_KINDS]);
   assert.equal(body.by_kind.reduce((n: number, k: any) => n + k.measured_bytes, 0), sum);
   const founderFree = body.by_plan.find((p: any) => p.plan_key === 'founder:free');
@@ -401,7 +402,7 @@ test('HQ\'s read says what it could not read, and never states a guessed figure'
   assert.match(body.by_state_reason, /no member’s total is complete/);
   f.fail(/account_subscriptions/);
   const plans = (await f.call(66, 'GET', '/api/admin/platform/storage')).body;
-  assert.deepEqual([plans.by_plan, plans.by_state, plans.totals.members], [null, null, null]);
+  assert.deepEqual([plans.by_plan, plans.by_state, plans.populations], [null, null, null]);
   assert.equal(plans.by_plan_reason, 'The plans could not be read.');
 });
 

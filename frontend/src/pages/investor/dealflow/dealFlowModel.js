@@ -11,6 +11,7 @@
  */
 
 import { SCOPE_LABELS } from '../../../components/scoring/scorecard/scorecardModel.js';
+import { roundAsk } from '../../../components/deals/dealMoney.js';
 
 export const BASE = '/deals';
 export const COMPARE = '/deals/compare';
@@ -102,7 +103,7 @@ export function dealRow(d = {}) {
     name: d.project_name || 'Name not recorded',
     sector: d.project_sector || null,
     round: roundWord(d.status),
-    ask: num(d.amount),
+    ask: roundAsk(d),
     currency: d.currency || null,
     daysInStage: num(d.days_in_stage),
     member: Number(d.is_member) === 1,

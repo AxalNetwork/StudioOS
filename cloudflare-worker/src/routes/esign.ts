@@ -1988,6 +1988,40 @@ function notActionable(c: any, envRow: any, verb: 'voided' | 'reminded') {
 
 // POST /api/legal/esign/:id/void — the sender withdraws an envelope before
 // anyone has signed it. Body: { reason? } (≤ 500 chars).
+/**
+ * D4809: void an envelope on behalf of a workflow that replaces it (the cohort
+ * NDA's Send again), by its uuid. The same rule as the sender's void below:
+ * one batch, only while nobody has started to sign, recipients become 'void'.
+ * Returns whether the envelope is void afterwards (already void counts).
+ */
+export async function voidEnvelopeForResend(env: Env, envelopeUuid: string, reason: string, actorUserId: number): Promise<boolean> {
+  await ensureSchema(env);
+  const row: any = await env.DB.prepare('SELECT id, status FROM esign_envelopes WHERE envelope_uuid = ?').bind(envelopeUuid).first();
+  if (!row) return true;
+  if (row.status === 'void') return true;
+  const id = Number(row.id);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'void', last_error = ?
+        WHERE id = ? AND status IN ('sent', 'partially_signed')
+          AND NOT EXISTS (SELECT 1 FROM esign_recipients
+                           WHERE envelope_id = ? AND status IN ('signing', 'signed'))`
+    ).bind(reason, id, id),
+    env.DB.prepare(
+      `UPDATE esign_recipients SET status = 'void'
+        WHERE envelope_id = ? AND status = 'pending'
+          AND EXISTS (SELECT 1 FROM esign_envelopes WHERE id = ? AND status = 'void')`
+    ).bind(id, id),
+  ]);
+  const after: any = await env.DB.prepare('SELECT status FROM esign_envelopes WHERE id = ?').bind(id).first();
+  if (after?.status !== 'void') return false;
+  await appendAudit(env, id, {
+    ts: new Date().toISOString(), signer_id: actorUserId, signer_email: null,
+    action: 'envelope_voided', ip: 'system', meta: { by: 'workflow', reason },
+  });
+  return true;
+}
+
 esign.post('/:id{[0-9]+}/void', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);

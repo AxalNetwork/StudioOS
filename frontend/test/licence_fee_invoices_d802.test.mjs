@@ -15,6 +15,8 @@ import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import LicenceFeeInvoices from '../src/pages/admin/LicenceFeeInvoices.jsx';
 import { feeLine, money, paidLine, parseAmount } from '../src/pages/admin/licenceFeeInvoicesModel.js';
+import { licencePageSource } from './_licencePage.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
 const h = React.createElement;
 const LICENCE = { uid: 'lic_a' };
@@ -139,13 +141,13 @@ test('the calls go to the Worker\'s routes, and the licence console draws the ta
   assert.match(src, /method: 'PATCH', body: JSON\.stringify\(\{ paid_cents: paidCents/);
   assert.match(src, /method: 'PATCH', body: JSON\.stringify\(\{ status: 'void', void_note: voidNote \}\)/);
   assert.match(src, /`\/licence\/mine\/fee-invoices\/\$\{enc\(invoiceUid\)\}\/pdf`/);
-  const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/admin_licences.ts', import.meta.url), 'utf8');
+  const worker = licenceRoutesSource();
   for (const route of ["r.get('/:uid/fee-invoices'", "r.post('/:uid/fee-invoices'", "r.patch('/:uid/fee-invoices/:invoiceUid'", "r.get('/:uid/fee-invoices/:invoiceUid/pdf'"]) {
     assert.ok(worker.includes(route), route);
   }
   assert.ok(readFileSync(new URL('../../cloudflare-worker/src/routes/licence.ts', import.meta.url), 'utf8').includes("r.get('/mine/fee-invoices/:uid/pdf'"));
   assert.match(readFileSync(new URL('../src/lib/apiModules.generated.js', import.meta.url), 'utf8'), /export \* from '\.\/api\/licenceFeeInvoices\.js';/);
-  const page = readFileSync(new URL('../src/pages/admin/AdminLicences.jsx', import.meta.url), 'utf8');
+  const page = licencePageSource();
   assert.match(page, /\{step === FEE_INVOICES_STEP && <LicenceFeeInvoices licence=\{d\} \/>\}/);
   // D4707: the tab bar is drawn from licenceNavModel's list, test ids and all.
   assert.match(readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8'), /testId: 'licence-fee-invoices-tab'/);

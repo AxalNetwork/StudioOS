@@ -515,6 +515,13 @@ async function activateDueCycles(env: Env, nowMs: number): Promise<void> {
         `UPDATE cohort_applicants SET status = 'activated', decided_at = datetime('now') WHERE id = ? AND status = 'approved'`,
       ).bind(a.id).run();
       if ((upd.meta?.changes ?? 0) === 0) continue;
+      // D4657: the enrollment is the stable reference — this founder, this
+      // cycle, this applicant. Written first, so the admission below never
+      // exists without the cycle it belongs to.
+      const { ensureCohortEnrollment } = await import('./labEnrollment');
+      await ensureCohortEnrollment(env, {
+        userId: a.user_id, cycleId: cyc.id, applicantId: a.id, applicationId: a.application_id, startAt: cyc.start_at,
+      });
       await env.DB.prepare(
         `INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort)
          VALUES (?, 1, ?)

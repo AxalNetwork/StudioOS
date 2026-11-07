@@ -5,6 +5,7 @@
  *   POST   /blocks    { kind, ref?, project? }   one live update block, computed now; `{ block: null }` when there is none
  *   POST   /drafts    { person, intent, tone, length, refs[], blocks[], project?, estimate? }
  *   POST   /drafts/:uid/revise { instruction, project?, estimate? }
+ *   PATCH  /drafts/:uid { to?, subject, body, expected_revision }   D4660: the member's edit of one version, no run, no charge
  *   GET    /drafts[?person=]   GET /drafts/:uid   DELETE /drafts/:uid   the member's own drafts only
  *
  * A draft is one `mail_draft` run (`services/aiRouter.ts`), held and settled in
@@ -22,7 +23,7 @@ import { computeBlock, isBlockKind } from '../services/mail/blocks';
 import { contextPack, MailError, NOT_FOUND, parseRef, personRecord } from '../services/mail/contextPack';
 import {
   blocksNow, deleteDraft, draftAsk, draftMessages, draftOf, listDrafts, MAX_TOKENS, parentAsk,
-  projectParam, revisionInstruction, runDraft, ticked, type DraftAsk, type Revision,
+  projectParam, revisionInstruction, runDraft, saveDraftEdit, ticked, type DraftAsk, type Revision,
 } from '../services/mail/drafts';
 import type { Block } from '../services/mail/blocks';
 import type { Pack, PackItem } from '../services/mail/contextPack';
@@ -118,8 +119,21 @@ mail.post('/drafts/:uid/revise', async (c) => {
     const b = await body(c);
     const parent = await parentAsk(c.env, user, c.req.param('uid'));
     if (!parent) return refuse(c, 404, { code: 'not_found', message: 'Draft not found.' });
-    const revision = { subject: parent.row.subject, body: parent.row.body, instruction: revisionInstruction(b.instruction) };
+    // D4660: a revision starts from the member's saved edit of this version when there is one, else the generated text.
+    const revision = { subject: parent.current.subject, body: parent.current.body, instruction: revisionInstruction(b.instruction) };
     return await press(c, user, { ...parent.body, project: b.project, estimate: b.estimate }, { uid: parent.row.uid, revision });
+  } catch (e) { return failure(c, e); }
+});
+
+// D4660: the member's edit of one version, saved with no model run and no charge. Names the revision it read; 409 `stale_edit` otherwise.
+mail.patch('/drafts/:uid', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try {
+    const b = await body(c);
+    const out = await saveDraftEdit(c.env, user, c.req.param('uid'), { to: b.to, subject: b.subject, body: b.body, expected: b.expected_revision });
+    if (out.ok) return c.json({ draft: out.draft });
+    return refuse(c, out.status, { code: out.code, message: out.message, ...(out.current ? { extra: { draft: out.current } } : {}) });
   } catch (e) { return failure(c, e); }
 });
 

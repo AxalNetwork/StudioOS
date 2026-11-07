@@ -112,7 +112,7 @@ function AgentTable({ rows, onOpen, label }) {
   );
 }
 
-export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
+export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, addOff = null, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
   // The grouped footer's company reach is said only once it is live (#3697 part 2), as the page's managed note is.
   const [hidden, setHidden] = useState(() => new Set());
   const aside = <SkillsLink scope={scope} testId="team-agents-skills" />;
@@ -148,7 +148,8 @@ export default function AgentsCard({ block, loading, kind, scope = null, company
         <div className="flex flex-col items-center gap-3 rounded-axal-md border border-dashed border-axal-hairline px-6 py-8 text-center dark:border-gray-700" data-testid="team-agents-empty">
           <AgentTile size={40} />
           <p className={`m-0 max-w-md ${MUTED}`}>No agent works here yet. Add one in a role, like a CFO who drafts your runway note. It will only propose; you decide.</p>
-          {canAdd ? <button type="button" className={BTN_PRIMARY} onClick={onAdd} data-testid="team-agents-add">Add an AI agent</button> : null}
+          {canAdd ? <button type="button" className={`${BTN_PRIMARY} disabled:opacity-50`} onClick={onAdd} disabled={!!addOff} title={addOff || undefined} data-testid="team-agents-add">Add an AI agent</button> : null}
+          {canAdd && addOff ? <p role="status" className={`m-0 ${MUTED}`} data-testid="team-agents-add-off">{addOff}</p> : null}
           {planLocked ? <PlanLine /> : null}
         </div>
       </TeamCard>
