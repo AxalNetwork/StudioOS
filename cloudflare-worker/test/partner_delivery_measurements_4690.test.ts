@@ -186,8 +186,6 @@ async function call(
 }
 
 const ours = { user: OURS_USER, role: 'partner' };
-const theirs = { user: THEIRS_USER, role: 'partner' };
-const fran = { user: FOUNDER_USER, role: 'founder' };
 
 
 const d = (iso: string) => new Date(iso);
@@ -201,7 +199,6 @@ const nowQuarter = () => {
   return `${n.getUTCFullYear()}-Q${Math.floor(n.getUTCMonth() / 3) + 1}`;
 };
 const past = (days: number) => new Date(Date.now() - days * 86400000).toISOString();
-const future = (days: number) => new Date(Date.now() + days * 86400000).toISOString();
 
 function retainer(
   db: InstanceType<typeof DatabaseSync>, engagementId: number,
