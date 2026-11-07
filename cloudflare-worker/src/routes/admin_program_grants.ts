@@ -61,13 +61,14 @@ import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
-import { pushLicenceToBranch } from '../services/licencePush';
+import { pushLicenceToBranch, queuePushStatement } from '../services/licencePush';
+import { clearGuard, decisionGuard, runDecision } from '../services/decisionBatch';
 import { offerRefusal } from '../services/programGrantStates';
 import { createAndSendEnvelope } from './esign';
-import { PROGRAM_SCHEDULE_DOC_TYPE, scheduleDocument } from '../services/programSchedule';
+import { PROGRAM_SCHEDULE_DOC_TYPE, scheduleDocument, voidSupersededSchedules } from '../services/programSchedule';
 import {
   DEFAULT_KEYS, TERM_KEYS, presentGrant, programNamed, programOf, readDefaults, readGrid, readHistory, readinessRefusal,
-  termsDiff, termsOf, validateTerms, type LicenceLite, type Terms,
+  termsDiff, termsHashOf, termsOf, validateTerms, type LicenceLite, type Terms,
 } from '../services/programGrants';
 import { exportCsv, readAllHistory } from '../services/programGrantsHistory';
 import { csvResponse, stamp } from '../services/csv';
@@ -103,12 +104,21 @@ async function grantRow(env: Env, licenceId: number, programKey: string) {
     .bind(licenceId, programKey).first<Record<string, any>>();
 }
 
-async function logProgram(env: Env, licenceId: number, actorId: number, detail: Record<string, unknown>, reason: string) {
-  await env.DB.prepare(
+/**
+ * D4805 (#4805): the history line of a grant write, as a statement of that write's own batch, so the state
+ * and its history commit together or not at all.
+ */
+function programEvent(env: Env, licenceId: number, actorId: number, detail: Record<string, unknown>, reason: string) {
+  return env.DB.prepare(
     `INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
      VALUES (?, 'program_changed', ?, ?, ?, ?)`,
-  ).bind(licenceId, JSON.stringify(detail), reason, actorId, nowIso()).run();
+  ).bind(licenceId, JSON.stringify(detail), reason, actorId, nowIso());
 }
+
+/** The schedules of earlier revisions stop being current; their rows, and any signature on them, stay. */
+const supersedeSchedules = (env: Env, grantId: number) => env.DB.prepare(
+  'UPDATE program_grant_schedules SET superseded_at = ? WHERE grant_id = ? AND superseded_at IS NULL',
+).bind(nowIso(), grantId);
 
 /** Why this licence cannot take a grant, a change or a resume now; null when it can. */
 function frozen(licence: LicenceLite): string | null {
@@ -143,23 +153,27 @@ const INSERT_GRANT = `INSERT INTO program_grants
   (uid, licence_id, program_key, state, starts_on, ends_on, ends_with_licence, capacity_cap, capacity_uncapped, cohorts_per_year, credits_per_quarter, fee_cents, currency, hq_share_bps, hq_approves_each_cohort, hq_approval_above_cents, playbook, brand, reporting, requires_signed_schedule, note, set_by_user_id, set_at)
   VALUES (?, ?, ?, 'granted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 const REGRANT = `UPDATE program_grants SET state = 'granted', starts_on = ?, ends_on = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?,
-  note = ?, set_by_user_id = ?, set_at = ?, paused_at = NULL, ended_at = NULL, schedule_contract_uid = NULL, schedule_signed_at = NULL
-  WHERE id = ? AND state = 'ended'`;
+  note = ?, set_by_user_id = ?, set_at = ?, paused_at = NULL, ended_at = NULL, schedule_contract_uid = NULL, schedule_signed_at = NULL,
+  terms_revision = terms_revision + 1
+  WHERE id = ? AND state = 'ended' AND terms_revision = ?`;
 // D956: a draft is granted in place, keeping its proposal.
 const GRANT_DRAFT = `UPDATE program_grants SET state = 'granted', starts_on = ?, ends_on = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?,
-  note = ?, set_by_user_id = ?, set_at = ?
-  WHERE id = ? AND state = 'draft'`;
-const CHANGE_TERMS = `UPDATE program_grants SET starts_on = ?, ends_on = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?, note = ?, set_by_user_id = ?, set_at = ?
-  WHERE id = ? AND state IN ('granted', 'paused')`;
+  note = ?, set_by_user_id = ?, set_at = ?, terms_revision = terms_revision + 1
+  WHERE id = ? AND state = 'draft' AND terms_revision = ?`;
+const CHANGE_TERMS = `UPDATE program_grants SET starts_on = ?, ends_on = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?, note = ?, set_by_user_id = ?, set_at = ?,
+  schedule_contract_uid = NULL, schedule_signed_at = NULL, terms_revision = terms_revision + 1
+  WHERE id = ? AND state IN ('granted', 'paused') AND terms_revision = ?`;
 const UPDATE_DEFAULTS = `UPDATE program_grant_defaults SET grantable = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?, updated_by_user_id = ?, updated_at = ?
   WHERE program_key = ?`;
 const PAUSE = "UPDATE program_grants SET state = 'paused', paused_at = ?, set_by_user_id = ?, set_at = ? WHERE id = ? AND state = 'granted'";
 const RESUME = "UPDATE program_grants SET state = 'granted', paused_at = NULL, set_by_user_id = ?, set_at = ? WHERE id = ? AND state = 'paused'";
 const END = "UPDATE program_grants SET state = 'ended', ended_at = ?, set_by_user_id = ?, set_at = ? WHERE id = ? AND state IN ('granted', 'paused')";
 const termValues = (t: Terms) => TERM_KEYS.map((k) => t[k] ?? null);
-// D1120: an envelope is named only on a grant with no signed schedule, so a
-// send racing a signature never replaces the signed one.
-const RECORD_SCHEDULE = 'UPDATE program_grants SET schedule_contract_uid = ? WHERE id = ? AND schedule_signed_at IS NULL';
+// D1120, D4805: an envelope is named only on a grant with no signed schedule AND only while its terms are
+// still the revision the schedule was rendered from, so a send racing a signature or a terms change never
+// names an envelope for terms the grant no longer has.
+const RECORD_SCHEDULE = 'UPDATE program_grants SET schedule_contract_uid = ? WHERE id = ? AND schedule_signed_at IS NULL AND terms_revision = ?';
+const INSERT_SCHEDULE = `INSERT INTO program_grant_schedules (grant_id, revision, terms_hash, envelope_uuid, sent_at) VALUES (?, ?, ?, ?, ?)`;
 
 // ─────────────────────────────────────────────── reads
 
@@ -322,21 +336,39 @@ r.post('/licences/:uid/:program', async (c) => {
       return refuse(c, 400, 'invalid_terms', 'capacity_uncapped cannot be set with a capacity cap.');
     }
     const at = nowIso();
-    if (existing) {
-      // A re-grant after an end: the same row starts again, with fresh terms and schedule.
-      // A draft (D956) is granted in place, with its proposal.
-      const res = await c.env.DB.prepare(fromDraft ? GRANT_DRAFT : REGRANT).bind(...termValues(terms), note.note ?? null, admin.id, at, existing.id).run();
-      if (!res.meta?.changes) return refuse(c, 409, 'already_granted', `${program.name} changed while you were granting it. Read it again.`);
-    } else {
-      await c.env.DB.prepare(INSERT_GRANT)
-        .bind(newUid(), licence.id, programKey, ...termValues(terms), note.note ?? null, admin.id, at).run();
-    }
     const changed = termsDiff({}, Object.fromEntries(Object.entries(terms).filter(([, val]) => val != null)));
     if (fromDraft) changed.unshift({ key: 'state', before: 'draft', after: 'granted' });
     const action = fromDraft ? 'granted' : existing ? 'regranted' : 'granted';
-    await logProgram(c.env, licence.id, admin.id, {
+    const history = programEvent(c.env, licence.id, admin.id, {
       action, program_key: programKey, changed, reason, ...(fromDraft ? { from_draft: true, proposal_uid: existing!.proposal_uid ?? null } : {}),
     }, reason);
+    if (existing) {
+      // A re-grant after an end: the same row starts again, with fresh terms and schedule.
+      // A draft (D956) is granted in place, with its proposal. D4805: the grant, its history, the schedules it
+      // replaces and the branch push it owes are one batch, and the grant names the revision it read.
+      const run = await runDecision(c.env, [
+        c.env.DB.prepare(fromDraft ? GRANT_DRAFT : REGRANT).bind(...termValues(terms), note.note ?? null, admin.id, at, existing.id, existing.terms_revision ?? 1),
+        decisionGuard(c.env),
+        history,
+        ...voidSupersededSchedules(c.env, existing.id),
+        supersedeSchedules(c.env, existing.id),
+        queuePushStatement(c.env, licence.id),
+        clearGuard(c.env),
+      ]);
+      if (run.lost) return refuse(c, 409, 'already_granted', `${program.name} changed while you were granting it. Read it again.`);
+    } else {
+      try {
+        await c.env.DB.batch([
+          c.env.DB.prepare(INSERT_GRANT).bind(newUid(), licence.id, programKey, ...termValues(terms), note.note ?? null, admin.id, at),
+          history,
+          queuePushStatement(c.env, licence.id),
+        ]);
+      } catch (e) {
+        // A grant for this licence and program landed first; the batch rolled back whole.
+        if (/UNIQUE/i.test(e instanceof Error ? e.message : '')) return refuse(c, 409, 'already_granted', `${program.name} changed while you were granting it. Read it again.`);
+        throw e;
+      }
+    }
     const saved = await grantRow(c.env, licence.id, programKey);
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pushed }, existing ? 200 : 201);
@@ -365,10 +397,20 @@ r.patch('/licences/:uid/:program', async (c) => {
     const changed = termsDiff(before, after);
     const noteChanged = note.note !== undefined && (note.note ?? null) !== (existing.note ?? null);
     if (!changed.length && !noteChanged) return refuse(c, 400, 'no_change', 'Nothing changes: these are the terms the grant already has.');
-    const res = await c.env.DB.prepare(CHANGE_TERMS)
-      .bind(...termValues(after), note.note === undefined ? (existing.note ?? null) : note.note, admin.id, nowIso(), existing.id).run();
-    if (!res.meta?.changes) return refuse(c, 409, 'not_granted', 'This grant changed while you were changing it. Read it again.');
-    await logProgram(c.env, licence.id, admin.id, { action: 'terms_changed', program_key: programKey, changed, note_changed: noteChanged, reason }, reason);
+    // D4805: a change of terms is a new revision. The grant names the revision it read, so a stale change
+    // loses; the schedule signed under the old revision no longer vouches for these terms (the grant waits
+    // on an amendment) but its record stays; and the history and the owed branch push commit with it.
+    const run = await runDecision(c.env, [
+      c.env.DB.prepare(CHANGE_TERMS)
+        .bind(...termValues(after), note.note === undefined ? (existing.note ?? null) : note.note, admin.id, nowIso(), existing.id, existing.terms_revision ?? 1),
+      decisionGuard(c.env),
+      programEvent(c.env, licence.id, admin.id, { action: 'terms_changed', program_key: programKey, changed, note_changed: noteChanged, reason }, reason),
+      ...voidSupersededSchedules(c.env, existing.id),
+      supersedeSchedules(c.env, existing.id),
+      queuePushStatement(c.env, licence.id),
+      clearGuard(c.env),
+    ]);
+    if (run.lost) return refuse(c, 409, 'not_granted', 'This grant changed while you were changing it. Read it again.');
     const saved = await grantRow(c.env, licence.id, programKey);
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), changed, pushed });
@@ -392,13 +434,15 @@ function transition(action: 'paused' | 'resumed' | 'ended', from: string[], to: 
         return refuse(c, 409, 'wrong_state', `This program is ${now} for this licence, so it cannot be ${action}.`, { state: existing?.state ?? null });
       }
       const at = nowIso();
-      const res = action === 'resumed'
-        ? await c.env.DB.prepare(RESUME).bind(admin.id, at, existing.id).run()
-        : await c.env.DB.prepare(action === 'paused' ? PAUSE : END).bind(at, admin.id, at, existing.id).run();
-      if (!res.meta?.changes) return refuse(c, 409, 'wrong_state', 'This grant changed while you were changing it. Read it again.');
-      await logProgram(c.env, licence.id, admin.id, {
-        action, program_key: programKey, changed: [{ key: 'state', before: existing.state, after: to }], reason,
-      }, reason);
+      // D4805: the state, its history and the branch push it owes commit together, or not at all.
+      const run = await runDecision(c.env, [
+        action === 'resumed' ? c.env.DB.prepare(RESUME).bind(admin.id, at, existing.id) : c.env.DB.prepare(action === 'paused' ? PAUSE : END).bind(at, admin.id, at, existing.id),
+        decisionGuard(c.env),
+        programEvent(c.env, licence.id, admin.id, { action, program_key: programKey, changed: [{ key: 'state', before: existing.state, after: to }], reason }, reason),
+        queuePushStatement(c.env, licence.id),
+        clearGuard(c.env),
+      ]);
+      if (run.lost) return refuse(c, 409, 'wrong_state', 'This grant changed while you were changing it. Read it again.');
       const saved = await grantRow(c.env, licence.id, programKey);
       const pushed = await pushLicenceToBranch(c.env, licence.id);
       return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pushed });
@@ -458,7 +502,10 @@ r.post('/licences/:uid/:program/schedule/send', async (c) => {
     }
     const named = await c.env.DB.prepare('SELECT legal_entity_name, signatory_name FROM territory_licences WHERE id = ?')
       .bind(licence.id).first<{ legal_entity_name: string | null; signatory_name: string | null }>();
-    const doc = scheduleDocument({ ...licence, legal_entity_name: named?.legal_entity_name ?? null }, existing, today());
+    // D4805: the schedule is rendered from, and bound to, the revision and fingerprint of the terms as read now.
+    const revision = Number(existing.terms_revision ?? 1);
+    const hash = await termsHashOf(existing);
+    const doc = scheduleDocument({ ...licence, legal_entity_name: named?.legal_entity_name ?? null }, existing, today(), { number: revision, hash });
     // A rendered body skips the template library, so no template refusal can
     // come back; a malformed body is this code's fault and answers 5xx.
     const sent = await createAndSendEnvelope(c.env, {
@@ -475,12 +522,21 @@ r.post('/licences/:uid/:program/schedule/send', async (c) => {
       templateVersion: null,
     });
     if (!sent) return c.json({ error: 'envelope_send_failed', message: 'The schedule could not be created or sent. Nothing was recorded.' }, 502);
-    const res = await c.env.DB.prepare(RECORD_SCHEDULE).bind(sent.envelope_uuid, existing.id).run();
-    if (!res.meta?.changes) return refuse(c, 409, 'already_signed', 'This grant’s schedule was signed while you were sending it. Read it again.');
-    await logProgram(c.env, licence.id, admin.id, {
-      action: 'schedule_sent', program_key: programKey,
-      changed: [{ key: 'schedule_contract_uid', before: existing.schedule_contract_uid ?? null, after: sent.envelope_uuid }], reason,
-    }, reason);
+    // The envelope is named on the grant, recorded against the revision it carries, and its history and owed
+    // push commit with it. If the terms moved or the schedule was signed meanwhile this writes nothing, and the
+    // envelope that was sent has no record, so it can sign nothing.
+    const recorded = await runDecision(c.env, [
+      c.env.DB.prepare(RECORD_SCHEDULE).bind(sent.envelope_uuid, existing.id, revision),
+      decisionGuard(c.env),
+      c.env.DB.prepare(INSERT_SCHEDULE).bind(existing.id, revision, hash, sent.envelope_uuid, nowIso()),
+      programEvent(c.env, licence.id, admin.id, {
+        action: 'schedule_sent', program_key: programKey, revision,
+        changed: [{ key: 'schedule_contract_uid', before: existing.schedule_contract_uid ?? null, after: sent.envelope_uuid }], reason,
+      }, reason),
+      queuePushStatement(c.env, licence.id),
+      clearGuard(c.env),
+    ]);
+    if (recorded.lost) return refuse(c, 409, 'terms_changed', 'This grant’s terms changed, or its schedule was signed, while you were sending it. The schedule that went out is for the earlier terms and signs nothing. Read the grant again, then send it again.');
     await logAdminAction(c.env, admin.id, admin.email, 'program_grant_schedule_sent', {
       licence_uid: licence.uid, program_key: programKey, envelope_uuid: sent.envelope_uuid, reason,
     });
