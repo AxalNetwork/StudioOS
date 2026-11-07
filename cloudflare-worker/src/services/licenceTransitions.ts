@@ -73,11 +73,6 @@ export function appliedGuard(licenceId: number, revision: number, status: string
   };
 }
 
-/** The prerequisites of an active licence as one SQL predicate on `territory_licences l`. */
-const PREREQUISITES = `EXISTS (SELECT 1 FROM licence_territories t WHERE t.licence_id = l.id)
-  AND (SELECT COALESCE(SUM(s.seats_licensed), 0) FROM licence_seats s WHERE s.licence_id = l.id) > 0
-  AND l.annual_fee_cents IS NOT NULL AND l.revenue_share_bps IS NOT NULL AND l.renews_on IS NOT NULL`;
-
 export type Change = {
   note?: string | null;
   /** `renew` only. */
@@ -93,20 +88,31 @@ export type Change = {
  */
 export async function transition(env: Env, held: Held, verb: LicenceVerb, change: Change): Promise<TransitionResult> {
   if (!allows(verb, held.status)) return { ok: false, code: 'bad_transition', current: { status: held.status, revision: held.revision } };
-  const sets: string[] = [];
-  const binds: unknown[] = [];
-  if (verb === 'activate' || verb === 'reinstate') sets.push("status = 'active'", 'status_note = NULL', 'suspended_at = NULL');
-  else if (verb === 'suspend') { sets.push("status = 'suspended'", 'status_note = ?', 'suspended_at = ?'); binds.push(change.note ?? null, change.now); }
-  else if (verb === 'terminate') { sets.push("status = 'terminated'", 'status_note = ?', 'terminated_at = ?'); binds.push(change.note ?? null, change.now); }
-  else { sets.push('renews_on = ?'); binds.push(change.renewsOn ?? null); }
-  sets.push('revision = revision + 1', 'updated_at = ?');
-  binds.push(change.now);
-  // Fixed fragments only (the SET list is built from this function's own literals; the prerequisites are a module constant),
-  // joined by concatenation so no `${}` lands in a prepare() template.
-  const prerequisites = ENTERS_ACTIVE.has(verb) ? ' AND ' + PREREQUISITES : '';
-  const move = env.DB.prepare(
-    'UPDATE territory_licences AS l SET ' + sets.join(', ') + ' WHERE l.id = ? AND l.status = ? AND l.revision = ?' + prerequisites,
-  ).bind(...binds, held.id, held.status, held.revision);
+  // One literal statement per shape. No SQL is assembled at run time: the schema
+  // guards read these strings, and a reader can see every UPDATE this machine runs.
+  const at = [held.id, held.status, held.revision];
+  let move: D1PreparedStatement;
+  if (verb === 'activate') {
+    move = env.DB.prepare(
+      "UPDATE territory_licences AS l SET status = 'active', status_note = NULL, suspended_at = NULL, revision = revision + 1, updated_at = ? WHERE l.id = ? AND l.status = ? AND l.revision = ? AND EXISTS (SELECT 1 FROM licence_territories t WHERE t.licence_id = l.id) AND (SELECT COALESCE(SUM(s.seats_licensed), 0) FROM licence_seats s WHERE s.licence_id = l.id) > 0 AND l.annual_fee_cents IS NOT NULL AND l.revenue_share_bps IS NOT NULL AND l.renews_on IS NOT NULL",
+    ).bind(change.now, ...at);
+  } else if (verb === 'reinstate') {
+    move = env.DB.prepare(
+      "UPDATE territory_licences AS l SET status = 'active', status_note = NULL, suspended_at = NULL, revision = revision + 1, updated_at = ? WHERE l.id = ? AND l.status = ? AND l.revision = ? AND EXISTS (SELECT 1 FROM licence_territories t WHERE t.licence_id = l.id) AND (SELECT COALESCE(SUM(s.seats_licensed), 0) FROM licence_seats s WHERE s.licence_id = l.id) > 0 AND l.annual_fee_cents IS NOT NULL AND l.revenue_share_bps IS NOT NULL AND l.renews_on IS NOT NULL",
+    ).bind(change.now, ...at);
+  } else if (verb === 'suspend') {
+    move = env.DB.prepare(
+      "UPDATE territory_licences AS l SET status = 'suspended', status_note = ?, suspended_at = ?, revision = revision + 1, updated_at = ? WHERE l.id = ? AND l.status = ? AND l.revision = ?",
+    ).bind(change.note ?? null, change.now, change.now, ...at);
+  } else if (verb === 'terminate') {
+    move = env.DB.prepare(
+      "UPDATE territory_licences AS l SET status = 'terminated', status_note = ?, terminated_at = ?, revision = revision + 1, updated_at = ? WHERE l.id = ? AND l.status = ? AND l.revision = ?",
+    ).bind(change.note ?? null, change.now, change.now, ...at);
+  } else {
+    move = env.DB.prepare(
+      'UPDATE territory_licences AS l SET renews_on = ?, revision = revision + 1, updated_at = ? WHERE l.id = ? AND l.status = ? AND l.revision = ?',
+    ).bind(change.renewsOn ?? null, change.now, ...at);
+  }
   let results: Array<{ meta?: { changes?: number } }>;
   try {
     results = await env.DB.batch([move, ...(change.after ?? [])]);

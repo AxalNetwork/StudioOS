@@ -47,7 +47,7 @@ export class LicenceRefusal extends Error {
 type Change = { userId: number; licence: unknown; actorId: number; source: string;
   retainPrimary?: boolean; appointmentStatements?: D1PreparedStatement[];
   /** #4678: an extra predicate on the appointment's role write. When it is false the role does not change and the grant refuses with 409 `licence_cannot_administer`. */
-  appointmentGuard?: { sql: string; binds: unknown[] } };
+  appointmentGuard?: { licenceId: number; userId: number } };
 async function subject(db: D1Database, change: Change): Promise<User> {
   if (!isLicence(change.licence)) throw new LicenceRefusal('invalid_licence', 400);
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(change.userId).first<User>();
@@ -83,10 +83,21 @@ export async function grantLicence(db: D1Database, change: Change): Promise<'gra
   ];
   // S1's explicit exception: preserve the old primary and appoint the admin
   // atomically. No route is allowed to run a second, separate role write.
-  if (change.retainPrimary) statements.push(db.prepare(`UPDATE users SET role = 'admin'
-    WHERE id = ? AND lower(role) = ? AND EXISTS (SELECT 1 FROM account_licences
-      WHERE user_id = ? AND licence = ? AND revoked_at IS NULL)${change.appointmentGuard ? ` AND ${change.appointmentGuard.sql}` : ''}`)
-    .bind(userId, licence, userId, licence, ...(change.appointmentGuard?.binds ?? [])));
+  if (change.retainPrimary) {
+    const g = change.appointmentGuard;
+    // The guarded form adds one predicate: the appointing licence still administers users and the account is not bound elsewhere.
+    statements.push(g
+      ? db.prepare(`UPDATE users SET role = 'admin'
+        WHERE id = ? AND lower(role) = ? AND EXISTS (SELECT 1 FROM account_licences
+          WHERE user_id = ? AND licence = ? AND revoked_at IS NULL)
+          AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')
+          AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?)`)
+        .bind(userId, licence, userId, licence, g.licenceId, g.userId, g.licenceId)
+      : db.prepare(`UPDATE users SET role = 'admin'
+        WHERE id = ? AND lower(role) = ? AND EXISTS (SELECT 1 FROM account_licences
+          WHERE user_id = ? AND licence = ? AND revoked_at IS NULL)`)
+        .bind(userId, licence, userId, licence));
+  }
   statements.push(...(change.appointmentStatements || []));
   const result = await db.batch(statements);
   if (change.retainPrimary && !result[2].meta.changes) throw new LicenceRefusal(change.appointmentGuard ? 'licence_cannot_administer' : 'primary_licence', 409);
