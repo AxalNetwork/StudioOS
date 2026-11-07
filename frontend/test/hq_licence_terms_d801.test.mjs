@@ -251,7 +251,9 @@ test('Open terms goes to the term\'s row or its step; a notice of non-renewal is
 
 test('the licence page mounts the schedule, the panel, and Grant admin prefills the existing appointment', () => {
   const SRC = codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx'));
-  assert.ok(SRC.includes('data-testid="licence-schedule-tab"'));
+  // D4707: the tab bar is drawn from licenceNavModel's list, test ids and all.
+  assert.ok(readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8').includes("testId: 'licence-schedule-tab'"));
+  assert.ok(SRC.includes('data-testid={t.testId}'));
   assert.ok(SRC.includes('{step === SCHEDULE_STEP && <LicenceTermsSchedule licence={d} highlight={highlight} onSaved={refresh} />}'));
   assert.ok(SRC.includes('<LicenceRequestsPanel'));
   assert.ok(SRC.includes("onGrantAdmin={(g) => { setGrant(g); setStep(ADMINS_STEP); }}"));
