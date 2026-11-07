@@ -98,13 +98,13 @@ const noticesDdl = () => ddlFrom('264_admin_notices.sql', 'CREATE TABLE IF NOT E
 
 /**
  * #4686 — the revision ledger terminate now commits into: migration 295's
- * `licence_push_pending` and the 202611071545 migration's tables and ALTERs,
+ * `licence_push_pending` and the 202611071927 migration's tables and ALTERs,
  * minus the `branch_licence` ones (a branch's table, not part of this fixture).
  */
 const syncLedgerDdl = () => {
   const dir = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
   const m295 = readFileSync(resolve(dir, '295_licence_push_pending.sql'), 'utf8').replace(/^--.*$/gm, '');
-  const m4686 = readFileSync(resolve(dir, '202611071545_licence_sync_revision.sql'), 'utf8')
+  const m4686 = readFileSync(resolve(dir, '202611071927_licence_sync_revision.sql'), 'utf8')
     .replace(/^--.*$/gm, '').split(';').filter((x) => x.trim() && !/branch_licence/.test(x)).join(';\n');
   return `${m295};\n${m4686};`;
 };

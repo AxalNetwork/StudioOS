@@ -1,6 +1,6 @@
 ### Licence termination and branch synchronisation, durable (D4686, #4686)
 
-Backed by `services/licencePush.ts`, `rpc/branchOps.ts` and migration `202611071545_licence_sync_revision` (`licence_sync_state`, `licence_termination_ops`, and revision columns on `licence_push_pending` and `branch_licence`).
+Backed by `services/licencePush.ts`, `rpc/branchOps.ts` and migration `202611071927_licence_sync_revision` (`licence_sync_state`, `licence_termination_ops`, and revision columns on `licence_push_pending` and `branch_licence`).
 
 | Route | Who | What changed |
 | --- | --- | --- |
