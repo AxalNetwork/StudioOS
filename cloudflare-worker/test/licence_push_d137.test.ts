@@ -211,7 +211,9 @@ test('every licence transition reports the push beside its own outcome', () => {
   // contract, and a notice review that reinstates). Still exact, so a push
   // added or dropped moves this figure on purpose. D797 — eleven: the terms
   // schedule (`PUT /:uid/terms`) rides the copy too (`terms_json`).
-  assert.equal(calls.length, 11, `expected eleven licence changes to push, found ${calls.length}`);
+  // D4671 — twelve: completing the entity and signatory (`PATCH /:uid/entity`)
+  // changes the copy's legal name, address and signatory.
+  assert.equal(calls.length, 12, `expected twelve licence changes to push, found ${calls.length}`);
   for (const status of ['active', 'suspended', 'terminated']) {
     assert.ok(
       new RegExp(`status: '${status}'[^}]*pushed`).test(src) || src.includes(`status: '${status}', pushed }`),

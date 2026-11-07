@@ -37,9 +37,14 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
+    // D1's batch is one transaction: all of it lands or none of it does.
     async batch(x: any[]) {
       const out: any[] = [];
-      for (const st of x || []) out.push(await st.run());
+      db.exec('BEGIN');
+      try {
+        for (const st of x || []) out.push(await st.run());
+        db.exec('COMMIT');
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
       return out;
     },
   };
@@ -76,10 +81,11 @@ function freshDb() {
       before_json TEXT, after_json TEXT, outcome TEXT);
     CREATE TABLE licence_contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       licence_uid TEXT NOT NULL, template_slug TEXT NOT NULL, template_version INTEGER NOT NULL,
-      template_title TEXT NOT NULL, body_md TEXT NOT NULL, unfilled_fields TEXT NOT NULL DEFAULT '[]',
+      template_title TEXT NOT NULL, body_md TEXT NOT NULL, body_sha256 TEXT, unfilled_fields TEXT NOT NULL DEFAULT '[]',
       status TEXT NOT NULL DEFAULT 'draft', envelope_uid TEXT, superseded_at TEXT,
       created_by_user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')),
       sent_at TEXT, signed_at TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+    CREATE UNIQUE INDEX idx_licence_contracts_one_current ON licence_contracts (licence_uid) WHERE superseded_at IS NULL;
     CREATE TABLE legal_templates (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE,
       title TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'gp', body_md TEXT NOT NULL DEFAULT '',
       merge_fields TEXT NOT NULL DEFAULT '[]', version INTEGER NOT NULL DEFAULT 1,
@@ -202,15 +208,13 @@ test('D758 a platform licence stub is refused with the counsel sentence', async 
   assert.ok(r.body.message.startsWith('Stub — counsel to draft.'), r.body.message);
 });
 
-test('D758 a draft whose row became a stub after drafting is 409 on send, stays draft and has no envelope', async () => {
+test('D4671 a template that became a stub after drafting does not stop the reviewed draft going out: the stored text is what is signed', async () => {
   const db = freshDb();
   db.prepare("UPDATE legal_templates SET body_md = '', is_stub = 1 WHERE slug = 'licence_agreement'").run();
   const r = await quietly(() => post(db, '/lic_fr/contract/ctr_1/send'));
-  assert.equal(r.status, 409, JSON.stringify(r.body));
-  assert.equal(r.body.error, 'template_has_no_body');
-  const row = contracts(db)[0];
-  assert.equal(row.status, 'draft');
-  assert.equal(row.envelope_uid, null);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const env = db.prepare('SELECT document_body FROM esign_envelopes WHERE envelope_uuid = ?').get(r.body.envelope_uuid) as any;
+  assert.equal(env.document_body, 'AGREEMENT for Axal VC France SAS in FR at EUR 90,000.00.');
 });
 
 test('migration 331 widens licence_events for contract_sent', () => {
@@ -219,4 +223,115 @@ test('migration 331 widens licence_events for contract_sent', () => {
     'utf8',
   );
   assert.match(sql, /'contract_sent'/);
+});
+
+// ---------------------------------------------------------------------------
+// D4671 — the document sent is the document stored.
+// ---------------------------------------------------------------------------
+import { createHash } from 'node:crypto';
+const sha = (t: string) => createHash('sha256').update(t).digest('hex');
+const STORED = 'AGREEMENT for Axal VC France SAS in FR at EUR 90,000.00.';
+const envelopeRows = (db: InstanceType<typeof DatabaseSync>) =>
+  db.prepare("SELECT name FROM sqlite_master WHERE name = 'esign_envelopes'").get()
+    ? db.prepare('SELECT envelope_uuid, document_body, body_sha256, template_version, document_title FROM esign_envelopes').all() as any[]
+    : [];
+
+test('D4671 the envelope carries the stored body byte for byte, its hash and the stored template version', async () => {
+  const db = freshDb();
+  const r = await quietly(() => post(db, '/lic_fr/contract/ctr_1/send'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const [env] = envelopeRows(db);
+  assert.equal(env.document_body, STORED);
+  assert.equal(env.body_sha256, sha(STORED));
+  assert.equal(env.template_version, 4);
+  assert.equal(env.document_title, 'Territory licence agreement');
+});
+
+test('D4671 editing the licence, the master template or the library version after drafting cannot change what is sent', async () => {
+  const db = freshDb();
+  db.prepare("UPDATE territory_licences SET annual_fee_cents = 9500000, legal_entity_name = 'Someone Else Ltd', token_split_bps = 3501 WHERE id = 1").run();
+  db.prepare("UPDATE legal_templates SET body_md = 'A completely different {{annual_fee}} text', version = 9 WHERE slug = 'licence_agreement'").run();
+  const r = await quietly(() => post(db, '/lic_fr/contract/ctr_1/send'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const [env] = envelopeRows(db);
+  assert.equal(env.document_body, STORED, 'the stored text, not today\'s ledger or template');
+  assert.equal(env.template_version, 4, 'the version the draft carries, not the library\'s current one');
+});
+
+test('D4671 a stored hash that no longer matches the stored body is 409 and creates no envelope', async () => {
+  const db = freshDb();
+  db.prepare('UPDATE licence_contracts SET body_sha256 = ? WHERE uid = ?').run(sha('what was reviewed'), 'ctr_1');
+  const r = await quietly(() => post(db, '/lic_fr/contract/ctr_1/send'));
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, 'contract_body_changed');
+  assert.deepEqual(envelopeRows(db), []);
+  assert.equal(contracts(db)[0].status, 'draft');
+});
+
+test('D4671 any unresolved field, namespaced or not, is refused before an envelope exists', async () => {
+  for (const hole of ['{{licence.signatory_name}}', '{{terms.governing_law}}', '{{ annual_fee }}']) {
+    const db = freshDb();
+    db.prepare('UPDATE licence_contracts SET body_md = ?, body_sha256 = NULL WHERE uid = ?').run(`Signed by ${hole}.`, 'ctr_1');
+    const r = await quietly(() => post(db, '/lic_fr/contract/ctr_1/send'));
+    assert.equal(r.status, 409, hole);
+    assert.equal(r.body.error, 'contract_incomplete');
+    assert.equal(r.body.unresolved_fields.length, 1, hole);
+    assert.deepEqual(envelopeRows(db), [], `${hole}: no envelope, so no email`);
+    assert.equal(contracts(db)[0].status, 'draft');
+  }
+});
+
+test('D4671 an envelope already pending for this signer under older text is not linked to the contract', async () => {
+  const db = freshDb();
+  const first = await quietly(() => post(db, '/lic_fr/contract/ctr_1/send'));
+  assert.equal(first.status, 200);
+  db.prepare("UPDATE licence_contracts SET body_md = 'REVISED TEXT', body_sha256 = NULL, status = 'draft', envelope_uid = NULL, sent_at = NULL WHERE uid = 'ctr_1'").run();
+  const again = await quietly(() => post(db, '/lic_fr/contract/ctr_1/send'));
+  assert.equal(again.status, 409, JSON.stringify(again.body));
+  assert.equal(again.body.error, 'envelope_body_mismatch');
+  assert.equal(contracts(db)[0].envelope_uid, null);
+});
+
+test('D4671 reissuing keeps every prior row, leaves exactly one current, and stores the body hash', async () => {
+  const db = freshDb();
+  const a = await post(db, '/lic_fr/contract', { template_slug: 'licence_agreement' });
+  const b = await post(db, '/lic_fr/contract', { template_slug: 'licence_agreement' });
+  assert.equal(a.status, 201, JSON.stringify(a.body));
+  assert.equal(b.status, 201);
+  const rows = contracts(db);
+  assert.equal(rows.length, 3, 'the seeded draft, and both reissues, all preserved');
+  assert.equal(rows.filter((r) => !r.superseded_at).length, 1);
+  assert.equal(rows.find((r) => !r.superseded_at)!.uid, b.body.uid);
+  const stored = db.prepare('SELECT body_md, body_sha256 FROM licence_contracts WHERE uid = ?').get(b.body.uid) as any;
+  assert.equal(stored.body_sha256, sha(stored.body_md));
+  assert.equal(b.body.body_sha256, stored.body_sha256, 'the preview carries the same hash');
+});
+
+test('D4671 a failed insert leaves the prior contract current (one transaction)', async () => {
+  const db = freshDb();
+  db.prepare("INSERT INTO legal_templates (slug, title, category, body_md, version, is_active) VALUES ('boom','Boom','gp','text',1,1)").run();
+  db.exec("CREATE TRIGGER boom_insert BEFORE INSERT ON licence_contracts WHEN NEW.template_slug = 'boom' BEGIN SELECT RAISE(ABORT, 'insert failed'); END;");
+  const r = await quietly(() => post(db, '/lic_fr/contract', { template_slug: 'boom' }));
+  assert.ok(r.status >= 400, JSON.stringify(r.body));
+  const rows = contracts(db);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].superseded_at, null, 'ctr_1 is still the current contract');
+});
+
+test('D4671 PATCH /entity completes the signatory, validated, and the contract can then be reissued complete', async () => {
+  const db = freshDb();
+  db.prepare("UPDATE territory_licences SET signatory_name = NULL, registered_address = NULL WHERE id = 1").run();
+  const patch = (body: unknown) => call(db, '/lic_fr/entity', { method: 'PATCH', body: JSON.stringify(body) });
+  assert.equal((await patch({})).status, 400);
+  assert.equal((await patch({ signatory_name: '   ' })).status, 400, 'blank is refused');
+  assert.equal((await patch({ signatory_name: '{{licence.signatory_name}}' })).status, 400, 'a placeholder is not a value');
+  assert.equal((await patch({ registered_address: 'x'.repeat(501) })).status, 400);
+  assert.equal((await patch({ signatory_name: 7 })).status, 400);
+  const ok = await patch({ signatory_name: ' Marie Dubois ', registered_address: '1 Rue de Rivoli, 75001 Paris', legal_entity_name: 'Axal VC France SAS' });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const lic = db.prepare('SELECT signatory_name, registered_address, legal_entity_name FROM territory_licences WHERE id = 1').get() as any;
+  assert.equal(lic.signatory_name, 'Marie Dubois');
+  assert.equal(lic.registered_address, '1 Rue de Rivoli, 75001 Paris');
+  const ev = db.prepare("SELECT before_json, after_json FROM licence_events WHERE licence_id = 1 AND event = 'terms_changed'").get() as any;
+  assert.ok(ev && JSON.parse(ev.before_json).signatory_name === null);
 });

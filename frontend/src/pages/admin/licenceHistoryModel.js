@@ -7,9 +7,11 @@
  * and a row no person wrote (a scheduled job) is "System".
  */
 
+import { TOKEN_SPLIT_HISTORY_LABEL } from '../../lib/tokenSplit';
+
 const LABELS = {
   term_years: 'Term (years)', annual_fee_cents: 'Annual fee (cents)', currency: 'Currency',
-  revenue_share_bps: 'Revenue share (bps)', token_split_bps: 'Token split (bps)', starts_on: 'Starts',
+  revenue_share_bps: 'Revenue share (bps)', token_split_bps: TOKEN_SPLIT_HISTORY_LABEL, starts_on: 'Starts',
   renews_on: 'Renews', status: 'Status', countries: 'Countries',
 };
 
