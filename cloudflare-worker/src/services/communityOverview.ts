@@ -163,12 +163,18 @@ function daysOpen(status: unknown, publishedAt: unknown, nowMs: number): number 
   return Math.max(0, Math.floor((nowMs - at) / 86_400_000));
 }
 
+/** The span both periods cover, so a two-period count reads only those rows (#4717 package 5). */
+const earliest = (a: WeekAxis, b: WeekAxis) => (a.from < b.from ? a.from : b.from);
+const latest = (a: WeekAxis, b: WeekAxis) => (a.to > b.to ? a.to : b.to);
+
 async function jobsBlock(env: Env, axis: WeekAxis, before: WeekAxis, nowMs: number) {
   const apps = await env.DB.prepare(
     `SELECT SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS window,
             SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS previous
-       FROM job_applications`,
-  ).bind(axis.from, axis.to, before.from, before.to).first<{ window: number; previous: number }>();
+       FROM job_applications
+      -- #4717 package 5: only the two periods are read (the index on datetime(created_at)), never all history.
+      WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`,
+  ).bind(axis.from, axis.to, before.from, before.to, earliest(axis, before), latest(axis, before)).first<{ window: number; previous: number }>();
   const byWeek = await env.DB.prepare(
     `SELECT date(created_at, '-6 days', 'weekday 1') AS week, COUNT(*) AS n
        FROM job_applications
@@ -332,8 +338,9 @@ async function bookingsPart(env: Env, axis: WeekAxis, before: WeekAxis) {
     `SELECT SUM(CASE WHEN datetime(b.created_at) >= datetime(?) AND datetime(b.created_at) < datetime(?) THEN 1 ELSE 0 END) AS window,
             SUM(CASE WHEN datetime(b.created_at) >= datetime(?) AND datetime(b.created_at) < datetime(?) THEN 1 ELSE 0 END) AS previous
        FROM expert_bookings b JOIN experts e ON e.id = b.expert_id
-      WHERE substr(e.uid, 1, ?) <> ?`,
-  ).bind(axis.from, axis.to, before.from, before.to, SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX)
+      WHERE substr(e.uid, 1, ?) <> ?
+        AND datetime(b.created_at) >= datetime(?) AND datetime(b.created_at) < datetime(?)`,
+  ).bind(axis.from, axis.to, before.from, before.to, SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, earliest(axis, before), latest(axis, before))
     .first<{ window: number; previous: number }>();
   const byWeek = await env.DB.prepare(
     `SELECT date(b.created_at, '-6 days', 'weekday 1') AS week, COUNT(*) AS n
@@ -440,8 +447,16 @@ async function eventsParts(env: Env, weeks: CommunityWeeks, nowMs: number) {
 // The read
 // ---------------------------------------------------------------------------
 
+/**
+ * #4717 package 6 — the period a read without `weeks` answers: 12, the page's
+ * own default (D933). D931 answered 4, so the read and the page it serves
+ * disagreed about the one period neither named; the page always names one,
+ * and any other caller now gets the page's.
+ */
+export const COMMUNITY_DEFAULT_WEEKS: CommunityWeeks = 12;
+
 export function parseCommunityWeeks(raw: string | undefined): CommunityWeeks | null {
-  if (raw === undefined || raw === '') return 4;
+  if (raw === undefined || raw === '') return COMMUNITY_DEFAULT_WEEKS;
   const w = Number(raw);
   return (COMMUNITY_WEEKS as readonly number[]).includes(w) && String(w) === raw ? (w as CommunityWeeks) : null;
 }

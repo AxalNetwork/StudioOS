@@ -29,7 +29,7 @@ import {
   COHORT_TZ, wallClockToUtcMs, delawareYearMonth, materializeCycle,
   claimOrResumeJob, completeJobRun,
 } from './cohortTiming';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 export const APP_REMINDER_THRESHOLDS_HOURS = [72, 24] as const;
 export const DEFAULT_MIN_COHORT_SIZE = 1;
@@ -121,30 +121,42 @@ const msOf = (ts: string): number => Date.parse(ts.replace(' ', 'T') + 'Z');
 // Schema ensure (mirrors migration 157 for dev/preview D1)
 // ---------------------------------------------------------------------------
 
+/**
+ * #4568 R2-04: the bootstrap a preview or local database needs, run through
+ * `runSchemaBootstrap`, which reads `cohort_cycles`' columns once per binding
+ * and skips the ALTERs whose column is there. Migration 157 declares all four,
+ * so against an up-to-date database (production) this issues no ALTER at all.
+ * Before, it tried all four on every fresh isolate — the cron tick runs it
+ * each time — and each failed with `duplicate column name`, which the audit
+ * saw as recurring D1 errors.
+ *
+ * A bootstrap that genuinely fails now throws `cohort_schema_not_ready`
+ * (logged once, with no value) and is not marked ready, so the next call
+ * tries again. Before, it logged and returned, and the caller went on against
+ * tables that might be incomplete. Every caller already handles a throw: the
+ * cron tick and the apply route catch and log, and the admin routes answer
+ * the app's 500.
+ */
 const SCHEMA_READY = new WeakMap<object, boolean>();
+export const COHORT_SCHEMA = Object.freeze([
+  `ALTER TABLE cohort_cycles ADD COLUMN applications_open_at TEXT`,
+  `ALTER TABLE cohort_cycles ADD COLUMN applications_close_at TEXT`,
+  `ALTER TABLE cohort_cycles ADD COLUMN app_status TEXT NOT NULL DEFAULT 'open'`,
+  `ALTER TABLE cohort_cycles ADD COLUMN force_proceed INTEGER NOT NULL DEFAULT 0`,
+  `CREATE TABLE IF NOT EXISTS cohort_applicants (id INTEGER PRIMARY KEY AUTOINCREMENT, application_id INTEGER NOT NULL, user_id INTEGER NOT NULL, cohort_cycle_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', rolled_from_cycle_id INTEGER, decided_at TEXT, decided_by TEXT, decision_reason TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(application_id, cohort_cycle_id))`,
+  `CREATE TABLE IF NOT EXISTS cohort_cycle_events (id INTEGER PRIMARY KEY AUTOINCREMENT, cohort_cycle_id INTEGER, event_type TEXT NOT NULL, details TEXT, actor TEXT NOT NULL DEFAULT 'scheduler', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  `CREATE TABLE IF NOT EXISTS cohort_app_notification_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, cohort_cycle_id INTEGER NOT NULL, notif_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'sent', sent_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, cohort_cycle_id, notif_type))`,
+  `CREATE TABLE IF NOT EXISTS cohort_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')), updated_by TEXT)`,
+]);
 export async function ensureCohortAppSchema(env: Env): Promise<void> {
   if (SCHEMA_READY.get(bindingKey(env))) return;
-  const alters = [
-    `ALTER TABLE cohort_cycles ADD COLUMN applications_open_at TEXT`,
-    `ALTER TABLE cohort_cycles ADD COLUMN applications_close_at TEXT`,
-    `ALTER TABLE cohort_cycles ADD COLUMN app_status TEXT NOT NULL DEFAULT 'open'`,
-    `ALTER TABLE cohort_cycles ADD COLUMN force_proceed INTEGER NOT NULL DEFAULT 0`,
-  ];
-  const ddl = [
-    `CREATE TABLE IF NOT EXISTS cohort_applicants (id INTEGER PRIMARY KEY AUTOINCREMENT, application_id INTEGER NOT NULL, user_id INTEGER NOT NULL, cohort_cycle_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', rolled_from_cycle_id INTEGER, decided_at TEXT, decided_by TEXT, decision_reason TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(application_id, cohort_cycle_id))`,
-    `CREATE TABLE IF NOT EXISTS cohort_cycle_events (id INTEGER PRIMARY KEY AUTOINCREMENT, cohort_cycle_id INTEGER, event_type TEXT NOT NULL, details TEXT, actor TEXT NOT NULL DEFAULT 'scheduler', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-    `CREATE TABLE IF NOT EXISTS cohort_app_notification_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, cohort_cycle_id INTEGER NOT NULL, notif_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'sent', sent_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, cohort_cycle_id, notif_type))`,
-    `CREATE TABLE IF NOT EXISTS cohort_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')), updated_by TEXT)`,
-  ];
   try {
-    for (const s of alters) {
-      try { await env.DB.prepare(s).run(); } catch { /* column exists */ }
-    }
-    for (const s of ddl) await env.DB.prepare(s).run();
-    SCHEMA_READY.set(bindingKey(env), true);
-  } catch (e) {
-    console.error('[cohort-apps] schema ensure failed', e);
+    await runSchemaBootstrap(env, COHORT_SCHEMA);
+  } catch {
+    console.error('[cohort-apps] schema_not_ready');
+    throw new Error('cohort_schema_not_ready');
   }
+  SCHEMA_READY.set(bindingKey(env), true);
 }
 
 // ---------------------------------------------------------------------------

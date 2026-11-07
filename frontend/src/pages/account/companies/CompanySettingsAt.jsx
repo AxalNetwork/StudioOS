@@ -35,17 +35,25 @@ import CompanySettingsPage, { FirmProfileMount } from '../../CompanySettingsPage
 import { companySettingsPathFor } from './companiesModel';
 import { SettingsHead } from './CompanySettingsTabs.jsx';
 import CompanyGeneralForm from './CompanyGeneralForm.jsx';
+import { NotYours } from './portfolioUi.jsx';
+import * as portfolio from './portfolioAdapter.js';
 
-/** The company's name for the head, from its own read (any company the member belongs to). */
-function useCompanyName(uid) {
-  const [name, setName] = useState('');
+/** The company's name for the head, from its own read (any company the member belongs to); `notFound` when it is not theirs to open. */
+function useCompanyRead(uid) {
+  const [read, setRead] = useState({ name: '', notFound: false });
   useEffect(() => {
+    setRead({ name: '', notFound: false });
     if (!uid) return undefined;
     let alive = true;
-    teamsApi.getCompany(uid).then((d) => { if (alive) setName(String(d?.company_name || '').trim()); }, () => {});
+    // #4736: through() tells a company that is not the member's to open (404) from a transient failure.
+    portfolio.through(() => teamsApi.getCompany(uid)).then((r) => {
+      if (!alive) return;
+      if (r.available) setRead({ name: String(r.value?.company_name || '').trim(), notFound: false });
+      else if (r.notFound) setRead({ name: '', notFound: true });
+    });
     return () => { alive = false; };
   }, [uid]);
-  return name;
+  return read;
 }
 
 export default function CompanySettingsAt() {
@@ -54,7 +62,7 @@ export default function CompanySettingsAt() {
   const { company } = useActiveCompany();
   const { loading } = useCompanyReadState();
   const { user } = useAuth();
-  const read = useCompanyName(uid);
+  const { name: read, notFound } = useCompanyRead(uid);
   const name = read || (company?.uid === uid ? String(company?.company_name || '').trim() : '');
   usePublishScope(uid && name ? scopeFor({ company: { uid, name } }) : null);
   if (loading) return null;
@@ -73,6 +81,7 @@ export default function CompanySettingsAt() {
     if (company?.uid) return <Navigate replace to={`${companySettingsPathFor(company.uid)}${search}${hash}`} />;
     return <CompanySettingsPage />;
   }
+  if (notFound) return <NotYours />;
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 md:px-7" data-testid="company-settings-general">
       <SettingsHead uid={uid} name={name} tab="general" />

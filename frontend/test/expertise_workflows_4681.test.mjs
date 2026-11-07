@@ -115,7 +115,7 @@ test('Services edits a saved service in place: one PATCH, no delete and recreate
 // ─────────────────────────────────────────────────────────── Proof, mounted
 
 const PROOF = { id: 8, uid: 'p-8', kind: 'engagement', title: 'Led a synthetic rebuild', detail: null, organization: 'Example Co', period_note: null,
-  is_public: false, attested: true, status: 'attested', consents: [{ id: 1, attester_name: 'Sam Example', consent_given: true, withdrawn_at: null, statement: 'Confirmed.' }] };
+  is_public: false, attested: true, status: 'attested', consents: [{ id: 1, attester_name: 'Sam Example', consent_given: true, state: 'confirmed', withdrawn_at: null, statement: 'Confirmed.' }] };
 
 async function proofZone(deleteImpl) {
   const calls = [];

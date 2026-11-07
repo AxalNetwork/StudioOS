@@ -250,6 +250,17 @@ export const generateCaptions = (uid, language) => adminLearningApi.generateCapt
 export const deleteCaptions = (uid, language) => adminLearningApi.deleteCaptions(uid, language);
 export const setStreamThumbnail = (uid, pct) => adminLearningApi.setStreamThumbnail(uid, pct);
 
+/**
+ * #4179 (D4179) / #4742 — start copying one uploaded file to Stream:
+ * `POST /admin/learning/stream/migrations`. Resolves to the copy
+ * (`{ stream_uid, state: 'copying' }`); a refusal (409 `not_r2`,
+ * 409 `already_copied`, 502 `stream_copy_failed`) is not caught, so the
+ * caller draws the route's own `error.data.message`.
+ */
+export async function copyToStream(uid) {
+  return (await adminLearningApi.migrateVideoToStream(uid)).copy;
+}
+
 /** Upload a WebVTT file: read, checked (WebVTT only, at most 1 MB), then `PUT …/captions/:lang`. */
 export async function uploadCaptionFile(uid, language, file) {
   const text = typeof file?.text === 'function' ? await file.text() : '';
@@ -405,8 +416,19 @@ export function courseForm(course) {
     estimated_minutes: course?.estimated_minutes === null || course?.estimated_minutes === undefined ? '' : String(course.estimated_minutes),
     visibility: course?.visibility ?? 'open',
     resources: Array.isArray(course?.resources) ? course.resources.map((r) => ({ title: r.title ?? '', url: r.url ?? '' })) : [],
+    // D4650 (#4650, part 2): the course's metadata, as the form edits it (a list is one line per entry).
+    audience: Array.isArray(course?.meta?.audience) ? [...course.meta.audience] : [],
+    stage: course?.meta?.stage ?? '',
+    outcomes: (course?.meta?.outcomes ?? []).join('\n'),
+    prerequisites: (course?.meta?.prerequisites ?? []).join('\n'),
+    author: course?.meta?.author ?? '',
+    reviewer: course?.meta?.reviewer ?? '',
+    reviewed_on: course?.meta?.reviewed_on ?? '',
+    practical_output: course?.meta?.practical_output ?? '',
   };
 }
+
+const lines = (text) => String(text ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
 
 /** The body `POST /courses` and `PATCH /courses/:uid` take. Blank resource rows are dropped. */
 export function courseBody(form) {
@@ -421,6 +443,14 @@ export function courseBody(form) {
     resources: (form.resources || [])
       .filter((r) => String(r.title || '').trim() || String(r.url || '').trim())
       .map((r) => ({ title: String(r.title || '').trim(), url: String(r.url || '').trim() })),
+    audience: Array.isArray(form.audience) ? form.audience : [],
+    stage: String(form.stage ?? '').trim() || null,
+    outcomes: lines(form.outcomes),
+    prerequisites: lines(form.prerequisites),
+    author: String(form.author ?? '').trim() || null,
+    reviewer: String(form.reviewer ?? '').trim() || null,
+    reviewed_on: String(form.reviewed_on ?? '').trim() || null,
+    practical_output: String(form.practical_output ?? '').trim() || null,
   };
 }
 

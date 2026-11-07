@@ -423,9 +423,9 @@ test('submitting a posting for review records when (migration 550)', async () =>
   assert.match(String(row.submitted_at), /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
 });
 
-test('weeks: 4, 12 or 52, and 4 when absent', () => {
-  assert.equal(parseCommunityWeeks(undefined), 4);
-  assert.equal(parseCommunityWeeks(''), 4);
+test('weeks: 4, 12 or 52, and 12 when absent (#4717 package 6: the page\'s default, D933)', () => {
+  assert.equal(parseCommunityWeeks(undefined), 12);
+  assert.equal(parseCommunityWeeks(''), 12);
   assert.equal(parseCommunityWeeks('12'), 12);
   assert.equal(parseCommunityWeeks('52'), 52);
   for (const bad of ['7', '4.0', '012', 'year', '-4']) assert.equal(parseCommunityWeeks(bad), null, bad);
@@ -472,7 +472,7 @@ test('the route: any admin reads, with no HQ gate; a member is refused; a bad we
   assert.equal(ok.status, 200);
   assert.equal(ok.body.weeks, 12);
   assert.equal(ok.body.week_starts.length, 12);
-  assert.equal((await get(db, '', ADMIN)).body.weeks, 4);
+  assert.equal((await get(db, '', ADMIN)).body.weeks, 12, 'no weeks reads the page\'s default (#4717 package 6)');
   assert.equal((await get(db, '', MEMBER)).status, 403);
   const bad = await get(db, '?weeks=7', ADMIN);
   assert.equal(bad.status, 400);

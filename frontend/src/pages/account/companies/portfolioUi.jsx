@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Pill from '../../../ui/Pill.jsx';
 import { Unrecorded } from '../../../ui/Honesty.jsx';
 import { EYEBROW, INK, MUTED, BTN_SECONDARY } from '../../team/teamUi.jsx';
+import { BASE_PATH } from './companiesModel';
 
 /**
  * D1413 (#3696) — the small pieces every Portfolio screen draws: the company
@@ -129,6 +130,16 @@ export function Reading({ testId, lines = 3 }) {
     <div aria-busy="true" className="flex flex-col gap-2" data-testid={testId}>
       <span className={MUTED}>Reading…</span>
       {Array.from({ length: lines }, (_, i) => <span key={i} className="h-2.5 rounded-full bg-axal-ground dark:bg-gray-800" style={{ width: `${80 - i * 12}%` }} />)}
+    </div>
+  );
+}
+
+/** A company the member cannot open (the Worker answers 404 for an unknown company and for a non-member alike): the refusal, no Try again (#4736). */
+export function NotYours({ testId = 'company-settings-not-yours' }) {
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-3 p-6" data-testid={testId}>
+      <p className={`m-0 text-[14px] font-bold ${INK}`}>This company is not yours to open.</p>
+      <Link to={BASE_PATH} className={BTN_SECONDARY}>Back to Portfolio</Link>
     </div>
   );
 }

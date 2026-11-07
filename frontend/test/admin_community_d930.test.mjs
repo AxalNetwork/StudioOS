@@ -19,6 +19,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
+import { communityModelSource, communityPageSource } from './_community_source.mjs';
 import {
   COMMUNITY_PATH, MOVED_KEY, MOVED_NOTICE, PAGE_UNREADABLE,
   buildCircles, buildConsoles, buildJobs, buildNeeds, buildNextUp, buildTiles,
@@ -392,12 +393,12 @@ test('the routes, the row and the reads the page must never make', () => {
   assert.match(app, /<Route path="\/admin\/community" element=\{guard\(\['admin'\], <AdminCommunity \/>\)\} \/>/);
   assert.doesNotMatch(app, /<Route path="\/admin\/held\/community" element=\{<HeldCommunityRedirect \/>\} \/>/);
   assert.match(read('frontend/src/sidebarConfig.js'), /\{ to: '\/admin\/community', icon: Network, label: 'Community'/);
-  const page = read('frontend/src/pages/admin/community/AdminCommunity.jsx');
+  const page = communityPageSource();
   // The aggregate decrypts members' answers to average them; the experts read caps at 50 and counts samples (D930 §2).
   assert.doesNotMatch(page, /wellbeingAggregate|wellbeingExperts|\/wellbeing\//, 'the page reads a wellbeing route');
   // #4717: the roster is counted on the server; the page reads no profile list, so no name can reach it.
   assert.doesNotMatch(page, /adminNetworkProfiles|network-profiles/);
-  assert.match(read('frontend/src/pages/admin/community/communityModel.js'), /blockOf\(reads\.overview, 'network', ROSTER_UNREAD\)/);
+  assert.match(communityModelSource(), /blockOf\(reads\.overview, 'network', ROSTER_UNREAD\)/);
   // The analytics summary is all time; nothing here reads it.
-  assert.doesNotMatch(read('frontend/src/pages/admin/community/communityModel.js'), /\.summary\b/);
+  assert.doesNotMatch(communityModelSource(), /\.summary\b/);
 });

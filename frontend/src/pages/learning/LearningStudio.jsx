@@ -14,10 +14,11 @@ import {
 } from './LearningStates';
 import { SECONDARY, PRIMARY } from './studioParts';
 import {
-  STATUS_NOTICE, addLesson, addModule, deleteLesson, deleteModule, moveLesson, moveModule, readStudioCourse,
+  STATUS_NOTICE, addLesson, addModule, copyToStream, deleteLesson, deleteModule, moveLesson, moveModule, readStudioCourse,
   readStudioCourses, readStudioItems, renameModule, saveCourse, saveItem, setCourseStatus, setItemStatus,
   studioRows, updateLesson,
 } from './studioActions';
+import { homeRefusal } from './LearningHomeActions';
 import useLearningRead from './useLearningRead';
 
 /**
@@ -48,7 +49,7 @@ const rowsOf = (state) => (state?.status === 'ready' ? state.rows : []);
  */
 export function StudioView({
   items, courses, exercises = null, exams = null, editor,
-  onRetryItems, onRetryCourses, onRetryExercises, onRetryExams,
+  onRetryItems, onRetryCourses, onRetryExercises, onRetryExams, onCopyToStream = null,
 }) {
   // D4181 (lr17): the video whose analytics Sheet is open, or null.
   const [analytics, setAnalytics] = useState(null);
@@ -81,6 +82,7 @@ export function StudioView({
         rows={rows}
         onRetry={() => { for (const l of lists) l.retry?.(); }}
         onAnalytics={(row) => setAnalytics({ uid: row.uid, title: row.title })}
+        onCopyToStream={onCopyToStream}
       />
       {analytics ? <VideoAnalyticsSheet uid={analytics.uid} fallbackTitle={analytics.title} onClose={() => setAnalytics(null)} /> : null}
       <p className="text-[12.5px] text-axal-muted dark:text-gray-400">
@@ -208,6 +210,25 @@ export default function LearningStudio({ sub }) {
     onDeleteLesson: (uid) => run('modules', () => deleteLesson(uid), showCourse),
   });
 
+  /**
+   * #4179 / #4742 — Copy to Stream, from the table's row. The success and the
+   * refusal are both held on the item itself, not on `said` (which belongs to
+   * whatever editor is open): `stream_copy` optimistically moves to "copying"
+   * so the button and the banner draw the state without waiting for the next
+   * `GET /items`, and a refusal is drawn in the route's own words
+   * (`error.data.message`, never `e.message`) as the row's own "Copy failed".
+   */
+  const onCopyToStream = async (row) => {
+    const setStreamCopy = (stream_copy) => setItems((s) => (s.status === 'ready'
+      ? { ...s, rows: s.rows.map((r) => (r.uid === row.uid ? { ...r, stream_copy } : r)) } : s));
+    try {
+      const copy = await copyToStream(row.uid);
+      setStreamCopy({ state: copy?.state || 'copying', stream_uid: copy?.stream_uid ?? null });
+    } catch (err) {
+      setStreamCopy({ state: 'failed', error_message: homeRefusal(err, 'The copy could not be started. Try again.') });
+    }
+  };
+
   const itemRows = rowsOf(items);
   const choices = { exercises: rowsOf(assessments.exercises), exams: rowsOf(assessments.exams) };
   let editor = null;
@@ -248,6 +269,7 @@ export default function LearningStudio({ sub }) {
           items={items} courses={courses} exercises={assessments.exercises} exams={assessments.exams} editor={editor}
           onRetryItems={retryItems} onRetryCourses={retryCourses}
           onRetryExercises={assessments.retryExercises} onRetryExams={assessments.retryExams}
+          onCopyToStream={onCopyToStream}
         />
         {!editor && <WebinarStudioList />}
       </div>

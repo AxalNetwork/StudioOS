@@ -102,4 +102,4 @@ function its file name implies, or when a module imports a page eagerly.
 | --- | --- |
 | `learning.jsx` | The Learning center (D562): every `/learning` route. |
 | `portfolio.jsx` | Portfolio's canonical addresses (D1413, #3696): `/c/<company>[/p/<project>]` and `/p/<project>`, resolved and opened under Account › Portfolio. |
-| `team.jsx` | Team (D1497, #3727): a company's Team, a project's Team in or out of a company, and Project settings › General. |
+| `team.jsx` | Team (D1497, #3727): a company's Team, a project's Team in or out of a company, and Project settings › General; a project's Work (`/projects/:id/work`, which since #4735 also admits an advisor holding a seat on the project, as the Worker's read rule does) and a company's compliance tasks. |

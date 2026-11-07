@@ -9,6 +9,7 @@ import { courseCoverDraw, courseCoverQuote, courseForm } from './studioActions';
 import { byPosition, lessonKindLabel } from './learningModel';
 
 const LEVELS = [['', 'Not set'], ['intro', 'Intro'], ['intermediate', 'Intermediate'], ['advanced', 'Advanced']];
+const AUDIENCES = [['founder', 'Founders'], ['investor', 'Investors'], ['advisor', 'Advisors'], ['partner', 'Partners']];
 
 /**
  * The course builder, for the Super Admin (D562 stage 2; D557's
@@ -89,6 +90,47 @@ export default function StudioCourseBuilder({ course, items = [], exercises = []
               Add a resource
             </button>
             <p className="text-[11.5px] text-axal-faint dark:text-gray-500">Each one is a title and an https link, up to 50.</p>
+          </fieldset>
+          {/* D4650 (#4650, part 2): what the course page's "About this course" shows. Each field may stay empty: it then reads "not recorded". */}
+          <fieldset className="grid gap-3 sm:col-span-2 sm:grid-cols-2" data-testid="studio-course-about">
+            <legend className="mb-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200">About this course</legend>
+            <div className="sm:col-span-2">
+              <span className="block text-[12px] text-axal-muted dark:text-gray-400" id={id('audience')}>Who it is for</span>
+              <div className="mt-1 flex flex-wrap gap-3" role="group" aria-labelledby={id('audience')}>
+                {AUDIENCES.map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-1.5 text-[12.5px] text-axal-ink dark:text-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={form.audience.includes(value)}
+                      onChange={(e) => setForm((f) => ({ ...f, audience: e.target.checked ? [...f.audience, value] : f.audience.filter((a) => a !== value) }))}
+                      data-testid={`input-course-audience-${value}`}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <Field id={id('stage')} label="Stage" hint="The venture stage it is for, up to 120 characters.">
+              <input id={id('stage')} className={INPUT} value={form.stage} onChange={set('stage')} data-testid="input-course-stage" />
+            </Field>
+            <Field id={id('output')} label="Practical output" hint="What the learner leaves with, up to 300 characters.">
+              <input id={id('output')} className={INPUT} value={form.practical_output} onChange={set('practical_output')} data-testid="input-course-output" />
+            </Field>
+            <Field id={id('outcomes')} label="Outcomes" hint="One per line, up to 8.">
+              <textarea id={id('outcomes')} rows={3} className={INPUT} value={form.outcomes} onChange={set('outcomes')} data-testid="input-course-outcomes" />
+            </Field>
+            <Field id={id('prerequisites')} label="Prerequisites" hint="One per line, up to 8.">
+              <textarea id={id('prerequisites')} rows={3} className={INPUT} value={form.prerequisites} onChange={set('prerequisites')} data-testid="input-course-prerequisites" />
+            </Field>
+            <Field id={id('author')} label="Author">
+              <input id={id('author')} className={INPUT} value={form.author} onChange={set('author')} data-testid="input-course-author" />
+            </Field>
+            <Field id={id('reviewer')} label="Reviewer">
+              <input id={id('reviewer')} className={INPUT} value={form.reviewer} onChange={set('reviewer')} data-testid="input-course-reviewer" />
+            </Field>
+            <Field id={id('reviewed')} label="Review date" hint="Not in the future.">
+              <input id={id('reviewed')} type="date" className={INPUT} value={form.reviewed_on} onChange={set('reviewed_on')} data-testid="input-course-reviewed-on" />
+            </Field>
           </fieldset>
           <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
             <button type="submit" className={PRIMARY} disabled={busy} data-testid="button-course-save">

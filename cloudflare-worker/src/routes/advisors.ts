@@ -19,6 +19,10 @@ import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 /** The request's execution context, or none where the runtime gives none (a test's request). */
 const execCtx = (c: any) => { try { return c.executionCtx; } catch { return undefined; } };
 import { logAdminAction } from '../services/adminAudit';
+import {
+  CODE_MAX_ATTEMPTS, CODE_TTL_MS, CODES_PER_HOUR, attestationMailer, claimJson, claimSha256, codeHash,
+  consentState, emailOf, maskEmail, newCode, sha256Hex,
+} from '../services/advisorProofAttestation';
 import { ensureTier, type TierUser } from '../middleware/requireTier';
 import {
   isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull,
@@ -322,6 +326,9 @@ advisors.get('/', async (c) => {
 advisors.get('/me', async (c) => {
   try {
     const user = await requireAuth(c);
+    // D4670: someone who holds no Advisor licence is refused, so "you may not"
+    // never reads as "you have no profile yet" (null, below).
+    if (!mayHoldAdvisorProfile(user)) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     // The 202 columns are read straight out of the row below; heal a database
     // that was baselined after those ALTERs landed. See advisorStoresSchema.ts.
     await ensureAdvisorStoresSchema(c.env);
@@ -372,9 +379,19 @@ function mergeProfileFields(existing: AdvisorRow | null, body: any) {
   };
 }
 
+/**
+ * D4670 (#4670): only an Advisor (a primary or an additional licence, D4472)
+ * or an admin may create or change an advisor profile. Before, a founder's
+ * POST created an active profile, because `myAdvisor` answered null for them
+ * and null read as "make one".
+ */
+const mayHoldAdvisorProfile = (user: User) => holdsLicence(user, 'advisor') || isAdmin(user);
+const ADVISOR_LICENCE_REQUIRED = { code: 'advisor_licence_required', message: 'An advisor profile needs the Advisor licence.' } as const;
+
 advisors.post('/me', async (c) => {
   try {
     const user = await requireAuth(c);
+    if (!mayHoldAdvisorProfile(user)) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     await ensureAdvisorStoresSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const existing = await myAdvisor(c.env, user);
@@ -1455,39 +1472,44 @@ type ConsentRow = {
   request_token: string | null; consent_given: number; consent_given_at: string | null;
   consent_text: string | null; consent_captured_by: number | null;
   statement: string | null; withdrawn_at: string | null;
+  claim_sha256: string | null; claim_json: string | null;
   created_at: string; updated_at: string;
 };
 
 const PROOF_KINDS = ['engagement', 'outcome', 'role', 'credential'];
 
 /**
- * The consent as the ADVISOR may see it. `request_token` is never included:
- * it is the attester's credential for answering, and an advisor who could read
- * it could answer on the attester's behalf — which would make every
- * attestation in the table self-issued and worth nothing.
+ * The consent as the ADVISOR may see it (D4670). `invite_token` is the link the
+ * advisor hands over, readable again so a refresh never loses it: since D4670
+ * the link only shows the claim, and answering needs a code mailed to the
+ * named address, so holding it is not being able to answer.
  */
-function consentDto(r: ConsentRow): any {
+function consentDto(r: ConsentRow, currentClaimSha: string): any {
+  const state = consentState(r, currentClaimSha);
   return {
     id: r.id, uid: r.uid, proof_item_id: r.proof_item_id,
     attester_name: r.attester_name, attester_email: r.attester_email,
     attester_role: r.attester_role, relationship: r.relationship,
     requested_at: r.requested_at,
-    consent_given: !!r.consent_given,
+    state,
+    consent_given: state === 'confirmed',
     consent_given_at: r.consent_given_at,
     statement: r.statement,
     withdrawn_at: r.withdrawn_at,
+    invite_token: state === 'pending' ? r.request_token : null,
     created_at: r.created_at,
   };
 }
 
 /**
  * Attested is DERIVED from the consent rows, never stored on the item — see
- * migration 204's header. `withdrawn_at` disqualifies a row even when
- * `consent_given` was never cleared, so a withdrawal cannot be undone by
- * forgetting to update one of two columns.
+ * migration 204's header. Since D4670 a row counts only while it is confirmed
+ * about the claim as it now reads (`consentState`): a withdrawal, a claim that
+ * changed, or a confirmation recorded before D4670 does not.
  */
-function proofDto(r: ProofRow, consents: ConsentRow[]): any {
-  const live = consents.filter((x) => x.consent_given === 1 && !x.withdrawn_at);
+function proofDto(r: ProofRow, consents: ConsentRow[], currentClaimSha: string): any {
+  const views = consents.map((x) => consentDto(x, currentClaimSha));
+  const live = views.filter((x) => x.state === 'confirmed');
   return {
     id: r.id, uid: r.uid, advisor_id: r.advisor_id,
     kind: r.kind, title: r.title, detail: r.detail,
@@ -1498,7 +1520,7 @@ function proofDto(r: ProofRow, consents: ConsentRow[]): any {
     // point of the zone: the advisor's own word and someone else's word are
     // different evidence and must never render identically.
     status: live.length > 0 ? 'attested' : 'self_stated',
-    consents: consents.map(consentDto),
+    consents: views,
     created_at: r.created_at, updated_at: r.updated_at,
   };
 }
@@ -1525,6 +1547,13 @@ async function loadProofConsents(env: Env, advisorId: number, itemIds: number[])
   return out;
 }
 
+async function proofWithConsents(env: Env, advisorId: number, items: ProofRow[]): Promise<any[]> {
+  const consents = await loadProofConsents(env, advisorId, items.map((r) => r.id));
+  const out = [];
+  for (const r of items) out.push(proofDto(r, consents.get(r.id) || [], await claimSha256(r)));
+  return out;
+}
+
 advisors.get('/me/proof', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -1542,6 +1571,13 @@ advisors.get('/me/proof', async (c) => {
                 SELECT 1 FROM advisor_proof_consents x
                  WHERE x.proof_item_id = p.id AND x.consent_given = 1
                    AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
+                   -- D4670: confirmed about the claim as it now reads (consentState).
+                   AND x.claim_json IS NOT NULL
+                   AND json_extract(x.claim_json, '$.kind') IS p.kind
+                   AND json_extract(x.claim_json, '$.title') IS p.title
+                   AND json_extract(x.claim_json, '$.organization') IS p.organization
+                   AND json_extract(x.claim_json, '$.period_note') IS p.period_note
+                   AND json_extract(x.claim_json, '$.detail') IS p.detail
               ) THEN 1 ELSE 0 END), 0) AS attested,
               COALESCE(SUM(CASE WHEN EXISTS (
                 SELECT 1 FROM advisor_proof_consents x
@@ -1551,11 +1587,10 @@ advisors.get('/me/proof', async (c) => {
          FROM advisor_proof_items p WHERE p.advisor_id = ?`
     ).bind(m.id).first<{ total: number; attested: number; awaiting: number }>();
     const items = rows.results || [];
-    const consents = await loadProofConsents(c.env, m.id, items.map((r) => r.id));
     const total = Number(whole?.total) || 0;
     const attested = Number(whole?.attested) || 0;
     return c.json({
-      items: items.map((r) => proofDto(r, consents.get(r.id) || [])),
+      items: await proofWithConsents(c.env, m.id, items),
       page: pageFacts(w, total, items.length),
       // `awaiting`: a claim with an ask no one has answered or withdrawn.
       counts: { total, attested, self_stated: total - attested, awaiting: Number(whole?.awaiting) || 0 },
@@ -1586,7 +1621,7 @@ advisors.post('/me/proof', async (c) => {
            body.is_public ? 1 : 0, now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_items WHERE id = ?')
       .bind((r as any).meta?.last_row_id).first<ProofRow>();
-    return c.json(proofDto(fresh!, []));
+    return c.json(proofDto(fresh!, [], await claimSha256(fresh!)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1608,7 +1643,10 @@ advisors.delete('/me/proof/:id', async (c) => {
     // DELETE re-checks the owner, and the consent DELETE names only that item.
     const consents = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_proof_consents WHERE proof_item_id = ?')
       .bind(row.id).first<{ n: number }>();
+    // D4670: the consents' one-time codes go first (they reference the rows);
+    // the answer history stays, and holds no name or address.
     await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM advisor_proof_consent_codes WHERE consent_id IN (SELECT id FROM advisor_proof_consents WHERE proof_item_id = ?)').bind(row.id),
       c.env.DB.prepare('DELETE FROM advisor_proof_consents WHERE proof_item_id = ?').bind(row.id),
       c.env.DB.prepare('DELETE FROM advisor_proof_items WHERE id = ? AND advisor_id = ?').bind(row.id, m.id),
     ]);
@@ -1616,15 +1654,20 @@ advisors.delete('/me/proof/:id', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+async function proofEvent(env: Env, consentId: number, kind: string, claimSha: string | null, at: string) {
+  await env.DB.prepare(
+    'INSERT INTO advisor_proof_consent_events (consent_id, kind, claim_sha256, created_at) VALUES (?, ?, ?, ?)'
+  ).bind(consentId, kind, claimSha, at).run();
+}
+
 /**
- * Ask a named person to confirm a claim.
+ * Ask a named person to confirm a claim (D4670).
  *
- * This RECORDS the request; it does not send it. Who delivers the ask — mail,
- * a link the advisor copies, something else — is a separate decision, and a
- * route that quietly sent mail to an address a user typed would be making it.
- * The token is returned to the ADVISOR once here so a link can be handed over
- * by whatever channel they already have with the person; it is never included
- * in any subsequent read.
+ * This RECORDS the request and pins the claim as it now reads; it sends
+ * nothing. The advisor hands over the link by whatever channel they already
+ * have with the person, and may read it back from the list. The person's
+ * email is required, because answering needs a code mailed there on their own
+ * request, and it cannot be the advisor's own address.
  */
 advisors.post('/me/proof/:id/consent-request', async (c) => {
   try {
@@ -1635,66 +1678,179 @@ advisors.post('/me/proof/:id/consent-request', async (c) => {
     if (!item || item.advisor_id !== m.id) return c.json({ detail: 'Proof item not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     const attester_name = String(body.attester_name || '').trim().slice(0, 200);
-    if (!attester_name) return c.json({ detail: 'Name the person being asked to confirm' }, 400);
+    if (!attester_name) return refuse(c, 400, { code: 'attester_name_required', message: 'Name the person being asked to confirm.' });
+    const attester_email = emailOf(body.attester_email);
+    if (!attester_email) return refuse(c, 400, { code: 'attester_email_required', message: 'Give the email address of the person being asked; their code is sent there.' });
+    const own = [user.email, m.email].map(emailOf).filter(Boolean);
+    if (own.includes(attester_email)) {
+      return refuse(c, 422, { code: 'attester_is_requester', message: 'Someone else confirms your claim: that address is your own.' });
+    }
     const token = newUid();
     const now = nowIso();
+    const pinned = claimJson(item);
+    const sha = await sha256Hex(pinned);
     const r = await c.env.DB.prepare(
       `INSERT INTO advisor_proof_consents
          (uid, proof_item_id, attester_name, attester_email, attester_role,
           relationship, requested_at, requested_by, request_token,
-          consent_given, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
-    ).bind(newUid(), item.id, attester_name,
-           trimOrNull(body.attester_email, 300), trimOrNull(body.attester_role, 200),
-           trimOrNull(body.relationship, 200), now, user.id, token, now, now).run();
-    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE id = ?')
-      .bind((r as any).meta?.last_row_id).first<ConsentRow>();
-    return c.json({ ...consentDto(fresh!), request_token: token, delivered: false });
+          consent_given, claim_sha256, claim_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`
+    ).bind(newUid(), item.id, attester_name, attester_email,
+           trimOrNull(body.attester_role, 200), trimOrNull(body.relationship, 200),
+           now, user.id, token, sha, pinned, now, now).run();
+    const id = Number((r as any).meta?.last_row_id);
+    await proofEvent(c.env, id, 'asked', sha, now);
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE id = ?').bind(id).first<ConsentRow>();
+    return c.json({ ...consentDto(fresh!, sha), delivered: false });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The consent a link names, its claim, and whether the claim still reads as pinned. */
+async function consentByToken(env: Env, token: string) {
+  if (!token || token.length > 100) return null;
+  const row = await env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE request_token = ?').bind(token).first<ConsentRow>();
+  if (!row) return null;
+  const item = await env.DB.prepare('SELECT * FROM advisor_proof_items WHERE id = ?').bind(row.proof_item_id).first<ProofRow>();
+  if (!item) return null;
+  const advisor = await env.DB.prepare('SELECT id, user_id, display_name, email FROM advisors WHERE id = ?').bind(item.advisor_id).first<{ id: number; user_id: number | null; display_name: string; email: string | null }>();
+  const currentSha = await claimSha256(item);
+  return { row, item, advisor, currentSha };
+}
+
+const NO_REQUEST = { code: 'consent_not_found', message: 'This request does not exist, or the claim it was about was removed.' } as const;
+
+/**
+ * The attester's view (D4670): the claim exactly as they are asked to confirm
+ * it, who asked, and the history of their answers. No account, and no code:
+ * reading is what the link is for. A link answers nothing about any other
+ * claim, and never the attester's address in full.
+ */
+// Three segments, first one literal: `/:uid/book` two segments up cannot
+// shadow these, and neither can any future single-segment route.
+advisors.get('/proof-consents/:token/claim', async (c) => {
+  try {
+    const found = await consentByToken(c.env, String(c.req.param('token') || ''));
+    if (!found) return refuse(c, 404, NO_REQUEST);
+    const { row, item, advisor, currentSha } = found;
+    const pinned = row.claim_json ? JSON.parse(row.claim_json) : JSON.parse(claimJson(item));
+    const events = (await c.env.DB.prepare(
+      'SELECT kind, created_at FROM advisor_proof_consent_events WHERE consent_id = ? ORDER BY id ASC'
+    ).bind(row.id).all<{ kind: string; created_at: string }>()).results || [];
+    c.header('Cache-Control', 'private, no-store');
+    return c.json({
+      advisor_name: advisor?.display_name || null,
+      attester_name: row.attester_name,
+      email_hint: maskEmail(row.attester_email),
+      claim: pinned,
+      claim_sha256: row.claim_sha256 || currentSha,
+      // The advisor changed the claim after asking: what was asked about is no longer what it says.
+      claim_changed: !!row.claim_sha256 && row.claim_sha256 !== currentSha,
+      state: consentState(row, currentSha),
+      statement: row.statement,
+      history: events,
+    });
   } catch (e) { return mapError(c, e); }
 });
 
 /**
- * The attester answers. Token-authenticated, and NOT advisor-scoped — the whole
- * value of an attestation is that the subject cannot record it for themselves.
+ * Mail the attester a one-time code (D4670), on their own request, to the
+ * address the advisor named. Five an hour per request; the code lasts 15
+ * minutes. The address is never echoed in full and never logged.
+ */
+advisors.post('/proof-consents/:token/code', async (c) => {
+  try {
+    const found = await consentByToken(c.env, String(c.req.param('token') || ''));
+    if (!found) return refuse(c, 404, NO_REQUEST);
+    const { row, advisor } = found;
+    const to = emailOf(row.attester_email);
+    if (!to) return refuse(c, 409, { code: 'attester_email_missing', message: 'This request names no email address, so no code can be sent. Ask the advisor to send a new request.' });
+    const now = Date.now();
+    const recent = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM advisor_proof_consent_codes WHERE consent_id = ? AND datetime(created_at) > datetime(?)'
+    ).bind(row.id, new Date(now - 3600_000).toISOString()).first<{ n: number }>();
+    if (Number(recent?.n || 0) >= CODES_PER_HOUR) {
+      return refuse(c, 429, { code: 'code_rate_limited', message: 'Several codes were sent in the last hour. Use the latest one, or try again later.' });
+    }
+    const code = newCode();
+    await c.env.DB.prepare(
+      'INSERT INTO advisor_proof_consent_codes (consent_id, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, ?)'
+    ).bind(row.id, await codeHash(row.id, code), new Date(now + CODE_TTL_MS).toISOString(), new Date(now).toISOString()).run();
+    const sent = await attestationMailer.send(c.env, to, advisor?.display_name || 'An advisor', code);
+    if (!sent) return refuse(c, 503, { code: 'code_unsent', message: 'The code could not be emailed just now. Try again in a few minutes.' });
+    return c.json({ sent: true, email_hint: maskEmail(to), expires_in_seconds: CODE_TTL_MS / 1000 });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The attester answers (D4670). The link names the request; the code proves
+ * the person answering reads the address the advisor named. `claim_sha256`
+ * is the claim the attester was shown: an answer about another reading of it
+ * is refused. The advisor themselves is refused even with a code.
  *
  * `requireAuth` is deliberately absent: an attester is usually not a user of
  * this product, and requiring an account would mean the only confirmable claims
  * are the ones a colleague already inside Axal can vouch for.
  */
-// Three segments, first one literal: `/:uid/book` two segments up cannot
-// shadow it, and neither can any future single-segment route.
 advisors.post('/proof-consents/:token/respond', async (c) => {
   try {
-    const token = String(c.req.param('token') || '');
-    const row = await c.env.DB.prepare(
-      'SELECT * FROM advisor_proof_consents WHERE request_token = ?'
-    ).bind(token).first<ConsentRow>();
-    if (!row) return c.json({ detail: 'Consent request not found' }, 404);
+    const found = await consentByToken(c.env, String(c.req.param('token') || ''));
+    if (!found) return refuse(c, 404, NO_REQUEST);
+    const { row, item, advisor, currentSha } = found;
     const body = await c.req.json().catch(() => ({} as any));
-    const now = nowIso();
+    // A signed-in caller who is the advisor is refused outright: the subject of a claim never answers it.
+    const caller = await getCurrentUser(c).catch(() => null);
+    if (caller && advisor?.user_id != null && Number(caller.id) === Number(advisor.user_id)) {
+      return refuse(c, 403, { code: 'requester_cannot_attest', message: 'You cannot answer a request about your own claim.' });
+    }
+    const code = typeof body.code === 'string' ? body.code.trim() : '';
+    if (!/^\d{6}$/.test(code)) return refuse(c, 400, { code: 'code_required', message: 'Enter the six-digit code emailed to you.' });
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const latest = await c.env.DB.prepare(
+      'SELECT id, code_hash, expires_at, attempts, used_at FROM advisor_proof_consent_codes WHERE consent_id = ? ORDER BY id DESC LIMIT 1'
+    ).bind(row.id).first<{ id: number; code_hash: string; expires_at: string; attempts: number; used_at: string | null }>();
+    if (!latest || latest.used_at || Date.parse(latest.expires_at) <= nowMs || Number(latest.attempts) >= CODE_MAX_ATTEMPTS) {
+      return refuse(c, 401, { code: 'code_expired', message: 'That code has expired or was already used. Ask for a new one.' });
+    }
+    if (latest.code_hash !== await codeHash(row.id, code)) {
+      await c.env.DB.prepare('UPDATE advisor_proof_consent_codes SET attempts = attempts + 1 WHERE id = ?').bind(latest.id).run();
+      return refuse(c, 401, { code: 'code_wrong', message: 'That code is not right. Check the latest email and try again.' });
+    }
+    // The code is spent before anything is written, so it answers once.
+    const spent = await c.env.DB.prepare('UPDATE advisor_proof_consent_codes SET used_at = ? WHERE id = ? AND used_at IS NULL').bind(now, latest.id).run();
+    if (!Number((spent as any)?.meta?.changes ?? 1)) return refuse(c, 401, { code: 'code_expired', message: 'That code has expired or was already used. Ask for a new one.' });
+
     if (body.consent_given === false) {
       // Declining and withdrawing are the same shape: the row stays, and says
-      // so. Deleting it would erase the fact that the ask was ever made.
+      // so, and the history keeps which it was.
+      const wasGiven = Number(row.consent_given) === 1 && !row.withdrawn_at;
       await c.env.DB.prepare(
         `UPDATE advisor_proof_consents
             SET consent_given = 0, withdrawn_at = ?, updated_at = ? WHERE id = ?`
       ).bind(now, now, row.id).run();
+      await proofEvent(c.env, row.id, wasGiven || row.consent_given_at ? 'withdrawn' : 'declined', row.claim_sha256, now);
     } else {
       const consent_text = String(body.consent_text || '').trim();
-      if (!consent_text) {
-        return c.json({ detail: 'consent_text must record what was agreed to' }, 400);
+      if (!consent_text) return refuse(c, 400, { code: 'consent_text_required', message: 'The confirmation must record what was agreed to.' });
+      const asked = row.claim_sha256 || currentSha;
+      if (asked !== currentSha || (typeof body.claim_sha256 === 'string' && body.claim_sha256 !== currentSha)) {
+        return refuse(c, 409, { code: 'claim_changed', message: 'The claim has changed since you were asked. Nothing was recorded; the advisor needs to ask again.' });
       }
+      const again = !!row.consent_given_at;
       await c.env.DB.prepare(
         `UPDATE advisor_proof_consents
             SET consent_given = 1, consent_given_at = ?, consent_text = ?,
-                statement = ?, withdrawn_at = NULL, updated_at = ?
+                statement = ?, withdrawn_at = NULL, claim_sha256 = ?, claim_json = ?, updated_at = ?
           WHERE id = ?`
       ).bind(now, consent_text.slice(0, 2000), trimOrNull(body.statement, 2000),
-             now, row.id).run();
+             currentSha, row.claim_json || claimJson(item), now, row.id).run();
+      await proofEvent(c.env, row.id, again ? 'reconfirmed' : 'confirmed', currentSha, now);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE id = ?')
       .bind(row.id).first<ConsentRow>();
-    return c.json(consentDto(fresh!));
+    // The attester's own answer, never the advisor's link.
+    const { invite_token: _hidden, attester_email: _addr, ...answer } = consentDto(fresh!, currentSha);
+    return c.json(answer);
   } catch (e) { return mapError(c, e); }
 });
 

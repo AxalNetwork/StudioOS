@@ -238,4 +238,16 @@ export function SaveNote({ note }) {
   );
 }
 
+/**
+ * D4670: what a refused read or write says, by the Worker's code. Anything
+ * else is the caller's own fixed sentence: a zone never prints raw error text.
+ */
+export const ASK_REFUSALS = Object.freeze({
+  attester_email_required: 'Give their email address: their code is sent there when they answer.',
+  attester_is_requester: 'That address is your own. Someone else confirms your claim.',
+  attester_name_required: 'Name the person you are asking.',
+  advisor_licence_required: 'Expertise needs the Advisor licence on this account.',
+});
+export const refusalText = (err, fallback) => ASK_REFUSALS[err?.code] || fallback;
+
 export { Pill };

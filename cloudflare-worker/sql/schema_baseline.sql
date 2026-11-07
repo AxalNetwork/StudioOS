@@ -2695,6 +2695,12 @@ CREATE TABLE legal_obligations (
   UNIQUE(user_id, obligation_key)
 );
 
+CREATE TABLE legal_template_proposals (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, entity TEXT NOT NULL, priority TEXT NOT NULL, kind TEXT NOT NULL, draft_body_md TEXT NOT NULL, source_urls_json TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'pending_counsel_review', created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+
+CREATE TABLE legal_template_research_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, template_id INTEGER NOT NULL, template_slug TEXT NOT NULL, jurisdiction TEXT NOT NULL, draft_body_md TEXT NOT NULL DEFAULT '', review_notes TEXT NOT NULL, citations_json TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'pending_counsel_review', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(template_id,jurisdiction), FOREIGN KEY(template_id) REFERENCES legal_templates(id));
+
+CREATE TABLE legal_template_review_events (id INTEGER PRIMARY KEY AUTOINCREMENT, template_id INTEGER NOT NULL, review_type TEXT NOT NULL, jurisdiction TEXT, status TEXT NOT NULL DEFAULT 'pending', reviewer TEXT, source_reference TEXT, review_due_at TEXT, reviewed_at TEXT, notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(template_id) REFERENCES legal_templates(id));
+
 CREATE TABLE legal_template_versions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       template_id INTEGER NOT NULL,
@@ -5985,6 +5991,8 @@ CREATE INDEX idx_legal_obligations_status ON legal_obligations(status);
 
 CREATE INDEX idx_legal_obligations_user   ON legal_obligations(user_id);
 
+CREATE INDEX idx_legal_template_review_events_status ON legal_template_review_events(status,template_id);
+
 CREATE INDEX idx_legal_template_versions_tpl ON legal_template_versions(template_id);
 
 CREATE INDEX idx_legal_templates_active ON legal_templates(is_active);
@@ -6760,6 +6768,8 @@ BEGIN
         'lp_investors is sealed (Epic 11). Use limited_partners + vc_funds instead.'
     );
 END;
+
+CREATE VIEW legal_template_research_queue AS SELECT t.id AS template_id,t.slug,t.title,t.category,t.version AS live_version,t.is_stub,d.status AS research_status,d.jurisdiction,d.review_notes,d.citations_json,length(d.draft_body_md) AS draft_chars,d.updated_at FROM legal_templates t JOIN legal_template_research_drafts d ON d.template_id=t.id;
 
 CREATE VIEW partner_summary AS
       SELECT u.id, u.email, u.name, u.role, u.kyc_status,

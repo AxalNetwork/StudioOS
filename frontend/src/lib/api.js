@@ -4220,9 +4220,10 @@ export const api = {
   createMyAdvisorProof: (data) =>
     request('/advisors/me/proof', { method: 'POST', body: JSON.stringify(data) }),
   deleteMyAdvisorProof: (id) => request(`/advisors/me/proof/${id}`, { method: 'DELETE' }),
-  // Records the ask; it does not send it. The response carries `request_token`
-  // exactly once — the advisor hands the link over by whatever channel they
-  // already have with the person, and no later read returns it.
+  // Records the ask; it does not send it. D4670: the response and every later
+  // list carry `invite_token` while the ask is pending, so a refresh never loses
+  // the link. The link only shows the claim; answering needs a code mailed to
+  // the address named here (`attester_email`, required, not the advisor's own).
   requestAdvisorProofConsent: (id, data) =>
     request(`/advisors/me/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -4364,8 +4365,12 @@ export const api = {
   acceptReceivedDeliverableVersion: (uid) =>
     request(`/advisors/received/deliverables/${encodeURIComponent(uid)}/accept`, { method: 'POST' }),
 
-  // The attester's own answer. Unauthenticated on purpose — the token is the
-  // credential, and an attester is usually not a user of this product.
+  // D4670 — the attester's side, unauthenticated on purpose (an attester is
+  // usually not a user of this product). The link reads the claim; a code
+  // emailed to the named address, on the attester's own request, answers it.
+  getAdvisorProofConsentClaim: (token) => request(`/advisors/proof-consents/${token}/claim`),
+  requestAdvisorProofConsentCode: (token) =>
+    request(`/advisors/proof-consents/${token}/code`, { method: 'POST', body: JSON.stringify({}) }),
   respondToAdvisorProofConsent: (token, data) =>
     request(`/advisors/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
 

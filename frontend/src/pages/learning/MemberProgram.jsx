@@ -8,6 +8,7 @@ import {
   UNAVAILABLE_LINE, completionCell, continueTarget, enrolmentCopy, entryFor, programProgress, progressLine, subjectKindLabel,
 } from './programModel';
 import { enrolSelf, readMemberProgram } from './programReads';
+import { homeRefusal } from './LearningHomeActions';
 import useLearningRead from './useLearningRead';
 
 /**
@@ -125,7 +126,8 @@ export default function MemberProgramPage({ uid }) {
       await enrolSelf(uid);
       retry();
     } catch (err) {
-      setJoinError(err?.message || 'You could not be enrolled.');
+      // #4742 — a route refusal only, never a transport/internal Error.message (MyPrograms.jsx's homeRefusal).
+      setJoinError(homeRefusal(err, 'You could not be enrolled. Try again.'));
     } finally {
       setJoining(false);
     }

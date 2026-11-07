@@ -890,3 +890,33 @@ export function statsTiles(stats) {
     { key: 'exams', label: 'Exams passed', value: exams && Number.isFinite(Number(exams.sat)) && Number.isFinite(Number(exams.passed)) ? `${Number(exams.passed)} of ${Number(exams.sat)}` : nr },
   ];
 }
+
+// ---------------------------------------------------------------------------
+// D4650 (#4650, part 2): a course's metadata, as the course page shows it
+// ---------------------------------------------------------------------------
+
+export const COURSE_AUDIENCE_LABEL = Object.freeze({ founder: 'Founders', investor: 'Investors', advisor: 'Advisors', partner: 'Partners' });
+export const ABOUT_NOT_RECORDED = 'Who this course is for, what it teaches and what it assumes are not recorded yet.';
+
+/**
+ * The course page's "About this course": one row per field the author
+ * recorded, in a fixed order, and `missing` naming each field that is not.
+ * Nothing is inferred from the summary: a field not filled is listed as not
+ * recorded, and a course with none recorded says so in one sentence.
+ */
+export function courseAbout(meta) {
+  const m = meta || {};
+  const rows = [];
+  const missing = [];
+  const audience = (Array.isArray(m.audience) ? m.audience : []).map((a) => COURSE_AUDIENCE_LABEL[a]).filter(Boolean);
+  if (audience.length) rows.push({ key: 'audience', label: 'For', value: audience.join(', ') }); else missing.push('who it is for');
+  if (m.stage) rows.push({ key: 'stage', label: 'Stage', value: m.stage }); else missing.push('stage');
+  const outcomes = Array.isArray(m.outcomes) ? m.outcomes : [];
+  if (outcomes.length) rows.push({ key: 'outcomes', label: "You'll be able to", list: outcomes }); else missing.push('outcomes');
+  const prerequisites = Array.isArray(m.prerequisites) ? m.prerequisites : [];
+  if (prerequisites.length) rows.push({ key: 'prerequisites', label: 'Before you start', list: prerequisites }); else missing.push('prerequisites');
+  if (m.practical_output) rows.push({ key: 'practical_output', label: "You'll leave with", value: m.practical_output }); else missing.push('what you leave with');
+  const people = [m.author ? `Written by ${m.author}` : null, m.reviewer ? `reviewed by ${m.reviewer}${m.reviewed_on ? ` on ${m.reviewed_on}` : ''}` : null].filter(Boolean);
+  if (people.length) rows.push({ key: 'people', label: 'Responsibility', value: people.join(', ') }); else missing.push('author and reviewer');
+  return { rows, missing, empty: rows.length === 0 };
+}
