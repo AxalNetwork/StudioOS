@@ -3145,15 +3145,21 @@ export type GuardrailCounters = {
    *     `safe` would be a verdict nothing reached.
    *   · The whole block still fails as one with the rest of `enforcement`: an
    *     unreadable `advisor_turn_audit` is not a turn that fired no rules.
+   *   · D4691 — the breakdown is its OWN read, so it carries its own state: when
+   *     the totals were read and the breakdown was not, `breakdown_available`
+   *     is false and `rules`, `states` and `unclassified` are null, never an
+   *     empty list and a zero that would read as "no rule fired".
    */
   enforcement:
     | {
       available: true;
       blocked: number;
       flagged: number;
-      rules: Array<{ category: string; turns: number }>;
-      states: Array<{ category: string; turns: number }>;
-      unclassified: number;
+      breakdown_available: boolean;
+      breakdown_reason?: string;
+      rules: Array<{ category: string; turns: number }> | null;
+      states: Array<{ category: string; turns: number }> | null;
+      unclassified: number | null;
     }
     | { available: false; reason: string };
   /**
@@ -3281,14 +3287,27 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
         reason: '`advisor_turn_audit` could not be read on this database (migration 043). That is '
           + 'not the same as no turn having been blocked or flagged.',
       }
-      : {
-        available: true,
-        blocked: Number(enforcement?.blocked || 0),
-        flagged: Number(enforcement?.flagged || 0),
-        rules: catRows.filter((r) => isRule(r.category)),
-        states: catRows.filter((r) => r.category !== '' && !isRule(r.category)),
-        unclassified: catRows.find((r) => r.category === '')?.turns ?? 0,
-      },
+      : byCategory === undefined
+        ? {
+          available: true,
+          blocked: Number(enforcement?.blocked || 0),
+          flagged: Number(enforcement?.flagged || 0),
+          breakdown_available: false,
+          breakdown_reason: 'The breakdown by guardrail rule over `advisor_turn_audit` did not complete, which is '
+            + 'not the same as no rule having fired.',
+          rules: null,
+          states: null,
+          unclassified: null,
+        }
+        : {
+          available: true,
+          blocked: Number(enforcement?.blocked || 0),
+          flagged: Number(enforcement?.flagged || 0),
+          breakdown_available: true,
+          rules: catRows.filter((r) => isRule(r.category)),
+          states: catRows.filter((r) => r.category !== '' && !isRule(r.category)),
+          unclassified: catRows.find((r) => r.category === '')?.turns ?? 0,
+        },
     guard: guardRows === undefined
       ? {
         available: false,

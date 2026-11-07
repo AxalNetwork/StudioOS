@@ -335,8 +335,10 @@ test('data access is one zone in two halves, and neither can hide the other', ()
 test('a session open past its limit reads "not closed", not "0m left"', () => {
   // The token expires at thirty minutes; closing the row is best-effort on
   // the way out. An open row past the limit means the RECORD was not closed.
-  assert.match(ROUTE, /dur = 'not closed';/);
-  assert.match(ROUTE, /elapsed >= IMPERSONATION_EXPIRY_MINUTES/);
+  // D4691 — "past its limit" is the shared rule's `not_closed` (the extension
+  // ceiling at HQ, thirty minutes for a branch session), so this zone, the
+  // feed's outcome column and the overview's count agree on every row.
+  assert.match(ROUTE, /if \(status === 'not_closed'\) dur = 'not closed';/);
   assert.match(ROUTE, /dur = `\$\{IMPERSONATION_EXPIRY_MINUTES - elapsed\}m left`;/);
   assert.ok(PAGE.includes('not closed'), 'the page never explains what the state means');
   assert.ok(PAGE.includes('&ldquo;0m left&rdquo; would say somebody is still inside'),

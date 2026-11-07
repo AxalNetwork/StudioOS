@@ -26,9 +26,9 @@ const LIST = {
   total: 3,
   expiry_minutes: 30,
   rows: [
-    { id: 11, user_id: 901, email: 'super@axal.example', name: 'Sam Super', role: 'admin', user_agent: 'Chrome', ip: '203.0.113.1', factor: 'totp', created_at: '2026-10-04 08:02:00', last_seen_at: '2026-10-04 09:00:00', is_current: true },
-    { id: 12, user_id: 903, email: 'fran@example.com', name: 'Fran Target', role: 'founder', user_agent: 'Safari', ip: '203.0.113.7', factor: 'password', created_at: '2026-10-02 07:50:00', last_seen_at: '2026-10-04 08:30:00', is_current: false },
-    { id: 13, user_id: 904, email: 'olu@example.com', name: null, role: 'founder', user_agent: null, ip: null, factor: null, created_at: null, last_seen_at: '2026-10-04 08:10:00', is_current: false },
+    { id: 11, user_id: 901, email: 'super@axal.example', name: 'Sam Super', role: 'admin', user_agent: 'Chrome', network: '203.0.113.0/24', factor: 'totp', created_at: '2026-10-04 08:02:00', last_seen_at: '2026-10-04 09:00:00', is_current: true },
+    { id: 12, user_id: 903, email: 'fran@example.com', name: 'Fran Target', role: 'founder', user_agent: 'Safari', network: '203.0.113.0/24', factor: 'password', created_at: '2026-10-02 07:50:00', last_seen_at: '2026-10-04 08:30:00', is_current: false },
+    { id: 13, user_id: 904, email: 'olu@example.com', name: null, role: 'founder', user_agent: null, network: 'unknown', factor: null, created_at: null, last_seen_at: '2026-10-04 08:10:00', is_current: false },
   ],
   impersonations: {
     available: true,
@@ -43,7 +43,9 @@ test('the list renders every session with its acts; the caller\'s own reads Curr
   const t = renderedText(h);
   assert.match(t, /Fran Target/);
   assert.match(t, /olu@example\.com/, 'a row with no name must fall back to the address');
-  assert.match(t, /no device recorded · no address recorded/, 'an absent device or address rendered blank');
+  // D4691 — HQ's list carries the network bucket, never the address.
+  assert.match(t, /no device recorded · no network recorded/, 'an absent device or network rendered blank');
+  assert.match(t, /Safari · network 203\.0\.113\.0\/24/, 'the network bucket is not shown');
   assert.match(t, /3 active · token under 24h old, not revoked, account not signed out/);
   // Two actionable rows, each with Revoke and Sign out account; the current
   // row has neither, and no checkbox.

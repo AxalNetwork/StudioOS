@@ -60,9 +60,16 @@ import {
   IMPERSONATION_EXPIRY_MINUTES, requireSuperAdmin, requireSuperAdminWriteBar, bumpJwtMinIat, selectJwt,
 } from '../auth';
 import {
-  listActiveSessions, countActiveSessions, listLiveImpersonations, revokeUserSession, endImpersonation,
+  listActiveSessions, countActiveSessions, listLiveImpersonations, countSupportSessions, revokeUserSession, endImpersonation,
   SESSION_TOKEN_HOURS, SESSION_BULK_LIMIT,
 } from '../services/userSessions';
+import {
+  SESSION_STATUS_DEFINITIONS, supportSessionStatus, supportSessionLimitMinutes, parseStoredTs,
+  type SupportSessionStatus,
+} from '../services/sessionStatus';
+import {
+  securityEventIdentity, supportIdentity, userIdentity, type Identity,
+} from '../services/securityIdentity';
 import { loadTokenAnomalies } from '../services/tokenAnomalies';
 import { logAdminAction } from '../services/adminAudit';
 import { loadGuardrailCounters } from '../services/aiRouter';
@@ -161,26 +168,48 @@ const AI_SAFETY_WINDOW_DAYS = 7;
  * possible direction to be wrong in.
  */
 async function aiSafetyBlock(env: Env) {
-  const counters = await loadGuardrailCounters(env, AI_SAFETY_WINDOW_DAYS);
+  // D481 — the token anomalies carry their own availability, their own table
+  // and their own window (24 hours against the seven days before), stated in
+  // their own `how`; they answer whatever the rollup below does.
+  const always = { token_anomalies: await loadTokenAnomalies(env), not_counted: AI_SAFETY_NOT_COUNTED };
+  // D4691 — `available` is earned, not asserted: a rollup that threw is the
+  // whole block unreadable, with its reason, never a block of zeros.
+  let counters: Awaited<ReturnType<typeof loadGuardrailCounters>>;
+  try {
+    counters = await loadGuardrailCounters(env, AI_SAFETY_WINDOW_DAYS);
+  } catch {
+    return {
+      available: false as const,
+      reason: 'The AI guardrail counters could not be read on this database. That is not a claim that no guarded '
+        + 'call ran or that nothing was blocked.',
+      ...always,
+    };
+  }
   return {
-    available: true,
+    available: true as const,
     window_days: counters.window_days,
     since: counters.since,
     verdicts: counters.verdicts,
     enforcement: counters.enforcement,
     guard: counters.guard, // D4522: router enforcement is separate from legacy chat.
-    // D481 — its own availability, its own table, its own window (24 hours
-    // against the seven days before), stated in its own `how`.
-    token_anomalies: await loadTokenAnomalies(env),
-    not_counted: AI_SAFETY_NOT_COUNTED,
+    ...always,
   };
 }
 
-/** SQLite's `datetime('now')` is 'YYYY-MM-DD HH:MM:SS' (UTC, no zone). */
-function parseSqlTs(s: string | null | undefined): number {
-  if (!s) return NaN;
-  const iso = s.includes('T') ? s : `${s.replace(' ', 'T')}Z`;
-  return Date.parse(iso);
+/** SQLite's `datetime('now')` is 'YYYY-MM-DD HH:MM:SS' (UTC, no zone); D4691 — one parser, shared with the status rules. */
+const parseSqlTs = (s: string | null | undefined): number => parseStoredTs(s);
+
+/**
+ * D4691 — one read, its own availability. Every figure on /overview comes
+ * through this or an equivalent per-store try, so one failed store costs its
+ * own tile and never the page, and never reads as an empty table or a zero.
+ */
+async function readPart<T>(what: string, fn: () => Promise<T>): Promise<({ available: true } & T) | Absent> {
+  try {
+    return { available: true, ...(await fn()) };
+  } catch {
+    return absent(`${what} could not be read on this database. This is not a claim that there are none.`);
+  }
 }
 
 /**
@@ -266,12 +295,23 @@ r.get('/overview', async (c) => {
   // The COUNT only. The rows themselves moved to /governance when H7's feed
   // replaced the Y2 audit zone: reading fifty of them here and rendering none
   // is a page of D1 work per load for a table nothing draws.
-  const auditTotal = await env.DB.prepare('SELECT COUNT(*) AS n FROM admin_audit_log').first<{ n: number }>();
+  const audit = await readPart('The admin action log', async () => {
+    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM admin_audit_log').first<{ n: number }>();
+    if (!row) throw new Error('no row');
+    return { total: Number(row.n) || 0, feed: '/api/admin/security/governance' };
+  });
 
   // Impersonation: the table is created lazily by services/cohortTiming.ts on
   // first use, so a database that has never impersonated has no table. That
   // is "no sessions", but reported as unreadable rather than guessed at.
-  let impersonations: { available: true; active: number; recent: Record<string, unknown>[] } | Absent;
+  //
+  // D4691 — `active` is `live` by the shared rule (services/sessionStatus.ts):
+  // exactly the rows the Sessions zone lists with an End button. It used to be
+  // every record with no end time, so a record nobody closed counted as a
+  // live support session forever. Those are counted apart as `not_closed`.
+  let impersonations:
+    | { available: true; active: number; live: number; not_closed: number; open: number; recent: Record<string, unknown>[] }
+    | Absent;
   try {
     const recent = await env.DB.prepare(
       `SELECT i.id, i.admin_user_id, i.target_user_id, i.context, i.started_at, i.ended_at,
@@ -282,10 +322,23 @@ r.get('/overview', async (c) => {
         ORDER BY i.started_at DESC, i.id DESC
         LIMIT ?`,
     ).bind(IMPERSONATION_LIMIT).all<Record<string, unknown>>();
-    const active = await env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM impersonation_sessions WHERE ended_at IS NULL',
-    ).first<{ n: number }>();
-    impersonations = { available: true, active: Number(active?.n) || 0, recent: recent.results || [] };
+    const counts = await countSupportSessions(env);
+    const now = Date.now();
+    impersonations = {
+      available: true,
+      active: counts.live,
+      live: counts.live,
+      not_closed: counts.not_closed,
+      open: counts.open,
+      recent: (recent.results || []).map((i) => ({
+        ...i,
+        status: supportSessionStatus(i, now),
+        actor: supportIdentity(
+          { id: i.admin_user_id, name: i.admin_name, email: i.admin_email },
+          { id: i.target_user_id, name: i.target_name, email: i.target_email },
+        ),
+      })),
+    };
   } catch {
     impersonations = absent('The impersonation_sessions table could not be read on this database.');
   }
@@ -300,23 +353,41 @@ r.get('/overview', async (c) => {
     sessions = absent('The user_sessions table could not be read on this database.');
   }
 
-  const admins = await env.DB.prepare(
-    `SELECT COUNT(*) AS total,
-            SUM(CASE WHEN tfa_methods IS NOT NULL AND tfa_methods <> '[]' THEN 1 ELSE 0 END) AS with_mfa
-       FROM users WHERE LOWER(role) = 'admin' AND is_active = 1`,
-  ).first<{ total: number; with_mfa: number }>();
+  const mfa = await readPart('Admin MFA coverage', async () => {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN tfa_methods IS NOT NULL AND tfa_methods <> '[]' THEN 1 ELSE 0 END) AS with_mfa
+         FROM users WHERE LOWER(role) = 'admin' AND is_active = 1`,
+    ).first<{ total: number; with_mfa: number }>();
+    if (!row) throw new Error('no row');
+    return { admins_total: Number(row.total) || 0, admins_with_mfa: Number(row.with_mfa) || 0 };
+  });
 
-  const kycRows = await env.DB.prepare(
-    'SELECT kyc_status, COUNT(*) AS n FROM users WHERE is_active = 1 GROUP BY kyc_status',
-  ).all<{ kyc_status: string | null; n: number }>();
-  const kyc: Record<string, number> = {};
-  for (const row of kycRows.results || []) kyc[String(row.kyc_status ?? 'not_started')] = Number(row.n) || 0;
+  // D4691 — `kyc` keeps its shape (status → count) when read; an unreadable
+  // queue is `kyc: null` beside `kyc_available: false` and its reason, never
+  // an empty object the page would draw as a queue with nobody in it.
+  let kyc: Record<string, number> | null = null;
+  let kycReason: string | null = null;
+  try {
+    const kycRows = await env.DB.prepare(
+      'SELECT kyc_status, COUNT(*) AS n FROM users WHERE is_active = 1 GROUP BY kyc_status',
+    ).all<{ kyc_status: string | null; n: number }>();
+    kyc = {};
+    for (const row of kycRows.results || []) kyc[String(row.kyc_status ?? 'not_started')] = Number(row.n) || 0;
+  } catch {
+    kycReason = 'The KYC queue could not be read on this database. This is not a claim that the queue is empty.';
+  }
 
-  const dsrRows = await env.DB.prepare(
-    `SELECT id, email, name, role, deletion_requested_at FROM users
-      WHERE deletion_requested_at IS NOT NULL
-      ORDER BY deletion_requested_at ASC`,
-  ).all<{ id: number; email: string; name: string; role: string; deletion_requested_at: string }>();
+  let dsrRows: { results?: Array<{ id: number; email: string; name: string; role: string; deletion_requested_at: string }> } | null;
+  try {
+    dsrRows = await env.DB.prepare(
+      `SELECT id, email, name, role, deletion_requested_at FROM users
+        WHERE deletion_requested_at IS NOT NULL
+        ORDER BY deletion_requested_at ASC`,
+    ).all<{ id: number; email: string; name: string; role: string; deletion_requested_at: string }>();
+  } catch {
+    dsrRows = null;
+  }
 
   // D168 — WHAT EACH SUBJECT HAS ASKED BEFORE. `users.deletion_requested_at`
   // is still the one source of "open" (see migration 272), so the list above
@@ -328,7 +399,7 @@ r.get('/overview', async (c) => {
   const ledgerReason = ledger.available ? null : ledger.reason;
 
   const now = Date.now();
-  const dsr = (dsrRows.results || []).map((u) => {
+  const dsr = (dsrRows?.results || []).map((u) => {
     const seen = ledger.available ? ledger.byUser.get(u.id) : undefined;
     return {
       id: u.id, email: u.email, name: u.name, role: u.role,
@@ -349,13 +420,23 @@ r.get('/overview', async (c) => {
   });
 
   return c.json({
-    audit: { total: Number(auditTotal?.n) || 0, feed: '/api/admin/security/governance' },
+    audit,
     impersonations,
     sessions,
-    mfa: { admins_total: Number(admins?.total) || 0, admins_with_mfa: Number(admins?.with_mfa) || 0 },
+    // D4691 — the one set of status definitions every count and list here uses.
+    session_definitions: SESSION_STATUS_DEFINITIONS,
+    mfa,
     kyc,
+    kyc_available: kyc !== null,
+    ...(kycReason ? { kyc_reason: kycReason } : {}),
     kyc_not_recorded: KYC_NOT_RECORDED,
     dsr: {
+      // D4691 — the open requests' own read. Unreadable is `available: false`
+      // with no rows, so the page cannot show "no open request".
+      available: dsrRows !== null,
+      ...(dsrRows === null
+        ? { reason: 'The open erasure requests could not be read on this database. This is not a claim that none are open.' }
+        : {}),
       clock_days: DSR_CLOCK_DAYS,
       kinds: DSR_KINDS,
       rows: dsr,
@@ -364,7 +445,7 @@ r.get('/overview', async (c) => {
       // construction, so the grouping has one group, and the second field says
       // why there is not a second: no branch RPC returns a branch's erasure
       // requests, and the brief forbids fanning out for one.
-      by_branch: [{ branch: 'HQ-held', open: dsr.length }],
+      by_branch: dsrRows === null ? [] : [{ branch: 'HQ-held', open: dsr.length }],
       branches: { bound: boundBranchCount(env), reason: DSR_BRANCH_REASON },
       ledger_available: ledgerAvailable,
       ...(ledgerReason ? { ledger_reason: ledgerReason } : {}),
@@ -483,6 +564,13 @@ type FeedRow = {
   source: string;
   tone: 'alert' | 'warn' | 'note';
   /**
+   * D4691 — who acted, in the one shape every reader on this page uses
+   * (services/securityIdentity.ts): an account, a support operator on behalf
+   * of an account, the platform, or — for a refused attempt — only a network.
+   * `actor` above is this identity's label, kept for older readers.
+   */
+  actor_identity: Identity;
+  /**
    * D200 — H23's fifth column. Stored for a security event; DERIVED for the
    * other four stores, because each of them writes AFTER the act it records
    * (`logAdminAction`, `logActivity`, `logEvent` — hq_security.test.mjs pins
@@ -495,6 +583,9 @@ type FeedRow = {
 /** A person, by the best name the join gave — never a bare id passed off as one. */
 const who = (name: unknown, email: unknown, id: unknown): string | null =>
   (name ? String(name) : null) || (email ? String(email) : null) || (id ? `user ${id}` : null);
+
+/** D4691 — a feed row's two actor fields from one identity, so they cannot disagree. */
+const actorOf = (identity: Identity) => ({ actor: identity.label, actor_identity: identity });
 
 /** `filters_json` is free-form. Only a non-empty string `reason` is lifted out. */
 function reasonFrom(json: unknown): string | null {
@@ -525,11 +616,13 @@ const minutesBetween = (a: number, b: number) => Math.max(0, Math.round((b - a) 
  * token's expiry means the record was never closed, not that somebody is
  * still inside.
  */
-function impersonationOutcome(i: ImpersonationRow, now: number): 'live' | 'ended' | 'not closed' {
-  if (i.ended_at) return 'ended';
-  const started = parseSqlTs(i.started_at as string);
-  const elapsed = Number.isNaN(started) ? null : minutesBetween(started, now);
-  return elapsed !== null && elapsed >= IMPERSONATION_EXPIRY_MINUTES ? 'not closed' : 'live';
+const OUTCOME_OF: Record<SupportSessionStatus, 'live' | 'ended' | 'not closed' | 'unknown'> = {
+  live: 'live', ended: 'ended', not_closed: 'not closed', unknown: 'unknown',
+};
+function impersonationOutcome(i: ImpersonationRow, now: number): 'live' | 'ended' | 'not closed' | 'unknown' {
+  // D4691 — the shared rule, so this column, the Data access zone, the
+  // overview's count and the Sessions list cannot disagree about one row.
+  return OUTCOME_OF[supportSessionStatus(i, now)];
 }
 
 /**
@@ -605,10 +698,12 @@ const FEED_LICENCE_SUSPENSIONS_SQL = `SELECT e.id, e.event, e.note, e.created_at
  * row that resolves to nobody is its network bucket and nothing more.
  */
 const FEED_SECURITY_EVENTS_SQL = `SELECT s.id, s.kind, s.factor, s.outcome, s.detail, s.user_id, s.ip_prefix,
-          s.branch_code, s.occurred_at,
-          u.name AS subject_name, u.email AS subject_email
+          s.branch_code, s.occurred_at, s.support_user_id,
+          u.name AS subject_name, u.email AS subject_email,
+          sp.name AS support_name, sp.email AS support_email
      FROM security_events s
      LEFT JOIN users u ON u.id = s.user_id
+     LEFT JOIN users sp ON sp.id = s.support_user_id
     ORDER BY s.occurred_at DESC, s.id DESC LIMIT ?`;
 
 type ImpersonationRow = Record<string, unknown>;
@@ -675,7 +770,7 @@ r.get('/governance', async (c) => {
           key: `audit:${a.id}`,
           at: (a.exported_at as string) || null,
           ts: parseSqlTs(a.exported_at as string),
-          actor: who(a.admin_name, a.admin_email, a.admin_user_id),
+          ...actorOf(userIdentity(a.admin_user_id, a.admin_name, a.admin_email)),
           action,
           tenant: null,
           target: [
@@ -710,7 +805,7 @@ r.get('/governance', async (c) => {
           key: `activity:${l.id}`,
           at: (l.created_at as string) || null,
           ts: parseSqlTs(l.created_at as string),
-          actor: who(l.actor_name, l.actor_email, l.user_id),
+          ...actorOf(userIdentity(l.user_id, l.actor_name, l.actor_email)),
           action,
           tenant: null,
           // `details` is already the sentence a person wrote at the write site.
@@ -736,7 +831,10 @@ r.get('/governance', async (c) => {
           key: `impersonation:${i.id}`,
           at: (i.started_at as string) || null,
           ts: parseSqlTs(i.started_at as string),
-          actor: who(i.admin_name, i.admin_email, i.admin_user_id),
+          ...actorOf(supportIdentity(
+            { id: i.admin_user_id, name: i.admin_name, email: i.admin_email },
+            { id: i.target_user_id, name: i.target_name, email: i.target_email },
+          )),
           action: 'impersonate',
           tenant: null,
           // The reason is mandatory on the support-session dialog, so a row
@@ -769,7 +867,7 @@ r.get('/governance', async (c) => {
           key: `licence:${e.id}`,
           at: (e.created_at as string) || null,
           ts: parseSqlTs(e.created_at as string),
-          actor: who(e.actor_name, e.actor_email, e.actor_user_id),
+          ...actorOf(userIdentity(e.actor_user_id, e.actor_name, e.actor_email)),
           action: `licence ${event}`,
           // The one column that is real here, and only here.
           tenant: (e.brand_name as string) || null,
@@ -796,18 +894,24 @@ r.get('/governance', async (c) => {
       for (const s of got) {
         const outcome = String(s.outcome || '');
         const branch = String(s.branch_code || 'hq');
+        // D4691 — a refused sign-in or recovery step established nobody, so
+        // its actor is its network and the account it named is the subject,
+        // in the Target column; a gate refusal or step-up is the signed-in
+        // caller's, or the support operator's on that caller's behalf.
+        const { actor, subject } = securityEventIdentity(s);
         rows.push({
           key: `security:${s.id}`,
           at: (s.occurred_at as string) || null,
           ts: parseSqlTs(s.occurred_at as string),
-          // A subject that resolved to an account is named; one that did not
-          // is its network, because the address a refused attempt presented
-          // was hashed before it reached the row and is not recoverable.
-          actor: who(s.subject_name, s.subject_email, s.user_id) || `network ${String(s.ip_prefix || 'unknown')}`,
+          ...actorOf(actor),
           action: `${String(s.kind || '')}.${String(s.factor || '')}`,
           // The deployment that recorded it — a fact about where, not whose.
           tenant: branch === 'hq' ? 'HQ' : branch,
-          target: s.detail ? `detail=${String(s.detail)}` : null,
+          target: [
+            subject ? `named ${subject.label}` : null,
+            actor.kind === 'support' && actor.on_behalf_of ? `on behalf of ${actor.on_behalf_of.label}` : null,
+            s.detail ? `detail=${String(s.detail)}` : null,
+          ].filter(Boolean).join(' · ') || null,
           source: 'security_events',
           tone: outcome === 'refused' ? 'alert' : 'note',
           outcome,
@@ -848,31 +952,41 @@ r.get('/governance', async (c) => {
       items: impersonations.slice(0, DATA_ACCESS_LIMIT).map((i) => {
         const started = parseSqlTs(i.started_at as string);
         const ended = i.ended_at ? parseSqlTs(i.ended_at as string) : NaN;
-        const live = !i.ended_at;
-        const elapsed = Number.isNaN(started) || (!live && Number.isNaN(ended))
+        const status = supportSessionStatus(i, now);
+        const live = status === 'live';
+        const open = status !== 'ended';
+        const elapsed = Number.isNaN(started) || (!open && Number.isNaN(ended))
           ? null
-          : minutesBetween(started, live ? now : ended);
+          : minutesBetween(started, open ? now : ended);
+        // D4691 — the shared rule decides live and not-closed, as everywhere
+        // else on the page. Past the first token's thirty minutes an HQ
+        // session can still be live (it may have been extended, up to the
+        // ceiling), so the time left is stated as an upper bound; only past
+        // the session's limit is an open record "not closed" — the record was
+        // never closed, NOT somebody still inside.
         let dur: string | null;
-        if (elapsed === null) dur = null;
-        else if (!live) dur = `${elapsed}m`;
-        else if (elapsed >= IMPERSONATION_EXPIRY_MINUTES) {
-          // The token expired at thirty minutes; closing the row is a
-          // best-effort write on the way out (routes/admin.ts), so an open
-          // row past the limit means the record was never closed, NOT that
-          // somebody is still inside. "0m left" would claim the opposite.
-          dur = 'not closed';
-        } else dur = `${IMPERSONATION_EXPIRY_MINUTES - elapsed}m left`;
+        if (status === 'not_closed') dur = 'not closed';
+        else if (elapsed === null) dur = null;
+        else if (!open) dur = `${elapsed}m`;
+        else if (elapsed < IMPERSONATION_EXPIRY_MINUTES && Number(i.admin_user_id) !== 0) {
+          dur = `${IMPERSONATION_EXPIRY_MINUTES - elapsed}m left`;
+        } else dur = `at most ${Math.max(0, supportSessionLimitMinutes(i.admin_user_id) - elapsed)}m left`;
         return {
           kind: 'impersonation',
+          status,
+          actor: supportIdentity(
+            { id: i.admin_user_id, name: i.admin_name, email: i.admin_email },
+            { id: i.target_user_id, name: i.target_name, email: i.target_email },
+          ),
           what: `Impersonation · ${who(i.target_name, i.target_email, i.target_user_id) || 'unknown account'}`,
           meta: [
-            who(i.admin_name, i.admin_email, i.admin_user_id),
+            supportIdentity({ id: i.admin_user_id, name: i.admin_name, email: i.admin_email }, { id: i.target_user_id }).label,
             stamp(i.started_at),
             i.context ? clip(String(i.context), 120) : null,
           ].filter(Boolean).join(' · '),
           dur,
           live,
-          overdue: Boolean(live && elapsed !== null && elapsed >= IMPERSONATION_EXPIRY_MINUTES),
+          overdue: status === 'not_closed',
         };
       }),
     };
@@ -892,9 +1006,10 @@ r.get('/governance', async (c) => {
       available: true,
       items: (ex.results || []).map((e) => ({
         kind: 'export',
+        actor: userIdentity(e.admin_user_id, e.admin_name, e.admin_email),
         what: `Export · ${e.report_type ? String(e.report_type) : String(e.action || 'report')}`,
         meta: [
-          who(e.admin_name, e.admin_email, e.admin_user_id),
+          userIdentity(e.admin_user_id, e.admin_name, e.admin_email).label,
           e.format ? String(e.format) : null,
           stamp(e.exported_at),
         ].filter(Boolean).join(' · '),
@@ -1021,9 +1136,21 @@ r.get('/sessions', async (c) => {
 
   // The support sessions answer for themselves: a database that never
   // impersonated has no table, and that costs this half, not the list.
-  let impersonations: { available: true; rows: Awaited<ReturnType<typeof listLiveImpersonations>> } | Absent;
+  let impersonations:
+    | { available: true; rows: Array<Awaited<ReturnType<typeof listLiveImpersonations>>[number] & { actor: Identity }> }
+    | Absent;
   try {
-    impersonations = { available: true, rows: await listLiveImpersonations(c.env) };
+    const live = await listLiveImpersonations(c.env);
+    impersonations = {
+      available: true,
+      rows: live.map((i) => ({
+        ...i,
+        actor: supportIdentity(
+          { id: i.admin_user_id, name: i.admin_name, email: i.admin_email },
+          { id: i.target_user_id, name: i.target_name, email: i.target_email },
+        ),
+      })),
+    };
   } catch {
     impersonations = absent('The impersonation_sessions table could not be read on this database.');
   }
@@ -1034,6 +1161,8 @@ r.get('/sessions', async (c) => {
     rows: list.rows,
     impersonations,
     expiry_minutes: IMPERSONATION_EXPIRY_MINUTES,
+    // D4691 — the same definitions /overview's tiles are counted by.
+    definitions: SESSION_STATUS_DEFINITIONS,
   });
 });
 
