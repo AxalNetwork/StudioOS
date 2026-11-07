@@ -533,7 +533,7 @@ test('D4809: each grant offers its one NDA action; the dialog says where the NDA
   assert.doesNotMatch(GIVEN_DONE, /sends|is sent to/, 'giving access never claims an NDA went');
   let nda = () => response({ grant: GRANT('g1', { nda_state: 'delivery_failed' }), envelope: { uuid: 'e1', email_sent: false } });
   const grants = { items: [GRANT('g1'), GRANT('g3', { nda_state: 'sent' }), GRANT('g4', { nda_state: 'signed', state: 'active' })], total: 3 };
-  const view = await mounted('/admin/programs/investor-cohorts', worker({ grants, writes: { nda: (o, path) => nda(o, path) } }));
+  const view = await mounted('/admin/programs/investor-cohorts', worker({ grants, writes: { nda: () => nda() } }));
   try {
     assert.equal(view.textOf('programs-investor-row-g1-nda-action'), 'Send NDA');
     assert.equal(view.textOf('programs-investor-row-g3-nda-action'), 'Void and resend');
@@ -546,7 +546,7 @@ test('D4809: each grant offers its one NDA action; the dialog says where the NDA
     assert.match(view.textOf('programs-investor-nda-go-done'), /its email did not go/);
   } finally { await view.close(); }
   nda = () => refusal(409, 'signature_in_progress');
-  const resend = await mounted('/admin/programs/investor-cohorts', worker({ grants, writes: { nda: (o, path) => nda(o, path) } }));
+  const resend = await mounted('/admin/programs/investor-cohorts', worker({ grants, writes: { nda: () => nda() } }));
   try {
     await resend.click('programs-investor-row-g3-nda-action');
     assert.equal(resend.textOf('programs-investor-nda-line'), NDA_LINE.sent);
