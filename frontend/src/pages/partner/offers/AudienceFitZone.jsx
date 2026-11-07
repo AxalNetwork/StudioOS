@@ -14,6 +14,7 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { fitView } from '../../../lib/fitRuleView.js';
 
 /**
  * Offers · Audience fit — `/offers/audience-fit`.
@@ -33,12 +34,15 @@ import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit'
  * `referred_to` IS PART OF THE RULE, not a note on it. A rule that cannot carry
  * the alternative cannot produce the sentence above.
  *
- * NOTHING RUNS THESE. No lead is scored, filtered or auto-declined against a
- * rule here, and the worker says so in its own response (`enforcement: 'none'`)
- * rather than leaving the page to imply whatever it likes. The rules are a
- * record a person reads before deciding — which is the honest description of
- * what they are today, and the one the rail's "no lead is passed or pursued
- * except on your click" already promises.
+ * PIPELINE READS THESE, AND DECLINES NOTHING. `Pipeline · Leads` reads the
+ * active rules to score a lead (a budget floor, a best-fit profile and its
+ * signal), and a lead that matches a declined sector or an absent capability is
+ * marked excluded there: it carries the firm's sentence and no number, and it
+ * is left out of the AI ranking. The worker says so in its own response
+ * (`enforcement: 'score_and_rank'`, `auto_decline: false`) rather than leaving
+ * the page to imply whatever it likes. Scoring and ranking are not rejection:
+ * an excluded lead stays on Leads and passing on it is still the firm's click
+ * (#4696).
  */
 
 const KINDS = [
@@ -55,9 +59,10 @@ const KIND_TONE = {
 /**
  * How strong a fit a PROFILE is (migration 229), in the firm's own words.
  *
- * NOT A SCORE ABOUT ANYBODY. The zone still runs nothing: the worker answers
- * `enforcement: 'none'` and this file does not compute a number against a
- * founder's need. A firm writing "pre-product founders with a deck — weak
+ * NOT A SCORE ABOUT ANYBODY HERE. This file computes no number against a
+ * founder's need; Pipeline does that, and reads `best_fit` and `weak_intent`
+ * as receipts on the score while `qualified` is a note the firm keeps. A firm
+ * writing "pre-product founders with a deck — weak
  * intent" is writing a sentence about a KIND of client, which is the same act
  * as writing the reason beside it.
  *
@@ -360,12 +365,11 @@ export default function PartnerAudienceFitZone() {
   const floor = items.find((r) => r.is_active && r.kind === 'budget_floor') || null;
   // The artboard's `Fit profiles` table is who the firm IS for; its `Who we are
   // not for` card below is the other three kinds. One split, two compositions.
-  const profiles = items.filter((r) => r.kind === 'best_fit');
-  // ALL THREE STRENGTH CHIPS SELECT ON THE STORED `signal` (migration 229), and
-  // they select over the PROFILES rather than over every rule: a chip that
-  // returned a declined sector under `Weak` would be answering a different
-  // question from the one it asks.
-  const visible = view === 'all' ? items : profiles.filter((r) => r.signal === view);
+  // ONE ROW SET PER CHIP, for the principal table, the editable list and the
+  // export (`lib/fitRuleView.js`, #4696). The chip narrowed the list and the
+  // export and left the table showing the whole library.
+  // `visible` IS the editable list AND the export: `fitView` returns one set for both.
+  const { profiles, profileRows, ruleRows: visible, narrowed } = fitView(items, view);
 
   // ══ THE ARTBOARD'S FOUR TILES ════════════════════════════════════════════
   // `Best fit · Budget floor · Sectors declined · Capabilities absent`, counted
@@ -418,7 +422,7 @@ export default function PartnerAudienceFitZone() {
 
   return (
     <>
-      {/* Hoisted out of `ZoneBody`, and the export takes `visible`: a file that
+      {/* Hoisted out of `ZoneBody`, and the export takes `visible`, the rows the chip selects: a file that
           did not match the chip on screen would be its own small untruth. */}
       {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
           An action states what the zone DOES and an export over nothing
@@ -491,6 +495,14 @@ export default function PartnerAudienceFitZone() {
             <FitTile label="Capabilities absent" value={String(absent.length)} note="stated, not stretched" />
           </div>
 
+          {/* WHOLE LIBRARY, NOT THE CHIP. The four tiles above and the card
+              below count every rule whatever the signal filter shows; the
+              profile table and the rule list count what the filter selects. */}
+          <p className="-mt-3 text-[11px] text-gray-600 dark:text-gray-400" data-testid="fit-library-note">
+            Tiles and the “who we are not for” card count the whole library
+            ({items.length} rule{items.length === 1 ? '' : 's'}), whatever the signal filter shows.
+          </p>
+
           {/* THE ARTBOARD'S LINKAGE NOTE, minus a number it has no store for.
               Its own reads "… produced four explained passes last quarter" —
               that is its sample, and nothing in this product logs a pass, so
@@ -498,10 +510,17 @@ export default function PartnerAudienceFitZone() {
               record stops. */}
           <div className="rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[11.5px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300">
             <strong className="text-cyan-700 dark:text-cyan-300">Reads through to Pipeline:</strong>{' '}
-            Pipeline · Leads quotes these sentences to pass a lead with a named reason — “under floor,
-            referred to Ostara Studio” rather than silence. Nothing counts how often: no pass is
-            logged anywhere, so the number of explained passes is not a figure this page can show.
+            Pipeline · Leads scores each lead against the rules in use. It quotes these sentences to pass a lead with a named reason —
+            “under floor, referred to Ostara Studio” rather than silence. Nothing counts how often: no pass is logged anywhere, so the number of explained
+            passes is not a figure this page can show.
           </div>
+
+          {narrowed && (
+            <p className="-mb-3 text-[11px] text-gray-600 dark:text-gray-400" data-testid="fit-profiles-shown">
+              Showing {profileRows.length} of {profiles.length} profile{profiles.length === 1 ? '' : 's'},
+              the same rows as the list and the export below.
+            </p>
+          )}
 
           <Instrument
             testid="fit-profiles"
@@ -509,7 +528,7 @@ export default function PartnerAudienceFitZone() {
             meta="Signals feed lead scoring"
             cols="1.9fr 1fr 2.4fr"
             head={['Profile', 'Signal', 'Why']}
-            rows={profiles.map((r) => ({
+            rows={profileRows.map((r) => ({
               key: r.id,
               cells: [
                 {
@@ -527,7 +546,7 @@ export default function PartnerAudienceFitZone() {
                 r.statement ? { text: r.statement } : { nr: true },
               ],
             }))}
-            note={'A profile graded weak intent is not a decline, and keeping the two apart is what this table is for: the honest answer to a pre-product founder is “not yet”, and a match engine that cannot say “not yet” ends up saying “no” to the same founder twice. The meta line above is the artboard\u2019s and it describes an intention rather than this product: nothing scores a lead against these rows, the worker says so in its own response, and your click is still what passes on anybody. A profile with no sentence reads absent in Why because a pass citing it would have nothing to quote \u2014 which is the silence this whole zone exists to replace.'}
+            note={'A profile graded weak intent is not a decline, and keeping the two apart is what this table is for: the honest answer to a pre-product founder is “not yet”, and a match engine that cannot say “not yet” ends up saying “no” to the same founder twice. Pipeline reads the signals in this table when it scores a lead: best fit and weak intent each add a receipt to the score, and qualified is a note you keep that scoring does not read. Scoring is not rejection, and your click is still what passes on anybody. A profile with no sentence reads absent in Why because a pass citing it would have nothing to quote \u2014 which is the silence this whole zone exists to replace.'}
           />
 
           {/* ══ THE ARTBOARD'S `Who we are not for` CARD ════════════════════
@@ -639,16 +658,26 @@ export default function PartnerAudienceFitZone() {
               onClose={() => setShowingPasses(false)} />
           )}
 
-          <StatedLimit title="What these rules do, and do not">
+          <StatedLimit title="What these rules are used for, and what they are not">
             <p>
-              <strong>Nothing runs these rules.</strong>{' '}
+              <strong>Pipeline scores and ranks leads with these rules; it never declines one for you.</strong>{' '}
               {d?.enforcement_note
-                || 'They are a record a person reads before passing on a lead. Nothing scores, filters or auto-declines against them.'}{' '}
-              A lead below your floor still appears on{' '}
+                || 'Pipeline reads your active rules to score leads and to leave a lead that matches a declined sector or an absent capability out of its ranking. Nothing is auto-declined: an excluded lead stays on Leads, and passing on it is still your click.'}{' '}
+              A lead below your floor, or one that matches a declined sector, still appears on{' '}
               <Link to="/pipeline/leads" className="text-amber-700 underline">Leads</Link>{' '}
               and it is still your click that passes on it — which is what the
               workspace rail promises, and this zone does not quietly break.
             </p>
+            {Array.isArray(d?.used_for) && d.used_for.length > 0 && (
+              <ul className="mt-2 list-disc pl-5">
+                {d.used_for.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            )}
+            {Array.isArray(d?.not_used_for) && d.not_used_for.length > 0 && (
+              <ul className="mt-2 list-disc pl-5">
+                {d.not_used_for.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            )}
           </StatedLimit>
         </div>
       </ZoneBody>
