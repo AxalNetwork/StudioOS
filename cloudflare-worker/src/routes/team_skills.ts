@@ -73,8 +73,9 @@ import { moduleOf } from '../services/agents/catalogue';
 import { systemPrompt } from '../services/agents/agentRun';
 import { RUN_COST_CONFIG, deltaOf, estimate, pinTokens, skillRunChangeMicro, specialistHint, type Estimate, type Pin } from '../services/agents/runCost';
 import { modelRefusal } from '../services/aiRouter';
+import { logAdminAction } from '../services/adminAudit';
 import {
-  ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, peopleAxes, teamUserIds, toolLabel, versionTags,
+  ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, linksOf, logSkillsChanged, peopleAxes, skillsChange, teamUserIds, toolLabel, versionTags,
   type AttachCode, type Blocked,
 } from '../services/agents/skillLinks';
 
@@ -375,6 +376,10 @@ router.patch('/skills/:uid', async (c) => {
     // D4160: an Axal skill is retired with its replacement and a reason, from HQ › AI agents.
     if (s.scope === 'hq') return say(c, 409, 'replacement_required', 'Retire an Axal skill from HQ › AI agents, naming the skill that replaces it.');
     await c.env.DB.prepare(`UPDATE agent_skills SET status = 'retired', updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(user.id, s.id).run();
+    // D4534: a company skill's retirement is in the admin audit, as HQ's is (D4160).
+    await logAdminAction(c.env, user.id, user.email, 'company_skill_retired', {
+      skill_uid: s.uid, skill_name: s.name, company_id: s.company_id, before: { status: s.status, version: s.current_version || null }, after: { status: 'retired' },
+    });
   } else {
     const cur = await draftParts(c.env, s);
     const has = (k: string) => k in b;
@@ -519,10 +524,13 @@ router.put('/agents/:uid/skills', async (c) => {
   if (!b || !Array.isArray(b.skills) || b.skills.length > 40) return say(c, 400, 'body_invalid', 'Send the agent\'s skills as a list of up to 40.');
   const checked = await checkSkillList(c.env, a, b.skills, (sk) => mayRead(c.env, sk as SkillRow, user));
   if (!checked.ok) return refuseBlocked(c, checked.blocked, { skill_uid: checked.skill_uid });
+  const before = await linksOf(c.env, a.id);
   await c.env.DB.batch([
     c.env.DB.prepare('DELETE FROM agent_skill_links WHERE agent_id = ? AND skill_id NOT IN (SELECT value FROM json_each(?))').bind(a.id, JSON.stringify(checked.wanted.map((w) => w.s.id))),
     ...checked.wanted.map((w) => linkStatement(c.env, a.id, w.s.id, w.version, user.id)),
   ]);
+  // D4534: who added, re-pinned or removed which skills.
+  await logSkillsChanged(c.env, a.id, user.id, skillsChange(before, await linksOf(c.env, a.id)));
   return c.json({ can_manage: true, ...(await agentSkillsDto(c.env, a)) });
 });
 
@@ -747,6 +755,10 @@ router.post('/skills/:uid/assign', async (c) => {
     'INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by) VALUES (?, ?, ?, ?) ON CONFLICT (agent_id, skill_id) DO NOTHING',
   ).bind(a.id, s.id, s.current_version, user.id))) : [];
   const added = res.reduce((n, r) => n + Number(r?.meta?.changes ?? 0), 0);
+  // D4534: one event per agent the skill was added to.
+  for (const [i, a] of targets.entries()) {
+    if (Number(res[i]?.meta?.changes ?? 0) > 0) await logSkillsChanged(c.env, a.id, user.id, { added: [{ uid: s.uid, version: s.current_version }], repinned: [], removed: [] });
+  }
   return c.json({ added, refused, used_by: await usedBy(c.env, s.id) });
 });
 
