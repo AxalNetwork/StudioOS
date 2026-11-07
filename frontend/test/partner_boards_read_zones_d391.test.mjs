@@ -62,7 +62,7 @@ test('D391: the Pipeline board\'s leads read the Leads zone\'s endpoint, not the
   assert.ok(!Object.values(board.sources).some((f) => String(f).includes('listNeeds')),
     'no board source may read listNeeds any more');
   // The zone reads the same method, so the two cannot show different lists.
-  assert.match(codeOnly(raw('frontend/src/pages/partner/pipeline/LeadsZone.jsx')), /api\.listPartnerLeads\(\)/);
+  assert.match(codeOnly(raw('frontend/src/pages/partner/pipeline/LeadsZone.jsx')), /api\.listPartnerLeads\(/);
 });
 
 test('D391: a lead row carries its source, its match and the receipts behind it', () => {

@@ -100,8 +100,9 @@ export default function FounderBuildBoard() {
     setStatus('loading');
     setError('');
     try {
-      const active = await api.pipelineActive();
-      const available = Array.isArray(active) ? active : [];
+      // #4701: every page of the list, not the first hundred.
+      const active = await api.pipelineActiveAll();
+      const available = Array.isArray(active?.items) ? active.items : [];
       setProjects(available);
       const requested = Number(requestedId);
       const chosen = available.find((project) => project.id === requested) || available[0];

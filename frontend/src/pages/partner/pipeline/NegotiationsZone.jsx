@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -346,10 +348,14 @@ export default function PartnerNegotiationsZone() {
   const [note, setNote] = useState(null);
   const [view, setView] = useState('all');
 
+  const loadGen = useRef(0);
   const load = useCallback(async () => {
+    const mine = (loadGen.current += 1);
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
-      const r = await api.listPartnerNegotiations();
+      const r = await readAllPages((cur) => api.listPartnerNegotiations(cur));
+      // A newer load (a write's re-read, a retry) owns the screen: drop this answer.
+      if (loadGen.current !== mine) return;
       // A bare array, a missing key or an object are all survivable here: the
       // page renders an empty list rather than throwing on `.map` of undefined.
       setState({
@@ -357,6 +363,7 @@ export default function PartnerNegotiationsZone() {
         items: Array.isArray(r?.items) ? r.items : [],
       });
     } catch (e) {
+      if (loadGen.current !== mine) return;
       setState({
         loading: false,
         error: e?.message || 'The negotiation record did not load.',
@@ -507,6 +514,7 @@ export default function PartnerNegotiationsZone() {
       )}
     >
       <div className="space-y-6">
+        <PartialRead data={state.data} noun="negotiations" onRetry={load} />
         <ZoneHeading
           title="Negotiations"
           blurb={
