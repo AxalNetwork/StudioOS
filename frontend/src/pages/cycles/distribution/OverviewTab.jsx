@@ -1,4 +1,4 @@
-/** D4485 (#4485): DS1 Overview, with independently unreadable data and retained legacy tools. */
+/** D4485 (#4485): DS1 Overview, with independently unreadable data and retained legacy tools. D4493: This week's STEP items. */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cyclesWrite } from '../../../lib/api/cycles.js';
@@ -12,6 +12,8 @@ import './distributionStates.css';
 import { distributionKpis } from './distributionStates.js';
 import { useDistributionState } from './DistributionStates.jsx';
 import { useDistributionLayout } from './useDistributionLayout.js';
+import { useDueSteps } from './SequenceBuilder.jsx';
+import { channelLabel, rowState, stepsOn } from './sequenceModel.js';
 
 function Failed({ onRetry }) {
   return <div role="status"><strong>Unreadable</strong><p>{UNREADABLE_NOTE}</p><button type="button" className="ds-overview-link" onClick={onRetry}>Try again</button></div>;
@@ -24,7 +26,7 @@ export function OverviewSkeleton() {
   return <div className="ds-overview" role="status" aria-label="Loading Distribution overview"><div className="ds-overview-kpis">{keys.map((key) => <Card key={key}><Skeleton h={12} w="65%" /><Skeleton h={22} className="mt-3" /></Card>)}</div><div className="ds-overview-columns"><Skeleton.Card /><Skeleton.Card /></div></div>;
 }
 const sub = { leads: 'UTM-tagged sign-ups · this month', replies: 'Across channels · this month', cost_per_lead: 'This month’s spend ÷ leads' };
-export function OverviewView({ data, loading = false, onRetry, search = '', projectId, onAdd, additions = {}, today }) {
+export function OverviewView({ data, loading = false, onRetry, search = '', projectId, onAdd, additions = {}, today, steps = null }) {
   const {width}=useDistributionLayout();
   const controls=useDistributionState();
   const keys=distributionKpis(width)??Object.keys(KPI_LABELS);
@@ -59,9 +61,10 @@ export function OverviewView({ data, loading = false, onRetry, search = '', proj
           </article>;
         })}</div> : <div><p>{campaigns.total === 0 ? 'No campaigns yet. A campaign groups your channels, audience, budget and posts toward one goal.' : 'No active campaigns. Open Campaigns to see your drafts and completed campaigns.'}</p><>{controls?.manual.disabled ? <button type="button" disabled className="ds-overview-link" title={controls.manual.reason}>New campaign</button> : <Link className="ds-overview-link" to={`/grow/distribution/campaigns/new${search}`}>New campaign</Link>}</></div>}
       </Card>
-      <Card><Head title="This week" href={distributionPath('calendar', search)} link="Open Calendar" /><p className="ds-overview-sub">Scheduled posts and sequence steps{data?.week?.from ? ` · ${data.week.from} – ${week.days.at(-1)?.date}` : ''}. Sequence steps are not recorded here yet.</p>
+      <Card><Head title="This week" href={distributionPath('calendar', search)} link="Open Calendar" /><p className="ds-overview-sub">Scheduled posts and sequence steps{data?.week?.from ? ` · ${data.week.from} – ${week.days.at(-1)?.date}` : ''}.{steps?.state === 'unreadable' ? ' Sequence steps: Unreadable.' : ''}</p>
         {week.state === 'unreadable' ? <Failed onRetry={onRetry} /> : <div className="ds-overview-week">{week.days.map((day) => <section key={day.date} className={`ds-overview-day${day.today ? ' is-today' : ''}`} aria-label={day.heading}><h3>{day.heading}</h3><time dateTime={day.date}>{day.date.slice(5)}</time>
-          {day.empty ? <p className="ds-overview-sub">{day.empty}</p> : day.items.map((item) => <article className="ds-overview-post" key={item.uid}><span className="ds-eyebrow">POST</span><p>{item.title || 'Untitled post'}</p><Chip>{item.channel || 'Channel · Not recorded'}</Chip></article>)}
+          {day.empty && !stepsOn(steps, day.date).length ? <p className="ds-overview-sub">{day.empty}</p> : day.items.map((item) => <article className="ds-overview-post" key={item.uid}><span className="ds-eyebrow">POST</span><p>{item.title || 'Untitled post'}</p><Chip>{item.channel || 'Channel · Not recorded'}</Chip></article>)}
+          {stepsOn(steps, day.date).map((step) => <article className="ds-overview-post" key={`${step.enrolment_uid}:${step.position}`} data-testid="overview-step"><span className="ds-eyebrow">STEP</span><p>{step.contact_name || 'Name · Not recorded'} · Step {step.position} · {channelLabel(step.channel)}</p><Chip>{rowState(step.state).label}</Chip></article>)}
         </section>)}</div>}
       </Card>
     </div><aside className="ds-overview-side">
@@ -96,5 +99,6 @@ export default function OverviewTab({ projectId, search = '', refresh, children,
       setAdditions((state) => ({ ...state, [reply.uid]: 'added' }));
     } catch { setAdditions((state) => ({ ...state, [reply.uid]: 'error' })); }
   };
-  return <><OverviewView data={reading.data} loading={reading.key !== key || reading.loading} projectId={projectId} search={search} onRetry={() => setAttempt((n) => n + 1)} onAdd={add} additions={additions} />{children}</>;
+  const steps = useDueSteps(projectId, { version: attempt });
+  return <><OverviewView steps={steps} data={reading.data} loading={reading.key !== key || reading.loading} projectId={projectId} search={search} onRetry={() => setAttempt((n) => n + 1)} onAdd={add} additions={additions} />{children}</>;
 }

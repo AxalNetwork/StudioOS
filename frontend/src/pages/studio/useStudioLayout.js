@@ -11,6 +11,12 @@
  *   Saving… then Saved. A failed save stays in edit mode with the draft kept
  *   (409 → SM8c with Reload layout; 402 → the locked notice; else Try again).
  * - Reset asks first (SM5r), then `resetLayout` at once and leaves edit mode.
+ * - D4621: one operation at a time. While a save or reset is in flight the
+ *   draft, Customise, Done and Reset do nothing, so the Saved line always
+ *   describes what was sent. Each operation carries the generation it began
+ *   in; a reload, a profile change or an unmount starts a new one, and a
+ *   response from an older one is dropped, never written over the newer read.
+ *   Leaving with unsaved edits (a link, Back, closing the tab) asks first.
  * - An administrator names the profile: `profile` is always sent, on every
  *   read, save and reset. D4362 (#4362) supersedes SM11: an admin customises
  *   the Founder, Investor, Advisor or Partner Studio they switch to, and the
@@ -29,6 +35,7 @@ import {
   sameLayout, saveFailureOf, toSave,
 } from './studioLayoutModel';
 import { fallbackLayout } from './studioFallback';
+import { useLeaveGuard } from './useLeaveGuard';
 
 // Only the kind is kept: the page branches on the refusal's code, never on its sentence (D258).
 const failed = (_e, kind) => ({ failed: true, kind });
@@ -72,6 +79,7 @@ export function studioFromReads(args) {
     saveError: args.saveError || null,
     dismissDropped: noop, reload: noop, customise: noop, done: noop, reset: noop,
     askReset: false, setAskReset: noop, mapOpen: !!args.mapOpen, setMapOpen: noop, lockedKey: args.lockedKey || null, setLockedKey: noop,
+    leave: null,
     edit: NO_EDIT,
   };
 }
@@ -90,9 +98,17 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
   const [askReset, setAskReset] = useState(false);
   const [lockedKey, setLockedKey] = useState(null);
   const savedTimer = useRef(null);
+  const gen = useRef(0);
+  const busy = useRef(false);
 
   useEffect(() => {
     let live = true;
+    gen.current += 1;
+    busy.current = false;
+    setEditing(false);
+    setSaving('idle');
+    setSaveError(null);
+    setAskReset(false);
     setModules(undefined);
     setLayout(undefined);
     Promise.allSettled([api.modules(sent), api.layout(sent)]).then(([m, l]) => {
@@ -102,7 +118,7 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
       if (l.status === 'fulfilled') setLayout(l.value);
       else { reportError('Studio:layout', l.reason); setLayout(failed(l.reason, readFailureOf(l.reason))); }
     });
-    return () => { live = false; };
+    return () => { live = false; gen.current += 1; busy.current = false; };
   }, [api, sent, n]);
 
   useEffect(() => () => clearTimeout(savedTimer.current), []);
@@ -111,47 +127,55 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
   const { placed, canCustomise, dirty } = view;
 
   // Leaving with unsaved edits asks first.
-  useEffect(() => {
-    if (!dirty || typeof window === 'undefined') return undefined;
-    const ask = (e) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', ask);
-    return () => window.removeEventListener('beforeunload', ask);
-  }, [dirty]);
+  const leave = useLeaveGuard(dirty);
 
   const reload = useCallback(() => { setEditing(false); setSaveError(null); setDismissed(false); setN((x) => x + 1); }, []);
 
   const customise = useCallback(() => {
-    if (!canCustomise) return;
+    if (!canCustomise || busy.current) return;
     setDraft(placed);
     setSaveError(null);
     setEditing(true);
   }, [canCustomise, placed]);
 
   const done = useCallback(async () => {
-    if (!editing || saving === 'saving') return;
-    if (sameLayout(draft, placed)) { setEditing(false); setMapOpen(false); return; }
+    if (!editing || busy.current) return false;
+    if (sameLayout(draft, placed)) { setEditing(false); setMapOpen(false); return true; }
+    const g = gen.current;
+    busy.current = true;
     setSaving('saving');
     setSaveError(null);
     try {
       const next = await api.saveLayout(toSave(draft), layout?.revision ?? null, sent);
+      if (g !== gen.current) return false;
+      busy.current = false;
       setLayout(next);
       setEditing(false);
       setMapOpen(false);
       setSaving('saved');
       clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaving('idle'), 2400);
+      return true;
     } catch (e) {
       reportError('Studio:saveLayout', e);
+      if (g !== gen.current) return false;
+      busy.current = false;
       setSaving('idle');
       setSaveError(saveFailureOf(e));
+      return false;
     }
-  }, [api, draft, editing, layout, placed, saving, sent]);
+  }, [api, draft, editing, layout, placed, sent]);
 
   const reset = useCallback(async () => {
     setAskReset(false);
+    if (busy.current) return;
+    const g = gen.current;
+    busy.current = true;
     setSaving('saving');
     try {
       const next = await api.resetLayout(sent);
+      if (g !== gen.current) return;
+      busy.current = false;
       setLayout(next);
       setEditing(false);
       setMapOpen(false);
@@ -159,10 +183,22 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
       setSaving('idle');
     } catch (e) {
       reportError('Studio:resetLayout', e);
+      if (g !== gen.current) return;
+      busy.current = false;
       setSaving('idle');
       setSaveError({ kind: 'reset_failed' });
     }
   }, [api, sent]);
+
+  // Save, then go where the person was headed; a failed save stays here with its notice.
+  const saveAndLeave = useCallback(async () => {
+    const held = leave.current();
+    if (await done()) leave.proceed(held);
+    else leave.stay();
+  }, [done, leave]);
+
+  // The draft is frozen while a save or reset is in flight.
+  const change = (fn) => { if (!busy.current) setDraft(fn); };
 
   return {
     ...view,
@@ -179,13 +215,14 @@ export function useStudioLayout({ profile, viewer, readOnly = false, api = studi
     setMapOpen,
     lockedKey,
     setLockedKey,
+    leave: { ...leave, saveAndLeave },
     edit: {
-      add: (mod) => setDraft((d) => addTo(d, mod)),
-      remove: (key) => setDraft((d) => removeFrom(d, key)),
-      resize: (key, size) => setDraft((d) => resizeIn(d, key, size)),
-      moveUp: (key) => setDraft((d) => moveUp(d, key)),
-      moveDown: (key) => setDraft((d) => moveDown(d, key)),
-      move: (from, to) => setDraft((d) => moveAt(d, from, to)),
+      add: (mod) => change((d) => addTo(d, mod)),
+      remove: (key) => change((d) => removeFrom(d, key)),
+      resize: (key, size) => change((d) => resizeIn(d, key, size)),
+      moveUp: (key) => change((d) => moveUp(d, key)),
+      moveDown: (key) => change((d) => moveDown(d, key)),
+      move: (from, to) => change((d) => moveAt(d, from, to)),
     },
   };
 }
