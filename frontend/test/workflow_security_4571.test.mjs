@@ -39,9 +39,8 @@ export const MUTABLE_IMAGES = Object.freeze({
   'ci.yml': 'SC-03',
   'deck-visual.yml': 'SC-03',
 });
-export const UNGATED_COMMENT_TRIGGERS = Object.freeze({
-  'claude-code.yml': 'SC-02',
-});
+// SC-02 (claude-code.yml) was closed by gating each comment event on its author's association.
+export const UNGATED_COMMENT_TRIGGERS = Object.freeze({});
 
 const indentOf = (l) => l.length - l.trimStart().length;
 const isComment = (l) => l.trimStart().startsWith('#');
@@ -202,4 +201,23 @@ test('WF-6: a workflow an issue or comment can start, holding a write token, say
   for (const f of Object.keys(UNGATED_COMMENT_TRIGGERS)) {
     assert.doesNotMatch(codeLines(read(f)).join('\n'), /author_association/, `${f} is gated now: remove it from UNGATED_COMMENT_TRIGGERS and close its register row`);
   }
+});
+
+test('SC-02: claude-code.yml lets only an owner, member or collaborator start it, on every comment and issue event', () => {
+  // Mutation checked: one event's author_association check removed (pull_request_review) while the others stay.
+  const src = codeLines(read('claude-code.yml')).join('\n');
+  const at = src.indexOf('if: |');
+  assert.ok(at > 0, 'the job condition');
+  const cond = src.slice(at, src.indexOf('runs-on:', at));
+  const GATE = (obj) => `contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.${obj}.author_association)`;
+  for (const [event, obj] of [['issue_comment', 'comment'], ['pull_request_review_comment', 'comment'], ['pull_request_review', 'review'], ['issues', 'issue']]) {
+    const from = cond.indexOf(`github.event_name == '${event}'`);
+    assert.ok(from >= 0, `${event} is a trigger`);
+    const next = cond.indexOf("github.event_name == '", from + 1);
+    const clause = cond.slice(from, next < 0 ? cond.length : next);
+    assert.ok(clause.includes(GATE(obj)), `${event}: the mention must come from an owner, member or collaborator (${obj}.author_association)`);
+  }
+  assert.doesNotMatch(cond, /CONTRIBUTOR|FIRST_TIME|NONE|MANNEQUIN/, 'only the three trusted associations');
+  // Every non-dispatch branch is gated: four gates for four events.
+  assert.equal(cond.split('author_association').length - 1, 4);
 });
