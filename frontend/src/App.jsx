@@ -3283,8 +3283,9 @@ function AppInner() {
            ? studioGate(<PitchWorkspaceMoved />)
            : studioGate(<PitchStudio tab="overview" />))} />
       {/* D4254 (#4254): the tile row. Decks is PD-1; Script & rehearsal and Share & analytics
-          are the new addresses; /raise/pitch/analytics and the old module page
-          /raise/pitch-deck land on them with the venture kept. */}
+          are the new addresses; the old module page /raise/pitch-deck lands on the Overview with
+          the venture kept. The old analytics address is retired (D2319, #4734), like the other
+          never-opened forwards. */}
       <Route path="/raise/pitch/decks" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="decks" />))} />
       <Route path="/raise/pitch/script" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="script" />))} />
       <Route path="/raise/pitch/share" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="analytics" />))} />
