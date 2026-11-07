@@ -16,7 +16,7 @@ const read = (p) => readFileSync(resolve(root, p), 'utf8');
 
 test('Detail remounts when the selected licence changes so territory drafts do not leak', () => {
   const page = codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx'));
-  assert.match(page, /<Detail key=\{sel\} uid=\{sel\}/, 'territory draft state must reset on licence switch');
+  assert.match(page, /<Detail\s+key=\{sel\} uid=\{sel\}/, 'territory draft state must reset on licence switch');
 });
 
 test('deploy version renders Not recorded when no SHA is stamped', () => {
