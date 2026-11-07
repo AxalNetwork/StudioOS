@@ -9,6 +9,7 @@ import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorResearchWorkspace.css';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import { RETRIEVAL_UNAVAILABLE } from '../research/askOutcome.js';
 
 const arrayOf = (value, keys = []) => Array.isArray(value) ? value : keys.reduce((found, key) => found.length ? found : (Array.isArray(value?.[key]) ? value[key] : []), []);
 const stamp = (value) => { if (!value) return 'Freshness not supplied'; const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Freshness not supplied' : `Updated ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`; };
@@ -186,6 +187,7 @@ function AskAnswer({ asked, error, asking, onRetry }) {
   if (!asked) return null;
   const citations = Array.isArray(asked.citations) ? asked.citations : [];
   const said = asked.reason === 'answered' ? asked.answer
+    : asked.reason === 'retrieval_unavailable' ? RETRIEVAL_UNAVAILABLE
     : asked.reason === 'no_source'
       ? (Number(asked.indexed_documents) === 0
         ? 'Your research library holds no indexed document yet, so there is nothing to answer from. Add a document on the Library page and it becomes answerable here.'
