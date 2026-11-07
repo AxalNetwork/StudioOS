@@ -12,6 +12,7 @@
  */
 import type { Env, User } from '../types';
 import { isAdmin } from '../routes/_t13t14t15_helpers';
+import { refusalBody } from '../util/refusal';
 
 export async function viewerIsMember(env: Env, companyId: number, viewer: User): Promise<boolean> {
   if (isAdmin(viewer)) return true;
@@ -37,4 +38,38 @@ export async function canEditAsMember(env: Env, company: { id: number }, user: U
   ).bind(company.id, user.id).first<{ role_in_company: string; is_primary_admin: number }>();
   if (!link) return false;
   return !!link.is_primary_admin || ['Owner', 'Admin', 'Founder'].includes(link.role_in_company);
+}
+
+/**
+ * D4963 (#4963) — ONE LIFECYCLE RULE: AN ARCHIVED COMPANY IS READ-ONLY UNTIL IT IS RESTORED.
+ *
+ * Every write to something the company owns refuses while `archived_at` is set, with the same status, code and
+ * sentence: General (PATCH /company/:uid and /company/me), the logo, Legal (legal, tax id, officers, locations, slug),
+ * documents, compliance, Team (members, invitations, people, coverage, plan) and the venture moves into or out of it.
+ * The one write an archived company takes is `POST /company/:uid/restore`. Reads still answer, so its members see
+ * what they are restoring. `company_archive_gate_4963.test.ts` lists every write route
+ * and asserts each refuses.
+ *
+ * 409 (not 410): the company exists and the request is valid; the state it is in conflicts with the change.
+ * `error` and `code` both carry `archived`, because older routes answered `{ code }` and newer ones `{ error }`.
+ */
+export const ARCHIVED_CODE = 'archived';
+export const ARCHIVED_MESSAGE = 'This company is archived. Restore it before you change it.';
+
+export const isArchived = (company: { archived_at?: string | null } | null | undefined): boolean =>
+  !!company && company.archived_at != null && company.archived_at !== '';
+
+/** The one refusal for a write to an archived company. */
+export function archivedRefusal(c: { json: (body: unknown, status: any) => Response }): Response {
+  return c.json(
+    refusalBody({ code: ARCHIVED_CODE, message: ARCHIVED_MESSAGE, extra: { code: ARCHIVED_CODE } }),
+    409,
+  );
+}
+
+/** The archived state of a company by id, for routes that hold only the id. Null when there is no such company. */
+export async function archivedById(env: Env, companyId: number): Promise<boolean | null> {
+  const row = await env.DB.prepare('SELECT archived_at FROM company_profiles WHERE id = ?')
+    .bind(companyId).first<{ archived_at: string | null }>();
+  return row ? isArchived(row) : null;
 }

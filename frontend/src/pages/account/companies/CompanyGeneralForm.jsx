@@ -5,7 +5,8 @@ import { companyLogoApi } from '../../../lib/api/companyLogo';
 import { safeReadJSON } from '../../../lib/storage';
 import { useUpdateCompanyDetails } from '../../../contexts/ActiveCompanyContext';
 import {
-  CURRENCY_CODES, DESCRIPTION_MAX, LABELS, LEAVE_PROMPT, LOGO_HINT, SECTIONS, STAGES, canEditCompany, changes, formOf, logoProblem, problemOf, readOnlyLine, regionsOf, regionsText, shownLogo, unsavedLine,
+  CURRENCY_CODES, DESCRIPTION_MAX, LABELS, LEAVE_PROMPT, LOGO_HINT, SECTIONS, STAGES, VERSION_CONFLICT, archivedLine, canEditCompany, changes,
+  conflictLine, formOf, logoProblem, problemOf, readOnlyLine, rebaseOnConflict, regionsOf, regionsText, shownLogo, unsavedLine, versionOf,
 } from './generalFormModel';
 import { CompanyMark, Failed, INK, MUTED, NotYours, PCard, Reading } from './portfolioUi.jsx';
 import * as portfolio from './portfolioAdapter.js';
@@ -17,6 +18,11 @@ import * as portfolio from './portfolioAdapter.js';
  * edit (not only the one active on this device). #4201: the logo tile (ST2)
  * holds a picked or removed logo until the same Save (ST2b, ST2c), and the
  * preview shows it. No URL box, no internal path, no explanation of the app.
+ *
+ * #4963: every save sends the `profile_version` it loaded (`expected_version`). A stale save is a 409
+ * `version_conflict` carrying the current company: the form is rebuilt on it (`rebaseOnConflict`), keeping every
+ * value the other editor committed and this editor's other edits, and says which edits were replaced. An archived
+ * company is drawn read-only, as the Worker refuses its writes.
  */
 
 const INPUT = 'w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[13.5px] text-axal-ink disabled:cursor-not-allowed disabled:bg-axal-ground dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:disabled:bg-gray-800';
@@ -145,7 +151,8 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi }) {
   const row = state.row;
   const patch = useMemo(() => (form && row ? changes(form, row) : {}), [form, row]);
   const dirty = Object.keys(patch).length > 0 || logo !== null;
-  const canEdit = canEditCompany(row, safeReadJSON('user', {}));
+  const archived = Boolean(row?.archived_at);
+  const canEdit = canEditCompany(row, safeReadJSON('user', {})) && !archived;
   const problem = form ? problemOf(form) : null;
 
   // ST6d: a reload or a closed tab with unsaved changes asks first.
@@ -165,18 +172,30 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi }) {
   };
   const onSave = async () => {
     setSave({ status: 'saving', message: '' });
+    let updated = row;
     try {
-      // The logo first: its route answers with the company detail, and the fields' PATCH then applies on top.
-      let updated = row;
-      if (logo?.upload) updated = await logoApi.upload(uid, logo.upload);
-      else if (logo?.remove) updated = await logoApi.remove(uid);
+      // The logo first: its route answers with the company detail (and its new version), and the fields' PATCH then
+      // applies on top of that version, so this save never trips over its own logo.
+      if (logo?.upload) updated = await logoApi.upload(uid, logo.upload, versionOf(row));
+      else if (logo?.remove) updated = await logoApi.remove(uid, versionOf(row));
       if (logo) { holdLogo(null); setLogoError(null); }
-      if (Object.keys(patch).length) updated = await api.updateCompany(uid, patch);
+      if (Object.keys(patch).length) updated = await api.updateCompany(uid, { ...patch, expected_version: versionOf(updated) });
       setState({ status: 'ready', row: updated });
       setForm(formOf(updated));
       updateCompanyDetails(updated);
       setSave({ status: 'saved', message: '' });
     } catch (e) {
+      const current = e?.code === VERSION_CONFLICT ? e?.data?.company : null;
+      if (current && typeof current === 'object') {
+        // Rebuilt on what is saved now: their values kept, this editor's other edits kept, the clashes named.
+        const { form: next, conflicts } = rebaseOnConflict(form, row, current);
+        setState({ status: 'ready', row: current });
+        setForm(next);
+        updateCompanyDetails(current);
+        setSave({ status: 'conflict', message: conflictLine(conflicts) });
+        return;
+      }
+      if (updated !== row) { setState({ status: 'ready', row: updated }); updateCompanyDetails(updated); }
       setSave({ status: 'error', message: e?.message || '' });
     }
   };
@@ -189,7 +208,9 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <form className="flex flex-col gap-4" data-testid="company-general-form" onSubmit={(e) => { e.preventDefault(); if (dirty && !problem) onSave(); }}>
-        {!canEdit && <p className={`m-0 ${MUTED}`} data-testid="company-general-read-only">{readOnlyLine(row.company_name)}</p>}
+        {archived
+          ? <p className={`m-0 ${MUTED}`} data-testid="company-general-archived">{archivedLine(row.company_name)}</p>
+          : !canEdit && <p className={`m-0 ${MUTED}`} data-testid="company-general-read-only">{readOnlyLine(row.company_name)}</p>}
         <LogoTile name={name} row={row} pending={logo} problem={logoError} disabled={!canEdit || save.status === 'saving'}
           onPick={onPickLogo} onRemove={() => { setLogoError(null); holdLogo({ remove: true }); }} onUndo={() => { setLogoError(null); holdLogo(null); }} />
         {SECTIONS.map((sec) => (
@@ -208,8 +229,9 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi }) {
           <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-2.5 dark:border-gray-700 dark:bg-gray-900" data-testid="company-general-savebar">
             <span className={`mr-auto ${MUTED}`} role="status">
               {save.status === 'saved' ? 'Saved · just now'
-                : save.status === 'error' ? `Your changes were not saved. Try again.${save.message ? ` ${save.message}` : ''}`
-                  : problem || unsavedLine(patch, logo)}
+                : save.status === 'conflict' ? <span data-testid="company-general-conflict">{save.message}</span>
+                  : save.status === 'error' ? `Your changes were not saved. Try again.${save.message ? ` ${save.message}` : ''}`
+                    : problem || unsavedLine(patch, logo)}
             </span>
             {dirty && <button type="button" className={GHOST} onClick={() => { setForm(formOf(row)); holdLogo(null); setLogoError(null); setSave({ status: 'idle', message: '' }); }} disabled={save.status === 'saving'}>Discard</button>}
             {dirty && <button type="submit" className={PRIMARY} disabled={!!problem || save.status === 'saving'} data-testid="company-general-save">{save.status === 'saving' ? 'Saving…' : save.status === 'error' ? 'Try again' : 'Save changes'}</button>}

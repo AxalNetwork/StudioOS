@@ -67,7 +67,8 @@ test('the page draws one header and one form, never the old page under the tabs'
   for (const [name, src] of [['tabs', tabs], ['form', form], ['at', at]]) {
     assert.doesNotMatch(src, /Coming later|A company is a legal entity|This sidebar is scoped|SlugChip|Logo URL/, name);
   }
-  assert.match(form, /api\.updateCompany\(uid, patch\)/, 'one save, with only what changed');
+  // #4963: the changed fields and the version they were loaded at, and nothing else.
+  assert.match(form, /api\.updateCompany\(uid, \{ \.\.\.patch, expected_version: versionOf\(updated\) \}\)/, 'one save, with only what changed');
 });
 
 test('a standalone project has no Legal anywhere; the Settings entry opens Project settings', () => {

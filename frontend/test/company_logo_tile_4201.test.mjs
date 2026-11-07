@@ -73,9 +73,10 @@ test('the form saves the logo with its one Save, before the fields, and the prev
   const src = read('pages/account/companies/CompanyGeneralForm.jsx');
   assert.match(src, /const dirty = Object\.keys\(patch\)\.length > 0 \|\| logo !== null;/, 'a held logo makes the form dirty');
   const save = src.slice(src.indexOf('const onSave'), src.indexOf('if (state.status === \'loading\')'));
-  const upload = save.indexOf('logoApi.upload(uid, logo.upload)');
-  const remove = save.indexOf('logoApi.remove(uid)');
-  const fields = save.indexOf('api.updateCompany(uid, patch)');
+  // #4963: each call also carries the version it was loaded at; the order is what is pinned here.
+  const upload = save.indexOf('logoApi.upload(uid, logo.upload,');
+  const remove = save.indexOf('logoApi.remove(uid,');
+  const fields = save.indexOf('api.updateCompany(uid, { ...patch,');
   assert.ok(upload > 0 && remove > 0 && fields > upload && fields > remove, 'the logo first, then the fields');
   assert.match(save, /if \(Object\.keys\(patch\)\.length\) updated = await api\.updateCompany/, 'no empty PATCH for a logo-only change');
   assert.match(src, /const why = logoProblem\(file\);\s*setLogoError\(why\);\s*if \(why\) return;/, 'a bad file is never held');

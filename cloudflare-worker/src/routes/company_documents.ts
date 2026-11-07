@@ -35,7 +35,7 @@ import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
-import { canEdit, viewerIsMember } from '../services/companyAccess';
+import { archivedRefusal, canEdit, isArchived, viewerIsMember } from '../services/companyAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -191,7 +191,7 @@ r.post('/company/:uid/documents', async (c) => {
     const access = await accessOf(c.env, c.req.param('uid'), user);
     if (!access) return notFound(c);
     if (!access.editor) return refuse(c, 403, { code: 'not_editor', message: 'Only an owner, admin or founder of this company can upload its documents.' });
-    if (access.company.archived_at) return refuse(c, 409, { code: 'archived', message: 'This company is archived. Restore it before you add documents.' });
+    if (isArchived(access.company)) return archivedRefusal(c); // #4963: the shared archived rule
 
     const fileRequired = () => refuse(c, 400, { code: 'file_required', message: 'Choose a file to upload.' });
     if (!(c.req.header('content-type') || '').toLowerCase().includes('multipart/form-data')) return fileRequired();

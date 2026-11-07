@@ -96,6 +96,41 @@ export function changes(form, row) {
   return patch;
 }
 
+// ── Concurrency (#4963) ─────────────────────────────────────────────────────
+
+/** The refusal code a stale save answers with; its body carries `company`, the current detail. */
+export const VERSION_CONFLICT = 'version_conflict';
+
+/** The token a save sends back: the `profile_version` this form loaded, or undefined for a row that has none. */
+export const versionOf = (row) => (Number.isSafeInteger(row?.profile_version) && row.profile_version > 0 ? row.profile_version : undefined);
+
+/**
+ * After a 409: the form rebuilt on the CURRENT company. Every value the other editor committed is kept. This editor's
+ * edits to fields nobody else changed are re-applied on top, so they are not lost; an edit to a field the other editor
+ * also changed is replaced by their committed value and named in `conflicts`, for this editor to review and redo.
+ */
+export function rebaseOnConflict(form, loadedRow, currentRow) {
+  const mine = changes(form, loadedRow);
+  const theirs = changes(formOf(currentRow), loadedRow);
+  const next = formOf(currentRow);
+  const conflicts = [];
+  for (const f of Object.keys(mine)) {
+    if (f in theirs) { if (norm(f, form[f]) !== norm(f, currentRow?.[f])) conflicts.push(f); }
+    else next[f] = form[f];
+  }
+  return { form: next, conflicts };
+}
+
+/** The line a conflicted save shows. */
+export function conflictLine(conflicts) {
+  const named = (conflicts || []).map((f) => LABELS[f] || f);
+  if (!named.length) return 'Someone else saved changes first. Their values are shown and your other changes are kept; review and save again.';
+  return `Someone else saved changes first. Your edit${named.length === 1 ? '' : 's'} to ${named.join(', ')} ${named.length === 1 ? 'was' : 'were'} replaced by their saved value; your other changes are kept. Review and save again.`;
+}
+
+/** ST6c for an archived company: nothing here can change until it is restored (#4963, the Worker's rule). */
+export const archivedLine = (name) => `${name || 'This company'} is archived. Restore it before you change its settings.`;
+
 /** Why the form cannot be saved yet, or null. The name is required; the count is a whole number. */
 export function problemOf(form) {
   if (!String(form?.company_name ?? '').trim()) return 'Enter a company name.';
