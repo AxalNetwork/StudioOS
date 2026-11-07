@@ -2072,6 +2072,15 @@ async function handleStripeEvent(
           },
         });
       }
+      // D4855: the discount this payment took stops being a hold on the licence's
+      // promotion ceiling and counts for good. Idempotent: a re-delivered event
+      // commits a row that is already committed. A PI with no reservation (HQ,
+      // or made before this) names none and this does nothing.
+      const reservationRef = (meta.promo_reservation_ref || '').trim();
+      if (reservationRef) {
+        const { commitPromoReservation } = await import('../services/promoRedemption');
+        await commitPromoReservation(env, reservationRef);
+      }
       // Task #8 — universal referral commission. ANY PI stamped at creation
       // with referral attribution (referral_code + referrer_user_id + price_id)
       // earns the referrer a commission off the product's `commission_pct`

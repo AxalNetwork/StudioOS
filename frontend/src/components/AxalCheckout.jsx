@@ -49,6 +49,10 @@ const PROMO_REASONS = {
   already_used: "You've already used this code.",
   not_first_purchase: 'This code is for a first purchase only.',
   first_purchase_unreadable: "We couldn't confirm this is your first purchase. Try again in a moment.",
+  // D4855 (#4855): the licence's promotion ceiling.
+  ceiling_exceeded: "This code's discount is more than this licence's promotion budget has left. Pay without it.",
+  ceiling_not_recorded: 'No discount can be given yet. Pay without the code.',
+  ceiling_unreadable: "This code can't be checked right now. Try again in a moment.",
 };
 function promoReasonText(reason) {
   return PROMO_REASONS[reason] || "That code can't be applied to this purchase.";

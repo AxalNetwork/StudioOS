@@ -658,6 +658,8 @@ test('P4: the list stops at its limit, and the counts cover every code', async (
   assert.equal(p.truncated, true);
   assert.equal(p.counts.active, PROMO_LIST_LIMIT + 5, 'the counts stopped at the listed fifty');
   assert.ok(Array.isArray(p.caveats) && p.caveats.length === 4);
+  assert.ok(!p.caveats.some((x: string) => /not checked|nothing enforces/.test(x)), 'D4855: the page no longer says ceilings go unchecked');
+  assert.ok(p.caveats.some((x: string) => /refuses a discount that is more than the ceiling/.test(x)), 'D4855: it says what checkout does');
 });
 
 test('P4: a missing promo table is unreadable and is not created', async () => {

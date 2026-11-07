@@ -31,6 +31,7 @@ import {
   recordSubscriptionRedemption,
   REDEMPTION_SOURCES,
 } from './promos';
+import { commitPromoReservation } from './promoRedemption';
 
 const SUB_RE = /^sub_[A-Za-z0-9]{1,255}$/;
 const PROMO_RE = /^promo_[A-Za-z0-9]{1,255}$/;
@@ -80,6 +81,9 @@ export async function recordInvoiceRedemption(env: Env, inv: Obj): Promise<void>
       const sub = await stripeCall<{ metadata?: Obj }>(env, `/subscriptions/${subId}`, {}, { method: 'GET' });
       md = sub.metadata ?? null;
     }
+    // D4855: the first invoice is paid, so the discount it took counts against the licence's ceiling for good.
+    const reservationRef = typeof md?.promo_reservation_ref === 'string' ? md.promo_reservation_ref.trim() : '';
+    if (reservationRef) await commitPromoReservation(env, reservationRef);
     const promoId = typeof md?.promo_code_id === 'string' ? md.promo_code_id.trim() : '';
     const userId = Number(md?.user_id);
     if (!PROMO_RE.test(promoId) || !Number.isSafeInteger(userId) || userId <= 0) return;
