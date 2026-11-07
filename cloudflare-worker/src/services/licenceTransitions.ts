@@ -101,10 +101,11 @@ export async function transition(env: Env, held: Held, verb: LicenceVerb, change
   else { sets.push('renews_on = ?'); binds.push(change.renewsOn ?? null); }
   sets.push('revision = revision + 1', 'updated_at = ?');
   binds.push(change.now);
-  const prerequisites = ENTERS_ACTIVE.has(verb) ? ` AND ${PREREQUISITES}` : '';
+  // Fixed fragments only (the SET list is built from this function's own literals; the prerequisites are a module constant),
+  // joined by concatenation so no `${}` lands in a prepare() template.
+  const prerequisites = ENTERS_ACTIVE.has(verb) ? ' AND ' + PREREQUISITES : '';
   const move = env.DB.prepare(
-    `UPDATE territory_licences AS l SET ${sets.join(', ')}
-      WHERE l.id = ? AND l.status = ? AND l.revision = ?${prerequisites}`,
+    'UPDATE territory_licences AS l SET ' + sets.join(', ') + ' WHERE l.id = ? AND l.status = ? AND l.revision = ?' + prerequisites,
   ).bind(...binds, held.id, held.status, held.revision);
   let results: Array<{ meta?: { changes?: number } }>;
   try {

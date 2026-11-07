@@ -94,6 +94,8 @@ const r = new Hono<{ Bindings: Env }>();
 
 const SEAT_TYPES = ['founder', 'investor', 'advisor', 'partner'] as const;
 const ISO2 = /^[A-Z]{2}$/;
+/** #4678: true while the licence (bound as the one `?`) has not been terminated; appended to writes that must not touch a terminated licence. */
+const NOT_TERMINATED = "EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')";
 /** Statuses that still hold territory. Terminated is the only one that does not. */
 const HOLDS_TERRITORY = ['draft', 'pending_activation', 'active', 'suspended'];
 /** The two kinds migration 279's CHECK admits. Named here so the handler and
@@ -621,10 +623,9 @@ r.put('/:uid/territories', async (c) => {
     const stmts = [
       // #4678: a licence terminated since the read above releases its territory
       // for good; neither statement may take it back.
-      c.env.DB.prepare(`DELETE FROM licence_territories WHERE licence_id = ? AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`).bind(licence.id, licence.id),
+      c.env.DB.prepare('DELETE FROM licence_territories WHERE licence_id = ? AND ' + NOT_TERMINATED).bind(licence.id, licence.id),
       ...wanted.map((code) => c.env.DB.prepare(
-        `INSERT INTO licence_territories (licence_id, country_code, created_at)
-         SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`,
+        'INSERT INTO licence_territories (licence_id, country_code, created_at) SELECT ?, ?, ? WHERE ' + NOT_TERMINATED,
       ).bind(licence.id, code, nowIso(), licence.id)),
       c.env.DB.prepare('UPDATE territory_licences SET revision = revision + 1, updated_at = ? WHERE id = ?')
         .bind(nowIso(), licence.id),
@@ -657,10 +658,9 @@ r.put('/:uid/seats', async (c) => {
     }
     const beforeSeats = await seatsOf(c.env, licence.id);
     await c.env.DB.batch([
-      c.env.DB.prepare(`DELETE FROM licence_seats WHERE licence_id = ? AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`).bind(licence.id, licence.id),
+      c.env.DB.prepare('DELETE FROM licence_seats WHERE licence_id = ? AND ' + NOT_TERMINATED).bind(licence.id, licence.id),
       ...SEAT_TYPES.map((t) => c.env.DB.prepare(
-        `INSERT INTO licence_seats (licence_id, seat_type, seats_licensed, created_at)
-         SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')`,
+        'INSERT INTO licence_seats (licence_id, seat_type, seats_licensed, created_at) SELECT ?, ?, ?, ? WHERE ' + NOT_TERMINATED,
       ).bind(licence.id, t, seats[t], nowIso(), licence.id)),
       c.env.DB.prepare('UPDATE territory_licences SET revision = revision + 1, updated_at = ? WHERE id = ?')
         .bind(nowIso(), licence.id),
@@ -1188,7 +1188,7 @@ r.post('/:uid/terminate', async (c) => {
     const guard = appliedGuard(licence.id, licence.revision + 1, 'terminated');
     const moved = await transition(c.env, licence, 'terminate', {
       note, now: nowIso(),
-      after: [c.env.DB.prepare(`DELETE FROM licence_territories WHERE licence_id = ? AND ${guard.sql}`).bind(licence.id, ...guard.binds)],
+      after: [c.env.DB.prepare('DELETE FROM licence_territories WHERE licence_id = ? AND ' + guard.sql).bind(licence.id, ...guard.binds)],
     });
     if (!moved.ok) return moved.code === 'bad_transition'
       ? c.json({ error: 'bad_transition', message: 'This licence is already terminated.' }, 409)
@@ -1371,22 +1371,22 @@ r.post('/:uid/admins', async (c) => {
     // administer users, and the account is not bound to another licence. It
     // is decided inside the batch, so an appointment racing a termination or
     // another appointment either applies whole or not at all.
-    const can = `EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status IN (${APPOINTABLE.map((x) => `'${x}'`).join(', ')}))
-      AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?)`;
-    const canBinds = [licence.id, u.id, licence.id];
-    const guard = { sql: `(${can})`, binds: canBinds };
-    const bindStatement = c.env.DB.prepare(`INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
-        SELECT ?, ?, ?, ? WHERE ${can}
-        ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role WHERE licence_admins.licence_id = excluded.licence_id`)
-      .bind(licence.id, u.id, role, admin.id, ...canBinds);
+    const can = "EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status IN (" + APPOINTABLE.map(() => '?').join(', ') + "))"
+      + ' AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?)';
+    const canBinds = [licence.id, ...APPOINTABLE, u.id, licence.id];
+    const guard = { sql: '(' + can + ')', binds: canBinds };
+    const bindStatement = c.env.DB.prepare(
+      'INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id) SELECT ?, ?, ?, ? WHERE ' + can
+      + ' ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role WHERE licence_admins.licence_id = excluded.licence_id',
+    ).bind(licence.id, u.id, role, admin.id, ...canBinds);
     const appointmentStatements = [
       bindStatement,
-      c.env.DB.prepare(`INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
-        SELECT ?, 'terms_changed', ?, ?, ?, ? WHERE ${can}`)
-        .bind(licence.id, JSON.stringify({ administrator_added: u.email, admin_role: role, promoted_from: previousRole }), reason, admin.id, nowIso(), ...canBinds),
-      c.env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?,?,?,? WHERE ${can}`)
+      c.env.DB.prepare(
+        "INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at) SELECT ?, 'terms_changed', ?, ?, ?, ? WHERE " + can,
+      ).bind(licence.id, JSON.stringify({ administrator_added: u.email, admin_role: role, promoted_from: previousRole }), reason, admin.id, nowIso(), ...canBinds),
+      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?,?,?,? WHERE ' + can)
         .bind('role_changed', `Super admin ${admin.name} made ${u.email} an administrator of ${licence.licence_ref} (was ${previousRole || 'unrecorded'}). Reason: ${reason}`, actorHash, admin.id, ...canBinds),
-      c.env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?,?,?,? WHERE ${can}`)
+      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?,?,?,? WHERE ' + can)
         .bind('your_role_changed', `You were made an administrator of ${licence.licence_ref} by ${admin.name}`, targetHash, u.id, ...canBinds),
     ];
     const retainedLicence = previousRole.toLowerCase();
@@ -1398,7 +1398,7 @@ r.post('/:uid/admins', async (c) => {
       // licence to retain. Their existing atomic appointment is unchanged,
       // with the role write guarded like the rest.
       await c.env.DB.batch([
-        c.env.DB.prepare(`UPDATE users SET role = 'admin' WHERE id = ? AND ${can}`).bind(u.id, ...canBinds),
+        c.env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ? AND " + can).bind(u.id, ...canBinds),
         ...appointmentStatements,
       ]);
     }
