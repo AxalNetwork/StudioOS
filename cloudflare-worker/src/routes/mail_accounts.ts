@@ -10,7 +10,9 @@
  *   POST   /accounts/mcp                   D1343: { connection_uid, address, display_name? } a member's own MCP mail server
  *                                          (a D852 custom connector with an approved send tool); verified, nothing sent
  *   POST   /accounts/:uid/verify           checks the mailbox again; an expired token turns the row `expired`
- *   DELETE /accounts/:uid                  revoke at the provider where it can, forget the credentials; sent rows stay
+ *   DELETE /accounts/:uid                  revoke at the provider where it can, forget the credentials; sent rows stay.
+ *                                          Answers { ok, account } from the persisted row; 409 connection_changed when a newer
+ *                                          connection was saved while this disconnect was in flight (#4654)
  *   POST   /send/confirm                   { account_uid } → a one-use nonce for the composer's pressed Send
  *   POST   /send                           { account_uid, to, subject, body, draft_uid?, nonce } → one `mail_sent` row
  *                                          `intro_uid?` (D4329): the intro for an accepted introduction request;
@@ -19,6 +21,10 @@
  *                                          opt-out line; its voice note is attached; the send moves the step on
  *   GET    /sent?page=&person=             D1344: the member's own sent log, newest first, 20 a page, with the refs each quoted;
  *                                          `person` keeps the rows sent from that person's drafts
+ *
+ * #4654: a mailbox has one state. A verify or send that completes after the member disconnected or reconnected changes
+ * nothing; a connection started before a newer one or before a disconnect is 409 connection_superseded (the OAuth
+ * callback redirects with `?mail=superseded`); see `services/mail/accounts.ts`.
  *
  * Another member's uid is 404, as one that does not exist. A support session
  * is refused: mail goes out in the member's own name. Rate limited per member.
@@ -35,8 +41,8 @@ import { authorizeUrl, configured, exchangeCode, gmailEnabled, OUTLOOK_READ_SCOP
 import { AdapterError, type Attachment } from '../services/mail/adapters/types';
 import { SequenceRefused, sequenceAdvance, sequenceSendGate, VOICE_MIME } from '../services/distribution/sequences';
 import {
-  accountOf, accountView, forget, issueNonce, listAccounts, markError, markExpired, markUsed, openCreds, saveAccount,
-  spendOauthState, spendSendNonce, type AccountRow,
+  accountOf, accountView, ConnectionSuperseded, forget, issueNonce, listAccounts, markError, markExpired, markUsed, openCreds, persisted,
+  saveAccount, spendOauthState, spendSendNonce, type AccountRow,
 } from '../services/mail/accounts';
 import { indexHmac } from '../services/columnCipher';
 import { configOf, customMcpEnabled, customRowFor, isConnectionUid } from '../integrations/customMcp';
@@ -71,6 +77,16 @@ function adapterRefusal(c: Context<any>, e: unknown): Response {
     return refuse(c, status, { code: `mailbox_${e.code}`, message: e.sentence });
   }
   return refuse(c, 503, { code: 'mailbox_unreadable', message: 'The mailbox could not be used. Try again.', raw: e instanceof Error ? e.name : 'error' });
+}
+
+/** A connection that lost to a newer one or to a disconnect (#4654): our sentence, 409, nothing changed. */
+function supersededRefusal(c: Context<any>, e: ConnectionSuperseded): Response {
+  return refuse(c, 409, { code: 'connection_superseded', message: e.sentence });
+}
+
+/** The mailbox the member disconnected while an operation was in flight reads as one that is gone, not as one that expired. */
+async function goneOrNot(c: Context<{ Bindings: Env }>, user: User, row: AccountRow): Promise<Response | null> {
+  return (await accountOf(c.env, user, row.uid)) ? null : refuse(c, 404, { code: 'not_found', message: NOT_FOUND });
 }
 
 /** Records what a use of the mailbox did to it: rotated credentials, or the provider's demand to reconnect. */
@@ -108,6 +124,7 @@ mailAccounts.get('/accounts/oauth/callback', async (c) => {
   const back = (status: string) => c.redirect(`/email?mail=${status}`, 302);
   const spent = await spendOauthState(c.env, c.req.query('state'));
   if (!spent) return back('expired');
+  const startedAt = spent.issued_at || new Date().toISOString();
   const code = c.req.query('code');
   if (!code || c.req.query('error')) return back('declined');
   const provider = spent.provider.startsWith('outlook') ? 'outlook' : spent.provider === 'gmail' ? 'gmail' : null;
@@ -119,9 +136,11 @@ mailAccounts.get('/accounts/oauth/callback', async (c) => {
     await saveAccount(c.env, user, {
       provider, address: got.address, display_name: got.name, scopes: got.scopes,
       can_read: provider === 'outlook' && got.scopes.split(/\s+/).some((s) => s.endsWith(OUTLOOK_READ_SCOPE)), creds: got.creds,
-    });
+    }, startedAt);
     return back('connected');
   } catch (e) {
+    // A connect started before a newer one, or before the member's disconnect, is not applied (#4654): it did not fail, it lost.
+    if (e instanceof ConnectionSuperseded) return back('superseded');
     console.warn('[mail] oauth callback failed:', e instanceof AdapterError ? e.code : 'error');
     return back('failed');
   }
@@ -134,12 +153,13 @@ mailAccounts.post('/accounts/imap', async (c) => {
   const address = String(b.address ?? '').trim().toLowerCase();
   if (!EMAIL.test(address) || address.length > 320) return refuse(c, 400, { code: 'address_invalid', message: 'Give the mailbox’s email address.' });
   const name = typeof b.display_name === 'string' && b.display_name.trim() && headerSafe(b.display_name) ? b.display_name.trim().slice(0, 120) : null;
+  const startedAt = new Date().toISOString();
   try {
     const creds = checkSettings(b as any);
     await ADAPTERS.imap!.verify(c.env, creds);
-    const account = await saveAccount(c.env, user, { provider: 'imap', address, display_name: name, scopes: '', can_read: false, creds });
+    const account = await saveAccount(c.env, user, { provider: 'imap', address, display_name: name, scopes: '', can_read: false, creds }, startedAt);
     return c.json({ account }, 201);
-  } catch (e) { return adapterRefusal(c, e); }
+  } catch (e) { return e instanceof ConnectionSuperseded ? supersededRefusal(c, e) : adapterRefusal(c, e); }
 });
 
 // D1343 (#3551): a member's own MCP mail server, chosen as a mailbox. Its send tool is the one the
@@ -158,11 +178,12 @@ mailAccounts.post('/accounts/mcp', async (c) => {
   if (!row) return refuse(c, 404, { code: 'connector_not_found', message: 'That connector was not found.' });
   if (!configOf(row)?.mail_send) return refuse(c, 409, { code: 'send_tool_not_approved', message: 'Choose the tool that sends your email on that connector first.' });
   const creds = { kind: 'mcp' as const, connection_uid: uid, user_id: Number(user.id) };
+  const startedAt = new Date().toISOString();
   try {
     await ADAPTERS.mcp!.verify(c.env, creds);
-    const account = await saveAccount(c.env, user, { provider: 'mcp', address, display_name: name, scopes: '', can_read: false, creds });
+    const account = await saveAccount(c.env, user, { provider: 'mcp', address, display_name: name, scopes: '', can_read: false, creds }, startedAt);
     return c.json({ account }, 201);
-  } catch (e) { return adapterRefusal(c, e); }
+  } catch (e) { return e instanceof ConnectionSuperseded ? supersededRefusal(c, e) : adapterRefusal(c, e); }
 });
 
 mailAccounts.post('/accounts/:uid/verify', async (c) => {
@@ -173,12 +194,16 @@ mailAccounts.post('/accounts/:uid/verify', async (c) => {
   const adapter = ADAPTERS[row.provider];
   const creds = await openCreds(c.env, row);
   if (!adapter || !creds) {
+    // Credentials that are gone because the member disconnected meanwhile are a disconnected mailbox, not an expired one.
+    const gone = await goneOrNot(c, user, row);
+    if (gone) return gone;
     await markExpired(c.env, row, 'The mailbox’s saved access could not be opened. Connect it again.');
   } else {
+    // The provider's answer, good or bad, is written only while the mailbox is the one it was asked about (#4654).
     try { await markUsed(c.env, row, (await adapter.verify(c.env, creds)).creds); }
     catch (e) { await afterUse(c.env, row, e); }
   }
-  return c.json({ account: accountView((await c.env.DB.prepare('SELECT * FROM mail_accounts WHERE id = ?').bind(row.id).first<AccountRow>())!) });
+  return c.json({ account: accountView(await persisted(c.env, row)) });
 });
 
 mailAccounts.delete('/accounts/:uid', async (c) => {
@@ -190,7 +215,13 @@ mailAccounts.delete('/accounts/:uid', async (c) => {
   // Revoked at the provider where it can be; forgotten here either way.
   if (creds) { try { await ADAPTERS[row.provider]?.revoke(c.env, creds); } catch { /* forgotten below */ } }
   await forget(c.env, row);
-  return c.json({ ok: true });
+  // The reply is the persisted state, not an assumption: revoked, with nothing sealed left to use.
+  const after = await persisted(c.env, row);
+  if (after.status !== 'revoked') {
+    // A newer connection was saved while this disconnect was in flight, and it stays (#4654): say what is true.
+    return refuse(c, 409, { code: 'connection_changed', message: 'This mailbox was connected again while you were disconnecting it, so it is still connected.' });
+  }
+  return c.json({ ok: after.credentials === null, account: accountView(after) });
 });
 
 mailAccounts.post('/send/confirm', async (c) => {
@@ -270,6 +301,8 @@ mailAccounts.post('/send', async (c) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(uid, user.id, row.id, to, hash, subject, messageId, draftUid, JSON.stringify(refs), error ? null : new Date().toISOString(), error).run();
   if (!adapter || !creds) {
+    const gone = await goneOrNot(c, user, row);
+    if (gone) { await log(null, 'The mailbox was disconnected before this email could be sent.'); return gone; }
     const sentence = 'The mailbox’s saved access could not be opened. Connect it again.';
     await markExpired(c.env, row, sentence);
     await log(null, sentence);
