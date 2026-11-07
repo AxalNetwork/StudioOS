@@ -7,6 +7,7 @@ import {
   Field, MoreRows, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
 } from './kit';
+import { SERVICE_LIMITS, SUPPORTED_CURRENCIES } from '../../../lib/advisorLimits';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -56,7 +57,7 @@ const KINDS = [
   ['retainer', 'Retainer', 'Recurring, usually monthly.'],
 ];
 
-const BLANK = { title: '', kind: 'fixed', duration_note: '', price: '', scope: '' };
+const BLANK = { title: '', kind: 'fixed', duration_note: '', price: '', currency: 'USD', scope: '' };
 
 export default function ServicesZone() {
   // #4689: a page at a time; the tiles read `counts`, the whole list's figures.
@@ -103,6 +104,7 @@ export default function ServicesZone() {
         kind: draft.kind,
         duration_note: draft.duration_note.trim() || null,
         price_cents: parsed.cents,
+        currency: draft.currency,
         scope: draft.scope.trim() || null,
       });
       await fill.afterSave(created?.id);
@@ -137,12 +139,26 @@ export default function ServicesZone() {
     if (!Object.keys(body).length) { stopEdit(); return; }
     setSaving(true);
     try {
-      await api.updateMyAdvisorService(row.id, body);
+      // D4674: only the changed fields are sent, with the revision this form was
+      // opened on, so an edit made elsewhere in the meantime is a conflict and
+      // not a silent overwrite.
+      const saved = await api.updateMyAdvisorService(row.id, { ...body, revision: row.updated_at });
+      // The form is reset from what the server stored, not from what was typed.
+      setEditDraft(serviceDraftOf(saved));
       stopEdit();
       setNote({ ok: true, text: 'Service saved.' });
       await load();
     } catch (err) {
-      setEditNote({ ok: false, text: err?.message || 'The change could not be saved. The service is as it was.' });
+      if (err?.code === 'revision_conflict' || err?.status === 409) {
+        // Show the row as it now stands, and keep what the person typed visible
+        // in the note rather than saving it over a change they have not seen.
+        const current = err?.data?.current;
+        if (current) setEditDraft(serviceDraftOf(current));
+        setEditNote({ ok: false, text: err?.message || 'This service was changed somewhere else. It is shown as it now stands; your change was not saved.' });
+        await load();
+      } else {
+        setEditNote({ ok: false, text: err?.message || 'The change could not be saved. The service is as it was.' });
+      }
     } finally {
       setSaving(false);
     }
@@ -242,7 +258,7 @@ export default function ServicesZone() {
         <FillFormBar fill={fill} />
         <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Title" fill={{ ctl: fill, name: 'title', value: draft.title }}>
-            <input ref={titleRef} className={inputClass} value={draft.title} data-testid="advisor-service-title"
+            <input ref={titleRef} className={inputClass} value={draft.title} data-testid="advisor-service-title" maxLength={SERVICE_LIMITS.title}
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               placeholder="Fractional CTO day" />
           </Field>
@@ -257,14 +273,20 @@ export default function ServicesZone() {
               onChange={(e) => setDraft({ ...draft, price: e.target.value })}
               placeholder="2500" />
           </Field>
+          <Field label="Currency" hint="Chosen, not assumed: the price is in this currency.">
+            <select className={inputClass} value={draft.currency} data-testid="advisor-service-currency"
+              onChange={(e) => setDraft({ ...draft, currency: e.target.value })}>
+              {SUPPORTED_CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
           <Field label="Duration" hint="In your own words.">
-            <input className={inputClass} value={draft.duration_note}
+            <input className={inputClass} value={draft.duration_note} maxLength={SERVICE_LIMITS.duration_note}
               onChange={(e) => setDraft({ ...draft, duration_note: e.target.value })}
               placeholder="One day, on site" />
           </Field>
           <div className="sm:col-span-2">
             <Field label="What it covers" fill={{ ctl: fill, name: 'scope', value: draft.scope }}>
-              <textarea rows={2} className={inputClass} value={draft.scope}
+              <textarea rows={2} className={inputClass} value={draft.scope} maxLength={SERVICE_LIMITS.scope}
                 onChange={(e) => setDraft({ ...draft, scope: e.target.value })} />
             </Field>
           </div>
@@ -281,7 +303,7 @@ export default function ServicesZone() {
         className="mb-3"
         role="advisor"
         filters={advisorZoneFilters('expertise/services', { value: view, onChange: setView })}
-        actions={advisorZoneActions('expertise/services', { handlers: { focusAddForm }, view: { header: ['Service', 'Kind', 'Active', 'Price (cents)', 'Units sold'], rows: shown, cells: (r) => [r.title, r.kind, r.is_active, r.price_cents, r.units_sold] } })}
+        actions={advisorZoneActions('expertise/services', { handlers: { focusAddForm }, view: { header: ['Service', 'Kind', 'Active', 'Price (minor units)', 'Currency', 'Units sold'], rows: shown, cells: (r) => [r.title, r.kind, r.is_active, r.price_cents, r.currency, r.units_sold] } })}
       />
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
         isEmpty={state.items.length === 0} empty={empty}>
@@ -329,7 +351,7 @@ export default function ServicesZone() {
                 <form onSubmit={(e) => saveEdit(e, row)} className="mt-3 grid grid-cols-1 gap-3 border-t border-axal-hairline pt-3 sm:grid-cols-2 dark:border-gray-700"
                   data-testid={`advisor-service-form-${row.id}`}>
                   <Field label="Title">
-                    <input className={inputClass} value={editDraft.title} data-testid="advisor-service-edit-title"
+                    <input className={inputClass} value={editDraft.title} data-testid="advisor-service-edit-title" maxLength={SERVICE_LIMITS.title}
                       onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} />
                   </Field>
                   <Field label="Kind">
@@ -342,12 +364,15 @@ export default function ServicesZone() {
                     <input className={inputClass} value={editDraft.price} inputMode="decimal" data-testid="advisor-service-edit-price"
                       onChange={(e) => setEditDraft({ ...editDraft, price: e.target.value })} />
                   </Field>
-                  <Field label="Currency" hint="Three letters, such as USD.">
-                    <input className={inputClass} value={editDraft.currency} maxLength={3} data-testid="advisor-service-edit-currency"
-                      onChange={(e) => setEditDraft({ ...editDraft, currency: e.target.value })} />
+                  <Field label="Currency" hint="Changing it means entering the price in the new currency too.">
+                    <select className={inputClass} value={editDraft.currency} data-testid="advisor-service-edit-currency"
+                      onChange={(e) => setEditDraft({ ...editDraft, currency: e.target.value })}>
+                      {(SUPPORTED_CURRENCIES.includes(editDraft.currency) ? SUPPORTED_CURRENCIES : [editDraft.currency, ...SUPPORTED_CURRENCIES])
+                        .map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
                   </Field>
                   <Field label="Duration">
-                    <input className={inputClass} value={editDraft.duration_note} data-testid="advisor-service-edit-duration"
+                    <input className={inputClass} value={editDraft.duration_note} data-testid="advisor-service-edit-duration" maxLength={SERVICE_LIMITS.duration_note}
                       onChange={(e) => setEditDraft({ ...editDraft, duration_note: e.target.value })} />
                   </Field>
                   <Field label="State" hint={SERVICE_STATES.find((x) => x.id === editDraft.is_active)?.hint}>
@@ -359,7 +384,7 @@ export default function ServicesZone() {
                   </Field>
                   <div className="sm:col-span-2">
                     <Field label="What it covers">
-                      <textarea rows={2} className={inputClass} value={editDraft.scope} data-testid="advisor-service-edit-scope"
+                      <textarea rows={2} className={inputClass} value={editDraft.scope} data-testid="advisor-service-edit-scope" maxLength={SERVICE_LIMITS.scope}
                         onChange={(e) => setEditDraft({ ...editDraft, scope: e.target.value })} />
                     </Field>
                   </div>

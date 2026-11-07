@@ -6,6 +6,7 @@ import {
   Field, SaveNote, Unrecorded, ZoneBody, ZoneHeading, refusalText,
   buttonClass, inputClass,
 } from './kit';
+import { PROFILE_LIMITS } from '../../../lib/advisorLimits';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -98,6 +99,28 @@ const EMPTY_DRAFT = {
   headshot_url: '', linkedin_url: '',
 };
 
+/** The form's fields from a saved profile (null when there is none yet). */
+export function draftOf(profile) {
+  return {
+    ...EMPTY_DRAFT,
+    display_name: profile?.display_name || '',
+    headline: profile?.headline || '',
+    bio: profile?.bio || '',
+    // An unanswered list comes back as null and an answered-empty one as
+    // []. Both render as an empty box; only a SAVE tells them apart, and
+    // the save reports whichever the advisor actually left behind.
+    expertise: joinList(profile?.expertise),
+    sectors: joinList(profile?.sectors),
+    stages: joinList(profile?.stages),
+    languages: joinList(profile?.languages),
+    country: profile?.country || '',
+    timezone: profile?.timezone || '',
+    availability_note: profile?.availability_note || '',
+    headshot_url: profile?.headshot_url || '',
+    linkedin_url: profile?.linkedin_url || '',
+  };
+}
+
 export default function ProfileZone() {
   const [state, setState] = useState({ loading: true, error: '', profile: null });
   // SEEDED, NOT NULL, and this is a crash fix rather than a tidy-up.
@@ -143,24 +166,7 @@ export default function ProfileZone() {
       // `null` from the API means "you have no advisor row yet", which is a
       // real state an advisor account can be in — the row is created by the
       // first save. An empty draft is correct here; an error would not be.
-      setDraft({
-        ...EMPTY_DRAFT,
-        display_name: profile?.display_name || '',
-        headline: profile?.headline || '',
-        bio: profile?.bio || '',
-        // An unanswered list comes back as null and an answered-empty one as
-        // []. Both render as an empty box; only a SAVE tells them apart, and
-        // the save reports whichever the advisor actually left behind.
-        expertise: joinList(profile?.expertise),
-        sectors: joinList(profile?.sectors),
-        stages: joinList(profile?.stages),
-        languages: joinList(profile?.languages),
-        country: profile?.country || '',
-        timezone: profile?.timezone || '',
-        availability_note: profile?.availability_note || '',
-        headshot_url: profile?.headshot_url || '',
-        linkedin_url: profile?.linkedin_url || '',
-      });
+      setDraft(draftOf(profile));
     } catch (e) {
       setState({ loading: false, error: refusalText(e, 'The profile could not be read.'), profile: null });
     }
@@ -175,7 +181,11 @@ export default function ProfileZone() {
     setSaving(true);
     setNote(null);
     try {
-      const saved = await api.upsertMyAdvisor({
+      // D4674: only the fields that differ from the saved profile are sent, with
+      // the revision this form was read on. Two tabs editing different fields
+      // both persist; the same record moved elsewhere is a conflict, not an
+      // overwrite.
+      const next = {
         display_name: draft.display_name.trim(),
         headline: draft.headline.trim() || null,
         bio: draft.bio.trim() || null,
@@ -190,10 +200,22 @@ export default function ProfileZone() {
         availability_note: draft.availability_note.trim() || null,
         headshot_url: draft.headshot_url.trim() || null,
         linkedin_url: draft.linkedin_url.trim() || null,
-      });
+      };
+      const was = state.profile;
+      const changed = was ? Object.fromEntries(Object.entries(next).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(was[k] ?? null))) : next;
+      if (was && !Object.keys(changed).length) { setNote({ ok: true, text: 'Nothing to save: the profile is as it was.' }); return; }
+      const saved = await api.upsertMyAdvisor(was ? { ...changed, revision: was.updated_at } : changed);
+      // The form is reset from what the server stored, not from what was typed.
+      setDraft(draftOf(saved));
       setState((c) => ({ ...c, profile: saved }));
       setNote({ ok: true, text: 'Profile saved.' });
     } catch (err) {
+      if (err?.code === 'revision_conflict' || err?.status === 409) {
+        const current = err?.data?.current;
+        if (current) { setState((c) => ({ ...c, profile: current })); setDraft(draftOf(current)); }
+        setNote({ ok: false, text: err?.message || 'The profile was changed somewhere else. It is shown as it now stands; your change was not saved.' });
+        return;
+      }
       // Named, not swallowed. The reported defect on the old surface was a
       // save that reported success while the worker discarded nine fields.
       setNote({ ok: false, text: refusalText(err, 'The profile could not be saved. Nothing was changed.') });
@@ -277,18 +299,18 @@ export default function ProfileZone() {
             <form onSubmit={save} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {fieldShown(view, 'display_name', state.profile) && (
                 <Field label="Name">
-                  <input className={inputClass} value={draft.display_name} onChange={set('display_name')} />
+                  <input className={inputClass} value={draft.display_name} maxLength={PROFILE_LIMITS.display_name} onChange={set('display_name')} />
                 </Field>
               )}
               {fieldShown(view, 'headline', state.profile) && (
                 <Field label="Headline" hint="One line. e.g. “ex-Stripe payments PM”.">
-                  <input className={inputClass} value={draft.headline} onChange={set('headline')} />
+                  <input className={inputClass} value={draft.headline} maxLength={PROFILE_LIMITS.headline} onChange={set('headline')} />
                 </Field>
               )}
               {fieldShown(view, 'bio', state.profile) && (
                 <div className="sm:col-span-2">
                   <Field label="Bio">
-                    <textarea rows={4} className={inputClass} value={draft.bio} onChange={set('bio')} />
+                    <textarea rows={4} className={inputClass} value={draft.bio} maxLength={PROFILE_LIMITS.bio} onChange={set('bio')} />
                   </Field>
                 </div>
               )}

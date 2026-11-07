@@ -13,6 +13,10 @@ import type { Env, User } from '../types';
 import { getCurrentUser, requireAdmin, requireAuth, requireBranchNotSuspended } from '../auth';
 import { programRefusal } from '../services/programEnforcement';
 import { refuse } from '../util/refusal';
+import {
+  AdvisorValidationError, PROFILE_LIMITS, SERVICE_LIMITS, boundedList, boundedText, hourlyRate,
+  supportedCurrency, wholeCents,
+} from '../services/advisorLimits';
 import { railFor, refuseRun } from '../util/railContext';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
@@ -357,8 +361,7 @@ function mergeProfileFields(existing: AdvisorRow | null, body: any) {
     if (!(key in body)) return (existing?.[key as keyof AdvisorRow] as string | null) ?? null;
     const v = body[key];
     if (v == null) return null;
-    const t = String(v).trim();
-    return t ? t.slice(0, max) : null;
+    return boundedText(key, v, max);
   };
   const list = (key: string, col: keyof AdvisorRow): string | null => {
     if (!(key in body)) return (existing?.[col] as string | null) ?? null;
@@ -366,16 +369,16 @@ function mergeProfileFields(existing: AdvisorRow | null, body: any) {
     // Null clears the answer entirely; an empty array is a recorded empty
     // answer. Storing '[]' for both would lose which one the advisor meant.
     if (v == null) return null;
-    return JSON.stringify(Array.isArray(v) ? v.slice(0, 32).map(String) : []);
+    return JSON.stringify(boundedList(key, v));
   };
   return {
-    headline: text('headline', 200),
+    headline: text('headline', PROFILE_LIMITS.headline),
     stages_json: list('stages', 'stages_json'),
     languages_json: list('languages', 'languages_json'),
-    country: text('country', 100),
-    timezone: text('timezone', 100),
-    availability_note: text('availability_note', 500),
-    headshot_url: text('headshot_url', 1000),
+    country: text('country', PROFILE_LIMITS.country),
+    timezone: text('timezone', PROFILE_LIMITS.timezone),
+    availability_note: text('availability_note', PROFILE_LIMITS.availability_note),
+    headshot_url: text('headshot_url', PROFILE_LIMITS.headshot_url),
   };
 }
 
@@ -388,6 +391,19 @@ function mergeProfileFields(existing: AdvisorRow | null, body: any) {
 const mayHoldAdvisorProfile = (user: User) => holdsLicence(user, 'advisor') || isAdmin(user);
 const ADVISOR_LICENCE_REQUIRED = { code: 'advisor_licence_required', message: 'An advisor profile needs the Advisor licence.' } as const;
 
+/**
+ * D4674: a value over its limit, an unsupported currency or a malformed price is
+ * a 400 that names the field. `null` when the error is not one of those.
+ */
+function validationRefusal(c: any, e: unknown) {
+  if (!(e instanceof AdvisorValidationError)) return null;
+  return refuse(c, 400, { code: e.code, message: e.message });
+}
+
+/** D4674: the revision a client read (`updated_at`), or null when it sent none. */
+const sentRevision = (body: any): string | null =>
+  typeof body?.revision === 'string' && body.revision ? body.revision : null;
+
 advisors.post('/me', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -395,35 +411,60 @@ advisors.post('/me', async (c) => {
     await ensureAdvisorStoresSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const existing = await myAdvisor(c.env, user);
-    const display_name = body.display_name === undefined && existing
-      ? existing.display_name : String(body.display_name || user.name || user.email).slice(0, 200);
-    const bio = body.bio === undefined && existing ? existing.bio : trimOrNull(body.bio, 4000);
-    const linkedin_url = body.linkedin_url === undefined && existing
-      ? existing.linkedin_url : trimOrNull(body.linkedin_url, 500);
-    const hourly_rate_usd = body.hourly_rate_usd === undefined && existing
-      ? existing.hourly_rate_usd : body.hourly_rate_usd == null || body.hourly_rate_usd === ''
-        ? null : Number(body.hourly_rate_usd);
-    if (hourly_rate_usd != null && (!Number.isFinite(hourly_rate_usd) || hourly_rate_usd < 0)) {
-      return c.json({ detail: 'Hourly rate must be a non-negative number' }, 400);
-    }
-    const expertise_json = body.expertise === undefined && existing ? existing.expertise_json
-      : JSON.stringify(Array.isArray(body.expertise) ? body.expertise.slice(0, 32).map(String) : []);
-    const sectors_json = body.sectors === undefined && existing ? existing.sectors_json
-      : JSON.stringify(Array.isArray(body.sectors) ? body.sectors.slice(0, 32).map(String) : []);
+    // D4674: every limit is checked on the value as sent, and a value over it is
+    // refused with the field named; nothing is cut and reported as saved. Only
+    // the keys the body names are written (below), so two edits to different
+    // fields cannot overwrite one another, and a `revision` makes an edit to the
+    // same record conditional on it not having moved since it was read.
+    const has = (k: string) => k in body;
+    const display_name = has('display_name') || !existing
+      ? boundedText('display_name', body.display_name || user.name || user.email, PROFILE_LIMITS.display_name)
+      : existing.display_name;
+    if (!display_name) return refuse(c, 400, { code: 'display_name_required', message: 'A profile needs a display name.' });
+    const bio = has('bio') ? boundedText('bio', body.bio, PROFILE_LIMITS.bio) : (existing?.bio ?? null);
+    const linkedin_url = has('linkedin_url') ? boundedText('linkedin_url', body.linkedin_url, PROFILE_LIMITS.linkedin_url) : (existing?.linkedin_url ?? null);
+    const hourly_rate_usd = has('hourly_rate_usd') ? hourlyRate(body.hourly_rate_usd) : (existing?.hourly_rate_usd ?? null);
+    const expertise_json = has('expertise') ? JSON.stringify(boundedList('expertise', body.expertise)) : (existing?.expertise_json ?? '[]');
+    const sectors_json = has('sectors') ? JSON.stringify(boundedList('sectors', body.sectors)) : (existing?.sectors_json ?? '[]');
     const p = mergeProfileFields(existing, body);
     const now = nowIso();
     if (existing) {
-      await c.env.DB.prepare(
-        `UPDATE advisors SET display_name = ?, email = ?, bio = ?,
-           expertise_json = ?, sectors_json = ?, linkedin_url = ?,
-           hourly_rate_usd = ?, headline = ?, stages_json = ?,
-           languages_json = ?, country = ?, timezone = ?,
-           availability_note = ?, headshot_url = ?, updated_at = ?
-         WHERE id = ?`
-      ).bind(display_name, user.email, bio, expertise_json, sectors_json,
-             linkedin_url, hourly_rate_usd, p.headline, p.stages_json,
-             p.languages_json, p.country, p.timezone, p.availability_note,
-             p.headshot_url, now, existing.id).run();
+      const revision = sentRevision(body);
+      const flag = (k: string) => (has(k) ? 1 : 0);
+      const r = await c.env.DB.prepare(
+        `UPDATE advisors SET
+           display_name = CASE WHEN ? = 1 THEN ? ELSE display_name END, email = ?,
+           bio = CASE WHEN ? = 1 THEN ? ELSE bio END,
+           expertise_json = CASE WHEN ? = 1 THEN ? ELSE expertise_json END,
+           sectors_json = CASE WHEN ? = 1 THEN ? ELSE sectors_json END,
+           linkedin_url = CASE WHEN ? = 1 THEN ? ELSE linkedin_url END,
+           hourly_rate_usd = CASE WHEN ? = 1 THEN ? ELSE hourly_rate_usd END,
+           headline = CASE WHEN ? = 1 THEN ? ELSE headline END,
+           stages_json = CASE WHEN ? = 1 THEN ? ELSE stages_json END,
+           languages_json = CASE WHEN ? = 1 THEN ? ELSE languages_json END,
+           country = CASE WHEN ? = 1 THEN ? ELSE country END,
+           timezone = CASE WHEN ? = 1 THEN ? ELSE timezone END,
+           availability_note = CASE WHEN ? = 1 THEN ? ELSE availability_note END,
+           headshot_url = CASE WHEN ? = 1 THEN ? ELSE headshot_url END,
+           updated_at = ?
+         WHERE id = ? AND (? IS NULL OR updated_at = ?)`
+      ).bind(
+        flag('display_name'), display_name, user.email,
+        flag('bio'), bio, flag('expertise'), expertise_json, flag('sectors'), sectors_json,
+        flag('linkedin_url'), linkedin_url, flag('hourly_rate_usd'), hourly_rate_usd,
+        flag('headline'), p.headline, flag('stages'), p.stages_json, flag('languages'), p.languages_json,
+        flag('country'), p.country, flag('timezone'), p.timezone,
+        flag('availability_note'), p.availability_note, flag('headshot_url'), p.headshot_url,
+        now, existing.id, revision, revision,
+      ).run();
+      if (Number((r as any).meta?.changes ?? 1) === 0) {
+        const current = await loadAdvisorById(c.env, existing.id);
+        return c.json({
+          error: 'revision_conflict',
+          message: 'This profile was changed somewhere else after you opened it. It is shown as it now stands; nothing of yours was saved.',
+          current: current ? advisorDto(current) : null,
+        }, 409);
+      }
       const fresh = await loadAdvisorById(c.env, existing.id);
       return c.json(advisorDto(fresh!));
     }
@@ -447,7 +488,7 @@ advisors.post('/me', async (c) => {
     } catch { /* advisor_id column not yet migrated */ }
     const fresh = await loadAdvisorById(c.env, newId);
     return c.json(advisorDto(fresh!));
-  } catch (e) { return mapError(c, e); }
+  } catch (e) { return validationRefusal(c, e) ?? mapError(c, e); }
 });
 
 // ---------------------------------------------------------------------------
@@ -1319,23 +1360,7 @@ function serviceDto(r: ServiceRow, unitsSold: number | null = null): any {
  * One unit, named after the column it lands in.
  */
 function parsePriceCents(v: unknown): number | null {
-  if (v == null || v === '') return null;
-  const n = Number(v);
-  if (!Number.isInteger(n) || n < 0) throw new Error('price_cents must be a whole number of cents, zero or more');
-  if (n > 100_000_000_00) throw new Error('price_cents is implausibly large');
-  return n;
-}
-
-/**
- * D4681 (#4681): a currency is three letters (ISO 4217's shape), or the write
- * is refused. It used to be cut to eight characters and upper-cased, so a
- * typo was stored and shown beside the price as if it were a currency.
- */
-function parseCurrency(v: unknown, fallback: string): string {
-  if (v == null || v === '') return fallback;
-  const code = String(v).trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(code)) throw new Error('currency must be a three-letter code, such as USD');
-  return code;
+  return wholeCents(v);
 }
 
 advisors.get('/me/services', async (c) => {
@@ -1379,13 +1404,21 @@ advisors.post('/me/services', async (c) => {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const body = await c.req.json().catch(() => ({} as any));
-    const title = String(body.title || '').trim().slice(0, 200);
+    const title = boundedText('title', body.title, SERVICE_LIMITS.title);
     if (!title) return c.json({ detail: 'A service needs a title' }, 400);
     const kind = String(body.kind || 'fixed').trim();
     if (!SERVICE_KINDS.includes(kind)) {
       return c.json({ detail: 'kind must be one of: fixed, package, retainer' }, 400);
     }
-    const price_cents = parsePriceCents(body.price_cents);
+    const price_cents = wholeCents(body.price_cents);
+    // D4674: the currency is stated, never assumed. A price in a currency the
+    // advisor did not choose is a price they did not set.
+    if (body.currency == null || body.currency === '') {
+      return refuse(c, 400, { code: 'currency_required', message: 'Choose the currency this service is priced in.' });
+    }
+    const currency = supportedCurrency(body.currency);
+    const duration_note = boundedText('duration_note', body.duration_note, SERVICE_LIMITS.duration_note);
+    const scope = boundedText('scope', body.scope, SERVICE_LIMITS.scope);
     const now = nowIso();
     const uid = newUid();
     const r = await c.env.DB.prepare(
@@ -1393,15 +1426,12 @@ advisors.post('/me/services', async (c) => {
          (uid, advisor_id, title, kind, duration_note, price_cents, currency,
           scope, is_active, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(uid, m.id, title, kind,
-           trimOrNull(body.duration_note, 200), price_cents,
-           parseCurrency(body.currency, 'USD'),
-           trimOrNull(body.scope, 2000),
+    ).bind(uid, m.id, title, kind, duration_note, price_cents, currency, scope,
            body.is_active === false ? 0 : 1, now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_services WHERE id = ?')
       .bind((r as any).meta?.last_row_id).first<ServiceRow>();
     return c.json(serviceDto(fresh!));
-  } catch (e) { return mapError(c, e); }
+  } catch (e) { return validationRefusal(c, e) ?? mapError(c, e); }
 });
 
 advisors.patch('/me/services/:id', async (c) => {
@@ -1414,8 +1444,8 @@ advisors.patch('/me/services/:id', async (c) => {
     // from the path. A service belonging to someone else is Not Found here.
     if (!row || row.advisor_id !== m.id) return c.json({ detail: 'Service not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
-    const kind = body.kind == null ? row.kind : String(body.kind).trim();
-    if (!SERVICE_KINDS.includes(kind)) {
+    const has = (k: string) => k in body;
+    if (has('kind') && body.kind != null && !SERVICE_KINDS.includes(String(body.kind).trim())) {
       return c.json({ detail: 'kind must be one of: fixed, package, retainer' }, 400);
     }
     // D4681: a title sent blank is refused rather than quietly kept, so an edit
@@ -1423,26 +1453,56 @@ advisors.patch('/me/services/:id', async (c) => {
     if (body.title != null && !String(body.title).trim()) {
       return c.json({ detail: 'A service needs a title' }, 400);
     }
-    // Merge, not replace: an unmentioned field keeps its value.
-    const price_cents = 'price_cents' in body ? parsePriceCents(body.price_cents) : row.price_cents;
-    await c.env.DB.prepare(
-      `UPDATE advisor_services SET title = ?, kind = ?, duration_note = ?,
-         price_cents = ?, currency = ?, scope = ?, is_active = ?, updated_at = ?
-       WHERE id = ?`
+    const title = body.title == null ? null : boundedText('title', body.title, SERVICE_LIMITS.title);
+    const price_cents = has('price_cents') ? wholeCents(body.price_cents) : null;
+    const currency = has('currency') && body.currency != null ? supportedCurrency(body.currency) : null;
+    // Changing the currency of a price that is already set changes what the price
+    // means, so the new amount has to come in the same edit.
+    if (currency && currency !== row.currency && row.price_cents != null && !has('price_cents')) {
+      return refuse(c, 400, { code: 'price_required_with_currency', message: 'Changing the currency changes what the price means. Enter the price in the new currency as well.' });
+    }
+    const duration_note = has('duration_note') ? boundedText('duration_note', body.duration_note, SERVICE_LIMITS.duration_note) : null;
+    const scope = has('scope') ? boundedText('scope', body.scope, SERVICE_LIMITS.scope) : null;
+    const revision = sentRevision(body);
+    // D4674: ONE fixed statement that writes only the fields the body names
+    // (CASE per column), so two edits to different fields of the same service
+    // both land; a `revision` makes an edit conditional on the row not having
+    // moved since the editor read it, and a miss is a 409 with the current row.
+    const r = await c.env.DB.prepare(
+      `UPDATE advisor_services SET
+         title = CASE WHEN ? = 1 THEN ? ELSE title END,
+         kind = CASE WHEN ? = 1 THEN ? ELSE kind END,
+         duration_note = CASE WHEN ? = 1 THEN ? ELSE duration_note END,
+         price_cents = CASE WHEN ? = 1 THEN ? ELSE price_cents END,
+         currency = CASE WHEN ? = 1 THEN ? ELSE currency END,
+         scope = CASE WHEN ? = 1 THEN ? ELSE scope END,
+         is_active = CASE WHEN ? = 1 THEN ? ELSE is_active END,
+         updated_at = ?
+       WHERE id = ? AND advisor_id = ? AND (? IS NULL OR updated_at = ?)`
     ).bind(
-      body.title == null ? row.title : String(body.title).trim().slice(0, 200),
-      kind,
-      'duration_note' in body ? trimOrNull(body.duration_note, 200) : row.duration_note,
-      price_cents,
-      parseCurrency(body.currency, row.currency),
-      'scope' in body ? trimOrNull(body.scope, 2000) : row.scope,
-      body.is_active == null ? row.is_active : (body.is_active ? 1 : 0),
-      nowIso(), row.id,
+      body.title == null ? 0 : 1, title,
+      body.kind == null ? 0 : 1, body.kind == null ? null : String(body.kind).trim(),
+      has('duration_note') ? 1 : 0, duration_note,
+      has('price_cents') ? 1 : 0, price_cents,
+      currency ? 1 : 0, currency,
+      has('scope') ? 1 : 0, scope,
+      body.is_active == null ? 0 : 1, body.is_active ? 1 : 0,
+      nowIso(), row.id, m.id, revision, revision,
     ).run();
+    if (Number((r as any).meta?.changes ?? 1) === 0) {
+      const current = await c.env.DB.prepare('SELECT * FROM advisor_services WHERE id = ?')
+        .bind(row.id).first<ServiceRow>();
+      if (!current) return c.json({ detail: 'Service not found' }, 404);
+      return c.json({
+        error: 'revision_conflict',
+        message: 'This service was changed somewhere else after you opened it. It is shown as it now stands; nothing of yours was saved.',
+        current: serviceDto(current),
+      }, 409);
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_services WHERE id = ?')
       .bind(row.id).first<ServiceRow>();
     return c.json(serviceDto(fresh!));
-  } catch (e) { return mapError(c, e); }
+  } catch (e) { return validationRefusal(c, e) ?? mapError(c, e); }
 });
 
 advisors.delete('/me/services/:id', async (c) => {

@@ -360,7 +360,7 @@ test('an unanswered list reads as absent, not as an empty list', async () => {
 // ---------------------------------------------------------------------------
 test('a service with no price reads as unpriced, never as free', async () => {
   const e = env(freshDb());
-  const made = await call(e, 'POST', '/me/services', ada, { title: 'Fractional CTO day' });
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Fractional CTO day' });
   assert.equal(made.status, 200);
   assert.equal(made.body.price_cents, null, 'not 0');
   assert.equal(made.body.kind, 'fixed');
@@ -370,16 +370,16 @@ test('a service with no price reads as unpriced, never as free', async () => {
 test('a price is whole cents or it is rejected', async () => {
   const e = env(freshDb());
   for (const bad of [12.5, -1, 'free']) {
-    const r = await call(e, 'POST', '/me/services', ada, { title: 'x', price_cents: bad });
+    const r = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'x', price_cents: bad });
     assert.equal(r.status, 400, `rejected ${JSON.stringify(bad)}`);
   }
-  const ok = await call(e, 'POST', '/me/services', ada, { title: 'x', price_cents: 250000 });
+  const ok = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'x', price_cents: 250000 });
   assert.equal(ok.body.price_cents, 250000);
 });
 
 test('units_sold is null because nothing links a booking to a service', async () => {
   const e = env(freshDb());
-  await call(e, 'POST', '/me/services', ada, { title: 'Advisory hour' });
+  await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Advisory hour' });
   const list = await call(e, 'GET', '/me/services', ada);
   assert.equal(list.body.items[0].units_sold, null,
     'a topic-string match would be a guess presented as a count');
@@ -387,7 +387,7 @@ test('units_sold is null because nothing links a booking to a service', async ()
 
 test('an advisor cannot edit or delete another advisor’s service', async () => {
   const e = env(freshDb());
-  const mine = await call(e, 'POST', '/me/services', ada, { title: 'Mine' });
+  const mine = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Mine' });
   assert.equal((await call(e, 'PATCH', `/me/services/${mine.body.id}`, grace, { title: 'Hers' })).status, 404);
   assert.equal((await call(e, 'DELETE', `/me/services/${mine.body.id}`, grace)).status, 404);
   assert.equal((await call(e, 'GET', '/me/services', grace)).body.items.length, 0);
@@ -396,7 +396,7 @@ test('an advisor cannot edit or delete another advisor’s service', async () =>
 
 test('a service edit merges — an unmentioned price is not cleared', async () => {
   const e = env(freshDb());
-  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', price_cents: 500000 });
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Sprint', price_cents: 500000 });
   const edited = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'Two weeks' });
   assert.equal(edited.body.price_cents, 500000);
   assert.equal(edited.body.scope, 'Two weeks');
@@ -406,7 +406,7 @@ test('a service edit merges — an unmentioned price is not cleared', async () =
 
 test('D4681: one edit changes every field at once, without delete and recreate', async () => {
   const e = env(freshDb());
-  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', price_cents: 500000 });
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Sprint', price_cents: 500000 });
   const edited = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, {
     title: 'Design sprint', kind: 'package', price_cents: 650000, currency: 'eur',
     duration_note: 'Two weeks', scope: 'Discovery and a prototype', is_active: false,
@@ -423,12 +423,12 @@ test('D4681: a blank title or a malformed currency is refused, and nothing chang
   // Mutation checked: the blank-title guard removed → 200 with the old title kept;
   // parseCurrency accepting anything → 'DOLLARS' stored.
   const e = env(freshDb());
-  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', price_cents: 500000 });
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Sprint', price_cents: 500000 });
   for (const body of [{ title: '   ' }, { currency: 'dollars' }, { currency: 'US' }, { kind: 'subscription' }]) {
     const r = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { ...body, scope: 'should not land' });
     assert.equal(r.status, 400, JSON.stringify(body));
   }
-  assert.equal((await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'usd$' })).status, 400);
+  assert.equal((await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'x', currency: 'usd$' })).status, 400);
   const row = (await call(e, 'GET', '/me/services', ada)).body.items.find((s: any) => s.id === made.body.id);
   assert.deepEqual([row.title, row.currency, row.scope], ['Sprint', 'USD', null]);
 });
@@ -1111,4 +1111,102 @@ test('D4703: two payout onboarding starts make one provider account, and a store
       'acct_synthetic_winner', 'the account attached first is not overwritten');
     assert.deepEqual(linkedFor, ['acct_synthetic_winner']);
   } finally { globalThis.fetch = realFetch; }
+});
+
+// ---------------------------------------------------------------------------
+// D4674 — prices, currencies, limits and concurrent edits
+// ---------------------------------------------------------------------------
+test('D4674: a service is created with a stated, supported currency; CHF 123.45 stays CHF 123.45', async () => {
+  const e = env(freshDb());
+  const missing = await call(e, 'POST', '/me/services', ada, { title: 'x', price_cents: 100 });
+  assert.equal(missing.status, 400);
+  assert.equal(missing.body.error, 'currency_required', 'no silent USD');
+  const odd = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'XYZ' });
+  assert.equal(odd.status, 400);
+  assert.equal(odd.body.error, 'currency_unsupported');
+  const ok = await call(e, 'POST', '/me/services', ada, { title: 'Audit', currency: 'chf', price_cents: 12345 });
+  assert.equal(ok.status, 200);
+  assert.deepEqual([ok.body.price_cents, ok.body.currency], [12345, 'CHF']);
+  const list = await call(e, 'GET', '/me/services', ada);
+  assert.deepEqual([list.body.items[0].price_cents, list.body.items[0].currency], [12345, 'CHF']);
+});
+
+test('D4674: a price that could change magnitude is refused, not guessed', async () => {
+  const e = env(freshDb());
+  for (const bad of ['12,50', '1,5', '1.234,56', '1e3', 12.5, '12.50', ' ', 'NaN']) {
+    if (bad === ' ') continue;
+    const r = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'USD', price_cents: bad });
+    assert.equal(r.status, 400, JSON.stringify(bad));
+    assert.equal(r.body.error, 'price_invalid');
+  }
+  const digits = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'USD', price_cents: '1250' });
+  assert.equal(digits.body.price_cents, 1250);
+});
+
+test('D4674: changing the currency of a priced service needs the price in the same edit', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', price_cents: 500000 });
+  const bare = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { currency: 'EUR' });
+  assert.equal(bare.status, 400);
+  assert.equal(bare.body.error, 'price_required_with_currency');
+  const both = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { currency: 'EUR', price_cents: 450000 });
+  assert.deepEqual([both.body.currency, both.body.price_cents], ['EUR', 450000]);
+});
+
+test('D4674: text over its limit is refused with the field named; nothing is cut and saved', async () => {
+  const e = env(freshDb());
+  const long = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'USD', scope: 'a'.repeat(2001) });
+  assert.equal(long.status, 400);
+  assert.equal(long.body.error, 'too_long');
+  assert.match(long.body.message, /scope is at most 2000/);
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', scope: 'a'.repeat(2000) });
+  assert.equal(made.body.scope.length, 2000, 'exactly at the limit is fine');
+  const edit = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { title: 't'.repeat(201) });
+  assert.equal(edit.status, 400);
+  assert.equal((await call(e, 'GET', '/me/services', ada)).body.items[0].title, 'Sprint');
+  const profile = await call(e, 'POST', '/me', ada, { display_name: 'Ada', bio: 'b'.repeat(4001) });
+  assert.equal(profile.status, 400);
+  assert.equal(profile.body.error, 'too_long');
+  const tags = await call(e, 'POST', '/me', ada, { display_name: 'Ada', expertise: Array.from({ length: 33 }, (_, i) => `t${i}`) });
+  assert.equal(tags.body.error, 'too_many');
+});
+
+test('D4674: two edits to different fields of one service both persist', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', price_cents: 500000 });
+  // Both editors opened the same row; each sends only the field it changed.
+  const a = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'Two weeks' });
+  const b = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { price_cents: 600000 });
+  assert.equal(a.status, 200); assert.equal(b.status, 200);
+  const row = (await call(e, 'GET', '/me/services', ada)).body.items[0];
+  assert.deepEqual([row.scope, row.price_cents], ['Two weeks', 600000]);
+});
+
+test('D4674: an edit made on a stale revision is a 409 with the current row, and saves nothing', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', price_cents: 500000 });
+  const opened = made.body.updated_at;
+  db.prepare("UPDATE advisor_services SET updated_at = '2099-01-01T00:00:00.000Z', scope = 'someone else' WHERE id = ?").run(made.body.id);
+  const stale = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'mine', revision: opened });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.error, 'revision_conflict');
+  assert.equal(stale.body.current.scope, 'someone else');
+  const fresh = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'mine', revision: stale.body.current.updated_at });
+  assert.equal(fresh.status, 200);
+  assert.equal(fresh.body.scope, 'mine');
+});
+
+test('D4674: the profile writes only the fields it names, and a stale revision is a 409', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const made = await call(e, 'POST', '/me', ada, { display_name: 'Ada', bio: 'Original bio', headline: 'Original headline' });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  await call(e, 'POST', '/me', ada, { headline: 'New headline' });
+  const second = await call(e, 'POST', '/me', ada, { bio: 'New bio' });
+  assert.deepEqual([second.body.headline, second.body.bio], ['New headline', 'New bio'], 'neither edit lost the other');
+  db.prepare("UPDATE advisors SET updated_at = '2099-01-01T00:00:00.000Z' WHERE user_id = ?").run(ADVISOR_USER);
+  const stale = await call(e, 'POST', '/me', ada, { bio: 'late', revision: second.body.updated_at });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.current.bio, 'New bio');
 });

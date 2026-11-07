@@ -2,6 +2,8 @@ import React from 'react';
 import { Card, Pill, Skeleton } from '../../../ui';
 import ZoneActions from '../../../workspaces/ZoneActions';
 import { FillLabel } from '../../../ui/useScopedFill.jsx';
+import { moneyCents } from '../../../workspaces/boards/format';
+import { amountToCents } from '../../../lib/moneyInput';
 
 /**
  * Shared pieces for the five Expertise zones.
@@ -29,24 +31,16 @@ export function Unrecorded({ children = 'Not recorded' }) {
  */
 export function money(cents, currency = 'USD') {
   if (cents == null) return null;
-  const n = Number(cents);
-  if (!Number.isFinite(n)) return null;
-  const symbol = currency === 'USD' ? '$' : `${currency} `;
-  const whole = n / 100;
-  return `${symbol}${whole.toLocaleString(undefined, {
-    minimumFractionDigits: n % 100 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return moneyCents(cents, currency);
 }
 
-/** Dollars typed by a person into whole cents, or an error a person can act on. */
+/**
+ * What a person typed into a price box, as whole cents, or an error a person can
+ * act on (D4674). `12,50` is 12.50 and `1,5` is 1.50; an amount that could be
+ * read two ways is refused, not guessed (`lib/moneyInput.js`).
+ */
 export function dollarsToCents(input) {
-  const raw = String(input ?? '').trim().replace(/[$,\s]/g, '');
-  if (!raw) return { cents: null };
-  if (!/^\d+(\.\d{1,2})?$/.test(raw)) {
-    return { error: 'Enter an amount like 1500 or 1500.50' };
-  }
-  return { cents: Math.round(Number(raw) * 100) };
+  return amountToCents(input);
 }
 
 export function ZoneHeading({ title, blurb, action }) {
