@@ -152,6 +152,7 @@ const readVisibilityPage = async (page) => {
 export default function VisibilityZone() {
   const list = usePagedList(readVisibilityPage, {
     key: 'surfaces', pageKey: 'links', rowKey: 'key', counts: isLink, errorText: 'Your visibility could not be read.',
+    moreErrorText: 'The next links could not be read. Try again.',
   });
   const state = { loading: list.loading, error: list.error };
   const load = list.load;
