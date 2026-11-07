@@ -29,6 +29,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SEAT_ROLES } from '../src/rpc/branchOps.ts';
+import { licenceRoutesSource } from './_licenceRoutes.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
@@ -101,7 +102,7 @@ test('the branch counts seats and HQ does not, and both say why', () => {
   // making the two tiers "consistent". A branch can count because every user in
   // its D1 is its own; HQ cannot, because no account names a licence (U1).
   const branchOps = read('cloudflare-worker/src/rpc/branchOps.ts');
-  const hq = read('cloudflare-worker/src/routes/admin_licences.ts');
+  const hq = licenceRoutesSource();
   assert.match(branchOps, /seats_used:\s*seatsUsed\b/, 'the branch stopped counting its seats');
   assert.match(hq, /function seatsUsed\(\): null \{ return null; \}/, 'HQ started claiming a figure it cannot compute');
   assert.match(hq, /D127/, "HQ's null no longer explains why the branch differs");

@@ -31,13 +31,15 @@ import { fileURLToPath } from 'node:url';
 const NAV_MODEL = readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8');
 
 import { codeOnly } from './_codeOnly.mjs';
+import { licencePageSource } from './_licencePage.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
-const PAGE = read('frontend/src/pages/admin/AdminLicences.jsx');
+const PAGE = licencePageSource();
 const SRC = codeOnly(PAGE);
-const ROUTE = codeOnly(read('cloudflare-worker/src/routes/admin_licences.ts'));
+const ROUTE = codeOnly(licenceRoutesSource());
 const CONTENT = read('frontend/src/pages/hq/ContentPage.jsx');
 
 /**

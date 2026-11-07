@@ -113,6 +113,11 @@ to its canvas under the shared admin page header (D936). Its Deck roster tab
 embeds `AdminNetworkProfiles.jsx`; `/admin/network-profiles` and
 `/admin?tab=network-profiles` redirect to it — see its own README.
 
+`licences/` is #4707's split of `AdminLicences.jsx` at `/admin/licences`: one
+file per domain of the detail pane (lifecycle, territory, commercial terms,
+contract, deployment, administrators, compliance notices, brand kit, coverage)
+— see its own README.
+
 `grants/` is D981's Program grants at `/admin/licences/programs`, the second
 item of HQ's Licences strip, built to its canvas under the shared admin page
 header (D936). No grant is stored yet, so its cells say "Not recorded" — see

@@ -131,6 +131,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/contracts',      'the Contracts desk (D647), its Structure of the Fund sheet and the template editor (D717)'],
   ['frontend/src/pages/admin/events',         'the admin Events desk (D915): its tabs, the event page, the dialogs and the model they read'],
   ['frontend/src/pages/admin/grants',         'Program grants under Licences (D981)'],
+  ['frontend/src/pages/admin/licences',       'the HQ licence page, split by domain (#4707)'],
   ['frontend/src/pages/admin/kyc',            'KYC & KYB (D1228): its tabs, one person\'s case and its dialogs (D1233), Renewals and Audit (D1235), and the models they read'],
   ['frontend/src/pages/subsidiary/licence',   'the Licences page\'s tabs, the Administrator\'s own licence (D800, D804, D988)'],
   ['frontend/src/pages/admin/kyc',            'KYC & KYB under Approvals (D1228): People\'s case (D1233), Businesses and a business\'s case (D1234), their dialogs and models'],

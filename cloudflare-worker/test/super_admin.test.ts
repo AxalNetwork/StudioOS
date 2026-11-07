@@ -21,6 +21,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { isSuperAdmin, hydrateSuperAdmin, loadSuperAdminFlag } from '../src/auth.ts';
+import { licenceRoutesSource } from './_licenceRoutes.mjs';
 
 const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8');
 
@@ -78,7 +79,7 @@ test("the refusal is a 403 — not a 500, and not a 400", () => {
 test('every route on the franchise console is super-admin only', () => {
   // Reads included: its lists are every licensee's commercial terms side by
   // side. A subsidiary admin reads their own licence through routes/licence.ts.
-  const src = read('cloudflare-worker/src/routes/admin_licences.ts');
+  const src = licenceRoutesSource();
   assert.doesNotMatch(src, /\brequireAdmin\b/,
     'a plain requireAdmin here is a franchisee who can franchise');
   assert.ok((src.match(/requireSuperAdmin\(c\)/g) || []).length >= 16,

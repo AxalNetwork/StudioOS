@@ -28,6 +28,7 @@ import { licenceLedgerApi } from '../src/lib/api/licenceLedger.js';
 import { TermsScheduleForm, saveError } from '../src/pages/admin/LicenceTermsSchedule.jsx';
 import { RequestsPanelView, loadLicenceRequests } from '../src/pages/admin/LicenceRequestsPanel.jsx';
 import { EscalationKindFilter, escalationCardProps } from '../src/pages/hq/HqSupportPage.jsx';
+import { licencePageSource } from './_licencePage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -250,7 +251,7 @@ test('Open terms goes to the term\'s row or its step; a notice of non-renewal is
 });
 
 test('the licence page mounts the schedule, the panel, and Grant admin prefills the existing appointment', () => {
-  const SRC = codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx'));
+  const SRC = codeOnly(licencePageSource());
   // D4707: the tab bar is drawn from licenceNavModel's list, test ids and all.
   assert.ok(readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8').includes("testId: 'licence-schedule-tab'"));
   assert.ok(SRC.includes('data-testid={t.testId}'));

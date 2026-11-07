@@ -22,10 +22,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { deprovisionLicenceAdmins, unbindBranchAdmins } from '../src/routes/admin_licences.ts';
+import { licenceRoutesSource } from './_licenceRoutes.mjs';
 
 const ACTOR = { id: 1, name: 'HQ Holder', email: 'hq@axal.test' };
 const LICENCE = 42;
@@ -202,7 +201,7 @@ test('running it twice is a no-op the second time', async () => {
 
 /* The wiring, which no unit test above can see. */
 
-const ROUTE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_licences.ts'), 'utf8');
+const ROUTE = licenceRoutesSource();
 
 test('terminate calls it, and calls it AFTER the notification', async () => {
   const at = ROUTE.indexOf("r.post('/:uid/terminate'");

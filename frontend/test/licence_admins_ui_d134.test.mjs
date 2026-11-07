@@ -23,9 +23,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { licencePageSource } from './_licencePage.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = read('frontend/src/pages/admin/AdminLicences.jsx');
+const PAGE = licencePageSource();
 const CODE = codeOnly(PAGE);
 const API_RAW = read('frontend/src/lib/api.js');
 const API = codeOnly(API_RAW);

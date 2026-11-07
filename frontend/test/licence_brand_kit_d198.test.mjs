@@ -31,15 +31,17 @@ import { fileURLToPath } from 'node:url';
 const NAV_MODEL = readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8');
 
 import { codeOnly } from './_codeOnly.mjs';
+import { licencePageSource } from './_licencePage.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
-const PAGE = codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx'));
+const PAGE = codeOnly(licencePageSource());
 const SETTINGS = codeOnly(read('frontend/src/pages/branch/BranchSettings.jsx'));
 const STUDIO = codeOnly(read('frontend/src/pages/admin/AdminStudioOverview.jsx'));
 const API = codeOnly(read('frontend/src/lib/api.js'));
-const ROUTE = read('cloudflare-worker/src/routes/admin_licences.ts');
+const ROUTE = licenceRoutesSource();
 const BRAND = read('cloudflare-worker/src/routes/brand.ts');
 const MIGRATION = read('cloudflare-worker/sql/migrations/281_licence_brand_kits.sql');
 

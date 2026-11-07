@@ -23,6 +23,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { apiMethodNames } from './_apiMethods.mjs';
+import { licencePageSource } from './_licencePage.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -47,7 +49,7 @@ test('one country can be held by at most one licence, enforced by an index', () 
 });
 
 test('the conflict check names the holder but the index is the guard', () => {
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   const put = s.slice(s.indexOf("r.put('/:uid/territories'"), s.indexOf("r.put('/:uid/seats'"));
   assert.match(put, /territory_conflict/, 'a conflict must be refused with a nameable reason');
   assert.match(put, /409/, 'and it is a conflict, not a validation error');
@@ -56,7 +58,7 @@ test('the conflict check names the holder but the index is the guard', () => {
 });
 
 test('a suspended licence still holds its territory', () => {
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   const suspend = s.slice(s.indexOf("r.post('/:uid/suspend'"), s.indexOf("r.post('/:uid/reinstate'"));
   // The proof is an absence: suspension must not touch licence_territories.
   assert.ok(
@@ -73,13 +75,13 @@ test('a suspended licence still holds its territory', () => {
 });
 
 test('the UI states the suspension rule rather than leaving it to be inferred', () => {
-  const s = read(PAGE);
+  const s = licencePageSource();
   assert.match(s, /releasing (them|it) is a termination, not a lapse/i,
     'the counter-intuitive rule must be on screen');
 });
 
 test('the picker refuses rather than warns', () => {
-  const s = read(PAGE);
+  const s = licencePageSource();
   assert.match(s, /disabled=\{busy \|\| clashes\.length > 0\}/,
     'save must be unavailable while a clash is entered, not merely flagged');
 });
@@ -91,7 +93,7 @@ test('the picker refuses rather than warns', () => {
 test('seats used is null, never zero', () => {
   // "0 of 325 seats used" is a false statement about a real business. Null
   // renders as "unavailable"; zero renders as "nobody signed up".
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   assert.match(s, /function seatsUsed\(\): null/, 'the unknown must be typed as unknown');
   assert.match(s, /seats_used: seatsUsed\(\)/, 'and used wherever seats are reported');
   assert.match(s, /seats_used_available: false/, 'the list response must say it is unavailable');
@@ -113,7 +115,7 @@ test('no row anywhere gains a licence_id', () => {
 });
 
 test('the route says out loud that it is not the scope', () => {
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   assert.match(s, /WHAT THIS IS NOT/, 'the boundary must be documented at the top of the file');
   assert.match(s, /ONE middleware/, 'and name the rule it is respecting');
 });
@@ -132,12 +134,12 @@ test('the fee is integer cents and the rates are integer basis points', () => {
 });
 
 test('a share above 100% is clamped, not stored', () => {
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   assert.match(s, /Math\.min\(10000, Math\.max\(0, n\)\)/, '10000 bps is 100%');
 });
 
 test('the page converts entered currency to cents and shows bps as a percentage', () => {
-  const s = read(PAGE);
+  const s = licencePageSource();
   assert.match(s, /Math\.round\(Number\(f\.annual_fee\) \* 100\)/, 'entered units → integer cents');
   assert.ok(!/parseFloat\(/.test(s), 'no float parsing of money');
   // D149 MOVED THE PROPERTY AND THIS ASSERTION FOLLOWED IT, INVERTED. It used
@@ -148,7 +150,7 @@ test('the page converts entered currency to cents and shows bps as a percentage'
   // asserted across all of `frontend/src` by `bps_single_definition.test.mjs`.
   // A guard scoped to the file a helper happens to live in cannot see the copy
   // in the next file, which is how six of them accumulated.
-  assert.match(s, /import \{ bpsPercent as pct \} from '\.\.\/\.\.\/lib\/bps'/);
+  assert.match(s, /import \{ bpsPercent as pct \} from '(\.\.\/)+lib\/bps'/);
   assert.ok(
     !/\/ 100\)\.toFixed\(/.test(s),
     'bps → percent is lib/bps.js\'s, not a copy in this page',
@@ -164,7 +166,7 @@ test('every step of the issue flow has an endpoint', () => {
   // and the flow stopped short of; "Activate" was never a tab (the button sits
   // above them) and the fifth tab was really the history, which now has its
   // own unnumbered one.
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   for (const [step, marker] of [
     ['Entity', "r.post('/'"],
     ['Territory', "r.put('/:uid/territories'"],
@@ -184,14 +186,14 @@ test('every step of the issue flow has an endpoint', () => {
   assert.match(read('cloudflare-worker/src/index.ts'), /app\.route\('\/api\/admin', adminDeployments\)/);
 
   assert.match(
-    read(PAGE),
+    licencePageSource(),
     /const STEPS = \['Entity', 'Territory', 'Seats', 'Terms', 'Contract', 'Deploy'\]/,
     'the UI must name the same six steps',
   );
 });
 
 test('activation lists what blocks it, and a pending signature does not', () => {
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   assert.match(s, /async function activationBlockers/, 'blockers must be enumerable, not a boolean');
   assert.match(s, /A pending signature does not block activation/,
     'the canvas is explicit about this and the API must say it');
@@ -201,7 +203,7 @@ test('activation lists what blocks it, and a pending signature does not', () => 
 });
 
 test('a draft with no territory, seats or terms cannot be activated', () => {
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   const fn = s.slice(s.indexOf('async function activationBlockers'), s.indexOf("r.get('/', async"));
   for (const need of ['No territory is assigned', 'No seats are licensed', 'Commercial terms are incomplete', 'No renewal date']) {
     assert.ok(fn.includes(need), `activation must check: ${need}`);
@@ -213,7 +215,7 @@ test('a draft with no territory, seats or terms cannot be activated', () => {
  * ---------------------------------------------------------------- */
 
 test('every mutation is admin-only and recorded', () => {
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   const handlers = [...s.matchAll(/r\.(post|put|patch|delete)\('([^']+)'/g)].map((m) => m[2]);
   assert.ok(handlers.length >= 9, 'the flow should have several mutations');
   // The gate is now `requireSuperAdmin` (migration 199): this is the
@@ -247,13 +249,13 @@ test('the event log is append-only', () => {
   // handler that reaches for an UPDATE fails here at review time, rather than
   // shipping and raising ABORT in front of an operator. The database guard is
   // in `cloudflare-worker/test/audit_immutability_d156.test.ts`.
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   assert.ok(!/UPDATE licence_events|DELETE FROM licence_events/.test(s),
     'a contract dispute is exactly when an overwritten history is useless');
 });
 
 test('suspension and termination both require a recorded reason', () => {
-  const s = read(ROUTE);
+  const s = licenceRoutesSource();
   assert.match(s, /a suspension must record why/);
   assert.match(s, /a termination must record why/);
 });
@@ -321,7 +323,7 @@ test('no subsidiary from the canvas is seeded', () => {
   // The canvas names four licensees with fees, account counts and revenue.
   // They are placeholders; seeding them would state that Axal has subsidiaries
   // it does not have.
-  const sources = [read(SQL), read(ROUTE), read(PAGE)].join('\n');
+  const sources = [read(SQL), licenceRoutesSource(), licencePageSource()].join('\n');
   for (const name of ['AXL-001', 'AXL-002', 'AXL-003', 'AXL-004',
     'Axal VC France', 'Axal VC DACH', 'Axal VC Nordics', 'Axal VC Iberia']) {
     assert.ok(!sources.includes(name), `${name} is a canvas placeholder and must not ship`);
@@ -330,7 +332,7 @@ test('no subsidiary from the canvas is seeded', () => {
 });
 
 test('a failed ledger read is unreadable, not an empty ledger', () => {
-  const code = codeOnly(read(PAGE));
+  const code = codeOnly(licencePageSource());
   assert.match(code, /const UNAVAILABLE = Symbol\('unavailable'\)/);
   assert.match(code, /setData\(UNAVAILABLE\)/, 'a failed licences read must not become { items: [] }');
   assert.match(code, /<Unreadable what="The licence ledger"/);
@@ -339,13 +341,13 @@ test('a failed ledger read is unreadable, not an empty ledger', () => {
 });
 
 test('the empty ledger explains itself', () => {
-  assert.match(read(PAGE), /No licences have been issued/i);
-  assert.match(read(PAGE), /inventing one would misrepresent/i,
+  assert.match(licencePageSource(), /No licences have been issued/i);
+  assert.match(licencePageSource(), /inventing one would misrepresent/i,
     'and says why it is not pre-filled');
 });
 
 test('the page does not claim a utilisation figure', () => {
-  const code = codeOnly(read(PAGE));
+  const code = codeOnly(licencePageSource());
   assert.ok(!/utilised|utilization|% used/i.test(code),
     'the canvas shows "% utilised"; without account attribution that number cannot be computed');
 });
@@ -355,7 +357,7 @@ test('the page does not claim a utilisation figure', () => {
  * ---------------------------------------------------------------- */
 
 test('every api method the page calls exists and is served', () => {
-  const page = read(PAGE);
+  const page = licencePageSource();
   const apiSrc = read('frontend/src/lib/api.js');
   // No trailing `(`: several of these are passed to act() as a FUNCTION
   // REFERENCE (`act(api.licenceRenew, uid, {})`), and a regex demanding the

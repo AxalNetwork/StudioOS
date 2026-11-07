@@ -282,7 +282,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'routes/admin_telegram.ts': 'HQ broadcast media',
   'routes/legal_83b.ts': 'an 83(b) receipt, never counted',
   'routes/company_documents.ts': 'company legal records in documents, not a measured D1169 store',
-  'routes/admin_licences.ts': 'licence documents',
+  'routes/admin_licences_brand.ts': 'a white-label licence\'s brand mark (#4707 moved it out of admin_licences.ts)',
   'routes/news.ts': 'HQ news',
   'routes/admin_programs.ts': 'an HQ export',
   'routes/kyb_admin.ts': 'identity documents, never counted',

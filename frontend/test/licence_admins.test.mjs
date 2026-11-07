@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const migration = read('cloudflare-worker/sql/migrations/190_licence_admins.sql');
@@ -30,7 +31,7 @@ const route = read('cloudflare-worker/src/routes/licence.ts');
 // a comment. `codeOnly` is the repo's tool for the distinction and every
 // code-shaped assertion in this file now reads through it.
 const routeCode = codeOnly(route);
-const adminRoute = read('cloudflare-worker/src/routes/admin_licences.ts');
+const adminRoute = licenceRoutesSource();
 const index = read('cloudflare-worker/src/index.ts');
 const page = read('frontend/src/pages/subsidiary/MyLicencePage.jsx');
 
