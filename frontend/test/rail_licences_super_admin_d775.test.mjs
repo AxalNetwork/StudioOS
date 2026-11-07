@@ -27,7 +27,8 @@ test('H1 Licences is one board on its own route, with no option', () => {
 
 test('the licence open in the detail pane is the rail\'s record, by brand name or reference', () => {
   const code = read('pages/admin/AdminLicences.jsx');
-  assert.match(code, /const open = Array\.isArray\(data\?\.items\) \? data\.items\.find\(\(l\) => l\.uid === sel\) : null;/,
+  // D4707: `sel` is the reconciled selection (never a row the filter hides).
+  assert.match(code, /const open = allItems\.find\(\(l\) => l\.uid === sel\) \|\| null;/,
     'the record is no longer the licence the pane has open');
   assert.match(code, /useRecordCrumb\(open \? \(open\.brand_name \|\| open\.licence_ref\) : null, 'licence', open\?\.uid\);/,
     'AdminLicences no longer names its open licence');

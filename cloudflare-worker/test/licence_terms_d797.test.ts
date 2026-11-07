@@ -127,7 +127,8 @@ function freshDb({ terms = true }: { terms?: boolean } = {}) {
     CREATE TABLE licence_events (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER NOT NULL,
       event TEXT NOT NULL CHECK (event IN ('created', 'territory_changed', 'seats_changed', 'terms_changed', 'activated',
                                            'suspended', 'reinstated', 'renewed', 'terminated')),
-      detail_json TEXT, note TEXT, actor_user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      detail_json TEXT, note TEXT, actor_user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      before_json TEXT, after_json TEXT, outcome TEXT);
     CREATE TABLE licence_domains (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_uid TEXT, hostname TEXT, status TEXT);
     CREATE TABLE licence_deployments (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_uid TEXT UNIQUE, code TEXT,
       hostname TEXT, status TEXT, status_note TEXT);
