@@ -122,3 +122,7 @@ frontend/playwright-report/
 # scripts/build-profile-routing.mjs --check` fails if either is committed again.
 documentation/architecture/PROFILE_ROUTING.md
 documentation/architecture/PAGE_INVENTORY.md
+
+# #4570: the authorization inventory is build output. `node scripts/build-auth-inventory.mjs`
+# writes it; CI keeps it in the `routing-docs` artifact; `--check` in test:guards checks the ledger.
+documentation/architecture/AUTH_INVENTORY.json
