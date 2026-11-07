@@ -7,6 +7,7 @@
  *   POST   /drafts/:uid/revise { instruction, base?: { subject, body }, project?, estimate?, quote? }
  *     D4666: `estimate: true` answers a signed `quote`; a run without a valid quote for the operation as it
  *     stands is 409 `estimate_required` with a fresh estimate, and starts no model call.
+ *   PATCH  /drafts/:uid { to?, subject, body, expected_revision }   D4660: the member's edit of one version, no run, no charge
  *   GET    /drafts[?person=]   GET /drafts/:uid   DELETE /drafts/:uid   the member's own drafts only
  *
  * A draft is one `mail_draft` run (`services/aiRouter.ts`), held and settled in
@@ -24,7 +25,7 @@ import { computeBlock, isBlockKind } from '../services/mail/blocks';
 import { contextPack, MailError, NOT_FOUND, parseRef, personRecord } from '../services/mail/contextPack';
 import {
   blocksNow, deleteDraft, draftAsk, draftMessages, draftOf, listDrafts, MAX_TOKENS, parentAsk,
-  projectParam, revisionInstruction, runDraft, ticked, type DraftAsk, type Revision,
+  projectParam, revisionInstruction, runDraft, saveDraftEdit, ticked, type DraftAsk, type Revision,
 } from '../services/mail/drafts';
 import type { Block } from '../services/mail/blocks';
 import type { Pack, PackItem } from '../services/mail/contextPack';
@@ -139,16 +140,29 @@ mail.post('/drafts/:uid/revise', async (c) => {
     const b = await body(c);
     const parent = await parentAsk(c.env, user, c.req.param('uid'));
     if (!parent) return refuse(c, 404, { code: 'not_found', message: 'Draft not found.' });
-    // D4666: the text being revised is the member's snapshot when they send one (their edits to the saved draft),
-    // so the estimate and the run name the same text. Absent, it is the saved draft.
+    // D4660: a revision starts from the member's saved edit of this version when there is one, else the generated text.
+    // D4666: the text being revised is the editor's snapshot when the composer sends one, so the estimate and the
+    // run name the same text; absent, it is that saved edit.
     const base = b.base && typeof b.base === 'object' && !Array.isArray(b.base) ? b.base as Record<string, unknown> : null;
     const snap = (v: unknown, max: number, fallback: string) => (typeof v === 'string' && v.trim() ? v.slice(0, max) : fallback);
     const revision = {
-      subject: base ? snap(base.subject, 200, parent.row.subject) : parent.row.subject,
-      body: base ? snap(base.body, 8000, parent.row.body) : parent.row.body,
+      subject: base ? snap(base.subject, 200, parent.current.subject) : parent.current.subject,
+      body: base ? snap(base.body, 8000, parent.current.body) : parent.current.body,
       instruction: revisionInstruction(b.instruction),
     };
     return await press(c, user, { ...parent.body, project: b.project, estimate: b.estimate, quote: b.quote }, { uid: parent.row.uid, revision });
+  } catch (e) { return failure(c, e); }
+});
+
+// D4660: the member's edit of one version, saved with no model run and no charge. Names the revision it read; 409 `stale_edit` otherwise.
+mail.patch('/drafts/:uid', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try {
+    const b = await body(c);
+    const out = await saveDraftEdit(c.env, user, c.req.param('uid'), { to: b.to, subject: b.subject, body: b.body, expected: b.expected_revision });
+    if (out.ok) return c.json({ draft: out.draft });
+    return refuse(c, out.status, { code: out.code, message: out.message, ...(out.current ? { extra: { draft: out.current } } : {}) });
   } catch (e) { return failure(c, e); }
 });
 

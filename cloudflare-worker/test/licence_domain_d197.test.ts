@@ -34,6 +34,7 @@ import { Hono } from 'hono';
 
 import licences from '../src/routes/admin_licences.ts';
 import licence from '../src/routes/licence.ts';
+import { licenceRoutesSource } from './_licenceRoutes.mjs';
 import {
   CNAME_TARGET, SERVES_REASON, TXT_PREFIX, domainPayload, mintChallengeToken, normaliseHostname,
   recordsFor, validateHostname, verifyRecords,
@@ -637,7 +638,7 @@ test('a detach is recorded through logAdminAction, naming the licence and the ho
 });
 
 test('HQ cannot bind, check or approve a host — detach is the only route it has', () => {
-  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_licences.ts'), 'utf8');
+  const src = licenceRoutesSource();
   const registered = [...src.matchAll(/^r\.(get|post|put|patch|delete)\('([^']+)'/gm)].map((m) => m[2]);
   const domainRoutes = registered.filter((p) => p.includes('domain'));
   // H31: "There is no Approve, no Add domain, and no DNS editor for HQ to
