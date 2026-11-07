@@ -137,7 +137,7 @@ function freshDb() {
   `);
   // Verbatim from the migration. If it stops parsing, these tests stop running.
   db.exec(migration('238_advisor_engagements'));
-  db.exec(migration('202611071600_advisor_lifecycle_events'));
+  db.exec(migration('202611072048_advisor_lifecycle_events'));
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');

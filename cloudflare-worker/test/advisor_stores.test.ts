@@ -141,7 +141,7 @@ function freshDb() {
   // The new schema comes from the migration files verbatim. If one of them
   // stops parsing, these tests stop running — which is the point.
   db.exec(migration('201_advisors_table_in_ledger'));
-  db.exec(migration('202611071600_advisor_lifecycle_events'));
+  db.exec(migration('202611072048_advisor_lifecycle_events'));
   db.exec(migration('202_advisor_profile_fields'));
   db.exec(migration('203_advisor_services'));
   db.exec(migration('204_advisor_proof'));
