@@ -48,10 +48,8 @@ import { fromWorkerLibrary, fromWorkerSkillPage, skillRefusalWords } from './ski
 
 export const AGENTS_OFF_REASON = 'AI agents aren’t switched on yet.';
 
-/** The switched-off answer: every #3840 route while `TEAM_AGENTS_ENABLED` is off, and every unbuilt function below. */
+/** The switched-off answer: every #3840 route while `TEAM_AGENTS_ENABLED` is off. */
 export const unavailable = (reason = AGENTS_OFF_REASON) => ({ available: false, reason });
-
-const off = async () => unavailable();
 
 /** The first floor item `rules.always_asks_human` dropped, or null. */
 export function droppedFloorItem(rules) {
