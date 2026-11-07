@@ -2095,7 +2095,9 @@ export default function AdminLicences() {
   // #4700: `data.items` is the server's page for the current search and kind,
   // so it is exactly the rows the list draws.
   const allItems = Array.isArray(data?.items) ? data.items : [];
-  const visible = filterByKind(allItems, kindFilter);
+  // The server applies the kind and the search (#4700), so the loaded rows
+  // are already the visible ones.
+  const visible = allItems;
   const filters = useMemo(() => ({ q: search, kind: kindFilter === 'all' ? '' : kindFilter, limit: 50 }), [search, kindFilter]);
   // Never the hidden row (D4707, over #4700's paged ledger): see
   // `ledgerSelection`. `ready` means the loaded page is the one for the
