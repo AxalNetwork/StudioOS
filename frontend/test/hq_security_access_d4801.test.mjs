@@ -446,7 +446,7 @@ test('mounted: Revoke one — reason required in the dialog, no success before t
     await m.type(m.byId('action-reason'), REASON);
     await m.click(m.byId('action-continue'));
     assert.equal(m.props(m.dialog())['data-step'], 2);
-    assert.match(m.text(m.dialog()), new RegExp(`Reason${REASON}`));
+    assert.ok(m.text(m.dialog()).includes(`Reason${REASON}`), 'Review does not show the reason');
     assert.match(m.text(m.dialog()), /ScopeOne session/);
     assert.equal(m.calls.length, 0, 'Review sent the request');
     // Sent: waiting, nothing shown as done, and Esc cannot hide the answer.
@@ -495,7 +495,7 @@ for (const [name, err, result, title] of [
       assert.equal(m.props(m.byId('action-result'))['data-result'], result);
       assert.equal(m.text(m.find((n) => m.props(n)?.id === m.props(m.dialog())['aria-labelledby'])), title);
       assert.doesNotMatch(m.text(m.dialog()), /Confirmed by the server/, 'a non-success read as confirmed');
-      assert.match(m.text(m.dialog()), new RegExp(`Server said${err.message.replace(/[.()]/g, '\\$&')}`));
+      assert.ok(m.text(m.dialog()).includes(`Server said${err.message}`), 'the server\'s words are not shown');
       if (result === 'already_revoked') assert.equal(m.props(m.byId('hq-session-12'))['data-status'], 'revoked', 'an already-revoked row still read Active');
       else assert.equal(m.props(m.byId('hq-session-12'))['data-status'], 'active', 'a row was marked revoked without a confirmed revoke');
       if (result === 'unknown') {
@@ -583,7 +583,7 @@ test('mounted: emergency re-authentication — HQ-held wording, typed confirmati
     await m.type(m.byId('action-phrase'), 'sign out hq');
     await m.click(m.byId('action-confirm'));
     assert.equal(m.calls.length, 0, 'emergency ran without the typed confirmation');
-    assert.match(m.text(m.dialog()), new RegExp(`Type ${EMERGENCY_PHRASE} exactly to confirm`));
+    assert.ok(m.text(m.dialog()).includes(`Type ${EMERGENCY_PHRASE} exactly to confirm`), 'the typed-confirmation error is missing');
     const phraseLabel = m.find((n) => n.tagName === 'LABEL' && m.props(n).htmlFor === m.props(m.byId('action-phrase')).id);
     assert.match(m.text(phraseLabel), /Type SIGN OUT HQ to confirm/);
     await m.type(m.byId('action-phrase'), EMERGENCY_PHRASE);
@@ -769,7 +769,7 @@ test('the Access tab: the page-level reason fields are gone, the workspace and t
   const html = page('access');
   assert.doesNotMatch(renderedText(html), /Reason · required for any act below|I understand this signs out/, 'a page-level reason field is back');
   for (const id of ['access-workspace', 'hq-sessions-table', 'hq-support-sessions', 'access-reach', 'hq-force-reauth', 'hq-data-access']) {
-    assert.match(html, new RegExp(`data-testid="${id}"`));
+    assert.ok(html.includes(`data-testid="${id}"`), `the Access tab lost ${id}`);
   }
   assert.match(renderedText(html), /Live support sessions/);
   const ov = OVERVIEW(); ov.sessions = { available: false, reason: 'unreadable here' }; ov.impersonations = { available: false, reason: 'x' };
