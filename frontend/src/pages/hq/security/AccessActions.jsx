@@ -3,6 +3,7 @@ import StatusBadge, { ReadValue } from './StatusBadge.jsx';
 import ActionDialog, {
   BTN_DANGER, BTN_PLAIN, BTN_PRIMARY, NotInstrumented as NI, ReasonField, ScopeBox, YouAffected,
 } from './ActionDialog.jsx';
+import { DeploymentOutcomes } from './deploymentScope.jsx';
 import {
   EMERGENCY_PHRASE, MIN_REASON, RESULTS, ROW_OUTCOMES, bulkResult, bulkScope, formatUtc, resultOfError,
 } from './accessModel.js';
@@ -15,7 +16,7 @@ import {
  *   revoke           one session row
  *   revoke_selected  the selected rows, one reason for all of them (B1)
  *   sign_out         every session of one account
- *   end              one support-session record (C1: its token stays valid)
+ *   end              one support session: its token is refused from its next request (D4669, replacing C1)
  *   emergency        every HQ-held account, you included (A1)
  *
  * NOTHING IS SHOWN AS DONE BEFORE THE SERVER SAYS SO. The Result step is
@@ -108,20 +109,19 @@ export function actionCopy(action, { expiryMinutes = 30, now = Date.now() } = {}
     };
   }
   if (kind === 'end') {
-    const until = formatUtc(now + expiryMinutes * 60000, { seconds: false });
     return {
       title: 'End support session?',
       scope: {
-        title: 'Closes one support-session record',
+        title: 'Ends one support session',
         items: [
           `${action.admin} acting as ${action.target} · started ${action.started || 'at a time not stamped'}`,
-          'It can no longer be extended',
-          `Its token carries no session id, so it stays valid until it expires: at most ${expiryMinutes} minutes after it was minted, no later than ${until}`,
-          `${action.target} is not signed out of their own sessions. To cut the support token now, sign ${action.target} out instead`,
+          'Its token is refused from its next request (D4669)',
+          'Its record is closed, so it can no longer be extended',
+          `${action.target} is not signed out of their own sessions`,
         ],
       },
       you: { affected: false, text: action.self ? 'This is your own support session. Closing it does not end your admin session.' : 'Your own admin session continues.' },
-      reach: 'One support-session record',
+      reach: 'One support session',
       confirm: 'End support session',
       placeholder: 'e.g. support ticket resolved',
     };
@@ -155,7 +155,7 @@ export function resultTitle(action, outcome) {
     return {
       revoke: 'Session revoked',
       sign_out: `${action.name} signed out everywhere`,
-      end: 'Support session record closed — its token is still valid',
+      end: 'Support session ended',
       emergency: 'HQ-held accounts signed out',
     }[kind];
   }
@@ -176,7 +176,7 @@ export function resultTitle(action, outcome) {
   return 'Outcome unknown — re-read before retrying';
 }
 
-function ResultBody({ action, outcome, rowsById, onSignOutAccount, expiryMinutes }) {
+function ResultBody({ action, outcome, rowsById }) {
   const r = RESULTS[outcome.result];
   const at = formatUtc(outcome.receivedAt);
   const lines = [];
@@ -186,8 +186,7 @@ function ResultBody({ action, outcome, rowsById, onSignOutAccount, expiryMinutes
       lines.push(`Every session ${action.name} held before ${formatUtc(outcome.res?.revoked_at) || 'now'} is refused from its next request. They will need to sign in again.`);
     }
     if (action.kind === 'end') {
-      const until = formatUtc(outcome.receivedAt + expiryMinutes * 60000, { seconds: false });
-      lines.push(`The record is closed and can't be extended. Its token stays valid until it expires — no later than ${until}.`);
+      lines.push('Its token is refused from its next request, and the record is closed so it can\'t be extended.');
     }
   }
   return (
@@ -238,17 +237,15 @@ function ResultBody({ action, outcome, rowsById, onSignOutAccount, expiryMinutes
       {outcome.result === 'unknown' && (
         <KV rows={[['State now', <StatusBadge key="u" state="unknown" label="Unknown — re-read before retrying" />]]} />
       )}
-      {action.kind === 'end' && outcome.result === 'done' && onSignOutAccount && (
-        <button type="button" onClick={onSignOutAccount} className={BTN_PLAIN} data-testid="action-end-sign-out">
-          Sign out {action.target} now…
-        </button>
+      {(action.kind === 'sign_out' || action.kind === 'emergency') && outcome.result === 'done' && (
+        <DeploymentOutcomes outcomes={outcome.res?.outcomes} />
       )}
     </div>
   );
 }
 
 export default function AccessActionDialog({
-  action, onAct, onConfirmed, onClose, onReread, onSignOutAccount, expiryMinutes = 30, now = () => Date.now(),
+  action, onAct, onConfirmed, onClose, onReread, expiryMinutes = 30, now = () => Date.now(),
   returnFocus, fallbackFocus, rowsById = new Map(),
 }) {
   const [step, setStep] = useState(1);
@@ -389,8 +386,6 @@ export default function AccessActionDialog({
           action={action}
           outcome={outcome}
           rowsById={rowsById}
-          expiryMinutes={expiryMinutes}
-          onSignOutAccount={onSignOutAccount ? () => onSignOutAccount(action) : null}
         />
       )}
     </ActionDialog>

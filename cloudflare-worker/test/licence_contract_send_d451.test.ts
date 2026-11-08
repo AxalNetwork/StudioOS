@@ -58,7 +58,8 @@ function freshDb() {
     CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY);
     CREATE TABLE user_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, jti TEXT, factor TEXT,
-      assurance_level TEXT, created_at TEXT DEFAULT (datetime('now'))
+      assurance_level TEXT, created_at TEXT DEFAULT (datetime('now')),
+      revoked_at TEXT, last_seen_at TEXT
     );
     CREATE TABLE territory_licences ( revision INTEGER NOT NULL DEFAULT 0,id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
       licence_ref TEXT UNIQUE NOT NULL, entity_id INTEGER, legal_entity_name TEXT NOT NULL,

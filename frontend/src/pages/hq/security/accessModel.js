@@ -16,9 +16,9 @@
  *   - Sign out account (`POST /force-reauth/:userId`) raises that account's
  *     token floor, so every session it holds, on every device, is refused.
  *     It does not list which sessions that reached.
- *   - End support session (`POST /impersonations/:id/end`) closes the record.
- *     The support token carries no session id, so it stays valid until it
- *     expires, at most `expiry_minutes` (30) after it was minted (C1).
+ *   - End support session (`POST /impersonations/:id/end`) ends it: the
+ *     support token carries its record's id, so it is refused from its next
+ *     request (D4669, replacing C1's "stays valid until it expires").
  *   - Emergency re-authentication (`POST /force-reauth`) raises the floor of
  *     every active account in the HQ database, the caller's included. Nothing
  *     in the route reaches a branch database (A1). The count is known only
