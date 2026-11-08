@@ -35,10 +35,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
-import { api, spinoutLab } from '../../lib/api';
 import { cyclesApi } from '../../lib/api/cycles.js';
 import { reportError } from '../../lib/log';
-import { failedRead } from './founderStudioModel';
+import { startFounderStudioReads } from './founderStudioReads';
 import FounderStudioBody from './FounderStudioBody';
 import StudioPhone, { StudioConversations } from './StudioPhone';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
@@ -46,36 +45,6 @@ import { STUDIO_PATH, STUDIO_TICKET_PATH, searchWithTab, studioTabOf, ticketType
 import { useStudioLayout } from '../studio/useStudioLayout';
 import { cyclesPlaced } from '../studio/studioLayoutModel';
 import './founderStudioHome.css';
-
-const array = (value, key) => (Array.isArray(value) ? value : Array.isArray(value?.[key]) ? value[key] : []);
-
-/** The page's reads, each settled on its own. */
-export async function readFounderStudio({ requestedProjectId } = {}) {
-  const settle = async (key, promise) => {
-    try { return [key, await promise]; } catch (e) {
-      reportError(`FounderStudio:${key}`, e);
-      return [key, failedRead(e?.message)];
-    }
-  };
-  const [[, projects], ...rest] = await Promise.all([
-    settle('projects', api.listProjects()),
-    settle('lab', spinoutLab.state()),
-    settle('advisor', api.advisor.progress()),
-    settle('queue', api.advisor.queue()),
-  ]);
-  const reads = Object.fromEntries(rest);
-  if (projects && projects.failed) {
-    return { ...reads, project: projects, lifecycle: projects, scores: projects };
-  }
-  const list = array(projects, 'projects');
-  const project = list.find((p) => Number(p?.id) === Number(requestedProjectId)) || list.find((p) => p?.id) || null;
-  if (!project) return { ...reads, project: null, lifecycle: null, scores: null };
-  const [[, lifecycle], [, scores]] = await Promise.all([
-    settle('lifecycle', api.getLifecycle(project.id)),
-    settle('scores', api.getScores(project.id)),
-  ]);
-  return { ...reads, project, lifecycle, scores };
-}
 
 export default function FounderStudioHome({ user }) {
   const [searchParams] = useSearchParams();
@@ -93,9 +62,13 @@ export default function FounderStudioHome({ user }) {
   const cycles = useCycleReads(reads.project, cyclesPlaced(studio.shown));
 
   useEffect(() => {
+    // #4622: each read is committed as it settles; one a newer run has superseded is dropped.
     let alive = true;
     setReads({});
-    readFounderStudio({ requestedProjectId }).then((r) => { if (alive) setReads(r); });
+    startFounderStudioReads({
+      requestedProjectId,
+      onRead: (key, value) => { if (alive) setReads((r) => ({ ...r, [key]: value })); },
+    });
     return () => { alive = false; };
   }, [requestedProjectId, retry]);
 
