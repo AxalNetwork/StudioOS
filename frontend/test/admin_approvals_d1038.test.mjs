@@ -651,7 +651,7 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
     assert.match(v.of('approvals-tab-lanes'), /Lanes\s*29/);
     assert.match(v.of('approvals-hq-proposals'), /not built yet/);
     // D1132: Program-grant requests opens HQ's Requests page (D987), not "not built yet".
-    assert.match(v.of('approvals-hq-grants'), /Licences › Program grants › Requests/);
+    assert.match(v.of('approvals-hq-grants'), /Licences › Program access by licence › Requests/);
     assert.doesNotMatch(v.of('approvals-hq-grants'), /not built yet/);
     assert.ok(v.hrefs().includes('/admin/licences/programs/requests'));
   } finally { await v.unmount(); s.restore(); }

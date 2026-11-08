@@ -15,6 +15,16 @@ permissions:
   security-events: write
   actions: read
 
+# Every push to main used to start a full scan that nothing cancelled, so
+# several ran at once and the JavaScript analysis was cut off at its time
+# limit (runs 42464906534, 42466726853 on 2026-11-08). A newer commit of the
+# same event and ref now replaces the older scan; each scan still covers the
+# whole tree, so no commit's code goes unscanned. Scheduled runs keep their
+# own group.
+concurrency:
+  group: codeql-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Analyses both the worker (TS) and the FastAPI dev backend (Python) even
 # though FastAPI is not deployed — Python supply-chain issues still hit
 # Replit dev sessions.
@@ -70,7 +80,8 @@ jobs:
     name: analyze (${{ matrix.language }})
     needs: visibility
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 60, not 30: the JavaScript analysis took 28+ minutes on main (2026-11-08).
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
