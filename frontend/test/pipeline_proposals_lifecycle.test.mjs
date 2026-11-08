@@ -111,12 +111,14 @@ test('the win rate is null with nothing decided, and Analytics reads the same on
     'a win rate is drawn over an empty denominator');
   assert.ok(flat(strip).includes('nothing decided yet, so there is no rate'));
   const read = between(worker, "partnerPipeline.get('/proposals'", 'Append a version');
-  assert.ok(/win_rate_pct: decidedCount \? Math\.round\(\(wonCount \/ decidedCount\) \* 100\) : null,/.test(read),
+  // D4693: the same function `/quotes/analytics` uses, over the whole book (#4701).
+  assert.ok(/win_rate_pct: winRate\(wonCount, lostCount\)\.pct,/.test(read),
     'the win rate is no longer won-over-decided, or no longer null when nothing is decided');
-  // DECIDED IS ACCEPTED PLUS REJECTED — a proposal still waiting is not a loss,
-  // and a withdrawn one was never lost to anyone.
-  assert.ok(/if \(!x\.decided\) continue;\s*decidedCount \+= 1;/.test(read));
-  assert.ok(/const decided = Boolean\(q\.decided_at\) \|\| q\.status === 'accepted' \|\| q\.status === 'rejected';/.test(between(worker, 'async function readProposals', 'Append a version')),
+  assert.ok(/win_rate_basis: winRateBasis\(/.test(read), 'the win rate stopped saying what it was counted from');
+  assert.ok(/scanAll\(/.test(read), 'the win rate stopped being counted over the whole book');
+  // DECIDED IS WON PLUS LOST — a proposal still waiting is not a loss,
+  // and a withdrawn one was never lost to anyone, even with a decided_at stamp.
+  assert.ok(/const outcome = quoteOutcome\(q\.status\);\s*\n\s*const decided = outcome === 'won' \|\| outcome === 'lost';/.test(between(worker, 'async function readProposals', 'Append a version')),
     'the decided test changed shape');
 });
 
@@ -160,7 +162,7 @@ test('a version trail is append-only and self-numbering', () => {
   // NO EDIT AND NO DELETE. A history that can be rewritten is not one.
   assert.ok(!/UPDATE quote_versions|DELETE FROM quote_versions/.test(worker),
     'a version can now be edited or deleted');
-  assert.ok(/requireOwnQuote\(c\.env, partnerId, quoteId\)/.test(post),
+  assert.ok(/requireOwnQuote\(c\.env, partnerId, quoteId, companyId\)/.test(post),
     'a version can be appended to another firm’s quote');
 
   const inst = between(zone, 'testid="version-history"', '/>');
