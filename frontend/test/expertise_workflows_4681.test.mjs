@@ -79,7 +79,7 @@ test('a proof delete says what goes with it before it happens', () => {
 
 // ─────────────────────────────────────────────────────────── Services, mounted
 
-const SERVICE = { id: 3, uid: 'svc-3', title: 'Sprint', kind: 'fixed', duration_note: null, price_cents: 500000, currency: 'USD', scope: null, is_active: true, units_sold: null };
+const SERVICE = { id: 3, uid: 'svc-3', title: 'Sprint', kind: 'fixed', duration_note: null, price_cents: 500000, currency: 'USD', scope: null, is_active: true, units_sold: null, updated_at: '2026-11-07T10:00:00.000Z' };
 
 test('Services edits a saved service in place: one PATCH, no delete and recreate', async () => {
   // Mutation checked: Save sending the whole draft → the PATCH carries kind and scope too;
@@ -106,7 +106,7 @@ test('Services edits a saved service in place: one PATCH, no delete and recreate
     await submitForm(f, 'advisor-service-form-3');
     await f.flush();
     const updates = calls.filter((c) => c[0] === 'update');
-    assert.deepEqual(updates, [['update', 3, { title: 'Design sprint', price_cents: 650000, currency: 'EUR' }]]);
+    assert.deepEqual(updates, [['update', 3, { title: 'Design sprint', price_cents: 650000, currency: 'EUR', revision: '2026-11-07T10:00:00.000Z' }]]);
     assert.equal(calls.filter((c) => c[0] === 'delete' || c[0] === 'create').length, 0);
     assert.ok(f.text().includes('Service saved.'));
   } finally { await f.unmount(); delete globalThis.__api4681; }
