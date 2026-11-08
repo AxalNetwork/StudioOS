@@ -41,6 +41,8 @@ const MODEL = {
 function fixture() {
   const db = new DatabaseSync(':memory:', { ...SCHEMA_OPTIONS });
   loadSchema(db);
+  // D5016 seeds the 49-market catalogue and a v1 draft; these cases build their own, so they start empty.
+  db.exec("DELETE FROM country_market_profiles; DELETE FROM pricing_models WHERE status = 'draft'");
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   for (const id of [SUPER, SUPER_PW, ADMIN]) u.run(id, 'admin', `Person ${id}`, `user${id}@example.test`);
   db.exec(`INSERT INTO super_admins (user_id) VALUES (${SUPER}), (${SUPER_PW})`);
