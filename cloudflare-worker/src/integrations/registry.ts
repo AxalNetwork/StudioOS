@@ -688,7 +688,6 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
     pulls: BEEHIIV_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })),
     sends: [],
     feeds: [...new Set(BEEHIIV_BUILT_FEEDS.map((f) => f.module))],
-    used_by: [{ label: 'Grow · Distribution', href: '/grow/distribution' }, { label: 'Grow · Revenue and traction', href: '/grow/revenue-and-traction' }],
     permissions: ['Sign in with Beehiiv: read your publications, their subscriber counts and average open and click rates, and your sent posts and their figures, read only, through Beehiiv’s MCP server; it never reads a subscriber or an address, and never creates, edits, schedules or sends anything.'],
   },
   microsoft_365: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },

@@ -301,6 +301,7 @@ test('9. the picker: link, change, unlink; one publication per venture with the 
   assert.deepEqual([put.status, put.body.link], [200, { publication_id: PUB_A, name: PUB_A_NAME }], put.text);
   db.prepare("UPDATE beehiiv_publication_links SET channel_state = 'dismissed' WHERE project_id = 1").run();
   put = await req(app, env, fake, 10, LINK, { method: 'PUT', body: { project: 1, publication_id: PUB_A } });
+  assert.equal(put.status, 200, put.text);
   assert.equal(db.prepare('SELECT channel_state FROM beehiiv_publication_links WHERE project_id = 1').get().channel_state, 'dismissed', 'relinking the same publication keeps its decision');
   put = await req(app, env, fake, 10, LINK, { method: 'PUT', body: { project: 1, publication_id: PUB_B } });
   assert.equal(put.body.link.publication_id, PUB_B);
