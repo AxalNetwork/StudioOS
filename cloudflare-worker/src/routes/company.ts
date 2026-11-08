@@ -29,6 +29,9 @@ import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { legalPatch, MESSAGES as LEGAL_MESSAGES } from './company_legal';
 import { currencyCode, CURRENCY_INVALID_MESSAGE } from '../services/currencies';
 import {
+  PROSE_MAX, REVENUE_CODES, VOCAB_MESSAGES, checkProfileUrl, checkRegionCodes, regionsOf,
+} from '../services/companyProfileVocab';
+import {
   MAX_LOGO_BYTES, LOGO_CONTENT_TYPE, LOGO_MESSAGES, checkLogo, logoHeaders, logoKeyFor, logoUrlFor, newLogoToken, storedLogoOf,
 } from '../services/companyLogo';
 
@@ -48,6 +51,8 @@ type Company = {
   default_currency?: string | null;
   /** #4963 (migration 202611072255): the General profile's revision, the compare-and-swap token. */
   profile_version?: number;
+  /** #4964 (migration 202611072325): the regions as canonical codes, a JSON array; null derives them from the text. */
+  region_codes?: string | null;
   created_at: string; updated_at: string;
 };
 type Link = {
@@ -84,18 +89,31 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
   out.default_currency = c.default_currency ?? null;
   // #4963: the token a General edit sends back as `expected_version`.
   out.profile_version = Number.isSafeInteger(c.profile_version) ? c.profile_version : 1;
-  const isMember = await viewerIsMember(env, c.id, viewer);
+  // #4964: regions as codes for matching; `source` says stored or derived from the legacy text, `unmapped` what no
+  // code covers, so a legacy entry is shown to the editor rather than dropped.
+  const regions = regionsOf(c);
+  out.region_codes = regions.codes;
+  out.regions = { source: regions.source, unmapped: regions.unmapped };
+  // #4964: ONE bounded read for the roster, joined to the accounts it names, in place of a user lookup per member.
+  // Membership and the edit rule are decided from the same rows (`linkCanEdit` is `canEdit`'s rule on a link in
+  // hand), so a company with fifty members costs one query here, not fifty-three.
+  const roster = await env.DB.prepare(
+    `SELECT l.*, u.id AS member_id, u.name AS member_name, u.email AS member_email
+       FROM user_company_links l JOIN users u ON u.id = l.user_id
+      WHERE l.company_id = ?
+      ORDER BY l.id ASC`
+  ).bind(c.id).all<Link & { member_id: number; member_name: string; member_email: string }>();
+  const rows = roster.results || [];
+  const own = rows.find((r) => Number(r.user_id) === Number(viewer.id)) ?? null;
+  const isMember = isAdmin(viewer) || !!own;
   // D431 — economics are the member's and the editors'. `canEdit` is the rule
   // that already decides who may WRITE carry; the same rule decides who may
   // read it, so a reader who could not change a figure is never shown it.
-  const editor = await canEdit(env, c, viewer);
-  const links = await env.DB.prepare('SELECT * FROM user_company_links WHERE company_id = ?')
-    .bind(c.id).all<Link>();
+  // #4964: given the viewer's link from the roster above, it makes no query of its own.
+  const editor = await canEdit(env, c, viewer, { link: own });
   const members: any[] = [];
-  for (const lnk of links.results || []) {
-    const u = await env.DB.prepare('SELECT id, name, email FROM users WHERE id = ?')
-      .bind(lnk.user_id).first<{ id: number; name: string; email: string }>();
-    if (!u) continue;
+  for (const lnk of rows) {
+    const u = { id: lnk.member_id, name: lnk.member_name, email: lnk.member_email };
     members.push({
       user_id: u.id, name: u.name,
       // #3841: a member's email goes to that member only (the canvas: "Never show another member's email").
@@ -122,6 +140,8 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
   out.members = members;
   out.member_count = members.length;
   out.viewer_is_member = isMember;
+  // #4964: the edit capability, from the server's own rule, so the header, the form and the preview read one answer.
+  out.viewer_can_edit = editor;
   return out;
 }
 
@@ -338,7 +358,34 @@ r.post('/company/create', async (c) => {
 //   - An archived company refuses (`companyAccess.archivedRefusal`), as every company write does.
 const updatable = ['company_name', 'stage', 'revenue_range', 'employee_count',
   'current_products', 'international_presence', 'expansion_goals',
-  'logo_url', 'website', 'linkedin_url', 'description', 'default_currency'] as const;
+  'logo_url', 'website', 'linkedin_url', 'description', 'default_currency', 'region_codes'] as const;
+
+/**
+ * #4964: the structured fields' checks, applied only to a value that CHANGES, so a row written before them saves its
+ * other fields untouched. A refusal is a 422 with its code and our sentence, before anything is written.
+ */
+function profileFieldProblem(body: any, company: Company): keyof typeof VOCAB_MESSAGES | null {
+  const changes = (f: string) => body[f] !== undefined && !sameValue(body[f], (company as any)[f]);
+  if (body.region_codes !== undefined) {
+    const r = checkRegionCodes(body.region_codes);
+    if (!r.ok) return 'region_codes_invalid';
+    body.region_codes = r.value;
+  }
+  if (changes('revenue_range') && body.revenue_range !== null && !REVENUE_CODES.includes(String(body.revenue_range))) return 'revenue_range_invalid';
+  for (const [f, linkedin] of [['website', false], ['linkedin_url', true]] as const) {
+    if (typeof body[f] === 'string') body[f] = body[f].trim() || null;
+    if (changes(f) && body[f] !== null && !checkProfileUrl(body[f], { linkedin })) return linkedin ? 'linkedin_invalid' : 'website_invalid';
+  }
+  if (body.employee_count !== undefined && body.employee_count !== null) {
+    const n = typeof body.employee_count === 'string' && /^\d+$/.test(body.employee_count.trim()) ? Number(body.employee_count.trim()) : body.employee_count;
+    if (!(Number.isSafeInteger(n) && n >= 0)) return 'employee_count_invalid';
+    body.employee_count = n;
+  }
+  for (const f of ['current_products', 'expansion_goals', 'international_presence']) {
+    if (changes(f) && typeof body[f] === 'string' && body[f].length > PROSE_MAX) return 'prose_too_long';
+  }
+  return null;
+}
 
 export const VERSION_CONFLICT_MESSAGE = 'Someone else saved changes to this company after you opened it, so yours were not saved. The current values are shown; review them and save again.';
 
@@ -392,7 +439,16 @@ r.patch('/company/:uid', async (c) => {
       if (!code) return c.json({ code: 'currency_invalid', detail: CURRENCY_INVALID_MESSAGE }, 422);
       body.default_currency = code;
     }
+    const fieldProblem = profileFieldProblem(body, company);
+    if (fieldProblem) return refuse(c, 422, { code: fieldProblem, message: VOCAB_MESSAGES[fieldProblem] });
     const changed = updatable.filter((f) => body[f] !== undefined && !sameValue(body[f], (company as any)[f]));
+    // #4964, the lazy migration: a row that has never stored codes stores the ones its text derives on its first
+    // committed General save, so matching stops depending on the derivation. Never on a save that changes nothing.
+    if (changed.length && company.region_codes == null && body.region_codes === undefined) {
+      const text = body.international_presence !== undefined ? body.international_presence : company.international_presence;
+      const derived = regionsOf({ region_codes: null, international_presence: text }).codes;
+      if (derived.length) { body.region_codes = JSON.stringify(derived); changed.push('region_codes'); }
+    }
     if (changed.length) {
       const sets = changed.map((f) => `${f} = ?`);
       const params: any[] = changed.map((f) => body[f]);

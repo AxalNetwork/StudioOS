@@ -22,10 +22,17 @@ export async function viewerIsMember(env: Env, companyId: number, viewer: User):
   return !!link;
 }
 
-export async function canEdit(env: Env, company: { id: number }, user: User): Promise<boolean> {
+/**
+ * #4964: `opts.link` is the viewer's link when the caller already read the roster (`detailDto`): `null` means no link,
+ * and no query is made. Omitted, the link is read here as before.
+ */
+export async function canEdit(env: Env, company: { id: number }, user: User, opts: { link?: EditLink | null } = {}): Promise<boolean> {
   if (isAdmin(user)) return true;
+  if (opts.link !== undefined) return linkCanEdit(opts.link);
   return canEditAsMember(env, company, user);
 }
+
+type EditLink = { role_in_company: string; is_primary_admin?: number | boolean | null };
 
 /**
  * `canEdit` without the admin pass: only the company's own editors by their
@@ -36,6 +43,14 @@ export async function canEditAsMember(env: Env, company: { id: number }, user: U
   const link = await env.DB.prepare(
     'SELECT role_in_company, is_primary_admin FROM user_company_links WHERE company_id = ? AND user_id = ?'
   ).bind(company.id, user.id).first<{ role_in_company: string; is_primary_admin: number }>();
+  return linkCanEdit(link);
+}
+
+/**
+ * #4964: the edit rule on a link already in hand, so a reader that loaded the roster (`detailDto`) decides
+ * membership and editing from the same rows instead of two more queries. `canEditAsMember` is this on its own read.
+ */
+export function linkCanEdit(link: EditLink | null | undefined): boolean {
   if (!link) return false;
   return !!link.is_primary_admin || ['Owner', 'Admin', 'Founder'].includes(link.role_in_company);
 }

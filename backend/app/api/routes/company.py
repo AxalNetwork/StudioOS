@@ -162,14 +162,16 @@ def _company_detail_dto(session: Session, company: CompanyProfile, viewer: User)
     out["updated_at"] = company.updated_at.isoformat() if company.updated_at else None
 
     is_member = _viewer_is_company_member(session, company, viewer)
-    links = session.exec(
-        select(UserCompanyLink).where(UserCompanyLink.company_id == company.id)
+    # #4964: one joined read for the roster, not a user lookup per member
+    # (the Worker's detailDto does the same; dev parity only).
+    rows = session.exec(
+        select(UserCompanyLink, User)
+        .join(User, User.id == UserCompanyLink.user_id)
+        .where(UserCompanyLink.company_id == company.id)
+        .order_by(UserCompanyLink.id)
     ).all()
     members = []
-    for lnk in links:
-        u = session.get(User, lnk.user_id)
-        if not u:
-            continue
+    for lnk, u in rows:
         # Members of the company (and admins) see real emails so the team
         # can contact each other. Strangers see a masked form.
         member_email = u.email if is_member else mask_email(u.email)

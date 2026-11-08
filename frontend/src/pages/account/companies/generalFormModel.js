@@ -51,17 +51,34 @@ export const CURRENCY_CODES = Object.freeze([
   'USD', 'UYU', 'UZS', 'VED', 'VES', 'VND', 'VUV', 'WST', 'XAF', 'XCD', 'XCG', 'XOF', 'XPF', 'YER', 'ZAR', 'ZMW', 'ZWG',
 ]);
 
-/** The form's text fields, by section, as the canvas draws them. Growth keeps the old page's four. */
+/**
+ * #4964: the matching vocabulary, mirroring `cloudflare-worker/src/services/companyProfileVocab.ts` (a test keeps
+ * the codes equal). Regions are canonical codes (`region_codes`); revenue is a band.
+ */
+export const REGIONS = Object.freeze([
+  ['global', 'Global'], ['north_america', 'North America'], ['latin_america', 'Latin America'], ['uk_ireland', 'UK and Ireland'],
+  ['europe', 'Europe'], ['middle_east_north_africa', 'Middle East and North Africa'], ['sub_saharan_africa', 'Sub-Saharan Africa'],
+  ['south_asia', 'South Asia'], ['east_asia', 'East Asia'], ['southeast_asia', 'Southeast Asia'], ['oceania', 'Oceania'],
+]);
+export const REGION_CODES = Object.freeze(REGIONS.map(([c]) => c));
+export const regionLabel = (code) => (REGIONS.find(([c]) => c === code) || [null, code])[1];
+export const REVENUE_RANGES = Object.freeze([
+  ['pre_revenue', 'Pre-revenue'], ['under_100k', 'Under $100k a year'], ['100k_1m', '$100k to $1M a year'],
+  ['1m_5m', '$1M to $5M a year'], ['5m_20m', '$5M to $20M a year'], ['20m_plus', 'Over $20M a year'],
+]);
+export const PROSE_MAX = 500;
+
+/** The form's fields, by section, as the canvas draws them. Growth keeps the old page's four. */
 export const SECTIONS = [
   { key: 'identity', title: 'Identity', line: 'The name members see everywhere.', fields: ['company_name', 'stage', 'default_currency'] },
   { key: 'links', title: 'Links', fields: ['website', 'linkedin_url'] },
-  { key: 'where', title: 'Where you operate', line: 'Regions are used to match you with investors, advisors and events.', fields: ['international_presence'] },
+  { key: 'where', title: 'Where you operate', line: 'Regions are used to match you with investors, advisors and events.', fields: ['region_codes', 'international_presence'] },
   { key: 'about', title: 'About', fields: ['description'] },
   { key: 'growth', title: 'Growth', line: 'Used in investor matching and deal analysis.', fields: ['revenue_range', 'employee_count', 'current_products', 'expansion_goals'] },
 ];
 export const LABELS = {
   company_name: 'Company name', stage: 'Stage', default_currency: 'Default currency', website: 'Website', linkedin_url: 'LinkedIn',
-  international_presence: 'Regions', description: 'Description',
+  region_codes: 'Regions', international_presence: 'Notes on where you operate', description: 'Description',
   revenue_range: 'Revenue range', employee_count: 'Employee count', current_products: 'Current products', expansion_goals: 'Expansion goals',
 };
 export const FIELDS = SECTIONS.flatMap((s) => s.fields);
@@ -70,14 +87,21 @@ export const FIELDS = SECTIONS.flatMap((s) => s.fields);
 export const regionsOf = (v) => String(v ?? '').split(',').map((r) => r.trim()).filter(Boolean);
 export const regionsText = (list) => [...new Set((list || []).map((r) => String(r).trim()).filter(Boolean))].join(', ');
 
-/** The form's values from a `GET /company/:uid` row ('' for absent, never "Not recorded" inside a form). */
+/** Known codes, in the list's order, without repeats. */
+export const regionCodesIn = (v) => {
+  const set = new Set(Array.isArray(v) ? v.map(String) : []);
+  return REGION_CODES.filter((c) => set.has(c));
+};
+
+/** The form's values from a `GET /company/:uid` row ('' for absent, never "Not recorded" inside a form; codes as a list). */
 export function formOf(row) {
   const out = {};
-  for (const f of FIELDS) out[f] = row?.[f] == null ? '' : String(row[f]);
+  for (const f of FIELDS) out[f] = f === 'region_codes' ? regionCodesIn(row?.region_codes) : row?.[f] == null ? '' : String(row[f]);
   return out;
 }
 
 const norm = (f, v) => {
+  if (f === 'region_codes') { const c = regionCodesIn(v); return c.length ? c.join(',') : null; }
   const t = String(v ?? '').trim();
   if (f === 'employee_count') return t === '' ? null : Number(t);
   if (f === 'international_presence') return regionsText(regionsOf(t)) || null;
@@ -91,7 +115,7 @@ export function changes(form, row) {
   for (const f of FIELDS) {
     const next = norm(f, form?.[f]);
     const was = norm(f, row?.[f]);
-    if (next !== was) patch[f] = next;
+    if (next !== was) patch[f] = f === 'region_codes' ? regionCodesIn(form?.[f]) : next;
   }
   return patch;
 }
@@ -131,12 +155,32 @@ export function conflictLine(conflicts) {
 /** ST6c for an archived company: nothing here can change until it is restored (#4963, the Worker's rule). */
 export const archivedLine = (name) => `${name || 'This company'} is archived. Restore it before you change its settings.`;
 
-/** Why the form cannot be saved yet, or null. The name is required; the count is a whole number. */
-export function problemOf(form) {
+/** A link a member can open, as the Worker checks it (`checkProfileUrl`). */
+export function profileUrlOk(v, { linkedin = false } = {}) {
+  let u;
+  try { u = new URL(String(v).trim()); } catch { return false; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  if (!u.hostname.includes('.')) return false;
+  return !linkedin || u.hostname === 'linkedin.com' || u.hostname.endsWith('.linkedin.com');
+}
+
+/**
+ * Why the form cannot be saved yet, or null. The name is required; the count is a whole number. With the loaded row,
+ * a CHANGED link must be one a member can open and changed prose fits; a value written before these rules is left alone.
+ */
+export function problemOf(form, row = null) {
   if (!String(form?.company_name ?? '').trim()) return 'Enter a company name.';
   const n = String(form?.employee_count ?? '').trim();
   if (n && !(Number.isInteger(Number(n)) && Number(n) >= 0)) return 'Employee count is a whole number.';
   if (String(form?.description ?? '').length > DESCRIPTION_MAX) return `The description is at most ${DESCRIPTION_MAX} characters.`;
+  if (row) {
+    const changed = changes(form, row);
+    if (changed.website && !profileUrlOk(changed.website)) return 'Enter a website address that starts with https:// or http://.';
+    if (changed.linkedin_url && !profileUrlOk(changed.linkedin_url, { linkedin: true })) return 'Enter a LinkedIn address, such as https://www.linkedin.com/company/your-company.';
+    for (const f of ['current_products', 'expansion_goals', 'international_presence']) {
+      if (typeof changed[f] === 'string' && changed[f].length > PROSE_MAX) return `${LABELS[f]} is at most ${PROSE_MAX} characters.`;
+    }
+  }
   return null;
 }
 

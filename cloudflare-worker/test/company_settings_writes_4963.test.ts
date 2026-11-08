@@ -150,7 +150,7 @@ test('an unchanged body writes nothing; an invalid expected_version is a 400', a
 
 test('every committed General change records the changed field names and the revisions, never a value', async () => {
   const db = fixture(); const env = envOf(db);
-  await call(env, ADA, 'PATCH', PATCH, { description: 'Confidential pipeline note', revenue_range: '5m_10m', stage: 'seed', expected_version: 1 });
+  await call(env, ADA, 'PATCH', PATCH, { description: 'Confidential pipeline note', revenue_range: '5m_20m', stage: 'seed', expected_version: 1 });
   await call(env, FAY, 'PATCH', PATCH, { company_name: 'Northwind Labs', expected_version: 2 });
   const ev = events(db);
   assert.deepEqual(ev.map((e) => [e.actor, e.before, e.after]), [
@@ -159,7 +159,7 @@ test('every committed General change records the changed field names and the rev
   ]);
   assert.ok(ev.every((e) => typeof e.at === 'string' && e.at.length > 0), 'each event has its time');
   const all = JSON.stringify(db.prepare("SELECT before_json, after_json FROM company_membership_events WHERE kind = 'profile_update'").all());
-  assert.doesNotMatch(all, /Confidential|5m_10m|seed/, 'no value is stored');
+  assert.doesNotMatch(all, /Confidential|5m_20m|seed/, 'no value is stored');
   assert.equal(events(db, 'rename').length, 1, 'a rename keeps its own event beside it');
 });
 

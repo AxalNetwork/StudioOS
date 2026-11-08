@@ -77,7 +77,8 @@ test('D431: the rights the page draws from are the server’s (EDIT_ROLES), and 
   assert.match(route, /import \{[^}]*\bcanEdit\b[^}]*\} from '\.\.\/services\/companyAccess';/, 'the route uses the shared company gates');
   const access = codeOnly(read('cloudflare-worker/src/services/companyAccess.ts'));
   assert.match(access, /\['Owner', 'Admin', 'Founder'\]\.includes\(link\.role_in_company\)/, 'canEdit’s roles must stay Owner, Admin and Founder');
-  assert.match(route, /const editor = await canEdit\(env, c, viewer\);/, 'the server’s read gate is not canEdit');
+  // #4964: canEdit may be handed the viewer's link from the roster it already read; it is still canEdit.
+  assert.match(route, /const editor = await canEdit\(env, c, viewer(, \{ link: own \})?\);/, 'the server’s read gate is not canEdit');
   // The note names the same three roles, so the page cannot promise a wider
   // audience than the server serves.
   assert.match(PAGE_RAW, /CARRY_LOCKED_NOTE = 'Visible to the member and to an Owner, Admin or Founder only\./);
