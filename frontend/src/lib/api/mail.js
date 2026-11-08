@@ -25,6 +25,8 @@ import { request } from '../api.js';
 //   revise(uid, body)              POST   /mail/drafts/:uid/revise { instruction, base?: { subject, body }, project?, estimate?, quote? } → 201 { draft }
 // D4666: a run carries the `quote` of the estimate of THAT operation. Without a valid one it is 409 `estimate_required`
 // with a fresh `estimate` in the body, and nothing is run or held. A revision has its own estimate (`estimate: true`).
+//   saveEdit(uid, body)            PATCH  /mail/drafts/:uid { to?, subject, body, expected_revision } → { draft } (D4660: the member's own text of one
+//                                  version, no run and no charge; 409 `stale_edit` carries the current `draft`)
 //   drafts(person?)                GET    /mail/drafts?person= → { drafts }
 //   get(uid)                       GET    /mail/drafts/:uid → { draft }
 //   remove(uid)                    DELETE /mail/drafts/:uid → { ok }
@@ -58,6 +60,7 @@ export const mailApi = {
   estimate: (body) => post('/mail/drafts', { ...body, estimate: true }),
   draft: (body) => post('/mail/drafts', body),
   revise: (uid, body) => post(`/mail/drafts/${id(uid)}/revise`, body),
+  saveEdit: (uid, body) => request(`/mail/drafts/${id(uid)}`, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
   drafts: (person) => request(`/mail/drafts${person ? `?person=${id(person)}` : ''}`),
   get: (uid) => request(`/mail/drafts/${id(uid)}`),
   remove: (uid) => request(`/mail/drafts/${id(uid)}`, { method: 'DELETE' }),
