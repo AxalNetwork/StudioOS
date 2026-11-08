@@ -4376,6 +4376,18 @@ type EngagementRow = {
   created_at: string; updated_at: string;
 };
 
+/**
+ * #4715 (D4715): the terms of an engagement, and which of them a write changes.
+ * The client account link (`founder_user_id`) is not a term: linking who the
+ * contract is with to their Axal account changes nothing either side signed.
+ */
+export const ENGAGEMENT_TERMS = ['client_name', 'shape', 'scope_label', 'scope_includes', 'scope_excludes', 'amount_cents', 'term_ends_at'] as const;
+export function termChanges(before: Record<string, any>, after: Record<string, any>) {
+  return ENGAGEMENT_TERMS
+    .filter((f) => (before[f] ?? null) !== (after[f] ?? null))
+    .map((f) => ({ field: f, from: before[f] ?? null, to: after[f] ?? null }));
+}
+
 function engagementDto(r: EngagementRow): any {
   return {
     id: r.id, uid: r.uid, advisor_id: r.advisor_id,
@@ -4566,26 +4578,59 @@ advisors.patch('/me/engagements/:id', async (c) => {
     if (!ENGAGEMENT_SHAPES.includes(shape)) {
       return c.json({ detail: `shape must be one of: ${ENGAGEMENT_SHAPES.join(', ')}` }, 400);
     }
-    await c.env.DB.prepare(
-      `UPDATE advisor_engagements
-          SET client_name = ?, founder_user_id = ?, shape = ?, scope_label = ?,
-              scope_includes = ?, scope_excludes = ?, amount_cents = ?,
-              term_ends_at = ?, updated_at = ?
-        WHERE id = ?`
-    ).bind(
+    // D4695-style stale-view refusal: the caller may name the version it read.
+    if (body.expected_updated_at !== undefined && String(body.expected_updated_at) !== row.updated_at) {
+      return c.json({ detail: 'this engagement changed since you opened it — reload it', code: 'engagement_changed' }, 409);
+    }
+    const next = {
       // Merge, not replace: the board edits one field at a time, and an empty
       // client name would blank a card rather than rename it.
-      String(body.client_name ?? '').trim().slice(0, 200) || row.client_name,
-      'founder_user_id' in body
-        ? await engagementClientUser(c.env, m, body.founder_user_id) : row.founder_user_id,
+      client_name: String(body.client_name ?? '').trim().slice(0, 200) || row.client_name,
       shape,
-      'scope_label' in body ? trimOrNull(body.scope_label, 200) : row.scope_label,
-      'scope_includes' in body ? trimOrNull(body.scope_includes, 2000) : row.scope_includes,
-      'scope_excludes' in body ? trimOrNull(body.scope_excludes, 2000) : row.scope_excludes,
-      'amount_cents' in body ? parsePriceCents(body.amount_cents) : row.amount_cents,
-      'term_ends_at' in body ? engagementDate(body.term_ends_at) : row.term_ends_at,
-      nowIso(), row.id,
-    ).run();
+      scope_label: 'scope_label' in body ? trimOrNull(body.scope_label, 200) : row.scope_label,
+      scope_includes: 'scope_includes' in body ? trimOrNull(body.scope_includes, 2000) : row.scope_includes,
+      scope_excludes: 'scope_excludes' in body ? trimOrNull(body.scope_excludes, 2000) : row.scope_excludes,
+      amount_cents: 'amount_cents' in body ? parsePriceCents(body.amount_cents) : row.amount_cents,
+      term_ends_at: 'term_ends_at' in body ? engagementDate(body.term_ends_at) : row.term_ends_at,
+    };
+    const founderUserId = 'founder_user_id' in body
+      ? await engagementClientUser(c.env, m, body.founder_user_id) : row.founder_user_id;
+    // #4715 (D4715): once signed, the terms change only as a recorded correction.
+    const changes = termChanges(row, next);
+    const signed = !!row.started_at;
+    const reason = trimOrNull(body.correction_reason, 500);
+    if (signed && changes.length > 0 && !reason) {
+      return c.json({
+        detail: 'These terms were signed. Say why they are being corrected; the correction is kept in the engagement’s history.',
+        code: 'correction_reason_required', fields: changes.map((x) => x.field),
+      }, 409);
+    }
+    const now = nowIso();
+    const [wrote] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE advisor_engagements
+            SET client_name = ?, founder_user_id = ?, shape = ?, scope_label = ?,
+                scope_includes = ?, scope_excludes = ?, amount_cents = ?,
+                term_ends_at = ?, updated_at = ?
+          WHERE id = ? AND updated_at = ?`
+      ).bind(
+        next.client_name, founderUserId, next.shape, next.scope_label,
+        next.scope_includes, next.scope_excludes, next.amount_cents, next.term_ends_at,
+        now, row.id, row.updated_at,
+      ),
+      // The correction lands only if the update above did (its `updated_at` is this request's), so the history
+      // and the terms cannot disagree.
+      c.env.DB.prepare(
+        `INSERT INTO advisor_engagement_corrections
+           (uid, engagement_id, lane, reason, changes_json, corrected_by_user_id, created_at)
+         SELECT ?, id, lane, ?, ?, ?, ? FROM advisor_engagements
+          WHERE id = ? AND ? = 1 AND updated_at = ?`
+      ).bind(newUid(), reason ?? '', JSON.stringify(changes), user.id, now,
+        row.id, signed && changes.length > 0 ? 1 : 0, now),
+    ]);
+    if (Number((wrote as any)?.meta?.changes ?? 0) !== 1) {
+      return c.json({ detail: 'this engagement changed while you were looking at it — reload it', code: 'engagement_changed' }, 409);
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
       .bind(row.id).first<EngagementRow>();
     return c.json(engagementDto(fresh!));
@@ -4788,7 +4833,19 @@ advisors.get('/me/engagements/:id/events', async (c) => {
       `SELECT uid, kind, from_lane, to_lane, cycles_before, cycles_after, note, created_at
          FROM advisor_engagement_events WHERE engagement_id = ? ORDER BY id ASC LIMIT 200`
     ).bind(row.id).all();
-    return c.json({ items: rows.results || [] });
+    // #4715 (D4715): a correction to signed terms is part of the same history, with what changed.
+    const fixes = await c.env.DB.prepare(
+      `SELECT uid, lane, reason, changes_json, created_at
+         FROM advisor_engagement_corrections WHERE engagement_id = ? ORDER BY id ASC LIMIT 200`
+    ).bind(row.id).all<any>();
+    const corrections = (fixes.results || []).map((r: any) => ({
+      uid: r.uid, kind: 'corrected', from_lane: r.lane, to_lane: r.lane, note: r.reason,
+      changes: (() => { try { return JSON.parse(r.changes_json); } catch { return []; } })(),
+      created_at: r.created_at,
+    }));
+    const items = [...(rows.results || []), ...corrections]
+      .sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
+    return c.json({ items });
   } catch (e) { return mapError(c, e); }
 });
 
