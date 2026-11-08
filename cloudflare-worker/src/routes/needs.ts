@@ -14,6 +14,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, isPartner, isFounder, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { issueInvoice, invoiceDto } from '../services/engagementInvoices';
+import { logActorAct } from '../services/actorLog';
 import {
   analysePipeline, weightedPipeline, analyseDelivery, analyseByShape, analyseByQuarter,
   analyseLossReasons, inDecisionPeriod, quarterOf,
@@ -405,6 +406,30 @@ function readPeriod(raw: string | undefined): DecisionPeriod {
   return (Object.prototype.hasOwnProperty.call(PERIOD_LABELS, v) ? v : 'all') as DecisionPeriod;
 }
 
+
+/** Rows per chunk when the analytics walk a table. */
+const ANALYTICS_CHUNK = 500;
+/** Chunks one walk reads before it refuses to go on (250,000 rows). */
+const ANALYTICS_MAX_CHUNKS = 500;
+
+/**
+ * Read a whole table in id order, a chunk at a time. A walk that cannot finish
+ * THROWS: a figure computed from part of a book must not be sent as the figure.
+ */
+async function readAllByIdChunks<T extends { id: number }>(
+  read: (afterId: number) => Promise<{ results?: T[] }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  let after = 0;
+  for (let i = 0; i < ANALYTICS_MAX_CHUNKS; i += 1) {
+    const page = (await read(after)).results || [];
+    out.push(...page);
+    if (page.length < ANALYTICS_CHUNK) return out;
+    after = Number(page[page.length - 1].id);
+  }
+  throw new Error('analytics walk did not finish');
+}
+
 quotesRouter.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -426,43 +451,60 @@ quotesRouter.get('/analytics', async (c) => {
     // would silently drop it and quietly change the denominator of the one
     // figure this endpoint exists to compute. Unmatched rows land in the
     // by-shape breakdown as an unrecorded shape, which is what they are.
-    const quotes = await (
+    //
+    // EVERY QUOTE, NOT THE NEWEST THOUSAND (#4701). These reads were
+    // `ORDER BY created_at DESC LIMIT 1000`, so a firm with more than a
+    // thousand bids was told a win rate, a cycle time and a forecast computed
+    // from the newest thousand while the page said nothing about the rest. The
+    // reads now walk the table in id order in bounded chunks until it is
+    // exhausted; `rows_read` says how many were counted.
+    const readQuotes = (afterId: number) => (
       admin
         ? c.env.DB.prepare(
-            `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
+            `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-              ORDER BY q.created_at DESC LIMIT 1000`,
-          )
+              WHERE q.id > ?
+              ORDER BY q.id LIMIT ?`,
+          ).bind(afterId, ANALYTICS_CHUNK)
         : analyticsCompany !== null
           ? c.env.DB.prepare(
-              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
+              `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                  FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-                WHERE q.partner_id = ? AND (q.company_id = ? OR q.company_id IS NULL)
-                ORDER BY q.created_at DESC LIMIT 1000`,
-            ).bind(user.partner_id ?? -1, analyticsCompany)
+                WHERE q.partner_id = ? AND (q.company_id = ? OR q.company_id IS NULL) AND q.id > ?
+                ORDER BY q.id LIMIT ?`,
+            ).bind(user.partner_id ?? -1, analyticsCompany, afterId, ANALYTICS_CHUNK)
           : c.env.DB.prepare(
-              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
+              `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                  FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-                WHERE q.partner_id = ? ORDER BY q.created_at DESC LIMIT 1000`,
-            ).bind(user.partner_id ?? -1)
-    ).all<QuoteAnalyticsRow>();
-    const engagements = await (
+                WHERE q.partner_id = ? AND q.id > ? ORDER BY q.id LIMIT ?`,
+            ).bind(user.partner_id ?? -1, afterId, ANALYTICS_CHUNK)
+    ).all<QuoteAnalyticsRow & { id: number }>();
+    const readEngagements = (afterId: number) => (
       admin
         ? c.env.DB.prepare(
-            'SELECT status, price AS amount FROM engagements ORDER BY created_at DESC LIMIT 1000',
-          )
+            'SELECT id, status, price AS amount FROM engagements WHERE id > ? ORDER BY id LIMIT ?',
+          ).bind(afterId, ANALYTICS_CHUNK)
         : analyticsCompany !== null
           ? c.env.DB.prepare(
-              `SELECT status, price AS amount FROM engagements
-                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL)
-                ORDER BY created_at DESC LIMIT 1000`,
-            ).bind(user.partner_id ?? -1, analyticsCompany)
+              `SELECT id, status, price AS amount FROM engagements
+                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL) AND id > ?
+                ORDER BY id LIMIT ?`,
+            ).bind(user.partner_id ?? -1, analyticsCompany, afterId, ANALYTICS_CHUNK)
           : c.env.DB.prepare(
-              'SELECT status, price AS amount FROM engagements WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1000',
-            ).bind(user.partner_id ?? -1)
-    ).all<EngagementAnalyticsRow>().catch(() => ({ results: [] as EngagementAnalyticsRow[] }));
+              'SELECT id, status, price AS amount FROM engagements WHERE partner_id = ? AND id > ? ORDER BY id LIMIT ?',
+            ).bind(user.partner_id ?? -1, afterId, ANALYTICS_CHUNK)
+    ).all<EngagementAnalyticsRow & { id: number }>();
+    const quoteRows = await readAllByIdChunks(readQuotes);
 
-    const q = quotes.results || [];
+    // THE DELIVERY READ IS INDEPENDENT AND MAY FAIL ON ITS OWN. It used to
+    // `.catch(() => ({ results: [] }))`, which turned an unreadable engagements
+    // table into "0 active, 0 delivered" — a valid-looking zero. A failed read
+    // is now `delivery: null` with `delivery_unavailable: true`, and the quote
+    // figures, which did read, stay.
+    let engagementRows: Array<EngagementAnalyticsRow & { id: number }> | null = null;
+    try { engagementRows = await readAllByIdChunks(readEngagements); } catch { engagementRows = null; }
+
+    const q = quoteRows;
     // WHAT THE WINDOW APPLIES TO, and what it deliberately does not.
     //
     //   in       what was DECIDED in the window — the rate, the cycle, the
@@ -476,7 +518,9 @@ quotesRouter.get('/analytics', async (c) => {
     return c.json({
       pipeline,
       forecast: weightedPipeline(q),
-      delivery: analyseDelivery(engagements.results || []),
+      delivery: engagementRows === null ? null : analyseDelivery(engagementRows),
+      delivery_unavailable: engagementRows === null,
+      rows_read: q.length,
       by_shape: analyseByShape(inWindow),
       // NOT NARROWED, on purpose: this IS the time series. Applying the chip to
       // it would leave a quarter-over-quarter chart with one quarter in it.
@@ -678,8 +722,18 @@ async function engTransition(c: Context<{ Bindings: Env }>, target: 'start' | 'd
     sets.push('cancelled_at = ?'); params.push(nowIso());
     if (body.reason) { sets.push('cancel_reason = ?'); params.push(String(body.reason).slice(0, 2000)); }
   } else if (target === 'invoice') {
-    if (!['delivered', 'reviewed'].includes(e.status)) return c.json({ detail: `Cannot invoice from ${e.status}` }, 409);
+    // D4682 — A RETRY AFTER SUCCESS IS NOT AN ERROR. An engagement already
+    // `invoiced` whose invoice exists answers 200 with that engagement and
+    // issues nothing. (One that says `invoiced` with no invoice behind it,
+    // from before invoices were real documents, is still refused here: that
+    // is a data repair, not a retry.)
     if (!isPartnerSide) return c.json({ detail: 'Partner-side action' }, 403);
+    if (e.status === 'invoiced') {
+      const have = await c.env.DB.prepare('SELECT invoice_number FROM engagement_invoices WHERE engagement_id = ?')
+        .bind(id).first<{ invoice_number: string }>();
+      if (have && e.invoice_id === have.invoice_number) return c.json({ ...engagementDto(e), already_invoiced: true });
+    }
+    if (!['delivered', 'reviewed'].includes(e.status)) return c.json({ detail: `Cannot invoice from ${e.status}` }, 409);
     // This used to write `invoice_id = 'stub-<uid>'` and nothing else, with a
     // comment noting Stripe Connect was not ported. The effect in production
     // was a state that lied: the engagement went to `invoiced` permanently,
@@ -699,7 +753,7 @@ async function engTransition(c: Context<{ Bindings: Env }>, target: 'start' | 'd
               (SELECT p.name FROM projects p WHERE p.id = ?) AS bill_to_name`,
     ).bind(e.partner_id, e.founder_id, e.partner_id, e.project_id)
       .first<{ partner_user_id: number | null; founder_user_id: number | null; bill_from_name: string | null; bill_to_name: string | null }>();
-    const { invoice } = await issueInvoice(c.env, {
+    const issued = await issueInvoice(c.env, {
       engagementId: id,
       partnerUserId: parties?.partner_user_id ?? null,
       founderUserId: parties?.founder_user_id ?? null,
@@ -710,14 +764,42 @@ async function engTransition(c: Context<{ Bindings: Env }>, target: 'start' | 'd
       priceDollars: quote?.price ?? e.price,
       deliverables: quote?.deliverables ?? null,
     }, invUid, now);
-    nextStatus = 'invoiced';
-    sets.push('invoiced_at = ?'); params.push(now);
-    // The real invoice number, not a stub.
-    sets.push('invoice_id = ?'); params.push(invoice?.invoice_number ?? invUid);
+    // The invoice and the engagement's `invoiced` state were written by one
+    // batch inside `issueInvoice`; there is no second write to lose.
+    const fresh = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
+    if (!issued.invoice || fresh?.status !== 'invoiced') {
+      // The engagement stopped being invoiceable between the read and the
+      // batch (cancelled, say): nothing was issued.
+      return c.json({
+        detail: `Cannot invoice from ${fresh?.status ?? e.status}`, code: 'engagement_changed',
+      }, 409);
+    }
+    await logActorAct(c.env, user, 'engagement_invoice', {
+      engagement_id: id, invoice_number: issued.invoice.invoice_number,
+      created: issued.created, acting_as_admin: isAdmin(user) && !(isPartner(user) && user.partner_id === e.partner_id),
+    });
+    return c.json({ ...engagementDto(fresh), ...(issued.created ? {} : { already_invoiced: true }) });
   }
   sets.unshift('status = ?'); params.unshift(nextStatus);
   sets.push('updated_at = ?'); params.push(nowIso()); params.push(id);
-  await c.env.DB.prepare(`UPDATE engagements SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
+  // D4682 — THE MOVE NAMES THE STATE IT WAS DECIDED FROM. A request that read
+  // an older status (a cancel racing a deliver) changes nothing and answers
+  // 409, instead of writing over the transition that already completed.
+  params.push(e.status);
+  const moved = await c.env.DB.prepare(`UPDATE engagements SET ${sets.join(', ')} WHERE id = ? AND status = ?`)
+    .bind(...params).run();
+  if (Number((moved as any)?.meta?.changes ?? 0) !== 1) {
+    const now = await c.env.DB.prepare('SELECT status FROM engagements WHERE id = ?').bind(id).first<{ status: string }>();
+    return c.json({
+      detail: `This engagement is now ${now?.status ?? 'changed'}, so that was not applied.`,
+      code: 'engagement_changed', status: now?.status ?? null,
+    }, 409);
+  }
+  await logActorAct(c.env, user, `engagement_${target}`, {
+    engagement_id: id, from: e.status, to: nextStatus,
+    acting_as_admin: isAdmin(user) && !(isPartner(user) && user.partner_id === e.partner_id)
+      && !(isFounder(user) && user.founder_id === e.founder_id),
+  });
   const fresh = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
   return c.json(engagementDto(fresh!));
 }

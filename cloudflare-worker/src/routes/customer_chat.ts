@@ -18,6 +18,7 @@
  * flag so the UI can show "queued — team will reply by email".
  */
 import { Hono } from 'hono';
+import { founderPlanTier, holds, investorPlanTier } from '../services/licencePlans';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 
@@ -27,7 +28,11 @@ const customerChat = new Hono<{ Bindings: Env }>();
 const ALLOWED_FOUNDER_TIERS = new Set(['studio']);
 const ALLOWED_INVESTOR_TIERS = new Set(['institutional']);
 
-/** True when the user's tier qualifies for customer chat. */
+/**
+ * True when the user's tier qualifies for customer chat.
+ * D4729: a held Founder licence is read on its own Founder plan and a held Investor licence on its own Investor plan,
+ * so a Founder-primary member with an Investor grant is eligible by either licence's paid plan, and never by the other's bypass.
+ */
 function isEligible(user: any): boolean {
   if (!user) return false;
   const role = String(user.role || '').toLowerCase();
@@ -36,12 +41,13 @@ function isEligible(user: any): boolean {
   // Partners get chat regardless of subscription tier (they're paying via partner contract).
   if (role === 'partner') return true;
   if (role === 'investor') {
-    const t = String((user as any).investor_tier || 'free').toLowerCase();
-    return ALLOWED_INVESTOR_TIERS.has(t);
+    // A held Founder licence is read on its own Founder plan too (D4729).
+    if (holds(user, 'founder') && ALLOWED_FOUNDER_TIERS.has(String(founderPlanTier(user)))) return true;
+    return ALLOWED_INVESTOR_TIERS.has(String(investorPlanTier(user)));
   }
-  // Founder default
-  const t = String(user.subscription_tier || 'free').toLowerCase();
-  return ALLOWED_FOUNDER_TIERS.has(t);
+  // Founder default, and a held Investor licence on its own Investor plan.
+  if (holds(user, 'investor') && ALLOWED_INVESTOR_TIERS.has(String(investorPlanTier(user)))) return true;
+  return ALLOWED_FOUNDER_TIERS.has(String(founderPlanTier(user)));
 }
 
 function tierPaywall() {

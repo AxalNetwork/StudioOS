@@ -26,6 +26,7 @@ import {
 import { applyLicenceCopy } from '../src/rpc/branchOps.ts';
 
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { licenceRoutesSource } from './_licenceRoutes.mjs';
 const MIGRATION_295 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/295_licence_push_pending.sql'), 'utf8');
 
 function coerce(a: any[]): any[] {
@@ -50,6 +51,7 @@ function hqDb() {
   const d = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   d.exec(`
     CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
       id INTEGER PRIMARY KEY, uid TEXT, licence_ref TEXT, legal_entity_name TEXT, brand_name TEXT,
       registered_address TEXT, signatory_name TEXT, signatory_title TEXT, status TEXT,
       term_years INTEGER, annual_fee_cents INTEGER, currency TEXT,
@@ -183,7 +185,7 @@ test('D272: every licence change that alters the branch copy pushes it', () => {
   // push (licence_events is immutable, so a row records the push's outcome
   // when it is written), so the window is the whole handler up to the
   // response, not only the text after the event.
-  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_licences.ts'), 'utf8');
+  const src = licenceRoutesSource();
   for (const event of ["'territory_changed'", "'seats_changed'", "'terms_changed'", "'contract_instantiated'", "'reinstated', admin.id, { notice_uid"]) {
     const at = src.indexOf(event);
     assert.ok(at > 0, `no ${event} event`);

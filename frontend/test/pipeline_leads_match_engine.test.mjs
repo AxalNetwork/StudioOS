@@ -156,13 +156,17 @@ test('every receipt names the rule it came from', () => {
 });
 
 test('the three sets are disjoint, at the read and at the write', () => {
-  const list = between(worker, "partnerPipeline.get('/leads'", 'Record a pass');
+  const list = between(worker, 'async function readOpenLeads', 'Record a pass');
   // A NEED THIS FIRM QUOTED ON IS A PROPOSAL, excluded in SQL rather than by a
   // flag somebody keeps in step.
   assert.ok(/NOT EXISTS \(\s*SELECT 1 FROM quotes q WHERE q\.need_id = n\.id AND q\.partner_id = \?\s*\)/.test(list),
     'a need this firm already bid on can appear as a lead');
-  assert.ok(/\.filter\(\(n: any\) => !passedIds\.has\(Number\(n\.id\)\)\)/.test(list),
+  // #4701: the pass exclusion is in the WHERE clause too, BEFORE the page is
+  // cut. Filtering a capped read in JavaScript hid actionable leads and let
+  // an old pass fall out of the exclusion set.
+  assert.ok(/NOT EXISTS \(SELECT 1 FROM partner_lead_passes lp WHERE lp\.need_id = n\.id AND lp\.partner_id = \?\)/.test(list),
     'a passed need can appear as a lead');
+  assert.ok(!/passedIds/.test(list), 'a passed need is being excluded after the cap again');
   assert.ok(/WHERE n\.status = 'open'/.test(list), 'a closed need can appear as a lead');
 
   // AND THE WRITE REFUSES THE OVERLAP TOO, so one client cannot be both a
@@ -282,7 +286,7 @@ test('the AI band is the artboard’s, and the surface is allow-listed', () => {
 });
 
 test('both writers are reachable and the read is scoped to the caller’s firm', () => {
-  assert.ok(/listPartnerLeads: \(\) => request\('\/partner\/pipeline\/leads'\)/.test(apiJs));
+  assert.ok(/listPartnerLeads: \(cursor, passedCursor\) => \{/.test(apiJs));
   assert.ok(/passPartnerLead: \(needId, data\) =>/.test(apiJs));
   assert.ok(/unpassPartnerLead: \(needId\) =>/.test(apiJs));
   assert.ok(worker.includes("partnerPipeline.get('/leads'"));

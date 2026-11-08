@@ -6,7 +6,9 @@ import { Card, Pill, Unrecorded } from '../../ui';
 import LessonFooter, { MarkCompleteButton } from './LessonFooter';
 import { hasLessonBody, lessonPositionLine, progressRefusal } from './lessonFooterModel';
 import useOnline from './useOnline';
-import { queuedPositionWriter } from './lessonPositionWriter';
+import { queuedPositionWriter, positionStoreFor } from './lessonPositionWriter';
+import * as drafts from './learningDrafts';
+import { useAuth } from '../../hooks/useAuthSync';
 import './lessonFooter.css';
 import { LearningEmpty, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
 import {
@@ -46,7 +48,19 @@ import {
  * "Mark complete" is disabled until a page passes the handler: a button that
  * looked live and saved nothing would be the dead control D17 refuses.
  */
-export default function LessonPlayer({
+/** #4646: the key a pending position of the item on screen is kept under, for the players below it. */
+const PositionKeyContext = React.createContext(null);
+
+export default function LessonPlayer(props) {
+  const userId = useAuth()?.user?.id;
+  return (
+    <PositionKeyContext.Provider value={drafts.positionKey(userId, props.item?.uid)}>
+      <LessonPlayerBody {...props} />
+    </PositionKeyContext.Provider>
+  );
+}
+
+function LessonPlayerBody({
   status, lesson, item, video, transcript = null, moduleTitle, index, total, position, prev, next,
   completed = false, onMarkComplete, marking = false, markError = '', reason = NOT_LIVE.catalogue, onRetry,
   resumeFrom = null, onPosition = null, loadCaption = null, completionInHeader = false,
@@ -198,12 +212,17 @@ function usePositionWriter(onPosition, source) {
   const latest = useMemo(() => ({ current: onPosition }), [source]);
   latest.current = onPosition;
   const hasWriter = Boolean(onPosition);
-  const writer = useMemo(() => (hasWriter ? queuedPositionWriter((s, p) => latest.current?.(s, p)) : null), [hasWriter, source, latest]);
+  const key = React.useContext(PositionKeyContext);
+  const writer = useMemo(() => (hasWriter
+    ? queuedPositionWriter((s, p) => latest.current?.(s, p), { store: positionStoreFor(drafts, drafts.browserStore(), key) })
+    : null), [hasWriter, source, latest, key]);
   useEffect(() => {
     if (!writer) return undefined;
     writer.activate();
     const reconnect = () => writer.reconnect();
     window.addEventListener('online', reconnect);
+    // A position an earlier session could not write is written now, if the connection is up.
+    reconnect();
     return () => { window.removeEventListener('online', reconnect); writer.dispose(); };
   }, [writer]);
   return writer;

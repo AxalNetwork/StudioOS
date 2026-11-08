@@ -10,8 +10,8 @@ import { useRead } from './useProgramReads';
 import { countLine } from './programPagesModel';
 import { cohortName, isFailed, isLoading, isReady } from './programsModel';
 import {
-  ACCESS_WORD, ENDED_DONE, FOUNDER_COUNT_WAITS, GIVEN_DONE, INVESTORS_EMPTY, NDA_TEMPLATE_LABEL, NDA_TEMPLATE_LINE, NDA_WORD,
-  PAGE, SCOPES, SCOPES_CLOSED, cohortChoices, giveBody, grantCohort, grantParams, investorRefusal, investorTiles, toldLine,
+  ACCESS_WORD, ENDED_DONE, FOUNDER_COUNT_WAITS, GIVEN_DONE, INVESTORS_EMPTY, NDA_LINE, NDA_TEMPLATE_LABEL, NDA_TEMPLATE_LINE, NDA_WORD,
+  PAGE, SCOPES, SCOPES_CLOSED, cohortChoices, giveBody, grantCohort, grantParams, investorRefusal, investorTiles, ndaAction, toldLine,
 } from './investorCohortsModel';
 
 /**
@@ -22,8 +22,10 @@ import {
  * table; Activity is part 1's activity read. Give access and End access are
  * dialogs; part 6's refusals sit in them, keyed on `code`.
  *
- * NOT DRAWN: Send the cohort NDA, which part 6 refuses until HQ publishes the
- * template (409 `nda_template_missing`); Pause (OD-PAUSE); the cohort's
+ * D4809: each grant's NDA action (Send NDA, Send NDA again, Void and resend),
+ * a dialog that says where the NDA stands before anything is sent.
+ *
+ * NOT DRAWN: Pause (OD-PAUSE); the cohort's
  * founder count (O-FND); and the member pages behind part 6's investor and
  * founder routes, which are their own task.
  */
@@ -102,10 +104,13 @@ function InvestorsTable({ reads, tick, open }) {
                     </span>
                   </td>
                   <td className={TD}>{grantCohort(g)}</td>
-                  <td className={TD}>{NDA_WORD[g.nda_state] || g.nda_state}</td>
+                  <td className={TD} data-testid={`programs-investor-row-${g.uid}-nda`}>{NDA_WORD[g.nda_state] || g.nda_state}</td>
                   <td className={TD} data-testid={`programs-investor-row-${g.uid}-access`}>{ACCESS_WORD[g.state] || g.state}</td>
                   <td className={`${TD} font-mono`}>{`${Number(g.intro_requests).toLocaleString('en-US')} · ${Number(g.intros_accepted).toLocaleString('en-US')} accepted`}</td>
-                  <td className={TD}>
+                  <td className={`${TD} flex flex-wrap gap-2`}>
+                    {ndaAction(g) ? (
+                      <button type="button" onClick={() => open.dialog({ kind: 'nda', grant: g })} className="min-h-[36px] rounded-[9px] border border-axal-hairline px-3 text-[12.5px] font-bold text-axal-violet hover:bg-axal-ground dark:border-gray-700 dark:text-violet-300 dark:hover:bg-gray-800" data-testid={`programs-investor-row-${g.uid}-nda-action`}>{ndaAction(g).label}</button>
+                    ) : null}
                     {g.state === 'ended' ? null : (
                       <button type="button" onClick={() => open.dialog({ kind: 'end', grant: g })} className="min-h-[36px] rounded-[9px] border border-axal-hairline px-3 text-[12.5px] font-bold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800" data-testid={`programs-investor-row-${g.uid}-end`}>End access</button>
                     )}
@@ -247,6 +252,42 @@ export function GiveAccessDialog({ reads, onClose, onGiven }) {
           <li>They see no founder’s email address.</li>
         </ul>
         {!done && built.error && (investor || cohort) ? <p className={`m-0 ${SUB}`} data-testid="programs-give-fix">{built.error}</p> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+/** D4809: Send NDA / Send NDA again / Void and resend, with where the NDA stands said first. */
+export function NdaSendDialog({ grant, onClose, onSent }) {
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState('');
+  const [done, setDone] = useState('');
+  const action = ndaAction(grant);
+  const name = grant.investor?.name || 'this investor';
+  const go = async () => {
+    if (!action) return;
+    setBusy(true); setRefusal('');
+    try {
+      const r = await investorCohortsApi.sendNda(grant.uid, action.kind === 'resend' ? { void_previous: true } : {});
+      setDone(r?.grant?.nda_state === 'delivery_failed'
+        ? 'The NDA was created, but its email did not go. The grant records the failed delivery; send it again.'
+        : `The NDA is out for ${name} to sign. Access opens once they sign it.`);
+      onSent?.();
+    } catch (e) {
+      setRefusal(investorRefusal(e, 'The NDA was not sent. Try again.'));
+      onSent?.();
+    } finally { setBusy(false); }
+  };
+  const label = action ? `${action.label} to ${name}?` : 'The cohort NDA';
+  return (
+    <Lightbox label={label} title={label} sub={grantCohort(grant)} onClose={onClose} testId="programs-investor-nda-dialog"
+      footer={action ? <DialogButtons onClose={onClose} action={action.label} tone={action.kind === 'resend' ? 'danger' : 'primary'} busy={busy} onAction={go} refusal={refusal} done={done} testId="programs-investor-nda-go" /> : null}>
+      <div className={DIALOG_BODY}>
+        <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="programs-investor-nda-line">{NDA_LINE[grant.nda_state] || NDA_WORD[grant.nda_state] || ''}</p>
+        <ul className={DIALOG_LINES}>
+          <li>It is sent from HQ’s published cohort NDA template.</li>
+          <li>{`${name} reads nothing in ${grantCohort(grant)} until they sign it.`}</li>
+        </ul>
       </div>
     </Lightbox>
   );

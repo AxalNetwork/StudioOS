@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Community v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Community · v2 redesign</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Community — action before analytics</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:920px;line-height:1.55">The overview now answers three questions in order: what needs my attention, what is happening, and where do I manage it. Four authoritative KPIs replace eight; the decision queue sits directly under them; every module leads with a sentence before its chart; navigation is one View details (analytics) and one Manage → (console) per domain. Unreadable is never zero, empty modules say what to do next, and the page stays read-only. Shell, palette, type and the collapsed Eadwyn rail are unchanged from the live admin.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#6b6577">Sample data: 12-week period ending week of 2 Nov 2026 · HQ-held accounts</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Community v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 1800) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const C = (b, lab, hh) => D(b, lab, 560, 0, 12, hh || 420);
+    const boards = [
+      ['CM-01', 'Community · desktop 1440 · populated, 12 weeks', 'Compact header with the period radiogroup, updated time, Refresh and the methodology behind an info button. Four operating KPIs (Waiting on you, Upcoming events, Event registrations, Job applications) — Active members is gone because it is not recorded. The ranked queue sits directly under them beside a smaller activity chart that leads with its insight. Events + Who takes part, Opportunities + Network, Wellbeing + Recent activity, one collapsed Additional insights row, then Manage Community as compact destination rows. Cards keep their natural heights.', [D('CM01', false, 1440, 0, 12, 1900)]],
+      ['CM-02', 'Needs your attention · states', 'The KPI tile summarises; the card is the detail. Overdue (over two days) gets an amber dot plus the word overdue — never colour alone — and overdue items rank first. Rows open the item in Approvals; there is no Approve or Reject here. With many items the card shows five, a kind breakdown and a count of the rest. When clear, it collapses to one line.', [C('CM02a', 'A · Normal queue', 380), C('CM02b', 'B · Overdue item', 440), C('CM02c', 'C · Multiple approvals', 520), C('CM02d', 'D · Clear', 260)]],
+      ['CM-03', 'Partial data · the job board is unreadable', 'Only the affected parts change. The Job applications tile says Unreadable with Try again; the queue says job approvals may be missing; the chart drops the series and says why total participation is withheld; Who takes part restates its share without jobs; Opportunities shows the failure inside its own card; Recent activity notes the gap. Nothing becomes a zero. Additional insights is shown expanded.', [D('CM03', false, 1440, 0, 12, 1950)]],
+      ['CM-04', 'Empty and first-activity states', 'A · A genuinely empty Community replaces roughly three-quarters of the analytical UI with Build your community, a one-line clear queue, Manage Community and one Additional insights line — no axes, funnels or zero series. B · The first event exists: each module either shows the little it has or says the next useful action, and charts wait for meaningful variation.', [D('CM04a', 'A · Empty', 1440, 0, 12, 1000), D('CM04b', 'B · First activity', 1440, 0, 12, 1500)]],
+      ['CM-05', 'Events details · desktop lightbox', 'Opened from View details on Events. Summary strip, then tabs: the event list (default), Participation, and By type — Events by type moved here from the overview. Search, filters, sortable columns, pagination. A dash means not applicable yet. Esc closes and returns focus to the opener; Manage events → goes to the console.', [D('CM05', false, 1440, 900)]],
+      ['CM-06', 'Job postings details', 'Status distribution as a strip, search across role and company, status, company and location filters, sort by applications (active filter shown in violet), pagination over 38 postings.', [D('CM06', false, 1440, 900)]],
+      ['CM-07', 'Circles details', 'Opened from View circles in Network. Members and activity carry as entered in their headers because admins type them; a missing value reads Not entered, never zero.', [D('CM07', false, 1440, 900)]],
+      ['CM-08', 'Recent activity details', 'Kind filters with counts, date range and search; rows grouped by day with the time first. No member is named; admin actions read an admin; wellbeing appears only as aggregate counts.', [D('CM08', false, 1440, 900)]],
+      ['CM-09', 'Phone · 390 · populated', 'Its own hierarchy rather than the desktop stacked: header with a full-width period control, 2 × 2 KPIs, the queue (three rows and Review all), the next event, an activity summary with a View chart button instead of a chart, More analytics as disclosure rows (Who takes part shown open), four recent rows, Manage Community as a list. Targets are 44px or more.', [D('CM09', 'Full scroll', 390, 0, 28, 2300)]],
+      ['CM-10', 'Phone · full-screen detail', 'Lightboxes become pages with a back link to Community and a pinned Manage action. B is the chart as its table: the same data a screen reader gets, with the in-progress week marked so far and the unrecorded week as a dash.', [D('CM10a', 'A · Events', 390, 844, 28), D('CM10b', 'B · Activity as table', 390, 844, 28)]],
+      ['CM-11', 'Dark mode · desktop', 'Same layout on #0b1220 / #111827 with violet #a78bfa; amber and series colours are lifted for contrast. Shown with the methodology tooltip open from the info button.', [D('CM11', false, 1440, 0, 12, 1900)]],
+      ['CM-12', 'Loading and errors', 'A · Skeletons follow the real layout, the header stays live and the page reports it is reading, never zero. B · The whole overview failed: a page-level message, Try again and the last good read — and Manage Community still works. C–E · Block-level: a failed card, the same card retrying, and a chart with one unreadable series.', [D('CM12a', 'A · Loading', 1440, 0, 12, 1300), D('CM12b', 'B · Whole overview failed', 1440, 0, 12, 900), C('CM12c', 'C · One block failed', 260), C('CM12d', 'D · Retrying that block', 300), C('CM12e', 'E · One series unreadable', 470)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

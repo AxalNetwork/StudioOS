@@ -24,5 +24,6 @@ export const investorCohortsApi = {
   grants: (params) => request(`${BASE}${query(params)}`),
   give: (body) => request(BASE, post(body)),
   end: (uid) => request(`${BASE}/${enc(uid)}/end`, post({})),
-  sendNda: (uid) => request(`${BASE}/${enc(uid)}/nda`, post({})),
+  // D4809: `{ void_previous: true }` is Void and resend.
+  sendNda: (uid, body = {}) => request(`${BASE}/${enc(uid)}/nda`, post(body)),
 };

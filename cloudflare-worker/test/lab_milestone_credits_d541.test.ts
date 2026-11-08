@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 import { grantWriteBar } from './_write_bar_session.mjs';
+import { labEnrollmentSchema, evidenceTables, proveMilestone, graduate, GRADUATION_KEYS } from './_lab_evidence.ts';
 
 import spinoutLab from '../src/routes/spinout_lab.ts';
 import certificates from '../src/routes/spinout_certificates.ts';
@@ -44,7 +45,7 @@ function ddl(name: string): string {
   return BASELINE.slice(at, BASELINE.indexOf(');', at) + 2);
 }
 
-function freshDb({ rules = true } = {}) {
+function freshDb({ rules = true, programme = 'full' as 'full' | 'week4' } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'spinout_lab_milestones', 'activity_logs', 'spinout_applications', 'projects',
     'user_spinout_flags', 'spinout_certificates', 'perk_credit_ledger']) db.exec(ddl(t));
@@ -61,8 +62,19 @@ function freshDb({ rules = true } = {}) {
   const f = db.prepare(`INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort) VALUES (?, ?, 'Cohort 4')`);
   f.run(MEMBER, 1); f.run(GRAD, 1); f.run(OLD_GRAD, 1); f.run(OUTSIDER, 0);
   const m = db.prepare(`INSERT INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (?, ?, ?, ?)`);
-  m.run(GRAD, 4, 'incorporation_completed', '2026-10-04 09:00:00');
-  m.run(OLD_GRAD, 4, 'incorporation_completed', '2026-08-01 09:00:00');
+  // D4659: a graduate has the whole programme on record. The backfill tests
+  // keep D541's legacy shape (week 4 only), which is the data that backfill is for.
+  if (programme === 'full') {
+    graduate(db, GRAD, '2026-10-04 09:00:00');
+    graduate(db, OLD_GRAD, '2026-08-01 09:00:00');
+  } else {
+    m.run(GRAD, 4, 'incorporation_completed', '2026-10-04 09:00:00');
+    m.run(OLD_GRAD, 4, 'incorporation_completed', '2026-08-01 09:00:00');
+  }
+  // D4657: the enrollment migration, applied after the fixture users exist,
+  // records every one of them as a legacy enrollment, as production's would.
+  labEnrollmentSchema(db);
+  evidenceTables(db);
   return db;
 }
 
@@ -96,7 +108,11 @@ async function call(router: any, db: InstanceType<typeof DatabaseSync>, method: 
   const res = await router.request(path, init, envOf(db));
   return { status: res.status, body: (await res.json().catch(() => null)) as any };
 }
-const record = (db: any, who: number, key: string) => call(spinoutLab, db, 'POST', '/milestone', who, { milestone_key: key });
+// D4657: a milestone is recorded once its work is saved; each call saves it first.
+const record = (db: any, who: number, key: string) => {
+  if (key !== 'incorporation_completed') proveMilestone(db, who, key);
+  return call(spinoutLab, db, 'POST', '/milestone', who, { milestone_key: key });
+};
 const grants = (db: any, who: number) =>
   db.prepare(`SELECT delta, source_ref, rule_key FROM perk_credit_ledger WHERE user_id = ? AND kind = 'grant' ORDER BY id`).all(who).map((x: any) => ({ ...x }));
 const quiet = async <T>(fn: () => Promise<T>) => {
@@ -192,6 +208,8 @@ test('the half that paid, granted again, reads already_granted; a grant written 
 
 test('graduation: the certificate issued on the last milestone pays the bonus once', async () => {
   const db = freshDb();
+  // D4659: weeks 1-3 are on record; the paid incorporation completes the programme.
+  graduate(db, MEMBER, '2026-10-04 09:00:00', GRADUATION_KEYS.filter((k) => k !== 'incorporation_completed'));
   paidOrder(db, MEMBER);
   const r = await quiet(() => record(db, MEMBER, 'incorporation_completed'));
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -301,7 +319,7 @@ const SUPER = 950;
 
 /** OLD_GRAD finished the whole path before launch; MEMBER did part of it, one milestone already paid live. */
 function cohortDb() {
-  const db = freshDb();
+  const db = freshDb({ programme: 'week4' });
   db.exec(ddl('super_admins')); db.exec(ddl('admin_audit_log'));
   db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, 'admin', 'Super One', 'super@example.test', 1)`).run(SUPER);
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
@@ -409,6 +427,11 @@ test('POST /lab-backfill: the Super Admin\'s, with a reason, recorded in the aud
 
 // ─────────────── Eadwyn's answers and the certificate backfill (#1104 Q1 A) ──
 
+// D4657: Eadwyn saves the answer (the evidence) and then records the milestone.
+const eadwyn = (db: any, env: any, who: number, key: string, week: number) => {
+  proveMilestone(db, who, key);
+  return recordSpinoutMilestoneAndAdvance(env, who, key, week);
+};
 const milestoneRows = (db: any, who: number) =>
   db.prepare('SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ? ORDER BY id').all(who).map((x: any) => x.milestone_key);
 
@@ -416,20 +439,20 @@ test('a milestone Eadwyn records pays as the Lab page would, once, and only from
   const db = freshDb();
   const env = envOf(db);
   db.prepare('UPDATE users SET spinout_lab_week = 2 WHERE id = ?').run(MEMBER);
-  await quiet(() => recordSpinoutMilestoneAndAdvance(env, MEMBER, 'okrs_created', 2));
+  await quiet(() => eadwyn(db, env, MEMBER, 'okrs_created', 2));
   assert.deepEqual(grants(db, MEMBER), [{ delta: 50, source_ref: `lab:${MEMBER}:okrs_created`, rule_key: 'lab:okrs_created' }]);
   // The same answer again records nothing new and pays nothing new.
-  await quiet(() => recordSpinoutMilestoneAndAdvance(env, MEMBER, 'okrs_created', 2));
+  await quiet(() => eadwyn(db, env, MEMBER, 'okrs_created', 2));
   assert.equal(grants(db, MEMBER).length, 1);
   // A milestone the Lab page already recorded is not paid again from Eadwyn.
   await quiet(() => record(db, MEMBER, 'pitch_deck_drafted'));
   db.prepare("DELETE FROM perk_credit_ledger WHERE source_ref = ?").run(`lab:${MEMBER}:pitch_deck_drafted`);
-  await quiet(() => recordSpinoutMilestoneAndAdvance(env, MEMBER, 'pitch_deck_drafted', 2));
+  await quiet(() => eadwyn(db, env, MEMBER, 'pitch_deck_drafted', 2));
   assert.deepEqual(grants(db, MEMBER).map((g: any) => g.rule_key), ['lab:okrs_created'], 'only the call that recorded it pays');
   // A milestone with no rule is recorded and pays nothing; an outsider is paid nothing.
-  await quiet(() => recordSpinoutMilestoneAndAdvance(env, MEMBER, 'project_created', 1));
+  await quiet(() => eadwyn(db, env, MEMBER, 'project_created', 1));
   assert.ok(milestoneRows(db, MEMBER).includes('project_created'));
-  await quiet(() => recordSpinoutMilestoneAndAdvance(env, OUTSIDER, 'brand_basics_filled', 2));
+  await quiet(() => eadwyn(db, env, OUTSIDER, 'brand_basics_filled', 2));
   assert.ok(milestoneRows(db, OUTSIDER).includes('brand_basics_filled'));
   assert.deepEqual(grants(db, OUTSIDER), []);
   assert.equal(grants(db, MEMBER).length, 1);
@@ -440,7 +463,7 @@ test('a credit that fails never stops Eadwyn\'s milestone from recording or the 
   db.exec('DROP TABLE perk_credit_ledger');
   db.prepare('UPDATE users SET spinout_lab_week = 1 WHERE id = ?').run(MEMBER);
   for (const k of ['project_created', 'customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3']) {
-    await quiet(() => recordSpinoutMilestoneAndAdvance(envOf(db), MEMBER, k, 1));
+    await quiet(() => eadwyn(db, envOf(db), MEMBER, k, 1));
   }
   assert.equal(milestoneRows(db, MEMBER).length, 4);
   const week = (db.prepare('SELECT spinout_lab_week AS w FROM users WHERE id = ?').get(MEMBER) as any).w;
@@ -453,7 +476,9 @@ test('every answer path that records a Lab milestone goes through the helper tha
     assert.match(src, new RegExp(`recordSpinoutMilestoneAndAdvance\\(env, user\\.id, '${key}'`), key);
   }
   assert.match(src, /recordSpinoutMilestoneAndAdvance\(\s*env, user\.id, `customer_interview_logged_\$\{discoveryMatch\[1\]\}`/);
-  assert.equal((src.match(/INSERT OR IGNORE INTO spinout_lab_milestones/g) || []).length, 1, 'a second milestone insert would bypass the credit');
+  // D4657: the router writes no milestone itself; the one recorder (which pays) does.
+  assert.equal((src.match(/INTO spinout_lab_milestones/g) || []).length, 0, 'a milestone insert here would bypass the policy, the evidence and the credit');
+  assert.match(src, /recordLabMilestone\(env, userId, key, 'advisor'\)/);
 });
 
 test('a certificate the backfill issues pays the graduation bonus once, on the live terms', async () => {

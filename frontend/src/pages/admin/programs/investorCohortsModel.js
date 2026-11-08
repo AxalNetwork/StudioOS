@@ -20,7 +20,31 @@ const nf = (n) => Number(n).toLocaleString('en-US');
 export const ACCESS_WORD = Object.freeze({
   active: 'Active', ended: 'Ended', waits_for_verification: 'Waits for verification', waits_for_nda: 'Waits for the NDA',
 });
-export const NDA_WORD = Object.freeze({ signed: 'Signed', sent: 'Sent', not_sent: 'Not sent' });
+// D4809: every NDA state the Worker reports, each in its own words.
+export const NDA_WORD = Object.freeze({
+  signed: 'Signed', sent: 'Sent', not_sent: 'Not sent', delivery_failed: 'Delivery failed', declined: 'Declined', voided: 'Voided',
+});
+
+/**
+ * D4809: the one NDA action a grant offers now, or none. Sending is explicit:
+ * Give access sends nothing. A grant that is ended or signed offers nothing; an
+ * NDA out and delivered offers Void and resend; every other state offers Send
+ * NDA (again, after a failure, a decline or a void). An unverified investor is
+ * sent nothing until verified.
+ */
+export function ndaAction(grant) {
+  if (!grant || grant.state === 'ended' || grant.nda_state === 'signed' || !grant.verified_now) return null;
+  if (grant.nda_state === 'sent') return { kind: 'resend', label: 'Void and resend' };
+  return { kind: 'send', label: grant.nda_state === 'not_sent' ? 'Send NDA' : 'Send NDA again' };
+}
+/** D4809: where the NDA stands, said in a sentence for the dialog. */
+export const NDA_LINE = Object.freeze({
+  not_sent: 'The cohort NDA has not been sent. The investor reads nothing until they sign it.',
+  delivery_failed: 'The last send did not reach the investor. Sending again voids that envelope first, so only one is ever out.',
+  declined: 'The investor declined the last NDA. Sending again sends them a new one.',
+  voided: 'The last NDA was voided. Sending again sends a new one.',
+  sent: 'The NDA is out for signature. Void and resend voids it and sends a new one; it cannot be undone.',
+});
 export const SCOPES = Object.freeze([
   { key: 'summary', label: 'Venture summary' },
   { key: 'weekly_progress', label: 'Weekly progress' },
@@ -28,13 +52,13 @@ export const SCOPES = Object.freeze([
 export const SCOPES_CLOSED = 'Pitch deck and Demo Day room are not open yet: there is nothing for an investor to read there.';
 export const NDA_TEMPLATE_LABEL = 'Cohort NDA · investor_cohort_nda_v1';
 export const NDA_TEMPLATE_LINE = Object.freeze({
-  published: 'The cohort NDA template is published. Each grant sends it to the investor to sign before they read anything.',
+  published: 'The cohort NDA template is published. HQ sends it from each grant’s Send NDA; the investor reads nothing until they sign it.',
   missing: 'No cohort NDA template is published yet, so every grant waits for the NDA. HQ writes it in the legal template library.',
   unreadable: 'The cohort NDA template could not be read just now. That is not the same as missing.',
 });
 export const FOUNDER_COUNT_WAITS = 'Its founder count is not read here yet: what counts as a cohort’s founders is not decided.';
 export const INVESTORS_EMPTY = 'No investor has access yet. An admin gives a verified investor access to one cohort.';
-export const GIVEN_DONE = 'Access given. The investor reads nothing until they sign the cohort NDA.';
+export const GIVEN_DONE = 'Access given. No NDA has been sent yet: send it from the grant’s Send NDA. The investor reads nothing until they sign it.';
 export const ENDED_DONE = 'Access ended. The investor can no longer read this cohort, and its founders are told.';
 export const PAGE = 25;
 
@@ -117,6 +141,15 @@ export const INVESTOR_REFUSALS = Object.freeze({
   cycle_not_found: 'That cohort is not on record now. Nothing changed.',
   grant_not_found: 'This access is not on record now. Refresh the list.',
   already_ended: 'This access has already ended, so nothing changed. Refresh to see the list as it is.',
+  // D4809: the NDA send's refusals.
+  grant_ended: 'This access has ended, so no NDA is sent for it.',
+  already_signed: 'The cohort NDA is already signed, so nothing was sent.',
+  already_sent: 'The NDA is already out for signature. Use Void and resend to replace it.',
+  signature_in_progress: 'The investor has started signing this NDA, so it was not voided or sent again.',
+  nda_template_missing: 'No cohort NDA template is published yet, so nothing was sent. HQ writes it in the legal template library.',
+  nda_template_unreadable: 'The cohort NDA template could not be read just now, so nothing was sent. Try again.',
+  nda_template_unfilled: 'The cohort NDA template has a field this send cannot fill, so nothing was sent.',
+  envelope_send_failed: 'The NDA could not be created or sent. The grant records the failed send; send it again.',
   invalid_ids: 'Choose the investor and the cohort again. Nothing changed.',
 });
 const codeOf = (err) => err?.code || err?.data?.code || (typeof err?.data?.error === 'string' ? err.data.error : null);

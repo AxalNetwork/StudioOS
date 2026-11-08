@@ -52,8 +52,11 @@ function useRepositories(projectId) {
   return state;
 }
 
+/** D4601: true only after the clipboard accepted the text. No clipboard API, or a refusal, is false. */
 async function copy(text) {
-  try { await globalThis.navigator?.clipboard?.writeText(text); return true; } catch { return false; }
+  const clipboard = globalThis.navigator?.clipboard;
+  if (typeof clipboard?.writeText !== 'function') return false;
+  try { await clipboard.writeText(text); return true; } catch { return false; }
 }
 function download(name, text) {
   try {
@@ -80,6 +83,8 @@ export default function SendSheet({ projectId, scope = 'venture', items, onClose
   const needsRepo = tool === 'vercel';
   const connected = repos.repos.length > 0;
   const picked = items.filter((i) => chosen.has(i.uid));
+  // Once prepared, the sheet speaks of what was sent, not of the boxes as they stand.
+  const count = result ? result.uids.length : picked.length;
   const canPrepare = picked.length > 0 && !busy && !(needsRepo && !connected);
   const toggle = (uid) => setChosen((s) => { const n = new Set(s); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   const choose = (id) => { setTool(id); setResult(null); setRefusal(null); setSaid(''); };
@@ -88,11 +93,17 @@ export default function SendSheet({ projectId, scope = 'venture', items, onClose
   const prepare = async () => {
     if (!canPrepare || lock.current) return;
     lock.current = true; setBusy(true); setRefusal(null); setSaid('');
+    // D4601: the request and its answer are kept together. The controls are disabled while Prepare is pending, and
+    // whatever they say by the time it answers, the result is drawn from this snapshot.
+    const sent = {
+      tool, uids: picked.map((i) => i.uid), ...((tool === 'github' || tool === 'vercel') && connected && repo ? { repository: repo } : {}),
+    };
     try {
       const out = await buildPlanApi.send(projectId, {
-        provider: tool, items: picked.map((i) => i.uid), ...((tool === 'github' || tool === 'vercel') && connected && repo ? { repository: repo } : {}),
+        provider: sent.tool, items: sent.uids, ...(sent.repository ? { repository: sent.repository } : {}),
       }, scope);
-      setResult(out);
+      setResult({ ...sent, out });
+      setTool(sent.tool);
       onSent?.(out);
     } catch (e) {
       setRefusal(sendRefusal(e, items));
@@ -117,11 +128,11 @@ export default function SendSheet({ projectId, scope = 'venture', items, onClose
   );
 
   return (
-    <Sheet label="Send to…" title="Send to…" sub={`Send · ${picked.length} accepted ${picked.length === 1 ? 'item' : 'items'}`} onClose={close} width={600} testId="plan-send" footer={footer}>
+    <Sheet label="Send to…" title="Send to…" sub={`Send · ${count} accepted ${count === 1 ? 'item' : 'items'}`} onClose={close} width={600} testId="plan-send" footer={footer}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Send to" data-testid="plan-send-tabs">
           {PROVIDERS.map((p) => (
-            <button key={p.id} type="button" role="tab" aria-selected={tool === p.id} onClick={() => choose(p.id)} className={`${CHIP} ${tool === p.id ? CHIP_ON : CHIP_OFF}`} data-testid={`plan-send-tab-${p.id}`}>
+            <button key={p.id} type="button" role="tab" aria-selected={tool === p.id} onClick={() => choose(p.id)} disabled={busy} className={`${CHIP} ${tool === p.id ? CHIP_ON : CHIP_OFF}`} data-testid={`plan-send-tab-${p.id}`}>
               {p.label}{status(p.id) ? <span className="ml-1.5 font-semibold text-axal-muted dark:text-gray-400">· {status(p.id)}</span> : null}
             </button>
           ))}
@@ -135,7 +146,7 @@ export default function SendSheet({ projectId, scope = 'venture', items, onClose
               {!items.length ? <p className={MUTED} data-testid="plan-send-none">No accepted item has landed yet, so there is nothing to send.</p> : null}
               {items.map((i) => (
                 <label key={i.uid} className="flex min-h-[32px] items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
-                  <input type="checkbox" checked={chosen.has(i.uid)} onChange={() => toggle(i.uid)} data-testid={`plan-send-item-${i.uid}`} />
+                  <input type="checkbox" checked={chosen.has(i.uid)} disabled={busy} onChange={() => toggle(i.uid)} data-testid={`plan-send-item-${i.uid}`} />
                   <span className="font-semibold">{i.title}</span>
                 </label>
               ))}
@@ -144,7 +155,7 @@ export default function SendSheet({ projectId, scope = 'venture', items, onClose
               connected ? (
                 <label className="flex flex-col gap-1">
                   <span className={EYE}>Repository</span>
-                  <select value={repo} onChange={(e) => setRepo(e.target.value)} className="h-9 rounded-[7px] border border-axal-hairline bg-white px-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="plan-send-repo">
+                  <select value={repo} disabled={busy} onChange={(e) => setRepo(e.target.value)} className="h-9 rounded-[7px] border border-axal-hairline bg-white px-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="plan-send-repo">
                     {repos.repos.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
                   <span className={MUTED}>Only repositories you picked on the GitHub connector.</span>
@@ -170,7 +181,7 @@ export default function SendSheet({ projectId, scope = 'venture', items, onClose
           </div>
         ) : null}
 
-        {result ? <Result tool={tool} result={result} onCopy={(t) => copy(t).then((ok) => say(ok, 'Copied.', 'Could not copy. Select the text and copy it yourself.'))}
+        {result ? <Result tool={result.tool} result={result.out} onCopy={(t) => copy(t).then((ok) => say(ok, 'Copied.', 'Could not copy. Select the text and copy it yourself.'))}
           onDownload={(t) => say(download('plan-items.md', t), 'Downloaded plan-items.md.', 'Could not download. Copy it instead.')} /> : null}
         {said ? <p className={MUTED} role="status" data-testid="plan-send-said">{said}</p> : null}
       </div>

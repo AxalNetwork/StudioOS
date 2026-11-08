@@ -351,7 +351,8 @@ test('clearing a price clears the cut and the rate with it', async () => {
   const id = booking(db, 'b1', 1, CLIENT_A);
   await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 30_000 });
   const r = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada,
-    { amount_cents: null, billing_state: 'unpriced' });
+    { amount_cents: null, billing_state: 'unpriced', reprice: true });
+  // #4679: taking a price away is a repricing, so it is said on purpose.
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.amount_cents, null);
   // A stale cut left behind would be a figure with nothing under it.
