@@ -217,3 +217,44 @@ test('#4531: the published evaluation judges through the same rule; the demonstr
     assert.equal(row().result, 'pass');
   } finally { EVAL_DEPS.run = real; }
 });
+
+test('#4531 slice 2: the published evaluation judges the new assertions; a passing output that starts breaking one is a regression, told once', async () => {
+  const w = world();
+  const expect = {
+    output: 'brief', must_include: ['500000'], must_say_not_recorded: [], must_not_include: [],
+    structure: { sections: ['Cash', 'Runway'] }, evidence: { cite: ['mercury.balances'] },
+    refusal: { mode: 'not_recorded', subject: 'runway' }, claims: { required: [{ subject: 'cash', object: 'recorded' }], forbidden: [] },
+  };
+  w.db.prepare(`INSERT INTO agent_skill_cases (uid, skill_id, name, input_json, expect_json, created_by) VALUES ('case-structured', 1, 'Structured case', ?, ?, ?)`)
+    .run(JSON.stringify({ records: { 'mercury.balances': { cash_usd: 500000 } } }), JSON.stringify(expect), SUPER);
+  const live = (await casesOf(w.env, { id: 1, slug: 'board-meeting-brief' })).find((c) => c.key === 'case-structured')!;
+  // Mutation checked: `checkCase` dropping the slice-2 keys → the board judges phrases only, the second run passes and this fails.
+  assert.deepEqual(live.expect.structure, expect.structure);
+  const { EVAL_DEPS } = await import('../src/services/agents/skillLifecycle.ts');
+  const real = EVAL_DEPS.run;
+  let says = '## Cash\nCash of 500000 is recorded [mercury.balances].\n## Runway\nRunway: Not recorded';
+  EVAL_DEPS.run = async () => ({ ok: true, output: says, usageLogId: null }) as any;
+  const kv = new Map<string, string>();
+  w.env.RATE_LIMITS = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => { kv.set(k, v); } };
+  const told: any[] = [];
+  const tellHq = async (_env: any, n: any) => { told.push(n); return 1; };
+  const row = () => w.db.prepare("SELECT result, detail FROM agent_skill_version_evals WHERE skill_id = 1 AND case_key = 'case-structured' ORDER BY id DESC LIMIT 1").get() as any;
+  try {
+    await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq } as any, 1);
+    // Mutation checked: the published path judging without the case's input → the citation cannot resolve and this fails.
+    assert.deepEqual([row().result, row().detail], ['pass', null]);
+    // The same phrases, but the citation now names a record the case does not hold.
+    says = says.replace('[mercury.balances]', '[mercury.transactions]');
+    const second = await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq } as any, 1);
+    assert.deepEqual([row().result, row().detail], ['fail', "It cited [mercury.transactions], which the case's records do not hold."]);
+    assert.deepEqual(second.regressions.filter((r) => r.case === 'Structured case').map((r) => [r.version, r.model]), [[2, RUN_MODEL]]);
+    const notices = () => told.filter((n) => n.body.startsWith('Structured case'));
+    assert.equal(notices().length, 1);
+    assert.match(notices()[0].body, /It cited \[mercury\.transactions\]/);
+    // Still failing, on another assertion: no second notice for the same skill, version, case and model.
+    says = '## Cash\nCash of 500000 is recorded [mercury.balances].\nRunway is 3 months.';
+    await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq } as any, 1);
+    assert.deepEqual([row().result, row().detail], ['fail', 'It has no "Runway" section.']);
+    assert.equal(notices().length, 1, 'told once');
+  } finally { EVAL_DEPS.run = real; }
+});

@@ -17,7 +17,7 @@ const BOARD = SKILL_LIBRARY.find((e) => e.slug === 'board-meeting-brief')!.cases
 const verdict = (e: CaseExpect, out: string) => judge(e, out).result;
 
 test('the demonstrated regression: an unrelated "Not recorded" does not cover runway', () => {
-  assert.equal(JUDGE_VERSION, 2);
+  assert.equal(JUDGE_VERSION, 3, "slice 2 (judge version 3) leaves this rule as it was");
   assert.deepEqual(BOARD.must_say_not_recorded, ['runway'], 'the committed case is the one the issue names');
   const r = judge(BOARD, 'There are 37 paying customers. Delaware franchise tax is on the agenda. Runway is 12 months. Churn is Not recorded.');
   assert.deepEqual(r, { result: 'fail', detail: 'It did not say runway is not recorded.' });
