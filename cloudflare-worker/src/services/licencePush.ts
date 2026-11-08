@@ -213,7 +213,10 @@ export async function assembleLicenceRecordDetailed(
 }
 
 /**
- * #4686 — allocate the next HQ revision for this licence, ATOMICALLY: one
+ * #4686 — allocate the next HQ BRANCH-SYNC revision for this licence. This is
+ * `licence_sync_state.hq_revision`, which counts pushes; it is NOT
+ * `territory_licences.revision` (#4678), which counts moves and edits for
+ * compare-and-swap, and nothing compares the two. ATOMICALLY: one
  * statement increments and returns, so two concurrent pushes can never hold the
  * same number. Allocated BEFORE the licence is read, so a higher revision always
  * carries content read no earlier than a lower one.
@@ -319,6 +322,23 @@ async function recordPushOutcome(
         `UPDATE licence_sync_state SET hq_revision = ?, updated_at = datetime('now')
           WHERE licence_id = ? AND hq_revision < ?`,
       ).bind(Number(result.branch_revision), licenceId, Number(result.branch_revision)).run();
+    }
+    if (!result.code) {
+      // A failure that never learnt which branch it was for (the licence reread
+      // or the deployment lookup failed) knows nothing a row already holds does.
+      // It writes a row when there is none — the intent must not be lost — and
+      // otherwise leaves the existing row as it is (D4805's "queued with the
+      // change" row keeps its code, reason and immediate pickup), raising only
+      // the revision it stands for.
+      await env.DB.prepare(
+        `INSERT INTO licence_push_pending
+           (licence_id, code, reason, attempts, first_failed_at, last_attempt_at, revision, failure_code)
+         SELECT ?, '', ?, 1, ?, ?, ?, ?
+          WHERE NOT EXISTS (SELECT 1 FROM licence_sync_state WHERE licence_id = ? AND branch_revision >= ?)
+         ON CONFLICT(licence_id) DO UPDATE SET
+           revision = MAX(licence_push_pending.revision, excluded.revision)`,
+      ).bind(licenceId, reason, at, at, revision, result.failure_code ?? null, licenceId, revision).run();
+      return;
     }
     await env.DB.prepare(
       `INSERT INTO licence_push_pending

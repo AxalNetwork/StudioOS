@@ -20,9 +20,18 @@ unchanged when it was split.
 - `Coverage.jsx` — the EU coverage grid and the renewal pipeline above the list.
 - `licenceShared.jsx` — what the parts share: tones, seat types, step numbers,
   residency choices, `Chip` and `Field`.
+- `LedgerZero.jsx` — D4819 (#4819): the ledger's true zero state ("No licences
+  have been issued", Issue first licence, Why is this empty?), the one-line EU
+  coverage that opens `Coverage.jsx`'s grid, and seat utilisation as Not recorded.
+- `LedgerTable.jsx` — D4819: the populated ledger: the counts line, Needs HQ
+  (each item a filter of the table) and the nine-column table, a stacked list
+  on a phone. Its rows are the doors to one licence.
+- `LicenceDeepLink.jsx` — D4819: `/admin/licences/:uid` and
+  `/admin/licences/:uid/:section`, opened in today's detail view.
 
 The models these read stay beside the page in `../`: `licenceNavModel.js`
-(tabs and selection), `licenceReasonModel.js` and `LicenceReasonDialog.jsx`
+(tabs and selection), `licenceLedgerModel.js` (the ledger's cells, Needs HQ and
+the zero test, D4819), `licenceReasonModel.js` and `LicenceReasonDialog.jsx`
 (reasons), `licenceHistoryModel.js` and `LicenceHistory.jsx` (history).
 
 **Rule for adding to it.** A new licence domain is a new file here, imported
