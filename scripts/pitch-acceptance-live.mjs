@@ -45,6 +45,16 @@ export const VIEWPORTS = Object.freeze([
 ]);
 /** Words that mean the page broke rather than drew. */
 export const BROKEN = Object.freeze([/Something went wrong/i, /Unexpected Application Error/i, /Cannot read properties of/i]);
+/** HTTP-200 pages that are not an authenticated, eligible Pitch surface. */
+export const WRONG_STATE = Object.freeze([
+  /\bSign in\b/i,
+  /\bLog in\b/i,
+  /Connect your account to continue/i,
+  /Upgrade to unlock (?:Pitch|the Pitch deck studio)/i,
+  /Pitch deck studio is (?:locked|not included)/i,
+  /(?:Pitch|deck).*(?:could not be read|failed to load)/i,
+]);
+const PITCH_STATE = /\b(Pitch|Decks?|Editor|Review|Present|Analytics|Share)\b/i;
 /** Rows the live run never covers; the matrix says "not tested" for each, never a pass. */
 export const MANUAL_ROWS = Object.freeze([
   'Non-owner founder, HQ versus Founder preview, read-only roles, revoked connections',
@@ -69,12 +79,21 @@ export function configProblem(env) {
   return null;
 }
 
-/** A page's verdict from what it drew: broken words fail; an empty body fails. */
-export function pageVerdict(text) {
+/** A page's verdict: it must stay on the expected route and draw eligible Pitch UI. */
+export function pageVerdict(text, { expectedPath = null, finalUrl = null } = {}) {
   const t = String(text || '');
   const hit = BROKEN.find((re) => re.test(t));
   if (hit) return { ok: false, why: `The page shows "${hit.source}".` };
+  const wrong = WRONG_STATE.find((re) => re.test(t));
+  if (wrong) return { ok: false, why: 'The page is not an authenticated, eligible Pitch screen.' };
   if (t.replace(/\s+/g, '').length < 40) return { ok: false, why: 'The page drew almost nothing.' };
+  if (expectedPath) {
+    let actual = '';
+    try { actual = new URL(finalUrl || '', 'https://acceptance.invalid').pathname.replace(/\/$/, '') || '/'; } catch { /* refused below */ }
+    const expected = String(expectedPath).replace(/\/$/, '') || '/';
+    if (actual !== expected) return { ok: false, why: `The page ended at ${actual || 'an unknown route'}, not ${expected}.` };
+    if (!PITCH_STATE.test(t)) return { ok: false, why: 'The expected route did not draw a Pitch screen.' };
+  }
   return { ok: true, why: null };
 }
 
@@ -133,7 +152,9 @@ async function main(env = process.env) {
         const shot = join(out, `${p.key}-${vp.key}.png`);
         try {
           const res = await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
-          const verdict = res && res.status() < 400 ? pageVerdict(await page.innerText('body')) : { ok: false, why: `HTTP ${res ? res.status() : 'no answer'}` };
+          const verdict = res && res.status() < 400
+            ? pageVerdict(await page.innerText('body'), { expectedPath: p.path, finalUrl: page.url() })
+            : { ok: false, why: `HTTP ${res ? res.status() : 'no answer'}` };
           await page.screenshot({ path: shot, fullPage: true });
           results.push({ label: `${p.label}, ${vp.key}`, ok: verdict.ok, why: verdict.why, evidence: shot });
         } catch (e) {
