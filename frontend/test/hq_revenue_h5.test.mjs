@@ -87,21 +87,14 @@ test('no absent figure is defaulted to a number', () => {
   // And never a dash standing in for a value: a dash is indistinguishable
   // from a real value someone chose to draw.
   assert.doesNotMatch(SRC, /value=\{['"][—–-]['"]\}/, 'an em-dash is standing in for a missing figure');
-  // ONE STAT LEFT THAT MUST STAY PERMANENTLY BLANK. The other two acquired a
-  // store in D111 and their assertions moved to the two tests below; margin
-  // did not, because what tokens were billed at is still recorded nowhere.
-  for (const label of ['Margin']) {
-    const at = SRC.indexOf(`label="${label}"`);
-    assert.ok(at >= 0, `the ${label} stat is gone`);
-    // Bounded to this element's own `/>`. A character-count window runs into
-    // the next <Stat> and matches ITS value={null}, so the mutation that
-    // gives this one a number escapes. Caught on the H6 page, fixed here
-    // too before it could rot.
-    const end = SRC.indexOf('/>', at);
-    assert.ok(end > at, `the ${label} stat is not a self-closing element any more`);
-    assert.match(SRC.slice(at, end), /value=\{null\}/,
-      `the ${label} stat acquired a value — there is no source for one`);
-  }
+  // D5027: the margin is no longer permanently blank. The Worker computes it (D762, routes/admin_revenue.ts) and the
+  // page draws THAT figure through `tokenMarginView`; what must stay true is that an unknown margin is Not recorded
+  // and never a number (revenue_token_margin_5027 holds each state).
+  const at = SRC.indexOf('label="Token margin"');
+  assert.ok(at >= 0, 'the Token margin stat is gone');
+  const end = SRC.indexOf('/>', SRC.indexOf('note=', at));
+  assert.match(SRC.slice(at, end), /value=\{v\.margin\}/, 'the margin is not the Worker\'s figure, as tokenMarginView draws it');
+  assert.doesNotMatch(SRC.slice(at, end), /value=\{(?!v\.margin)/, 'the margin stat takes a value from somewhere else');
 });
 
 test('the statement ledger is read from its own endpoint, with its own failure', () => {
@@ -173,13 +166,14 @@ test('an unreported issued figure renders Unrecorded, never a zero or a full cei
   // "the branch has not told us" are different, and a zero would report the
   // whole ceiling as still available.
   assert.match(SRC, /api\.promoCeilings\(\)/, 'the ceilings are not read');
-  const at = SRC.indexOf('x.issued_available');
+  // D5028: the cells are driven by `ceilingFacts`, which keeps the five facts apart (revenue_ceiling_enforcement_5028).
+  const at = SRC.indexOf('facts.issued.known');
   assert.ok(at > 0, 'nothing distinguishes an unreported issued figure from a reported one');
   // Bounded to the two cells that render it, so the assertion cannot be
-  // satisfied by an `issued_available` used somewhere else on the page.
-  const cells = SRC.slice(at, at + 260);
+  // satisfied by a `facts.issued` used somewhere else on the page.
+  const cells = SRC.slice(at, at + 520);
   assert.match(cells, /<Unrecorded \/>/, 'an unreported issued figure renders as something other than Unrecorded');
-  assert.match(cells, /remaining_cents/, 'remaining is not gated on whether issued was reported');
+  assert.match(cells, /facts\.remaining\.known \? money\(x\.remaining_cents/, 'remaining is not gated on whether issued was reported');
   assert.match(PAGE, /not the same as having issued nothing/,
     'the page does not tell the reader what an absent issued figure means');
 });

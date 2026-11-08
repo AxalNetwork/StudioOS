@@ -17,6 +17,7 @@
  *                                    (opts.trimWhole drops the zero decimals of a whole amount)
  *   toMajorString(minor, code)       the exact major-unit text of an amount, for an edit box ("1234.56")
  *   toMinorSafe(v)                   v as a safe non-negative integer of minor units, or null
+ *   formatMicro(micro, code, opts)   an amount in millionths of a unit (micro-USD) as exact localized money, or null
  *
  * `reason` is one of: 'currency' | 'empty' | 'format' | 'negative' | 'decimals' | 'range'.
  */
@@ -147,6 +148,25 @@ export function formatMinor(minor, code, { locale, trimWhole = false } = {}) {
   });
   // Intl takes an exact decimal string; an engine that only takes numbers still has an amount below 2^53.
   try { return nf.format(decimalText(n, exp)); } catch { return nf.format(n / 10 ** exp); }
+}
+
+/**
+ * An amount held in MILLIONTHS of a major unit (the token ledger's micro-USD) as localized money, exactly: 12,340,000
+ * is "$12.34", 1,500 is "$0.0015". At least the currency's own decimals, up to six, trailing zeros beyond that dropped.
+ * Null when the count is not a safe integer or the currency is not a listed one.
+ */
+export function formatMicro(micro, code, { locale } = {}) {
+  const exp = exponentOf(code);
+  const n = typeof micro === 'string' && micro.trim() !== '' ? Number(micro) : micro;
+  if (exp === null || typeof n !== 'number' || !Number.isSafeInteger(n)) return null;
+  const digits = String(Math.abs(n)).padStart(7, '0');
+  const whole = digits.slice(0, -6);
+  let frac = digits.slice(-6);
+  while (frac.length > exp && frac.endsWith('0')) frac = frac.slice(0, -1);
+  if (exp === 0 && frac === '') return new Intl.NumberFormat(locale, { style: 'currency', currency: code, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(`${n < 0 ? '-' : ''}${whole}`);
+  return new Intl.NumberFormat(locale, {
+    style: 'currency', currency: code, minimumFractionDigits: frac.length, maximumFractionDigits: frac.length,
+  }).format(`${n < 0 ? '-' : ''}${whole}.${frac}`);
 }
 
 /**

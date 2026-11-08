@@ -137,3 +137,17 @@ test('toMinorSafe takes only safe non-negative integers', () => {
   assert.equal(toMinorSafe('123456'), 123456);
   for (const bad of [-1, 1.5, NaN, Infinity, null, undefined, '', '1.5', '-1', Number.MAX_SAFE_INTEGER + 1, '99999999999999999']) assert.equal(toMinorSafe(bad), null, String(bad));
 });
+
+test('formatMicro: millionths of a unit, exactly, at least the currency\'s decimals', async () => {
+  const { formatMicro } = await import('../src/lib/money.js');
+  assert.equal(formatMicro(12_340_000, 'USD', { locale: 'en-US' }), '$12.34');
+  assert.equal(formatMicro(1_500, 'USD', { locale: 'en-US' }), '$0.0015');
+  assert.equal(formatMicro(0, 'USD', { locale: 'en-US' }), '$0.00', 'a real zero is a figure');
+  assert.equal(formatMicro(-2_500_000, 'USD', { locale: 'en-US' }), '-$2.50');
+  assert.equal(formatMicro(-1, 'USD', { locale: 'en-US' }), '-$0.000001');
+  assert.equal(formatMicro(1_000_000, 'USD', { locale: 'en-US' }), '$1.00');
+  assert.equal(formatMicro(9_007_199_254_740_991, 'USD', { locale: 'en-US' }), '$9,007,199,254.740991', 'exact at the safe boundary');
+  assert.equal(formatMicro(2_000_000, 'JPY', { locale: 'en-US' }), '¥2');
+  for (const bad of [null, undefined, '', 'x', 1.5, NaN, Number.MAX_SAFE_INTEGER + 1]) assert.equal(formatMicro(bad, 'USD'), null, String(bad));
+  assert.equal(formatMicro(1_000_000, 'ABC'), null);
+});

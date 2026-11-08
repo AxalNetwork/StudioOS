@@ -9,4 +9,5 @@ export type ParseMinorResult =
 export function parseMinor(text: unknown, code: unknown, opts?: { allowNegative?: boolean }): ParseMinorResult;
 export function toMajorString(minor: unknown, code: unknown): string | null;
 export function formatMinor(minor: unknown, code: unknown, opts?: { locale?: string; trimWhole?: boolean }): string | null;
+export function formatMicro(micro: unknown, code: unknown, opts?: { locale?: string }): string | null;
 export function formatEventPrice(cents: unknown, currency?: string | null): string;

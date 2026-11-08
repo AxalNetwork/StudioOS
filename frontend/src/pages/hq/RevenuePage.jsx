@@ -18,12 +18,15 @@
  *                      being slow or down costs this zone and not the page.
  *   Promo ceilings     REAL — HQ sets a ceiling per licence per period, here
  *                      since D228 (the editor under the list), and pushes it
- *                      to the branch. Nothing at checkout enforces it yet, and
- *                      the editor says so. What is still absent is the
- *                      ISSUED figure: nothing on either tier writes one, and
- *                      no call carries one to HQ (D266 retired the
- *                      promoCeiling pull that would have), so it is null for
- *                      every row — and a null there is not a zero.
+ *                      to the branch, where checkout ENFORCES it atomically
+ *                      (D4855, `services/promoRedemption.ts`). Five facts are
+ *                      kept apart per row (`ceilingFacts`): saved at HQ,
+ *                      pushed to the branch, enforced by the branch, issued
+ *                      reported to HQ, remaining known. What HQ does not
+ *                      have is the branch's live ISSUED figure: nothing
+ *                      carries it to HQ (D266 retired the pull), so HQ's
+ *                      copy is null until a branch reports — and a null there
+ *                      is not a zero, and gives no remaining.
  *
  *   Billing exceptions H21 (D224) — refunds HQ issued in the last 30 days,
  *                      read from their audit rows, beside open disputes from
@@ -45,7 +48,7 @@ import { Coins } from 'lucide-react';
 import { api } from '../../lib/api';
 import { licenceLedgerApi } from '../../lib/api/licenceLedger';
 import { bpsPercent } from '../../lib/bps';
-import { currencyCode, formatMinor, parseMinor } from '../../lib/money';
+import { currencyCode, formatMicro, formatMinor, parseMinor } from '../../lib/money';
 import { reportError } from '../../lib/log';
 import { REFUND_REASON_MIN, refundReasonOk } from '../../lib/refundReason';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
@@ -129,7 +132,7 @@ function Stat({ label, value, note, tone = 'text-axal-ink' }) {
  */
 export const NOT_RECORDED_H21 = {
   ltv: 'No store reconciles revenue to account lifetime.',
-  tokenMargin: 'Gateway cost is an estimate, not a ledger, and no price is recorded beside it.',
+  tokenMargin: 'A margin per branch is not recorded: AI spend is not tied to a licence (U1). The platform-wide margin is under Token P&L.',
 };
 
 /** Open means Stripe has not closed it: not won, not lost. */
@@ -595,10 +598,56 @@ export function ceilingPayload({ licenceUid, period, amount, currency }) {
   return { licenceUid, body: { period: String(period), ceiling_cents: parsed.minor, currency: cur } };
 }
 
-/** Said on the editor, because nothing in checkout reads a ceiling yet. */
-export const CEILING_NOT_ENFORCED =
-  'Setting a ceiling records it at HQ and pushes it to the branch. Nothing at checkout checks a '
-  + 'code against it yet: a branch can issue past its ceiling and no payment is refused because of it.';
+/**
+ * What the editor and the list say about enforcement, as D4855 built it (owner decision of 2026-11-07, option B).
+ * One sentence each, so a test can hold every one to the contract: a regression that tells the operator checkout does
+ * not enforce a configured ceiling fails it.
+ */
+export const CEILING_ENFORCEMENT = Object.freeze([
+  'A ceiling that HQ has set and the branch holds is enforced at checkout, atomically: the branch refuses a discount above what is left of it, and two checkouts cannot both take the last of it.',
+  'If the branch holds no ceiling for the current quarter, discounts are allowed until HQ sets one. That is the owner\'s decision, not a fault, and "no ceiling" is neither 0 nor unlimited.',
+  'If the branch holds a ceiling it cannot read, the discount is refused.',
+  'Saving a ceiling stores it at HQ and pushes it to the branch; those are two facts, and the push can fail on its own. A ceiling the branch has not received is not enforced.',
+  'The branch counts what it gives. HQ does not receive that figure automatically: Issued and Remaining here are what the branch has reported to HQ, and they are Not recorded until it does.',
+]);
+
+/** A date as the day it is, from an ISO timestamp; null when there is none. */
+const dayOf = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
+
+/**
+ * The five facts about one ceiling row, kept apart (D5028). Never derived from each other:
+ *   saved     the row exists at HQ (it is listed, so it is);
+ *   pushed    the branch confirmed the LATEST saved figure (`pushed_at` not older than the last save);
+ *   enforced  what the branch does with it at checkout: only a ceiling for the CURRENT quarter that the branch has
+ *             received is enforced; an older one says nothing about this quarter; an earlier figure is what a branch
+ *             enforces when the latest save did not reach it;
+ *   issued    what the branch reported to HQ, or Not reported. HQ's copy is only what a branch reports;
+ *   remaining known only when an issued figure was reported: no issued figure, no remaining, never the whole ceiling.
+ */
+export function ceilingFacts(row, currentPeriod) {
+  const r = row || {};
+  const current = Boolean(currentPeriod) && r.period === currentPeriod;
+  const everPushed = typeof r.pushed_at === 'string' && r.pushed_at !== '';
+  const latestPushed = everPushed && (!r.updated_at || String(r.pushed_at) >= String(r.updated_at));
+  const issuedKnown = r.issued_available === true && r.issued_cents !== null && r.issued_cents !== undefined && Number.isFinite(Number(r.issued_cents));
+  const remainingKnown = issuedKnown && r.remaining_cents !== null && r.remaining_cents !== undefined && Number.isFinite(Number(r.remaining_cents));
+  let enforced;
+  if (!current) enforced = { state: 'other_period', label: 'Not this quarter: it governs no checkout now' };
+  else if (latestPushed) enforced = { state: 'enforced', label: 'Enforced by the branch at checkout' };
+  else if (everPushed) enforced = { state: 'earlier_figure', label: 'The branch enforces the figure it last received, not this one' };
+  else enforced = { state: 'not_received', label: 'Not enforced yet: the branch has not received it, so it allows discounts' };
+  return {
+    saved: { yes: true, label: 'Saved at HQ' },
+    pushed: latestPushed
+      ? { yes: true, label: `Pushed to the branch${dayOf(r.pushed_at) ? ` ${dayOf(r.pushed_at)}` : ''}` }
+      : { yes: false, label: everPushed ? 'The latest figure was not pushed' : 'Not pushed to the branch' },
+    enforced,
+    issued: issuedKnown
+      ? { known: true, label: `Reported${dayOf(r.issued_reported_at) ? ` ${dayOf(r.issued_reported_at)}` : ''}` }
+      : { known: false, label: 'Not reported to HQ' },
+    remaining: remainingKnown ? { known: true } : { known: false, label: 'Not known: no issued figure was reported' },
+  };
+}
 
 /**
  * D228 — the promo-ceiling editor. `licences` is null (loading), UNAVAILABLE
@@ -640,9 +689,9 @@ export function CeilingEditor({ licences, currentPeriod, onSave }) {
   return (
     <div className="mt-4 border-t border-axal-hairline pt-3" data-testid="hq-revenue-ceiling-editor">
       <div className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Set a ceiling</div>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300" data-testid="hq-revenue-ceiling-not-enforced">
-        {CEILING_NOT_ENFORCED}
-      </p>
+      <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11.5px] leading-relaxed text-axal-muted" data-testid="hq-revenue-ceiling-enforcement">
+        {CEILING_ENFORCEMENT.map((line) => <li key={line}>{line}</li>)}
+      </ul>
       {licences === UNAVAILABLE && (
         <div className="mt-2">
           <Unreadable what="The licence list" claim="No ceiling can be set until it is read; this is not a claim that there are no licences." />
@@ -677,6 +726,79 @@ export function CeilingEditor({ licences, currentPeriod, onSave }) {
           )}
         </form>
       )}
+    </div>
+  );
+}
+
+/**
+ * D5027 — the token P&L the Worker computes (D762, `routes/admin_revenue.ts`), as the display strings of this page.
+ * Pure over the `token_cost` payload so every state is drawn in a test. Two failure domains, never one:
+ *   - the COST (`available`, `cost_usd`) is the usage log;
+ *   - the MARGIN and its parts (`billed_available`) are the charge ledger. A margin that cannot be read leaves the cost
+ *     on screen, and a cost that cannot be read leaves nothing to show.
+ * A figure is `null` (the page draws Not recorded) when it is not known, and a real zero or negative figure is drawn as
+ * itself. When every member run this quarter predates migration 493 (`margin_microusd` null) there is no charge to
+ * total, so the top-up spend and cost, which come from that join, are Not recorded rather than $0.00; what is
+ * counted without it (tokens given, included in plans) stays. Included-plan usage is its own figure and is never
+ * added to the spend: the plan's price already paid for it.
+ */
+export function tokenMarginView(token) {
+  if (!token || token.available !== true) {
+    return { state: 'unreadable', reason: token?.reason || 'The AI usage log could not be read.', cost: null, margin: null };
+  }
+  const micro = (v) => (v === null || v === undefined ? null : formatMicro(Number(v), 'USD'));
+  const cost = Number.isFinite(Number(token.cost_usd)) && token.cost_usd !== null && token.cost_usd !== undefined ? usd(token.cost_usd) : null;
+  if (token.billed_available !== true) {
+    return {
+      state: 'margin_unreadable',
+      reason: token.billed_reason || 'The AI holds and token ledger could not be read, so the margin is not shown.',
+      cost, margin: null,
+    };
+  }
+  const marginKnown = token.margin_microusd !== null && token.margin_microusd !== undefined;
+  const runs = Number(token.member_runs);
+  const notRecorded = Number(token.runs_not_recorded);
+  const sign = marginKnown ? Math.sign(Number(token.margin_microusd)) : null;
+  return {
+    state: marginKnown ? 'ok' : 'predates',
+    reason: marginKnown ? null : 'Every member run this quarter was settled before the charge ledger (migration 493), so there is no charge to total. This is not a margin of zero.',
+    cost,
+    topupSpend: marginKnown ? micro(token.topup_spend_microusd) : null,
+    topupCost: marginKnown ? micro(token.topup_cost_microusd) : null,
+    given: micro(token.tokens_given_microusd),
+    included: micro(token.included_in_plans_microusd),
+    margin: marginKnown ? micro(token.margin_microusd) : null,
+    tone: sign === null ? null : (sign < 0 ? 'negative' : (sign > 0 ? 'positive' : 'zero')),
+    coverage: Number.isFinite(runs) && Number.isFinite(notRecorded)
+      ? `${runs.toLocaleString()} member run${runs === 1 ? '' : 's'} settled; ${notRecorded.toLocaleString()} before the charge ledger (migration 493) and outside the margin`
+      : null,
+  };
+}
+
+/** The token P&L tiles. Pure over `token_cost`, so a test draws every state. */
+export function TokenPnl({ token }) {
+  const v = tokenMarginView(token);
+  const toneClass = v.tone === 'negative' ? 'text-red-700 dark:text-red-300' : 'text-axal-ink';
+  return (
+    <div data-testid="hq-revenue-token-pnl">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+        <Stat
+          label="Token cost, platform-wide"
+          value={v.cost}
+          note={v.state === 'unreadable' ? v.reason : `${num(token.calls)} calls this quarter · USD`}
+        />
+        <Stat label="Top-up spend" value={v.topupSpend ?? null} note={v.state === 'ok' ? 'paid from tokens, by members' : (v.reason || 'not recorded')} />
+        <Stat label="Top-up cost" value={v.topupCost ?? null} note={v.state === 'ok' ? 'the share of the cost that spend caused' : (v.reason || 'not recorded')} />
+        <Stat label="Tokens given" value={v.given ?? null} note={v.given ? 'bonus and adjustment credits HQ gave' : (v.reason || 'not recorded')} />
+        <Stat label="Included in plans" value={v.included ?? null} note={v.included ? 'allowance draws; a plan\'s price pays for these, so they are not token revenue' : (v.reason || 'not recorded')} />
+        <Stat
+          label="Token margin"
+          value={v.margin}
+          tone={toneClass}
+          note={v.state === 'ok' ? 'top-up spend, less its cost, less tokens given' : (v.reason || 'not recorded')}
+        />
+      </div>
+      {v.coverage && <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-revenue-token-coverage">{v.coverage}. Admin-licence runs are left out.</p>}
     </div>
   );
 }
@@ -756,6 +878,7 @@ export default function RevenuePage() {
   const ready = data && data !== UNAVAILABLE;
   const fees = ready ? data.licence_fees : null;
   const token = ready ? data.token_cost : null;
+  const tokenView = tokenMarginView(token);
   const promos = ready ? data.promos : null;
   const usageCoverage = ready ? data.usage_coverage : null;
   const openDisputes = disputes && disputes !== UNAVAILABLE
@@ -794,7 +917,6 @@ export default function RevenuePage() {
           : 'Loading the revenue summary…')}
       unavailable={[
         ['Subscription revenue', 'No local charge ledger; Stripe is read per customer.'],
-        ['Token margin', 'The cost of a call is recorded, the price charged for it is not.'],
         ['LTV', NOT_RECORDED_H21.ltv],
         ['Revenue per subsidiary', 'Branches report quarters to HQ; every stream today arrives unmeasured (D266), so no amount is totalled.'],
         ['Token P&L per subsidiary', 'Spend is not tied to a licence (U1) and almost no model call carries branch metadata (D261).'],
@@ -883,12 +1005,10 @@ export default function RevenuePage() {
                     </tr>
                     <tr>
                       <td className="py-2 pr-3 font-medium">Token margin</td>
-                      <td className="py-2 pr-3"><Unrecorded /></td>
-                      <td className="py-2 pr-3 tabular-nums">
-                        {token?.available ? usd(token.cost_usd) : <Unrecorded />}
-                      </td>
+                      <td className="py-2 pr-3 tabular-nums">{tokenView.margin ?? <Unrecorded />}</td>
+                      <td className="py-2 pr-3 tabular-nums">{tokenView.cost ?? <Unrecorded />}</td>
                       <td className="py-2 text-[11.5px] text-axal-muted">
-                        {token?.available ? token.billed_reason : (token?.reason || null)}
+                        {tokenView.state === 'ok' ? 'Top-up spend less its share of the cost, less tokens given. USD. Included-plan usage is not revenue here.' : tokenView.reason}
                       </td>
                     </tr>
                   </tbody>
@@ -954,14 +1074,7 @@ export default function RevenuePage() {
           <div className="grid gap-4 md:grid-cols-2">
             <Zone title="Token P&L by subsidiary" sub="what it cost against what it billed">
               <Absent reason={ready ? data.token_pl_per_subsidiary_reason : 'The revenue summary could not be read.'} />
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <Stat
-                  label="Token cost, platform-wide"
-                  value={token?.available ? usd(token.cost_usd) : null}
-                  note={token?.available ? `${num(token.calls)} calls this quarter · USD` : (token?.reason || 'unreadable')}
-                />
-                <Stat label="Margin" value={null} note="no price is recorded to subtract the cost from" />
-              </div>
+              <div className="mt-3"><TokenPnl token={token} /></div>
             </Zone>
 
             <Zone title="Statements and Stripe" sub="what is owed, and what is stuck">
@@ -1124,34 +1237,47 @@ export default function RevenuePage() {
                       <th className="py-1.5 pr-3">Licence</th>
                       <th className="py-1.5 pr-3">Period</th>
                       <th className="py-1.5 pr-3">Ceiling</th>
+                      <th className="py-1.5 pr-3">At the branch</th>
                       <th className="py-1.5 pr-3">Issued</th>
                       <th className="py-1.5">Remaining</th>
                     </tr>
                   </thead>
                   <tbody data-testid="hq-revenue-ceilings">
-                    {ceilingRows.map((x) => (
-                      <tr key={`${x.licence_uid}:${x.period}`} className="border-b border-axal-hairline/60">
-                        <td className="py-2 pr-3 font-medium">{x.brand_name || x.licence_ref || x.licence_uid}</td>
-                        <td className="py-2 pr-3 tabular-nums">{x.period}</td>
-                        <td className="py-2 pr-3 tabular-nums">{money(x.ceiling_cents, x.currency)}</td>
-                        {/* NULL ISSUED IS NOT ZERO ISSUED. No branch reports
-                            an issued figure (nothing writes one — D266), so it
-                            reads as <Unrecorded/>, because a zero here would
-                            say the whole ceiling is still available — the one
-                            wrong number this zone can produce. */}
-                        <td className="py-2 pr-3 tabular-nums">
-                          {x.issued_available ? money(x.issued_cents, x.currency) : <Unrecorded />}
-                        </td>
-                        <td className="py-2 tabular-nums">
-                          {x.issued_available ? money(x.remaining_cents, x.currency) : <Unrecorded />}
-                        </td>
-                      </tr>
-                    ))}
+                    {ceilingRows.map((x) => {
+                      const facts = ceilingFacts(x, ceilings?.current_period);
+                      return (
+                        <tr key={`${x.licence_uid}:${x.period}`} className="border-b border-axal-hairline/60 align-top">
+                          <td className="py-2 pr-3 font-medium">{x.brand_name || x.licence_ref || x.licence_uid}</td>
+                          <td className="py-2 pr-3 tabular-nums">{x.period}</td>
+                          <td className="py-2 pr-3 tabular-nums">
+                            {money(x.ceiling_cents, x.currency)}
+                            <div className="text-[10.5px] font-normal text-axal-faint">{facts.saved.label}</div>
+                          </td>
+                          <td className="py-2 pr-3 text-[11.5px]" data-testid={`hq-revenue-ceiling-state-${x.licence_uid}-${x.period}`}>
+                            <div>{facts.pushed.label}</div>
+                            <div className="text-axal-faint">{facts.enforced.label}</div>
+                          </td>
+                          {/* NULL ISSUED IS NOT ZERO ISSUED, AND GIVES NO REMAINING. HQ's copy is only what a branch
+                              reports to it; with none, a zero here would say the whole ceiling is still available, and a
+                              remaining worked out from nothing would say the same. */}
+                          <td className="py-2 pr-3 tabular-nums">
+                            {facts.issued.known ? (
+                              <>{money(x.issued_cents, x.currency)}<div className="text-[10.5px] text-axal-faint">{facts.issued.label}</div></>
+                            ) : <Unrecorded />}
+                          </td>
+                          <td className="py-2 tabular-nums">
+                            {facts.remaining.known ? money(x.remaining_cents, x.currency) : <Unrecorded />}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
                 <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-revenue-issued-note">
-                  Issued is not recorded: nothing on either tier writes an issued figure, and no call
-                  carries one to HQ. An absent figure is not the same as having issued nothing.
+                  Issued and Remaining are what the branch has reported to HQ, and the branch does not report them
+                  automatically: the branch counts what it gives and enforces the ceiling itself, but HQ's copy stays
+                  Not recorded until a report arrives. An absent figure is not the same as having issued nothing, and
+                  no Remaining is worked out from one.
                 </p>
               </div>
             )}
