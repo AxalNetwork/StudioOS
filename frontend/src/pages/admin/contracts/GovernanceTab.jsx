@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { adminGovernanceApi } from '../../../lib/api/adminGovernance';
 import { reportError } from '../../../lib/log';
 import PdfPages from './PdfPages';
 import { useRead, ReadState, Missing, SidePanel, button, card, input, date } from './parts';
 import {
   ACCEPT, byCategory, dayLabel, draftRow, executedHint, fileProblem, moveLabel,
-  ownershipPayload, recordedPercent, statusLabel, versionLine,
+  ownershipPayload, recordedPercent, statusLabel, versionLine, isDrill, recordState,
 } from './governanceModel';
 import { governanceLifecycle } from '../../../lib/contractLifecycle';
 import { LifecycleBadge } from './LifecycleBadge';
+import { DrillList, EntitiesTable, EntityAttention, GroupHeader } from './GovernanceAttention';
 
 /**
  * D4563 (#4563) — HQ Contracts › Corporate Governance, at its own address
@@ -22,24 +24,37 @@ import { LifecycleBadge } from './LifecycleBadge';
  */
 export default function GovernanceTab() {
   const [revision, setRevision] = useState(0);
-  const [panel, setPanel] = useState(null); // { kind: 'new', entity } | { kind: 'doc', uid } | { kind: 'ownership' }
+  const [panel, setPanel] = useState(null); // { kind: 'new', entity, category? } | { kind: 'doc', uid } | { kind: 'ownership' }
   const read = useRead(() => adminGovernanceApi.list(), [revision]);
+  const [params] = useSearchParams();
   const changed = () => setRevision((n) => n + 1);
   const data = read.data;
+  // D4811 part 2: `?entity=<key>` is one entity's page, `?records=<state>` a summary count's records.
+  const focus = data?.entities.find((e) => e.key === params.get('entity')) || null;
+  const drill = isDrill(params.get('records')) ? params.get('records') : null;
+  const open = (uid) => setPanel({ kind: 'doc', uid });
+  const add = (entity, category) => setPanel({ kind: 'new', entity, category });
   return <section aria-label="Corporate Governance" data-testid="governance-tab" className="space-y-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="text-lg font-bold">Corporate Governance</h2>
         <p className="text-[12.5px] text-axal-muted">Operating agreements, formation certificates, member registers, resolutions and signing authority records of the three Axal entities. A file is never replaced: a corrected one is a new version.</p></div>
-      {data?.super_admin && <button type="button" className={button} onClick={() => setPanel({ kind: 'ownership' })}>Ownership (Super Admin)</button>}
     </div>
     <ReadState read={read} what="Governance documents">
-      {data && <div className="grid gap-4 xl:grid-cols-3">{data.entities.map((entity) => <EntityCard key={entity.key} entity={entity} categories={data.categories}
-        onNew={() => setPanel({ kind: 'new', entity })} onOpen={(uid) => setPanel({ kind: 'doc', uid })} />)}</div>}
+      {data && (focus ? <>
+        <EntityAttention entity={focus} onAdd={(category) => add(focus, category)} onOpen={open} />
+        <EntityCard entity={focus} categories={data.categories} onNew={() => add(focus)} onOpen={open} />
+      </> : drill ? <DrillList entities={data.entities} state={drill} onAdd={add} onOpen={open} /> : <>
+        <GroupHeader data={data} onOwnership={() => setPanel({ kind: 'ownership' })} />
+        <EntitiesTable entities={data.entities} />
+        <h3 className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">All documents</h3>
+        <div className="grid gap-4 xl:grid-cols-3">{data.entities.map((entity) => <EntityCard key={entity.key} entity={entity} categories={data.categories}
+          onNew={() => add(entity)} onOpen={open} />)}</div>
+      </>)}
     </ReadState>
-    {panel?.kind === 'new' && data && <NewDocument entity={panel.entity} categories={data.categories} superAdmin={data.super_admin}
+    {panel?.kind === 'new' && data && <NewDocument entity={panel.entity} category={panel.category} categories={data.categories} superAdmin={data.super_admin}
       onClose={() => setPanel(null)} onCreated={(uid) => { changed(); setPanel({ kind: 'doc', uid }); }} />}
     {panel?.kind === 'doc' && data && <DocumentPanel uid={panel.uid} categories={data.categories} superAdmin={data.super_admin} onClose={() => setPanel(null)} onChanged={changed} />}
-    {panel?.kind === 'ownership' && <OwnershipPanel onClose={() => setPanel(null)} />}
+    {panel?.kind === 'ownership' && <OwnershipPanel onClose={() => { setPanel(null); changed(); }} />}
   </section>;
 }
 
@@ -49,6 +64,15 @@ function StatusPill({ status }) {
   return badge ? <LifecycleBadge badge={badge} /> : <span className="text-[11px] text-axal-muted">{statusLabel(status)}</span>;
 }
 
+// D4811 part 2: an empty category says what the system knows of it, not a passive "None recorded".
+function emptyLine(entity, category) {
+  const record = entity.attention?.records?.find((r) => r.category === category);
+  if (!record) return 'None recorded.';
+  if (record.state === 'restricted') return `${recordState('restricted').label}: only the Super Admin can open it.`;
+  if (record.state === 'missing' || record.state === 'not_recorded') return `${recordState(record.state).label}.`;
+  return 'None recorded.';
+}
+
 function EntityCard({ entity, categories, onNew, onOpen }) {
   const groups = byCategory(entity.documents, categories);
   return <article className={`${card} min-w-0 p-4 space-y-3`} data-testid={`governance-entity-${entity.key}`}>
@@ -56,7 +80,7 @@ function EntityCard({ entity, categories, onNew, onOpen }) {
       <p className="text-[11px] text-axal-muted">{entity.documents.length} {entity.documents.length === 1 ? 'document' : 'documents'}{entity.withheld > 0 && <> · <span data-testid={`governance-withheld-${entity.key}`}>{entity.withheld} confidential (Super Admin only)</span></>}</p></div>
       <button type="button" className={`${button} shrink-0`} aria-label={`New document for ${entity.name}`} onClick={onNew}>New document</button></header>
     {groups.map((g) => <div key={g.key}><h4 className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">{g.label}</h4>
-      {g.documents.length === 0 ? <p className="py-1 text-[12px] text-axal-muted">None recorded.</p>
+      {g.documents.length === 0 ? <p className="py-1 text-[12px] text-axal-muted">{emptyLine(entity, g.key)}</p>
         : <ul className="divide-y divide-axal-hairline">{g.documents.map((d) => <li key={d.uid}>
           <button type="button" className="flex w-full flex-wrap items-center justify-between gap-2 py-2 text-left" onClick={() => onOpen(d.uid)}>
             <span className="min-w-0"><span className="block truncate text-[13px] font-semibold">{d.title}</span>
@@ -70,8 +94,8 @@ function Field({ label, children }) {
 }
 function Problem({ text }) { return text ? <p role="alert" className="text-xs text-red-700 dark:text-red-300">{text}</p> : null; }
 
-function NewDocument({ entity, categories, superAdmin, onClose, onCreated }) {
-  const [form, setForm] = useState({ category: categories[0]?.key || '', title: '', effective_date: '', confidential: superAdmin });
+function NewDocument({ entity, category, categories, superAdmin, onClose, onCreated }) {
+  const [form, setForm] = useState({ category: categories.some((c) => c.key === category) ? category : categories[0]?.key || '', title: '', effective_date: '', confidential: superAdmin });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
