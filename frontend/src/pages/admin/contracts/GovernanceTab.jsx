@@ -4,9 +4,11 @@ import { reportError } from '../../../lib/log';
 import PdfPages from './PdfPages';
 import { useRead, ReadState, Missing, SidePanel, button, card, input, date } from './parts';
 import {
-  ACCEPT, STATUS_TONES, byCategory, dayLabel, draftRow, executedHint, fileProblem, moveLabel,
+  ACCEPT, byCategory, dayLabel, draftRow, executedHint, fileProblem, moveLabel,
   ownershipPayload, recordedPercent, statusLabel, versionLine,
 } from './governanceModel';
+import { governanceLifecycle } from '../../../lib/contractLifecycle';
+import { LifecycleBadge } from './LifecycleBadge';
 
 /**
  * D4563 (#4563) — HQ Contracts › Corporate Governance, at its own address
@@ -41,8 +43,10 @@ export default function GovernanceTab() {
   </section>;
 }
 
+// D4811: the governance lifecycle's own words; only Executed is the filled seal.
 function StatusPill({ status }) {
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_TONES[status] || ''}`}>{statusLabel(status)}</span>;
+  const badge = governanceLifecycle(status);
+  return badge ? <LifecycleBadge badge={badge} /> : <span className="text-[11px] text-axal-muted">{statusLabel(status)}</span>;
 }
 
 function EntityCard({ entity, categories, onNew, onOpen }) {

@@ -1516,21 +1516,54 @@ export async function unlinkEvidence(
 
 export const EXPERIMENT_STATUSES = ['planned', 'running', 'done'] as const;
 
-/** Add an experiment to a claim. */
+/**
+ * Add an experiment to a claim.
+ *
+ * IDEMPOTENT ON `sourceProposalId`, WHEN GIVEN (D4627, #4627). The PostHog
+ * `experiment_evidence` acceptor (`services/posthog/validate.ts`) creates
+ * this row and then links it as evidence in two separate writer calls, with
+ * no transaction wrapping both — so a failure between them used to leave an
+ * experiment with no evidence link, and a retry of the same PostHog proposal
+ * created a SECOND orphan rather than finishing the first.
+ *
+ * NO SCHEMA CHANGE HERE — `uid` IS THE KEY. `hypothesis_experiments` is
+ * migration 460's alone to touch (`validate_writes_d690.test.ts`'s "17: 460
+ * adds no column that any other migration or the baseline already has"
+ * fails on another migration naming the table at all, column or not), so
+ * D4627 cannot add its own `source_proposal_id` here the way it did on
+ * `hypotheses`. `uid TEXT NOT NULL UNIQUE` already exists (460's own CREATE),
+ * so a deterministic uid built from the proposal's own id reuses that
+ * constraint instead: `ON CONFLICT(uid)` is safe everywhere this table
+ * exists, because the constraint comes from the original CREATE TABLE, not
+ * from an ADD COLUMN a test fixture built from a narrower replay could miss.
+ * Every other caller (the manual form, interview findings) passes no
+ * `sourceProposalId` and keeps the random uid it always used.
+ */
 export async function addExperiment(
   env: Env,
-  input: { projectId: number; userId: number | null; hypothesisId: number; title: unknown; method?: unknown; target?: unknown },
+  input: { projectId: number; userId: number | null; hypothesisId: number; title: unknown; method?: unknown; target?: unknown; sourceProposalId?: number | null },
 ): Promise<{ id: number }> {
   const h = await env.DB.prepare('SELECT id, code FROM hypotheses WHERE id = ? AND project_id = ?')
     .bind(input.hypothesisId, input.projectId).first<{ id: number; code: string }>();
   if (!h) throw new WriterError(404, 'Hypothesis not found on this project');
   const title = trimOrNull(input.title, 200);
   if (!title) throw new WriterError(400, 'An experiment needs a title');
-  const row = await env.DB.prepare(
-    `INSERT INTO hypothesis_experiments (uid, project_id, hypothesis_id, title, method, target, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-  ).bind(crypto.randomUUID(), input.projectId, input.hypothesisId, title, trimOrNull(input.method, 500), trimOrNull(input.target, 500), input.userId)
-    .first<{ id: number }>();
+  const method = trimOrNull(input.method, 500);
+  const target = trimOrNull(input.target, 500);
+  const sourceProposalId = Number.isSafeInteger(input.sourceProposalId) && Number(input.sourceProposalId)! > 0
+    ? Number(input.sourceProposalId) : null;
+  const uid = sourceProposalId == null ? crypto.randomUUID() : `posthog-proposal-${sourceProposalId}`;
+  const row = sourceProposalId == null
+    ? await env.DB.prepare(
+        `INSERT INTO hypothesis_experiments (uid, project_id, hypothesis_id, title, method, target, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      ).bind(uid, input.projectId, input.hypothesisId, title, method, target, input.userId).first<{ id: number }>()
+    : await env.DB.prepare(
+        `INSERT INTO hypothesis_experiments (uid, project_id, hypothesis_id, title, method, target, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(uid) DO UPDATE SET hypothesis_id = excluded.hypothesis_id, title = excluded.title, method = excluded.method, target = excluded.target
+         RETURNING id`,
+      ).bind(uid, input.projectId, input.hypothesisId, title, method, target, input.userId).first<{ id: number }>();
   await recordActor(env, input.userId, input.projectId, 'experiments', input.hypothesisId, 'experiment_added', `Experiment added to ${h.code}`);
   return { id: Number(row?.id) };
 }

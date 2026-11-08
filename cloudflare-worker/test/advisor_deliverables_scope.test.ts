@@ -172,7 +172,7 @@ const grace = { user: OTHER_ADVISOR_USER, role: 'advisor' };
 /** Create one work product. Defaults to the LINKED engagement. */
 async function create(e: any, who = ada, over: Record<string, unknown> = {}) {
   const r = await call(e, 'POST', '/me/deliverables', who,
-    { title: 'Q2 advisory review', engagement_id: 1, ...over });
+    { title: 'Q2 advisory review', engagement_id: 1, summary: 'First pass', link_url: 'https://docs.example/work', ...over });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return r.body;
 }
@@ -277,7 +277,7 @@ test('creating and versioning stay open to an unlinked client — only the send 
   const e = env(freshDb());
   const d = await create(e, ada, { engagement_id: 2, title: 'Board brief' });
   const v2 = await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada,
-    { summary: 'Second pass', label: 'v2 draft' });
+    { summary: 'Second pass', label: 'v2 draft', link_url: 'https://docs.example/work-v2' });
   assert.equal(v2.status, 201);
   assert.equal(v2.body.version, 2);
   assert.equal(v2.body.label, 'v2 draft');
@@ -316,7 +316,7 @@ test('versions are a sequence, and the ordinal is never reused', async () => {
   const d = await create(e);
   for (const expected of [2, 3, 4]) {
     const r = await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada,
-      { summary: `Pass ${expected}` });
+      { summary: `Pass ${expected}`, link_url: `https://docs.example/work-v${expected}` });
     assert.equal(r.status, 201);
     assert.equal(r.body.version, expected);
   }
@@ -410,7 +410,7 @@ test('the median measures the FIRST open of a work product, not the latest', asy
   const e = env(db);
   const d = await create(e, ada, { title: 'Pricing tier model' });
   await call(e, 'POST', `/me/deliverables/${d.id}/versions/1/send`, ada);
-  await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada, { summary: 'Second pass' });
+  await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada, { summary: 'Second pass', link_url: 'https://docs.example/work-v2' });
   await call(e, 'POST', `/me/deliverables/${d.id}/versions/2/send`, ada);
 
   const t0 = await listOf(e);
@@ -518,7 +518,7 @@ test('never opened excludes anything that was ever opened, and names the oldest'
   assert.equal(t.totals.oldest_never_opened.sent_at, '2026-08-22T00:00:00.000Z');
   // A deliverable with an OPENED version is out, even though it also has unsent
   // ones — the work product was read.
-  await call(e, 'POST', `/me/deliverables/${read.id}/versions`, ada, { summary: 'v2' });
+  await call(e, 'POST', `/me/deliverables/${read.id}/versions`, ada, { summary: 'v2', link_url: 'https://docs.example/work-v2' });
   t = await listOf(e);
   assert.equal(t.totals.never_opened, 2, 'a later unsent version does not un-read a deliverable');
 });

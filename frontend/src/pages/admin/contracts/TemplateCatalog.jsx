@@ -9,6 +9,8 @@ import FundIDocumentsPanel from './FundIDocumentsPanel';
 import PushResults from './PushResults';
 import { Thumbnail, useThumbnails } from './TemplateThumbnail';
 import GeneratedDocuments from './GeneratedDocuments';
+import { templateActions, templateLifecycle } from '../../../lib/contractLifecycle';
+import { LifecycleBadge, SafetyOverlayBadge } from './LifecycleBadge';
 
 // D717 (#1851) — the Templates tab's catalog (board L9, "Catalog · light" and
 // "Catalog · dark (the paper stays white)"; board L8's thumbnail and "Not in
@@ -54,11 +56,15 @@ function editedTitle(row) {
 function TemplateCard({ row, authoring, thumbs, onOpen, onOpenUsage }) {
   const s = templateState(row);
   const uses = <Pill tone="info">{row.usage_count ?? 0} uses</Pill>;
+  // D4811: the template's own lifecycle words, and the overlays beside them.
+  const lifecycle = <span className="flex flex-wrap gap-1"><LifecycleBadge badge={templateLifecycle(row)} />
+    {templateActions(row).overlays.map(k => <SafetyOverlayBadge key={k} kind={k} />)}</span>;
   return <div data-testid={`template-tile-${row.slug}`} className={`${card} flex gap-2.5 p-2.5 dark:border-[#2a2733] dark:bg-[#18161f]`}>
     <Thumbnail thumbs={thumbs} version={row.version} stub={s.stub} title={row.title} load={() => contractsApi.thumbnailBlob(row.slug, row.version)} />
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <button type="button" data-testid={`template-card-${row.slug}`} className="line-clamp-2 text-left text-[12.5px] font-bold leading-[1.3]" onClick={() => onOpen(row.slug)}>{row.title}</button>
       <p className="text-[11px] leading-[1.3] text-axal-muted dark:text-[#a29db0]">{row.kind} · {partyLine(row)}{row.format_source === 'slug' ? ' · from the slug' : ''}</p>
+      {lifecycle}
       {s.stub ? <>
         <p className="text-[11px] text-axal-muted dark:text-[#a29db0]" title={editedTitle(row)}>No body in the store yet.</p>
         {row.counsel_draft && <p className="text-[11px] font-semibold text-axal-amber-deep dark:text-amber-300">Stub — counsel to draft.</p>}

@@ -1,5 +1,5 @@
 /**
- * #4717 package 6 — The page as a whole: its eight tiles, the consoles strip, whether every read failed and whether Community is empty.
+ * #4717 package 6 — The page as a whole: its eight figures and D4820's four KPIs, the Manage Community figures, and whether every read failed.
  *
  * Split out of communityModel.js, which re-exports what the page and the
  * tests import. Pure: nothing here fetches.
@@ -11,7 +11,11 @@ import { oldestWait, queueCounts } from './queues.js';
 import { FIGURE_UNREAD, blockOf, count, countsAt, failed } from './read.js';
 import { expertsOf } from './wellbeing.js';
 
-/** The page's eight tiles, CM1 rows 1 and 2, in the canvas's order. */
+/**
+ * The page's eight figures, in v1's order. D4820 draws four of them as the KPI
+ * row (`buildKpis`); show-up is drawn in Events, published circles and the
+ * roster in Network, and wellbeing experts in Wellbeing.
+ */
 export function buildTiles(reads) {
   const tiles = [];
 
@@ -97,12 +101,12 @@ export function buildTiles(reads) {
  * whose items have no recorded submission says how many, and never dates them.
  */
 
-/** CM1 row 8: five console doors, one figure each. */
+/** Manage Community's figures (CM1 row 8, D4820 CM01): one per console that has a queue or drafts. */
 export function buildConsoles(reads) {
   const q = queueCounts(reads);
   const lane = (key) => {
     if (q.loading) return { state: 'loading' };
-    return q[key] === null ? { state: 'unreadable' } : { state: 'ready', text: `${nf(q[key])} pending` };
+    return q[key] === null ? { state: 'unreadable' } : { state: 'ready', text: `${nf(q[key])} to review` };
   };
   const ci = circlesOf(reads);
   return {
@@ -126,18 +130,11 @@ export function pageFailed(reads) {
   return failed(reads.overview);
 }
 
-/**
- * CM8: the Community read answered, and nothing has happened yet: no event in
- * any status, no posting in any status and no circle. Zeros are real here,
- * and only the read's own counts decide it (#4717); a block it could not read
- * is never taken for an empty one.
- */
+/** D4820: the four authoritative KPIs, in the canvas's order. Active members is never one: it is not recorded. */
+export const KPI_KEYS = ['waiting', 'upcoming', 'registrations', 'applications'];
 
-export function isEmptyCommunity(reads) {
-  const ev = blockOf(reads.overview, 'events.by_status');
-  const jb = blockOf(reads.overview, 'jobs');
-  const ci = circlesOf(reads);
-  if (ev.state !== 'ready' || jb.state !== 'ready' || ci.state !== 'ready') return false;
-  const zero = (o) => o && typeof o === 'object' && Object.values(o).every((v) => count(v) === 0);
-  return zero(ev.block.counts) && zero(jb.block.by_status) && ci.total === 0;
+/** D4820 CM01: the KPI row, the four figures of `buildTiles` whose keys are `KPI_KEYS`. */
+export function buildKpis(reads) {
+  const tiles = buildTiles(reads);
+  return KPI_KEYS.map((k) => tiles.find((t) => t.key === k));
 }

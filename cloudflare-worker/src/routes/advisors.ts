@@ -1112,7 +1112,9 @@ advisors.post('/slots/:id/book', async (c) => {
             status: 'pending',
             ics_status: 'TENTATIVE' as const,
             location_kind: 'video',
-            location_uri: slot.meeting_url || null,
+            // #4715: the meeting link goes out with the confirmation
+            // (deferCalendarConfirm), not with the request.
+            location_uri: null,
             organizer_email: advisorMeta?.email || null,
             attendees: [
               { email: advisorMeta?.email || null, name: advisorMeta?.display_name || null, role: 'advisor' },
@@ -2161,7 +2163,14 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
 
     // COMPARE-AND-SWAP on the state this request read: an edit that lands
     // between the read and the write is a 409, not a silent overwrite.
-    const res = await c.env.DB.prepare(
+    //
+    // #4713 (D4713): a change of an amount already priced is written to
+    // `advisor_booking_price_events` with who did it (and the admin behind an
+    // impersonation) and the amount, rate and cut before and after. It runs in
+    // the same batch, after the guarded update, and inserts only if that update
+    // changed the row, so a refused or raced write leaves no event.
+    const audited = (pricing || repricing) && stored != null && amount_cents !== stored;
+    const update = c.env.DB.prepare(
       `UPDATE advisor_bookings
           SET amount_cents = ?, billing_state = ?,
               platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
@@ -2169,7 +2178,22 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
     ).bind(
       amount_cents, billing_state, cut, bps, nowIso(),
       row.id, row.billing_state, stored,
-    ).run();
+    );
+    const writes = [update];
+    if (audited) {
+      writes.push(c.env.DB.prepare(
+        `INSERT INTO advisor_booking_price_events
+           (booking_id, actor_user_id, impersonated_by, from_amount_cents, to_amount_cents, from_take_rate_bps, to_take_rate_bps, from_cut_cents, to_cut_cents)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE changes() = 1`
+      ).bind(
+        row.id, Number(user.id), (user as any).impersonated_by ? Number((user as any).impersonated_by) : null,
+        stored, amount_cents,
+        row.take_rate_bps == null ? null : Number(row.take_rate_bps), bps,
+        row.platform_cut_cents == null ? null : Number(row.platform_cut_cents), cut,
+      ));
+    }
+    const [res] = await c.env.DB.batch(writes);
     if (Number((res as any)?.meta?.changes ?? 0) !== 1) {
       return c.json({
         detail: 'This session changed while you were editing it. Reload and try again.',
@@ -4544,6 +4568,11 @@ export function deliverableState(versions: Pick<VersionRow, 'sent_at' | 'opened_
   return 'not_started';
 }
 
+/** An absolute https web address: the one shape a version's content link may take. */
+function isHttpsLink(raw: string): boolean {
+  try { const u = new URL(raw); return u.protocol === 'https:' && !u.username && !u.password && !!u.hostname; } catch { return false; }
+}
+
 function versionDto(r: VersionRow): any {
   return {
     uid: r.uid, version: Number(r.version), label: r.label, summary: r.summary,
@@ -4801,6 +4830,17 @@ advisors.post('/me/deliverables/:id/versions', async (c) => {
     const m = await requireMyAdvisor(c, user);
     const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
     const body = await c.req.json().catch(() => ({} as any));
+    // #4712 (D4712): A REVISION IS NEVER EMPTY. A new version carries a change
+    // note (what is different from the last one) and the content, a web link;
+    // "Add a version" used to POST `{}` and record a v3 that said nothing and
+    // pointed nowhere. Older versions stay as recorded: there is no route that
+    // edits one.
+    const note = trimOrNull(body.summary, 2000);
+    const link = trimOrNull(body.link_url, 2000);
+    if (!note) return c.json({ detail: 'Say what changed in this version.', code: 'empty_version' }, 422);
+    if (!link || !isHttpsLink(link)) {
+      return c.json({ detail: 'Add the content as a web link that starts with https://', code: 'empty_version' }, 422);
+    }
     const top = await c.env.DB.prepare(
       'SELECT MAX(version) AS v FROM advisor_deliverable_versions WHERE deliverable_id = ?'
     ).bind(row.id).first<{ v: number | null }>();
@@ -4850,6 +4890,13 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
       return c.json({
         detail: 'Link this work product to an engagement whose client has an Axal account before sending — nothing an unlinked client is sent can ever be recorded as opened',
       }, 409);
+    }
+
+    // #4712: nothing is sent that has nothing in it. A version with no link has
+    // no content for the client to open (an empty v1 from a title-only work
+    // product, or an empty revision recorded before this rule).
+    if (!v.link_url || !isHttpsLink(v.link_url)) {
+      return c.json({ detail: 'This version has no content to send. Add a version with a link, then send that one.', code: 'empty_version' }, 422);
     }
 
     const now = nowIso();
@@ -5070,6 +5117,10 @@ function availabilityDto(r: AvailabilityRow | null): any {
     // Lets the page tell "no rules configured" from "rules configured to
     // nothing", which read identically in the four fields above.
     configured: Boolean(r),
+    // #4713 (D4713): the version of this rule set. A replacement that names the
+    // revision it was edited from is refused when the rules have changed since
+    // (another tab, another device). `''` is "no rules yet".
+    revision: r?.updated_at ?? '',
   };
 }
 
@@ -5153,6 +5204,40 @@ advisors.put('/me/availability', async (c) => {
     const buffer = parseOptionalCount(body.buffer_minutes, 'buffer_minutes', 24 * 60);
     const notice = parseOptionalCount(body.min_notice_hours, 'min_notice_hours', 24 * 365);
     const blackouts = parseBlackouts(body.blackouts);
+    // #4713 (D4713): optional compare-and-set. A caller that sends the
+    // `revision` it read replaces only that version of the rules: if another
+    // tab changed them since, the write is refused (409 `rules_changed`) with
+    // the current rules, and nothing is overwritten. Omitting it keeps the
+    // unconditional replace the route always had.
+    const expected = body.expected_revision !== undefined && body.expected_revision !== null ? String(body.expected_revision) : null;
+    const rulesChanged = async () => {
+      const row = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json({
+        detail: 'Your availability rules changed somewhere else since you opened them. Nothing was saved; reload to see the current rules.',
+        code: 'rules_changed', current: availabilityDto(row),
+      }, 409);
+    };
+    if (expected !== null) {
+      // The compare and the write are ONE statement, so two tabs saving from
+      // the same revision cannot both win: the loser's UPDATE matches no row.
+      const at = nowIso();
+      const res = expected === ''
+        ? await c.env.DB.prepare(
+          `INSERT INTO advisor_availability_rules
+             (advisor_id, weekly_paid_cap, buffer_minutes, min_notice_hours, blackouts_json, timezone, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(advisor_id) DO NOTHING`
+        ).bind(m.id, cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, at).run()
+        : await c.env.DB.prepare(
+          `UPDATE advisor_availability_rules
+              SET weekly_paid_cap = ?, buffer_minutes = ?, min_notice_hours = ?, blackouts_json = ?, timezone = ?, updated_at = ?
+            WHERE advisor_id = ? AND updated_at = ?`
+        ).bind(cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, m.id, expected).run();
+      if (!Number((res as any).meta?.changes ?? 0)) return rulesChanged();
+      const done = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json(availabilityDto(done));
+    }
     const now = nowIso();
     await c.env.DB.prepare(
       `INSERT INTO advisor_availability_rules

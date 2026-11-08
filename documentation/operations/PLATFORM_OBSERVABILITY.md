@@ -82,25 +82,68 @@ Defaults and overrides (whole bytes, deploy variables, all optional):
 An override that is not a whole byte count, or breaks warning < critical ≤
 limit, is ignored as a set and the response says so.
 
-## 5. What is not built yet
+## 5. History and alerts (D4559 part 2)
 
-- **Alert lifecycle.** `levelFor` takes the previous level for hysteresis, but
-  nothing stores a level yet, so there is no deduplicated open/clear incident,
-  no routing and no mute window. Next slice: a daily cron snapshot row per
-  metric (also the trend and projection view), and an alert that opens once on
-  a rising level and clears on recovery.
+`services/platformCapacityHistory.ts`, run by the scheduled handler on HQ only
+(every 15 minutes at :11; the daily snapshot at 04:11 UTC).
+
+**Snapshot.** `platform_capacity_snapshots` keeps one row per (scope, UTC day,
+metric) for the capacity read's fixed deployment metrics only (`SNAPSHOT_KEY`):
+`d1.size_bytes`, `d1.size_ratio`, and each queue's backlog, backlog size and
+oldest age. An unreadable day is `value NULL, availability 'unavailable'`, never
+0. No member, company, tenant, file name, SQL or secret is stored.
+
+**Trend and projection.** `GET /api/admin/platform/capacity/history?days=N`
+(1–365, default 90; Super Admin). Each series lists its daily points, nulls
+included, and `last_measured_at`. `d1_projection` fits a straight line through
+the measured days only and states:
+
+| State | When |
+| --- | --- |
+| `insufficient` | fewer than 7 measured days, or under a week between first and last |
+| `not_growing` | the line does not rise |
+| `at_limit` | the latest size is at or over the limit |
+| `beyond_horizon` | the limit is more than five years out; no month is named |
+| `projected` | a month (`YYYY-MM`), the window, the points used, R², and a confidence of `low` or `medium` (never higher: `medium` needs 28+ points and R² ≥ 0.8) |
+
+It names a month, not a day: a line through recent growth is a trend, not a
+forecast.
+
+**Alerts.** `platform_capacity_alerts` holds one row per episode, at most one
+open per (scope, metric) (a partial unique index, so two racing sweeps open one).
+
+| Reading | Effect |
+| --- | --- |
+| warning or critical (with hysteresis from the open episode's severity) | opens an episode, or changes the open one's severity in place |
+| measured ok, or an empty queue | clears the open episode (recovery) |
+| unreadable, with an episode open | holds it; an outage is not a recovery |
+| unreadable, measured in the last 48 hours, nothing open | opens an `unavailable` episode (a freshness gap) |
+| unreadable, never measured | nothing; it stays listed as unavailable |
+
+Routing: active HQ Super Admins, in-app, category `operations`, link
+`/admin/platform`. A member opts out with `notification_prefs.platform_capacity.in_app = false`.
+Each notice is deduplicated by episode and stage, so an episode notifies once
+per severity and once when it clears. `GET /api/admin/platform/capacity/alerts`
+lists open episodes and those cleared in the last 30 days.
+`POST /api/admin/platform/capacity/alerts/:id/mute` (`{ hours: 1..168, reason }`,
+the Super Admin write bar, audited) stops an open episode's notices until
+`muted_until`; it is still tracked and still clears.
+
+## 6. What is not built yet
+
 - **Account analytics** (Workers, D1 query volume and latency, Workflows, R2):
   see owner item 1.
-- **The screen.** No canvas under `design/` covers a capacity panel, so per
-  `AGENTS.md` § Missing UI the issue carries `needs-design` and the page is not
-  invented. The route is ready for it.
+- **The screen.** The canvas posted on #4559 (2026-11-07) awaits the owner's
+  approval and its export in `design/incoming/`, so per `AGENTS.md` § Missing UI
+  the issue carries `needs-design` and the page is not built. The capacity,
+  history and alert routes are ready for it.
 - **Signals owned elsewhere** (second audit comment on #4559): scheduler
   progress #4592, lifecycle repair #4593, halt acknowledgement #4572, runtime
   DDL #4568, authentication monitor #4571, schema parity and restore
   #4591/#4558, provider quotas #4556, hosted evidence #4594. Each becomes a
   dictionary row when its owner exposes a source.
 
-## 6. Owner items
+## 7. Owner items
 
 1. **Account analytics token.** The GraphQL datasets above need an account
    token with `Account Analytics: Read`. The Worker may already hold one as
