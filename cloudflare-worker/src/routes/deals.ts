@@ -1,5 +1,5 @@
 import { holdsLicence, heldLicences } from '../services/accountLicences';
-import { investorHasDealRelationship } from '../services/dealAccess';
+import { dealAudience, hasActiveDealNda, investorHasDealRelationship, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
@@ -142,7 +142,8 @@ deals.get('/', async (c) => {
         : await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`);
   }
   await sql.end();
-  return c.json((rows as any[]).map(row => serializeDeal(row, user.role)));
+  // D4631: the studio's internal fields leave to staff by licence, not by primary role.
+  return c.json((rows as any[]).map(row => serializeDeal(row, isDealStaff(user) ? 'admin' : 'member')));
 });
 
 // ---------------------------------------------------------------------------
@@ -262,6 +263,9 @@ deals.get('/pass-analytics', async (c) => {
   }
 
   await sql.end();
+  // D4631: the pass taxonomy (counts and reasons) is a shared aggregate; the pass's own note and who passed are the
+  // studio's, so they leave only to deal staff.
+  if (!isDealStaff(user)) matches = matches.map(({ pass_note: _note, passed_by_name: _by, ...rest }) => rest);
   return c.json({
     total: breakdown.total,
     buckets: breakdown.buckets,
@@ -344,7 +348,9 @@ deals.get('/screening', async (c) => {
   const sql = getSQL(c.env);
   let desk: unknown;
   try {
-    let rows = user.role === 'investor' ? await sql`
+    // D4631: anyone who is not deal staff is narrowed to their own relationships, whatever their primary role.
+    const narrowed = !isDealStaff(user);
+    let rows = narrowed ? await sql`
       SELECT d.id AS deal_id, d.status AS deal_status, p.name AS company, p.sector
         FROM deals d JOIN projects p ON p.id = d.project_id
        WHERE p.deleted_at IS NULL AND (
@@ -354,7 +360,7 @@ deals.get('/screening', async (c) => {
       SELECT d.id AS deal_id, d.status AS deal_status, p.name AS company, p.sector
         FROM deals d JOIN projects p ON p.id = d.project_id
        WHERE p.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 200`;
-    if (user.role === 'investor') {
+    if (narrowed) {
       // D1254 preserves the deal reader's invited-or-committed rule, including
       // historical deals/commitments. The open-deal rule for trust is separate.
       const allowed = await userReadableDealIds(c.env, user, (rows as any[]).map(row => Number(row.deal_id)));
@@ -500,7 +506,9 @@ deals.get('/transfers', async (c) => {
   // The column list is written out in both branches rather than interpolated:
   // this file's `sql` tag binds every ${} as a VALUE, so a column list must
   // never travel through it.
-  const rows = String(user.role) === 'investor'
+  // D4631: only deal staff read every transfer; anyone else reads their own deals' transfers, whatever their
+  // primary role. (Which firm a transfer belongs to is #4633's: `company_id` is the recording firm today.)
+  const rows = !isDealStaff(user)
     ? await sql`
       SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
              t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name,
@@ -578,7 +586,7 @@ deals.get('/:id', async (c) => {
     return c.json({ detail: 'Forbidden: you do not own this deal' }, 403);
   }
   await sql.end();
-  const deal = serializeDeal(rows[0], user.role);
+  const deal = serializeDeal(rows[0], isDealStaff(user) ? 'admin' : 'member');
   if (user.role === 'investor' && effectiveInvestorTier(user as InvestorUser) === 'free') {
     let own = null;
     let ownUnreadable = false;
@@ -916,7 +924,7 @@ deals.post('/:id/pass', async (c) => {
 // ---------------------------------------------------------------------------
 type ReadCtx =
   | { error: Response; user?: undefined; sql?: undefined; deal?: undefined }
-  | { error?: undefined; user: User; sql: ReturnType<typeof getSQL>; deal: any };
+  | { error?: undefined; user: User; sql: ReturnType<typeof getSQL>; deal: any; audience: DealAudience };
 
 // Deal-room read authorization, kept in lockstep with the FastAPI
 // `_ensure_deal_read_access` helper:
@@ -930,7 +938,9 @@ type ReadCtx =
 async function canReadDeal(env: Env, user: User, dealId: number, projectFounderId: any): Promise<boolean> {
   // #2460 narrows the generic founder guard; deal-room policy is separate
   // and deliberately retains the existing partner reader pending #2450.
-  if (holdsLicence(user, 'partner')) return true;
+  // D4631: the same rule as `dealAudience` (services/dealAccess.ts): staff by licence, the venture's founder,
+  // or an invited or committed investor. Written out here so the reader's own relationship query stays in sight.
+  if (isDealStaff(user)) return true;
   if (canAccessFounderResource(user as any, projectFounderId)) return true;
   if (holdsLicence(user, 'investor')) return investorHasDealRelationship(env, (user as any).id, dealId);
   return false;
@@ -982,19 +992,26 @@ async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
   const sql = getSQL(c.env);
   const rows = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name AS project_name, p.founder_id AS project_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return { error: c.json({ error: 'Deal not found' }, 404) }; }
-  if (!(await canReadDeal(c.env, user, id, (rows[0] as any).project_founder_id))) {
+  const audience = await dealAudience(c.env, user, id, (rows[0] as any).project_founder_id);
+  if (audience === 'none') {
     await sql.end();
     return { error: c.json({ detail: 'Forbidden: you do not own this deal' }, 403) };
   }
-  return { user, sql, deal: rows[0] as any };
+  return { user, sql, deal: rows[0] as any, audience };
 }
 
 deals.get('/:id/documents', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal } = ctx;
+  const { sql, deal, user, audience } = ctx;
   if (!deal.project_id) { await sql.end(); return c.json([]); }
+  // D4631: the venture's document list is behind the venture's NDA, as its team, market and traction sections are.
+  // The platform admin and the venture's own founder are exempt; an investor without an active NDA is told why, not given [].
+  if (!ndaExempt(audience, user as any) && !(await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id))) {
+    await sql.end();
+    return c.json({ error: 'nda_required', masked: true, reason: 'no_pairwise_nda', detail: 'Sign the venture\'s NDA to see its documents.' }, 403);
+  }
   const docs = await sql`SELECT id, uid, title, doc_type, status, created_at FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`;
   await sql.end();
   return c.json(docs);
@@ -1039,14 +1056,15 @@ deals.get('/:id/commitments', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, user } = ctx;
-  if (user.role === 'investor') {
-    // D4633: an investor's own commitments under ONE firm, the one the commit
-    // and withdrawal routes act under (the active firm, else the only one).
-    // Each row names its firm and whether it belongs to that context. A row
-    // recorded before commitments named a firm (company_id NULL) is listed
-    // too, marked `legacy` when a firm is selected: it is the investor's, but
-    // no firm's, so the page shows it and offers no action on it.
+  const { sql, user, audience } = ctx;
+  // D4631: who is named follows the caller's relationship to THIS deal, not their primary role.
+  // D4633: an investor's own commitments under ONE firm, the one the commit
+  // and withdrawal routes act under (the active firm, else the only one).
+  // Each row names its firm and whether it belongs to that context. A row
+  // recorded before commitments named a firm (company_id NULL) is listed
+  // too, marked `legacy` when a firm is selected: it is the investor's, but
+  // no firm's, so the page shows it and offers no action on it.
+  if (audience === 'investor') {
     const firm = await transferFirm(c, user, COMMITMENT_FIRM_REQUIRED);
     if ('refuse' in firm) { await sql.end(); return firm.refuse; }
     const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.company_id, cp.company_name, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name
@@ -1058,7 +1076,7 @@ deals.get('/:id/commitments', async (c) => {
       return { ...r, company_name: r.company_name ?? null, firm_context: firm.companyId, in_context: !legacy, legacy };
     }));
   }
-  if (user.role === 'admin' || user.role === 'founder' || user.role === 'partner') {
+  if (namesInvestors(audience)) {
     // D4633: each row names the firm it is held for (null: recorded before commitments named one).
     const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.company_id, cp.company_name, c.amount, c.status, c.created_at, u.name AS investor_name
       FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id LEFT JOIN company_profiles cp ON cp.id = c.company_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
@@ -1137,9 +1155,10 @@ deals.get('/:id/activity', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal, user } = ctx;
+  const { sql, deal, user, audience } = ctx;
   // D1155 (DL15): an Operating Partner reads the activity in full, as the commitments read.
-  const named = user.role === 'admin' || user.role === 'founder' || user.role === 'partner';
+  // D4631: named for this deal's staff and its own founder, by relationship, not by primary role.
+  const named = namesInvestors(audience);
   const money = (amount: unknown) => (amount == null ? 'Not recorded' : `${Math.round(Number(amount)).toLocaleString()} ${deal.currency ?? 'USD'}`);
   const events: any[] = [];
   events.push({ type: 'created', label: 'Deal created', at: deal.created_at, mine: false });
@@ -1406,8 +1425,10 @@ deals.post('/:id/closing-checklist/apply', async (c) => {
   const data = await c.req.json().catch(() => ({} as any));
   const slug = String(data?.template_slug || '');
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT id, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  // D4631: a deal's closing checklist is changed by whoever may move the round (as PUT, advance and pass).
+  if (!canMoveRound(user, (rows[0] as any).lead_partner_id)) { await sql.end(); return c.json(NOT_YOUR_ROUND, 403); }
   if (!CLOSING_TEMPLATE_SLUGS.has(slug)) {
     await sql.end();
     return c.json({
@@ -1445,8 +1466,10 @@ deals.post('/:id/closing-checklist/apply', async (c) => {
 });
 
 deals.post('/:id/closing-checklist/items', async (c) => {
-  await requireRole(c, 'partner');
+  const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
+  const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
+  if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
   const data = await c.req.json().catch(() => ({} as any));
   const label = data?.label != null ? String(data.label).trim().slice(0, 300) : '';
   if (!label) {
@@ -1479,6 +1502,8 @@ deals.post('/:id/closing-checklist/items', async (c) => {
 deals.patch('/:id/closing-checklist/items/:itemUid', async (c) => {
   const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
+  const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
+  if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
   const itemUid = c.req.param('itemUid');
   const data = await c.req.json().catch(() => ({} as any));
   const state = String(data?.state || '');
