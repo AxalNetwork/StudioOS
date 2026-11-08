@@ -47,6 +47,9 @@ function world() {
   db.exec(sql('migrations/759_agent_skills.sql'));
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql'));
+  // D4533: a publish writes the version's evidence column (null for a company skill); that migration builds on 202611022140.
+  db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql'));
+  db.exec(sql('migrations/202611081919_skill_release_evidence.sql'));
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', null);
