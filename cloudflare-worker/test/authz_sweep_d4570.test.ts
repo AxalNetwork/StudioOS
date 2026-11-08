@@ -12,7 +12,8 @@
 // ratchets, so neither can grow unseen and each fix shows up as a list to shrink:
 //   KNOWN_500        refused, but with 500 where 401 belongs (#4570 asks for 401/403/404); empty now;
 //   GATE_NOT_REACHED the feature answers 503 before its gate runs (switched off here),
-//                    so the sweep did not test that gate.
+//                    so the sweep did not test that gate. A feature whose switch is a plain
+//                    env flag is switched on for its own routes (FEATURE_ON), and comes off.
 // A 3xx is a refusal only on an OAuth callback, whose refusal is a redirect to
 // the app's error page (admin_x.ts maps requireSuperAdmin's failure to one).
 //
@@ -54,11 +55,19 @@ const FIXED_TO_401 = [
 /** Switched off here: 503 before the gate runs, so this sweep did not reach the gate. */
 const GATE_NOT_REACHED = new Set([
   'POST /api/auth/sms/confirm-enrollment', 'POST /api/auth/sms/start-enrollment', 'POST /api/calendar/google/meet-transcripts/connect',
-  'POST /api/linkedin/oauth/start', 'GET /api/round-calls', 'POST /api/round-calls', 'GET /api/round-calls/:uid', 'PUT /api/round-calls/:uid',
-  'PUT /api/round-calls/:uid/audience', 'POST /api/round-calls/:uid/audience-preview', 'POST /api/round-calls/:uid/counsel-approval',
-  'POST /api/round-calls/:uid/counsel-request', 'POST /api/round-calls/:uid/manage', 'PUT /api/round-calls/:uid/questions/:questionUid',
-  'POST /api/round-calls/:uid/responses', 'POST /api/round-calls/:uid/send', 'GET /api/round-calls/context', 'GET /api/round-calls/counsel-queue',
+  'POST /api/linkedin/oauth/start',
 ]);
+/**
+ * A feature switched on for its own routes only, so the sweep reaches the gate behind the switch. A test
+ * environment's flag, never a deployment's: each is the feature's own off-switch, read per request.
+ * Round calls (routes/round_calls.ts) answer 503 `round_calls_disabled` from router middleware while
+ * ROUND_CALLS_ENABLED is not 'true'; with it on, each route's own gate runs and refuses. Three of them read
+ * the venture id before the gate (400 `invalid_project` for none), so each request names one (`project_id`).
+ */
+const FEATURE_ON: Array<{ prefix: string; env: Record<string, string>; query?: string; body?: Record<string, unknown> }> = [
+  { prefix: '/api/round-calls', env: { ROUND_CALLS_ENABLED: 'true' }, query: 'project_id=1', body: { project_id: 1 } },
+];
+const featureOf = (path: string) => FEATURE_ON.find((f) => path === f.prefix || path.startsWith(`${f.prefix}/`));
 
 /**
  * Super Admin routes an admin may read by design: the reader sees `requireSuperAdmin` in a helper that asks
@@ -95,12 +104,13 @@ const keyOf = (r: { method: string; path: string }) => `${r.method === 'ALL' ? '
 async function send(r: { method: string; path: string }, who?: number) {
   const method = r.method === 'ALL' ? 'GET' : r.method;
   const read = method === 'GET' || method === 'HEAD';
-  const res = await worker.fetch(new Request(`https://unit.test${fill(r.path)}`, {
+  const feature = featureOf(r.path);
+  const res = await worker.fetch(new Request(`https://unit.test${fill(r.path)}${feature?.query ? `?${feature.query}` : ''}`, {
     method, redirect: 'manual',
     headers: { ...(who ? { authorization: `Bearer ${tokens[who]}` } : {}), ...(read ? {} : { 'content-type': 'application/json' }) },
-    body: read ? undefined : '{}',
+    body: read ? undefined : JSON.stringify(feature?.body ?? {}),
   // A fresh limiter per request: this sweep is about gates, and the limiter would otherwise answer 429 first.
-  }), { ...env, RATE_LIMITS: memKV() }, ctx);
+  }), { ...env, ...(feature?.env ?? {}), RATE_LIMITS: memKV() }, ctx);
   return { status: res.status, location: res.headers.get('location') };
 }
 
@@ -127,6 +137,11 @@ test('every signed-in route refuses a caller with no credentials', async () => {
   assert.deepEqual([...KNOWN_500].filter((k) => !got(500).has(k)), [], 'fixed: take these off KNOWN_500');
   assert.deepEqual([...GATE_NOT_REACHED].filter((k) => !got(503).has(k)), [], 'reached now: take these off GATE_NOT_REACHED');
   assert.ok(results.filter((x) => x.status === 401).length > 3000, 'most refusals are the 401 the gate gives');
+  // The routes behind a switched-on feature reach their gate: no 503 among them, and an anonymous caller is 401.
+  // Mutation checked: FEATURE_ON emptied → the thirteen round-call routes answer 503 again and this fails.
+  const behind = results.filter((x) => featureOf(x.path));
+  assert.ok(behind.length >= 13, `${behind.length} routes behind a switched-on feature`);
+  assert.deepEqual(behind.filter((x) => x.status !== 401).map((x) => `${x.key} — ${x.status}`), []);
   // Mutation checked: `safe`'s re-throw of a gate's refusal removed → these answer 500 again and this fails.
   assert.deepEqual(FIXED_TO_401.map((k) => [k, results.find((x) => x.key === k)?.status]), FIXED_TO_401.map((k) => [k, 401]));
 });

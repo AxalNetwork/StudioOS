@@ -635,7 +635,8 @@ test('every wiring place D923 §1 names follows the page', () => {
   assert.match(placement, /\{ key: '\/admin\/partners', kind: 'row', label: 'Partner Invitations', route: '\/admin\/partner-invitations', hqOnly: false,\s*\.\.\.admin\('Community', 'card link'\), how: [^}]*also: \[admin\('Approvals', 'lane'\)\] \}/);
   assert.match(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Partner invitations<\/Link>/);
   assert.match(read('frontend/src/pages/admin/adminStudioOverview.js'), /'Partner invitations': '\/admin\/partner-invitations',/);
-  assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Open partner invitations<\/Link>/);
+  // D4820: Community's door is a Manage Community row, "Open →" named "Open Partner invitations".
+  assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\} aria-label=\{openLabel\('Partner invitations'\)\}>Open →<\/Link>/);
   assert.match(read('frontend/src/lib/railPages.js'), /own\('\/admin\/partner-invitations', key\(AD, 'Community', 'Partner invitations'\)\)/);
   assert.match(read('frontend/src/lib/railOptions/admin.js'), /id: 'S31', section: 'Community', module: 'Partner invitations', route: '\/admin\/partner-invitations', files: \['pages\/admin\/PartnerInvitations\.jsx'\], rail: FRAME/);
   assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/partners' \}, \/\/ D923/);

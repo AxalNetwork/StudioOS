@@ -51,6 +51,7 @@ import { structureForPaper } from '../services/fundStructure';
 import { renderLegalPdf } from '../services/legalPaperRender';
 import { readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
+import { isRestrictedSlug, templateUseRefusal } from '../services/templateSafety';
 import { templateFormatFor, renderFormat, COUNSEL_DRAFT_SLUGS, type TemplateFormat } from '../services/templateFormat';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -296,10 +297,11 @@ export class RenderedBodyError extends Error {
  * through `templateBodyRefusal`.
  */
 export class TemplateBodyError extends Error {
-  reason: 'no_body' | 'unreadable';
+  /** D4811 adds `restricted`: the template is in `COUNSEL_REVIEW_SLUGS` (services/templateSafety.ts). */
+  reason: 'no_body' | 'unreadable' | 'restricted';
   slug: string;
   constructor(reason: TemplateBodyError['reason'], slug: string) {
-    super(reason === 'no_body' ? 'template_has_no_body' : 'template_unreadable');
+    super(reason === 'no_body' ? 'template_has_no_body' : reason === 'restricted' ? 'template_restricted' : 'template_unreadable');
     this.reason = reason;
     this.slug = slug;
   }
@@ -310,8 +312,13 @@ export class TemplateBodyError extends Error {
  * error. The admin sentences reuse the canvas's stub copy (boards L8 and L9).
  */
 export function templateBodyRefusal(e: unknown, audience: 'admin' | 'member'):
-  { status: 409 | 503; code: 'template_has_no_body' | 'template_unreadable'; message: string } | null {
+  { status: 409 | 503; code: 'template_has_no_body' | 'template_unreadable' | 'template_restricted'; message: string } | null {
   if (!(e instanceof TemplateBodyError)) return null;
+  if (e.reason === 'restricted') {
+    const r = templateUseRefusal({ slug: e.slug, body_md: 'x' })!;
+    return { status: 409, code: 'template_restricted', message: audience === 'member'
+      ? 'This document is not ready to send: counsel has not reviewed its text yet. Nothing was sent.' : r.message };
+  }
   if (e.reason === 'unreadable') {
     return { status: 503, code: 'template_unreadable', message: 'The template could not be read, so nothing was sent. Try again in a moment.' };
   }
@@ -411,6 +418,9 @@ export async function createAndSendEnvelope(
   // recipient or any email is written; a store that cannot be read is refused
   // as unreadable, never as "no body".
   const rendered = opts.renderedBody;
+  // D4811: a restricted template is refused before anything is written, whether
+  // the body is looked up here or was rendered by the caller from that template.
+  if (isRestrictedSlug(documentType) || isRestrictedSlug(opts.documentType)) throw new TemplateBodyError('restricted', documentType);
   if (rendered !== undefined) {
     if (!rendered || typeof rendered.title !== 'string' || !rendered.title.trim()) {
       throw new RenderedBodyError('missing_title');

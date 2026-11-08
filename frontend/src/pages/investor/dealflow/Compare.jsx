@@ -30,6 +30,7 @@ import { COMPARE_COLOURS, barShare, compareCsv, compareRows, compareSummary } fr
 
 const BOX = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
+const WARN = 'm-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200';
 const PILL = 'rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] dark:border-gray-700';
 const BTN = 'inline-flex items-center rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const PRIMARY = 'inline-flex items-center rounded-[9px] bg-violet-700 px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-violet-800 disabled:opacity-50 dark:bg-violet-600 dark:hover:bg-violet-500';
@@ -62,7 +63,7 @@ function ScopeBars({ ventures }) {
 }
 
 /** The table: the same bands, the strongest alone in a row in weight 800, then the facts. */
-function CompareTable({ ventures }) {
+function CompareTable({ ventures, flowUnknown = false }) {
   const head = 'px-2 py-1.5 text-left text-[11px] font-bold uppercase text-gray-500 dark:text-gray-400';
   return (
     <div className="overflow-x-auto" id="compare-table">
@@ -85,7 +86,7 @@ function CompareTable({ ventures }) {
             </tr>
           ))}
           <tr className="border-t border-axal-hairline dark:border-gray-700"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Ask</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><AskCell row={v} /></td>)}</tr>
-          <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Your stage</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5">{stageWord(v.stage)}</td>)}</tr>
+          <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Your stage</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5">{flowUnknown ? 'Unreadable' : stageWord(v.stage)}</td>)}</tr>
           <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Days in stage</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><DaysCell row={v} /></td>)}</tr>
           <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Fit to my thesis</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><FitCell fit={v.fit} /></td>)}</tr>
         </tbody>
@@ -101,12 +102,13 @@ export function CompareNote({ ids, api: noteApi = dealFlowApi }) {
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [againNotes, setAgainNotes] = useState(0);
   useEffect(() => {
     let alive = true;
-    noteApi.compareNotes(ids).then((r) => { if (alive) setSaved({ kind: 'ok', items: r?.items || [] }); }, (e) => { reportError('DealFlow:notes', e); if (alive) setSaved({ kind: 'unreadable' }); });
+    noteApi.compareNotes(ids).then((r) => { if (alive) setSaved({ kind: 'ok', items: r?.items || [], unreadable: Number(r?.unreadable) || 0 }); }, (e) => { reportError('DealFlow:notes', e); if (alive) setSaved({ kind: 'unreadable' }); });
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, againNotes]);
   const run = async () => {
     setBusy(true); setError('');
     try { setDraft(await noteApi.draftCompareNote(ids)); } catch (e) { reportError('DealFlow:draft-note', e); setError(e?.message || 'Eadwyn could not draft this note. Try again.'); } finally { setBusy(false); }
@@ -115,7 +117,7 @@ export function CompareNote({ ids, api: noteApi = dealFlowApi }) {
     setBusy(true); setError('');
     try {
       const out = await noteApi.keepCompareNote(draft.receipt);
-      setSaved((s) => ({ kind: 'ok', items: [out.saved, ...(s.kind === 'ok' ? s.items : [])] }));
+      setSaved((s) => ({ kind: 'ok', items: [out.saved, ...(s.kind === 'ok' ? s.items : [])], unreadable: s.kind === 'ok' ? s.unreadable : 0 }));
       setDraft(null);
     } catch (e) { reportError('DealFlow:keep-note', e); setError(e?.message || 'The note could not be saved. Nothing was saved.'); } finally { setBusy(false); }
   };
@@ -138,7 +140,8 @@ export function CompareNote({ ids, api: noteApi = dealFlowApi }) {
         </div>
       )}
       {error && <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" role="alert" data-testid="dealflow-compare-note-refused">{error}</p>}
-      {saved.kind === 'unreadable' && <p className={MUTED} data-testid="dealflow-compare-note-unread">Your saved notes for these ventures could not be read. Drafting still works.</p>}
+      {saved.kind === 'unreadable' && <p className={MUTED} data-testid="dealflow-compare-note-unread">Your saved notes for these ventures could not be read. Drafting still works. <button type="button" className="font-semibold underline" onClick={() => setAgainNotes((n) => n + 1)}>Try again</button></p>}
+      {saved.kind === 'ok' && saved.unreadable > 0 && <p className={MUTED} data-testid="dealflow-compare-note-partial">{saved.unreadable === 1 ? 'One saved note' : `${saved.unreadable} saved notes`} could not be read{saved.items.length ? '; the others are below' : ''}. <button type="button" className="font-semibold underline" onClick={() => setAgainNotes((n) => n + 1)}>Try again</button></p>}
       {saved.kind === 'ok' && saved.items.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="dealflow-compare-notes">
           {saved.items.map((n) => <li key={n.uid} className="border-l-2 border-violet-300 pl-3 text-[13px] dark:border-violet-700">{n.text}</li>)}
@@ -157,7 +160,7 @@ function download(text) {
 }
 
 /** DLS8/DLS9 from rows already read, each with its scores and fit. */
-export function CompareView({ ventures, missing = 0, ids = [] }) {
+export function CompareView({ ventures, missing = 0, ids = [], flowUnknown = false }) {
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="dealflow-compare-page">
       <nav className="text-[13px] text-axal-muted dark:text-gray-400"><Link to="/deals?view=table" className="font-semibold text-violet-700 underline dark:text-violet-300">Deal flow</Link> › Compare</nav>
@@ -180,7 +183,7 @@ export function CompareView({ ventures, missing = 0, ids = [] }) {
                 <li key={v.id} className={BOX} data-testid={`dealflow-compare-${v.id}`}>
                   <div className="flex items-center gap-2"><span className={`inline-block h-3 w-3 rounded-full ${COMPARE_COLOURS[i].swatch}`} aria-label={`${COMPARE_COLOURS[i].name} in the chart`} role="img" /><span className="font-semibold">{v.name}</span></div>
                   {v.sector && <span className={MUTED}>{v.sector}</span>}
-                  <div className="flex flex-wrap gap-1"><span className={PILL}>{stageWord(v.stage)}</span><span className={PILL}>{v.round}</span></div>
+                  <div className="flex flex-wrap gap-1"><span className={PILL}>{flowUnknown ? 'Stage unreadable' : stageWord(v.stage)}</span><span className={PILL}>{v.round}</span></div>
                   <AskCell row={v} />
                   {v.scores.state === 'locked' ? <ScopeStrip locked /> : <ScopeStrip scopes={stripScopes(v.scores)} />}
                 </li>
@@ -200,7 +203,7 @@ export function CompareView({ ventures, missing = 0, ids = [] }) {
               <p className="m-0 text-[13px]" data-testid="dealflow-compare-summary">{compareSummary(ventures)}</p>
               <p className={MUTED}>A bar is a band: Weak, Fair or Strong, never a number. A hatched bar has low confidence; a dashed line is a scope without a score.</p>
               <ScopeBars ventures={ventures} />
-              <CompareTable ventures={ventures} />
+              <CompareTable ventures={ventures} flowUnknown={flowUnknown} />
             </section>
             <CompareNote ids={ids.length ? ids : ventures.map((v) => v.id)} />
           </>
@@ -216,11 +219,14 @@ export function DealCompare({ ids }) {
   const [scores, setScores] = useState(null);
   const [fits, setFits] = useState(null);
   const [again, setAgain] = useState(0);
+  const [againScores, setAgainScores] = useState(0);
   useEffect(() => {
     let alive = true;
     setRead({ kind: 'loading' });
-    Promise.all([api.listDeals(), dealFlowApi.flow().catch(() => ({ items: [] }))]).then(
-      ([deals, flow]) => { if (alive) setRead({ kind: 'ok', rows: flowRows('all', { flow, deals }) }); },
+    // D4635 (#4635): a failed flow read is said, never read as an empty flow (which would claim "Not on your deals").
+    let flowFailed = false;
+    Promise.all([api.listDeals(), dealFlowApi.flow().catch((e) => { reportError('DealFlow:compare-flow', e); flowFailed = true; return { items: [] }; })]).then(
+      ([deals, flow]) => { if (alive) setRead({ kind: 'ok', flowFailed, rows: flowRows('all', { flow, deals }) }); },
       (e) => { reportError('DealFlow:compare', e); if (alive) setRead({ kind: 'unreadable' }); },
     );
     return () => { alive = false; };
@@ -228,11 +234,12 @@ export function DealCompare({ ids }) {
   useEffect(() => {
     let alive = true;
     if (!ids.length) return undefined;
+    setScores(null); setFits(null);
     ventureScoresApi.batch(ids.map(Number)).then((s) => { if (alive) setScores(s); }, (e) => { reportError('DealFlow:compare-scores', e); if (alive) setScores('failed'); });
     dealViewsApi.fit(ids).then((f) => { if (alive) setFits(new Map((f?.items || []).map((x) => [String(x.deal_id), x]))); }, (e) => { reportError('DealFlow:compare-fit', e); if (alive) setFits('failed'); });
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, againScores]);
   const ventures = useMemo(() => (read.kind === 'ok'
     ? ids.map((id) => read.rows.find((r) => r.id === String(id))).filter(Boolean).map((r) => ({ ...r, scores: scoresOf(scores, r.id), fit: fitOf(fits, r.id) }))
     : []), [read, scores, fits, key]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -240,8 +247,10 @@ export function DealCompare({ ids }) {
   if (read.kind === 'unreadable') return <section className={BOX}><Unreadable what="The ventures to compare" claim="That is not the same as having none." onRetry={() => setAgain((n) => n + 1)} /></section>;
   return (
     <>
-      {scores === 'failed' && <p className="m-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200" role="status" data-testid="dealflow-compare-scores-failed">Scores could not be read. Names, stages and money are current.</p>}
-      <CompareView ventures={ventures} missing={ids.length - ventures.length} ids={ventures.map((v) => v.id)} />
+      {scores === 'failed' && <p className={WARN} role="status" data-testid="dealflow-compare-scores-failed">Scores could not be read. Names, stages and money are current. <button type="button" className="font-semibold underline" onClick={() => setAgainScores((n) => n + 1)}>Try again</button></p>}
+      {fits === 'failed' && <p className={WARN} role="status" data-testid="dealflow-compare-fit-failed">Fit to your thesis could not be read. The scores are current. <button type="button" className="font-semibold underline" onClick={() => setAgainScores((n) => n + 1)}>Try again</button></p>}
+      {read.flowFailed && <p className={WARN} role="status" data-testid="dealflow-compare-flow-failed">Your deal flow could not be read, so where each venture is on it is not shown. <button type="button" className="font-semibold underline" onClick={() => setAgain((n) => n + 1)}>Try again</button></p>}
+      <CompareView ventures={ventures} missing={ids.length - ventures.length} ids={ventures.map((v) => v.id)} flowUnknown={!!read.flowFailed} />
     </>
   );
 }

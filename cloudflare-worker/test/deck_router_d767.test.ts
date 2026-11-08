@@ -18,6 +18,7 @@
  *     --test cloudflare-worker/test/deck_router_d767.test.ts
  */
 import test from 'node:test';
+import { FAST_PATH_AUDIENCE } from '../src/services/decks/newDeck.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -53,6 +54,8 @@ function fixture({ funded = true } = {}) {
     CREATE TABLE integrations (id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, status TEXT);`);
   // D1503 (#3754): /generate reads the deck's element model picks (migration 717).
   f.db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/717_deck_model_picks.sql'), 'utf8'));
+  // D4597 (#4597): a metered build names a pinned quote (D1540, migration 733).
+  f.db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/733_deck_proposal_reports.sql'), 'utf8'));
   f.db.prepare('INSERT INTO projects (id, name, sector, stage, description, problem_statement, solution) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(PROJECT.id, PROJECT.name, PROJECT.sector, PROJECT.stage, PROJECT.description, PROJECT.problem_statement, PROJECT.solution);
   setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
@@ -139,8 +142,14 @@ test('D897: the deck build is one router run with option deck:build, and no inve
     f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
     const jwt = await new SignJWT({ user_id: 500, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
       .sign(new TextEncoder().encode(JWT_SECRET));
+    // D4597 (#4597): a metered build names the quote it was shown.
+    const inputs = { project_id: 1, audience: FAST_PATH_AUDIENCE, length: 'standard' };
+    const quoted = await app.request('/api/decks/new/quote', {
+      method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...inputs, step: 'build' }),
+    }, f.env);
+    const quote = await quoted.json() as any;
     const res = await app.request('/api/decks/generate', {
-      method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify({ project_id: 1 }),
+      method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...inputs, quote_uid: quote.quote_uid }),
     }, f.env);
     const text = await res.text();
     assert.equal(res.status, 201, text);

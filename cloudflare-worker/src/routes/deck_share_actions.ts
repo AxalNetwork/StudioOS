@@ -101,6 +101,23 @@ async function verifyShareToken(env: Env, token: string, c: any): Promise<{ deck
 }
 
 /**
+ * D4598 (#4598): the view row an event names, only when it is THIS link's own
+ * visit to THIS deck. A view id from another link or deck, an id that is not a
+ * positive integer, or a preview with no link (its token id is null, which no
+ * row equals), names nothing: the event is kept
+ * without one, so it can never be counted on another investor's visit.
+ */
+async function ownView(env: Env, tok: { deckId: number; tokenId: number | null }, raw: unknown): Promise<number | null> {
+  const id = Number(raw);
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  try {
+    const row = await env.DB.prepare('SELECT id FROM deck_share_views WHERE id = ? AND deck_id = ? AND share_token_id = ?')
+      .bind(id, tok.deckId, tok.tokenId).first<{ id: number }>();
+    return row ? Number(row.id) : null;
+  } catch { return null; }
+}
+
+/**
  * D902 — a studio link: one made by the one link writer, which always names
  * its investor. The studio's links do not offer the deal pack (bug 12; its
  * terms are CAPITAL's, #2424). A link with no investor is the Spin-Out Lab's.
@@ -277,7 +294,7 @@ deckShareActions.post('/share/:token/signup', async (c) => {
   const name = String(body?.name || '').trim();
   const role = body?.role && ['investor', 'partner', 'founder'].includes(body.role)
     ? body.role : 'investor';
-  const viewId = body?.view_id ? Number(body.view_id) : null;
+  const viewId = await ownView(c.env, tok, body?.view_id);
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRe.test(email)) return c.json({ error: 'invalid_email' }, 400);
   if (!name) return c.json({ error: 'name_required' }, 400);
@@ -428,7 +445,7 @@ deckShareActions.post('/share/:token/nda', async (c) => {
   const userId = Number(authUser.id);
 
   const body = await c.req.json().catch(() => null) as any;
-  const viewId = body?.view_id ? Number(body.view_id) : null;
+  const viewId = await ownView(c.env, tok, body?.view_id);
   const signedBy = String(body?.signed_by || '').trim();
   if (!signedBy) return c.json({ error: 'missing_fields' }, 400);
 
@@ -523,7 +540,6 @@ deckShareActions.post('/share/:token/click', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const cardUid = typeof body?.card_uid === 'string' && CLICK_ID.test(body.card_uid) ? body.card_uid : null;
   const blockId = typeof body?.block_id === 'string' && CLICK_ID.test(body.block_id) ? body.block_id : null;
-  const viewId = Number.isSafeInteger(Number(body?.view_id)) && Number(body.view_id) > 0 ? Number(body.view_id) : null;
   if (!cardUid || !blockId) return refuse(c, 400, { code: 'button_required', message: 'Say which button was pressed.' });
   await ensureDeckShareConversionSchema(c.env);
   const deck = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(tok.deckId).first<any>();
@@ -535,10 +551,9 @@ deckShareActions.post('/share/:token/click', async (c) => {
   const isButton = Array.isArray(card?.blocks) && card.blocks.some((b: any) => b?.id === blockId && b?.kind === 'button');
   if (!isButton) return refuse(c, 404, { code: 'button_not_found', message: 'That button is not on this deck.' });
   // A view id from another link or deck is not this viewer's: the click is kept without one.
-  const view = viewId == null ? null
-    : await c.env.DB.prepare('SELECT id FROM deck_share_views WHERE id = ? AND deck_id = ?').bind(viewId, tok.deckId).first<any>();
+  const viewId = await ownView(c.env, tok, body?.view_id);
   await logConversion(c.env, {
-    deckId: tok.deckId, tokenId: tok.tokenId, viewId: view ? Number(view.id) : null,
+    deckId: tok.deckId, tokenId: tok.tokenId, viewId,
     projectId: deck?.project_id ?? null, type: 'button_click', refId: `${cardUid}:${blockId}`,
   });
   return c.json({ ok: true });
@@ -562,7 +577,7 @@ deckShareActions.post('/share/:token/feedback', async (c) => {
   try { const u = await requireAuth(c); userId = Number(u.id); } catch {}
 
   const body = await c.req.json().catch(() => null) as any;
-  const viewId = body?.view_id ? Number(body.view_id) : null;
+  const viewId = await ownView(c.env, tok, body?.view_id);
   const slideReactions = body?.slide_reactions && typeof body.slide_reactions === 'object'
     ? JSON.stringify(body.slide_reactions) : null;
   const overallNote = body?.overall_note ? String(body.overall_note).slice(0, 4000) : null;
@@ -593,8 +608,11 @@ deckShareActions.post('/share/:token/feedback', async (c) => {
   // reaction follows its card. Best effort: the reactions by place are kept.
   if (feedbackId && body?.slide_reactions && typeof body.slide_reactions === 'object') {
     try {
-      const row = await c.env.DB.prepare('SELECT slides FROM pitch_decks WHERE id = ?').bind(tok.deckId).first<{ slides: string | null }>();
-      const cards = JSON.parse(row?.slides || '[]');
+      // D4598: a place is the card as THIS link sends it (its variant's order, less hidden cards and what the link leaves out),
+      // the same list the reader and the click route use, never the version's cards as stored.
+      const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(tok.deckId).first<any>();
+      const link = tok.tokenId == null ? null : await c.env.DB.prepare('SELECT include_json, variant_id FROM pitch_deck_share_tokens WHERE id = ?').bind(tok.tokenId).first<any>();
+      const cards = row ? await linkSentCards(c.env, row, link) : [];
       const byUid: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(body.slide_reactions as Record<string, unknown>)) {
         const uid = /^(0|[1-9][0-9]{0,2})$/.test(k) ? cardUidAt(cards, Number(k)) : null;
@@ -673,7 +691,7 @@ deckShareActions.post('/share/:token/deal-pack', async (c) => {
   const userId = Number(authUser.id);
 
   const body = await c.req.json().catch(() => null) as any;
-  const viewId = body?.view_id ? Number(body.view_id) : null;
+  const viewId = await ownView(c.env, tok, body?.view_id);
   const missing = ['check_size', 'valuation_cap', 'discount'].filter(k => body?.[k] == null || String(body[k]).trim() === '');
   if (missing.length) return c.json({ error: 'Missing deal terms', missing_fields: missing }, 400);
   const checkSize = String(body.check_size).slice(0, 60);
@@ -747,7 +765,7 @@ deckShareActions.post('/share/:token/deal-pack/sign', async (c) => {
   const userId = Number(authUser.id);
 
   const body = await c.req.json().catch(() => null) as any;
-  const viewId = body?.view_id ? Number(body.view_id) : null;
+  const viewId = await ownView(c.env, tok, body?.view_id);
   const signedBy = String(body?.signed_by || '').trim();
   const docIds: number[] = Array.isArray(body?.document_ids)
     ? body.document_ids.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n))

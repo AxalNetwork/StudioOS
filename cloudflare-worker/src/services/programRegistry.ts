@@ -219,11 +219,11 @@ export async function updateProgram(env: Env, key: string, body: unknown, actor:
 
 type SectionRow = {
   section_key: string; position: number; title: string; body: string | null; computed: number;
-  template_keys: string; edited_at: string | null;
+  template_keys: string; edited_at: string | null; edited_by_user_id: number | null;
 };
 
 const SECTION_SELECT =
-  'SELECT section_key, position, title, body, computed, template_keys, edited_at FROM program_playbook_sections';
+  'SELECT section_key, position, title, body, computed, template_keys, edited_at, edited_by_user_id FROM program_playbook_sections';
 
 function templateKeysOf(raw: unknown): string[] {
   try {
@@ -259,6 +259,15 @@ const contentOf = (rows: SectionRow[]) =>
     JSON.stringify(templateKeysOf(s.template_keys))]));
 
 /**
+ * D4806 (#4806) — the revision of a draft: the SHA-256 of what `contentOf` says it holds. The reviewer reads
+ * it with the draft and sends it back with Publish, so a publish applies to the draft the reviewer saw.
+ */
+export async function draftHashOf(rows: SectionRow[]): Promise<string> {
+  const bytes = new TextEncoder().encode(contentOf(rows));
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * GET /api/admin/programs/:key — the registry row and the published playbook,
  * with its version and date. A Super Admin also gets the draft: its sections,
  * when it was last edited, and whether it differs from what is published.
@@ -290,6 +299,8 @@ export async function programDetail(env: Env, key: string, superAdmin: boolean, 
       sections: draft.map(sectionView),
       edited_at: edited.length ? edited[edited.length - 1] : null,
       differs: contentOf(draft) !== contentOf(published),
+      // D4806: the revision of this draft; Publish names it.
+      hash: await draftHashOf(draft),
     };
   }
   return out;
@@ -356,15 +367,28 @@ export async function editDraftSection(env: Env, key: string, sectionKey: string
 }
 
 /**
- * POST /api/admin/programs/:key/playbook/publish — the draft becomes the next
- * version. Nothing to publish (the draft is what is published, or is empty)
- * is a 409. The version row and its sections go in one batch, and the version
- * number is unique per program, so two publishes racing cannot both land.
+ * POST /api/admin/programs/:key/playbook/publish { expected_hash } — the draft the reviewer saw becomes the
+ * next version. Nothing to publish (the draft is what is published, or is empty) is a 409. The version row
+ * and its sections go in one batch, and the version number is unique per program, so two publishes racing
+ * cannot both land.
+ *
+ * D4806 (#4806): AN APPROVAL APPLIES TO THE REVISION THE REVIEWER SAW. The request names that revision
+ * (`expected_hash`, from `programDetail`'s `draft.hash`); a draft that has changed since is refused
+ * (409 `draft_changed`) and nothing is published. The version's sections are then inserted from the very
+ * rows that were read and hashed, never copied from "whatever version 0 is" when the batch runs, so an
+ * edit that lands between the read and the write cannot enter a version under the publisher's name: it
+ * stays in the draft, which then differs from what was published.
  */
-export async function publishDraft(env: Env, key: string, actor: Actor) {
+export async function publishDraft(env: Env, key: string, actor: Actor, expectedHash?: unknown) {
   const p = await programByKey(env, key);
+  if (typeof expectedHash !== 'string' || !/^[0-9a-f]{64}$/.test(expectedHash)) {
+    throw new ProgramError(400, 'expected_hash_required', 'Send the revision of the draft you reviewed (expected_hash). Nothing was published.');
+  }
   const latest = await latestVersion(env, p.key);
   const draft = await sectionsOf(env, p.key, 0);
+  if ((await draftHashOf(draft)) !== expectedHash) {
+    throw new ProgramError(409, 'draft_changed', 'The draft changed after you reviewed it. Reload it, review it again, then publish. Nothing was published.');
+  }
   const published = latest ? await sectionsOf(env, p.key, Number(latest.version)) : [];
   if (!draft.length || contentOf(draft) === contentOf(published)) {
     throw new ProgramError(409, 'nothing_to_publish', 'The draft is the same as the published playbook.');
@@ -376,12 +400,11 @@ export async function publishDraft(env: Env, key: string, actor: Actor) {
       env.DB.prepare(
         'INSERT INTO program_playbook_versions (program_key, version, published_at, published_by_user_id) VALUES (?, ?, ?, ?)',
       ).bind(p.key, next, t, actor.id),
-      env.DB.prepare(
+      ...draft.map((s) => env.DB.prepare(
         `INSERT INTO program_playbook_sections
            (program_key, version, section_key, position, title, body, computed, template_keys, edited_at, edited_by_user_id)
-         SELECT program_key, ?, section_key, position, title, body, computed, template_keys, edited_at, edited_by_user_id
-           FROM program_playbook_sections WHERE program_key = ? AND version = 0`,
-      ).bind(next, p.key),
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(p.key, next, s.section_key, s.position, s.title, s.body, s.computed, s.template_keys, s.edited_at, s.edited_by_user_id)),
     ]);
   } catch (e) {
     if (/UNIQUE constraint failed/i.test(String((e as Error)?.message ?? e))) {
@@ -436,6 +459,30 @@ export function insertProgramStatements(env: Env, p: NewProgram, actorId: number
          (program_key, version, section_key, position, title, body, computed, template_keys, edited_at, edited_by_user_id)
        VALUES (?, 0, ?, ?, ?, ?, 0, ?, ?, ?)`,
     ).bind(p.key, s.key, i + 1, s.title, s.body, JSON.stringify(s.template_keys ?? []), t, actorId)),
+  ];
+}
+
+/**
+ * D4806 (#4806): `insertProgramStatements` for a proposal's approval. Every statement writes only while the
+ * proposal's own decision stands: the proposal is `approved` and was decided by this actor at this instant
+ * (`decidedAt`, a timestamp minted for this request). The decision's UPDATE is the batch's FIRST statement,
+ * so a decision that lost (the proposal was declined, sent back or approved by someone else first) leaves
+ * the registry row, the playbook draft and the draft grant unwritten, not just the proposal unchanged.
+ */
+export function insertProgramStatementsOnApproval(env: Env, p: NewProgram, actorId: number, gate: { proposalId: number; decidedAt: string }) {
+  const t = new Date().toISOString();
+  return [
+    env.DB.prepare(
+      `INSERT INTO programs (key, grp, name, purpose, who, join_method, status, position, licence_uid, created_at, updated_at)
+       SELECT ?, ?, ?, ?, ?, ?, 'proposed', (SELECT COALESCE(MAX(position), 0) + 1 FROM programs), ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?)`,
+    ).bind(p.key, p.grp, p.name, p.purpose, p.who, p.join_method, p.licence_uid, t, t, gate.proposalId, gate.decidedAt, actorId),
+    ...p.sections.map((s, i) => env.DB.prepare(
+      `INSERT INTO program_playbook_sections
+         (program_key, version, section_key, position, title, body, computed, template_keys, edited_at, edited_by_user_id)
+       SELECT ?, 0, ?, ?, ?, ?, 0, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?)`,
+    ).bind(p.key, s.key, i + 1, s.title, s.body, JSON.stringify(s.template_keys ?? []), t, actorId, gate.proposalId, gate.decidedAt, actorId)),
   ];
 }
 

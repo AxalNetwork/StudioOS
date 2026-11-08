@@ -31,6 +31,7 @@ const ROUTES: Array<[string, string]> = [
   ['PUT /:uid/territories', 'admin_licences_terms'],
   ['PUT /:uid/seats', 'admin_licences_terms'],
   ['PATCH /:uid/terms', 'admin_licences_terms'],
+  ['PATCH /:uid/entity', 'admin_licences_terms'],
   ['GET /:uid/terms', 'admin_licences_terms'],
   ['PUT /:uid/terms', 'admin_licences_terms'],
   ['GET /:uid/activation', 'admin_licences_lifecycle'],

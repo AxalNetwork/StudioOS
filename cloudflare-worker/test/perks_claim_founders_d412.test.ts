@@ -310,7 +310,10 @@ test('the partner states a cash value; only an admin writes the editorial note, 
   // The partner cannot write an endorsement of their own listing.
   const self = await call('PATCH', `/partner/${sub.body.uid}`, PARTNER, { editorial_note: 'Best perk ever' });
   assert.equal(self.status, 400, 'editorial_note is not a partner field');
-  await call('POST', `/admin/${sub.body.uid}/review`, ADMIN, { action: 'approve', featured: true, editorial_note: 'Our pick this month.' });
+  // D4806: an admin's review names the listing revision it read (its `updated_at`).
+  const revision = (db.prepare('SELECT updated_at FROM perks WHERE uid = ?').get(sub.body.uid) as any).updated_at;
+  const approved = await call('POST', `/admin/${sub.body.uid}/review`, ADMIN, { action: 'approve', featured: true, editorial_note: 'Our pick this month.', expected_revision: revision });
+  assert.equal(approved.status, 200, JSON.stringify(approved.body));
   const list = await call('GET', '/', FOUNDER);
   assert.equal(list.body.items[0].editorial_note, 'Our pick this month.');
   assert.equal(list.body.items[0].value_cents, 50000);

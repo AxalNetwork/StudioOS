@@ -45,7 +45,7 @@ import type { Env } from '../types';
 import type { AgentRow } from '../services/agents/teams';
 import { scopeOfRow } from './engine';
 import { autonomy, engineMode, haltedAll, type AgentRuntime } from './runtime';
-import { enqueueAgentRun } from './agentQueue';
+import { enqueueAgentRun, recordRepairMetrics, repairExhaustedRun } from './agentQueue';
 import { defaultTokensLeft, sweepDuties, type DutyDeps } from '../services/agents/duties';
 import { notify } from '../services/notify';
 import { purgeExpired } from '../services/agents/memory';
@@ -154,11 +154,51 @@ const sqlTime = (value: string): number | null => {
   return Number.isFinite(ms) ? ms : null;
 };
 
+/** D4593 (#4593) — at most this many stranded runs are repaired in one sweep. */
+export const REPAIR_MAX = 20;
+
+/**
+ * The durable owner of an exhausted agent message's repair. A run the agent DLQ ended `failed`
+ * (`queue_exhausted`) whose task is still `in_progress` is the one state a lost or dropped DLQ message
+ * can leave behind; `repairExhaustedRun` reopens the task only from `in_progress` and never beside a
+ * newer attempt or live run, so this and the DLQ consumer can race harmlessly. It changes state only:
+ * it admits, starts, refunds and charges nothing, so it runs even when the engine is off or halted.
+ * Reports pending count and age as low-cardinality metrics.
+ */
+export async function sweepStrandedRuns(env: Env, now: Date): Promise<{ repaired: number; pending: number }> {
+  const out = { repaired: 0, pending: 0 };
+  try {
+    const rows = (await env.DB.prepare(
+      `SELECT r.uid AS uid, r.ended_at AS ended_at FROM agent_task_runs r
+         JOIN scope_tasks t ON t.id = r.task_id
+        WHERE r.status = 'failed' AND r.refusal = 'queue_exhausted' AND t.status = 'in_progress'
+          AND NOT EXISTS (SELECT 1 FROM agent_task_runs n WHERE n.task_id = r.task_id AND n.id <> r.id
+                            AND (n.attempt > r.attempt OR n.status IN ('admitted', 'running', 'waiting_decision')))
+        ORDER BY r.id LIMIT ?`,
+    ).bind(REPAIR_MAX).all<{ uid: string; ended_at: string | null }>()).results ?? [];
+    const ends = rows.map((r) => (r.ended_at ? sqlTime(r.ended_at) : null)).filter((v): v is number => v != null);
+    let ambiguous = 0;
+    for (const r of rows) {
+      try { if ((await repairExhaustedRun(env, r.uid)) === 'repaired') out.repaired += 1; }
+      catch { ambiguous += 1; console.warn('[agents] repair_failed'); }
+    }
+    out.pending = ambiguous;
+    await recordRepairMetrics(env, [
+      ['agent_repair_pending', rows.length],
+      ['agent_repair_repaired', out.repaired],
+      ['agent_repair_ambiguous', ambiguous],
+      ...(ends.length ? [['agent_repair_oldest_age_seconds', Math.max(0, Math.floor((now.getTime() - Math.min(...ends)) / 1000))] as [string, number]] : []),
+    ]);
+  } catch { console.warn('[agents] repair_sweep_unreadable'); }
+  return out;
+}
+
 export async function sweepAgents(env: Env, now: Date, deps?: Partial<SweepDeps>): Promise<{ resent: number; admitted: number; cap_resumed: number }> {
   const out = { resent: 0, admitted: 0, cap_resumed: 0 };
   const stats: SweepStats = { examined: 0, eligible: 0, refused: 0, oldestEligibleAgeSeconds: null, cursorReset: false };
   const finish = async () => { await recordSweepMetrics(env, now, out, stats); return out; };
   try { out.cap_resumed = await resumeCapPauses(env, now); } catch { console.warn('[agents] cap_resume_failed'); }
+  await sweepStrandedRuns(env, now);
   if (await haltedAll(env)) return finish();
   const mode = await engineMode(env);
   if (mode === 'off') return finish();

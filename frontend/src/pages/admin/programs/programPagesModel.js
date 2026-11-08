@@ -242,6 +242,8 @@ export function playbookFrom(read, superAdmin) {
     publishedAt: pb.published_at || null,
     editedAt: draft?.edited_at || null,
     differs: Boolean(draft?.differs),
+    // D4806: the revision of the draft the reviewer sees; Publish names it.
+    draftHash: typeof draft?.hash === 'string' ? draft.hash : null,
     sections,
   };
 }
@@ -741,8 +743,9 @@ export const ACTION_WORD = Object.freeze({ approve: 'Approve', reject: 'Reject',
 /**
  * Each action's dialog: what it does, and what it sends. Approve keeps the
  * stored note unless one is typed (N8); Reject needs the note the partner
- * sees and is final; the feature switch is an approve on a live listing,
- * which the Worker treats as an edit of the feature only.
+ * sees and is final; the feature switch is its own operation on a live listing
+ * (`POST /perks/admin/:uid/feature`, D4806), never an approve, so it cannot put a
+ * paused or edited listing back on the shelf.
  */
 export function listingDialog(action, p) {
   const offer = p?.offer || 'this listing';
@@ -753,17 +756,25 @@ export function listingDialog(action, p) {
   return { title: `Stop featuring ${offer}?`, lines: ['It leaves “Featured this month”. It stays live.'], button: 'Stop featuring' };
 }
 
+/** Feature and Stop featuring are one operation of their own; every other action is a review. */
+export const isFeatureAction = (action) => action === 'feature' || action === 'unfeature';
+
+/**
+ * D4806 (#4806): every body names the listing revision the reviewer saw (`expected_revision`, the row's
+ * `updated_at`), so a listing that changed while the dialog was open is refused, not overwritten.
+ */
 export function listingBody(action, p, { note = '', editorial = '', featured = false } = {}) {
   const typed = String(note || '').trim();
-  if (action === 'reject') return { action: 'reject', review_note: typed };
-  if (action === 'pause') return { action: 'pause', ...(typed ? { review_note: typed } : {}) };
-  if (action === 'feature' || action === 'unfeature') {
-    const body = { action: 'approve', featured: action === 'feature' };
+  const expected_revision = typeof p?.updated_at === 'string' ? p.updated_at : null;
+  if (action === 'reject') return { action: 'reject', review_note: typed, expected_revision };
+  if (action === 'pause') return { action: 'pause', ...(typed ? { review_note: typed } : {}), expected_revision };
+  if (isFeatureAction(action)) {
+    const body = { featured: action === 'feature', expected_revision };
     const line = String(editorial || '').trim();
     if (action === 'feature' && line) body.editorial_note = line;
     return body;
   }
-  const body = { action: 'approve', review_note: typed || p?.review_note || '' };
+  const body = { action: 'approve', review_note: typed || p?.review_note || '', expected_revision };
   if (featured) body.featured = true;
   const line = String(editorial || '').trim();
   if (line) body.editorial_note = line;
@@ -799,24 +810,31 @@ export function isDone(cell) {
 }
 export const hasFinished = (learner) => Array.isArray(learner?.completion) && learner.completion.length > 0 && learner.completion.every(isDone);
 
-/** Completion by program: each published program's learners (R10), finished by OD9's rule. */
-export function completionRows(programs, learnerReads) {
+/**
+ * Completion by program: each published program's learners and how many
+ * finished (OD9's rule, applied by the Worker), from D4810's one completion
+ * read. A program the read lists as unreadable, or leaves out past its cap, is
+ * said so, never drawn as 0.
+ */
+export function completionRows(programs, read) {
+  const state = !read || isLoading(read) ? 'loading' : isFailed(read) ? 'unreadable' : 'ready';
+  const by = new Map((state === 'ready' && Array.isArray(read.data?.programs) ? read.data.programs : []).map((x) => [x.uid, x]));
+  const unreadable = new Set(state === 'ready' && Array.isArray(read.data?.unreadable) ? read.data.unreadable : []);
   return programs.map((p) => {
-    const read = learnerReads[p.uid];
-    if (!read || isLoading(read)) return { uid: p.uid, name: p.name, region: p.region, state: 'loading' };
-    if (isFailed(read)) return { uid: p.uid, name: p.name, region: p.region, state: 'unreadable' };
-    const learners = Array.isArray(read.data?.learners) ? read.data.learners : [];
-    const finished = learners.filter(hasFinished).length;
-    return {
-      uid: p.uid, name: p.name, region: p.region, state: 'ready', learners: learners.length, finished,
-      percent: learners.length ? Math.round((100 * finished) / learners.length) : null,
-    };
+    const base = { uid: p.uid, name: p.name, region: p.region };
+    if (state !== 'ready') return { ...base, state };
+    const x = by.get(p.uid);
+    if (!x) return { ...base, state: unreadable.has(p.uid) ? 'unreadable' : 'left_out' };
+    const learners = Number(x.learners) || 0;
+    const finished = Number(x.finished) || 0;
+    return { ...base, state: 'ready', learners, finished, percent: learners ? Math.round((100 * finished) / learners) : null };
   });
 }
 
 /** Finished: the sum over programs, unreadable if any program's learners could not be read. */
 export function finishedTotal(rows) {
-  if (rows.some((r) => r.state === 'unreadable')) return { state: 'unreadable' };
+  // D4810: a program left out past the cap makes the total partial, so none is drawn.
+  if (rows.some((r) => r.state === 'unreadable' || r.state === 'left_out')) return { state: 'unreadable' };
   if (rows.some((r) => r.state !== 'ready')) return { state: 'loading' };
   return { state: 'ready', count: rows.reduce((t, r) => t + r.finished, 0) };
 }
