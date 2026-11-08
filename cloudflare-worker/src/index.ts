@@ -838,6 +838,8 @@ const COOL_OFF_PREFIXES = [
   '/api/admin/licences',
   // D5014 (#5014) — the pricing models and market data behind recommended licence fees. Same class.
   '/api/admin/licence-pricing',
+  // D5048 (#5048) — a licence's package and program agreements. Same class.
+  '/api/admin/licence-agreements',
   // D708 — each Axal entity's bank accounts: the payment instructions every
   // notice prints. Pause them for a freshly-recovered admin.
   '/api/admin/bank-accounts',
