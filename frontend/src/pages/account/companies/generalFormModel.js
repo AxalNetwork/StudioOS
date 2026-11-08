@@ -51,17 +51,34 @@ export const CURRENCY_CODES = Object.freeze([
   'USD', 'UYU', 'UZS', 'VED', 'VES', 'VND', 'VUV', 'WST', 'XAF', 'XCD', 'XCG', 'XOF', 'XPF', 'YER', 'ZAR', 'ZMW', 'ZWG',
 ]);
 
-/** The form's text fields, by section, as the canvas draws them. Growth keeps the old page's four. */
+/**
+ * #4964: the matching vocabulary, mirroring `cloudflare-worker/src/services/companyProfileVocab.ts` (a test keeps
+ * the codes equal). Regions are canonical codes (`region_codes`); revenue is a band.
+ */
+export const REGIONS = Object.freeze([
+  ['global', 'Global'], ['north_america', 'North America'], ['latin_america', 'Latin America'], ['uk_ireland', 'UK and Ireland'],
+  ['europe', 'Europe'], ['middle_east_north_africa', 'Middle East and North Africa'], ['sub_saharan_africa', 'Sub-Saharan Africa'],
+  ['south_asia', 'South Asia'], ['east_asia', 'East Asia'], ['southeast_asia', 'Southeast Asia'], ['oceania', 'Oceania'],
+]);
+export const REGION_CODES = Object.freeze(REGIONS.map(([c]) => c));
+export const regionLabel = (code) => (REGIONS.find(([c]) => c === code) || [null, code])[1];
+export const REVENUE_RANGES = Object.freeze([
+  ['pre_revenue', 'Pre-revenue'], ['under_100k', 'Under $100k a year'], ['100k_1m', '$100k to $1M a year'],
+  ['1m_5m', '$1M to $5M a year'], ['5m_20m', '$5M to $20M a year'], ['20m_plus', 'Over $20M a year'],
+]);
+export const PROSE_MAX = 500;
+
+/** The form's fields, by section, as the canvas draws them. Growth keeps the old page's four. */
 export const SECTIONS = [
   { key: 'identity', title: 'Identity', line: 'The name members see everywhere.', fields: ['company_name', 'stage', 'default_currency'] },
   { key: 'links', title: 'Links', fields: ['website', 'linkedin_url'] },
-  { key: 'where', title: 'Where you operate', line: 'Regions are used to match you with investors, advisors and events.', fields: ['international_presence'] },
+  { key: 'where', title: 'Where you operate', line: 'Regions are used to match you with investors, advisors and events.', fields: ['region_codes', 'international_presence'] },
   { key: 'about', title: 'About', fields: ['description'] },
   { key: 'growth', title: 'Growth', line: 'Used in investor matching and deal analysis.', fields: ['revenue_range', 'employee_count', 'current_products', 'expansion_goals'] },
 ];
 export const LABELS = {
   company_name: 'Company name', stage: 'Stage', default_currency: 'Default currency', website: 'Website', linkedin_url: 'LinkedIn',
-  international_presence: 'Regions', description: 'Description',
+  region_codes: 'Regions', international_presence: 'Notes on where you operate', description: 'Description',
   revenue_range: 'Revenue range', employee_count: 'Employee count', current_products: 'Current products', expansion_goals: 'Expansion goals',
 };
 export const FIELDS = SECTIONS.flatMap((s) => s.fields);
@@ -70,14 +87,21 @@ export const FIELDS = SECTIONS.flatMap((s) => s.fields);
 export const regionsOf = (v) => String(v ?? '').split(',').map((r) => r.trim()).filter(Boolean);
 export const regionsText = (list) => [...new Set((list || []).map((r) => String(r).trim()).filter(Boolean))].join(', ');
 
-/** The form's values from a `GET /company/:uid` row ('' for absent, never "Not recorded" inside a form). */
+/** Known codes, in the list's order, without repeats. */
+export const regionCodesIn = (v) => {
+  const set = new Set(Array.isArray(v) ? v.map(String) : []);
+  return REGION_CODES.filter((c) => set.has(c));
+};
+
+/** The form's values from a `GET /company/:uid` row ('' for absent, never "Not recorded" inside a form; codes as a list). */
 export function formOf(row) {
   const out = {};
-  for (const f of FIELDS) out[f] = row?.[f] == null ? '' : String(row[f]);
+  for (const f of FIELDS) out[f] = f === 'region_codes' ? regionCodesIn(row?.region_codes) : row?.[f] == null ? '' : String(row[f]);
   return out;
 }
 
 const norm = (f, v) => {
+  if (f === 'region_codes') { const c = regionCodesIn(v); return c.length ? c.join(',') : null; }
   const t = String(v ?? '').trim();
   if (f === 'employee_count') return t === '' ? null : Number(t);
   // D4961: compared as the Worker stores them, so "northwind.example" and the stored "https://northwind.example" are the same value.
@@ -94,9 +118,53 @@ export function changes(form, row) {
   for (const f of FIELDS) {
     const next = norm(f, form?.[f]);
     const was = norm(f, row?.[f]);
-    if (next !== was) patch[f] = next;
+    if (next !== was) patch[f] = f === 'region_codes' ? regionCodesIn(form?.[f]) : next;
   }
   return patch;
+}
+
+// ── Concurrency (#4963) ─────────────────────────────────────────────────────
+
+/** The refusal code a stale save answers with; its body carries `company`, the current detail. */
+export const VERSION_CONFLICT = 'version_conflict';
+
+/** The token a save sends back: the `profile_version` this form loaded, or undefined for a row that has none. */
+export const versionOf = (row) => (Number.isSafeInteger(row?.profile_version) && row.profile_version > 0 ? row.profile_version : undefined);
+
+/**
+ * After a 409: the form rebuilt on the CURRENT company. Every value the other editor committed is kept. This editor's
+ * edits to fields nobody else changed are re-applied on top, so they are not lost; an edit to a field the other editor
+ * also changed is replaced by their committed value and named in `conflicts`, for this editor to review and redo.
+ */
+export function rebaseOnConflict(form, loadedRow, currentRow) {
+  const mine = changes(form, loadedRow);
+  const theirs = changes(formOf(currentRow), loadedRow);
+  const next = formOf(currentRow);
+  const conflicts = [];
+  for (const f of Object.keys(mine)) {
+    if (f in theirs) { if (norm(f, form[f]) !== norm(f, currentRow?.[f])) conflicts.push(f); }
+    else next[f] = form[f];
+  }
+  return { form: next, conflicts };
+}
+
+/** The line a conflicted save shows. */
+export function conflictLine(conflicts) {
+  const named = (conflicts || []).map((f) => LABELS[f] || f);
+  if (!named.length) return 'Someone else saved changes first. Their values are shown and your other changes are kept; review and save again.';
+  return `Someone else saved changes first. Your edit${named.length === 1 ? '' : 's'} to ${named.join(', ')} ${named.length === 1 ? 'was' : 'were'} replaced by their saved value; your other changes are kept. Review and save again.`;
+}
+
+/** ST6c for an archived company: nothing here can change until it is restored (#4963, the Worker's rule). */
+export const archivedLine = (name) => `${name || 'This company'} is archived. Restore it before you change its settings.`;
+
+/** A link a member can open, as the Worker checks it (`checkProfileUrl`). Kept for the conflict tests. */
+export function profileUrlOk(v, { linkedin = false } = {}) {
+  let u;
+  try { u = new URL(String(v).trim()); } catch { return false; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  if (!u.hostname.includes('.')) return false;
+  return !linkedin || u.hostname === 'linkedin.com' || u.hostname.endsWith('.linkedin.com');
 }
 
 /**
@@ -132,22 +200,34 @@ export function normalizeLinkedIn(raw) {
   return m ? `https://${host === 'linkedin.com' ? 'www.linkedin.com' : host}/${m[1].toLowerCase()}/${m[2]}` : null;
 }
 
-/** Why the form cannot be saved yet, or null. The name is required; every other field follows the Worker's contract. */
-export function problemOf(form) {
+/**
+ * Why the form cannot be saved yet, or null. The name is required; every other field follows the Worker's contract
+ * (D4962). With the loaded row, a value written before these rules is left alone (#4964): only a CHANGED link, a
+ * changed count and changed prose are checked, and prose the editor is typing is capped at PROSE_MAX.
+ */
+export function problemOf(form, row = null) {
   if (!String(form?.company_name ?? '').trim()) return 'Enter a company name.';
   const n = String(form?.employee_count ?? '').trim();
   if (n && !(/^\d{1,7}$/.test(n) && Number(n) <= EMPLOYEE_MAX)) return `Employee count is a whole number from 0 to ${EMPLOYEE_MAX.toLocaleString('en-US')}.`;
   if (String(form?.description ?? '').trim().length > DESCRIPTION_MAX) return `The description is at most ${DESCRIPTION_MAX} characters.`;
+  const changed = row ? changes(form, row) : null;
+  const check = (f) => !changed || f in changed;
   for (const f of ['revenue_range', 'current_products', 'expansion_goals', 'description']) {
+    if (!check(f)) continue;
     const v = String(form?.[f] ?? '').trim();
     // eslint-disable-next-line no-control-regex
     if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(v)) return `${LABELS[f]} contains characters that cannot be saved.`;
-    if (f !== 'description' && v.length > LIMITS[f]) return `${LABELS[f]} is at most ${LIMITS[f]} characters.`;
+    const cap = f === 'description' ? DESCRIPTION_MAX : (changed ? Math.min(LIMITS[f], PROSE_MAX) : LIMITS[f]);
+    if (f !== 'description' && v.length > cap) return `${LABELS[f]} is at most ${cap} characters.`;
   }
-  const site = String(form?.website ?? '').trim();
-  if (site && !normalizeWebsite(site)) return 'Enter a web address that starts with http:// or https://.';
-  const linked = String(form?.linkedin_url ?? '').trim();
-  if (linked && !normalizeLinkedIn(linked)) return 'Enter the address of a LinkedIn company, school or showcase page.';
+  if (check('website')) {
+    const site = String(form?.website ?? '').trim();
+    if (site && !normalizeWebsite(site)) return 'Enter a web address that starts with http:// or https://.';
+  }
+  if (check('linkedin_url')) {
+    const linked = String(form?.linkedin_url ?? '').trim();
+    if (linked && !normalizeLinkedIn(linked)) return 'Enter the address of a LinkedIn company, school or showcase page.';
+  }
   return null;
 }
 

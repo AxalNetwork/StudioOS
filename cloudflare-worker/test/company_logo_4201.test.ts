@@ -35,6 +35,8 @@ const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_eve
 const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
 const M757 = readFileSync(new URL('../sql/migrations/757_company_default_currency.sql', import.meta.url), 'utf8');
 const M4201 = readFileSync(new URL('../sql/migrations/202611031619_company_logo_change_event.sql', import.meta.url), 'utf8');
+// #4963: profile_version and the 'profile_update' kind; the logo write is conditioned on the version.
+const M4963 = readFileSync(new URL('../sql/migrations/202611072255_company_profile_version.sql', import.meta.url), 'utf8');
 
 // Ada is Northwind's primary admin; Ben a plain member; Fay a Founder by role; Cy runs Southwind only; Eve a platform admin.
 const ADA = 1, BEN = 2, CY = 3, EVE = 4, FAY = 5;
@@ -44,7 +46,7 @@ const ROLE: Record<number, string> = { [ADA]: 'founder', [BEN]: 'founder', [CY]:
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
-  db.exec(M597); db.exec(M685); db.exec(M757); db.exec(M4201);
+  db.exec(M597); db.exec(M685); db.exec(M757); db.exec(M4201); db.exec(M4963);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   for (const [id, n] of [[ADA, 'Ada'], [BEN, 'Ben'], [CY, 'Cy'], [EVE, 'Eve'], [FAY, 'Fay']] as const) u.run(id, ROLE[id], `${n} Made-up`, `${n.toLowerCase()}@example.test`);
   const c = db.prepare("INSERT INTO company_profiles (id, uid, company_name, logo_url, created_at, updated_at) VALUES (?, ?, ?, ?, '2026-01-01', '2026-01-01')");
@@ -247,7 +249,10 @@ test('edit rule: PATCH /company/:uid\'s — a plain member 403, an editor by rol
       .then((t) => app.request('/api/company/co-north', { method: 'PATCH', headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ description: 'x' }) }, env))
       .then((r) => r.status);
   };
-  assert.deepEqual(await Promise.all([BEN, FAY, ADA, EVE, CY].map(patch)), [403, 200, 200, 403, 403]);
+  // Sequential: two editors saving at once is a version conflict (#4963), which has its own test. This one is who may write.
+  const statuses = [];
+  for (const who of [BEN, FAY, ADA, EVE, CY]) statuses.push(await patch(who));
+  assert.deepEqual(statuses, [403, 200, 200, 403, 403]);
 });
 
 test('edit rule: a support session reads and writes nothing here (D4960), as PATCH does', async () => {
