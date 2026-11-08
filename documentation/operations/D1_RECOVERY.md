@@ -171,6 +171,13 @@ flag, which makes the drill rehearse what a real recovery must do.
 
 **No run has passed yet.** The 2026-11-01 run imported 274 of 276 chunks and
 failed at chunk 275 with `SQLITE_CONSTRAINT_FOREIGNKEY` (run 41307767798).
+The cause was a foreign-key cycle between `legal_documents` and `vc_funds`
+(one row each, pointing at each other): the splitter could not order it, and
+`PRAGMA defer_foreign_keys` does not hold across the statements of a remote
+`--file` import. The splitter now inserts one side with the back-edge column
+NULL and restores it with an `UPDATE` after every INSERT, so each statement
+passes immediate FK checks (`cycle_edges_broken` in the split summary; a cycle
+with no nullable back-edge is still counted as `cyclic_tables`).
 
 **Since D4558 the drill restores only a backup its manifest vouches for.**
 `backup-d1.yml` writes `<key minus .sql>.manifest.json` beside each export,
