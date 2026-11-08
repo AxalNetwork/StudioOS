@@ -112,7 +112,7 @@ test('legal generation names absent terms and writes no document or money',async
 });
 test('spin-out refuses missing paper terms before any automatic side effects',async()=>{
   const f=fixture();try {
-    const r=await call(f,4,'/api/legalcap/subsidiary/spinout',{deal_id:1,force:true});assert.equal(r.status,400,JSON.stringify(r.body));
+    const r=await call(f,4,'/api/legalcap/subsidiary/spinout',{deal_id:1,override:{kind:'no_passed_gate',reason:'Synthetic test: no gate recorded'}});assert.equal(r.status,400,JSON.stringify(r.body));
     for(const table of ['subsidiaries','legal_documents','capital_calls']) assert.equal(f.db.prepare(`SELECT COUNT(*) n FROM ${table}`).get()?.n,0);
   }finally{f.db.close();}
 });
@@ -181,7 +181,7 @@ test('a valid spin-out creates only supplied papers and never attempts a capital
     f.db.exec("INSERT INTO syndicates(id,deal_id,name,status,created_by) VALUES(1,1,'Synthetic','open',2)");
     const base=f.env.DB;let calls=0;
     f.env.DB={...base,prepare(sql:string){if(/INSERT\s+INTO\s+capital_calls/i.test(sql))calls++;return base.prepare(sql);}};
-    const r=await call(f,4,'/api/legalcap/subsidiary/spinout',{deal_id:1,force:true,variables});
+    const r=await call(f,4,'/api/legalcap/subsidiary/spinout',{deal_id:1,override:{kind:'no_passed_gate',reason:'Synthetic test: no gate recorded'},variables});
     assert.equal(r.status,201,JSON.stringify(r.body));assert.equal(calls,0);assert.equal(r.body.capital_call,null);
     const papers=f.db.prepare('SELECT content FROM legal_documents').all();assert.equal(papers.length,3);
     for(const paper of papers){const content=JSON.parse(String(paper.content));assert.equal(content.vars.amount,'123');assert.equal(content.vars.holding_equity_pct,'10');}

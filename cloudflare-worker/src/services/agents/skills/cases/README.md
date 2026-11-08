@@ -8,9 +8,14 @@ One case per starter skill, named `<slug>.json` after the skill in `../`. Part D
   "skill": "<slug>", "version": 1, "note": "…",
   "input":  { "records": { "<catalogue read key>": … } },
   "expect": { "output": "draft | record_change | brief",
-              "must_include": [ … ], "must_say_not_recorded": [ … ], "must_not_include": [ … ] }
+              "must_include": [ … ], "must_say_not_recorded": [ … ], "must_not_include": [ … ],
+              "numbers": [ { "metric": "DPI", "value": 0.2, "unit": "x", "tolerance": 0.005 } ] }
 }
 ```
+
+`numbers` is optional (#4531). `must_say_not_recorded` is judged per field: the
+field and "Not recorded" in the same line, sentence, list item or table row.
+The full rules are in `documentation/architecture/SKILL_LIBRARY_CONTRACT.md`.
 
 **Rules.** Every record is made up. A case feeds only reads its skill is given
 (the read key's source is one of the skill's `tools`). No email address appears

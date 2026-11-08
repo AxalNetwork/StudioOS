@@ -197,3 +197,23 @@ test('D1612 D: the board runs each published Axal skill\'s cases on its current 
   assert.deepEqual((await skillBoard(w.env, [2]))[0].regressed, []);
   assert.deepEqual(await skillBoard(w.env, []), []);
 });
+
+test('#4531: the published evaluation judges through the same rule; the demonstrated runway output fails and is recorded', async () => {
+  const w = world();
+  const { EVAL_DEPS } = await import('../src/services/agents/skillLifecycle.ts');
+  const real = EVAL_DEPS.run;
+  let says = 'There are 37 paying customers. Delaware franchise tax is on the agenda. Runway is 12 months. Churn is Not recorded.';
+  EVAL_DEPS.run = async () => ({ ok: true, output: says, usageLogId: null }) as any;
+  const kv = new Map<string, string>();
+  w.env.RATE_LIMITS = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => { kv.set(k, v); } };
+  try {
+    // The board-meeting-brief starter case (`skills/cases/board-meeting-brief.json`) on its current version.
+    await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq: async () => 1 } as any, 1);
+    const row = () => w.db.prepare("SELECT result, detail FROM agent_skill_version_evals WHERE skill_id = 1 AND case_key = ? ORDER BY id DESC LIMIT 1").get(STARTER_KEY) as any;
+    // Mutation checked: the published path given its own phrase judge → this passes and the test fails.
+    assert.deepEqual([row().result, row().detail], ['fail', 'It did not say runway is not recorded.']);
+    says = 'There are 37 paying customers. Delaware franchise tax is on the agenda. Runway: Not recorded.';
+    await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq: async () => 1 } as any, 1);
+    assert.equal(row().result, 'pass');
+  } finally { EVAL_DEPS.run = real; }
+});

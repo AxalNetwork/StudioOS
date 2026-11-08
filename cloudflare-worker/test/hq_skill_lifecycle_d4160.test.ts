@@ -401,3 +401,23 @@ test('D4160: the diff between versions and the draft; bulk items done or refused
   assert.equal((await call(w, SUPER, 'GET', `${HQ}/${ready}/diff?from=v9`)).body.error, 'version_unknown');
   assert.equal((await call(w, SUPER, 'GET', `${HQ}/${ready}`)).body.skill.status, 'published', 'an unreviewed edit is a draft of a published skill');
 });
+
+test('#4531: the draft evaluation judges missing data per field, so an unrelated "Not recorded" fails the case', async () => {
+  const w = world();
+  const uid = await newSkill(w);
+  const kase = (say: string) => ({
+    name: 'Runway is missing', input: { records: { 'stripe.read': { cash_usd: 400000, say } } },
+    expect: { output: 'draft', must_include: [], must_say_not_recorded: ['runway'], must_not_include: [] },
+  });
+  stubRun();
+  const run = async (say: string) => {
+    assert.equal((await call(w, SUPER, 'PUT', `${HQ}/${uid}/cases`, { reason: 'The missing-runway golden case.', cases: [kase(say)] })).status, 200);
+    return (await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] })).body.evals;
+  };
+  // Mutation checked: `judge()` back on "the field anywhere and Not recorded anywhere" → this passes and the test fails.
+  const bad = await run('Runway is 12 months. Churn is Not recorded.');
+  assert.deepEqual([bad.pass, bad.total, bad.meets_bar], [0, 1, false]);
+  assert.equal(bad.cases[0].results[0].detail, 'It did not say runway is not recorded.');
+  const good = await run('Cash is 400000. Runway: Not recorded.');
+  assert.deepEqual([good.pass, good.total, good.meets_bar], [1, 1, true]);
+});
