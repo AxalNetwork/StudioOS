@@ -56,22 +56,31 @@ import { LOSS_REASONS } from '../services/bdAnalytics';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import { railFor, refuseRun } from '../util/railContext';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { isAdmin } from './_t13t14t15_helpers';
+import {
+  companyBinds, isActiveRetainer, monthlyCents, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
+} from '../services/partnerPipelineRules';
 import {
   mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
 } from './_t13t14t15_helpers';
 import {
-  currentMonthlyCents, daysBetween, mergePatch, parseCents, parseHours, parsePeriod,
-  requireOwnEngagement, requireOwnQuote, requirePartnerRole, retainerProjection, utilisationFor,
+  daysBetween, mergePatch, parseCents, parseHours, parsePeriod,
+  outsideCompany, requireOwnEngagement, requireOwnQuote, requirePartnerRole, retainerProjection, utilisationFor,
 } from './_partner_workspace_helpers';
 
 const partnerPipeline = new Hono<{ Bindings: Env }>();
 
 /** The partner row for the caller, or a throw `mapError` will shape. */
-async function actingPartner(c: any): Promise<{ user: User; partnerId: number }> {
+async function actingPartner(c: any): Promise<{ user: User; partnerId: number; companyId: number | null }> {
   const user = (await requireAuth(c)) as User;
   requirePartnerRole(user);
   const partner = await requirePartnerProfile(c.env, user);
-  return { user, partnerId: Number(partner.id) };
+  // D4693: THE SELECTED COMPANY, verified, resolved once and handed to every read and write below. The overview
+  // (`/quotes/me`, `/quotes/analytics`) already narrows to it; the zones did not, so a firm saw one agency's win rate
+  // beside another's proposals. An admin's oversight view stays wide, as it does there.
+  const companyId = isAdmin(user) ? null : await activeCompanyFor(c, user);
+  return { user, partnerId: Number(partner.id), companyId };
 }
 
 async function body<T>(c: any): Promise<T> {
@@ -570,7 +579,7 @@ partnerPipeline.delete('/leads/:needId/pass', async (c) => {
  * of the answer was thrown away. The ids ride in one bound `json_each(?)`, so
  * nothing is interpolated into the statement.
  */
-async function readProposals(env: Env, partnerId: number, cursor: string | null, limit: number) {
+async function readProposals(env: Env, partnerId: number, companyId: number | null, cursor: string | null, limit: number) {
   const cur = decodeCursor(cursor, 2);
   const rows = await env.DB.prepare(
     `SELECT q.id, q.uid, q.need_id, q.price, q.timeline_weeks, q.deliverables,
@@ -583,10 +592,11 @@ async function readProposals(env: Env, partnerId: number, cursor: string | null,
        LEFT JOIN engagements e ON e.quote_id = q.id
        LEFT JOIN partner_retainers r ON r.engagement_id = e.id
       WHERE q.partner_id = ?
+        AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
         AND (? IS NULL OR q.created_at < ? OR (q.created_at = ? AND q.id < ?))
       ORDER BY q.created_at DESC, q.id DESC
       LIMIT ?`,
-  ).bind(partnerId, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  ).bind(partnerId, ...companyBinds(companyId), cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
   const page = trimPage(rows.results || [], limit);
   const ids = page.rows.map((q: any) => Number(q.id));
   const versions = ids.length
@@ -595,8 +605,9 @@ async function readProposals(env: Env, partnerId: number, cursor: string | null,
          FROM quote_versions v
          JOIN quotes q ON q.id = v.quote_id
         WHERE q.partner_id = ? AND v.quote_id IN (SELECT value FROM json_each(?))
+          AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
         ORDER BY v.quote_id, v.version`,
-    ).bind(partnerId, JSON.stringify(ids)).all<any>()
+    ).bind(partnerId, JSON.stringify(ids), ...companyBinds(companyId)).all<any>()
     : { results: [] as any[] };
 
   const byQuote = new Map<number, any[]>();
@@ -615,7 +626,10 @@ async function readProposals(env: Env, partnerId: number, cursor: string | null,
 
   const items = page.rows.map((q: any) => {
     const trail = byQuote.get(Number(q.id)) || [];
-    const decided = Boolean(q.decided_at) || q.status === 'accepted' || q.status === 'rejected';
+    // D4693: decided means won or lost. A decided_at stamp alone does not decide a quote —
+    // a withdrawn one can carry it and is still not a loss.
+    const outcome = quoteOutcome(q.status);
+    const decided = outcome === 'won' || outcome === 'lost';
     return {
       quote_id: Number(q.id),
       uid: q.uid,
@@ -658,33 +672,35 @@ async function readProposals(env: Env, partnerId: number, cursor: string | null,
 
 partnerPipeline.get('/proposals', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const limit = listLimit(c.req.query('limit'));
     const cursor = c.req.query('cursor') ?? null;
     decodeCursor(cursor, 2);
-    const pageRead = await readProposals(c.env, partnerId, cursor, limit);
+    const pageRead = await readProposals(c.env, partnerId, companyId, cursor, limit);
     const items = pageRead.rows;
 
     // EVERY FIGURE BELOW DESCRIBES THE WHOLE BOOK, NOT THE PAGE (#4701). The
     // win rate over a firm's newest 200 bids is a different number from its
-    // win rate, and it moves as old bids age out of the window.
+    // win rate, and it moves as old bids age out of the window. The populations
+    // are D4693's: won and lost are decisions, withdrawing is not losing, and
+    // the rate is the one `/quotes/analytics` prints.
     let liveCount = 0;
     let liveValue = 0;
-    let decidedCount = 0;
+    let withdrawnCount = 0;
     let wonCount = 0;
     let lostCount = 0;
     const lossCounts: Record<string, number> = {};
     for (const r of LOSS_REASONS) lossCounts[r] = 0;
     let unstatedLosses = 0;
     const walk = await scanAll(
-      (cur) => readProposals(c.env, partnerId, cur, 200),
+      (cur) => readProposals(c.env, partnerId, companyId, cur, 200),
       (rows) => {
         for (const x of rows) {
-          if (!x.decided && x.status !== 'withdrawn') { liveCount += 1; liveValue += x.price_dollars || 0; }
-          if (!x.decided) continue;
-          decidedCount += 1;
-          if (x.state === 'Won') wonCount += 1;
-          if (x.state === 'Lost') {
+          const outcome = quoteOutcome(x.status);
+          if (outcome === 'open') { liveCount += 1; liveValue += x.price_dollars || 0; }
+          if (outcome === 'withdrawn') withdrawnCount += 1;
+          if (outcome === 'won') wonCount += 1;
+          if (outcome === 'lost') {
             lostCount += 1;
             if (x.loss_reason && LOSS_REASONS.includes(x.loss_reason)) lossCounts[x.loss_reason] += 1;
             else unstatedLosses += 1;
@@ -692,6 +708,7 @@ partnerPipeline.get('/proposals', async (c) => {
         }
       },
     );
+    const decidedCount = wonCount + lostCount;
 
     return c.json({
       items,
@@ -706,7 +723,10 @@ partnerPipeline.get('/proposals', async (c) => {
       // NULL WITH NOTHING DECIDED. A rate over an empty denominator is not zero
       // per cent, and the analytics zone reports the same figure from the same
       // rule rather than a second one.
-      win_rate_pct: decidedCount ? Math.round((wonCount / decidedCount) * 100) : null,
+      win_rate_pct: winRate(wonCount, lostCount).pct,
+      // The sentence `/quotes/analytics` prints for the same figure, from the same function.
+      win_rate_basis: winRateBasis(wonCount, lostCount, liveCount, withdrawnCount),
+      withdrawn_count: withdrawnCount,
       loss_reasons: LOSS_REASONS.map((reason) => ({ reason, count: lossCounts[reason] })),
       // A LOSS WITH NO REASON IS THE CHART'S REAL FINDING, so it is counted
       // rather than folded into `other`: "we did not ask" and "they said other"
@@ -730,9 +750,9 @@ partnerPipeline.get('/proposals', async (c) => {
  */
 partnerPipeline.post('/proposals/:quoteId/versions', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const quoteId = Number(c.req.param('quoteId'));
-    await requireOwnQuote(c.env, partnerId, quoteId);
+    await requireOwnQuote(c.env, partnerId, quoteId, companyId);
     const b = await body<any>(c);
     const summary = trimOrNull(b.change_summary, 400);
     if (!summary) return c.json({ detail: 'A version needs to say what changed' }, 400);
@@ -769,9 +789,9 @@ partnerPipeline.post('/proposals/:quoteId/versions', async (c) => {
  */
 partnerPipeline.put('/proposals/:quoteId/outcome', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const quoteId = Number(c.req.param('quoteId'));
-    const quote = await requireOwnQuote(c.env, partnerId, quoteId);
+    const quote = await requireOwnQuote(c.env, partnerId, quoteId, companyId);
     const b = await body<any>(c);
 
     if (b.loss_reason === null) {
@@ -833,15 +853,13 @@ const TERM_STATES = ['open', 'agreed', 'conceded', 'refused'];
 
 /**
  * One chunk of the firm's quotes with their negotiation, and the terms of
- * exactly those negotiations (#4701).
+ * exactly those negotiations (#4701), narrowed to the selected company (D4693).
  *
- * The terms used to be every term the firm owned, read in one query and then
- * matched to whichever 200 quotes the list returned. They now ride a bound
- * `json_each(?)` of the returned negotiation ids, still joined back to
- * `quotes.partner_id` so the ownership predicate lives in the query: a term can
- * only come back for a quote that is this partner's.
+ * The terms ride a bound `json_each(?)` of the returned negotiation ids, still
+ * joined back to `quotes.partner_id` so the ownership predicate lives in the
+ * query: a term can only come back for a quote that is this partner's.
  */
-async function readNegotiations(env: Env, partnerId: number, cursor: string | null, limit: number) {
+async function readNegotiations(env: Env, partnerId: number, companyId: number | null, cursor: string | null, limit: number) {
   const cur = decodeCursor(cursor, 2);
   const rows = await env.DB.prepare(
     `SELECT q.id AS quote_id, q.uid AS quote_uid, q.price, q.status AS quote_status,
@@ -854,10 +872,11 @@ async function readNegotiations(env: Env, partnerId: number, cursor: string | nu
        LEFT JOIN founders f ON f.id = n.founder_id
        LEFT JOIN quote_negotiations g ON g.quote_id = q.id
       WHERE q.partner_id = ?
+        AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
         AND (? IS NULL OR q.created_at < ? OR (q.created_at = ? AND q.id < ?))
       ORDER BY q.created_at DESC, q.id DESC
       LIMIT ?`,
-  ).bind(partnerId, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  ).bind(partnerId, ...companyBinds(companyId), cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
   const page = trimPage(rows.results || [], limit);
   const negotiationIds = page.rows.filter((r: any) => r.negotiation_id).map((r: any) => Number(r.negotiation_id));
   const terms = negotiationIds.length
@@ -867,8 +886,9 @@ async function readNegotiations(env: Env, partnerId: number, cursor: string | nu
          JOIN quote_negotiations g ON g.id = t.negotiation_id
          JOIN quotes q ON q.id = g.quote_id
         WHERE q.partner_id = ? AND t.negotiation_id IN (SELECT value FROM json_each(?))
+          AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
         ORDER BY t.negotiation_id, t.id`,
-    ).bind(partnerId, JSON.stringify(negotiationIds)).all<any>()
+    ).bind(partnerId, JSON.stringify(negotiationIds), ...companyBinds(companyId)).all<any>()
     : { results: [] as any[] };
   const termsByNegotiation = new Map<number, any[]>();
   for (const t of terms.results || []) {
@@ -884,11 +904,11 @@ async function readNegotiations(env: Env, partnerId: number, cursor: string | nu
     need_id: r.need_id ? Number(r.need_id) : null,
     need_title: r.need_title ?? null,
     need_category: r.need_category ?? null,
-    // The lane card's heading. `need_title` is what the work is; the client
-    // is who it is for, and a board of scopes with no names on it is a board
-    // nobody can act from.
     founder_name: r.founder_name ?? null,
-    negotiation: r.negotiation_id ? negotiationDto(r) : null,
+    // D4693: `open` and `label` are the rule every count and every printed state uses.
+    negotiation: r.negotiation_id
+      ? { ...negotiationDto(r), open: negotiationIsOpen(r.stage, r.quote_status), label: negotiationLabel(r.stage, r.quote_status) }
+      : null,
     terms: r.negotiation_id ? (termsByNegotiation.get(Number(r.negotiation_id)) || []) : [],
   }));
   const last = page.rows[page.rows.length - 1];
@@ -897,28 +917,27 @@ async function readNegotiations(env: Env, partnerId: number, cursor: string | nu
 
 partnerPipeline.get('/negotiations', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const limit = listLimit(c.req.query('limit'));
     const cursor = c.req.query('cursor') ?? null;
     decodeCursor(cursor, 2);
-    const pageRead = await readNegotiations(c.env, partnerId, cursor, limit);
+    const pageRead = await readNegotiations(c.env, partnerId, companyId, cursor, limit);
     const items = pageRead.rows;
 
-    // ── The `p3` strip, counted server-side over the whole book ───────────
-    // TRACKED AND OPEN. A quote with no negotiation row is not being tracked
-    // here at all, and a closed one is not live — neither belongs in a count
-    // of what is in play, and folding either in would make the board look
-    // busier than the work is. The count walks EVERY quote, not the page.
+    // TRACKED AND OPEN, over the whole book (#4701). "Open" is the shared rule (D4693):
+    // tracked, not closed, and the quote behind it still waiting.
     let liveCount = 0;
     let liveValue = 0;
     let awaitingUs = 0;
     let awaitingThem = 0;
     let stalled = 0;
+    let trackedCount = 0;
     const walk = await scanAll(
-      (cur) => readNegotiations(c.env, partnerId, cur, 200),
+      (cur) => readNegotiations(c.env, partnerId, companyId, cur, 200),
       (rows) => {
         for (const x of rows) {
-          if (!x.negotiation || x.negotiation.stage === 'closed') continue;
+          if (x.negotiation) trackedCount += 1;
+          if (!x.negotiation?.open) continue;
           liveCount += 1;
           liveValue += Number(x.price) || 0;
           if (x.negotiation.ball === 'us') awaitingUs += 1;
@@ -932,6 +951,9 @@ partnerPipeline.get('/negotiations', async (c) => {
       next_cursor: pageRead.next,
       has_more: pageRead.next !== null,
       totals_complete: walk.complete,
+      open_count: liveCount,
+      tracked_count: trackedCount,
+      count_basis: `${liveCount} open of ${trackedCount} tracked. A negotiation is open when it is not closed and its quote is still waiting.`,
       live_count: liveCount,
       // `quotes.price` is grandfathered REAL dollars — named, not guessed at.
       live_value_dollars: liveValue,
@@ -960,9 +982,9 @@ partnerPipeline.get('/negotiations', async (c) => {
  */
 partnerPipeline.put('/negotiations/:quoteId', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const quoteId = Number(c.req.param('quoteId'));
-    await requireOwnQuote(c.env, partnerId, quoteId);
+    await requireOwnQuote(c.env, partnerId, quoteId, companyId);
     const b = await body<any>(c);
 
     const existing = await c.env.DB.prepare(
@@ -1012,9 +1034,9 @@ partnerPipeline.put('/negotiations/:quoteId', async (c) => {
 
 partnerPipeline.post('/negotiations/:quoteId/terms', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const quoteId = Number(c.req.param('quoteId'));
-    await requireOwnQuote(c.env, partnerId, quoteId);
+    await requireOwnQuote(c.env, partnerId, quoteId, companyId);
     const b = await body<any>(c);
     const label = trimOrNull(b.label, 160);
     if (!label) return c.json({ detail: 'A term needs a label — what is being negotiated' }, 400);
@@ -1054,7 +1076,7 @@ partnerPipeline.post('/negotiations/:quoteId/terms', async (c) => {
 });
 
 /** The term, if it hangs off a negotiation on a quote this partner owns. */
-async function ownTerm(env: Env, partnerId: number, termId: number) {
+async function ownTerm(env: Env, partnerId: number, termId: number, companyId: number | null = null) {
   const row = await env.DB.prepare(
     `SELECT t.*, q.partner_id
        FROM quote_terms t
@@ -1062,7 +1084,13 @@ async function ownTerm(env: Env, partnerId: number, termId: number) {
        JOIN quotes q ON q.id = g.quote_id
       WHERE t.id = ?`,
   ).bind(termId).first<any>();
-  if (!row || Number(row.partner_id) !== Number(partnerId)) {
+  const company = row && companyId !== null
+    ? (await env.DB.prepare(
+      `SELECT q.company_id FROM quote_terms t JOIN quote_negotiations g ON g.id = t.negotiation_id
+         JOIN quotes q ON q.id = g.quote_id WHERE t.id = ?`,
+    ).bind(termId).first<{ company_id: number | null }>())?.company_id
+    : null;
+  if (!row || Number(row.partner_id) !== Number(partnerId) || outsideCompany(company, companyId)) {
     throw new Response(JSON.stringify({ detail: 'Term not found' }), {
       status: 404, headers: { 'Content-Type': 'application/json' },
     });
@@ -1072,9 +1100,9 @@ async function ownTerm(env: Env, partnerId: number, termId: number) {
 
 partnerPipeline.patch('/negotiation-terms/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    const row = await ownTerm(c.env, partnerId, id);
+    const row = await ownTerm(c.env, partnerId, id, companyId);
     const b = await body<any>(c);
     const merged = mergePatch(row, b, ['label', 'our_position', 'their_position', 'landing', 'state']);
     if (!trimOrNull(merged.label, 160)) return c.json({ detail: 'A term needs a label' }, 400);
@@ -1097,9 +1125,9 @@ partnerPipeline.patch('/negotiation-terms/:id', async (c) => {
 
 partnerPipeline.delete('/negotiation-terms/:id', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    await ownTerm(c.env, partnerId, id);
+    await ownTerm(c.env, partnerId, id, companyId);
     await c.env.DB.prepare('DELETE FROM quote_terms WHERE id = ?').bind(id).run();
     return c.json({ ok: true, id });
   } catch (e) { return mapError(c, e); }
@@ -1137,7 +1165,7 @@ const CADENCES = ['monthly', 'quarterly'];
  * Delivery's Health and Board reads call too. This read does not derive a
  * period, a utilisation or a monthly amount of its own.
  */
-async function readRetainers(env: Env, partnerId: number, cursor: string | null, limit: number) {
+async function readRetainers(env: Env, partnerId: number, companyId: number | null, cursor: string | null, limit: number) {
   const cur = decodeCursor(cursor, 4);
   const now = new Date();
   const rows = await env.DB.prepare(
@@ -1153,11 +1181,12 @@ async function readRetainers(env: Env, partnerId: number, cursor: string | null,
        LEFT JOIN founders f ON f.id = e.founder_id
        LEFT JOIN partner_retainers r ON r.engagement_id = e.id
       WHERE e.partner_id = ?
+        AND (? IS NULL OR e.company_id IS NULL OR e.company_id = ?)
         AND (? IS NULL OR ((r.id IS NULL), (r.renews_at IS NULL), COALESCE(r.renews_at, ''), (0 - e.id)) > (?, ?, ?, ?))
       ORDER BY (r.id IS NULL), (r.renews_at IS NULL), COALESCE(r.renews_at, ''), (0 - e.id)
       LIMIT ?`,
   ).bind(
-    partnerId, cur ? 1 : null,
+    partnerId, ...companyBinds(companyId), cur ? 1 : null,
     cur ? cur[0] : null, cur ? cur[1] : null, cur ? cur[2] : null, cur ? cur[3] : null,
     limit + 1,
   ).all<any>();
@@ -1172,8 +1201,9 @@ async function readRetainers(env: Env, partnerId: number, cursor: string | null,
          JOIN partner_retainers r ON r.id = u.retainer_id
          JOIN engagements e ON e.id = r.engagement_id
         WHERE e.partner_id = ? AND u.retainer_id IN (SELECT value FROM json_each(?))
+          AND (? IS NULL OR e.company_id IS NULL OR e.company_id = ?)
         ORDER BY u.retainer_id, u.period DESC`,
-    ).bind(partnerId, JSON.stringify(retainerIds)).all<any>()
+    ).bind(partnerId, JSON.stringify(retainerIds), ...companyBinds(companyId)).all<any>()
     : { results: [] as any[] };
   const usageByRetainer = new Map<number, any[]>();
   for (const u of usageRows.results || []) {
@@ -1199,9 +1229,24 @@ async function readRetainers(env: Env, partnerId: number, cursor: string | null,
       r.retainer_id ? (usageByRetainer.get(Number(r.retainer_id)) || []) : [],
       now,
     );
-    // The monthly figure is #4690's helper, called on the row the page read.
-    // A quarterly amount is divided there, once, and an ended retainer is null.
-    if (proj.retainer) proj.retainer.current_monthly_cents = currentMonthlyCents(r, now);
+    // D4693: the monthly figure the zone prints, and what counts as current revenue.
+    // A quarterly amount is divided by three; an unknown cadence is null, never
+    // assumed monthly. An ended retainer, or one on a cancelled engagement, is
+    // history and contributes nothing to the total.
+    if (proj.retainer) {
+      const active = isActiveRetainer(
+        { ended_at: r.ended_at },
+        { status: r.engagement_status, cancelled_at: r.cancelled_at },
+        now.toISOString().slice(0, 10),
+      );
+      const monthly = monthlyCents(
+        r.amount_cents === null || r.amount_cents === undefined ? null : Number(r.amount_cents),
+        r.cadence,
+      );
+      proj.retainer.active = active;
+      proj.retainer.monthly_cents = monthly;
+      proj.retainer.current_monthly_cents = active ? monthly : null;
+    }
     return { ...base, ...proj };
   });
   const last = list[list.length - 1];
@@ -1215,21 +1260,21 @@ async function readRetainers(env: Env, partnerId: number, cursor: string | null,
 
 partnerPipeline.get('/retainers', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const limit = listLimit(c.req.query('limit'));
     const cursor = c.req.query('cursor') ?? null;
     decodeCursor(cursor, 4);
-    const pageRead = await readRetainers(c.env, partnerId, cursor, limit);
+    const pageRead = await readRetainers(c.env, partnerId, companyId, cursor, limit);
     const items = pageRead.rows;
 
-    // EVERY FIGURE BELOW IS OVER THE WHOLE BOOK (#4701): the walk reads every
-    // engagement, so a firm with 300 retainers is not told its MRR from the
-    // soonest-renewing 200. An ended retainer (the shared active predicate,
-    // #4690) leaves the live counts before a shape or a consumption count.
+    // EVERY FIGURE BELOW IS OVER THE WHOLE BOOK (#4701). An ended retainer
+    // (D4693's active predicate) leaves the live counts before a shape or a
+    // consumption count.
     let mrrCents = 0;
     let counted = 0;
     let unpriced = 0;
     let withRetainer = 0;
+    let endedCount = 0;
     let activeRetainers = 0;
     let under = 0;
     let over = 0;
@@ -1237,26 +1282,21 @@ partnerPipeline.get('/retainers', async (c) => {
     let atRiskPriced = false;
     const byShape: Record<string, number> = { retainer: 0, embedded_seat: 0 };
     const walk = await scanAll(
-      (cur) => readRetainers(c.env, partnerId, cur, 200),
+      (cur) => readRetainers(c.env, partnerId, companyId, cur, 200),
       (rows) => {
         for (const x of rows) {
           if (!x.retainer) continue;
           withRetainer += 1;
-          if (!x.retainer.active) continue;
+          if (!x.retainer.active) { endedCount += 1; continue; }
           activeRetainers += 1;
           const monthly = x.retainer.current_monthly_cents;
           if (monthly == null) unpriced += 1;
           else { mrrCents += monthly; counted += 1; }
           const shape = x.retainer.shape;
           if (shape && shape in byShape) byShape[shape] += 1;
-          // UNDER-CONSUMING IS THE PAGE'S WHOLE ARGUMENT: "a client using 34% of
-          // retained hours is a churn risk that no complaint has surfaced yet, and a
-          // client at 118% is unbilled work." Both are read off the same utilisation
-          // the row draws, so the strip and the table cannot disagree.
-          //
-          // A RETAINER WITH NO RETAINED HOURS IS IN NEITHER. It has no utilisation at
-          // all — a different shape of deal, not a badly-consumed one — and sweeping
-          // it into `under` would report a fee-based retainer as a churn risk.
+          // A retainer with no retained hours is in neither consumption count:
+          // it has no utilisation at all, and reading it as under-consumption
+          // would report a fee-based retainer as a churn risk.
           if (x.utilisation_pct != null && x.utilisation_pct < 60) {
             under += 1;
             if (monthly != null) { atRiskCents += monthly; atRiskPriced = true; }
@@ -1266,29 +1306,24 @@ partnerPipeline.get('/retainers', async (c) => {
       },
     );
 
-
     return c.json({
       items,
       next_cursor: pageRead.next,
       has_more: pageRead.next !== null,
       totals_complete: walk.complete,
       retainer_count: withRetainer,
+      active_count: activeRetainers,
       active_retainer_count: activeRetainers,
+      ended_count: endedCount,
       mrr_cents: counted ? mrrCents : null,
-      // COUNTED BY SHAPE, because an embedded seat is recurring revenue and is
-      // not a retainer — and this is the page that exists to tell those
-      // economics apart.
       shape_counts: byShape,
       under_consuming_count: under,
       over_scope_count: over,
       // NULL, NOT ZERO, when nothing under-consuming carries an amount: "no
       // money at risk" and "we cannot price the risk" are different answers.
       at_risk_mrr_cents: atRiskPriced ? atRiskCents : null,
-      // Says what it counted rather than presenting a total as complete. A
-      // retainer with no amount is skipped, never counted as zero — zero would
-      // claim the client pays nothing.
       mrr_basis: counted
-        ? `${counted} retainer${counted === 1 ? '' : 's'} with a recorded amount; normalised to a month (quarterly divided by three); ended retainers are not counted.`
+        ? `${counted} active retainer${counted === 1 ? '' : 's'} with a recorded amount; normalised to a month (quarterly divided by three)${endedCount ? `; ${endedCount} ended not counted` : ''}.`
         : null,
       mrr_note: counted
         ? (unpriced ? `${unpriced} retainer${unpriced === 1 ? ' has' : 's have'} no amount recorded and ${unpriced === 1 ? 'is' : 'are'} not in this total.` : null)
@@ -1303,9 +1338,9 @@ partnerPipeline.get('/retainers', async (c) => {
 
 partnerPipeline.put('/retainers/:engagementId', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
-    await requireOwnEngagement(c.env, partnerId, engagementId);
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
     const b = await body<any>(c);
 
     const existing = await c.env.DB.prepare(
@@ -1364,9 +1399,9 @@ partnerPipeline.put('/retainers/:engagementId', async (c) => {
 
 partnerPipeline.delete('/retainers/:engagementId', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
-    await requireOwnEngagement(c.env, partnerId, engagementId);
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
     const row = await c.env.DB.prepare(
       'SELECT id FROM partner_retainers WHERE engagement_id = ?',
     ).bind(engagementId).first<any>();
@@ -1379,9 +1414,9 @@ partnerPipeline.delete('/retainers/:engagementId', async (c) => {
 
 partnerPipeline.put('/retainers/:engagementId/usage/:period', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
-    await requireOwnEngagement(c.env, partnerId, engagementId);
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
     const retainer = await c.env.DB.prepare(
       'SELECT * FROM partner_retainers WHERE engagement_id = ?',
     ).bind(engagementId).first<any>();
@@ -1430,9 +1465,9 @@ partnerPipeline.put('/retainers/:engagementId/usage/:period', async (c) => {
 
 partnerPipeline.delete('/retainers/:engagementId/usage/:period', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { partnerId, companyId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
-    await requireOwnEngagement(c.env, partnerId, engagementId);
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
     const retainer = await c.env.DB.prepare(
       'SELECT id FROM partner_retainers WHERE engagement_id = ?',
     ).bind(engagementId).first<any>();

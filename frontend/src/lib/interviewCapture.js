@@ -194,7 +194,7 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState, st
   const s = {
     stream: null, ctx: null, analyser: null, processor: null, recorder: null, socket: null,
     seq: Number.isFinite(startSeq) && startSeq > 0 ? startSeq : 0, startedAt: 0, pausedMs: 0, pausedAt: null, chunkTimer: null, lastSoundAt: 0,
-    live: !!liveOn, caption: '', online: true, flushing: false, pending: 0, error: null,
+    live: !!liveOn, caption: '', online: true, flushing: false, pending: 0, error: null, slices: new Set(), unsaved: new Map(),
     levelTimer: null, mic: null, display: null, displayVideo: null, shareNote: null, recordStream: null, budget: false, discarded: false, holding: false,
   };
   const emit = (extra = {}) => onState?.({
@@ -225,6 +225,30 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState, st
   // Offsets continue from what the Worker already holds (`active_ms`), so a resumed capture's chunks and marks line up.
   const offsetMs = () => baseOffsetMs + (s.startedAt ? deps.now() - s.startedAt - s.pausedMs - (s.pausedAt != null ? deps.now() - s.pausedAt : 0) : 0);
 
+  /**
+   * Put one slice on the device queue. A refused write keeps the slice in memory
+   * (`s.unsaved`) and is reported by `stop`, so the member can retry it rather
+   * than lose it (D4624).
+   */
+  const persistSlice = async (row) => {
+    if (s.discarded) { s.unsaved.delete(row.seq); return true; }
+    try {
+      // Tagged with the member, so app load never flushes it under another one (D685 §5.6.6).
+      await queue.put(row);
+    } catch {
+      s.unsaved.set(row.seq, row);
+      emit();
+      return false;
+    }
+    s.unsaved.delete(row.seq);
+    s.lastSeq = Math.max(s.lastSeq ?? -1, row.seq);
+    s.pending += 1;
+    emit();
+    // A sign-out's stop holds the last slice on this device (D685 §5.6.8).
+    if (!s.holding) flush();
+    return true;
+  };
+
   const startRecorderSlice = () => {
     const stream = s.recordStream || s.stream;
     if (!deps.MediaRecorder || !stream) return;
@@ -234,16 +258,20 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState, st
     s.seq += 1;
     const parts = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
+    // D4624 (#4624): every slice has a completion promise that settles only when
+    // its final event has fired AND its blob is on this device (or the write
+    // was refused). `stop` awaits all of them, so a final event or a queue write
+    // that is slow can never be mistaken for "nothing was recorded".
+    let settle = () => {};
+    const done = new Promise((resolve) => { settle = resolve; });
+    s.slices.add(done);
+    done.then(() => s.slices.delete(done));
     rec.onstop = async () => {
-      if (!parts.length || s.discarded) return;
-      const blob = new Blob(parts, { type: parts[0].type || 'audio/webm' });
-      // Tagged with the member, so app load never flushes it under another one (D685 §5.6.6).
-      await queue.put({ sessionId, seq, blob, startMs, userId });
-      s.lastSeq = Math.max(s.lastSeq ?? -1, seq);
-      s.pending += 1;
-      emit();
-      // A sign-out's stop holds the last slice on this device (D685 §5.6.8).
-      if (!s.holding) flush();
+      try {
+        if (!parts.length || s.discarded) return;
+        const blob = new Blob(parts, { type: parts[0].type || 'audio/webm' });
+        await persistSlice({ sessionId, seq, blob, startMs, userId });
+      } finally { settle(); }
     };
     rec.start();
     s.recorder = rec;
@@ -406,11 +434,16 @@ export function createCapture({ deps, api, queue, sessionId, liveOn, onState, st
       // Let the last slice's onstop queue it before the final flush. A sign-out
       // passes `flush: false`: the chunks stay on this device, never sent as
       // someone else (D685 §5.6.8).
-      await new Promise((r) => deps.setTimeout(r, 0));
-      if (flushOnStop) await flush();
-      // The last seq queued, for `finish` (D685 §5.9.1). A slice that held no
-      // sound was never queued, so it is not counted as one to wait for.
-      return { pending: s.pending, lastSeq: s.lastSeq ?? null };
+      // D4624: wait for every slice's own completion, including a final event
+      // that fires late, rather than one turn of the event loop.
+      while (s.slices.size) await Promise.all([...s.slices]);
+      // A write the device refused is tried again here, so a retried Stop can recover it.
+      for (const row of [...s.unsaved.values()]) await persistSlice(row);
+      if (flushOnStop && !s.unsaved.size) await flush();
+      // The last seq persisted, for `finish` (D685 §5.9.1). A slice that held no
+      // sound was never queued, so it is not counted as one to wait for. `unsaved`
+      // counts slices that could not be written: the caller must not finish.
+      return { pending: s.pending, lastSeq: s.lastSeq ?? null, unsaved: s.unsaved.size };
     },
     /**
      * Discard this recording (D685 §5.7.9): nothing more is queued or sent,

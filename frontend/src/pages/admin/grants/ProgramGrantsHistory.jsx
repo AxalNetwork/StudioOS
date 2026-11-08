@@ -65,8 +65,8 @@ function ProgramGrantsHistoryPage() {
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="program-grants-history">
       <AdminPageHeader
-        crumb={{ label: 'Licences', to: LEDGER_PATH, current: 'Program grants' }}
-        title="Program grants"
+        crumb={{ label: 'Licences', to: LEDGER_PATH, current: 'Program access by licence' }}
+        title="Program access by licence"
         pills={[{ label: 'HQ only', tone: 'hq' }]}
         actions={<button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>}
         line="Every program decision HQ recorded, for every studio, with HQ's reason. Newest first."

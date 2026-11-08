@@ -3,6 +3,7 @@ import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
 import { railPageHeaders } from './railPage.js';
 import { railBody } from './railPages.js';
+import { rememberLabVenture } from './labVenture.js';
 import { readAllPages } from './pagedRead.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
@@ -5729,8 +5730,11 @@ export const adminArticles = {
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.
 export const spinoutLab = {
-  state: () => request('/spinout-lab/state'),
+  state: () => request('/spinout-lab/state').then(rememberLabVenture),
   start: () => request('/spinout-lab/start', { method: 'POST' }),
+  // D4659: name which of your own projects is the Lab venture.
+  chooseVenture: (project_id) =>
+    request('/spinout-lab/venture', { method: 'POST', body: JSON.stringify({ project_id }) }),
   complete: (milestone_key) =>
     request('/spinout-lab/milestone', {
       method: 'POST',
