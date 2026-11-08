@@ -223,10 +223,12 @@ test('ONE engagement record feeds every instrument, and the second read feeds no
   // AND THE SECOND ONE IS TOLERATED, so an advisor whose bookings will not load
   // still has a contract board: no `.catch` there and one failing feed takes the
   // whole zone down.
-  assert.match(P, /api\.listMyAdvisorBookings\(\)\.catch\(\(\) => null\)/);
+  // #4714 (D4714): both reads walk every page (`readEveryPage`); the bookings
+  // walk is still the tolerated one.
+  assert.match(P, /readEveryPage\(\(page\) => api\.listMyAdvisorBookings\(undefined, page\)\)\.catch\(\(\) => null\)/);
   // Only the engagement read is allowed to set the page's error state.
   const load = P.slice(P.indexOf('const load = useCallback'), P.indexOf('useEffect(() => { load(); }'));
-  assert.equal((load.match(/api\.listMyAdvisorEngagements\(\)/g) || []).length, 1);
+  assert.equal((load.match(/api\.listMyAdvisorEngagements\(page\)/g) || []).length, 1);
 });
 
 test('every write the page makes is a method the api layer actually has', () => {

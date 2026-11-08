@@ -93,7 +93,7 @@ test('the link control offers accounts the API will accept, and never a typed id
   // The candidates come from this advisor's own bookings — the relationship the
   // worker checks — and they are a tolerated second source, so an advisor whose
   // bookings will not load still has a contract board.
-  assert.match(E, /api\.listMyAdvisorBookings\(\)\.catch\(\(\) => null\)/);
+  assert.match(E, /readEveryPage\(\(page\) => api\.listMyAdvisorBookings\(undefined, page\)\)\.catch\(\(\) => null\)/);
   assert.match(E, /b\.client_user_id/);
   // A SELECT, not an input: the set is closed.
   assert.match(E, /data-testid=\{`link-pr2-\$\{e\.id\}`\}/);
