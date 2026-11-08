@@ -836,6 +836,8 @@ const COOL_OFF_PREFIXES = [
   // exclusive grant over whole countries. Same class as promos: pause it for a
   // freshly-recovered admin.
   '/api/admin/licences',
+  // D5014 (#5014) — the pricing models and market data behind recommended licence fees. Same class.
+  '/api/admin/licence-pricing',
   // D708 — each Axal entity's bank accounts: the payment instructions every
   // notice prints. Pause them for a freshly-recovered admin.
   '/api/admin/bank-accounts',
