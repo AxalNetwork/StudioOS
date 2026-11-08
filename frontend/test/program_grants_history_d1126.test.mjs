@@ -94,7 +94,7 @@ test('mounted History: every studio\'s decisions, newest first, the tabs, and ol
   });
   const v = await render(h(ProgramGrantsHistory), HISTORY_PATH);
   try {
-    assert.match(v.of('grants-history-header'), /Licences.*Program grants.*HQ only.*Grid.*History/s);
+    assert.match(v.of('grants-history-header'), /Licences.*Program access by licence.*HQ only.*Grid.*History/s);
     assert.match(v.of('grants-history-row-9'), /Studio Lisbon · AXL-002.*Terms changed: Refer & Earn.*credits per quarter: 300 → 400.*HQ’s reason: Referral volume doubled/s);
     assert.match(v.of('grants-history-row-7'), /by HQ.*Partner deal types changed/s);
     assert.equal(v.has('grants-history-row-3'), false);

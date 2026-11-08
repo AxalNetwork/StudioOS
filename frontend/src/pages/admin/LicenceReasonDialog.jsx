@@ -48,6 +48,11 @@ export function LicenceReasonDialog({ ask, onDone }) {
         </div>
       )}
     >
+      {ask.consequence && (
+        <p className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" data-testid="licence-reason-consequence">
+          {ask.consequence}
+        </p>
+      )}
       <label htmlFor={fieldId} className="block text-sm text-gray-800 dark:text-gray-200">{ask.question}</label>
       <textarea
         id={fieldId} ref={field} value={text} onChange={(e) => setText(e.target.value)}
