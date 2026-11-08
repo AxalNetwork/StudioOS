@@ -182,6 +182,7 @@ export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/learningPlan.js';
 export * from './api/licenceAccount.js';
+export * from './api/licenceExclusivity.js';
 export * from './api/licenceFeeInvoices.js';
 export * from './api/licenceLedger.js';
 export * from './api/licencePricing.js';
