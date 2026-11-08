@@ -394,7 +394,7 @@ test('AF23 and the wiring: Sources a bottom sheet, Preview full height, 44px tar
   assert.match(route, /fill=\{fillFor\(formOpen\)\}/);
   assert.match(route, /: moduleFill \? <FillModule /);
   const lightbox = readFileSync(new URL('../src/pages/cycles/FormLightbox.jsx', import.meta.url), 'utf8');
-  assert.match(lightbox, /const result = await onSubmit\(sent\);\n\s*await afterSave\(result, sent\);/, 'record only after the form’s own Save');
+  assert.match(lightbox, /const result = await onSubmit\(sent, memory\.current\);\n\s*await afterSave\(result, sent\);/, 'record only after the form’s own Save');
 });
 
 // ── #3740 part 1: Ask on the Edit forms, the KPI form, and the mount guard ───

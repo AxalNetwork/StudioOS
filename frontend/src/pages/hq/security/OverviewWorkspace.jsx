@@ -140,6 +140,17 @@ export default function OverviewWorkspace({ model, onRetry, filterLabel, sourceN
           {sourceNotes}
         </SourceAvailability>
       </section>
+      {/* D4801 — SE01's Emergency card, worded for what the act reaches (D4803
+          A1). The act itself runs in Access, through its Scope → Review →
+          Result dialog; this card only says what it does and where it is. */}
+      <section aria-labelledby="security-emergency-h" className="rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="security-overview-emergency">
+        <h2 id="security-emergency-h" className="text-[14px] font-extrabold tracking-tight">Emergency re-authentication</h2>
+        <p className="mt-1 text-[12.5px] text-axal-muted dark:text-gray-300">
+          Signs out every HQ-held account, you included. Branch databases are not touched. It runs from Access, after a
+          review with a typed confirmation.
+        </p>
+        <Link to={`${tabHref('access')}#emergency`} className={`${ACTION_PLAIN} mt-2`}>Open in Access</Link>
+      </section>
     </div>
   );
 }

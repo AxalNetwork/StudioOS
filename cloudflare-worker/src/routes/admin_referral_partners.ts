@@ -427,12 +427,32 @@ r.get('/terms', async (c) => {
   } catch (e) { return unreadable(c, e); }
 });
 
+/** A new row's triggers: nothing else can have decided it yet. */
 async function saveTriggers(env: Env, termsId: number, triggers: Trigger[]) {
   return [
     env.DB.prepare('DELETE FROM referral_partner_term_triggers WHERE terms_id = ?').bind(termsId),
     ...triggers.map((g) => env.DB.prepare(
       'INSERT INTO referral_partner_term_triggers (terms_id, rule_key, amount_cents, percentage_bps) VALUES (?, ?, ?, ?)',
     ).bind(termsId, g.rule_key, g.amount_cents, g.percentage_bps)),
+  ];
+}
+
+/**
+ * D4804 (#4804): an EDIT's triggers. Every statement names the parent's status, so a stale edit that lost
+ * to submit or approve replaces nothing: the parent UPDATE changes no row AND its triggers stay as they
+ * were, in the same batch. The parent UPDATE leaves the status as it found it, so while the draft is
+ * still a draft each of these statements sees it and runs.
+ */
+async function replaceDraftTriggers(env: Env, termsId: number, triggers: Trigger[]) {
+  return [
+    env.DB.prepare(
+      `DELETE FROM referral_partner_term_triggers WHERE terms_id = ?
+         AND EXISTS (SELECT 1 FROM referral_partner_terms WHERE id = ? AND status = 'draft')`,
+    ).bind(termsId, termsId),
+    ...triggers.map((g) => env.DB.prepare(
+      `INSERT INTO referral_partner_term_triggers (terms_id, rule_key, amount_cents, percentage_bps)
+       SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM referral_partner_terms WHERE id = ? AND status = 'draft')`,
+    ).bind(termsId, g.rule_key, g.amount_cents, g.percentage_bps, termsId)),
   ];
 }
 
@@ -478,7 +498,7 @@ r.patch('/terms/:uid', async (c) => {
          contract_slug = ?, note = ?, updated_at = datetime('now') WHERE id = ? AND status = 'draft'`,
     ).bind(input.starts_on, input.ends_on, input.cap_per_intro_cents, input.overall_cap_cents, input.currency, input.sectors,
       input.contract_slug, input.note, t.id);
-    const results = await c.env.DB.batch([update, ...await saveTriggers(c.env, Number(t.id), input.triggers)]);
+    const results = await c.env.DB.batch([update, ...await replaceDraftTriggers(c.env, Number(t.id), input.triggers)]);
     if (!Number(results[0]?.meta?.changes)) return refuse(c, 409, { code: 'terms_not_draft', message: 'Only a draft can be edited. Submitted terms are HQ’s to decide.' });
     await logAdminAction(c.env, admin.id, admin.email, 'referral_terms.updated', { uid: t.uid });
     const saved = await termsByUid(c.env, t.uid);
