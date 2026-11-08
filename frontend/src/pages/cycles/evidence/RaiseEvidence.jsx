@@ -26,6 +26,7 @@ import { BTN_S } from './EvidenceParts';
 import { EvidenceError, EvidenceForbidden, EvidenceLoading, EvidenceMain } from './EvidenceView';
 import { ClaimDrawer, ItemDrawer } from './EvidenceDrawers';
 import { InvestorPreview, ReviewQueue } from './EvidenceReview';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /** The read's page: the first 100 of each list. */
 export const PAGE = Object.freeze({ limit: 100 });
@@ -63,7 +64,7 @@ export function useEvidence(projectId) {
       const read = refresh ? await raiseEvidenceApi.refresh(projectId, PAGE) : await raiseEvidenceApi.read(projectId, PAGE);
       setState({ status: 'ready', read });
     } catch (e) {
-      setState(e?.status === 403 ? { status: 'forbidden' } : { status: 'error', message: e?.message || '' });
+      setState(e?.status === 403 ? { status: 'forbidden' } : { status: 'error', message: userFacingRaiseError(e, { fallback: '' }) });
     }
   }, [projectId]);
   useEffect(() => { load(); }, [load]);

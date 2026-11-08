@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1106 (#2986) — the one in-page dialog every Data room change opens. It says
@@ -15,7 +16,7 @@ export default function DataRoomDialog({ copy, onClose, onConfirm, danger = fals
   const close = () => { if (!busy) onClose(); };
   const go = async () => {
     setBusy(true); setRefusal(null);
-    try { await onConfirm(); } catch (e) { setRefusal(refusalOf ? refusalOf(e) : (e?.message || 'That did not go through. Try again.')); setBusy(false); }
+    try { await onConfirm(); } catch (e) { setRefusal(refusalOf ? refusalOf(e) : (userFacingRaiseError(e, { fallback: 'That did not go through. Try again.' }))); setBusy(false); }
   };
   return (
     <Lightbox label={copy.title} title={copy.title} onClose={close} testId={testId}

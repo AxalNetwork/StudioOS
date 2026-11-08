@@ -5,6 +5,7 @@ import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import { useWrite } from './CapTableDialog';
 import { MERCURY_ID, closeView, mercuryView, proposalView, toBps } from './historyModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import { safeRaiseError, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1025 (#2862, CT11a–b) — one proposal, at `/raise/cap-table/proposal/<id>`,
@@ -74,7 +75,7 @@ function Shell({ eyebrow, title, onClose, write, confirm, buttons, children, tes
 
 const refusalOf = (e) => {
   const missing = Array.isArray(e?.data?.missing) && e.data.missing.length ? ` It still needs: ${e.data.missing.join(', ')}.` : '';
-  return `${e?.message || 'That did not go through. Nothing changed.'}${missing}`;
+  return `${userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })}${missing}`;
 };
 
 /** CT11a: a SAFE request from Mercury. */
@@ -89,7 +90,7 @@ function MercuryProposal({ projectId, id, role, onClose, onDone }) {
   const accept = () => {
     const bps = toBps(discount);
     if (Number.isNaN(bps)) { write.setRefusal('The discount is a percent, such as 20.'); return; }
-    write.run(() => cyclesWrite.raise.acceptMercuryProposal(projectId, id, bps != null ? { discount_bps: bps } : {}).catch((e) => { throw new Error(refusalOf(e)); }));
+    write.run(() => cyclesWrite.raise.acceptMercuryProposal(projectId, id, bps != null ? { discount_bps: bps } : {}).catch((e) => { throw safeRaiseError(refusalOf(e)); }));
   };
   const dismiss = () => write.run(() => cyclesWrite.raise.dismissMercuryProposal(projectId, id));
   let body;
@@ -133,7 +134,7 @@ function CloseProposal({ projectId, closeUid, record, role, onClose, onDone }) {
   const owner = role === 'owner';
   const recordAll = () => write.run(async () => {
     for (const r of v.ready) {
-      try { await capTableRecordApi.accept(projectId, r.uid, {}); } catch (e) { throw new Error(`${r.holder}: ${refusalOf(e)}`); }
+      try { await capTableRecordApi.accept(projectId, r.uid, {}); } catch (e) { throw safeRaiseError(`${r.holder}: ${refusalOf(e)}`); }
     }
     return { recorded: v.ready.length };
   });
@@ -174,7 +175,7 @@ function RecordProposal({ projectId, row, record, role, onClose, onDone }) {
   const [reason, setReason] = useState('');
   const v = proposalView(row, record);
   const owner = role === 'owner';
-  const accept = () => write.run(() => capTableRecordApi.accept(projectId, row.uid, {}).catch((e) => { throw new Error(refusalOf(e)); }));
+  const accept = () => write.run(() => capTableRecordApi.accept(projectId, row.uid, {}).catch((e) => { throw safeRaiseError(refusalOf(e)); }));
   const dismiss = () => write.run(() => capTableRecordApi.dismiss(projectId, row.uid, reason.trim() ? { reason: reason.trim() } : {}));
   return (
     <Shell eyebrow="Proposal" title={v.title} onClose={onClose} write={write} testId="captable-proposal-record"

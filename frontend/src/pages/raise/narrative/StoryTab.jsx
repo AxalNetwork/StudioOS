@@ -19,6 +19,7 @@ import { OBJECTION_OPTION, answerSaveLines, versionHref } from './narrativeModel
 import { ObjectionsPanel } from './ObjectionsPanel';
 import NarrativeCoach from './NarrativeCoach';
 import { FIX_PROPOSAL_NOTE, appendFix, fixParts } from './claimsModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D910 (#2694) — NAR2, Story: the sections rail with its dots, reorderable by
@@ -54,7 +55,7 @@ function useNarrative(projectId, version, reload) {
     setState({ status: 'loading', data: null });
     narrativeApi.read(projectId, version)
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: error?.message || '' }); });
+      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, version, reload]);
   return state;
@@ -312,7 +313,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
       try {
         await narrativeApi.saveSection(projectId, version, w.section, w.body);
       } catch (e) {
-        setSaving({ open: true, busy: false, error: `${SAVE_FAILED} ${w.label}: ${e?.message || 'the save was refused'}.` });
+        setSaving({ open: true, busy: false, error: `${SAVE_FAILED} ${w.label}: ${userFacingRaiseError(e, { fallback: 'the save was refused' })}.` });
         return;
       }
     }
@@ -324,7 +325,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
       try {
         await narrativeApi.recordAnswer(projectId, key, { version, section: p.section, how: 'eadwyn' });
       } catch (e) {
-        failed.push(`“${p.text}” (${e?.message || 'the write was refused'})`);
+        failed.push(`“${p.text}” (${userFacingRaiseError(e, { fallback: 'the write was refused' })})`);
       }
     }
     setPending((now) => Object.fromEntries(Object.entries(now).filter(([, p]) => !written.has(p.section))));

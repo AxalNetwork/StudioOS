@@ -6,6 +6,7 @@ import {
   NOT_RECORDED, SECTIONS, centsFromTyped, dayText, money, roundSourceRows, sectionOf, splitCheck, sourceText,
 } from './useOfFundsModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1177 (#3104) — the Use of funds tool's shared parts: the plan read, the
@@ -216,7 +217,7 @@ function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
   );
 }
 
-const refusal = (e) => (e?.message ? `${e.message}` : 'It was not saved. Read the plan again before retrying.');
+const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
 
 /** UF3: the raise, the five shares with their amounts, the live total and the target runway. */
 export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api = useOfFundsApi }) {

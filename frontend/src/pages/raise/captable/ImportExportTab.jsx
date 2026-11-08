@@ -11,6 +11,7 @@ import { day } from './capTableModel';
 import {
   FIELDS, ROWS_MAX, TEMPLATE_CSV, counts, guessMap, importBody, mapWords, parseCsv, preview, proposeLabel,
 } from './capTableImport';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1026 (#2863) — Import and export (CT14).
@@ -207,7 +208,7 @@ function ExportBlock({ projectId }) {
   const w = useWrite((out) => { setSnap(false); setSaid((s) => ({ ...s, snapshot: `Added to the data room as ${out?.file?.name || 'the snapshot'}, under NDA and seen by nobody until you share it.` })); });
   const run = async (key, fn) => {
     setBusy(key); setSaid((s) => ({ ...s, [key]: '' }));
-    try { await fn(); setSaid((s) => ({ ...s, [key]: 'Downloaded.' })); } catch (e) { setSaid((s) => ({ ...s, [key]: e?.message || 'The export could not be made. Nothing was downloaded.' })); } finally { setBusy(null); }
+    try { await fn(); setSaid((s) => ({ ...s, [key]: 'Downloaded.' })); } catch (e) { setSaid((s) => ({ ...s, [key]: userFacingRaiseError(e, { fallback: 'The export could not be made. Nothing was downloaded.' }) })); } finally { setBusy(null); }
   };
   const row = (key, title, sub, label, onClick) => (
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground py-2 last:border-b-0 dark:border-gray-700" data-testid={`captable-export-${key}`}>

@@ -21,6 +21,7 @@ import {
 import {
   BTN_L, BTN_S, BlockUnreadable, CARD, ChangeDialog, H2, LINK, MUTED, SharingPill, SourcePill, StalePill, StatePill, StrengthMark,
 } from './EvidenceParts';
+import { safeRaiseError, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 const decide = async (projectId, p, verb) => {
   try {
@@ -160,7 +161,7 @@ export function ShareDialog({ items, projectId, onClose, onDone }) {
         const failed = [];
         for (const i of items) { if (i.visibility === to) continue; try { await raiseEvidenceApi.update(projectId, i.uid, i.version, { visibility: to }); } catch { failed.push(itemTitle(i)); } }
         await onDone?.();
-        if (failed.length) throw new Error(`Not shared: ${failed.join(', ')}. The source may have changed; look again and confirm it first.`);
+        if (failed.length) throw safeRaiseError(`Not shared: ${failed.join(', ')}. The source may have changed; look again and confirm it first.`);
       }}>
       <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
         {items.map((i) => <li key={i.uid} className="flex flex-wrap items-center justify-between gap-2 text-[13px]"><span className="font-semibold">{itemTitle(i)}</span><SourcePill source={i.source_label} provider={i.provider} on={i.observed_on} /></li>)}
@@ -197,7 +198,7 @@ export function InvestorPreview({ projectId, search = '' }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true; setView({ status: 'loading' });
-    raiseEvidenceApi.preview(projectId, nda).then((r) => { if (alive) setView({ status: 'ready', r }); }).catch((e) => { if (alive) setView({ status: 'error', message: e?.message }); });
+    raiseEvidenceApi.preview(projectId, nda).then((r) => { if (alive) setView({ status: 'ready', r }); }).catch((e) => { if (alive) setView({ status: 'error', message: userFacingRaiseError(e, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, nda, tick]);
   const r = view.r;

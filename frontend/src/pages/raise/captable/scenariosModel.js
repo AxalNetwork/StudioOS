@@ -19,6 +19,7 @@
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { HOME_PATH, dollars, pct, shares, tabSearch } from './capTableModel';
+import { userFacingRaiseError, raiseValidationErrors } from '../../../lib/raiseErrors.js';
 
 export { foundersAfter, scenarioCard, scenarioCards } from './capTableModel';
 
@@ -280,11 +281,11 @@ export function inputsFromDraft(d) {
 
 /** The route's refusal, as the sentences it carries. */
 export function variantSaveErrors(e) {
-  const list = e?.data?.errors || e?.data?.detail?.errors;
-  if (Array.isArray(list) && list.length) return list.map(String);
+  const list = raiseValidationErrors(e);
+  if (list.length) return list;
   if (e?.status === 402) return ['Editing a scenario needs the Raise + Grow plan.'];
   if (e?.status === 403) return ['You can read this cap table, but not change it.'];
-  return [e?.message || 'The scenario could not be saved.'];
+  return [userFacingRaiseError(e, { fallback: 'The scenario could not be saved.' })];
 }
 
 /** Inputs that carry the attached reads forward, or drop them when the inputs changed. */

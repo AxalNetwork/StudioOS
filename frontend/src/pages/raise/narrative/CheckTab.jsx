@@ -9,6 +9,7 @@ import {
   FIX_NO_NUMBER, NOTHING_COMPARED, RESULT_LABELS, RESULT_TONE, SOURCE_UNREADABLE,
   acceptFixHref, againstLine, checkLine, fixParts, fixScope, lastChecked,
 } from './claimsModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D912 (#2696, part 6 of #2454) — NAR8, the Check tab, and NAR9, Phrase the
@@ -36,8 +37,7 @@ const LAVENDER = 'rounded-[10px] border border-axal-lavender-edge bg-axal-lavend
 
 /** The Worker's sentence, or ours when it sent a bare code (`draft_unavailable`). */
 function refusal(e, fallback) {
-  const m = typeof e?.message === 'string' ? e.message.trim() : '';
-  return m && !/^[a-z_]+$/.test(m) ? m : fallback;
+  return userFacingRaiseError(e, { fallback, scope: 'raise:narrative' });
 }
 
 export default function CheckTab({ projectId, version, search = '', admin = false, fixOn = true }) {

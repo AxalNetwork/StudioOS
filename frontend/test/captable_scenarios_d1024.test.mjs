@@ -507,7 +507,7 @@ test('Duplicate, Rename and Delete each open a dialog; a refusal stays in it', a
     await r.press(r.by('captable-scenario-delete'));
     await r.press(r.by('captable-scenario-delete-dialog-go'));
     assert.ok(r.ids().includes('captable-scenario-delete-dialog'), 'the dialog stays');
-    assert.match(r.text(r.by('captable-scenario-delete-dialog-refusal')), /not change it/);
+    assert.match(r.text(r.by('captable-scenario-delete-dialog-refusal')), /do not have access to do that/);
     assert.equal(r.where.path, '/raise/cap-table/scenarios/s-today?project_id=3');
   } finally { await r.close(); }
 });

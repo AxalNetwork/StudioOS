@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { reportError } from '../../../lib/log';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * #3938 part 2 (D1478 task 4) — search inside the room's files.
@@ -26,7 +27,7 @@ export default function DataRoomSearch({ projectUid, shared = false, canIndex = 
     if (!q.trim()) return;
     setBusy('search');
     try { setAnswer(await (shared ? dataRoomApi.sharedSearch(projectUid, q) : dataRoomApi.search(projectUid, q))); }
-    catch (err) { reportError('DataRoomSearch:search', err); setAnswer({ available: false, reason: err?.message || 'The data room could not be searched right now.' }); }
+    catch (err) { reportError('DataRoomSearch:search', err); setAnswer({ available: false, reason: userFacingRaiseError(err, { fallback: 'The data room could not be searched right now.' }) }); }
     finally { setBusy(null); }
   };
   const index = async () => {
@@ -38,7 +39,7 @@ export default function DataRoomSearch({ projectUid, shared = false, canIndex = 
         const v = r.value;
         setIndexLine(`${v.indexed} indexed${v.no_text ? `, ${v.no_text} with no text` : ''}${v.failed?.length ? `, ${v.failed.length} could not be read` : ''}${v.remaining ? ` · ${v.remaining} left, press again` : ' · all files indexed'}`);
       }
-    } catch (err) { reportError('DataRoomSearch:index', err); setIndexLine(err?.message || 'Indexing did not run.'); }
+    } catch (err) { reportError('DataRoomSearch:index', err); setIndexLine(userFacingRaiseError(err, { fallback: 'Indexing did not run.' })); }
     finally { setBusy(null); }
   };
 

@@ -282,7 +282,7 @@ test('mounted option A: a section saved but its answer refused says so; a draft 
     await m.click('story-proposal-accept');
     await m.click('story-save-open');
     await m.click('story-save-confirm');
-    assert.match(m.textOf('story-answer-not-recorded'), /^Saved, but which section answers “Too small a market” \(Version not found\) was not recorded\. Mark it answered from Objections heard\.$/);
+    assert.match(m.textOf('story-answer-not-recorded'), /^Saved, but which section answers “Too small a market” \(That could not be found\. It may have been removed\.\) was not recorded\. Mark it answered from Objections heard\.$/);
   } finally { await m.close(); }
   m = await mounted(STORY);
   try {
@@ -348,7 +348,7 @@ test('mounted option A: Mark answered and Clear answer each open a dialog first,
   try {
     await refused.click(`story-objection-mark-${K_MARKET}`);
     await refused.click('story-objection-mark-dialog-confirm');
-    assert.equal(refused.textOf('story-objection-mark-dialog-failed'), 'Nothing was changed: Version not found.');
+    assert.equal(refused.textOf('story-objection-mark-dialog-failed'), 'Nothing was changed. That could not be found. It may have been removed.');
   } finally { await refused.close(); }
 });
 
