@@ -243,7 +243,9 @@ test('F0: the catalog profile says "Add to my funds", and its way back is the Di
   assert.match(out, /<a[^>]*href="\/research\/funds\?view=directory"[^>]*>[\s\S]*?Fund directory<\/a>/);
   // The company page's "See all N in Funds" counts directory funds, so it lands on the directory too.
   const company = read('frontend/src/pages/research/CompanyProfile.jsx');
-  assert.equal((company.match(/more="\/research\/funds\?view=directory"/g) || []).length, 2);
+  // D4612: and it keeps the list's own filter, so the total it names is the total it opens.
+  assert.match(company, /more=\{directoryHref\(\{ focus: tracked\.slug \}\)\}/);
+  assert.match(company, /more=\{directoryHref\(\{ hq_country: tracked\.country_code \}\)\}/);
   assert.doesNotMatch(company, /more="\/research\/funds"/);
 });
 
