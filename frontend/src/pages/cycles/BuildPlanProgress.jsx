@@ -38,6 +38,7 @@ const FILL = {
   sent: 'bg-sky-500',
   progress: 'bg-amber-500',
   built: 'bg-emerald-500',
+  tested: 'bg-teal-600',
   notstarted: 'bg-[#6b6577]',
   unrecorded: 'border border-dashed border-axal-muted bg-transparent dark:border-gray-400',
 };
