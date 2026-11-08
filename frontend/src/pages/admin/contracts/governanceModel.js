@@ -5,14 +5,12 @@
  * and this file only mirrors the ones the page uses to word a control.
  */
 
-export const STATUS_LABELS = Object.freeze({ draft: 'Draft', review: 'In review', approved: 'Approved', executed: 'Executed', archived: 'Archived' });
-export const STATUS_TONES = Object.freeze({
-  draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200',
-  review: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
-  approved: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200',
-  executed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
-  archived: 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
-});
+import { GOVERNANCE_KEYS, governanceLifecycle } from '../../../lib/contractLifecycle';
+
+// D4811: the labels are the governance lifecycle's (`lib/contractLifecycle.js`),
+// so the pill, the move dialog and the moves read one vocabulary. `review` reads
+// "In review"; the stored values do not change.
+export const STATUS_LABELS = Object.freeze(Object.fromEntries(Object.keys(GOVERNANCE_KEYS).map((k) => [k, governanceLifecycle(k).label])));
 export const statusLabel = (status) => STATUS_LABELS[status] || 'Not recorded';
 
 /** The verb a move button says. */

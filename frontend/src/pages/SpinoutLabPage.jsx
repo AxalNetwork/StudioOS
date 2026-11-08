@@ -64,6 +64,7 @@ function gradCohortLabel(cohort) {
 export function GraduatesSection() {
   // null = loading, 'error' = fetch failed, [] = no graduates yet
   const [grads, setGrads] = useState(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -79,7 +80,7 @@ export function GraduatesSection() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [attempt]);
 
   return (
     <section className="mb-12">
@@ -101,12 +102,13 @@ export function GraduatesSection() {
         </div>
       )}
       {grads === 'error' && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-6 text-[13px] text-gray-500 dark:text-gray-400">
-          Couldn't load graduate companies right now — please try again later.
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-6 text-[13px] text-gray-500 dark:text-gray-400" role="alert" data-testid="graduates-unreadable">
+          Couldn't load graduate companies right now. This is not a statement that there are none.{' '}
+          <button type="button" className="font-semibold underline" onClick={() => { setGrads(null); setAttempt((n) => n + 1); }} data-testid="graduates-retry">Try again</button>
         </div>
       )}
       {Array.isArray(grads) && grads.length === 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-[16px] p-8 text-center">
+        <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-[16px] p-8 text-center" data-testid="graduates-empty">
           <div className="text-[14px] font-bold text-gray-700 dark:text-gray-300 mb-1">No graduates yet.</div>
           <div className="text-[12.5px] text-gray-500 dark:text-gray-400">
             Companies appear here automatically when their founders complete the 4-week sprint.

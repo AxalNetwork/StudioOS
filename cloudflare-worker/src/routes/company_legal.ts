@@ -40,6 +40,7 @@ import { isAdmin, mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
 import { encryptColumn, decryptColumn } from '../services/columnCipher';
 import { logAdminAction } from '../services/adminAudit';
+import { companyWriteDenial, isSupportSession, type WriteDenial } from '../services/companyAccess';
 import { checkSlug, slugHolder, retireSlug, companyPath } from '../services/slugs';
 import { archivedRefusal } from '../services/companyAccess';
 
@@ -69,7 +70,8 @@ type CompanyRow = {
   legal_name: string | null; legal_form: string | null; jurisdiction: string | null;
   registration_number: string | null; incorporation_date: string | null; registered_agent_name: string | null;
 };
-type Access = { company: CompanyRow; member: boolean; editor: boolean; admin: boolean };
+// D4960: `editor` is whether this caller's WRITE would be accepted (a seat, never HQ's reach, never a support session); `denial` says why not.
+type Access = { company: CompanyRow; member: boolean; editor: boolean; admin: boolean; denial: WriteDenial | null };
 type Block<T> = { available: true; value: T } | { available: false; reason: string };
 const ok = <T>(value: T): Block<T> => ({ available: true, value });
 const failed = (what: string): Block<never> => ({ available: false, reason: `${what} could not be read. That is not the same as none.` });
@@ -78,7 +80,7 @@ const COMPANY_SQL = `SELECT id, uid, company_name, archived_at, slug, legal_name
   registration_number, incorporation_date, registered_agent_name FROM company_profiles WHERE uid = ?`;
 
 /** The company and what the caller may do with it, or null when the caller may not see it. */
-async function accessOf(env: Env, uid: string, user: User): Promise<Access | null> {
+async function accessOf(env: Env, uid: string, user: User, support = false): Promise<Access | null> {
   const company = await env.DB.prepare(COMPANY_SQL).bind(uid).first<CompanyRow>();
   if (!company) return null;
   const admin = isAdmin(user);
@@ -86,8 +88,8 @@ async function accessOf(env: Env, uid: string, user: User): Promise<Access | nul
     'SELECT role_in_company, is_primary_admin FROM user_company_links WHERE company_id = ? AND user_id = ?',
   ).bind(company.id, user.id).first<{ role_in_company: string; is_primary_admin: number }>();
   if (!link && !admin) return null;
-  const editor = admin || !!link?.is_primary_admin || ['Owner', 'Admin', 'Founder'].includes(String(link?.role_in_company));
-  return { company, member: true, editor, admin };
+  const denial = await companyWriteDenial(env, company, user, support);
+  return { company, member: true, editor: denial == null, admin, denial };
 }
 
 const notFound = (c: any) => refuse(c, 404, { code: 'not_found', message: 'Company not found.' });
@@ -97,9 +99,11 @@ const archived = (c: any) => archivedRefusal(c);
 
 /** For a write: the access, or the refusal to return. */
 async function editorOf(c: any, uid: string, user: User): Promise<Access | Response> {
-  const a = await accessOf(c.env, uid, user);
+  const a = await accessOf(c.env, uid, user, await isSupportSession(c));
   if (!a) return notFound(c);
-  if (!a.editor) return notEditor(c);
+  if (a.denial) {
+    return a.denial.reason === 'not_an_editor' ? notEditor(c) : refuse(c, 403, { code: a.denial.code, message: a.denial.message });
+  }
   if (a.company.archived_at) return archived(c);
   return a;
 }
@@ -209,7 +213,7 @@ async function taxSummary(env: Env, companyId: number): Promise<Block<{ recorded
 r.get('/company/:uid/legal', async (c) => {
   try {
     const user = await requireAuth(c);
-    const a = await accessOf(c.env, c.req.param('uid'), user);
+    const a = await accessOf(c.env, c.req.param('uid'), user, await isSupportSession(c));
     if (!a) return notFound(c);
     const [officers, locations, tax_id] = await Promise.all([
       officersOf(c.env, a.company.id), locationsOf(c.env, a.company.id), taxSummary(c.env, a.company.id),
@@ -264,7 +268,7 @@ r.put('/company/:uid/legal', async (c) => {
 r.get('/company/:uid/tax-id', async (c) => {
   try {
     const user = await requireAuth(c);
-    const a = await accessOf(c.env, c.req.param('uid'), user);
+    const a = await accessOf(c.env, c.req.param('uid'), user, await isSupportSession(c));
     if (!a) return notFound(c);
     const row = await taxRow(c.env, a.company.id);
     // The number goes to an editor's own edit field, and never to a platform admin.
@@ -344,7 +348,7 @@ const officerByUid = (env: Env, companyId: number, uid: string) =>
 r.get('/company/:uid/officers', async (c) => {
   try {
     const user = await requireAuth(c);
-    const a = await accessOf(c.env, c.req.param('uid'), user);
+    const a = await accessOf(c.env, c.req.param('uid'), user, await isSupportSession(c));
     if (!a) return notFound(c);
     const officers = await officersOf(c.env, a.company.id);
     if (!officers.available) return refuse(c, 503, { code: 'officers_unreadable', message: officers.reason });
@@ -452,7 +456,7 @@ const isUniqueClash = (e: unknown) => /UNIQUE constraint failed/i.test(String((e
 r.get('/company/:uid/locations', async (c) => {
   try {
     const user = await requireAuth(c);
-    const a = await accessOf(c.env, c.req.param('uid'), user);
+    const a = await accessOf(c.env, c.req.param('uid'), user, await isSupportSession(c));
     if (!a) return notFound(c);
     const locations = await locationsOf(c.env, a.company.id);
     if (!locations.available) return refuse(c, 503, { code: 'locations_unreadable', message: locations.reason });

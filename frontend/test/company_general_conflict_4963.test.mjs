@@ -5,8 +5,8 @@
  *   - `rebaseOnConflict` rebuilds the form on the current company: every value the other editor committed is kept;
  *     this editor's edits to fields nobody else changed are re-applied; an edit to a field the other editor also
  *     changed is replaced by their committed value and named;
- *   - the form sends the version it loaded with every save (logo first, then fields at the logo's version), and on a
- *     409 `version_conflict` rebuilds from the conflict's company rather than erasing it;
+ *   - the form sends the version it loaded with its one Save, and on a 409 `version_conflict` rebuilds from the
+ *     conflict's company rather than erasing it;
  *   - an archived company is drawn read-only.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/company_general_conflict_4963.test.mjs
@@ -60,13 +60,13 @@ test('versionOf: the loaded version, or undefined for a row without one', () => 
 test('the form sends its version with each save and rebuilds from the conflict instead of erasing it', () => {
   const src = read('pages/account/companies/CompanyGeneralForm.jsx');
   const save = src.slice(src.indexOf('const onSave'), src.indexOf("if (state.status === 'loading')"));
-  assert.match(save, /logoApi\.upload\(uid, logo\.upload, versionOf\(row\)\)/);
-  assert.match(save, /logoApi\.remove\(uid, versionOf\(row\)\)/);
-  assert.match(save, /api\.updateCompany\(uid, \{ \.\.\.patch, expected_version: versionOf\(updated\) \}\)/, 'the fields go at the version the logo returned');
+  assert.match(save, /logoApi\.saveSettings\(uid, intent\)/, 'one save commits the fields and the logo');
+  assert.match(save, /expectedVersion: versionOf\(baseline\)/, 'that save names the version the form loaded');
   assert.match(save, /e\?\.code === VERSION_CONFLICT \? e\?\.data\?\.company : null/);
   assert.match(save, /rebaseOnConflict\(form, row, current\)/);
   assert.match(save, /setState\(\{ status: 'ready', row: current \}\)/, 'the current company becomes the row the next save is against');
-  assert.match(src, /canEditCompany\(row, safeReadJSON\('user', \{\}\)\)\) && !archived/, 'an archived company is read-only');
+  assert.match(src, /&& !archived/, 'an archived company is read-only');
+  assert.match(src, /archivedLine\(/);
   const logo = read('lib/api/companyLogo.js');
   assert.match(logo, /\?expected_version=\$\{v\}/);
 });

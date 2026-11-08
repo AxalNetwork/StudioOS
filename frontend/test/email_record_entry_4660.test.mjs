@@ -2,6 +2,7 @@
 // The real producer (CycleRoute's Email action) is mounted against the real
 // consumer (RecordEmailSheet); only the network is stubbed. Every record and
 // address is made up, and nothing is sent.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act } from 'react';

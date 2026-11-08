@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import StudioModules from '../studio/StudioModules';
@@ -7,7 +7,8 @@ import { PURPOSE, TILE } from '../studio/studioLayoutModel';
 import { useStudioLayout } from '../studio/useStudioLayout';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
-import { AWAITING_DECISION, isBookableSlot, slotMinutes, slotView } from './advisory/kit';
+import { AWAITING_DECISION, slotMinutes, slotView } from './advisory/kit';
+import { advisorToday, listNames, todayState } from './advisorToday';
 import './advisorStudioHome.css';
 import { earningsFigures } from './advisorEarnings';
 
@@ -65,6 +66,36 @@ function bookingIdentity(booking) {
   return booking.client_name || booking.founder_name || booking.user_name || booking.name || 'Client identity not recorded';
 }
 
+/**
+ * The Today tile from `advisorToday`'s answer. What an input returned is shown
+ * even while another is loading or has failed, with the gap named; it is
+ * Empty only when every input has answered, and Unreadable (never Empty) when
+ * nothing came back and an input failed.
+ */
+function todayTile(today, onRetry) {
+  const { items, openSlots, loading: pending, failed: broken } = today;
+  const gap = [
+    pending.length ? `Still reading ${listNames(pending)}.` : '',
+    broken.length ? `Could not read ${listNames(broken)}, so this list may be incomplete.` : '',
+  ].filter(Boolean).join(' ');
+  const state = todayState(today);
+  if (state === 'unreadable') return { state: TILE.UNREADABLE, onRetry };
+  if (state === 'loading') return { state: TILE.LOADING };
+  if (state === 'empty') return { state: TILE.EMPTY, empty: 'No sessions or open slots are scheduled for today.', href: '/calendar', openLabel: 'Open calendar' };
+  return {
+    state: TILE.READY,
+    href: '/calendar',
+    openLabel: 'Open calendar',
+    body: (
+      <div className="advisor-list">
+        {items.map((item, index) => <div className="advisor-row" key={item.id || index}><div><strong>{item.topic || item.title || 'Advisor session'}</strong><span>{formatWhen(itemStart(item))}{minutesLabel(item)}</span></div><Status tone={item.status === 'confirmed' ? 'good' : 'neutral'}>{item.status || 'Scheduled'}</Status></div>)}
+        {openSlots.slice(0, 2).map((slot) => <div className="advisor-row advisor-row--open" key={slot.id}><div><strong>Open slot</strong><span>{formatWhen(slotView(slot).startsAt)}{minutesLabel(slot)} · date-specific</span></div><Status>Open</Status></div>)}
+        {gap && <div className="advisor-state-note" role="status" data-testid="status-advisor-today-partial"><span>{gap}</span>{broken.length > 0 && <button type="button" onClick={onRetry} data-testid="button-retry-advisor-today"><RefreshCw size={13} /> Retry</button>}</div>}
+      </div>
+    ),
+  };
+}
+
 export default function AdvisorStudioHome({
   user,
   dashboard = null,
@@ -80,6 +111,22 @@ export default function AdvisorStudioHome({
   const [commissions, setCommissions] = useState(loading);
   const [advisorAssistantAvailable, setAdvisorAssistantAvailable] = useState(true);
 
+  // D4620 (#4620): one loader per source, so a retry asks again for the source
+  // that failed and leaves what the others returned in place. `latest` drops an
+  // answer that a newer ask for the same source has already replaced.
+  const latest = useRef({});
+  const read = useCallback((key, set, ask, shape) => {
+    const mine = (latest.current[key] || 0) + 1;
+    latest.current[key] = mine;
+    set(loading);
+    ask().then((r) => { if (latest.current[key] === mine) set(ready(shape(r))); })
+      .catch((e) => { if (latest.current[key] === mine) set(failed(e)); });
+  }, []);
+  const loadBookings = useCallback(() => read('bookings', setBookings, () => api.listMyAdvisorBookings(), asItems), [read]);
+  // The calendar answer is kept whole: its `sources` say whether the advisor-booking source was actually read.
+  const loadCalendar = useCallback(() => read('calendar', setCalendar, () => api.listCalendarEvents(), (r) => r), [read]);
+  const loadSlots = useCallback((uid) => read('slots', setSlots, () => api.listAdvisorSlots(uid, true), asItems), [read]);
+
   const load = useCallback(() => {
     if (previewing) {
       setAdvisor(unavailable('Advisor data is withheld in role preview.'));
@@ -90,45 +137,32 @@ export default function AdvisorStudioHome({
       setCommissions(unavailable('Earnings are withheld in role preview.'));
       return;
     }
-    setAdvisor(loading); setSlots(loading); setBookings(loading); setCalendar(loading); setPayouts(loading); setCommissions(loading);
+    setAdvisor(loading); setSlots(loading); setPayouts(loading); setCommissions(loading);
     api.getMyAdvisor()
       .then((profile) => {
         if (!profile?.uid) { setAdvisor(unavailable('Your advisor profile is not available yet.')); setSlots(unavailable('Publish an advisor profile to manage slots.')); return; }
         setAdvisor(ready(profile));
-        api.listAdvisorSlots(profile.uid, true).then((r) => setSlots(ready(asItems(r)))).catch((e) => setSlots(failed(e)));
+        loadSlots(profile.uid);
       })
       .catch((e) => { setAdvisor(failed(e)); setSlots(failed(e)); });
-    api.listMyAdvisorBookings().then((r) => setBookings(ready(asItems(r)))).catch((e) => setBookings(failed(e)));
-    api.listCalendarEvents().then((r) => setCalendar(ready(asItems(r)))).catch((e) => setCalendar(failed(e)));
+    loadBookings();
+    loadCalendar();
     api.payoutsMe().then((r) => setPayouts(ready(r || {}))).catch((e) => setPayouts(failed(e)));
     api.commissionsMe().then((r) => setCommissions(ready(r || {}))).catch((e) => setCommissions(failed(e)));
-  }, [previewing]);
+  }, [previewing, loadBookings, loadCalendar, loadSlots]);
 
   useEffect(() => { load(); }, [load]);
 
-  const todayItems = useMemo(() => {
-    const now = new Date();
-    const dayEnd = new Date(now); dayEnd.setHours(23, 59, 59, 999);
-    const events = calendar.state === 'ready' ? calendar.data : [];
-    const bookingEvents = events.filter((event) => {
-      const start = itemStart(event);
-      return (event.kind === 'advisor_booking' || event.type === 'advisor_booking') && new Date(start) >= now && new Date(start) <= dayEnd;
-    });
-    const bookingRows = bookings.state === 'ready' ? bookings.data.filter((b) => {
-      const d = new Date(itemStart(b));
-      return d >= now && d <= dayEnd && !['cancelled', 'no_show'].includes(b.status);
-    }) : [];
-    const seen = new Set();
-    return [...bookingRows, ...bookingEvents].filter((item) => {
-      const id = item.booking_id || item.id;
-      if (seen.has(id)) return false; seen.add(id); return true;
-    // This list MIXES two sources: advisor bookings, whose time is
-    // `slot_starts_at` from the worker (or `scheduled_start` from the dev
-    // backend), and calendar events, whose time is genuinely `start_at`. The
-    // chain omitted `slot_starts_at`, so every worker booking sorted as
-    // Invalid Date — NaN — and the order was undefined.
-    }).sort((a, b) => new Date(itemStart(a)) - new Date(itemStart(b)));
-  }, [bookings, calendar]);
+  // The Today list's reads: bookings, the calendar and the slots (D4620).
+  const today = useMemo(() => advisorToday({ bookings, calendar, slots }), [bookings, calendar, slots]);
+  // Retry asks again for the inputs that failed, and nothing else.
+  const retryToday = useCallback(() => {
+    if (today.failed.includes('bookings')) loadBookings();
+    if (today.failed.includes('calendar')) loadCalendar();
+    if (today.failed.includes('slots')) {
+      if (advisor.state === 'ready' && advisor.data?.uid) loadSlots(advisor.data.uid); else load();
+    }
+  }, [today, advisor, loadBookings, loadCalendar, loadSlots, load]);
 
   const engagements = useMemo(() => {
     if (bookings.state !== 'ready') return [];
@@ -162,38 +196,11 @@ export default function AdvisorStudioHome({
     ['Public profile', publicProfileLive ? 'Listed' : profile.listed === false || profile.is_active === false ? 'Not listed' : 'Not recorded', publicProfileLive ? 'good' : 'neutral'],
     ['Bookings', profile.accepting_bookings === true ? 'Accepting' : profile.accepting_bookings === false ? 'Not accepting' : 'Not recorded', profile.accepting_bookings === true ? 'good' : 'neutral'],
   ] : [];
-  const todayOpenSlots = useMemo(() => {
-    if (slots.state !== 'ready') return [];
-    const now = new Date();
-    const end = new Date(now); end.setHours(23, 59, 59, 999);
-    // This block carried a sixth private copy of the slot adapter — correct,
-    // but private, which is precisely how the other five copies drifted and
-    // how AdvisorsPage stayed broken. One implementation, in ./advisory/kit.
-    return slots.data.filter((slot) => {
-      if (!isBookableSlot(slot)) return false;
-      const start = new Date(slotView(slot).startsAt);
-      return start >= now && start <= end;
-    }).sort((a, b) => new Date(slotView(a).startsAt) - new Date(slotView(b).startsAt));
-  }, [slots]);
-
   // D4362 (#4362): an admin previewing arranges their own Advisor Studio; its tiles stay withheld (`withheld`).
   const studio = useStudioLayout({ profile: 'advisor', viewer: user });
   const withheld = { state: TILE.WITHHELD };
   const tiles = previewing ? Object.fromEntries(['today', 'storefront', 'engagements', 'consented_proof', 'earnings'].map((k) => [k, withheld])) : {
-    today: calendar.state === 'loading' || bookings.state === 'loading' ? { state: TILE.LOADING }
-      : (calendar.state === 'unavailable' && bookings.state === 'unavailable') ? { state: TILE.UNREADABLE, onRetry: load }
-        : (todayItems.length === 0 && todayOpenSlots.length === 0) ? { state: TILE.EMPTY, empty: 'No sessions or open slots are scheduled for today.', href: '/calendar', openLabel: 'Open calendar' }
-          : {
-            state: TILE.READY,
-            href: '/calendar',
-            openLabel: 'Open calendar',
-            body: (
-              <div className="advisor-list">
-                {todayItems.map((item, index) => <div className="advisor-row" key={item.id || index}><div><strong>{item.topic || item.title || 'Advisor session'}</strong><span>{formatWhen(itemStart(item))}{minutesLabel(item)}</span></div><Status tone={item.status === 'confirmed' ? 'good' : 'neutral'}>{item.status || 'Scheduled'}</Status></div>)}
-                {todayOpenSlots.slice(0, 2).map((slot) => <div className="advisor-row advisor-row--open" key={slot.id}><div><strong>Open slot</strong><span>{formatWhen(slotView(slot).startsAt)}{minutesLabel(slot)} · date-specific</span></div><Status>Open</Status></div>)}
-              </div>
-            ),
-          },
+    today: todayTile(today, retryToday),
     storefront: advisor.state === 'loading' ? { state: TILE.LOADING }
       : advisor.failed ? { state: TILE.UNREADABLE, onRetry: load }
         : !profile ? { state: TILE.NOT_RECORDED, reason: advisor.message || 'Storefront details are not available.', href: '/expertise/profile', openLabel: 'Open storefront' }

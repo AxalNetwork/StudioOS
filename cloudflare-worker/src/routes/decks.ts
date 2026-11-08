@@ -1096,6 +1096,11 @@ decks.post('/share/:token/heartbeat', async (c) => {
   const link = await c.env.DB.prepare('SELECT id, deck_id, include_json, variant_id FROM pitch_deck_share_tokens WHERE id = ?')
     .bind(live.id).first<{ id: number; deck_id: number; include_json: string | null; variant_id: number | null }>();
   if (!timePerSlideOn(link?.include_json)) return c.json({ ok: true, counts_only: true });
+  // D4598: the view must be this link's own visit. A view id from another link of the deck is no beat of this one:
+  // nothing is written to that visit (its seconds, its cards, its signals).
+  const own = await c.env.DB.prepare('SELECT id FROM deck_share_views WHERE id = ? AND deck_id = ? AND share_token_id = ?')
+    .bind(viewId, parseInt(m[1]), live.id).first<{ id: number }>();
+  if (!own) return c.json({ ok: false }, 200);
   try {
     await c.env.DB.prepare(
       `UPDATE deck_share_views

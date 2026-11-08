@@ -11,6 +11,7 @@ import LicenceHistory from '../LicenceHistory';
 import { AlertCircle, Check, X, Ban, RotateCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { bpsPercent as pct } from '../../../lib/bps';
+import { TOKEN_SPLIT_HQ_LABEL } from '../../../lib/tokenSplit';
 import { reportError } from '../../../lib/log';
 import { useReasonDialog } from '../LicenceReasonDialog';
 import { LICENCE_REASONS } from '../licenceReasonModel';
@@ -150,7 +151,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         <Field label="Seats licensed" value={n0(d.seats_licensed)} />
         <Field label="Annual fee" value={fee(d.annual_fee_cents, d.currency)} />
         <Field label="Revenue share" value={pct(d.revenue_share_bps)} />
-        <Field label="Token split to HQ" value={pct(d.token_split_bps)} />
+        <Field label={TOKEN_SPLIT_HQ_LABEL} value={pct(d.token_split_bps)} />
         <Field
           label="Renews"
           value={d.renews_on || null}

@@ -78,7 +78,7 @@ function world(answer: (input: any) => unknown = () => ({ response: JSON.stringi
   db.exec(mig('459_cycle_activity_convention.sql'));
   db.exec(mig('460_validate_record_stores.sql'));
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql', '446_interview_structure_receipts.sql',
-    '447_assistant_interviews.sql', '452_record_session_setup.sql', '453_interview_processing.sql']) db.exec(mig(m));
+    '447_assistant_interviews.sql', '452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '453_interview_processing.sql']) db.exec(mig(m));
   db.exec(mig('449_interview_channels.sql').split(';')
     .filter((sql) => /CREATE TABLE IF NOT EXISTS channel_threads \(/.test(sql)).map((sql) => `${sql};`).join('\n'));
   db.exec(mig('488_channel_consents.sql'));

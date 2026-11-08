@@ -10,6 +10,7 @@
 // that a read does not carry: a renewal mode HQ has not recorded is not
 // guessed, and seats used on HQ, which nothing counts, is not drawn as zero.
 import { NOT_RECORDED } from './absence';
+import { TOKEN_SPLIT_OWN_DETAIL } from './tokenSplit';
 import { bpsPercent } from './bps';
 import { LICENCE_TERM_FIELDS, TERM_GROUP_TITLES, displayValue } from './licenceTermsForm';
 
@@ -188,7 +189,7 @@ export function feeCard(licence, now = new Date()) {
 
 /** The Revenue share card: the share, the AI token split and, when D797 records it, the royalty on licences sold. */
 export function shareCard(licence, terms = null) {
-  const parts = [`AI token split ${percent(licence?.token_split_bps)}`];
+  const parts = [`${TOKEN_SPLIT_OWN_DETAIL} ${percent(licence?.token_split_bps)}`];
   if (terms && 'royalty_platform_licence_bps' in terms) {
     parts.push(`royalty on licences sold ${percent(terms.royalty_platform_licence_bps)}`);
   }

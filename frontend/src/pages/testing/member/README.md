@@ -7,6 +7,7 @@ A member joins the Product tester pool once; an Admin decides; an active tester 
 | `testerModel.js` | Pure rules: the card's six states (PT-M1), a programme's row (PT-M2), an application's pill, line and whether Withdraw is offered (PT-M3), which sheet an Inbox notice opens (PT-M4), dates in words. |
 | `TesterSheets.jsx` | The four sheets: Become a Product tester, the member's place in the pool (with Leave), an open programme (with Apply), and one application (with Withdraw behind its confirm). |
 | `ProductTestingStudio.jsx` | The Studio section, mounted under each member's Studio home (`../../Dashboard.jsx`) and on `../../ExploringDashboard.jsx`. Three reads, three blocks; an Admin sees nothing. |
+| `ProductTestingStudioLazy.jsx` | `ProductTestingStudio` behind `React.lazy` + `Suspense`, with a skeleton in the section's card shape (D4574, #4574 H6). `../../Dashboard.jsx` imports this, so the section's chunk leaves the Studio page's static closure. |
 | `InboxTesting.jsx` | `useInboxTesting`: the Inbox's testing notices open their sheet in place, and an open application's notice carries Withdraw (`../../InboxPage.jsx`). |
 
 **The rule for adding here:** no email and no other tester's name, ever. Every change asks first, in place. A failed read says "Could not be read" in its own block. The data comes from `lib/api/productTesting.js`; add no `/api/*` method here.

@@ -35,7 +35,7 @@ import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
-import { archivedRefusal, canEdit, isArchived, viewerIsMember } from '../services/companyAccess';
+import { archivedRefusal, companyWriteDenial, isArchived, isSupportSession, viewerIsMember, type WriteDenial } from '../services/companyAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -96,10 +96,12 @@ function docOf(row: DocRow): Doc {
 const notFound = (c: any) => refuse(c, 404, { code: 'not_found', message: 'Company not found.' });
 
 /** The company and whether the caller may edit it; null for an unknown uid or a non-member alike. */
-async function accessOf(env: Env, uid: string, user: User): Promise<{ company: CompanyRow; editor: boolean } | null> {
+async function accessOf(env: Env, uid: string, user: User, support = false): Promise<{ company: CompanyRow; editor: boolean; denial: WriteDenial | null } | null> {
   const company = await env.DB.prepare('SELECT id, uid, archived_at FROM company_profiles WHERE uid = ?').bind(uid).first<CompanyRow>();
   if (!company || !(await viewerIsMember(env, company.id, user))) return null;
-  return { company, editor: await canEdit(env, company, user) };
+  // D4960: an upload is a write: a seat, never HQ's reach, never a support session.
+  const denial = await companyWriteDenial(env, company, user, support);
+  return { company, editor: denial == null, denial };
 }
 
 /** The newest row of each named kind, and how many older ones it has. */
@@ -159,7 +161,7 @@ export const reads = { readSlots, readOther, readVentures };
 r.get('/company/:uid/documents', async (c) => {
   try {
     const user = await requireAuth(c);
-    const access = await accessOf(c.env, c.req.param('uid'), user);
+    const access = await accessOf(c.env, c.req.param('uid'), user, await isSupportSession(c));
     if (!access) return notFound(c);
     const id = access.company.id;
     let slots;
@@ -188,10 +190,14 @@ const ALLOWED_DECLARED = new Set(['application/pdf', 'image/jpeg', 'image/jpg', 
 r.post('/company/:uid/documents', async (c) => {
   try {
     const user = await requireAuth(c);
-    const access = await accessOf(c.env, c.req.param('uid'), user);
+    const access = await accessOf(c.env, c.req.param('uid'), user, await isSupportSession(c));
     if (!access) return notFound(c);
-    if (!access.editor) return refuse(c, 403, { code: 'not_editor', message: 'Only an owner, admin or founder of this company can upload its documents.' });
-    if (isArchived(access.company)) return archivedRefusal(c); // #4963: the shared archived rule
+    if (access.denial) {
+      return access.denial.reason === 'not_an_editor'
+        ? refuse(c, 403, { code: 'not_editor', message: 'Only an owner, admin or founder of this company can upload its documents.' })
+        : refuse(c, 403, { code: access.denial.code, message: access.denial.message });
+    }
+    if (isArchived(access.company)) return archivedRefusal(c);
 
     const fileRequired = () => refuse(c, 400, { code: 'file_required', message: 'Choose a file to upload.' });
     if (!(c.req.header('content-type') || '').toLowerCase().includes('multipart/form-data')) return fileRequired();
@@ -244,7 +250,7 @@ r.post('/company/:uid/documents', async (c) => {
 r.get('/company/:uid/documents/:docUid/file', async (c) => {
   try {
     const user = await requireAuth(c);
-    const access = await accessOf(c.env, c.req.param('uid'), user);
+    const access = await accessOf(c.env, c.req.param('uid'), user, await isSupportSession(c));
     if (!access) return notFound(c);
     const gone = () => refuse(c, 404, { code: 'not_found', message: 'Document not found.' });
     const row = await c.env.DB.prepare(

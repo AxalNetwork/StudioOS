@@ -418,6 +418,20 @@ export async function inboxItem(env: Env, a: { lane: ApprovalLaneKey; itemId: nu
 export type InboxItem = ApprovalItem & { assignee?: Assignee | null };
 
 /**
+ * D4814: the oldest item with a known age, and its lane, or null when nothing
+ * read has one. An item with no arrival time is never the oldest.
+ */
+function oldestOf(items: ApprovalItem[], lanes: Array<{ key: string; label: string }>) {
+  let top: ApprovalItem | null = null;
+  for (const it of items) {
+    if (it.age_hours == null) continue;
+    if (!top || (it.age_hours as number) > (top.age_hours as number)) top = it;
+  }
+  if (!top) return null;
+  return { age_hours: top.age_hours, lane: top.lane, label: lanes.find((l) => l.key === top!.lane)?.label ?? top.lane_label };
+}
+
+/**
  * GET /api/admin/approvals — every waiting item, oldest first, with its
  * assignee, paged, with an exact total of the lanes that answered and the
  * three tiles (over 72 hours, assigned to the caller, per admin).
@@ -454,6 +468,25 @@ export async function hqInbox(env: Env, a: {
     per_admin: short || !assignments.available || !assignments.reviewers ? null : assignments.reviewers.map((r) => ({
       id: r.id, name: r.name, count: board.items.filter((it) => assigneeOf(it)?.user_id === r.id).length,
     })),
+    // D4814: the items nobody holds, across every lane read, not one page. Like
+    // the others it is null when a lane failed or was cut at the cap (shown
+    // short), and null when the assignment record could not be read (that is
+    // "not read", never "nobody").
+    unassigned: short || !assignments.available ? null : board.items.filter((it) => !assigneeOf(it)).length,
+    overdue_unassigned: short || !assignments.available ? null : board.items.filter((it) => it.sla === 'past' && !assigneeOf(it)).length,
+    // D4814: the oldest item read, with its lane. With a lane unreadable it is
+    // the oldest of the lanes that answered, and `complete` says so.
+    oldest: oldestOf(board.items, board.lanes),
+    ...(short ? {
+      // D4814: what the rows that were read hold, so a page can say "127+"
+      // rather than nothing; each is a floor, never the figure.
+      at_least: {
+        over_72h: board.items.filter((it) => it.sla === 'past').length,
+        unassigned: assignments.available ? board.items.filter((it) => !assigneeOf(it)).length : null,
+        assigned_to_me: assignments.available ? board.items.filter((it) => assigneeOf(it)?.user_id === a.callerId).length : null,
+      },
+    } : {}),
+    complete: !short,
     ...(short ? { reason: short }
       : !assignments.available ? { reason: assignments.reason }
         : !assignments.reviewers ? { reason: assignments.reviewers_reason } : {}),

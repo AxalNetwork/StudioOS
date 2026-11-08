@@ -35,10 +35,11 @@
  * against a mocked sql() helper without standing up Hono + JWT.
  */
 import { holdsLicence } from '../services/accountLicences';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { refuse } from '../util/refusal';
 import { lpSelfScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 // Catalog moved to a pure module so non-route consumers (advisor
@@ -918,9 +919,10 @@ spinoutLab.post('/exit', async (c) => {
 // `incorporation_completed` milestone on record — the strongest completion
 // signal (the /exit escape hatch flips is_incorporated without finishing
 // the sprint, so it does NOT count). Company facts come from the founder's
-// project; the cohort application's working name is the fallback. Never
-// throws — answers [] when tables predate the Lab migrations. Exposes only
-// company-level facts (no founder emails/ids).
+// project; the cohort application's working name is the fallback. D4661: a
+// read that fails is a 503 (see `outcomesUnreadable`), never []; [] means the
+// read worked and no one has graduated. Exposes only company-level facts (no
+// founder emails/ids).
 type GraduateRow = {
   user_id: number;
   completed_at: string | null;
@@ -933,6 +935,43 @@ type GraduateRow = {
   total_funding: number | null;
   last_funding_round: string | null;
 };
+
+// D4661 — A PUBLIC OUTCOME READ THAT COULD NOT BE READ SAYS SO. `/graduates`, `/stats`,
+// `/cohort` and `/shipped` used to answer `[]` or zeros when D1 failed, which a page
+// draws as proof: "no graduates yet", "0 companies built", "no one in the sprint".
+// A failed read is now a 503 with a code and our own sentence (the exception's text
+// goes to the log), and every page that reads them already draws a rejected read as
+// unreadable with a retry. A read that succeeded and found nothing still answers
+// `[]` (or a measured zero): that is a different fact.
+function outcomesUnreadable(c: Context<any>, what: string, raw: unknown): Response {
+  return refuse(c, 503, {
+    code: 'lab_outcomes_unreadable',
+    message: `${what} could not be read just now. Try again in a moment.`,
+    raw,
+  });
+}
+
+// A company's name falls back to its application. A failed fallback read is not "no name":
+// the row would be dropped and the list would read as complete. It is recorded, and the
+// handler answers unreadable instead of a shorter list.
+function applicationNames(env: Env) {
+  let failure: unknown = null;
+  return {
+    async of(rowName: string | null, userId: number): Promise<string | null> {
+      if (rowName) return rowName;
+      try {
+        const row = await env.DB.prepare(
+          `SELECT company_name FROM spinout_applications WHERE user_id = ? ORDER BY id DESC LIMIT 1`,
+        ).bind(userId).first<{ company_name: string | null }>();
+        return row?.company_name ?? null;
+      } catch (e) {
+        failure = failure ?? e;
+        return null;
+      }
+    },
+    get failure(): unknown { return failure; },
+  };
+}
 
 spinoutLab.get('/graduates', async (c) => {
   let rows: GraduateRow[] = [];
@@ -948,8 +987,8 @@ spinoutLab.get('/graduates', async (c) => {
        ORDER BY m.graduated_at DESC, p.id ASC`,
     ).all<GraduateRow>();
     rows = res.results ?? [];
-  } catch {
-    return c.json([]);
+  } catch (e) {
+    return outcomesUnreadable(c, 'The Lab’s graduates', e);
   }
   type GraduateCard = {
     name: string | null;
@@ -988,15 +1027,15 @@ spinoutLab.get('/graduates', async (c) => {
     }
   }
   const out: GraduateCard[] = [];
+  const names = applicationNames(c.env);
   for (const userId of order) {
     const entry = byUser.get(userId)!;
-    if (!entry.name) {
-      entry.name = (await latestApplication(c.env, userId))?.company_name ?? null;
-    }
+    entry.name = await names.of(entry.name, userId);
     if (!entry.name) continue; // nothing real to show for this graduate
     out.push(entry);
     if (out.length >= 12) break;
   }
+  if (names.failure) return outcomesUnreadable(c, 'The Lab’s graduates', names.failure);
   return c.json(out);
 });
 
@@ -1006,8 +1045,8 @@ spinoutLab.get('/graduates', async (c) => {
 // — never founder names, emails, or ids. Members are users currently in
 // the sprint (`spinout_lab_active = 1`); recent graduates (week-4
 // `incorporation_completed` within the last 45 days) fill the final
-// column. Never throws — answers [] when tables predate the Lab
-// migrations.
+// column. D4661: a read that fails is a 503, never [] — an empty directory
+// means no company is in the sprint, a failed one means we do not know.
 type CohortActiveRow = {
   user_id: number;
   week: number | null;
@@ -1040,8 +1079,8 @@ type CohortMember = {
 // hero stats panel (also on the logged-out marketing page). Companies
 // built = distinct founders who completed the week-4 incorporation
 // milestone; total_raised sums each graduate's first (non-deleted)
-// project's total_funding. Never throws — answers zeros when tables
-// predate the Lab migrations.
+// project's total_funding. D4661: a read that fails is a 503, not zeros — a
+// measured zero (the read worked and no one has graduated) is a different fact.
 spinoutLab.get('/stats', async (c) => {
   try {
     const res = await c.env.DB.prepare(
@@ -1063,8 +1102,8 @@ spinoutLab.get('/stats', async (c) => {
       if (Number.isFinite(funding) && funding > 0) totalRaised += funding;
     }
     return c.json({ companies, total_raised: totalRaised > 0 ? totalRaised : null });
-  } catch {
-    return c.json({ companies: 0, total_raised: null });
+  } catch (e) {
+    return outcomesUnreadable(c, 'The Lab’s programme figures', e);
   }
 });
 
@@ -1136,8 +1175,8 @@ spinoutLab.get('/cohort', async (c) => {
     const ms = Date.parse(s.replace(' ', 'T') + (s.includes('Z') ? '' : 'Z'));
     return Number.isFinite(ms) ? ms : null;
   };
-  const companyName = async (rowName: string | null, userId: number): Promise<string | null> =>
-    rowName ?? ((await latestApplication(c.env, userId))?.company_name ?? null);
+  const names = applicationNames(c.env);
+  const companyName = (rowName: string | null, userId: number): Promise<string | null> => names.of(rowName, userId);
 
   const members: CohortMember[] = [];
   const seen = new Set<number>();
@@ -1155,8 +1194,8 @@ spinoutLab.get('/cohort', async (c) => {
        ORDER BY u.spinout_lab_started_at ASC, p.id ASC`,
     ).all<CohortActiveRow>();
     activeRows = res.results ?? [];
-  } catch {
-    return c.json([]);
+  } catch (e) {
+    return outcomesUnreadable(c, 'The Lab’s cohort', e);
   }
   for (const r of activeRows) {
     if (seen.has(r.user_id)) continue; // several projects: keep the first
@@ -1191,8 +1230,8 @@ spinoutLab.get('/cohort', async (c) => {
        ORDER BY m.graduated_at DESC, p.id ASC`,
     ).all<CohortGradRow>();
     gradRows = res.results ?? [];
-  } catch {
-    gradRows = [];
+  } catch (e) {
+    return outcomesUnreadable(c, 'The Lab’s cohort', e);
   }
   const gradSeen = new Set<number>();
   for (const r of gradRows) {
@@ -1217,6 +1256,7 @@ spinoutLab.get('/cohort', async (c) => {
     });
     if (gradSeen.size >= 8) break;
   }
+  if (names.failure) return outcomesUnreadable(c, 'The Lab’s cohort', names.failure);
   return c.json(members);
 });
 
@@ -1244,8 +1284,7 @@ spinoutLab.get('/cohort', async (c) => {
 // Company-level facts only, exactly like `/cohort`: the working name from the
 // founder's project (or their application), never a founder name, email or id.
 //
-// Never throws — answers [] when the tables predate the Lab migrations, the
-// same contract as `/cohort` and `/stats`.
+// D4661: a read that fails is a 503, never [] — the same contract as `/cohort` and `/stats`.
 type ShippedRow = {
   user_id: number;
   milestone_key: string;
@@ -1280,8 +1319,8 @@ spinoutLab.get('/shipped', async (c) => {
        LIMIT 2000`,
     ).all<ShippedRow>();
     rows = res.results ?? [];
-  } catch {
-    return c.json([]);
+  } catch (e) {
+    return outcomesUnreadable(c, 'The Lab’s shipped feed', e);
   }
 
   // The projects LEFT JOIN repeats every milestone once per project, so fold
@@ -1308,13 +1347,13 @@ spinoutLab.get('/shipped', async (c) => {
     cleared_at: string;
   }> = [];
 
+  const names = applicationNames(c.env);
   for (const [userId, entry] of byUser) {
     const clears = weekClearsFor(
       [...entry.keys].map(([milestone_key, completed_at]) => ({ milestone_key, completed_at })),
     );
     if (!clears.length) continue;
-    const company =
-      entry.meta.name ?? (await latestApplication(c.env, userId))?.company_name ?? null;
+    const company = await names.of(entry.meta.name, userId);
     // A cohort member with no company name anywhere is skipped rather than
     // drawn as "Untitled": the row is about a company, and we do not have one.
     if (!company) continue;
@@ -1331,6 +1370,7 @@ spinoutLab.get('/shipped', async (c) => {
     }
   }
 
+  if (names.failure) return outcomesUnreadable(c, 'The Lab’s shipped feed', names.failure);
   events.sort((a, b) => b.cleared_at.localeCompare(a.cleared_at));
   return c.json(events.slice(0, SHIPPED_MAX_EVENTS));
 });

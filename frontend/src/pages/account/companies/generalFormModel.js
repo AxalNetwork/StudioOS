@@ -104,6 +104,9 @@ const norm = (f, v) => {
   if (f === 'region_codes') { const c = regionCodesIn(v); return c.length ? c.join(',') : null; }
   const t = String(v ?? '').trim();
   if (f === 'employee_count') return t === '' ? null : Number(t);
+  // D4961: compared as the Worker stores them, so "northwind.example" and the stored "https://northwind.example" are the same value.
+  if (f === 'website') return t === '' ? null : (normalizeWebsite(t) ?? t);
+  if (f === 'linkedin_url') return t === '' ? null : (normalizeLinkedIn(t) ?? t);
   if (f === 'international_presence') return regionsText(regionsOf(t)) || null;
   if (f === 'default_currency') return t === '' ? null : t.toUpperCase();
   return t === '' ? null : t;
@@ -155,7 +158,7 @@ export function conflictLine(conflicts) {
 /** ST6c for an archived company: nothing here can change until it is restored (#4963, the Worker's rule). */
 export const archivedLine = (name) => `${name || 'This company'} is archived. Restore it before you change its settings.`;
 
-/** A link a member can open, as the Worker checks it (`checkProfileUrl`). */
+/** A link a member can open, as the Worker checks it (`checkProfileUrl`). Kept for the conflict tests. */
 export function profileUrlOk(v, { linkedin = false } = {}) {
   let u;
   try { u = new URL(String(v).trim()); } catch { return false; }
@@ -165,21 +168,65 @@ export function profileUrlOk(v, { linkedin = false } = {}) {
 }
 
 /**
- * Why the form cannot be saved yet, or null. The name is required; the count is a whole number. With the loaded row,
- * a CHANGED link must be one a member can open and changed prose fits; a value written before these rules is left alone.
+ * The Worker's contract for these fields (D4962, `services/companyProfileFields.ts`), restated so the form can say
+ * "no" before the request and say the same thing the Worker would. `test/fixtures/company_field_cases.json` is run
+ * by both sides, so the two cannot differ without a case failing.
+ */
+export const EMPLOYEE_MAX = 1_000_000;
+export const LIMITS = { revenue_range: 100, current_products: 1000, expansion_goals: 1000, description: 280, website: 500, linkedin_url: 300 };
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+/** A website the Worker would store (http or https, a dotted host, no credentials), or null. */
+export function normalizeWebsite(raw) {
+  const t = String(raw ?? '').trim();
+  if (!t || /\s/.test(t)) return null;
+  let url;
+  try { url = new URL(HAS_SCHEME.test(t) ? t : `https://${t}`); } catch { return null; }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  if (url.username || url.password) return null;
+  if (!url.hostname.includes('.') || url.hostname.startsWith('.') || url.hostname.endsWith('.')) return null;
+  const path = url.pathname === '/' && !url.search && !url.hash ? '' : url.pathname;
+  return `${url.protocol}//${url.host}${path}${url.search}${url.hash}`;
+}
+
+/** A LinkedIn company, school or showcase page, or null. */
+export function normalizeLinkedIn(raw) {
+  const site = normalizeWebsite(raw);
+  if (!site) return null;
+  const url = new URL(site);
+  const host = url.hostname.toLowerCase();
+  if (host !== 'linkedin.com' && !host.endsWith('.linkedin.com')) return null;
+  const m = url.pathname.match(/^\/(company|school|showcase)\/([^/]+)\/?$/i);
+  return m ? `https://${host === 'linkedin.com' ? 'www.linkedin.com' : host}/${m[1].toLowerCase()}/${m[2]}` : null;
+}
+
+/**
+ * Why the form cannot be saved yet, or null. The name is required; every other field follows the Worker's contract
+ * (D4962). With the loaded row, a value written before these rules is left alone (#4964): only a CHANGED link, a
+ * changed count and changed prose are checked, and prose the editor is typing is capped at PROSE_MAX.
  */
 export function problemOf(form, row = null) {
   if (!String(form?.company_name ?? '').trim()) return 'Enter a company name.';
   const n = String(form?.employee_count ?? '').trim();
-  if (n && !(Number.isInteger(Number(n)) && Number(n) >= 0)) return 'Employee count is a whole number.';
-  if (String(form?.description ?? '').length > DESCRIPTION_MAX) return `The description is at most ${DESCRIPTION_MAX} characters.`;
-  if (row) {
-    const changed = changes(form, row);
-    if (changed.website && !profileUrlOk(changed.website)) return 'Enter a website address that starts with https:// or http://.';
-    if (changed.linkedin_url && !profileUrlOk(changed.linkedin_url, { linkedin: true })) return 'Enter a LinkedIn address, such as https://www.linkedin.com/company/your-company.';
-    for (const f of ['current_products', 'expansion_goals', 'international_presence']) {
-      if (typeof changed[f] === 'string' && changed[f].length > PROSE_MAX) return `${LABELS[f]} is at most ${PROSE_MAX} characters.`;
-    }
+  if (n && !(/^\d{1,7}$/.test(n) && Number(n) <= EMPLOYEE_MAX)) return `Employee count is a whole number from 0 to ${EMPLOYEE_MAX.toLocaleString('en-US')}.`;
+  if (String(form?.description ?? '').trim().length > DESCRIPTION_MAX) return `The description is at most ${DESCRIPTION_MAX} characters.`;
+  const changed = row ? changes(form, row) : null;
+  const check = (f) => !changed || f in changed;
+  for (const f of ['revenue_range', 'current_products', 'expansion_goals', 'description']) {
+    if (!check(f)) continue;
+    const v = String(form?.[f] ?? '').trim();
+    // eslint-disable-next-line no-control-regex
+    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(v)) return `${LABELS[f]} contains characters that cannot be saved.`;
+    const cap = f === 'description' ? DESCRIPTION_MAX : (changed ? Math.min(LIMITS[f], PROSE_MAX) : LIMITS[f]);
+    if (f !== 'description' && v.length > cap) return `${LABELS[f]} is at most ${cap} characters.`;
+  }
+  if (check('website')) {
+    const site = String(form?.website ?? '').trim();
+    if (site && !normalizeWebsite(site)) return 'Enter a web address that starts with http:// or https://.';
+  }
+  if (check('linkedin_url')) {
+    const linked = String(form?.linkedin_url ?? '').trim();
+    if (linked && !normalizeLinkedIn(linked)) return 'Enter the address of a LinkedIn company, school or showcase page.';
   }
   return null;
 }
@@ -217,13 +264,95 @@ export function shownLogo(row, pending) {
   return row?.logo_url || null;
 }
 
-/** Whether this viewer may edit, mirroring the route's `canEdit`, from the row's members. */
+/**
+ * Whether this viewer may edit: the server's own answer (D4960), `row.viewer.can_edit`,
+ * which the company read returns and the write routes enforce. A cached role decides
+ * nothing: an admin is not an editor of a company they hold no seat in. Only a read
+ * that carries no `viewer` (an older Worker) falls back to the seat rule, and then
+ * without any admin pass.
+ */
 export function canEditCompany(row, me) {
-  if (String(me?.role || '') === 'admin') return true;
+  if (row?.viewer && typeof row.viewer.can_edit === 'boolean') return row.viewer.can_edit;
   const mine = (row?.members || []).find((m) => Number(m.user_id) === Number(me?.id));
   return !!(mine && (mine.is_primary_admin || EDIT_ROLES.includes(mine.role_in_company)));
 }
 
 /** ST6c: the one line a member who cannot edit sees. A role is said only where it limits. */
 export const readOnlyLine = (name) => `Only Owners, Admins and Founders of ${name || 'this company'} can edit these settings.`;
+
+/** D4960: the line for each reason the server gives; HQ and a support session are not told to ask an Owner. */
+export function readOnlyReasonLine(row) {
+  const why = row?.viewer?.read_only_reason;
+  if (why === 'hq_access') return 'Read only. HQ reads this company; its members make the changes here.';
+  if (why === 'support_session') return 'Read only. A support session can read this company but cannot change it.';
+  return readOnlyLine(row?.company_name);
+}
 export const LEAVE_PROMPT = 'Leave without saving? Your changes to General will be lost.';
+
+// ── One Save, one recoverable operation (D4961) ───────────────────────────────
+
+/**
+ * What one click on Save means: the changed fields and the pending logo, together. The Worker takes them as one
+ * request (`POST /company/:uid/settings`) and commits them as one, so a logo can no longer commit while the fields
+ * fail. This is the intent a failed or uncertain save is judged against.
+ */
+export function saveIntent(patch, logo) {
+  return {
+    fields: patch || {},
+    logo: logo?.upload || null,
+    remove: Boolean(logo?.remove),
+  };
+}
+
+export const hasIntent = (intent) => Object.keys(intent?.fields || {}).length > 0 || Boolean(intent?.logo) || Boolean(intent?.remove);
+
+const storedLogo = (uid, url) => typeof url === 'string' && url.startsWith(`/api/company/${encodeURIComponent(uid)}/logo?v=`);
+
+/**
+ * What a re-read of the company says about an intent. `before` is the company as the form last held it. Never
+ * "saved" unless every part of the intent is in the row:
+ *   - each field equals what was asked, compared as the Worker stores it;
+ *   - an upload: the row's logo is a stored one and is not the one that was there before;
+ *   - a removal: the row has no logo.
+ * `none` committed means "not saved" and a retry is safe; `some` is a partial commit, said specifically; `all` is saved.
+ */
+export function reconcile(row, intent, before, uid) {
+  const fields = Object.keys(intent?.fields || {});
+  const fieldDone = fields.filter((f) => norm(f, row?.[f]) === norm(f, intent.fields[f]));
+  let logoDone = null;
+  if (intent?.logo) logoDone = storedLogo(uid, row?.logo_url) && row.logo_url !== (before?.logo_url ?? null);
+  else if (intent?.remove) logoDone = (row?.logo_url ?? null) === null;
+  const parts = fields.length + (logoDone === null ? 0 : 1);
+  const done = fieldDone.length + (logoDone ? 1 : 0);
+  return {
+    outcome: parts === 0 || done === parts ? 'all' : done === 0 ? 'none' : 'some',
+    fieldsSaved: fieldDone,
+    fieldsLeft: fields.filter((f) => !fieldDone.includes(f)),
+    logoSaved: logoDone === true,
+    logoLeft: logoDone === false,
+  };
+}
+
+/** A failure the Worker answered with a 4xx did not write anything (it checks everything first). No answer, or a 5xx, may have. */
+export const failedBeforeWriting = (e) => Number.isInteger(e?.status) && e.status >= 400 && e.status < 500;
+
+const label = (f) => (LABELS[f] || f).toLowerCase();
+
+/**
+ * The sentence for a settled save. `kind`: 'saved' | 'saved_after_check' | 'not_saved' | 'partly' | 'unknown'.
+ * "Not saved" is said only when a re-read (or a 4xx) shows nothing committed; an unconfirmed outcome says so.
+ */
+export function saveLine(kind, { detail = '', result = null } = {}) {
+  const tail = detail ? ` ${detail}` : '';
+  switch (kind) {
+    case 'saved': return 'Saved · just now';
+    case 'saved_after_check': return 'Saved. The answer did not arrive, so we checked: your changes are in.';
+    case 'not_saved': return `Your changes were not saved. Nothing was changed; they are still here to try again.${tail}`;
+    case 'partly': {
+      const done = [...(result?.fieldsSaved || []).map(label), ...(result?.logoSaved ? ['the logo'] : [])];
+      const left = [...(result?.fieldsLeft || []).map(label), ...(result?.logoLeft ? ['the logo'] : [])];
+      return `Part of your changes saved: ${done.join(', ') || 'nothing'}. Not saved yet: ${left.join(', ')}. They are still here to try again.`;
+    }
+    default: return 'We could not confirm whether your changes saved. They are still here; Try again checks first, then saves only what is missing.';
+  }
+}
