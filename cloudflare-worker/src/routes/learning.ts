@@ -495,16 +495,24 @@ r.post('/progress', async (c) => {
 r.get('/me', async (c) => {
   let user: any;
   try { user = await requireAuth(c); } catch (e) { return mapError(c, e); }
-  const rows = await c.env.DB.prepare(
+  // #4648: the learner's record is read per kind. One LIMIT over every kind let a learner with hundreds of item rows push
+  // their course rows out of the list, so Continue learning showed none while "Courses in progress" (a count of the
+  // course rows) said otherwise. Each kind now has its own bound, and the course rows the home draws are never starved.
+  const read = (kinds: string[]) => c.env.DB.prepare(
     `SELECT p.subject_kind, p.subject_uid, p.status, p.percent, p.started_at, p.completed_at, p.updated_at,
             COALESCE(i.title, cr.title, l.title) AS title, i.kind AS item_kind, cr.slug AS course_slug
        FROM learning_progress p
        LEFT JOIN learning_items i ON p.subject_kind = 'item' AND i.uid = p.subject_uid
        LEFT JOIN learning_courses cr ON p.subject_kind = 'course' AND cr.uid = p.subject_uid
        LEFT JOIN learning_lessons l ON p.subject_kind = 'lesson' AND l.uid = p.subject_uid
-      WHERE p.user_id = ?
+      WHERE p.user_id = ? AND p.subject_kind IN (${kinds.map(() => '?').join(', ')})
       ORDER BY p.updated_at DESC, p.id DESC LIMIT 500`,
-  ).bind(user.id).all<any>();
+  ).bind(user.id, ...kinds).all<any>();
+  const [courseRows, otherRows] = await Promise.all([read(['course']), read(['item', 'lesson'])]);
+  const rows = {
+    results: [...(courseRows.results || []), ...(otherRows.results || [])]
+      .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))),
+  };
   const list = rows.results || [];
   return c.json({
     in_progress: list.filter((x) => x.status === 'started'),
