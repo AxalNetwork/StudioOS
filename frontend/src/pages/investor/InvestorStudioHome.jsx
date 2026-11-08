@@ -8,12 +8,10 @@
  * same, one per source, shared by the tiles. The header is Studio, the
  * purpose line and Customise. No AIRail on /studio (owner, #3698 G).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CircleAlert, Sparkles } from 'lucide-react';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
-import { api } from '../../lib/api';
-import { reportError } from '../../lib/log';
 import { quickStats } from './investorStudioParts';
 import StudioModules from '../studio/StudioModules';
 import { CustomiseButton, StudioFixedLock } from '../studio/StudioParts';
@@ -22,6 +20,7 @@ import { INVESTOR_AGENDA_KINDS, calendarCoverage, upcomingActive } from '../stud
 import { useStudioLayout } from '../studio/useStudioLayout';
 import { investorTiles } from '../studio/tiles/investorTiles';
 import InvestorThesisBand from './InvestorThesisBand';
+import { useInvestorSources } from './useInvestorSources';
 import './investorStudioHome.css';
 
 const list = (data, keys = []) => Array.isArray(data) ? data : keys.reduce((found, key) => found || (Array.isArray(data?.[key]) ? data[key] : null), null) || [];
@@ -36,34 +35,8 @@ export default function InvestorStudioHome({
   onRetryLifecycle,
 }) {
   const [advisorAvailable, setAdvisorAvailable] = useState(null);
-  const [records, setRecords] = useState({ portfolio: undefined, events: undefined });
-  const [failures, setFailures] = useState({});
-  const [retry, setRetry] = useState(0);
-
-  useEffect(() => {
-    let alive = true;
-    if (previewing) {
-      setRecords({ portfolio: null, events: null });
-      setFailures({});
-      return () => { alive = false; };
-    }
-    setRecords({ portfolio: undefined, events: undefined });
-    setFailures({});
-    // listCalendarEvents has no "upcoming" flag contract; filtering locally
-    // retains only dated future records and never invents a calendar item.
-    const calls = [['portfolio', api.positionsAnalytics()], ['events', api.listCalendarEvents()]];
-    Promise.allSettled(calls.map(([, fn]) => fn)).then((outcomes) => {
-      if (!alive) return;
-      const next = {}; const errors = {};
-      outcomes.forEach((result, index) => {
-        const key = calls[index][0];
-        if (result.status === 'fulfilled') next[key] = result.value;
-        else { errors[key] = result.reason?.message || 'Source unavailable'; reportError(`InvestorStudio:${key}`, result.reason); }
-      });
-      setRecords(next); setFailures(errors);
-    });
-    return () => { alive = false; };
-  }, [previewing, retry]);
+  // #4622: each source is read, committed and retried on its own (`useInvestorSources`).
+  const { records, failures, readAll, retryFailed } = useInvestorSources({ previewing });
 
   // D4362 (#4362): an admin previewing arranges their own Investor Studio; its tiles stay withheld (`withheld`).
   const studio = useStudioLayout({ profile: 'investor', viewer: user });
@@ -78,10 +51,11 @@ export default function InvestorStudioHome({
   const eventsCoverage = calendarCoverage(records.events, INVESTOR_AGENDA_KINDS);
   const events = upcomingActive(eventsCoverage.items, { limit: 2 });
   const refreshContext = () => {
-    setRetry((n) => n + 1);
+    readAll();
     onRetryDashboard?.();
   };
-  const retrySources = () => setRetry((n) => n + 1);
+  // Retry asks again only for the sources that failed (and for a calendar that answered incompletely).
+  const retrySources = () => retryFailed(eventsCoverage.state !== 'ready');
   // The lifecycle is read by Dashboard.jsx. Where it passes no retry of its
   // own (the dashboard itself failed, so the lifecycle was never asked for),
   // retrying the dashboard is what reads it again.
