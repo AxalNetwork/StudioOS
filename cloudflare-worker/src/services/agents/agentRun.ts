@@ -62,6 +62,14 @@
  * grants (`tool_not_approved`) and refuses a read outside its allow-list
  * (`tool_not_in_skill`). Its steps and allow-list join the system prompt; the
  * usage row records `skill_id` and `skill_version`.
+ *
+ * SKILL RUNTIME (D4555, #4555). The skill's text comes through
+ * `skillTextForRun` (`skillRuntime.ts`). The legacy loader is the default and
+ * gives today's `skillPrompt()` text with no other read. Only the preview
+ * Worker with `AGENT_SKILL_RUNTIME=cloudflare_sdk` (`skillEngineOf`) loads it
+ * through the Agent Skills SDK adapter, over the D1-authorized run manifest;
+ * a D1 re-check that refuses there is 409 `skill_unavailable` before any
+ * model call, and its `run` event names the runtime (`skill_runtime`).
  */
 import { agentModels, planOk } from './modelOffers';
 import { allowlistRefusal } from './allowlists';
@@ -76,7 +84,8 @@ import { agentDisclaimerText, disclaimerKeyForRole } from './disclaimers';
 import { personaOf } from './personas';
 import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
 import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
-import { skillForRun, skillPrompt, tagUsage } from './skillEval';
+import { skillForRun, tagUsage } from './skillEval';
+import { skillEngineOf, skillTextForRun, type RunSkillDeps, type RunSkillText } from './skillRuntime';
 
 export const PROMPT_MAX = 8000;
 const CYCLE_PAGE = { validate: 'Founder · Validate', build: 'Founder · Build', raise: 'Founder · Raise', grow: 'Founder · Grow' } as const;
@@ -99,6 +108,8 @@ export type AgentRunInput = {
   skill?: string | null;
   /** D4534: the version the caller saved (a scheduled session); a different pin is refused `skill_version_changed`. */
   skillVersion?: number | null;
+  /** D4555, tests only: the SDK and resource provider the preview skill runtime uses. */
+  skillDeps?: RunSkillDeps;
 };
 
 export type AgentRefusal = { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
@@ -348,7 +359,14 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   // D1612 part D (#3954): a named skill runs at the agent's pinned version; its tools are checked again now.
   const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool), input.skillVersion ?? null) : null;
   if (skill && !skill.ok) return refused(env, a, skill, input.module, input.option);
-  if (skill) c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${skillPrompt(skill.version)}`;
+  // D4555: the skill's text through the skill runtime; the legacy loader unless the preview switch is on.
+  const engine = skill ? skillEngineOf(env) : 'legacy';
+  let loaded: RunSkillText | null = null;
+  if (skill) {
+    loaded = await skillTextForRun(env, a.id, skill, engine, input.skillDeps);
+    if (!loaded.ok) return refused(env, a, no(409, 'skill_unavailable', 'This skill is no longer available to this agent, so it was not run.'), input.module, input.option);
+    c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${loaded.text}`;
+  }
   const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
   if ('disconnected' in read) {
     await pause(env, a, 'tool_disconnected');
@@ -398,6 +416,8 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   await logEvent(env, a.id, a.sponsor_user_id, 'run', {
     module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}),
     ...(skill ? { skill: { uid: skill.skill.uid, version: skill.version.version } } : {}),
+    // D4555: only a run that asked for the SDK names its runtime; a legacy run's event is unchanged.
+    ...(engine === 'cloudflare_sdk' && loaded?.ok ? { skill_runtime: { runtime: loaded.runtime, fallback: loaded.fallback } } : {}),
   }, { usageLogId, proposalUid: proposal.uid });
   return { ok: true, proposal, charged: await chargedFor(env, usageLogId), usageLogId, runKey, replayed: false };
 }

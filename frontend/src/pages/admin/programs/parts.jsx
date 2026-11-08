@@ -92,6 +92,29 @@ export function Tile({ t, onRetry }) {
   );
 }
 
+/** D4807: the last answer stays while the next one reads, and says so. */
+export function StaleNote({ stale }) {
+  return stale ? <span role="status" className={SUB} data-testid="programs-catalogue-stale">Showing the last reading while the new one loads.</span> : null;
+}
+
+/**
+ * The five dimensions of a program, each its own labelled row (D4807): build
+ * state, operation, member access, studio offering and studio grants. No one
+ * status word stands for all five.
+ */
+export function ProgramDimensions({ dims, testId }) {
+  return (
+    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px]" data-testid={testId}>
+      {dims.map((d) => (
+        <React.Fragment key={d.key}>
+          <dt className="font-semibold text-axal-muted dark:text-gray-400">{d.label}</dt>
+          <dd className="m-0 font-medium text-axal-ink dark:text-gray-100" data-testid={`${testId}-${d.key}`}>{d.value}</dd>
+        </React.Fragment>
+      ))}
+    </dl>
+  );
+}
+
 /** A program's status in the canvas's words and tone. */
 export function StatusPill({ status, testId }) {
   const s = STATUS_PILL[status] || { glyph: '–', tone: 'muted' };
@@ -349,7 +372,7 @@ export function PeriodControl({ periods, weeks, onPick }) {
   );
 }
 
-/** PG2's "Studio" select, for a Super Admin: D893's Scope list (`scopeLines`, `SCOPE_NOTE`), as Insights draws it. */
+/** PG2's scope select (D4807: "Scope", since HQ-held accounts are a valid choice, not a studio), for a Super Admin: D893's Scope list (`scopeLines`, `SCOPE_NOTE`), as Insights draws it. */
 export function StudioSelect({ scopes, current, onPick }) {
   const [open, setOpen] = useState(false);
   const label = current?.kind === 'branch' ? current.label : 'HQ-held accounts';
@@ -359,10 +382,10 @@ export function StudioSelect({ scopes, current, onPick }) {
     <div className="relative">
       <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid="programs-studio"
         className="min-h-[36px] rounded-[7px] border border-axal-lavender-edge bg-axal-lavender px-2.5 py-1.5 text-[12.5px] font-bold text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300">
-        {`Studio · ${label} ▾`}
+        {`Scope · ${label} ▾`}
       </button>
       {open ? (
-        <div role="listbox" aria-label="Studio" className={`${CARD} absolute right-0 top-10 z-10 flex w-[300px] max-w-[calc(100vw-32px)] flex-col gap-0.5 p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`} data-testid="programs-studio-list">
+        <div role="listbox" aria-label="Scope" className={`${CARD} absolute right-0 top-10 z-10 flex w-[300px] max-w-[calc(100vw-32px)] flex-col gap-0.5 p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`} data-testid="programs-studio-list">
           {lines.map((l) => {
             const on = l.code === picked;
             return (

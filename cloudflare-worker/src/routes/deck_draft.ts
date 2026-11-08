@@ -6,6 +6,7 @@
  *   PATCH  /api/decks/:id/cards/:uid   one card's working copy, `If-Match: <rev>`
  *   GET    /api/decks/:id/draft        the version's working copy
  *   DELETE /api/decks/:id/draft        discard it
+ *   PUT    /api/decks/:id/draft-doc    D4596: which cards the working copy keeps, their order, the theme and the audience
  *
  * `If-Match` is required on a PATCH: `0` creates the card's first working copy,
  * `n` replaces revision n. Both are one conditional statement, so of two tabs
@@ -27,7 +28,7 @@ import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
 import { refuse } from '../util/refusal';
 import { ensureSchema, getDeckRow, sanitizeImageUrl, sanitizeSlides } from './decks';
-import { modelProblems } from '../services/decks/slideModel';
+import { AUDIENCES, THEME_KINDS, modelProblems, sanitizeTheme } from '../services/decks/slideModel';
 import { revOf } from '../services/decks/ifMatch';
 import { saveGateRefusal } from '../services/decks/saveGates';
 
@@ -43,6 +44,17 @@ const cardOf = (r: CardRow) => {
   try { card = JSON.parse(r.json); } catch { card = null; }
   return { uid: r.card_uid, ord: Number(r.ord), rev: Number(r.rev), updated_at: r.updated_at, card };
 };
+
+type DocRow = { rev: number; order_json: string; theme_json: string | null; audience: string | null; updated_at: string };
+/** D4596: the working copy's deck-level state, or null when none was ever saved. */
+async function docOf(env: Env, deckId: number) {
+  const r = await env.DB.prepare('SELECT rev, order_json, theme_json, audience, updated_at FROM pitch_deck_draft_doc WHERE deck_id = ?1').bind(deckId).first<DocRow>();
+  if (!r) return null;
+  let order: unknown = [], theme: unknown = null;
+  try { order = JSON.parse(r.order_json); } catch { order = []; }
+  try { theme = r.theme_json ? JSON.parse(r.theme_json) : null; } catch { theme = null; }
+  return { rev: Number(r.rev), order: Array.isArray(order) ? order as string[] : [], theme, audience: r.audience ?? null, updated_at: r.updated_at };
+}
 
 async function deckFor(c: any, write: boolean): Promise<{ row: any } | Response> {
   const user = await requireAuth(c);
@@ -64,13 +76,17 @@ deckDraft.get('/:id{[0-9]+}/draft', async (c) => {
   ).bind(Number(got.row.id)).all<CardRow>();
   const cards = (res.results || []).map(cardOf);
   const updated = cards.reduce<string | null>((m, x) => (!m || x.updated_at > m ? x.updated_at : m), null);
-  return c.json({ deck_id: Number(got.row.id), version: Number(got.row.version), rev: Number(got.row.version), updated_at: updated, cards });
+  const doc = await docOf(c.env, Number(got.row.id));
+  return c.json({ deck_id: Number(got.row.id), version: Number(got.row.version), rev: Number(got.row.version), updated_at: doc && (!updated || doc.updated_at > updated) ? doc.updated_at : updated, cards, doc });
 });
 
 deckDraft.delete('/:id{[0-9]+}/draft', async (c) => {
   const got = await deckFor(c, true);
   if (got instanceof Response) return got;
-  const r = await c.env.DB.prepare('DELETE FROM pitch_deck_cards WHERE deck_id = ?1').bind(Number(got.row.id)).run();
+  const [r] = await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM pitch_deck_cards WHERE deck_id = ?1').bind(Number(got.row.id)),
+    c.env.DB.prepare('DELETE FROM pitch_deck_draft_doc WHERE deck_id = ?1').bind(Number(got.row.id)),
+  ]);
   return c.json({ ok: true, deck_id: Number(got.row.id), discarded: Number(r?.meta?.changes || 0) });
 });
 
@@ -140,6 +156,59 @@ deckDraft.patch('/:id{[0-9]+}/cards/:uid', async (c) => {
   if (!changes) return conflict();
   const saved = await current();
   return c.json({ ok: true, deck_id: deckId, card: saved ? cardOf(saved) : null });
+});
+
+/**
+ * D4596 (#4596) — PUT /:id/draft-doc { order, theme, audience } with `If-Match: <rev>` (0 for the first).
+ * `order` is the complete list of the card uids the working copy keeps, in order: a card it does not
+ * list is removed, and its working copy is deleted in the same batch, gated on this write having won.
+ * One conditional statement decides between two writers; the loser gets 409 `doc_rev_conflict` with
+ * the server's state, and nothing is written. Theme and audience are checked as a save checks them.
+ */
+deckDraft.put('/:id{[0-9]+}/draft-doc', async (c) => {
+  const got = await deckFor(c, true);
+  if (got instanceof Response) return got;
+  const deckId = Number(got.row.id);
+  const header = c.req.header('if-match');
+  if (header == null) return refuse(c, 428, { code: 'if_match_required', message: 'Send the revision you edited (If-Match), or 0 for the first save.' });
+  const rev = revOf(header);
+  if (rev == null) return refuse(c, 400, { code: 'invalid_if_match', message: 'If-Match must be the revision you edited, a whole number.' });
+  const body: any = await c.req.json().catch(() => null);
+  const order = body?.order;
+  if (!Array.isArray(order) || order.length > DRAFT_MAX_CARDS || !order.every((u: unknown) => typeof u === 'string' && UID.test(u)) || new Set(order).size !== order.length) {
+    return refuse(c, 400, { code: 'invalid_order', message: `Send order as the deck's card uids, at most ${DRAFT_MAX_CARDS}, each once.` });
+  }
+  const audience = body?.audience ?? null;
+  if (audience !== null && !(typeof audience === 'string' && (AUDIENCES as readonly string[]).includes(audience))) {
+    return refuse(c, 400, { code: 'invalid_audience', message: `audience must be one of ${AUDIENCES.join(', ')}` });
+  }
+  let theme: unknown = body?.theme ?? null;
+  if (theme !== null) {
+    theme = sanitizeTheme(theme, sanitizeImageUrl);
+    if (!theme) return refuse(c, 400, { code: 'invalid_theme', message: `theme.kind must be one of ${THEME_KINDS.join(', ')}` });
+  }
+  const next = rev + 1;
+  const write = rev === 0
+    ? c.env.DB.prepare(`INSERT INTO pitch_deck_draft_doc (deck_id, rev, order_json, theme_json, audience, updated_at)
+                        SELECT ?1, 1, ?2, ?3, ?4, datetime('now') WHERE NOT EXISTS (SELECT 1 FROM pitch_deck_draft_doc WHERE deck_id = ?1)`)
+        .bind(deckId, JSON.stringify(order), theme ? JSON.stringify(theme) : null, audience)
+    : c.env.DB.prepare(`UPDATE pitch_deck_draft_doc SET order_json = ?3, theme_json = ?4, audience = ?5, rev = rev + 1, updated_at = datetime('now')
+                         WHERE deck_id = ?1 AND rev = ?2`)
+        .bind(deckId, rev, JSON.stringify(order), theme ? JSON.stringify(theme) : null, audience);
+  // The cards it no longer keeps go in the same batch, but only when THIS write is the doc's current revision.
+  const prune = c.env.DB.prepare(
+    `DELETE FROM pitch_deck_cards WHERE deck_id = ?1 AND card_uid NOT IN (SELECT value FROM json_each(?2))
+        AND EXISTS (SELECT 1 FROM pitch_deck_draft_doc WHERE deck_id = ?1 AND rev = ?3 AND order_json = ?2)`,
+  ).bind(deckId, JSON.stringify(order), next);
+  const [won] = await c.env.DB.batch([write, prune]);
+  if (!Number(won?.meta?.changes || 0)) {
+    return refuse(c, 409, {
+      code: 'doc_rev_conflict',
+      message: 'This deck changed in another tab or by another member while you were editing. Nothing was saved.',
+      extra: { rev: (await docOf(c.env, deckId))?.rev ?? 0, server: await docOf(c.env, deckId) },
+    });
+  }
+  return c.json({ ok: true, deck_id: deckId, doc: await docOf(c.env, deckId) });
 });
 
 export default deckDraft;

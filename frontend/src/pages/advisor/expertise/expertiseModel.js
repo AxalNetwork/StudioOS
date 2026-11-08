@@ -22,6 +22,8 @@ export const SERVICE_STATES = Object.freeze([
 export const serviceStateLabel = (row) => (row?.is_active ? 'Active' : 'Inactive');
 export const SERVICE_NOT_PUBLIC = 'A service is your own record. It is not on your public profile, and nobody can book it.';
 export const SERVICE_BOOKABLE = 'What a founder can book is a session type, and a public booking link to it. Those are set in Practice › Sessions.';
+import { centsToInput } from '../../../lib/moneyInput';
+
 export const SESSIONS_PATH = '/practice/sessions';
 export const CURRENCY_RE = /^[A-Za-z]{3}$/;
 
@@ -33,7 +35,7 @@ export const CURRENCY_RE = /^[A-Za-z]{3}$/;
 export function serviceEditBody(row, draft, cents) {
   const title = String(draft?.title ?? '').trim();
   if (!title) return { error: 'A service needs a title.' };
-  const currency = String(draft?.currency ?? '').trim().toUpperCase() || 'USD';
+  const currency = String(draft?.currency ?? '').trim().toUpperCase() || row?.currency || 'USD';
   if (!CURRENCY_RE.test(currency)) return { error: 'A currency is three letters, such as USD.' };
   const next = {
     title,
@@ -49,6 +51,9 @@ export function serviceEditBody(row, draft, cents) {
     const was = k === 'is_active' ? !!row?.[k] : (row?.[k] ?? null);
     if (was !== v) body[k] = v;
   }
+  // A price means nothing without its currency: moving a priced service to
+  // another currency sends the price in the same edit (the Worker requires it).
+  if ('currency' in body && row?.price_cents != null && !('price_cents' in body)) body.price_cents = next.price_cents;
   return { body };
 }
 
@@ -74,7 +79,7 @@ export function serviceDraftOf(row) {
   return {
     title: row?.title || '',
     kind: row?.kind || 'fixed',
-    price: row?.price_cents == null ? '' : (Number(row.price_cents) / 100).toFixed(2).replace(/\.00$/, ''),
+    price: centsToInput(row?.price_cents),
     currency: row?.currency || 'USD',
     duration_note: row?.duration_note || '',
     scope: row?.scope || '',
