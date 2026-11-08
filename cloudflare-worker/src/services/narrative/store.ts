@@ -29,7 +29,7 @@
  */
 import type { Env } from '../../types';
 import { WriterError } from '../validateWriters';
-import { ownVersion, runCheck, setWords } from '../raiseWriters';
+import { ownVersion, runCheck } from '../raiseWriters';
 import { logCycleWrite } from '../cycleActivity';
 import { VERSION_MARKER_KEY } from '../raiseCycle';
 
@@ -229,18 +229,20 @@ async function part<T extends object>(what: string, read: () => Promise<T>): Pro
 export async function readNarrative(env: Env, projectId: number, versionParam: unknown) {
   const version = await readableVersion(env, projectId, versionParam);
   const meta = await part('meta', async () => {
-    if (version === 0) return { live: true, investor_type: null, deck_version: null, start_from: null, based_on_version: null, check_against: null };
+    if (version === 0) return { live: true, investor_type: null, deck_version: null, start_from: null, based_on_version: null, check_against: null, revision: null };
     const marker = await env.DB.prepare(
       'SELECT investor_type, deck_version FROM spinout_deck_overrides WHERE project_id = ? AND version = ? ORDER BY field_key = ? DESC LIMIT 1',
     ).bind(projectId, version, VERSION_MARKER_KEY).first<{ investor_type: string | null; deck_version: number | null }>();
     const m = await env.DB.prepare(
-      'SELECT start_from, based_on_version, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?',
-    ).bind(projectId, version).first<{ start_from: string | null; based_on_version: number | null; check_against_json: string | null }>();
+      'SELECT start_from, based_on_version, check_against_json, revision FROM narrative_version_meta WHERE project_id = ? AND version = ?',
+    ).bind(projectId, version).first<{ start_from: string | null; based_on_version: number | null; check_against_json: string | null; revision: number | null }>();
     let checkAgainst: string[] | null = null;
     try { checkAgainst = m?.check_against_json ? JSON.parse(m.check_against_json) : null; } catch { checkAgainst = null; }
     return {
       live: false, investor_type: marker?.investor_type ?? null, deck_version: marker?.deck_version ?? null,
       start_from: m?.start_from ?? null, based_on_version: m?.based_on_version ?? null, check_against: checkAgainst,
+      // D5069: the revision this read is of. It goes back as `expected_revision`.
+      revision: Number(m?.revision ?? 0),
     };
   });
   const sections = await part('sections', async () => ({ items: await sectionsOf(env, projectId, version) }));
@@ -269,15 +271,35 @@ export async function compareNarrative(env: Env, projectId: number, aParam: unkn
 // Writes
 // ---------------------------------------------------------------------------
 
+/** D5069: a write was made from a read that is no longer the version's. */
+export class ChangedSinceOpen extends Error {
+  currentRevision: number;
+  constructor(currentRevision: number) { super('changed_since_open'); this.currentRevision = currentRevision; }
+}
+
+type Guard = { sql: string; args: unknown[] };
+type Stmt = ReturnType<Env['DB']['prepare']>;
+
 /**
- * `PUT /narrative/:version/sections/:section` — `{ body?, audience_note?,
- * position?, source?, bindings? }`; at least one. A section with a deck key
- * writes its words to the version's deck row, Why now to the version's meta,
- * the rest to `narrative_sections.body`. `prior_value` keeps the words it
- * replaced. A change to a deck row runs the version's check again.
+ * The guard every write of one save carries: the version's revision is now the
+ * one this save claimed. A statement that carries it matches nothing when the
+ * claim did not land, so a stale save writes no row, and a failed statement
+ * rolls the whole batch back (D1 runs a batch as one transaction).
  */
-export async function saveNarrativeSection(env: Env, a: { projectId: number; userId: number; version: unknown; section: unknown; body: Record<string, unknown> }) {
-  const version = await writableVersion(env, a.projectId, a.version);
+const guardOf = (projectId: number, version: number, revision: number, claim: string): Guard => ({
+  sql: 'EXISTS (SELECT 1 FROM narrative_version_meta g WHERE g.project_id = ? AND g.version = ? AND g.revision = ? AND g.claim = ?)',
+  args: [projectId, version, revision, claim],
+});
+
+async function revisionOf(env: Env, projectId: number, version: number): Promise<number> {
+  const r = await env.DB.prepare('SELECT revision FROM narrative_version_meta WHERE project_id = ? AND version = ?')
+    .bind(projectId, version).first<{ revision: number | null }>();
+  return Number(r?.revision ?? 0);
+}
+
+/** What one section's save writes, as statements; nothing runs here. */
+async function planSection(env: Env, a: { projectId: number; userId: number; version: number; section: unknown; body: Record<string, unknown> }, guard: Guard) {
+  const version = a.version;
   const spec = sectionSpec(a.section);
   const b = a.body;
   const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
@@ -302,6 +324,7 @@ export async function saveNarrativeSection(env: Env, a: { projectId: number; use
     source_kind: string | null; source_ref: string | null; source_label: string | null; prior_value: string | null }>();
   let prior: string | null = null;
   const changed: string[] = [];
+  const stmts: Stmt[] = [];
 
   if (words !== undefined) {
     if (spec.store === 'deck') {
@@ -311,18 +334,21 @@ export async function saveNarrativeSection(env: Env, a: { projectId: number; use
       const marker = await env.DB.prepare(
         'SELECT investor_type, deck_version FROM spinout_deck_overrides WHERE project_id = ? AND version = ? ORDER BY field_key = ? DESC LIMIT 1',
       ).bind(a.projectId, version, VERSION_MARKER_KEY).first<{ investor_type: string | null; deck_version: number | null }>();
-      await setWords(env, { projectId: a.projectId, userId: a.userId, version, investorType: marker?.investor_type ?? null,
-        deckVersion: marker?.deck_version ?? null, fieldKey: spec.deckKey!, value: words });
+      // The words of a deck-keyed section: replace the version's row (`setWords`), under the guard.
+      stmts.push(env.DB.prepare(`DELETE FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND field_key = ? AND ${guard.sql}`)
+        .bind(a.projectId, version, spec.deckKey, ...guard.args));
+      if (words !== null) {
+        stmts.push(env.DB.prepare(
+          `INSERT INTO spinout_deck_overrides (project_id, field_key, value, updated_by, updated_at, version, investor_type, deck_version)
+           SELECT ?, ?, ?, ?, datetime('now'), ?, ?, ? WHERE ${guard.sql}`,
+        ).bind(a.projectId, spec.deckKey, words, a.userId, version, marker?.investor_type ?? null, marker?.deck_version ?? null, ...guard.args));
+      }
     } else if (spec.store === 'meta') {
       const m = await env.DB.prepare('SELECT why_now FROM narrative_version_meta WHERE project_id = ? AND version = ?')
         .bind(a.projectId, version).first<{ why_now: string | null }>();
       prior = m?.why_now ?? null;
-      await env.DB.prepare(
-        `INSERT INTO narrative_version_meta (project_id, version, start_from, created_by) VALUES (?, ?, 'live', ?)
-         ON CONFLICT (project_id, version) DO NOTHING`,
-      ).bind(a.projectId, version, a.userId).run();
-      await env.DB.prepare(`UPDATE narrative_version_meta SET why_now = ?, updated_at = datetime('now') WHERE project_id = ? AND version = ?`)
-        .bind(words, a.projectId, version).run();
+      stmts.push(env.DB.prepare(`UPDATE narrative_version_meta SET why_now = ?, updated_at = datetime('now') WHERE project_id = ? AND version = ? AND ${guard.sql}`)
+        .bind(words, a.projectId, version, ...guard.args));
     } else {
       prior = current?.body ?? null;
     }
@@ -335,9 +361,9 @@ export async function saveNarrativeSection(env: Env, a: { projectId: number; use
   const src = keep ? { kind: current?.source_kind ?? null, ref: current?.source_ref ?? null, label: current?.source_label ?? null } : source;
 
   // The section's own row: its words (when it keeps them), place, note and provenance.
-  await env.DB.prepare(
+  stmts.push(env.DB.prepare(
     `INSERT INTO narrative_sections (project_id, version, section, position, body, audience_note, source_kind, source_ref, source_label, prior_value, updated_by, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now') WHERE ${guard.sql}
      ON CONFLICT (project_id, version, section) DO UPDATE SET
        position = excluded.position, body = excluded.body, audience_note = excluded.audience_note,
        source_kind = excluded.source_kind, source_ref = excluded.source_ref, source_label = excluded.source_label,
@@ -351,23 +377,130 @@ export async function saveNarrativeSection(env: Env, a: { projectId: number; use
     src.kind, src.ref, src.label,
     words !== undefined ? prior : current?.prior_value ?? null,
     a.userId,
-  ).run();
+    ...guard.args,
+  ));
 
   if (bindings !== undefined) {
-    await env.DB.batch([
-      env.DB.prepare('DELETE FROM narrative_bindings WHERE project_id = ? AND version = ? AND section = ?').bind(a.projectId, version, spec.key),
-      ...bindings.map((x, i) => env.DB.prepare(
-        `INSERT INTO narrative_bindings (project_id, version, section, position, source_key, record_ref, as_of, grade, snapshot_hash, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(a.projectId, version, spec.key, i, x.source_key, x.record_ref, x.as_of, x.grade, x.snapshot_hash, a.userId)),
-    ]);
+    stmts.push(env.DB.prepare(`DELETE FROM narrative_bindings WHERE project_id = ? AND version = ? AND section = ? AND ${guard.sql}`)
+      .bind(a.projectId, version, spec.key, ...guard.args));
+    bindings.forEach((x, i) => stmts.push(env.DB.prepare(
+      `INSERT INTO narrative_bindings (project_id, version, section, position, source_key, record_ref, as_of, grade, snapshot_hash, created_by)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}`,
+    ).bind(a.projectId, version, spec.key, i, x.source_key, x.record_ref, x.as_of, x.grade, x.snapshot_hash, a.userId, ...guard.args)));
     changed.push(`${bindings.length} bound ${bindings.length === 1 ? 'figure' : 'figures'}`);
   }
+  return { spec, stmts, changed, checks: words !== undefined && spec.store !== 'section' };
+}
 
-  if (words !== undefined && spec.store !== 'section') await runCheck(env, a.projectId, version);
-  await log(env, a.userId, a.projectId, version, 'narrative_section_saved', `Version ${version}: ${spec.label} saved (${changed.join(', ')})`);
-  const section = (await sectionsOf(env, a.projectId, version)).find((s) => s.key === spec.key)!;
-  return { version, section, bindings: (await bindingsOfVersion(env, a.projectId, version)).filter((x) => x.section === spec.key), changed };
+/**
+ * Run one save as ONE batch: make sure the version's meta row exists, claim
+ * the next revision (only while the stored one is `expected`), then the
+ * guarded writes. Resolves to the new revision, or throws `ChangedSinceOpen`
+ * with the stored one; in neither case is a row half written.
+ */
+async function commitGuarded(env: Env, a: { projectId: number; userId: number; version: number; expected: number | null },
+  build: (guard: Guard) => Promise<Stmt[]>): Promise<number> {
+  const stored = await revisionOf(env, a.projectId, a.version);
+  const expected = a.expected ?? stored;
+  if (expected !== stored) throw new ChangedSinceOpen(stored);
+  // The claim is this save's own: another writer who happens to reach the same
+  // revision number holds a different one, so it can never pass this save's guard.
+  const claim = crypto.randomUUID();
+  const guard = guardOf(a.projectId, a.version, expected + 1, claim);
+  const writes = await build(guard);
+  const results = await env.DB.batch([
+    env.DB.prepare(`INSERT INTO narrative_version_meta (project_id, version, start_from, created_by) VALUES (?, ?, 'live', ?) ON CONFLICT (project_id, version) DO NOTHING`)
+      .bind(a.projectId, a.version, a.userId),
+    env.DB.prepare(`UPDATE narrative_version_meta SET revision = revision + 1, claim = ?, updated_at = datetime('now') WHERE project_id = ? AND version = ? AND revision = ?`)
+      .bind(claim, a.projectId, a.version, expected),
+    ...writes,
+  ]);
+  if (Number((results[1] as any)?.meta?.changes ?? 0) !== 1) throw new ChangedSinceOpen(await revisionOf(env, a.projectId, a.version));
+  return expected + 1;
+}
+
+/**
+ * `PUT /narrative/:version/sections/:section` — `{ body?, audience_note?,
+ * position?, source?, bindings?, expected_revision? }`; at least one. A section
+ * with a deck key writes its words to the version's deck row, Why now to the
+ * version's meta, the rest to `narrative_sections.body`. `prior_value` keeps
+ * the words it replaced. A change to a deck row runs the version's check again.
+ * D5069: it is one batch, and it is refused (`ChangedSinceOpen`) when the
+ * version moved since `expected_revision` (without one, since this call began).
+ */
+export async function saveNarrativeSection(env: Env, a: { projectId: number; userId: number; version: unknown; section: unknown; body: Record<string, unknown> }) {
+  const version = await writableVersion(env, a.projectId, a.version);
+  const expected = expectedRevisionOf(a.body.expected_revision);
+  let plan: Awaited<ReturnType<typeof planSection>> | null = null;
+  await commitGuarded(env, { projectId: a.projectId, userId: a.userId, version, expected }, async (guard) => {
+    plan = await planSection(env, { projectId: a.projectId, userId: a.userId, version, section: a.section, body: a.body }, guard);
+    return plan.stmts;
+  });
+  const done = plan!;
+  if (done.checks) await runCheck(env, a.projectId, version);
+  await log(env, a.userId, a.projectId, version, 'narrative_section_saved', `Version ${version}: ${done.spec.label} saved (${done.changed.join(', ')})`);
+  const section = (await sectionsOf(env, a.projectId, version)).find((s) => s.key === done.spec.key)!;
+  return { version, section, bindings: (await bindingsOfVersion(env, a.projectId, version)).filter((x) => x.section === done.spec.key), changed: done.changed, revision: await revisionOf(env, a.projectId, version) };
+}
+
+/** `expected_revision`: a whole number, or absent (null). Anything else is refused. */
+export function expectedRevisionOf(v: unknown): number | null {
+  if (v === undefined || v === null) return null;
+  if (!Number.isSafeInteger(v) || (v as number) < 0) throw new WriterError(400, 'expected_revision is the whole-number revision the version was read at');
+  return v as number;
+}
+
+export type NarrativeAnswer = { objection: string; section: string; how: 'eadwyn' | 'picked' };
+export const NARRATIVE_VERSION_MAX_ANSWERS = 50;
+
+/**
+ * `PUT /narrative/:version` (D5069) — the whole of one Save version: every
+ * changed section and every objection answer the save carries, as ONE batch
+ * under one claimed revision. It commits all of it or none of it, and a
+ * version that moved since `expected_revision` is refused whole.
+ * `sections` is `[{ section, body?, audience_note?, position?, source?, bindings? }]`
+ * and `answers` is `[{ objection, section, how }]`; the caller has already
+ * checked that each objection exists (`objections` below is its key set).
+ */
+export async function saveNarrativeEdits(env: Env, a: {
+  projectId: number; userId: number; version: unknown; expectedRevision: unknown;
+  sections: Array<{ section: unknown; body: Record<string, unknown> }>; answers: NarrativeAnswer[];
+}) {
+  const version = await writableVersion(env, a.projectId, a.version);
+  const expected = expectedRevisionOf(a.expectedRevision);
+  if (!a.sections.length && !a.answers.length) throw new WriterError(400, 'Nothing to change');
+  if (a.sections.length > NARRATIVE_SECTIONS.length) throw new WriterError(400, `A version has ${NARRATIVE_SECTIONS.length} sections`);
+  const seen = new Set<string>();
+  for (const x of a.sections) {
+    const key = sectionSpec(x.section).key;
+    if (seen.has(key)) throw new WriterError(400, `${key} is sent twice`);
+    seen.add(key);
+  }
+  if (a.answers.length > NARRATIVE_VERSION_MAX_ANSWERS) throw new WriterError(400, `At most ${NARRATIVE_VERSION_MAX_ANSWERS} answers in one save`);
+  const plans: Array<Awaited<ReturnType<typeof planSection>>> = [];
+  const revision = await commitGuarded(env, { projectId: a.projectId, userId: a.userId, version, expected }, async (guard) => {
+    const stmts: Stmt[] = [];
+    for (const x of a.sections) {
+      const plan = await planSection(env, { projectId: a.projectId, userId: a.userId, version, section: x.section, body: x.body }, guard);
+      plans.push(plan);
+      stmts.push(...plan.stmts);
+    }
+    for (const ans of a.answers) {
+      const spec = sectionSpec(ans.section);
+      stmts.push(env.DB.prepare(
+        `INSERT INTO narrative_objection_answers (project_id, objection_key, version, section_key, how, answered_by)
+         SELECT ?, ?, ?, ?, ?, ? WHERE ${guard.sql}
+         ON CONFLICT (project_id, objection_key) DO UPDATE SET
+           version = excluded.version, section_key = excluded.section_key, how = excluded.how,
+           answered_by = excluded.answered_by, answered_at = datetime('now')`,
+      ).bind(a.projectId, ans.objection, version, spec.key, ans.how, a.userId, ...guard.args));
+    }
+    return stmts;
+  });
+  if (plans.some((p) => p.checks)) await runCheck(env, a.projectId, version);
+  await log(env, a.userId, a.projectId, version, 'narrative_version_saved',
+    `Version ${version} saved: ${plans.map((p) => `${p.spec.label} (${p.changed.join(', ')})`).concat(a.answers.length ? [`${a.answers.length} objection ${a.answers.length === 1 ? 'answer' : 'answers'}`] : []).join('; ')}`);
+  return { version, revision, saved: plans.map((p) => ({ section: p.spec.key, changed: p.changed })), answered: a.answers.map((x) => x.objection) };
 }
 
 /**

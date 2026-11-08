@@ -81,7 +81,7 @@ test('D632: a variant is renamed and edited in place; the main table is untouche
   const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
   assert.equal(made.status, 200);
 
-  const edited = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Bigger seed', inputs: DRAFT, project_id: 1 });
+  const edited = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Bigger seed', inputs: DRAFT, project_id: 1, expected_revision: made.body.revision });
   assert.equal(edited.status, 200, JSON.stringify(edited.body));
   assert.equal(edited.body.uid, made.body.uid, 'the same row, edited in place');
   assert.equal(edited.body.name, 'Bigger seed');
@@ -101,8 +101,8 @@ test('D632: a variant is renamed and edited in place; the main table is untouche
 test('D632: every variant write records its actor and project', async () => {
   const db = freshDb();
   const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
-  await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Draft B', inputs: DRAFT });
-  await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Draft B', inputs: MAIN });
+  const one = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Draft B', inputs: DRAFT, expected_revision: made.body.revision });
+  await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Draft B', inputs: MAIN, expected_revision: one.body.revision });
   await call(db, 'DELETE', `/scenarios/${made.body.uid}`);
   const rows = logs(db);
   assert.deepEqual(rows.map((r) => r.action), [
@@ -123,7 +123,7 @@ test('D632: every variant write records its actor and project', async () => {
 test('D632: an invalid edit is refused as sentences and changes nothing', async () => {
   const db = freshDb();
   const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
-  const bad = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Draft A', inputs: { founders: [] } });
+  const bad = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Draft A', inputs: { founders: [] }, expected_revision: made.body.revision });
   assert.equal(bad.status, 400);
   assert.deepEqual(bad.body.detail.errors, ['At least one founder is required.']);
   const after = await call(db, 'GET', `/scenarios/${made.body.uid}`);
@@ -135,7 +135,57 @@ test('D632: a failed log line never undoes the edit', async () => {
   const db = freshDb();
   const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
   db.exec('DROP TABLE activity_logs');
-  const edited = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Renamed', inputs: MAIN });
+  const edited = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Renamed', inputs: MAIN, expected_revision: made.body.revision });
   assert.equal(edited.status, 200);
   assert.equal(edited.body.name, 'Renamed');
+});
+
+// D5069 — two tabs read revision N; the first save wins and the second is refused.
+test('D5069: a PUT names the revision it read; a second tab with the old one gets 409 and changes nothing', async () => {
+  const db = freshDb();
+  const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
+  const tabA = (await call(db, 'GET', `/scenarios/${made.body.uid}`)).body;
+  const tabB = (await call(db, 'GET', `/scenarios/${made.body.uid}`)).body;
+  assert.equal(tabA.revision, tabB.revision);
+  const none = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'No revision', inputs: DRAFT });
+  assert.equal(none.status, 400);
+  assert.equal(none.body.error, 'expected_revision_required');
+  const a = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Tab A', inputs: DRAFT, expected_revision: tabA.revision });
+  assert.equal(a.status, 200, JSON.stringify(a.body));
+  assert.notEqual(a.body.revision, tabA.revision, 'the save is a new revision, even in the same millisecond');
+  const b = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Tab B', inputs: MAIN, expected_revision: tabB.revision });
+  assert.equal(b.status, 409);
+  assert.equal(b.body.error, 'changed_since_open');
+  assert.equal(b.body.current_revision, a.body.revision);
+  const after = (await call(db, 'GET', `/scenarios/${made.body.uid}`)).body;
+  assert.equal(after.name, 'Tab A');
+  assert.deepEqual(withoutKeys(after.inputs), DRAFT);
+  assert.equal(logs(db).filter((r) => r.action === 'captable_scenario_updated').length, 1, 'the refused save logs nothing');
+  // Reload latest, then save again from it.
+  const again = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Tab B', inputs: MAIN, expected_revision: after.revision });
+  assert.equal(again.status, 200);
+});
+
+test('D5069: a save that loses the race between its check and its UPDATE is a 409 too', async () => {
+  const db = freshDb();
+  const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
+  const rev = made.body.revision;
+  const tok = await new SignJWT({ user_id: 1, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const inner = d1Over(db);
+  let raced = false;
+  const DB = new Proxy(inner as any, { get: (t, k) => {
+    if (k !== 'prepare') return typeof t[k] === 'function' ? t[k].bind(t) : t[k];
+    return (sql: string) => {
+      if (!raced && /^\s*UPDATE cap_table_scenarios/.test(sql)) { raced = true; db.prepare("UPDATE cap_table_scenarios SET name = 'Other tab', updated_at = '2099-01-01T00:00:00.000Z' WHERE uid = ?").run(made.body.uid); }
+      return t.prepare(sql);
+    };
+  } });
+  const res = await captable.request(`/scenarios/${made.body.uid}`, { method: 'PUT',
+    headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Mine', inputs: DRAFT, expected_revision: rev }) }, { JWT_SECRET, ENVIRONMENT: 'development', DB } as any);
+  assert.equal(raced, true);
+  assert.equal(res.status, 409);
+  assert.equal(((await res.json()) as any).current_revision, '2099-01-01T00:00:00.000Z');
+  assert.equal((db.prepare('SELECT name FROM cap_table_scenarios WHERE uid = ?').get(made.body.uid) as any).name, 'Other tab');
 });
