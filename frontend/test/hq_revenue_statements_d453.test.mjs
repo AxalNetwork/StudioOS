@@ -51,17 +51,17 @@ test('only licences with a revenue share appear in the draw list', () => {
 });
 
 test('paid and dispute payloads refuse what the worker would refuse', () => {
-  assert.ok(statementPaidPayload({ amountText: '', note: 'x', owedCents: 100 }).error);
-  const okPay = statementPaidPayload({ amountText: '1', note: 'wire', owedCents: 200 });
+  assert.ok(statementPaidPayload({ amountText: '', note: 'x', owedCents: 100, currency: 'EUR' }).error);
+  const okPay = statementPaidPayload({ amountText: '1', note: 'wire', owedCents: 200, currency: 'EUR' });
   assert.equal(okPay.body.paid_cents, 100);
-  const over = statementPaidPayload({ amountText: '2', note: 'wire', owedCents: 100 });
+  const over = statementPaidPayload({ amountText: '2', note: 'wire', owedCents: 100, currency: 'EUR' });
   assert.ok(over.error, 'overpayment is refused before the call');
-  const ok = statementPaidPayload({ amountText: '0.35', note: 'wire', owedCents: 3500 });
+  const ok = statementPaidPayload({ amountText: '0.35', note: 'wire', owedCents: 3500, currency: 'EUR' });
   assert.equal(ok.body.paid_cents, 35);
-  assert.ok(statementDisputePayload({ amountText: '', note: 'why' }).error);
-  assert.deepEqual(statementDisputePayload({ amountText: '0', note: '' }).body, { disputed_cents: 0 }, 'D514: 0 clears a dispute');
-  assert.ok(statementDisputePayload({ amountText: '1', note: '' }).error);
-  assert.equal(statementDisputePayload({ amountText: '10', note: 'disputed fee' }).body.disputed_cents, 1000);
+  assert.ok(statementDisputePayload({ amountText: '', note: 'why', currency: 'EUR' }).error);
+  assert.deepEqual(statementDisputePayload({ amountText: '0', note: '', currency: 'EUR' }).body, { disputed_cents: 0 }, 'D514: 0 clears a dispute');
+  assert.ok(statementDisputePayload({ amountText: '1', note: '', currency: 'EUR' }).error);
+  assert.equal(statementDisputePayload({ amountText: '10', note: 'disputed fee', currency: 'EUR' }).body.disputed_cents, 1000);
 });
 
 test('D514 — the draw editor is replaced by the hold sentence', () => {

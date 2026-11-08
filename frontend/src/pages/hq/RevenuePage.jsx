@@ -45,6 +45,7 @@ import { Coins } from 'lucide-react';
 import { api } from '../../lib/api';
 import { licenceLedgerApi } from '../../lib/api/licenceLedger';
 import { bpsPercent } from '../../lib/bps';
+import { currencyCode, formatMinor, parseMinor } from '../../lib/money';
 import { reportError } from '../../lib/log';
 import { REFUND_REASON_MIN, refundReasonOk } from '../../lib/refundReason';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
@@ -53,21 +54,23 @@ import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 export const UNAVAILABLE = Symbol('unavailable');
 
+/** D5029: the bucket for a statement whose currency is missing or not a listed one. It is never read as euros. */
+export const UNRECORDED_CURRENCY = 'UNRECORDED';
+
 /** A number, or null when there is not one. Never a default. */
 const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v).toLocaleString());
 
-/** Minor units to a readable amount, in the currency the row is denominated in. */
-function money(cents, currency) {
+/**
+ * Minor units to a readable amount, in the currency the row is denominated in, at that currency's own number of
+ * decimals (D5029: `lib/money.js`; nothing here divides by 100). A row with no usable currency is NOT shown in a
+ * guessed one: the count of minor units is shown with the missing currency named, so a real amount is not dropped
+ * and not mistaken for euros.
+ */
+export function money(cents, currency) {
   if (cents === null || cents === undefined || !Number.isFinite(Number(cents))) return null;
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency', currency: currency || 'EUR', maximumFractionDigits: 0,
-    }).format(Number(cents) / 100);
-  } catch {
-    // An unknown ISO code must not blank the figure — show the number and
-    // name the currency beside it rather than dropping a real amount.
-    return `${(Number(cents) / 100).toLocaleString()} ${currency || ''}`.trim();
-  }
+  const shown = formatMinor(Number(cents), currency);
+  if (shown !== null) return shown;
+  return `${Number(cents).toLocaleString()} minor units (currency ${currency ? `"${currency}" is not one we can price in` : 'not recorded'})`;
 }
 const usd = (v) => (v === null || v === undefined || !Number.isFinite(Number(v))
   ? null
@@ -265,6 +268,14 @@ export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, o
  * helper runs the step-up challenge; this form only refuses early what the
  * worker would refuse anyway.
  */
+/** The refund amount as typed, checked for shape only (positive, digits and a point); the currency decides the rest. */
+export function refundAmountShape(text) {
+  const r = parseMinor(text, 'KWD'); // the widest exponent: a shape check, never the conversion
+  if (!r.ok && r.reason !== 'decimals') return { ok: false, message: 'Enter the amount as a positive figure, such as 25 or 25.50.' };
+  if (r.ok && r.minor <= 0) return { ok: false, message: 'The amount must be a positive figure.' };
+  return { ok: true, text: String(text).trim() };
+}
+
 function RefundForm({ onDone }) {
   const [f, setF] = useState({ target: '', amount: '', reason: '' });
   const [busy, setBusy] = useState(false);
@@ -279,10 +290,13 @@ function RefundForm({ onDone }) {
     const body = { reason: f.reason.trim() };
     if (target.startsWith('ch_')) body.charge = target; else body.payment_intent = target;
     if (f.amount !== '') {
-      // Minor units, an integer, as Stripe and the worker take it.
-      const cents = Math.round(Number(f.amount) * 100);
-      if (!Number.isInteger(cents) || cents <= 0) { setMsg({ err: true, text: 'The amount must be a positive figure.' }); return; }
-      body.amount = cents;
+      // D5029: this form is given a Stripe id, not a currency, so it cannot turn the figure into minor units. It
+      // sends what was typed, as major units, and the worker converts it in the charge's own currency (and refuses
+      // an amount that currency cannot hold, such as cents of a yen). The shape is checked here so a typo is
+      // caught before the round trip; how many decimals are allowed is the currency's, and the worker's to say.
+      const shape = refundAmountShape(f.amount);
+      if (!shape.ok) { setMsg({ err: true, text: shape.message }); return; }
+      body.amount_major = shape.text;
     }
     setBusy(true); setMsg(null);
     try {
@@ -304,7 +318,7 @@ function RefundForm({ onDone }) {
     <form onSubmit={submit} className="mt-4 grid gap-2 border-t border-axal-hairline pt-3 sm:grid-cols-2" data-testid="hq-revenue-refund-form">
       <div className="sm:col-span-2 text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Issue a refund · step-up</div>
       <input className={input} placeholder="pi_… or ch_…" value={f.target} onChange={(e) => set('target', e.target.value)} aria-label="PaymentIntent or Charge id" />
-      <input className={input} type="number" step="0.01" min="0" placeholder="Amount (blank refunds the rest)" value={f.amount} onChange={(e) => set('amount', e.target.value)} aria-label="Amount" />
+      <input className={input} type="text" inputMode="decimal" autoComplete="off" placeholder="Amount (blank refunds the rest)" value={f.amount} onChange={(e) => set('amount', e.target.value)} aria-label="Amount" />
       <textarea className={`${input} sm:col-span-2`} rows={2} required minLength={REFUND_REASON_MIN} placeholder="Why this money goes back — read by whoever audits it" value={f.reason} onChange={(e) => set('reason', e.target.value)} aria-label="Reason" />
       <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
         <button type="submit" disabled={busy} className="rounded-lg bg-red-700 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50">
@@ -337,16 +351,16 @@ export function statementDrawPayload({ licenceUid, period }) {
  * Paid and disputed amounts leave as integer minor units. A blank payment is
  * refused; zero is allowed when nothing was received.
  */
-export function statementPaidPayload({ amountText, note, owedCents }) {
+export function statementPaidPayload({ amountText, note, owedCents, currency }) {
   const text = String(amountText ?? '').trim();
   if (text === '') return { error: 'Enter what was received, in the licence currency. 0 is valid when nothing arrived.' };
-  const n = Number(text);
-  if (!Number.isFinite(n) || n < 0) return { error: 'The paid amount must be a figure of 0 or more.' };
-  const paid_cents = Math.round(n * 100);
-  if (!Number.isInteger(paid_cents)) return { error: 'The paid amount must resolve to whole minor units.' };
+  if (!currencyCode(currency)) return { error: 'This statement has no recorded currency, so what was received cannot be read as an amount.' };
+  const parsed = parseMinor(text, currency);
+  if (!parsed.ok) return { error: `The paid amount: ${parsed.message}` };
+  const paid_cents = parsed.minor;
   const owed = Number(owedCents);
   if (Number.isFinite(owed) && paid_cents > owed) {
-    return { error: `That is more than the ${owed} minor units this statement claims.` };
+    return { error: `That is more than the ${money(owed, currency)} this statement claims.` };
   }
   return { body: { paid_cents, paid_note: String(note ?? '').trim() || null } };
 }
@@ -371,12 +385,13 @@ export function statementAllowsPaidInFull(statement) {
  * D514 — 0 clears a dispute (and needs no reason); anything above 0 must say
  * why. The worker refuses paid and disputed together above owed.
  */
-export function statementDisputePayload({ amountText, note }) {
+export function statementDisputePayload({ amountText, note, currency }) {
   const text = String(amountText ?? '').trim();
   if (text === '') return { error: 'Enter the disputed amount, or 0 to clear the dispute.' };
-  const n = Number(text);
-  if (!Number.isFinite(n) || n < 0) return { error: 'The disputed amount must be a figure of 0 or more.' };
-  const disputed_cents = Math.round(n * 100);
+  if (!currencyCode(currency)) return { error: 'This statement has no recorded currency, so the disputed amount cannot be read.' };
+  const parsed = parseMinor(text, currency);
+  if (!parsed.ok) return { error: `The disputed amount: ${parsed.message}` };
+  const disputed_cents = parsed.minor;
   if (disputed_cents === 0) return { body: { disputed_cents: 0 } };
   const dispute_note = String(note ?? '').trim();
   if (!dispute_note) return { error: 'A dispute must say why — a subsidiary will ask HQ to justify it.' };
@@ -418,7 +433,7 @@ export function StatementDrawHeld() {
 /** D514 — how many statements in `currency` are floors (drawn over unreported or estimated streams). */
 export function floorsInCurrency(items, currency) {
   return (Array.isArray(items) ? items : [])
-    .filter((s) => (s.currency || 'EUR') === currency && s.status !== 'void' && !statementAllowsPaidInFull(s)).length;
+    .filter((s) => (currencyCode(s.currency) || UNRECORDED_CURRENCY) === currency && s.status !== 'void' && !statementAllowsPaidInFull(s)).length;
 }
 
 /**
@@ -471,14 +486,14 @@ export function StatementActions({ statement, onUpdate }) {
 
   const submitPaid = (e) => {
     e.preventDefault();
-    const p = statementPaidPayload({ amountText: paid.amount, note: paid.note, owedCents: statement.owed_cents });
+    const p = statementPaidPayload({ amountText: paid.amount, note: paid.note, owedCents: statement.owed_cents, currency: statement.currency });
     if (p.error) { setMsg({ err: true, text: p.error }); return; }
     patch(p.body);
   };
 
   const submitDispute = (e) => {
     e.preventDefault();
-    const p = statementDisputePayload({ amountText: dispute.amount, note: dispute.note });
+    const p = statementDisputePayload({ amountText: dispute.amount, note: dispute.note, currency: statement.currency });
     if (p.error) { setMsg({ err: true, text: p.error }); return; }
     patch(p.body);
   };
@@ -548,14 +563,14 @@ export function StatementActions({ statement, onUpdate }) {
           <form onSubmit={submitPaid} className="space-y-1">
             <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Set total paid</div>
             <p className="text-[10px] text-axal-faint">Replaces the total received so far; it does not add a receipt.</p>
-            <input className={input} type="number" step="0.01" min="0" placeholder="Total received to date" value={paid.amount} onChange={(e) => setPaid((x) => ({ ...x, amount: e.target.value }))} aria-label={`Total paid for ${rowLabel}`} />
+            <input className={input} type="text" inputMode="decimal" autoComplete="off" placeholder="Total received to date" value={paid.amount} onChange={(e) => setPaid((x) => ({ ...x, amount: e.target.value }))} aria-label={`Total paid for ${rowLabel}`} />
             <input className={input} placeholder="Reference or note" value={paid.note} onChange={(e) => setPaid((x) => ({ ...x, note: e.target.value }))} aria-label={`Payment note for ${rowLabel}`} />
             <button type="submit" disabled={busy} className={`${btn} bg-emerald-700 text-white hover:bg-emerald-800 dark:hover:bg-emerald-600`}>Save total paid</button>
           </form>
           <form onSubmit={submitDispute} className="space-y-1">
             <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Record dispute</div>
             <p className="text-[10px] text-axal-faint">0 clears the dispute.</p>
-            <input className={input} type="number" step="0.01" min="0" placeholder="Disputed amount" value={dispute.amount} onChange={(e) => setDispute((x) => ({ ...x, amount: e.target.value }))} aria-label={`Disputed amount for ${rowLabel}`} />
+            <input className={input} type="text" inputMode="decimal" autoComplete="off" placeholder="Disputed amount" value={dispute.amount} onChange={(e) => setDispute((x) => ({ ...x, amount: e.target.value }))} aria-label={`Disputed amount for ${rowLabel}`} />
             <input className={input} placeholder="Why — required above 0" value={dispute.note} onChange={(e) => setDispute((x) => ({ ...x, note: e.target.value }))} aria-label={`Dispute reason for ${rowLabel}`} />
             <button type="submit" disabled={busy} className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300`}>Save dispute</button>
           </form>
@@ -573,12 +588,11 @@ export function ceilingPayload({ licenceUid, period, amount, currency }) {
   if (!STATEMENT_PERIOD_RE.test(String(period || ''))) return { error: 'The period is a quarter, written YYYY-Qn.' };
   const text = String(amount ?? '').trim();
   if (text === '') return { error: 'Enter the ceiling. 0 is a ceiling: no promotions this period.' };
-  const n = Number(text);
-  if (!Number.isFinite(n) || n < 0) return { error: 'The ceiling must be a figure of 0 or more.' };
-  const cents = Math.round(n * 100);
-  const cur = String(currency || '').trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(cur)) return { error: 'The currency is a three-letter code, such as EUR.' };
-  return { licenceUid, body: { period: String(period), ceiling_cents: cents, currency: cur } };
+  const cur = currencyCode(String(currency || '').trim().toUpperCase());
+  if (!cur) return { error: 'The currency is a three-letter ISO 4217 code that StudioOS can price in, such as EUR.' };
+  const parsed = parseMinor(text, cur);
+  if (!parsed.ok) return { error: `The ceiling: ${parsed.message}` };
+  return { licenceUid, body: { period: String(period), ceiling_cents: parsed.minor, currency: cur } };
 }
 
 /** Said on the editor, because nothing in checkout reads a ceiling yet. */
@@ -650,7 +664,7 @@ export function CeilingEditor({ licences, currentPeriod, onSave }) {
           </select>
           <input className={input} value={period} onChange={(e) => set('period', e.target.value)} placeholder="YYYY-Qn" aria-label="Period" />
           <input className={input} value={currency} onChange={(e) => set('currency', e.target.value)} placeholder="EUR" maxLength={3} aria-label="Currency" />
-          <input className={`${input} sm:col-span-2`} type="number" step="0.01" min="0" value={f.amount} onChange={(e) => set('amount', e.target.value)} placeholder="Ceiling for the period" aria-label="Ceiling" />
+          <input className={`${input} sm:col-span-2`} type="text" inputMode="decimal" autoComplete="off" value={f.amount} onChange={(e) => set('amount', e.target.value)} placeholder="Ceiling for the period" aria-label="Ceiling" />
           <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
             <button type="submit" disabled={busy} className="rounded-lg bg-axal-violet px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50">
               {busy ? 'Saving…' : 'Save ceiling'}
