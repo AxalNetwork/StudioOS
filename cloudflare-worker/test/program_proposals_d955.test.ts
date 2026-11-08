@@ -45,6 +45,8 @@ function built(): DatabaseSync {
   // D4289 P1 (#4290): the deploy applies the Influencers row after these (it rebuilds 563's tables, so 563 first).
   db.exec(readFileSync(resolve(MIGRATIONS, '563_referral_partner_terms.sql'), 'utf8'));
   db.exec(readFileSync(resolve(MIGRATIONS, '202611031502_influencer_program.sql'), 'utf8'));
+  // D4808: the frozen record of what an approval was made from.
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611072010_program_approved_specs.sql'), 'utf8'));
   return db;
 }
 const BUILT = built();
@@ -238,7 +240,9 @@ test('the decision: approve for the catalogue writes HQ\'s draft program, read b
     ['proposed', 'Access', 'Founders, operating partners', 'By invitation', null, 'A purpose.']);
   const draft = db.prepare("SELECT section_key, title, body FROM program_playbook_sections WHERE program_key = 'founder-fitness-sprint' AND version = 0 ORDER BY position").all() as any[];
   assert.deepEqual(draft.map((s) => [s.section_key, s.body]), [
-    ['purpose', 'A purpose.'], ['who', 'Founders, operating partners'], ['join', 'By invitation · rolling · 20 seats'], ['rewards', 'None'], ['tools', 'Events'],
+    ['purpose', 'A purpose.'], ['who', 'Founders, operating partners'], ['join', 'By invitation · rolling · 20 seats'],
+    // D4808: eligibility and what HQ receives are carried too; what nothing enforces says so.
+    ['eligibility', null], ['rewards', 'None\nRecorded as approved. Nothing enforces it yet.'], ['tools', 'Events\nRecorded as approved. Nothing enforces it yet.'], ['hq', null],
   ]);
   assert.equal(one(db, "SELECT COUNT(*) AS n FROM program_playbook_versions WHERE program_key = 'founder-fitness-sprint'").n, 0, 'unpublished');
   for (const who of [LIS1, NAI, LONE]) {
@@ -247,6 +251,15 @@ test('the decision: approve for the catalogue writes HQ\'s draft program, read b
   }
   const detail = (await call(db, LIS1, 'GET', '/founder-fitness-sprint')).body;
   assert.deepEqual([detail.program.status, detail.playbook.published, detail.draft], ['proposed', false, undefined]);
+  // D4808: the page reads the exact proposal the program was approved from, and what it declares, none of it operational.
+  assert.equal(detail.approved_proposal.proposal_uid, 'pp-1');
+  assert.equal(detail.approved_proposal.decision, 'catalogue');
+  assert.equal(detail.approved_proposal.spec.fields.name, 'Founder Fitness Sprint');
+  assert.deepEqual(detail.approved_proposal.spec.not_operational.keys, ['eligibility', 'rewards', 'contracts', 'tools', 'hq_obligations']);
+  assert.deepEqual(detail.capabilities.map((c: any) => [c.label, c.operational]), [['Events', false]]);
+  // The snapshot is append-only: a later edit to the proposal or the row cannot change what was approved.
+  assert.throws(() => db.prepare("UPDATE program_approved_specs SET spec_json = '{}' WHERE program_key = 'founder-fitness-sprint'").run(), /append-only/);
+  assert.throws(() => db.prepare("DELETE FROM program_approved_specs WHERE program_key = 'founder-fitness-sprint'").run(), /append-only/);
   assert.deepEqual(audit(db, 'program.proposal.decide'), [{ uid: 'pp-1', outcome: 'approve_catalogue', note: 'Listed for every studio.', program_key: 'founder-fitness-sprint' }]);
   const act = (await call(db, SUPER, 'GET', '/founder-fitness-sprint/activity')).body;
   assert.deepEqual(act.rows.map((x: any) => [x.kind, x.concerns.outcome]), [['program.proposal.decide', 'approve_catalogue']]);
@@ -346,4 +359,40 @@ test('the mount: /proposals is its own router, never a program key', async () =>
   const index = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
   assert.ok(index.indexOf("app.route('/api/admin/programs/proposals', adminProgramProposals);") < index.indexOf("app.route('/api/admin/programs', adminPrograms);"));
   assert.ok(index.indexOf("app.route('/api/admin/programs/proposals', adminProgramProposals);") > 0);
+});
+
+test('D4808: a synthetic custom program, end to end: create → open → edit → publish → revisit, with no code for its key', async () => {
+  const db = fresh();
+  const made = await call(db, SUPER, 'POST', '/', { name: 'Synthetic Residency', group: 'Learning', purpose: 'A synthetic program.', who: ['Founders'], join_method: 'By application' });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  const key = made.body.program.key;
+  assert.equal(key, 'synthetic-residency');
+  // Open: every viewer reads it by key, with nothing a built-in carries; no proposal made it.
+  const opened = await call(db, SUPER, 'GET', `/${key}`);
+  assert.equal(opened.status, 200);
+  assert.equal(opened.body.program.status, 'proposed');
+  assert.equal(opened.body.approved_proposal, null, 'no proposal made it');
+  assert.deepEqual(opened.body.capabilities, []);
+  // Edit the draft, then publish it.
+  const edited = await call(db, SUPER, 'PUT', `/${key}/playbook/sections/purpose`, { body: 'Edited by HQ.' });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  const published = await call(db, SUPER, 'POST', `/${key}/playbook/publish`, {});
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  // Revisit: the published playbook is what an Admin reads, and the registry row is still there.
+  const revisit = await call(db, LIS1, 'GET', `/${key}`);
+  assert.equal(revisit.status, 200);
+  assert.equal(revisit.body.playbook.published, true);
+  assert.equal(revisit.body.playbook.version, 1);
+  assert.equal(revisit.body.playbook.sections.find((s: any) => s.key === 'purpose').body, 'Edited by HQ.');
+  // And it appears in the catalogue under its own key, among the nine.
+  const cat = (await call(db, LIS1, 'GET', '/?weeks=4')).body;
+  assert.ok(cat.programs.rows.some((p: any) => p.key === key));
+});
+
+test('D4808: HQ keeps a branch\'s rows for programs the nine do not include, and drops only a row with no valid key', async () => {
+  const { keepRegistryRows } = await import('../src/services/programCatalogue.ts');
+  const rows = [
+    { key: 'perks' }, { key: 'synthetic-residency' }, { key: 'Not A Key' }, { key: '' }, { key: 'a'.repeat(61) }, null, { name: 'no key' },
+  ];
+  assert.deepEqual(keepRegistryRows(rows).map((r: any) => r.key), ['perks', 'synthetic-residency']);
 });

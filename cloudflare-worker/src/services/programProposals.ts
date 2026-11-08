@@ -464,15 +464,45 @@ const toolsLine = (t: Record<ToolKey, boolean> | null) => {
   return on.length ? on.map((x, i) => (i ? lower(x) : x)).join(', ') : null;
 };
 
-/** PG14's Review sections (dc:467), as an unpublished playbook draft. */
+/**
+ * D4808 (#4808): what an approval records but nothing enforces yet. Each of these is carried into the approved spec
+ * and the playbook draft, and marked as not operational, so a page never reads as if the program enforced it.
+ */
+export const NOT_OPERATIONAL = 'Recorded as approved. Nothing enforces it yet.';
+export const NOT_OPERATIONAL_KEYS = ['eligibility', 'rewards', 'contracts', 'tools', 'hq_obligations'] as const;
+
+const withMarker = (body: string | null) => (body ? `${body}\n${NOT_OPERATIONAL}` : null);
+
+/** PG14's Review sections (dc:467), as an unpublished playbook draft. D4808 adds Eligibility and What HQ receives. */
 export function reviewSections(v: ReturnType<typeof proposalView>): NewProgram['sections'] {
   return [
     { key: 'purpose', title: 'Purpose', body: v.purpose },
     { key: 'who', title: 'Who it is for', body: whoLine(v.who ?? []) },
     { key: 'join', title: 'How people join', body: joinLine(v) },
-    { key: 'rewards', title: 'Rewards', body: v.rewards?.length ? v.rewards.join(', ') : null, template_keys: v.template_keys },
-    { key: 'tools', title: 'Tools', body: toolsLine(v.tools) },
+    { key: 'eligibility', title: 'Eligibility', body: withMarker(v.eligibility) },
+    { key: 'rewards', title: 'Rewards', body: withMarker(v.rewards?.length ? v.rewards.join(', ') : null), template_keys: v.template_keys },
+    { key: 'tools', title: 'Tools', body: withMarker(toolsLine(v.tools)) },
+    { key: 'hq', title: 'What HQ receives', body: withMarker(v.hq_receives) },
   ];
+}
+
+/**
+ * The frozen record of an approval: every material field of the proposal as it was approved, what each one becomes,
+ * and which of them are operational. Written once with the program (`program_approved_specs`, append-only).
+ */
+export function approvedSpec(v: ReturnType<typeof proposalView>, decision: 'studio' | 'catalogue') {
+  const on = v.tools ? (Object.keys(TOOLS) as ToolKey[]).filter((k) => v.tools![k]) : [];
+  return {
+    proposal_uid: v.uid,
+    decision,
+    fields: {
+      name: v.name, group: v.group, purpose: v.purpose, who: v.who, join_method: v.join_method, cycle: v.cycle,
+      cohort_weeks: v.cohort_weeks, seats: v.seats, eligibility: v.eligibility, rewards: v.rewards,
+      template_keys: v.template_keys, hq_receives: v.hq_receives, tools: v.tools,
+    },
+    capabilities: on.map((key) => ({ key, label: TOOLS[key], operational: false })),
+    not_operational: { keys: NOT_OPERATIONAL_KEYS, reason: NOT_OPERATIONAL },
+  };
 }
 
 /**
@@ -536,6 +566,12 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
     stmts.push(env.DB.prepare(
       `UPDATE program_proposals SET program_key = ? WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?`,
     ).bind(programKey, row.id, t, actor.id));
+    // The approved spec is written only by the decision that won, like the registry row (D4806).
+    stmts.push(env.DB.prepare(
+      `INSERT INTO program_approved_specs (program_key, proposal_uid, decision, decided_at, spec_json, created_at)
+       SELECT ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?)`,
+    ).bind(programKey, row.uid, decision, t, JSON.stringify(approvedSpec(v, decision)), t, row.id, t, actor.id));
     if (decision === 'studio') {
       const lic = await env.DB.prepare('SELECT id FROM territory_licences WHERE uid = ?').bind(row.licence_uid).first<{ id: number }>();
       if (lic) {

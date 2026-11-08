@@ -25,6 +25,7 @@ import { blocksFor, billedMinutes, splitCost } from '../src/services/liveTranscr
 
 const JWT_SECRET = 'd657-fixture-only-signing-secret-0123456789';
 const MIGRATION = readFileSync(new URL('../sql/migrations/438_interview_sessions.sql', import.meta.url), 'utf8');
+const PROJECTION_OWNER_MIGRATION = readFileSync(new URL('../sql/migrations/202611062140_interview_transcript_projection_owner.sql', import.meta.url), 'utf8');
 const FOUNDER = 2;      // owns project 10
 const OTHER = 3;        // owns nothing here
 const LAB = 4;          // an admitted Spin-Out Lab member, role 'exploring', owns project 20
@@ -43,6 +44,8 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
     CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER);
     CREATE TABLE discovery_interviews (
       id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, interviewee_name TEXT NOT NULL,
+      interviewee_role TEXT, notes TEXT, hypotheses_json TEXT, pains_json TEXT,
+      featured INTEGER DEFAULT 0, validation_rating INTEGER, validation_comment TEXT, icp_fit TEXT,
       transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT,
       -- D685: the columns production carries (211, 440) that the session routes now write.
       interviewee_company TEXT, interview_date TEXT, quote_consent INTEGER,
@@ -52,6 +55,7 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
       sort_order INTEGER NOT NULL DEFAULT 0, retired_at TEXT);
   `);
   db.exec(MIGRATION);
+  db.exec(PROJECTION_OWNER_MIGRATION);
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // 447 adds submitted_via (an assistant's or a channel's session); 452 is D685's setup.
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
@@ -227,9 +231,12 @@ test('the final transcript replaces the live draft, and the interview’s transc
   assert.ok(segs.every((s: any) => s.source === 'final'), 'a live draft survived the final transcript');
   assert.equal(segs.length, 2, 'one passage per chunk');
   assert.ok(!segs.some((s: any) => s.text.includes('loose')));
-  const interview = f.db.prepare('SELECT transcript, transcribed_by_model FROM discovery_interviews WHERE id = 1').get();
+  const interview = f.db.prepare('SELECT transcript, transcribed_by_model, transcript_session_uid FROM discovery_interviews WHERE id = 1').get();
   assert.equal(interview.transcript, segs.map((s: any) => s.text).join('\n'));
   assert.equal(interview.transcribed_by_model, '@cf/openai/whisper-large-v3-turbo');
+  assert.equal(interview.transcript_session_uid,
+    f.db.prepare('SELECT uid FROM interview_sessions WHERE id = ?').get(id).uid,
+    'the parent projection does not name its source session');
   const session = f.db.prepare('SELECT status, language, final_model FROM interview_sessions WHERE id = ?').get(id);
   assert.deepEqual({ ...session }, { status: 'transcribed', language: 'en', final_model: '@cf/openai/whisper-large-v3-turbo' });
   assert.equal(f.aiCalls.length, 2, 'each chunk is transcribed on its own');
@@ -237,6 +244,32 @@ test('the final transcript replaces the live draft, and the interview’s transc
   assert.equal(receipt.length, 1);
   assert.deepEqual([receipt[0].kind, receipt[0].outcome, receipt[0].audio_minutes], ['final', 'ok', 2]);
   assert.ok(receipt[0].cost_microusd > 0, 'a transcription must not cost zero');
+});
+
+test('D4626 migration claims an exact historical projection and never guesses independent text', () => {
+  const f = aiBudgetFixture();
+  f.db.exec(`CREATE TABLE discovery_interviews (
+    id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, interviewee_name TEXT NOT NULL,
+    transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT, updated_at TEXT
+  )`);
+  f.db.exec(MIGRATION);
+  f.db.exec(`
+    INSERT INTO discovery_interviews VALUES (1, 10, 'Exact', 'First line\nSecond line', 'then', 'model', 'then');
+    INSERT INTO discovery_interviews VALUES (2, 10, 'Independent', 'Written elsewhere', 'then', 'model', 'then');
+    INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel)
+      VALUES ('exact-session', 1, 10, 2, 'manual'), ('other-session', 2, 10, 2, 'manual');
+    INSERT INTO interview_transcript_segments (session_id, source, text)
+      SELECT id, 'final', 'First line' FROM interview_sessions WHERE uid = 'exact-session';
+    INSERT INTO interview_transcript_segments (session_id, source, text)
+      SELECT id, 'final', 'Second line' FROM interview_sessions WHERE uid = 'exact-session';
+    INSERT INTO interview_transcript_segments (session_id, source, text)
+      SELECT id, 'final', 'Different session text' FROM interview_sessions WHERE uid = 'other-session';
+  `);
+  f.db.exec(PROJECTION_OWNER_MIGRATION);
+  assert.equal(f.db.prepare('SELECT transcript_session_uid FROM discovery_interviews WHERE id = 1').get().transcript_session_uid,
+    'exact-session');
+  assert.equal(f.db.prepare('SELECT transcript_session_uid FROM discovery_interviews WHERE id = 2').get().transcript_session_uid,
+    null);
 });
 
 test('Nova-3 batch labels "Me" and the interviewee; an unlabelled passage is "Speaker ?" until assigned', async () => {
@@ -306,7 +339,7 @@ test('a model not offered is refused, and Whisper Tiny EN (unpriced) cannot be c
 
 // ── Deletion ─────────────────────────────────────────────────────────────────
 
-test('deleting a session removes its audio keys, its rows, and leaves an audit row', async () => {
+test('deleting a session removes its audio keys, rows and parent projection, then leaves an audit row', async () => {
   const f = fixture();
   const id = await recorded(f);
   await call(f.env, FOUNDER, 'POST', `/sessions/${id}/transcribe`, {});
@@ -322,10 +355,50 @@ test('deleting a session removes its audio keys, its rows, and leaves an audit r
     const col = t === 'interview_sessions' ? 'id' : 'session_id';
     assert.equal(f.db.prepare(`SELECT COUNT(*) n FROM ${t} WHERE ${col} = ?`).get(id).n, 0, `${t} kept a row`);
   }
+  assert.deepEqual({ ...f.db.prepare(
+    'SELECT transcript, transcribed_at, transcribed_by_model, transcript_session_uid FROM discovery_interviews WHERE id = 1',
+  ).get() }, { transcript: null, transcribed_at: null, transcribed_by_model: null, transcript_session_uid: null });
+  assert.equal((await call(f.env, FOUNDER, 'DELETE', `/sessions/${id}`)).status, 404, 'repeated delete should stay harmless');
   const audit = f.db.prepare("SELECT details, user_id, project_id FROM activity_logs WHERE action = 'interview_session_deleted'").get();
   assert.ok(audit, 'no audit row');
   assert.equal(JSON.parse(audit.details).audio_chunks, 2);
   assert.deepEqual([audit.user_id, audit.project_id], [FOUNDER, 10]);
+});
+
+test('deleting an older session preserves the newer projection; deleting its owner empties the discovery API', async () => {
+  const f = fixture();
+  const older = await recorded(f);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${older}/transcribe`, {});
+  const olderText = f.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = 1').get().transcript;
+
+  const newer = await recorded(f);
+  f.setAi(() => ({ text: 'The newer session wins.', transcription_info: { language: 'en' },
+    segments: [{ start: 0, end: 1, text: 'The newer session wins.' }] }));
+  await call(f.env, FOUNDER, 'POST', `/sessions/${newer}/transcribe`, {});
+  const before = f.db.prepare(
+    'SELECT transcript, transcribed_at, transcribed_by_model, transcript_session_uid FROM discovery_interviews WHERE id = 1',
+  ).get() as any;
+  assert.notEqual(before.transcript, olderText);
+  assert.equal(before.transcript_session_uid, f.db.prepare('SELECT uid FROM interview_sessions WHERE id = ?').get(newer).uid);
+
+  assert.equal((await call(f.env, FOUNDER, 'DELETE', `/sessions/${older}`)).status, 200);
+  assert.deepEqual({ ...f.db.prepare(
+    'SELECT transcript, transcribed_at, transcribed_by_model, transcript_session_uid FROM discovery_interviews WHERE id = 1',
+  ).get() }, { ...before }, 'deleting an older session erased the newer projection');
+
+  assert.equal((await call(f.env, FOUNDER, 'DELETE', `/sessions/${newer}`)).status, 200);
+  try { f.db.exec('ALTER TABLE projects ADD COLUMN company_id INTEGER'); } catch { /* present */ }
+  const { default: progress } = await import('../src/routes/progress.ts');
+  const papp = new Hono();
+  papp.route('/api/progress', progress as any);
+  const tok = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const response = await papp.request('/api/progress/discovery/10', { headers: { Authorization: `Bearer ${tok}` } }, f.env);
+  assert.equal(response.status, 200, await response.clone().text());
+  const interview = (await response.json() as any).interviews.find((row: any) => row.id === 1);
+  assert.deepEqual({ transcript: interview.transcript, transcribed_at: interview.transcribed_at,
+    transcribed_by_model: interview.transcribed_by_model },
+  { transcript: null, transcribed_at: null, transcribed_by_model: null });
 });
 
 // ── Spin-Out Lab ─────────────────────────────────────────────────────────────

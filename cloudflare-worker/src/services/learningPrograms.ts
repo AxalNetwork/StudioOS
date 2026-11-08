@@ -118,15 +118,39 @@ export type Learner = { user_id: number; uid: string; name: string | null; enrol
  * One program's actively enrolled learners, or one of them (`userUid`). Name
  * and uid only.
  */
-export async function programLearners(env: Env, programId: number, userUid?: string): Promise<Learner[]> {
+export async function programLearners(env: Env, programId: number, userUid?: string, page?: { limit: number; offset: number }): Promise<Learner[]> {
+  // D4810: a page when one is asked for; SQLite's LIMIT -1 is "no limit".
   const res = await env.DB.prepare(
     `SELECT e.user_id, u.uid, COALESCE(u.display_name, u.name) AS name, e.enrolled_at
        FROM learning_enrollments e JOIN users u ON u.id = e.user_id
       WHERE e.program_id = ? AND e.status = 'active' AND (? IS NULL OR u.uid = ?)
-      ORDER BY name COLLATE NOCASE, e.id`,
-  ).bind(programId, userUid ?? null, userUid ?? null).all<Learner>();
+      ORDER BY name COLLATE NOCASE, e.id LIMIT ? OFFSET ?`,
+  ).bind(programId, userUid ?? null, userUid ?? null, page ? page.limit : -1, page ? page.offset : 0).all<Learner>();
   return res.results || [];
 }
+
+/** D4810: how many learners are actively enrolled in a program. */
+export async function programLearnerCount(env: Env, programId: number): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM learning_enrollments WHERE program_id = ? AND status = 'active'`)
+    .bind(programId).first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * OD9, as D962 sets it (the frontend's `isDone`, kept beside it): a content
+ * cell is Done when a course or an item is `completed`, an exercise's latest
+ * submission is `accepted`, an exam is `passed`, a webinar is `attended`. A
+ * learner has finished when every cell is Done; no contents, no one finished.
+ */
+export function isDoneCell(cell: { subject_kind?: string; status?: string } | null | undefined): boolean {
+  const s = cell?.status;
+  if (cell?.subject_kind === 'exercise') return s === 'accepted';
+  if (cell?.subject_kind === 'exam') return s === 'passed';
+  if (cell?.subject_kind === 'webinar') return s === 'attended';
+  return s === 'completed';
+}
+export const hasFinishedCells = (completion: unknown): boolean =>
+  Array.isArray(completion) && completion.length > 0 && completion.every((c) => isDoneCell(c as any));
 
 /**
  * Each learner's completion of each content item, read from

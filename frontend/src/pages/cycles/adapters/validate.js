@@ -454,9 +454,8 @@ export const RECORDS = {
       // D697: a retired claim reads Retired; one whose lane moved in the last 14 days says so beside its status.
       status: r.retired === true ? { text: 'Retired', tone: 'grey' }
         : CLAIM_WORD[r.status] ? { text: `${CLAIM_WORD[r.status]}${r.moved === 'recent' ? ' · Moved' : ''}`, tone: CLAIM_TONE[r.status] } : null,
-      evidence: num(r.evidence) && r.evidence > 0
-        ? `${r.evidence}${EVIDENCE[r.strength] ? ` · ${EVIDENCE[r.strength][0]}` : ''}`
-        : null,
+      // D4585: the interviews the status counts, labelled as interviews, and the claim's other linked evidence apart.
+      evidence: supportCell(r),
       sprint: r.sprint ?? null,
       owner: r.owner ?? null,
       source: fillCell(r.provenance),
@@ -494,3 +493,17 @@ export const RECORDS = {
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
   },
 };
+
+/**
+ * D4585 (#4585): a claim's Interview support cell. The status counts interviews through pain links only, so the cell
+ * names them as interviews; evidence linked another way (a direct interview, a demand signal, a metric, an experiment)
+ * is said apart, as not counted in the status. Nothing at all is null (the table's "Not recorded"), never "0".
+ */
+export function supportCell(r) {
+  const n = num(r?.evidence) ? r.evidence : 0;
+  const l = r?.linked_evidence || {};
+  const other = ['interview', 'signal', 'metric', 'experiment'].reduce((t, k) => t + (num(l[k]) ? l[k] : 0), 0);
+  if (!n && !other) return null;
+  const head = `${n} interview${n === 1 ? '' : 's'}${n && EVIDENCE[r.strength] ? ` · ${EVIDENCE[r.strength][0]}` : ''}`;
+  return other ? `${head} · ${other} other linked, not in status` : head;
+}

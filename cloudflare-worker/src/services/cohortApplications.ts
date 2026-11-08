@@ -145,8 +145,15 @@ export const COHORT_SCHEMA = Object.freeze([
   `ALTER TABLE cohort_cycles ADD COLUMN force_proceed INTEGER NOT NULL DEFAULT 0`,
   `CREATE TABLE IF NOT EXISTS cohort_applicants (id INTEGER PRIMARY KEY AUTOINCREMENT, application_id INTEGER NOT NULL, user_id INTEGER NOT NULL, cohort_cycle_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', rolled_from_cycle_id INTEGER, decided_at TEXT, decided_by TEXT, decision_reason TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(application_id, cohort_cycle_id))`,
   `CREATE TABLE IF NOT EXISTS cohort_cycle_events (id INTEGER PRIMARY KEY AUTOINCREMENT, cohort_cycle_id INTEGER, event_type TEXT NOT NULL, details TEXT, actor TEXT NOT NULL DEFAULT 'scheduler', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  `CREATE TABLE IF NOT EXISTS cohort_app_notification_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, cohort_cycle_id INTEGER NOT NULL, notif_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'sent', sent_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, cohort_cycle_id, notif_type))`,
+  `CREATE TABLE IF NOT EXISTS cohort_app_notification_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, cohort_cycle_id INTEGER NOT NULL, notif_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'sent', sent_at TEXT NOT NULL DEFAULT (datetime('now')), title TEXT, body TEXT, link TEXT, email INTEGER, attempts INTEGER NOT NULL DEFAULT 0, delivered_at TEXT, UNIQUE(user_id, cohort_cycle_id, notif_type))`,
   `CREATE TABLE IF NOT EXISTS cohort_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')), updated_by TEXT)`,
+  // D4658 (migration 202611071730): the ledger carries its message and attempts.
+  `ALTER TABLE cohort_app_notification_ledger ADD COLUMN title TEXT`,
+  `ALTER TABLE cohort_app_notification_ledger ADD COLUMN body TEXT`,
+  `ALTER TABLE cohort_app_notification_ledger ADD COLUMN link TEXT`,
+  `ALTER TABLE cohort_app_notification_ledger ADD COLUMN email INTEGER`,
+  `ALTER TABLE cohort_app_notification_ledger ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE cohort_app_notification_ledger ADD COLUMN delivered_at TEXT`,
 ]);
 export async function ensureCohortAppSchema(env: Env): Promise<void> {
   if (SCHEMA_READY.get(bindingKey(env))) return;
@@ -229,25 +236,84 @@ export async function notifyOnce(
   env: Env,
   args: { userId: number; cycleId: number; notifType: string; title: string; body: string; link?: string; email?: boolean },
 ): Promise<boolean> {
+  // D4658: the claim stores the message as 'pending'; the send marks it 'sent'.
+  // A send that fails is 'failed', and one cut off before it finished stays
+  // 'pending' — both are delivered later by retryCohortNotifications, so a
+  // claim is never a promise that silently went undelivered.
   const claim = await env.DB.prepare(
-    `INSERT OR IGNORE INTO cohort_app_notification_ledger (user_id, cohort_cycle_id, notif_type) VALUES (?, ?, ?)`,
-  ).bind(args.userId, args.cycleId, args.notifType).run();
+    `INSERT OR IGNORE INTO cohort_app_notification_ledger
+       (user_id, cohort_cycle_id, notif_type, status, title, body, link, email, attempts)
+     VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 0)`,
+  ).bind(args.userId, args.cycleId, args.notifType, args.title, args.body, args.link ?? '/spinout-lab', args.email === false ? 0 : 1).run();
   if ((claim.meta?.changes ?? 0) === 0) return false;
+  await deliverLedgerRow(env, { user_id: args.userId, cohort_cycle_id: args.cycleId, notif_type: args.notifType,
+    title: args.title, body: args.body, link: args.link ?? '/spinout-lab', email: args.email === false ? 0 : 1 });
+  return true;
+}
+
+type LedgerRow = { user_id: number; cohort_cycle_id: number; notif_type: string; title: string | null; body: string | null; link: string | null; email: number | null };
+
+/** One delivery attempt for a claimed row; records the outcome. Never throws. */
+async function deliverLedgerRow(env: Env, r: LedgerRow): Promise<boolean> {
   try {
     const { notify } = await import('./notify');
     await notify(env, {
-      userId: args.userId, type: `cohort_app_${args.notifType}`,
-      title: args.title, body: args.body, link: args.link ?? '/spinout-lab',
-      channels: args.email === false ? ['in_app'] : ['in_app', 'email'],
+      userId: r.user_id, type: `cohort_app_${r.notif_type}`,
+      title: String(r.title ?? ''), body: String(r.body ?? ''), link: r.link ?? '/spinout-lab',
+      channels: Number(r.email ?? 1) === 0 ? ['in_app'] : ['in_app', 'email'],
       category: 'deals',
     });
-  } catch (e) {
-    console.warn('[cohort-apps] notify failed', e);
     await env.DB.prepare(
-      `UPDATE cohort_app_notification_ledger SET status = 'failed' WHERE user_id = ? AND cohort_cycle_id = ? AND notif_type = ?`,
-    ).bind(args.userId, args.cycleId, args.notifType).run();
+      `UPDATE cohort_app_notification_ledger SET status = 'sent', attempts = attempts + 1, delivered_at = datetime('now')
+        WHERE user_id = ? AND cohort_cycle_id = ? AND notif_type = ?`,
+    ).bind(r.user_id, r.cohort_cycle_id, r.notif_type).run();
+    return true;
+  } catch {
+    console.warn('[cohort-apps] notify failed', { type: r.notif_type });
+    try {
+      await env.DB.prepare(
+        `UPDATE cohort_app_notification_ledger SET status = 'failed', attempts = attempts + 1, sent_at = datetime('now')
+          WHERE user_id = ? AND cohort_cycle_id = ? AND notif_type = ?`,
+      ).bind(r.user_id, r.cohort_cycle_id, r.notif_type).run();
+    } catch { /* the row stays 'pending' and is retried */ }
+    return false;
   }
-  return true;
+}
+
+export const NOTIFY_MAX_ATTEMPTS = 5;
+/** A 'pending' row older than this was cut off before its send finished. */
+export const NOTIFY_STALE_MS = 10 * 60_000;
+
+/**
+ * Deliver what an earlier claim did not: 'failed' rows, and 'pending' rows
+ * older than NOTIFY_STALE_MS. Each row is re-claimed by a conditional update
+ * first, so two ticks never send it twice; after NOTIFY_MAX_ATTEMPTS it is
+ * 'abandoned' and an admin can see it. Bounded per call. Never throws.
+ */
+export async function retryCohortNotifications(env: Env, nowMs: number, limit = 20): Promise<{ sent: number; failed: number; abandoned: number }> {
+  const out = { sent: 0, failed: 0, abandoned: 0 };
+  try {
+    const stale = iso(nowMs - NOTIFY_STALE_MS);
+    const rows = await env.DB.prepare(
+      `SELECT id, user_id, cohort_cycle_id, notif_type, status, title, body, link, email, attempts
+         FROM cohort_app_notification_ledger
+        WHERE title IS NOT NULL AND (status = 'failed' OR (status = 'pending' AND sent_at <= ?))
+        ORDER BY id LIMIT ?`,
+    ).bind(stale, limit).all<LedgerRow & { id: number; status: string; attempts: number }>();
+    for (const r of rows.results || []) {
+      if (Number(r.attempts) >= NOTIFY_MAX_ATTEMPTS) {
+        await env.DB.prepare(`UPDATE cohort_app_notification_ledger SET status = 'abandoned' WHERE id = ? AND status = ?`).bind(r.id, r.status).run();
+        out.abandoned += 1;
+        continue;
+      }
+      const claim = await env.DB.prepare(
+        `UPDATE cohort_app_notification_ledger SET status = 'pending', sent_at = datetime('now') WHERE id = ? AND status = ? AND attempts = ?`,
+      ).bind(r.id, r.status, r.attempts).run();
+      if (Number(claim.meta?.changes ?? 0) !== 1) continue;
+      if (await deliverLedgerRow(env, r)) out.sent += 1; else out.failed += 1;
+    }
+  } catch { console.warn('[cohort-apps] notification retry unreadable'); }
+  return out;
 }
 
 /**
@@ -337,6 +403,8 @@ export async function runCohortApplicationsTick(env: Env, now: Date): Promise<vo
     if (e instanceof CohortSettingsUnreadable) return;
   }
   try { await activateDueCycles(env, nowMs); } catch (e) { console.error('[cohort-apps] activation failed', e); }
+  // D4658: deliver what an earlier claim did not.
+  await retryCohortNotifications(env, nowMs);
 }
 
 /** 3d / 24h "applications close soon" reminders to undecided applicants. */
@@ -502,40 +570,67 @@ async function activateDueCycles(env: Env, nowMs: number): Promise<void> {
     if (claim === 'done') continue;
     const label = monthLabel(cyc.year, cyc.month);
     const cohortLabel = `${label} Cohort`;
+    // D4658: each applicant is one batch (one D1 transaction): enrollment,
+    // admission flag, workspace, accepted application and, last, the
+    // applicant's own 'activated'. Either every effect lands or none does, so
+    // an interrupted run leaves the applicant 'approved' and the next run does
+    // it whole. Applicants already 'activated' are selected too: a run that
+    // resumes re-applies their (idempotent) effects and their notification.
+    // The job completes only when every applicant has; a failure is recorded
+    // and the job resumes on the next tick.
     const approved = await env.DB.prepare(
-      `SELECT ca.id, ca.application_id, ca.user_id, u.email, u.name
+      `SELECT ca.id, ca.application_id, ca.user_id, ca.status
          FROM cohort_applicants ca JOIN users u ON u.id = ca.user_id
-        WHERE ca.cohort_cycle_id = ? AND ca.status = 'approved'`,
-    ).bind(cyc.id).all<{ id: number; application_id: number; user_id: number; email: string; name: string | null }>();
+        WHERE ca.cohort_cycle_id = ? AND ca.status IN ('approved', 'activated')`,
+    ).bind(cyc.id).all<{ id: number; application_id: number; user_id: number; status: string }>();
     let activated = 0;
+    let failed = 0;
     for (const a of approved.results || []) {
-      // Per-applicant idempotent flip: 'approved' → 'activated' guards the
-      // side effects, so a resumed run never re-admits or re-notifies.
-      const upd = await env.DB.prepare(
-        `UPDATE cohort_applicants SET status = 'activated', decided_at = datetime('now') WHERE id = ? AND status = 'approved'`,
-      ).bind(a.id).run();
-      if ((upd.meta?.changes ?? 0) === 0) continue;
-      await env.DB.prepare(
-        `INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort)
-         VALUES (?, 1, ?)
-         ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`,
-      ).bind(a.user_id, cohortLabel).run();
-      // started_at = the cycle's own start instant, so the founder is
-      // calendar-gated by exactly this cycle's week windows.
-      await env.DB.prepare(
-        `UPDATE users SET spinout_lab_active = 1, spinout_lab_week = 1, spinout_lab_started_at = ?
-          WHERE id = ? AND (spinout_lab_active IS NULL OR spinout_lab_active = 0)`,
-      ).bind(cyc.start_at, a.user_id).run();
-      await env.DB.prepare(
-        `UPDATE spinout_applications SET status = 'accepted', decided_at = datetime('now') WHERE id = ? AND status = 'pending'`,
-      ).bind(a.application_id).run();
+      try {
+        const res = await env.DB.batch([
+          env.DB.prepare(
+            `INSERT OR IGNORE INTO spinout_lab_enrollments
+               (user_id, kind, cohort_cycle_id, cycle_source, cohort_applicant_id, application_id, started_at)
+             VALUES (?, 'cohort', ?, 'assigned', ?, ?, ?)`,
+          ).bind(a.user_id, cyc.id, a.id, a.application_id, cyc.start_at),
+          env.DB.prepare(
+            `INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort)
+             VALUES (?, 1, ?)
+             ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`,
+          ).bind(a.user_id, cohortLabel),
+          // started_at = the cycle's own start instant, so the founder is
+          // calendar-gated by exactly this cycle's week windows. A sprint that
+          // ended (is_incorporated) is never reopened.
+          env.DB.prepare(
+            `UPDATE users SET spinout_lab_active = 1, spinout_lab_week = 1, spinout_lab_started_at = ?
+              WHERE id = ? AND (spinout_lab_active IS NULL OR spinout_lab_active = 0) AND COALESCE(is_incorporated, 0) = 0`,
+          ).bind(cyc.start_at, a.user_id),
+          env.DB.prepare(
+            `UPDATE spinout_applications SET status = 'accepted', decided_at = datetime('now') WHERE id = ? AND status = 'pending'`,
+          ).bind(a.application_id),
+          env.DB.prepare(
+            `UPDATE cohort_applicants SET status = 'activated', decided_at = datetime('now') WHERE id = ? AND status = 'approved'`,
+          ).bind(a.id),
+        ]);
+        if (Number(res[res.length - 1]?.meta?.changes ?? 0) === 1) activated += 1;
+      } catch (e) {
+        failed += 1;
+        console.error('[cohort-apps] activation failed for an applicant', { cycle: cyc.id, applicant: a.id, code: (e as Error)?.name });
+        continue;
+      }
+      // After the state transition, durable and idempotent (one ledger row per
+      // user, cycle and type; a failed delivery is retried by the tick).
       await notifyOnce(env, {
         userId: a.user_id, cycleId: cyc.id, notifType: 'workspace_live',
         title: `Your Spin-Out Lab workspace is live`,
         body: `Welcome to the ${label} cohort! Week 1 is unlocked now — head to your workspace to get started.`,
         link: '/spinout-lab',
       });
-      activated += 1;
+    }
+    if (failed > 0) {
+      await logCycleEvent(env, cyc.id, 'activation_incomplete',
+        `${failed} applicant(s) could not be activated; the activation resumes on the next run`);
+      continue;
     }
     // Undecided applicants at the start instant roll to next month so
     // nobody silently falls out of the funnel.

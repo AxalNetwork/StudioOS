@@ -310,7 +310,13 @@ export function hiddenFrom(assignRead) {
 }
 export const HIDDEN_LINE = 'A founder can hide from one mentor. Each founder counts once.';
 
-const isAdvisorRow = (r) => String(r?.advisor_role || '').toLowerCase() === 'advisor';
+// D4807: the Worker answers "is this account an eligible mentor?" once
+// (`advisor_eligible`: active AND holds the Advisor licence, primary or
+// additional). Role-alone is the fallback for a row from an older read.
+// An inactive account is reported as inactive, not as having lost the role.
+const isAdvisorRow = (r) => (typeof r?.advisor_eligible === 'boolean'
+  ? r.advisor_eligible || r.advisor_is_active === false
+  : String(r?.advisor_role || '').toLowerCase() === 'advisor');
 const isOpenRow = (r) => r?.is_active === true || r?.is_active === 1;
 const isLiveRow = (r) => isOpenRow(r) && isAdvisorRow(r) && r?.advisor_is_active === true;
 
@@ -804,24 +810,31 @@ export function isDone(cell) {
 }
 export const hasFinished = (learner) => Array.isArray(learner?.completion) && learner.completion.length > 0 && learner.completion.every(isDone);
 
-/** Completion by program: each published program's learners (R10), finished by OD9's rule. */
-export function completionRows(programs, learnerReads) {
+/**
+ * Completion by program: each published program's learners and how many
+ * finished (OD9's rule, applied by the Worker), from D4810's one completion
+ * read. A program the read lists as unreadable, or leaves out past its cap, is
+ * said so, never drawn as 0.
+ */
+export function completionRows(programs, read) {
+  const state = !read || isLoading(read) ? 'loading' : isFailed(read) ? 'unreadable' : 'ready';
+  const by = new Map((state === 'ready' && Array.isArray(read.data?.programs) ? read.data.programs : []).map((x) => [x.uid, x]));
+  const unreadable = new Set(state === 'ready' && Array.isArray(read.data?.unreadable) ? read.data.unreadable : []);
   return programs.map((p) => {
-    const read = learnerReads[p.uid];
-    if (!read || isLoading(read)) return { uid: p.uid, name: p.name, region: p.region, state: 'loading' };
-    if (isFailed(read)) return { uid: p.uid, name: p.name, region: p.region, state: 'unreadable' };
-    const learners = Array.isArray(read.data?.learners) ? read.data.learners : [];
-    const finished = learners.filter(hasFinished).length;
-    return {
-      uid: p.uid, name: p.name, region: p.region, state: 'ready', learners: learners.length, finished,
-      percent: learners.length ? Math.round((100 * finished) / learners.length) : null,
-    };
+    const base = { uid: p.uid, name: p.name, region: p.region };
+    if (state !== 'ready') return { ...base, state };
+    const x = by.get(p.uid);
+    if (!x) return { ...base, state: unreadable.has(p.uid) ? 'unreadable' : 'left_out' };
+    const learners = Number(x.learners) || 0;
+    const finished = Number(x.finished) || 0;
+    return { ...base, state: 'ready', learners, finished, percent: learners ? Math.round((100 * finished) / learners) : null };
   });
 }
 
 /** Finished: the sum over programs, unreadable if any program's learners could not be read. */
 export function finishedTotal(rows) {
-  if (rows.some((r) => r.state === 'unreadable')) return { state: 'unreadable' };
+  // D4810: a program left out past the cap makes the total partial, so none is drawn.
+  if (rows.some((r) => r.state === 'unreadable' || r.state === 'left_out')) return { state: 'unreadable' };
   if (rows.some((r) => r.state !== 'ready')) return { state: 'loading' };
   return { state: 'ready', count: rows.reduce((t, r) => t + r.finished, 0) };
 }

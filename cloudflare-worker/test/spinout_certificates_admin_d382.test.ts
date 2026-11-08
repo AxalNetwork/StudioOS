@@ -21,6 +21,7 @@ import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 
 import certificates from '../src/routes/spinout_certificates.ts';
+import { graduate, labEnrollmentSchema } from './_lab_evidence.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN_ID = 900;
@@ -45,9 +46,11 @@ function freshDb() {
   u.run(OTHER_GRAD_ID, 'founder', 'Bo Graduate', 'bo@example.test');
   u.run(NON_GRAD_ID, 'founder', 'Cy Midway', 'cy@example.test');
   const m = db.prepare(`INSERT INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (?, ?, ?, ?)`);
-  m.run(GRAD_ID, 4, 'incorporation_completed', '2026-07-31 14:00:00');
-  m.run(OTHER_GRAD_ID, 4, 'incorporation_completed', '2026-08-02 10:00:00');
+  // D4659: a graduate has every week of the programme on record.
+  graduate(db, GRAD_ID, '2026-07-31 14:00:00');
+  graduate(db, OTHER_GRAD_ID, '2026-08-02 10:00:00');
   m.run(NON_GRAD_ID, 1, 'project_created', '2026-07-02 10:00:00');
+  labEnrollmentSchema(db);
   return db;
 }
 
@@ -121,7 +124,7 @@ test('a founder who did not graduate is refused with a code and our sentence', a
   const r = await post(db, '/certificates', { user_id: NON_GRAD_ID });
   assert.equal(r.status, 409);
   assert.equal(r.body.error, 'not_graduated');
-  assert.match(r.body.message, /incorporation_completed/);
+  assert.match(r.body.message, /every week of the programme/);
   assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM spinout_certificates`).get().n, 0);
 });
 

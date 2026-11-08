@@ -26,6 +26,7 @@ import { SignJWT } from 'jose';
 import spinoutLab from '../src/routes/spinout_lab.ts';
 import { recordPaidIncorporation, recordPaidIncorporationFromPaymentIntent } from '../src/services/incorporations.ts';
 import { syncIncorporationMilestone } from '../src/services/labIncorporationMilestone.ts';
+import { labEnrollmentSchema, graduate, GRADUATION_KEYS } from './_lab_evidence.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const MEMBER = 101, OUTSIDER = 102, GRAD = 103, OLD_GRAD = 104, ADMIN = 900;
@@ -55,8 +56,13 @@ function freshDb({ rules = true } = {}) {
   const f = db.prepare(`INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort) VALUES (?, ?, 'Cohort 4')`);
   f.run(MEMBER, 1); f.run(GRAD, 1); f.run(OLD_GRAD, 1); f.run(OUTSIDER, 0);
   const m = db.prepare(`INSERT INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (?, ?, ?, ?)`);
-  m.run(GRAD, 4, 'incorporation_completed', '2026-10-04 09:00:00');
-  m.run(OLD_GRAD, 4, 'incorporation_completed', '2026-08-01 09:00:00');
+  // D4659: graduates have the whole programme on record, and the member has
+  // weeks 1-3, so the paid incorporation is the step that completes it.
+  void m;
+  graduate(db, GRAD, '2026-10-04 09:00:00');
+  graduate(db, OLD_GRAD, '2026-08-01 09:00:00');
+  graduate(db, MEMBER, '2026-09-20 09:00:00', GRADUATION_KEYS.filter((k) => k !== 'incorporation_completed'));
+  labEnrollmentSchema(db); // D4657: the fixture's Lab founders, enrolled as the migration would
   return db;
 }
 

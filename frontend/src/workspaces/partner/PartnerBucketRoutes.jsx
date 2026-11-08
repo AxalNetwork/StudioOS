@@ -11,6 +11,7 @@ import NoStoreYet from '../NoStoreYet';
 import BucketBoard from '../BucketBoard';
 import { boardFor } from '../boards';
 import { api } from '../../lib/api';
+import { rowRequests } from '../../lib/serviceMeasures.js';
 
 // NOT `PartnerOperationsWorkspace`, and that is the fix rather than an
 // omission. That component is the legacy five-tab shell at
@@ -242,10 +243,10 @@ const LIVE = {
     catalog: (user) => <ServiceCatalogPage user={user} role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/catalog', opts)}
       zoneActions={(rows, handlers) => partnerZoneActions('offers/catalog', { handlers, view: {
-        header: ['Service', 'Model', 'Price (cents)', 'Sold', 'What’s included'],
+        header: ['Service', 'Model', 'Price (cents)', 'Requested', 'What’s included'],
         rows,
         cells: (o) => [o.title, o.engagement_model || '', o.price_cents ?? '',
-          o.sold || 0, o.summary],
+          rowRequests(o)?.requested ?? '', o.summary],
       } })} />,
     'perk-deals': (user) => <PerksPage user={user} embedded role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/perk-deals', opts)}
@@ -492,14 +493,14 @@ export default function PartnerBucketRoutes() {
     '/offers': {
       workspace: 'Offers',
       stance: 'Manual storefront record',
-      note: 'What the firm publishes is what the firm typed. No listing, perk description, case study or fit rule is written here, and no lead is scored against one.',
+      note: 'What the firm publishes is what the firm typed. No listing, perk description, case study or fit rule is written here. Pipeline scores leads against your fit rules, and leaves a lead that matches a declined sector or an absent capability out of its ranking, but nothing is declined for you.',
       // BOTH OF THESE FLIPPED WITH MIGRATION 209, so they are replaced rather
       // than kept. Attribution and consent are now recorded — which means the
       // rail would be asserting two absences the store no longer has, exactly
       // the drift `WorkerRail`'s own docblock warns about. What remains
       // genuinely unavailable is what nothing in this bucket does even now.
       unavailable: [
-        ['Fit scoring', 'Your fit rules are a record a person reads, not a filter that runs. No lead is scored, ranked or auto-declined against a budget floor or a declined sector — a pass is still your click and still your sentence.'],
+        ['Automatic declining', 'Your active fit rules score leads and leave a lead that matches a declined sector or an absent capability out of the ranking. No lead is declined, rejected or hidden for you: an excluded lead stays on Leads, and a pass is still your click and still your sentence.'],
         ['Publishing on your say-so', 'An outcome is publishable only where the client agreed to it, and only the client can record that agreement. Nothing here can mark your own evidence as confirmed, including this rail.'],
       ],
     },

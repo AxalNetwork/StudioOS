@@ -26,7 +26,8 @@
  * Every function that decides by time takes `now` (ms).
  */
 import type { Env } from '../types';
-import { computeDiscount, getPromoById, planKeyOf, promoExpired, readIntervals, readProductIds, validatePromoForProduct, type PromoRow } from './promos';
+import { computeDiscount, getPromoById, planKeyOf, promoExpired, readIntervals, readProductIds, type PromoRow } from './promos';
+import { canRedeemPromo } from './promoRedemption';
 import { planByKey } from './planCatalogue';
 import { todayUtc } from './referralPartnerTerms';
 
@@ -125,10 +126,11 @@ export async function autoOffer(env: Env, buyerUserId: number, sale: {
     const promo = await getPromoById(env, offer.promo_id);
     if (!promo) { skipped.push({ uid: offer.uid, why: 'code_refused' }); continue; }
     if (!planInScope(promo, sale.product)) { skipped.push({ uid: offer.uid, why: 'plan_not_in_offer' }); continue; }
-    const v = await validatePromoForProduct(env, promo.code, sale.product.id, sale.unitAmount, sale.currency, {
+    // D4855: the same rule as every checkout, so an offer the licence's ceiling cannot cover is not applied.
+    const v = await canRedeemPromo(env, { code: promo.code, productId: sale.product.id, amountCents: sale.unitAmount, currency: sale.currency, buyer: {
       userId: buyerUserId, interval: (sale.interval === 'month' || sale.interval === 'year') ? sale.interval : null,
-    });
-    if (!v.ok || !v.promo) { skipped.push({ uid: offer.uid, why: 'code_refused' }); continue; }
+    } });
+    if (!v.ok) { skipped.push({ uid: offer.uid, why: 'code_refused' }); continue; }
     const discount = computeDiscount(v.promo, sale.unitAmount).discountCents;
     const spend = await offerSpend(env, promo.id);
     if (givenIn(spend.given, currency) + discount > offer.budget_cents) { skipped.push({ uid: offer.uid, why: 'budget_used' }); continue; }
@@ -172,6 +174,38 @@ export async function offersRead(env: Env, influencerUserId: number, now: number
   const offers = (await env.DB.prepare(
     `SELECT * FROM influencer_offers WHERE influencer_user_id = ? ORDER BY featured DESC, id DESC`,
   ).bind(influencerUserId).all<OfferRow>()).results || [];
+  return { offers: await offerViews(env, offers, now) };
+}
+
+/** D4810: an offers page across every influencer; at most OFFERS_PAGE_MAX a read. */
+export const OFFERS_PAGE_MAX = 100;
+
+/**
+ * D4810 — every influencer's offers, newest first, one page at a time, each
+ * with its influencer (account uid, handle, name). It replaces one offers read
+ * per influencer, awaited in turn. `total` is every offer; a page is bounded,
+ * so the per-offer code and spend reads are too.
+ */
+export async function offersPage(env: Env, limit: number, offset: number, now: number = Date.now()) {
+  const [rows, count] = await Promise.all([
+    env.DB.prepare(
+      `SELECT o.*, u.uid AS influencer_uid, COALESCE(u.display_name, u.name) AS influencer_name, m.handle AS influencer_handle
+         FROM influencer_offers o JOIN users u ON u.id = o.influencer_user_id
+         LEFT JOIN influencers m ON m.user_id = o.influencer_user_id
+        ORDER BY o.id DESC LIMIT ? OFFSET ?`,
+    ).bind(limit, offset).all<OfferRow & { influencer_uid: string; influencer_name: string | null; influencer_handle: string | null }>(),
+    env.DB.prepare('SELECT COUNT(*) AS n FROM influencer_offers').first<{ n: number }>(),
+  ]);
+  const list = rows.results || [];
+  const views = await offerViews(env, list, now);
+  return {
+    items: list.map((r, i) => ({ influencer: { user_uid: r.influencer_uid, handle: r.influencer_handle ?? null, name: r.influencer_name ?? null }, offer: views[i] })),
+    total: Number(count?.n ?? 0), limit, offset,
+  };
+}
+
+/** Each offer as the influencer's own read shows it. */
+async function offerViews(env: Env, offers: OfferRow[], now: number) {
   const out = [];
   for (const o of offers) {
     const promo = await getPromoById(env, o.promo_id);
@@ -205,7 +239,7 @@ export async function offersRead(env: Env, influencerUserId: number, now: number
       ends_at: promo.expires_at || 'No end date',
     });
   }
-  return { offers: out };
+  return out;
 }
 
 /** The featured active offer, for P2's public @handle read; null when there is none. */

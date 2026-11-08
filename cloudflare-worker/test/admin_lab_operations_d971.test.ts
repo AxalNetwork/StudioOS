@@ -38,6 +38,15 @@ const BUILT = beforeM560();
 BUILT.exec(M560);
 // D955 landed while this tab was being built; the registry now selects licence_uid.
 BUILT.exec(readFileSync(resolve(MIGRATIONS, '561_program_proposals.sql'), 'utf8'));
+// D4657/D4659: the Lab reads enrollments and the graduation view.
+// D4808: the registry keeps the approved proposal snapshot.
+for (const m of [
+  '202611071700_spinout_lab_enrollments.sql',
+  '202611071800_lab_graduation_venture.sql',
+  '202611072010_program_approved_specs.sql',
+]) {
+  BUILT.exec(readFileSync(resolve(MIGRATIONS, m), 'utf8'));
+}
 
 /** A copy of BUILT, its schema and every row it holds (560's seed and 381's rules included). */
 function fresh(): DatabaseSync {

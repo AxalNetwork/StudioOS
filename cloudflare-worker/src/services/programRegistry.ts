@@ -283,6 +283,15 @@ export async function programDetail(env: Env, key: string, superAdmin: boolean, 
       ? { published: true, version: Number(latest.version), published_at: latest.published_at, sections: published.map(sectionView) }
       : { published: false, version: null, published_at: null, sections: [] },
   };
+  // D4808: the exact proposal this program was approved from, as it was approved; null for a program no proposal made.
+  const approved = await env.DB.prepare('SELECT proposal_uid, decision, decided_at, spec_json FROM program_approved_specs WHERE program_key = ?')
+    .bind(p.key).first<{ proposal_uid: string; decision: string; decided_at: string; spec_json: string }>().catch(() => null);
+  let spec: { capabilities?: unknown[] } | null = null;
+  try { spec = approved ? JSON.parse(approved.spec_json) : null; } catch { spec = null; }
+  out.approved_proposal = approved && spec
+    ? { proposal_uid: approved.proposal_uid, decision: approved.decision, decided_at: approved.decided_at, spec }
+    : null;
+  out.capabilities = Array.isArray(spec?.capabilities) ? spec!.capabilities : [];
   if (superAdmin) {
     const draft = await sectionsOf(env, p.key, 0);
     const edited = draft.map((s) => s.edited_at).filter((x): x is string => !!x).sort();

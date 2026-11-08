@@ -164,13 +164,32 @@ export function termsDiff(before: Terms, after: Terms) {
 
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
-export type ScheduleStatus = 'not_sent' | 'sent' | 'signed';
+export type ScheduleStatus = 'not_sent' | 'sent' | 'signed' | 'amendment_needed';
 
-/** D1120 — where a grant's schedule stands: signed once its time is set, sent once an envelope is named. */
-export function scheduleStatus(row: { schedule_contract_uid?: unknown; schedule_signed_at?: unknown }): ScheduleStatus {
+/**
+ * D1120 — where a grant's schedule stands: signed once its time is set, sent once an envelope is named.
+ * D4805 (#4805): a signature belongs to one terms revision. When the terms moved on after a signature
+ * (`signed_revision` is set and `schedule_signed_at` is not), the grant waits on an amendment:
+ * `amendment_needed` until the new revision's schedule is sent, `sent` after.
+ */
+export function scheduleStatus(row: { schedule_contract_uid?: unknown; schedule_signed_at?: unknown; signed_revision?: unknown }): ScheduleStatus {
   if (row.schedule_signed_at) return 'signed';
   if (row.schedule_contract_uid) return 'sent';
+  if (row.signed_revision != null) return 'amendment_needed';
   return 'not_sent';
+}
+
+/**
+ * D4805 (#4805) — the fingerprint of the terms a schedule is built from: SHA-256 over the program, every
+ * term in catalogue order and the note (the two things the schedule prints). The schedule prints it, a
+ * schedule row stores it when the envelope is sent, and a completion marks the grant signed only if it
+ * still matches, so a signature can never vouch for terms it did not show.
+ */
+export async function termsHashOf(row: Record<string, unknown>): Promise<string> {
+  const key = String(row.program_key);
+  const note = typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null;
+  const bytes = new TextEncoder().encode(JSON.stringify({ program_key: key, terms: termsOf(row, key), note }));
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export type LicenceLite = { id: number; uid: string; licence_ref: string | null; brand_name: string | null; kind: string | null; status: string; renews_on: string | null };
@@ -209,6 +228,9 @@ export function presentGrant(row: Record<string, any>, licence: LicenceLite, tod
       status: scheduleStatus(row),
       contract_uid: (row.schedule_contract_uid ?? null) as string | null,
       signed_at: (row.schedule_signed_at ?? null) as string | null,
+      // D4805: the revision of the terms now in force, and the newest the studio signed (null: none yet).
+      revision: Number(row.terms_revision ?? 1),
+      signed_revision: row.signed_revision == null ? null : Number(row.signed_revision),
     },
     note: row.note ?? null,
     paused_at: row.paused_at ?? null,

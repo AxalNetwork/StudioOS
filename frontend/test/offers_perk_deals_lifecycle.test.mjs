@@ -43,6 +43,9 @@ const actions = read('frontend/src/workspaces/partnerZoneActions.js');
 const routes = read('frontend/src/workspaces/partner/PartnerBucketRoutes.jsx');
 const kit = read('frontend/src/workspaces/canvasKit.jsx');
 const spec = raw('cloudflare-worker/src/routes/research.ts');
+// The two state functions moved to lib/perkListings.js so the Offers overview
+// draws the same listings through them (#4696); the page re-exports them.
+const listings = read('frontend/src/lib/perkListings.js');
 
 const PO2 = CANVAS.slice(CANVAS.indexOf("{ id:'po2'"), CANVAS.indexOf("{ id:'po3'"));
 assert.ok(PO2.includes("route:'/offers/perk-deals'"), 'the po2 artboard could not be found in the canvas');
@@ -168,7 +171,7 @@ test('the lifecycle window is one number, in the worker, and the page prints it'
   // and the page reads `lifecycle` off the row rather than computing one.
   assert.match(spec, /import \{ perkLifecycle \} from '\.\/perks';/,
     'the draft gather no longer shares the zone’s definition of what is expiring');
-  const state = between(page, 'export function perkState(', 'export function matchesPerkChip(');
+  const state = between(listings, 'export function perkState(', 'export function matchesPerkChip(');
   assert.match(state, /const s = String\(p\?\.lifecycle \|\| ''\);/,
     'the page is no longer reading the lifecycle the worker served');
   assert.ok(!/\b30\b|getUTCDate|Date\.now/.test(state),
@@ -197,7 +200,7 @@ test('the four chips run, and Live means approved AND not ended', () => {
   // THE CORRECTION `Live` NEEDED. It read `status === 'live'` alone — the
   // REVIEW state — while the artboard's own note for the word is "accepting
   // redemptions".
-  const chip = between(page, 'export function matchesPerkChip(', 'const STATE_LABEL');
+  const chip = between(listings, 'export function matchesPerkChip(', 'export const PERK_STATE_LABEL');
   assert.match(chip, /if \(chip === 'live'\) return p\.status === 'live' && state === 'live';/,
     'Live has stopped meaning both approved and not ended');
   assert.match(chip, /if \(chip === 'expiring'\) return state === 'expiring';/, 'Expiring no longer selects on the date');
@@ -222,10 +225,14 @@ test('the strip is the artboard’s four tiles, counted over the whole book', ()
   assert.ok(strip.includes('note="grants revoked on expiry"'), 'the Expired tile lost the artboard’s note');
   // COUNTED OVER `rows`, NEVER OVER THE CHIP-NARROWED LIST. A figure that
   // changes because a chip was clicked is not reporting what its label claims.
-  const counts = between(page, 'const live = rows.filter(', 'const handlers = {');
+  // The three sets come from lib/perkListings.js (#4696), which the Offers
+  // overview counts with too; they are taken over `rows`, never `visible`.
+  const counts = between(page, 'const { live, expiring, expired } = perkListingBook(', 'const handlers = {');
   assert.ok(!/\bvisible\b/.test(counts), 'a tile count is reading the chip-narrowed list');
-  for (const decl of ['const live = rows.filter(', 'const expiring = rows.filter(', 'const expired = rows.filter(']) {
-    assert.ok(page.includes(decl), `the strip has lost its count: ${decl}`);
+  assert.ok(page.includes('perkListingBook(rows)'), 'the strip has lost its counts');
+  const book = listings.slice(listings.indexOf('export function perkListingBook('), listings.indexOf('export function perkListingCounts('));
+  for (const decl of ['live: rows.filter(', 'expiring: rows.filter(', 'expired: rows.filter(']) {
+    assert.ok(book.includes(decl), `the shared book has lost its count: ${decl}`);
   }
 });
 
@@ -266,7 +273,7 @@ test('the instrument draws the artboard’s five columns, in its order and at it
 test('the row draws the state, the ratio, and what the expiry took back', () => {
   const cells = cellsOf(INST);
   assert.equal(cells.length, 5, 'the row no longer draws one cell per artboard column');
-  assert.match(cells[0], /text: p\.offer/, 'the first column is no longer the offer');
+  assert.match(cells[0], /text: perkListingName\(p\)/, 'the first column is no longer the offer');
   // The review state rides under the name rather than as a sixth column, so a
   // draft or a paused listing is legible without adding a column the artboard
   // does not draw.

@@ -156,10 +156,15 @@ test('OD9: Done is a course or item completed, an exercise accepted, an exam pas
   assert.equal(hasFinished({ completion: [] }), false, 'a program with no contents has no one finished');
   const done = { completion: [{ subject_kind: 'course', status: 'completed' }, { subject_kind: 'exam', status: 'passed' }] };
   const notYet = { completion: [{ subject_kind: 'course', status: 'completed' }, { subject_kind: 'exercise', status: 'needs_work' }] };
-  const rows = completionRows([{ uid: 'l1', name: 'Founder basics' }, { uid: 'l4', name: 'Fundraising' }], { l1: ready({ learners: [done, notYet] }), l4: failed() });
-  assert.deepEqual(rows.map((r) => [r.state, r.finished ?? null, r.learners ?? null]), [['ready', 1, 2], ['unreadable', null, null]]);
+  assert.equal([done, notYet].filter(hasFinished).length, 1);
+  // D4810: Completion by program comes from one read; the Worker applies OD9 and says which programs it could not read.
+  const programs = [{ uid: 'l1', name: 'Founder basics' }, { uid: 'l4', name: 'Fundraising' }, { uid: 'l9', name: 'Past the cap' }];
+  const rows = completionRows(programs, ready({ programs: [{ uid: 'l1', learners: 2, finished: 1 }], unreadable: ['l4'], capped: true, max: 2 }));
+  assert.deepEqual(rows.map((r) => [r.state, r.finished ?? null, r.learners ?? null]), [['ready', 1, 2], ['unreadable', null, null], ['left_out', null, null]]);
   assert.equal(finishedTotal(rows).state, 'unreadable', 'a program whose learners could not be read makes no total');
+  assert.equal(finishedTotal(rows.filter((r) => r.state !== 'unreadable')).state, 'unreadable', 'nor does one left out past the cap');
   assert.deepEqual(finishedTotal(rows.slice(0, 1)), { state: 'ready', count: 1 });
+  assert.equal(completionRows(programs, failed())[0].state, 'unreadable');
 });
 
 test('Mentor: Ended is the last 30 days from 565’s history, "at least" past a full page; Founders hidden is null-honest', () => {
@@ -294,7 +299,7 @@ function worker(o = {}) {
       { uid: 'u2', name: 'Noa Notyet', enrolled_at: d1(NOW - 8 * DAY), completion: [{ subject_kind: 'course', status: 'completed' }, { subject_kind: 'exercise', status: 'submitted' }] },
     ] } },
     enrolments = { weeks: 12, by_week: [{ week: '2026-10-19', count: 3, to_date: true }], total: 3, programs: [] },
-    learner = null, writes = {},
+    learner = null, writes = {}, completion = null,
   } = o;
   // A fixture is a body, or a function of the query that answers a body or a response.
   const call = (v, ...a) => {
@@ -338,10 +343,12 @@ function worker(o = {}) {
     if (path === '/api/perks') return call(perks);
     if (path === '/api/learning/programs/mine') return call(learning);
     if (path === '/api/learning/programs/mine/enrolments') return call(enrolments);
+    // D4810: the overview's one completion read, OD9 applied as the Worker applies it.
+    if (path === '/api/learning/programs/mine/completion') return call(completion ?? { programs: Object.entries(learners).map(([uid, v]) => ({ uid, learners: v.learners.length, finished: v.learners.filter(hasFinished).length })), unreadable: [], capped: false, max: 50 });
     const one2 = /^\/api\/learning\/programs\/([^/]+)\/learners\/([^/]+)$/.exec(path);
     if (one2) return call(learner || { program: { name: 'Founder basics', region: 'Lisbon' }, contents: [{ subject_kind: 'item', subject_uid: 'i1', title: 'Why validate first', kind: 'video' }, { subject_kind: 'exam', subject_uid: 'x1', title: 'Validation basics' }], learner: { uid: one2[2], name: 'Lea Learner', last_activity_at: d1(NOW - 2 * DAY), completion: [{ subject_kind: 'item', subject_uid: 'i1', status: 'completed', completed_at: d1(NOW - 3 * DAY) }, { subject_kind: 'exam', subject_uid: 'x1', status: 'not_passed', attempts: 2, best_score_percent: 60, passed_at: null }] } });
     const l = /^\/api\/learning\/programs\/([^/]+)\/learners$/.exec(path);
-    if (l) return call(learners[l[1]] ?? { learners: [] });
+    if (l) return call(learners[l[1]] ?? { learners: [] }, qs);
     return never();
   };
 }
@@ -782,4 +789,37 @@ test('D1124 · the header\'s grant badge reads D956\'s field on /:key; a failed 
     assert.equal(unread.textOf('programs-header-grant'), '!Grant unreadable');
     assert.equal(unread.textOf('programs-header-grant-reason'), 'Program grants could not be read.');
   } finally { await unread.close(); }
+});
+
+// ---------------------------------------------------------------------------
+// D4810 (#4810): request volume stays flat as records grow
+// ---------------------------------------------------------------------------
+
+test('D4810: Learning overview reads completion once for 120 programs, never once per program; the frame and the page share one detail read', async () => {
+  const many = Array.from({ length: 120 }, (_, i) => ({ uid: `p${i}`, name: `Program ${String(i).padStart(3, '0')}`, region: null, status: 'published', enrolment: 'open', learners: 3, contents: 2, admins: 1 }));
+  const completion = { programs: many.slice(0, 50).map((p) => ({ uid: p.uid, learners: 3, finished: 1 })), unreadable: [], capped: true, max: 50 };
+  const view = await mounted('/admin/programs/learning', ProgramPage, worker({ learning: { programs: many }, completion }));
+  try {
+    const gets = view.requests.filter((r) => r.method === 'GET').map((r) => r.url.split('?')[0]);
+    assert.equal(gets.filter((u) => u === '/api/learning/programs/mine/completion').length, 1, 'one completion read');
+    assert.equal(gets.filter((u) => /\/learners$/.test(u)).length, 0, 'no learners read per program');
+    assert.equal(gets.filter((u) => u === '/api/admin/programs/learning').length, 1, 'one detail read for the frame and the page');
+    assert.ok(gets.length < 12, `the overview stays a handful of reads: ${gets.length}`);
+    assert.match(view.textOf('programs-learning-completion'), /Only the first 50 published programs by name are counted/);
+    assert.ok(!view.has('programs-tile-finished-value'), 'a capped total is not drawn as complete');
+  } finally { await view.close(); }
+});
+
+test('D4810: People reads one page of learners at a time, with the total, and pages on', async () => {
+  const roster = Array.from({ length: 120 }, (_, i) => ({ uid: `u${i}`, name: `Learner ${String(i).padStart(3, '0')}`, enrolled_at: d1(NOW - DAY), completion: [] }));
+  const learners = { l1: (q) => ({ learners: roster.slice(Number(new URLSearchParams(q).get('offset')) || 0, (Number(new URLSearchParams(q).get('offset')) || 0) + 50), total: 120, limit: 50, offset: Number(new URLSearchParams(q).get('offset')) || 0 }) };
+  const view = await mounted('/admin/programs/learning/people', ProgramPage, worker({ learners }));
+  try {
+    await view.change('programs-learning-pick', { value: 'l1' });
+    assert.ok(view.requests.some((r) => r.url === '/api/learning/programs/l1/learners?limit=50&offset=0'), 'a page, not the roster');
+    assert.equal(view.textOf('programs-learning-learners-count'), '1–50 of 120 enrolled now');
+    await view.click('programs-learning-learners-next');
+    assert.ok(view.requests.some((r) => r.url === '/api/learning/programs/l1/learners?limit=50&offset=50'));
+    assert.equal(view.textOf('programs-learning-learners-count'), '51–100 of 120 enrolled now');
+  } finally { await view.close(); }
 });

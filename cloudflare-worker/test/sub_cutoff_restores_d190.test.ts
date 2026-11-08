@@ -413,8 +413,9 @@ test('service_engagements: an offering\'s sold count errors without 278, and cou
   assert.equal(list.status, 200, 'listing offerings failed after an engagement was recorded');
   const row = (list.body?.items || []).find((o: any) => o.id === 7);
   assert.ok(row, 'the offering that was engaged is not in the list at all');
-  assert.equal(Number(row.sold), 1,
-    'the offering reports a sold count that does not include the engagement just written — a '
+  // `sold` became per-status `requests` in #4696; still a correlated count.
+  assert.equal(Number(row.requests?.requested), 1,
+    'the offering reports a requested count that does not include the engagement just written — a '
     + 'correlated count over a table the write did not reach');
 });
 
