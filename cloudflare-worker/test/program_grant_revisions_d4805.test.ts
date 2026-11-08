@@ -313,12 +313,19 @@ test('7b. the push is durable even when the inline push never got as far as read
   assert.equal(done.body.pushed.ok, false);
   const owed = pending(db);
   assert.equal(owed.length, 1, 'the row was written by the change\'s own batch');
-  assert.deepEqual([owed[0].licence_id, owed[0].code, owed[0].reason, owed[0].attempts], [1, 'fr', 'queued with the change', 0]);
+  // D4686: the inline push that failed to read the licence now records its own failure on that row (the reason
+  // names what failed and the attempt is counted); the row stays, and the next tick works from the licence id.
+  assert.equal(owed[0].licence_id, 1);
+  assert.match(String(owed[0].reason), /could not re-read the licence/);
+  assert.equal(owed[0].attempts, 1);
   assert.ok(log.some((b) => b.some((s) => /INSERT INTO licence_push_pending/.test(s)) && b.some((s) => /UPDATE program_grants SET starts_on/.test(s))), 'queued in the same batch as the change');
 
   const up = branch('ok');
-  const r = await retryPendingLicencePushes({ DB: d1Over(db), BRANCH_FR: up.binding } as any, new Date()) as any;
-  assert.deepEqual([r.tried, r.ok], [1, 1], 'picked up at the next tick, without waiting out the window');
+  // D4686: the failed inline attempt counted, so the throttle holds the row for one window; after it, the tick takes it.
+  const early = await retryPendingLicencePushes({ DB: d1Over(db), BRANCH_FR: up.binding } as any, new Date()) as any;
+  assert.equal(early.tried, 0, 'inside the window it is left alone: a broken binding costs one call per window');
+  const r = await retryPendingLicencePushes({ DB: d1Over(db), BRANCH_FR: up.binding } as any, new Date(Date.now() + 2 * 3600_000)) as any;
+  assert.deepEqual([r.tried, r.ok], [1, 1], 'picked up at the first tick after the window');
   assert.equal(up.calls.length, 1);
   db.close();
 });
