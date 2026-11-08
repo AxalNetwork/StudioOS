@@ -97,6 +97,15 @@ export function migrationNumber(name) {
 //   LEGACY_DUPLICATES the seven prefixes that already exist twice; never more
 export const NUMBERED_CEILING = 799;
 export const LEGACY_DUPLICATES = Object.freeze([11, 68, 118, 228, 229, 230, 259]);
+// The one same-minute pair already on main: #4970 (D4675) and #4991 (D4691) each
+// wrote a migration at 2026-11-07 22:19 UTC and merged an hour apart. A migration
+// on main is never renamed (D269), and the two touch different tables, so the
+// full-name tiebreak orders them safely. Named by file, so a third file in that
+// minute, or any other shared stamp, still fails.
+export const LEGACY_DUPLICATE_STAMPS = Object.freeze([
+  Object.freeze(['202611072219_dsr_close_key.sql', '202611072219_security_events_support_actor.sql']),
+]);
+const isLegacyStampPair = (a, b) => LEGACY_DUPLICATE_STAMPS.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
 const STAMPED = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})_[a-z0-9][a-z0-9_]*\.sql$/;
 const NUMBERED = /^(\d{1,4})_.+\.sql$/;
 
@@ -138,6 +147,7 @@ export function migrationDuplicates(names) {
     const stamp = migrationStamp(name);
     const key = stamp ? `t${stamp}` : `n${migrationNumber(name)}`;
     if (!stamp && LEGACY_DUPLICATES.includes(migrationNumber(name))) continue;
+    if (byKey.has(key) && stamp && isLegacyStampPair(byKey.get(key), name)) continue;
     if (byKey.has(key)) out.push(`${byKey.get(key)} and ${name} share ${stamp ? `the stamp ${stamp}` : `the number ${migrationNumber(name)}`}.`);
     else byKey.set(key, name);
   }
