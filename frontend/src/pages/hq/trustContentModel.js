@@ -26,7 +26,23 @@ export const REFUSALS = {
   certification_fields: 'A certification needs its name, its auditor and the day it was issued.',
   report_required: 'A certification cannot be saved without its auditor\'s report on file.',
   subprocessor_fields: 'A subprocessor needs its name, what it does for us, the data it sees and where it is.',
+  // D4675 — the Worker's own sentences (`CONTENT_REFUSALS`).
+  review_required: 'This Publish does not say what was reviewed. Reload the page and publish again.',
+  changed_since_review: 'Nothing was published. The drafts changed after this dialog opened — another save, discard or Publish. Reload to review what is pending now.',
+  key_conflict: 'This Publish carries a key already used for a different one. Reload the page and publish again.',
 };
+
+/**
+ * D4675 — what a failed Publish says. A refusal (4xx) is certain: nothing was
+ * published. No answer at all, or a server failure, is NOT certain — the batch
+ * may have committed before the answer was lost — so it says so, and Try again
+ * is safe because the dialog resends the same key.
+ */
+export const PUBLISH_UNCONFIRMED = 'Whether this was published could not be confirmed. Try again: the same Publish goes live at most once.';
+export function publishRefusalText(e) {
+  if (!e?.status || e.status >= 500) return PUBLISH_UNCONFIRMED;
+  return refusalText(e, 'It could not be published just now. Nothing was published. Try again.');
+}
 
 /** The day part of a stamp, as written (YYYY-MM-DD), or null. Never a guess. */
 export const dayOf = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);

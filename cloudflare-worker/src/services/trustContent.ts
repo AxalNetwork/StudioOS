@@ -23,6 +23,8 @@
  */
 import type { Env } from '../types';
 import { obligationsForRole } from './trust';
+import { adminAuditStatement } from './adminAudit';
+import { hashEmail } from '../util/hashEmail';
 
 export const BLOCK_KEYS = ['glance', 'security', 'data', 'subprocessors', 'certifications', 'documents', 'disclosure'] as const;
 export type BlockKey = (typeof BLOCK_KEYS)[number];
@@ -77,6 +79,9 @@ export const CONTENT_REFUSALS = {
   not_found: 'There is no such subprocessor.',
   not_removing: 'This subprocessor is not being removed.',
   cannot_remove: 'This subprocessor is already off the list.',
+  review_required: 'This Publish does not say what was reviewed. Reload the page and publish again.',
+  changed_since_review: 'Nothing was published. The drafts changed after this dialog opened — another save, discard or Publish. Reload to review what is pending now.',
+  key_conflict: 'This Publish carries a key already used for a different one. Reload the page and publish again.',
 } as const;
 export type ContentRefusal = keyof typeof CONTENT_REFUSALS;
 
@@ -275,15 +280,112 @@ export type PublishResult = {
   blocks: BlockKey[];
   added: Array<{ uid: string; name: string; starts_at: string }>;
   removed: Array<{ uid: string; name: string }>;
+  /** D4675: true when this answer is the record of an earlier attempt with the same key. */
+  replayed?: boolean;
+};
+
+/**
+ * D4675 — EVERYTHING A PUBLISH WOULD CHANGE, AS ONE STRING SQLite COMPUTES.
+ *
+ * Every draft block (its body, checked date and save stamp) and every drafted
+ * or removing subprocessor (every field the publish copies or reports). Both
+ * the review token the editor carries and the batch's own guard come from this
+ * one expression, so the two cannot be computed differently.
+ */
+const PENDING_FINGERPRINT_SQL =
+  "(SELECT COALESCE((SELECT json_group_array(json_array(key, body_json, checked_at, updated_at, updated_by))"
+  + " FROM (SELECT key, body_json, checked_at, updated_at, updated_by FROM trust_content_blocks"
+  + " WHERE state = 'draft' ORDER BY key)), '[]')"
+  + " || '|' || COALESCE((SELECT json_group_array(json_array(uid, state, name, purpose, data_seen, location, starts_at, updated_at))"
+  + " FROM (SELECT uid, state, name, purpose, data_seen, location, starts_at, updated_at FROM trust_subprocessors"
+  + " WHERE state IN ('draft', 'removing') ORDER BY id)), '[]'))";
+
+const PENDING_FINGERPRINT_READ = 'SELECT ' + PENDING_FINGERPRINT_SQL + ' AS fp';
+
+async function sha256Hex(text: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function pendingFingerprint(env: Env): Promise<string> {
+  const row = await env.DB.prepare(PENDING_FINGERPRINT_READ).first<{ fp: string }>();
+  return String(row?.fp ?? '');
+}
+
+/**
+ * D4675 — the review token for what is pending now. The editor reads it with
+ * the drafts and sends it back with Publish; a Publish whose token is not the
+ * current one publishes nothing, because what the operator reviewed is not
+ * what would go live.
+ */
+export async function pendingReviewToken(env: Env): Promise<string> {
+  return sha256Hex(await pendingFingerprint(env));
+}
+
+/** A Publish key: made once by the editor for one Publish, reused on its retries. */
+export const PUBLISH_KEY_RE = /^[A-Za-z0-9_-]{16,100}$/;
+
+// The first statement of the batch. Its `uid` is NULL — a NOT NULL failure,
+// which rolls the whole batch back — unless the pending set is still exactly
+// the one read before the batch, so the publish is all of what was reviewed
+// or nothing. The request key's unique index refuses a second row for a key.
+const PUBLISH_GUARDED_CHANGE =
+  'INSERT INTO trust_content_changes (uid, published_at, published_by, change_note, blocks_json, subprocessors_json, request_key)'
+  + ' SELECT CASE WHEN ' + PENDING_FINGERPRINT_SQL + ' = ? THEN ? END, ?, ?, ?, ?, ?, ?';
+
+async function changeByKey(env: Env, key: string) {
+  return (await env.DB.prepare(
+    `SELECT uid, published_at, published_by, blocks_json, subprocessors_json FROM trust_content_changes WHERE request_key = ?`,
+  ).bind(key).first<{ uid: string; published_at: string; published_by: number | null; blocks_json: string; subprocessors_json: string }>()) ?? null;
+}
+
+/** The answer an earlier attempt with this key already recorded, or a conflict when it was not this operator's. */
+function replayOf(row: NonNullable<Awaited<ReturnType<typeof changeByKey>>>, userId: number): Ok<PublishResult> | No {
+  if (Number(row.published_by) !== userId) return no('key_conflict');
+  const log = (parseJson(row.subprocessors_json) as Array<{ action: string; uid: string; name: string; starts_at?: string }>) || [];
+  return {
+    ok: true,
+    value: {
+      uid: row.uid, published_at: row.published_at, replayed: true,
+      blocks: ((parseJson(row.blocks_json) as string[]) || []).filter(isBlockKey),
+      added: log.filter((l) => l.action === 'added').map((l) => ({ uid: l.uid, name: l.name, starts_at: String(l.starts_at) })),
+      removed: log.filter((l) => l.action === 'removed').map((l) => ({ uid: l.uid, name: l.name })),
+    },
+  };
+}
+
+export type PublishReview = {
+  /** `pendingReviewToken` as the editor read it. Absent only for callers with no editor (tests of the store itself). */
+  token?: string;
+  /** The editor's key for this Publish. */
+  key?: string;
+  /** Writes the two audit rows in the same batch; the caller has run `ensureAdminAuditLogTable`. */
+  actorEmail?: string;
 };
 
 /**
  * Publish every draft with one note, in one batch. Refuses when there is
- * nothing to publish. Each draft block is copied live as it stands at
- * commit (`INSERT … SELECT`), so a concurrent second Publish finds no draft
- * and copies nothing.
+ * nothing to publish.
+ *
+ * D4675 — WHAT WAS REVIEWED, ALL OF IT, ONCE:
+ *   · `review.token` must be the current pending set's token, or nothing is
+ *     published (`changed_since_review`);
+ *   · the batch's first statement re-checks the pending set inside the
+ *     batch, so a save landing between that check and the batch publishes
+ *     nothing rather than something unreviewed — and the change log never
+ *     names a block this publish did not copy;
+ *   · `review.key` is stored on the change row; a retry with the same key
+ *     answers with that row (`replayed`) instead of "nothing to publish";
+ *   · with `review.actorEmail`, the audit rows are in the same batch.
  */
-export async function publish(env: Env, userId: number, note: string, now = Date.now()): Promise<Ok<PublishResult> | No> {
+export async function publish(env: Env, userId: number, note: string, now = Date.now(), review: PublishReview = {}): Promise<Ok<PublishResult> | No> {
+  if (review.key) {
+    const prior = await changeByKey(env, review.key);
+    if (prior) return replayOf(prior, userId);
+  }
+  const fp = await pendingFingerprint(env);
+  if (review.token !== undefined && review.token !== await sha256Hex(fp)) return no('changed_since_review');
+
   const drafts = ((await env.DB.prepare(`SELECT key FROM trust_content_blocks WHERE state = 'draft'`).all<{ key: string }>()).results || [])
     .map((r) => r.key).filter(isBlockKey);
   const subs = (await env.DB.prepare(
@@ -300,9 +402,8 @@ export async function publish(env: Env, userId: number, note: string, now = Date
   const log = [...added.map((s) => ({ action: 'added', ...s })), ...removed.map((s) => ({ action: 'removed', ...s }))];
 
   const stmts = [
-    env.DB.prepare(
-      `INSERT INTO trust_content_changes (uid, published_at, published_by, change_note, blocks_json, subprocessors_json) VALUES (?, ?, ?, ?, ?, ?)`,
-    ).bind(uid, at, userId, note, JSON.stringify(drafts), JSON.stringify(log)),
+    env.DB.prepare(PUBLISH_GUARDED_CHANGE)
+      .bind(fp, uid, at, userId, note, JSON.stringify(drafts), JSON.stringify(log), review.key ?? null),
   ];
   for (const key of drafts) {
     stmts.push(env.DB.prepare(
@@ -324,8 +425,25 @@ export async function publish(env: Env, userId: number, note: string, now = Date
         WHERE uid = ? AND state = 'removing'`,
     ).bind(at, uid, s.uid));
   }
-  await env.DB.batch(stmts);
-  return { ok: true, value: { uid, published_at: at, blocks: drafts, added, removed } };
+  if (review.actorEmail !== undefined) {
+    const details = { change: uid, blocks: drafts, subprocessors_added: added.length, subprocessors_removed: removed.length };
+    stmts.push(adminAuditStatement(env, userId, 'trust_center.published', details));
+    stmts.push(env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`)
+      .bind('trust_center.published', JSON.stringify(details), await hashEmail(review.actorEmail), userId));
+  }
+  try {
+    await env.DB.batch(stmts);
+  } catch (e) {
+    // The batch rolled back whole. Say which of the three it was.
+    if (review.key) {
+      const raced = await changeByKey(env, review.key).catch(() => null);
+      if (raced) return replayOf(raced, userId);
+    }
+    const nowFp = await pendingFingerprint(env).catch(() => null);
+    if (nowFp !== null && nowFp !== fp) return no('changed_since_review');
+    throw e;
+  }
+  return { ok: true, value: { uid, published_at: at, blocks: drafts, added, removed, replayed: false } };
 }
 
 // ---------------------------------------------------------------------------

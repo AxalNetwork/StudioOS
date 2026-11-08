@@ -39,7 +39,9 @@ import { logAdminAction } from '../services/adminAudit';
 import {
   BLOCK_KEYS, BLOCK_LABELS, CONTENT_REFUSALS, type ContentRefusal, allSubprocessors, blocksIn, changes, isBlockKey,
   newUid, parseBody, parseCheckedAt, parseNote, parseSubprocessor, publish, reportOnFile,
+  pendingReviewToken, PUBLISH_KEY_RE,
 } from '../services/trustContent';
+import { ensureAdminAuditLogTable } from './admin';
 import { sendSubprocessorNotices, subscriberCounts } from '../services/subprocessorNotices';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -56,6 +58,10 @@ const audit = (env: Env, admin: { id: number; email: string }, action: string, d
 r.get('/', async (c) => {
   try {
     await requireSuperAdmin(c);
+    // D4675 — the review token is read FIRST: a save landing during the reads
+    // below then makes the token stale, which refuses a Publish of drafts the
+    // page did not show, instead of letting one through.
+    const pendingToken = await pendingReviewToken(c.env);
     const [published, drafts, subprocessors, reports, log, subscribers] = await Promise.all([
       blocksIn(c.env, 'published'),
       blocksIn(c.env, 'draft'),
@@ -73,6 +79,7 @@ r.get('/', async (c) => {
       reports: reports.results || [],
       changes: log,
       subscribers,
+      pending_token: pendingToken,
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -225,12 +232,23 @@ r.get('/reports/:uid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D4675 — PUBLISH WHAT WAS REVIEWED, ONCE. The body carries the review token
+ * the editor read (`pending_token`) and a key the dialog made for this
+ * Publish. Drafts that changed since are refused whole; a retry of the same
+ * key answers with the change it already recorded; the audit rows are in the
+ * publish batch. The notice emails to subscribers are queued after the
+ * commit, and the response says queued, never sent.
+ */
 r.post('/publish', async (c) => {
   try {
     const admin = await requireSuperAdminWriteBar(c);
     const raw = await c.req.json().catch(() => null) as Record<string, unknown> | null;
     const note = parseNote(raw?.note);
     if (!note.ok) return refuse(c, note.code);
+    const token = typeof raw?.pending_token === 'string' ? raw.pending_token : '';
+    const key = typeof raw?.publish_key === 'string' ? raw.publish_key : '';
+    if (!/^[0-9a-f]{64}$/.test(token) || !PUBLISH_KEY_RE.test(key)) return refuse(c, 'review_required');
     // A certification whose report left the store since it was saved is refused here too.
     const drafts = await blocksIn(c.env, 'draft');
     const certs = drafts.certifications;
@@ -238,17 +256,28 @@ r.post('/publish', async (c) => {
       const again = await parseBody('certifications', certs.body, (uid) => reportOnFile(c.env, uid));
       if (!again.ok) return refuse(c, again.code);
     }
-    const out = await publish(c.env, admin.id, note.value);
+    await ensureAdminAuditLogTable(c.env);
+    let out;
+    try {
+      out = await publish(c.env, admin.id, note.value, Date.now(), { token, key, actorEmail: admin.email });
+    } catch (e) {
+      console.warn('[trust-center] publish batch failed', (e as Error).message);
+      return c.json({
+        error: 'not_confirmed', code: 'not_confirmed',
+        message: 'The Publish could not be confirmed. As far as this server can tell nothing was published; '
+          + 'trying again publishes it at most once.',
+      }, 503);
+    }
     if (!out.ok) return refuse(c, out.code, 409);
-    await audit(c.env, admin, 'trust_center.published', {
-      change: out.value.uid, blocks: out.value.blocks,
-      subprocessors_added: out.value.added.length, subprocessors_removed: out.value.removed.length,
-    });
+    let notices: 'none' | 'queued' = 'none';
+    // On a replay too: the sweep claims each delivery once, so running it
+    // again finishes one an interrupted first attempt left undone.
     if (out.value.added.length) {
       const sweep = sendSubprocessorNotices(c.env).catch(() => { console.warn('[trust-center] notice sweep failed'); });
       try { c.executionCtx.waitUntil(sweep); } catch { await sweep; }
+      notices = 'queued';
     }
-    return c.json({ ok: true, ...out.value });
+    return c.json({ ok: true, ...out.value, notices });
   } catch (e) { return mapError(c, e); }
 });
 

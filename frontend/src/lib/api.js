@@ -3606,10 +3606,21 @@ export const api = {
   // subject's own act, recorded when they cancel. `fulfilled` records that the
   // MANUAL erasure was carried out — this platform performs none, and the
   // server's own message says so rather than letting the word imply otherwise.
-  hqCloseDsrRequest: (userId, outcome, reason) =>
+  //
+  // D4675 — `review` names the exact request the operator reviewed
+  // (`requested_at`, `request_id` from the list) and the `close_key` the page
+  // made once for this close and reuses on every retry, so a retry is recorded
+  // once and a close never lands on a request nobody reviewed.
+  hqCloseDsrRequest: (userId, outcome, reason, review) =>
     request(`/admin/security/dsr/${encodeURIComponent(userId)}/close`, {
       method: 'POST',
-      body: JSON.stringify({ outcome, reason }),
+      body: JSON.stringify({
+        outcome,
+        reason,
+        requested_at: review?.requested_at,
+        request_id: review?.request_id ?? null,
+        close_key: review?.close_key,
+      }),
     }),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
   licenceTerritories: () => request('/admin/licences/territories'),

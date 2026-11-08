@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ShieldCheck, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { newOpKey } from '../../lib/opKey';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import SecurityTabs from './security/SecurityTabs.jsx';
@@ -530,6 +531,14 @@ export function BackupDr({ block, unreadable }) {
   );
 }
 
+/** The write bar's refusal, in words the operator can act on (D4675 keeps it for the DSR close). */
+export function writeBarMessage(err) {
+  const msg = String(err?.message || err || 'Request failed');
+  return msg === 'TOTP required'
+    ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
+    : msg;
+}
+
 /**
  * D168 — one open erasure request, and the two outcomes HQ may record.
  *
@@ -548,23 +557,42 @@ export function BackupDr({ block, unreadable }) {
  * it deleted the account would be the `still_an_admin` mistake D134 named, in
  * the one place where the lie is also a compliance record.
  */
-function DsrClose({ row, onDone }) {
+export function DsrClose({ row, onDone }) {
   const [outcome, setOutcome] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // D4675 — ONE KEY PER CLOSE, resent on every retry of it, so a retry after a
+  // lost response or a step-up prompt is recorded once. A new outcome is a
+  // different close and gets a new key.
+  const [closeKey, setCloseKey] = useState(newOpKey);
+  // Set when the server recorded nothing because the request changed or was
+  // closed first: the row is out of date, and only a reload shows what is open.
+  const [outdated, setOutdated] = useState(false);
+  const choose = (next) => { setOutcome(next); setCloseKey(newOpKey()); setError(null); setOutdated(false); };
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api.hqCloseDsrRequest(row.id, outcome, reason.trim());
+      const res = await api.hqCloseDsrRequest(row.id, outcome, reason.trim(), {
+        requested_at: row.requested_at,
+        request_id: row.request_id ?? null,
+        close_key: closeKey,
+      });
+      // 202: sent, and not confirmed. The key is kept, so Try again is safe.
+      if (res?.code === 'outcome_unconfirmed') { setError(res.error); return; }
       onDone?.();
     } catch (err) {
-      const msg = String(err?.message || err || 'Request failed');
-      setError(msg === 'TOTP required'
-        ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
-        : msg);
+      if (err?.code === 'stale_request' || err?.code === 'no_open_request') {
+        setOutdated(true);
+        setError(writeBarMessage(err));
+      } else if (err?.code !== 'ledger_unavailable' && (!err?.status || err.status >= 500)) {
+        // No answer, or the server could not confirm: say unknown, not failed.
+        setError(`${writeBarMessage(err)} Whether it was recorded is not confirmed. Try again: the same close is recorded at most once.`);
+      } else {
+        setError(writeBarMessage(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -574,14 +602,14 @@ function DsrClose({ row, onDone }) {
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="hq-dsr-actions">
         <button
           type="button"
-          onClick={() => setOutcome('fulfilled')}
+          onClick={() => choose('fulfilled')}
           className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
         >
           Record as fulfilled
         </button>
         <button
           type="button"
-          onClick={() => setOutcome('denied')}
+          onClick={() => choose('denied')}
           className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
         >
           Record as denied
@@ -607,18 +635,28 @@ function DsrClose({ row, onDone }) {
           className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12px] font-normal text-axal-ink dark:bg-gray-900"
         />
       </label>
-      {error && <p role="alert" className="text-[11.5px] text-red-700 dark:text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-[11.5px] text-red-700 dark:text-red-300" data-testid="hq-dsr-close-error">{error}</p>}
       <div className="flex items-center gap-1.5">
+        {outdated && (
+          <button
+            type="button"
+            onClick={() => onDone?.()}
+            className="rounded-md border border-axal-hairline bg-white px-2.5 py-1 text-[11px] font-bold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+            data-testid="hq-dsr-reload"
+          >
+            Reload requests
+          </button>
+        )}
         <button
           type="submit"
-          disabled={busy || reason.trim().length < 8}
+          disabled={busy || outdated || reason.trim().length < 8}
           className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-amber-700 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500 dark:bg-gray-900 dark:text-amber-300 dark:hover:bg-amber-950/30"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : null} Close as {outcome}
         </button>
         <button
           type="button"
-          onClick={() => { setOutcome(''); setError(null); }}
+          onClick={() => choose('')}
           className="rounded-md px-2 py-1 text-[11px] font-semibold text-axal-faint hover:text-axal-ink dark:hover:text-gray-100"
         >
           Cancel
@@ -1114,7 +1152,7 @@ export function SecurityConsole({
                 <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
                   <div className="flex items-center justify-between gap-3">
                     <DsrSubject row={d} />
-                    <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
+                    <span title={d.deadline_at ? `The clock runs out ${String(d.deadline_at).slice(0, 16).replace('T', ' ')} UTC: ${data.dsr?.clock_days} × 24 hours from receipt.` : undefined} className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
                       {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
                     </span>
                   </div>

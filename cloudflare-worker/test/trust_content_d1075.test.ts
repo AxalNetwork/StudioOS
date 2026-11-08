@@ -123,6 +123,13 @@ function harness(db = fixture(), extra: Record<string, unknown> = {}) {
 }
 
 const TC = '/api/admin/security/trust-center';
+let publishSeq = 0;
+/** D4675: a Publish as the editor sends it — the review token it read and one key for this Publish. */
+async function reviewed(h: { call: (...a: any[]) => Promise<any> }, body: Record<string, unknown>) {
+  const read = await h.call(SUPER, 'GET', TC);
+  publishSeq += 1;
+  return { ...body, pending_token: read.body?.pending_token, publish_key: `test-publish-${String(publishSeq).padStart(8, '0')}` };
+}
 const lines = (text: string) => ({ intro: null, groups: [{ title: 'Signing in', lines: [{ text, recorded: true, checked_at: today() }] }] });
 const audits = (db: DatabaseSync) => (db.prepare(`SELECT action FROM admin_audit_log ORDER BY id`).all() as any[]).map((r) => r.action as string);
 
@@ -156,7 +163,7 @@ test('a draft is never served publicly; Publish serves it with its checked date 
     for (const k of BLOCK_KEYS) assert.ok(k in pub.body.blocks, k);
     assert.deepEqual(pub.body.changes.items, []);
 
-    const done = await h.call(SUPER, 'POST', `${TC}/publish`, { note: NOTE });
+    const done = await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: NOTE }));
     assert.equal(done.status, 200, done.text);
     assert.deepEqual(done.body.blocks, ['security']);
 
@@ -182,10 +189,10 @@ test('a draft is never served publicly; Publish serves it with its checked date 
 test('Publish without a note, with a short one, or with nothing drafted is refused', async () => {
   const h = harness();
   try {
-    assert.equal((await h.call(SUPER, 'POST', `${TC}/publish`, { note: NOTE })).body.code, 'nothing_to_publish');
+    assert.equal((await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: NOTE }))).body.code, 'nothing_to_publish');
     await h.call(SUPER, 'PUT', `${TC}/blocks/data`, { body: lines('No third-party analytics.') });
     for (const note of [undefined, '', 'too short', 'x'.repeat(1001)]) {
-      const r = await h.call(SUPER, 'POST', `${TC}/publish`, { note });
+      const r = await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note }));
       assert.equal(r.status, 400, String(note));
       assert.equal(r.body.code, 'note_required');
     }
@@ -221,7 +228,7 @@ test('a certification cannot be saved without its auditor\'s report on file; vis
 
     const ok = await h.call(SUPER, 'PUT', `${TC}/blocks/certifications`, { body: cert(up.body.uid) });
     assert.equal(ok.status, 200, ok.text);
-    await h.call(SUPER, 'POST', `${TC}/publish`, { note: 'Certifications: Example Standard added.' });
+    await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: 'Certifications: Example Standard added.' }));
     const item = (await h.call(null, 'GET', '/api/public/trust')).body.blocks.certifications.body.items[0];
     assert.equal(item.report_on_file, true);
     assert.equal('report_uid' in item, false);
@@ -240,7 +247,7 @@ test('only a Super Admin reads or writes, a write needs a recent step-up, and ev
     for (const who of [PLAIN_ADMIN, MEMBER]) {
       assert.equal((await h.call(who, 'GET', TC)).status, 403, `read ${who}`);
       assert.equal((await h.call(who, 'PUT', `${TC}/blocks/security`, { body: lines('x') })).status, 403, `write ${who}`);
-      assert.equal((await h.call(who, 'POST', `${TC}/publish`, { note: NOTE })).status, 403, `publish ${who}`);
+      assert.equal((await h.call(who, 'POST', `${TC}/publish`, await reviewed(h, { note: NOTE }))).status, 403, `publish ${who}`);
     }
     assert.equal((await h.call(null, 'GET', TC)).status, 401);
     const stale = await h.call(STALE_SUPER, 'PUT', `${TC}/blocks/security`, { body: lines('x') });
@@ -255,7 +262,7 @@ test('only a Super Admin reads or writes, a write needs a recent step-up, and ev
     const sub = await h.call(SUPER, 'POST', `${TC}/subprocessors`, { name: 'Vendor F', purpose: 'Error monitoring', data: 'Error reports', location: 'United States' });
     await h.call(SUPER, 'PATCH', `${TC}/subprocessors/${sub.body.uid}`, { purpose: 'Error monitoring and alerts' });
     await h.call(SUPER, 'POST', `${TC}/reports`, PDF);
-    await h.call(SUPER, 'POST', `${TC}/publish`, { note: NOTE });
+    await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: NOTE }));
     await h.call(SUPER, 'DELETE', `${TC}/subprocessors/${sub.body.uid}`);
     await h.call(SUPER, 'POST', `${TC}/subprocessors/${sub.body.uid}/keep`);
     assert.deepEqual(audits(h.db), [
@@ -279,7 +286,7 @@ test('a new subprocessor is a draft until Publish, then starts ten days later; r
     assert.equal((await h.call(SUPER, 'POST', `${TC}/subprocessors`, { name: 'Vendor G' })).body.code, 'subprocessor_fields');
     assert.deepEqual((await h.call(null, 'GET', '/api/public/trust')).body.subprocessors.items, []);
 
-    const done = await h.call(SUPER, 'POST', `${TC}/publish`, { note: 'Subprocessors: Vendor F added for error monitoring.' });
+    const done = await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: 'Subprocessors: Vendor F added for error monitoring.' }));
     const start = new Date(Date.parse(`${today()}T00:00:00Z`) + NOTICE_DAYS * 86_400_000).toISOString().slice(0, 10);
     assert.deepEqual(done.body.added, [{ uid: sub.body.uid, name: 'Vendor F', starts_at: start }]);
     let listed = (await h.call(null, 'GET', '/api/public/trust')).body.subprocessors;
@@ -293,7 +300,7 @@ test('a new subprocessor is a draft until Publish, then starts ten days later; r
     await h.call(SUPER, 'DELETE', `${TC}/subprocessors/${sub.body.uid}`);
     listed = (await h.call(null, 'GET', '/api/public/trust')).body.subprocessors;
     assert.equal(listed.items.length, 1, 'still listed until the removal is published');
-    await h.call(SUPER, 'POST', `${TC}/publish`, { note: 'Subprocessors: Vendor F removed.' });
+    await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: 'Subprocessors: Vendor F removed.' }));
     assert.deepEqual((await h.call(null, 'GET', '/api/public/trust')).body.subprocessors.items, []);
   } finally { h.restore(); }
 });
@@ -334,7 +341,7 @@ test('subscribe needs a confirm; an unconfirmed address is never sent to; unsubs
 
     await h.call(SUPER, 'POST', `${TC}/subprocessors`, { name: 'Vendor F', purpose: 'Error monitoring', data: 'Error reports', location: 'United States' });
     h.mails.length = 0;
-    await h.call(SUPER, 'POST', `${TC}/publish`, { note: 'Subprocessors: Vendor F added for error monitoring.' });
+    await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: 'Subprocessors: Vendor F added for error monitoring.' }));
     assert.equal(h.mails.length, 1, 'one notice: the confirmed address only');
     assert.equal(h.mails[0].to, 'ana@example.test');
     assert.ok(h.mails[0].text.includes('Vendor F'));
@@ -350,7 +357,7 @@ test('subscribe needs a confirm; an unconfirmed address is never sent to; unsubs
 
     await h.call(SUPER, 'POST', `${TC}/subprocessors`, { name: 'Vendor G', purpose: 'Support routing', data: 'Tickets', location: 'United States' });
     h.mails.length = 0;
-    await h.call(SUPER, 'POST', `${TC}/publish`, { note: 'Subprocessors: Vendor G added for support.' });
+    await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: 'Subprocessors: Vendor G added for support.' }));
     assert.equal(h.mails.length, 0, 'an unsubscribed address is never sent to');
   } finally { h.restore(); }
 });
@@ -360,7 +367,7 @@ test('without mail credentials no notice is claimed, so it goes once they are se
   try {
     h.db.prepare(`INSERT INTO subprocessor_subscribers (uid, email_hash, email_enc, status, confirmed_at) VALUES ('sps_00000000000000000001', 'h1', 'v1.x', 'confirmed', datetime('now'))`).run();
     await h.call(SUPER, 'POST', `${TC}/subprocessors`, { name: 'Vendor F', purpose: 'Error monitoring', data: 'Error reports', location: 'United States' });
-    await h.call(SUPER, 'POST', `${TC}/publish`, { note: 'Subprocessors: Vendor F added for error monitoring.' });
+    await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: 'Subprocessors: Vendor F added for error monitoring.' }));
     assert.equal((await sendSubprocessorNotices(h.env as any)).unconfigured, true);
     assert.equal(h.db.prepare('SELECT COUNT(*) AS n FROM subprocessor_notice_deliveries').get()!.n, 0);
   } finally { h.restore(); }
@@ -372,7 +379,7 @@ test('a part that cannot be read says so, and the rest of the read still answers
   const h = harness();
   try {
     await h.call(SUPER, 'PUT', `${TC}/blocks/glance`, { body: lines('Facts we can show.') });
-    await h.call(SUPER, 'POST', `${TC}/publish`, { note: 'At a glance: first published.' });
+    await h.call(SUPER, 'POST', `${TC}/publish`, await reviewed(h, { note: 'At a glance: first published.' }));
     h.db.exec('DROP TABLE subprocessor_notice_deliveries; DROP TABLE trust_subprocessors');
     const r = await h.call(null, 'GET', '/api/public/trust');
     assert.equal(r.status, 200);
