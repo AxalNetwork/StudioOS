@@ -34,6 +34,10 @@ export const COVERAGE_SORTS = [
  * #4700 — `items` is the summary's coverage (every licence that holds a
  * country) and `renewals` its soonest renewals with their total, both over the
  * whole ledger rather than the page on screen.
+ *
+ * D4819 (#4819) — the grid opens behind the ledger's one-line coverage
+ * (`LedgerZero.jsx`'s `CoverageLine`). Without `renewals` (an empty ledger)
+ * the renewal pipeline is not drawn: empty renewal analytics do not lead.
  */
 export function Coverage({ items, renewals, onOpen }) {
   const { cells, held_active: active, held_suspended: suspended, free, outside_eu: outside } =
@@ -49,7 +53,7 @@ export function Coverage({ items, renewals, onOpen }) {
   };
 
   return (
-    <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]" data-testid="hq-coverage">
+    <div className={`mt-4 grid gap-4 ${renewals === undefined ? '' : 'lg:grid-cols-[minmax(0,1fr)_320px]'}`} data-testid="hq-coverage">
       <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">EU territory coverage</h2>
@@ -129,6 +133,7 @@ export function Coverage({ items, renewals, onOpen }) {
         </p>
       </div>
 
+      {renewals !== undefined && (
       <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Renewal pipeline</h2>
         {pipeline.length === 0 ? (
@@ -161,6 +166,7 @@ export function Coverage({ items, renewals, onOpen }) {
           </p>
         )}
       </div>
+      )}
     </div>
   );
 }
