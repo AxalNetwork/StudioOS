@@ -31,11 +31,11 @@ export function EmailAction({ person, from = null, className = BTN, onOpen = nul
 }
 
 /** A row of single-choice chips. */
-export function Chips({ options, value, onChange, label, testId }) {
+export function Chips({ options, value, onChange, label, testId, disabled = false }) {
   return <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5" data-testid={testId}>
     {options.map((o) => {
       const on = o.value === value;
-      return <button key={o.value} type="button" role="radio" aria-checked={on} onClick={() => onChange(o.value)}
+      return <button key={o.value} type="button" role="radio" aria-checked={on} disabled={disabled} onClick={() => onChange(o.value)}
         className={`min-h-[30px] rounded-axal-pill border px-3 text-[12.5px] font-semibold max-sm:min-h-[44px] ${on
           ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300'
           : 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`}>{o.label}</button>;

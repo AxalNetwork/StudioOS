@@ -9,7 +9,7 @@
  *   GET  /:key                                     the registry row and the published playbook; a Super Admin also gets the draft
  *   PATCH /:key                                    purpose, who, join_method, status (requireSuperAdmin)
  *   PUT  /:key/playbook/sections/:section          edit the draft's section (requireSuperAdmin)
- *   POST /:key/playbook/publish                    the draft becomes the next version (requireSuperAdmin)
+ *   POST /:key/playbook/publish                    { expected_hash } the draft the reviewer saw becomes the next version (requireSuperAdmin)
  *   GET  /:key/activity?before=&limit=             the program's activity, newest first (requireAdmin)
  *   POST /:key/export                              D1124: the page's Download (CSV), counts only, logged (requireAdmin)
  *   PUT  /:key/grantable                           Offer to studios: { grantable, reason } (requireSuperAdminWriteBar, D956)
@@ -194,7 +194,8 @@ r.put('/:key/playbook/sections/:section', async (c) => {
 r.post('/:key/playbook/publish', async (c) => {
   try {
     const user = await requireSuperAdmin(c);
-    return c.json(await publishDraft(c.env, c.req.param('key'), actorOf(user)));
+    const b = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    return c.json(await publishDraft(c.env, c.req.param('key'), actorOf(user), b?.expected_hash));
   } catch (e) {
     return answer(c, e);
   }

@@ -283,3 +283,14 @@ export function stateTiles(ledger) {
     void_sessions: s.void_sessions ?? 0,
   };
 }
+
+/**
+ * #4713 (D4713): whether the note editor holds text that is not filed — the
+ * advisor typed or drafted something that differs from the stored note for the
+ * period shown. Resolved (filed or discarded) before the period changes.
+ */
+export function noteIsDirty(note, draft) {
+  const typed = String(draft ?? '').trim();
+  if (!typed) return false;
+  return typed !== String(note?.body ?? '').trim();
+}

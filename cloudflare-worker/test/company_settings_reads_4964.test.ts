@@ -147,23 +147,23 @@ test('regionCodesOf and regionsOf: aliases fold, case and punctuation do not mat
 
 // ── the other matching fields ─────────────────────────────────────────────
 
-test('revenue is a band, links must open, the count is whole, prose is bounded: each refused before any write', async () => {
+test('links must open, the count is whole, prose is bounded: each refused before any write', async () => {
   const db = fixture(0); const env = envOf(d1Over(db));
+  // D4962's contract, which this route now shares: 400 with `code`, revenue is bounded text, prose holds 1,000 characters.
   const cases: Array<[Record<string, unknown>, string]> = [
-    [{ revenue_range: '£2m' }, 'revenue_range_invalid'],
     [{ website: 'javascript:alert(1)' }, 'website_invalid'],
     [{ website: 'northwind' }, 'website_invalid'],
-    [{ linkedin_url: 'https://example.com/northwind' }, 'linkedin_invalid'],
+    [{ linkedin_url: 'https://example.com/northwind' }, 'linkedin_url_invalid'],
     [{ employee_count: -1 }, 'employee_count_invalid'],
     [{ employee_count: 2.5 }, 'employee_count_invalid'],
     [{ employee_count: 'ten' }, 'employee_count_invalid'],
-    [{ current_products: 'x'.repeat(501) }, 'prose_too_long'],
-    [{ expansion_goals: 'x'.repeat(501) }, 'prose_too_long'],
+    [{ current_products: 'x'.repeat(1001) }, 'current_products_too_long'],
+    [{ expansion_goals: 'x'.repeat(1001) }, 'expansion_goals_too_long'],
   ];
   for (const [body, code] of cases) {
     const r = await call(env, ADA, 'PATCH', GET, body);
-    assert.deepEqual([r.status, r.body.error], [422, code], JSON.stringify(body).slice(0, 80));
-    assert.equal(typeof r.body.message, 'string');
+    assert.deepEqual([r.status, r.body.code], [400, code], JSON.stringify(body).slice(0, 80));
+    assert.equal(typeof r.body.detail, 'string');
   }
   assert.equal((db.prepare('SELECT profile_version FROM company_profiles WHERE id = ?').get(NORTH) as any).profile_version, 1, 'nothing was written');
   const ok = await call(env, ADA, 'PATCH', GET, {

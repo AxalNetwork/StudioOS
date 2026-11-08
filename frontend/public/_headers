@@ -43,6 +43,11 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), camera=(self), microphone=(self), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()
 
+# D4582: the sign-in page is not indexed. The same directive is in the page's own head (ogRegistry.js, `robots`);
+# this header is the copy a crawler reads without parsing HTML, and `scripts/check-spa-live.mjs` asserts it.
+/login
+  X-Robots-Tag: noindex, follow
+
 # NO Content-Security-Policy here, and that is a decision rather than an
 # omission. The Worker's CSP is nonce-based and generated per request, which a
 # static header file cannot reproduce. index.html carries an inline boot

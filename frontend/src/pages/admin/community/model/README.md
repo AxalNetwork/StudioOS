@@ -18,15 +18,18 @@ place.
   worker's default too.
 - `constants.js` — the page's fixed words and numbers.
 - `queues.js` — the two review queues, Waiting on you's counts, the oldest wait
-  and Needs a decision.
+  and Needs your attention (D4820: Overdue first, five rows, and `clear`).
 - `events.js` — the Events card: show-up, Next up, the funnel, the waitlists,
   events by type.
 - `jobs.js` — the Jobs card.
 - `people.js` — circles and the roster.
 - `activity.js` — the weekly chart, its sentence, and Who takes part.
 - `wellbeing.js` — experts, bookings and the check-in band.
-- `page.js` — the eight tiles, the consoles strip, and whether the page failed
-  or is empty.
+- `page.js` — the eight figures, D4820's four KPIs (`buildKpis`), Manage
+  Community's figures, and whether the page failed.
+- `empty.js` — D4820: whether Community is genuinely empty
+  (`isEmptyCommunity`; an unreadable source is never empty), and the one-line
+  collapses of each card with nothing to draw.
 
 ## The rules
 

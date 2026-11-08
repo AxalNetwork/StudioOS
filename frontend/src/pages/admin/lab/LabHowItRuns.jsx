@@ -8,15 +8,15 @@ import { refusalText } from './labDesksModel';
 import { LAB_PATH } from './labModel';
 import { CALENDAR, CHECKLIST, TOOLS, sectionsOf, stamp, requirePlaybook } from './labOperationsModel';
 
-function Edit({ section, publish, onClose, changed }) {
+function Edit({ section, publish, draftHash, onClose, changed }) {
   const [title, setTitle] = useState(section?.title || '');
   const [body, setBody] = useState(section?.body || '');
   const w = useWrite(changed, {}, refusalText);
   return <Dialog title={publish ? 'Publish the playbook?' : `Edit ${section.title}`} sub={publish
     ? 'This saves a new published version for every admin. The previous version stays on record.'
     : 'This changes the draft only. Admins keep reading the published version until you publish. Calendar wording does not change the Lab’s clock.'}
-    w={w} onClose={onClose} testId="lab-playbook-dialog" action={publish ? 'Publish changes' : 'Save draft'} disabled={!publish && (!title.trim() || title.length > 120 || body.length > 5000)}
-    onAction={() => w.run(() => publish ? labOperationsApi.publish() : labOperationsApi.editSection(section.key, { title, body: body.trim() || null }))}
+    w={w} onClose={onClose} testId="lab-playbook-dialog" action={publish ? 'Publish changes' : 'Save draft'} disabled={publish ? !draftHash : (!title.trim() || title.length > 120 || body.length > 5000)}
+    onAction={() => w.run(() => publish ? labOperationsApi.publish(draftHash) : labOperationsApi.editSection(section.key, { title, body: body.trim() || null }))}
     done={publish ? 'The playbook was published.' : 'The draft was saved. It is not published yet.'}>
     {!publish && <><Field label="Title"><input className={INPUT} value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} data-testid="lab-playbook-title" disabled={w.busy || !!w.reply} /></Field>
       <Field label="Section text"><textarea className={`${INPUT} min-h-[180px] py-2`} value={body} maxLength={5000} onChange={(e) => setBody(e.target.value)} data-testid="lab-playbook-body" disabled={w.busy || !!w.reply} /></Field></>}
@@ -45,7 +45,7 @@ export default function LabHowItRuns({ superAdmin = false }) {
           {superAdmin && <div className="flex flex-wrap items-center gap-2">
             <button className={actionGhost} onClick={() => setDraft(!draft)} data-testid="lab-playbook-view">{draft ? 'Read published version' : 'Read and edit draft'}</button>
             <span className={SUB}>Draft edited: {stamp(data.draft?.edited_at)}</span>
-            <button className={actionPrimary} disabled={!data.draft?.differs || read.status !== 'ready'} onClick={() => setDialog({ publish: true })} data-testid="lab-playbook-publish">Publish changes</button>
+            <button className={actionPrimary} disabled={!data.draft?.differs || read.status !== 'ready'} onClick={() => setDialog({ publish: true, draftHash: typeof data.draft?.hash === 'string' ? data.draft.hash : null })} data-testid="lab-playbook-publish">Publish changes</button>
           </div>}</>}
       </section>
       {sections.map((s) => <section id={`lab-playbook-${s.key}`} key={s.key} className={`${CARD} flex flex-col gap-3 p-4`}>

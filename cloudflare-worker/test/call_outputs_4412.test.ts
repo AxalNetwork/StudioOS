@@ -91,7 +91,7 @@ function setup(reply?: (model: string, input: any) => any) {
  for (const column of ['quote_consent INTEGER','transcript TEXT','transcribed_at TEXT','transcribed_by_model TEXT']) {
   if (!w.db.prepare('PRAGMA table_info(discovery_interviews)').all().some((r: any) => r.name === column.split(' ')[0])) w.db.exec(`ALTER TABLE discovery_interviews ADD COLUMN ${column}`);
  }
- for (const [table, columns] of [['interview_sessions',['submitted_via TEXT','call_provider TEXT','meeting_url TEXT','client_key TEXT']], ['discovery_interviews',['stage TEXT','channel TEXT']]]) {
+ for (const [table, columns] of [['interview_sessions',['submitted_via TEXT','call_provider TEXT','meeting_url TEXT','client_key TEXT','setup_complete_at TEXT']], ['discovery_interviews',['stage TEXT','channel TEXT']]]) {
   for (const col of columns) if (!w.db.prepare(`PRAGMA table_info(${table})`).all().some((r: any) => r.name === col.split(' ')[0])) w.db.exec(`ALTER TABLE ${table} ADD COLUMN ${col}`);
  }
  setFixtureAllowance(w.db, 10000000);

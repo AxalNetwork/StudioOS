@@ -39,6 +39,16 @@ function slotDto(s: SlotRow, taken = 0): any {
     is_cancelled: !!s.is_cancelled, created_at: s.created_at,
   };
 }
+/**
+ * #4715 — a slot as anyone but its partner sees it. The meeting link and the
+ * partner's slot notes are for the partner and for a founder whose booking on
+ * the slot was confirmed; to everyone else a slot says only whether it has a
+ * link (`has_meeting_link`). The booking page reads neither field.
+ */
+function publicSlotDto(s: SlotRow, taken = 0): any {
+  const { meeting_url: _url, notes: _notes, ...shown } = slotDto(s, taken);
+  return { ...shown, has_meeting_link: !!s.meeting_url };
+}
 // The booking row itself carries no times: `starts_at` / `ends_at` /
 // `meeting_url` live on `partner_office_hour_slots`. List endpoints LEFT JOIN
 // the slot and pass those three through so the founder-facing page can render
@@ -55,6 +65,20 @@ type BookingWithSlotRow = BookingRow & {
 };
 function bookingDto(b: BookingWithSlotRow): any {
   return { ...b, is_cancelled: undefined };
+}
+/**
+ * #4715 — a booking as its founder reads it. The meeting link is the
+ * partner's slot URL; the founder holds it once the partner has confirmed
+ * (or the session is done), the same rule as the slot read. Before that, and
+ * after a cancel or a no-show, the row says only whether a link exists.
+ */
+const LINK_HELD = new Set(['confirmed', 'completed']);
+function founderBookingDto(b: BookingWithSlotRow): any {
+  const dto = bookingDto(b);
+  const has = !!b.meeting_url;
+  if (LINK_HELD.has(String(b.status))) return { ...dto, has_meeting_link: has };
+  const { meeting_url: _url, ...rest } = dto;
+  return { ...rest, has_meeting_link: has };
 }
 
 async function takenForSlot(env: Env, slotId: number): Promise<number> {
@@ -118,7 +142,7 @@ r.get('/me/slots', async (c) => {
 
 r.get('/partners/:uid/slots', async (c) => {
   try {
-    await requireAuth(c);
+    const viewer = await requireAuth(c);
     const partner = await partnerByUid(c.env, c.req.param('uid'));
     if (!partner) return c.json({ detail: 'Partner not found' }, 404);
     const upcoming = (c.req.query('upcoming_only') || 'true').toLowerCase() === 'true';
@@ -128,9 +152,21 @@ r.get('/partners/:uid/slots', async (c) => {
     const rows = upcoming
       ? await c.env.DB.prepare(sql).bind(partner.id, nowIso()).all<SlotRow>()
       : await c.env.DB.prepare(sql).bind(partner.id).all<SlotRow>();
+    // #4715: the partner (and an admin) see their own slots whole; a founder
+    // sees the link and notes only on a slot they hold a confirmed booking on.
+    const whole = Number(viewer.partner_id) === Number(partner.id) || isAdmin(viewer);
+    const held = new Set<number>();
+    if (!whole) {
+      const mine = await c.env.DB.prepare(
+        `SELECT slot_id FROM partner_bookings
+          WHERE partner_id = ? AND founder_user_id = ? AND status IN ('confirmed', 'completed')`,
+      ).bind(partner.id, viewer.id).all<{ slot_id: number }>();
+      for (const b of mine.results || []) held.add(Number(b.slot_id));
+    }
     const items: any[] = [];
     for (const s of (rows.results || []) as SlotRow[]) {
-      items.push(slotDto(s, await takenForSlot(c.env, s.id)));
+      const taken = await takenForSlot(c.env, s.id);
+      items.push(whole || held.has(Number(s.id)) ? slotDto(s, taken) : publicSlotDto(s, taken));
     }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
@@ -195,7 +231,6 @@ r.post('/slots/:id/book', async (c) => {
       const rowId = Number((ins as any).meta?.last_row_id);
       const slotStart = slot.starts_at;
       const slotEnd = slot.ends_at;
-      const meetingUrl = slot.meeting_url || null;
       const topic = (body.topic || '').toString().slice(0, 200);
       const notes = (body.notes || '').toString().slice(0, 2000);
       const syncP = (async () => {
@@ -225,7 +260,9 @@ r.post('/slots/:id/book', async (c) => {
             status: 'pending',
             ics_status: 'TENTATIVE' as const,
             location_kind: 'video',
-            location_uri: meetingUrl,
+            // #4715: the link goes out with the confirmation
+            // (deferCalendarConfirm), not with the request.
+            location_uri: null,
             organizer_email: partnerRow?.email || partnerOwnerEmail,
             attendees: [
               { email: partnerRow?.email || partnerOwnerEmail, name: partnerRow?.company || null, role: 'partner' },
@@ -293,7 +330,7 @@ r.get('/bookings/me', async (c) => {
     const rows = status
       ? await c.env.DB.prepare(sql).bind(user.id, status).all<BookingWithSlotRow>()
       : await c.env.DB.prepare(sql).bind(user.id).all<BookingWithSlotRow>();
-    return c.json({ items: (rows.results || []).map(bookingDto) });
+    return c.json({ items: (rows.results || []).map(founderBookingDto) });
   } catch (e) { return mapError(c, e); }
 });
 

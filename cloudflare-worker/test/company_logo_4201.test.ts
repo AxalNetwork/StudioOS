@@ -238,7 +238,9 @@ test('edit rule: PATCH /company/:uid\'s — a plain member 403, an editor by rol
   assert.equal(logos.store.size, 0);
   assert.equal((await call(env, FAY, 'POST', LOGO, form(png(64, 64)))).status, 200, 'a Founder by role edits');
   assert.equal((await call(env, ADA, 'POST', LOGO, form(png(64, 64)))).status, 200, 'the primary admin edits');
-  assert.equal((await call(env, EVE, 'POST', LOGO, form(png(64, 64)))).status, 200, 'a platform admin edits, as PATCH allows');
+  // D4960: HQ reads a company it holds no seat in. The direct API refuses it, as PATCH does.
+  const hq = await call(env, EVE, 'POST', LOGO, form(png(64, 64)));
+  assert.deepEqual([hq.status, hq.body.code, hq.body.reason], [403, 'company_read_only', 'hq_access'], 'a platform admin without a seat does not edit');
   // The PATCH rule matches: the same people PATCH allows.
   const patch = (who: number) => {
     const app = new Hono(); app.route('/api', companyRoutes);
@@ -247,13 +249,18 @@ test('edit rule: PATCH /company/:uid\'s — a plain member 403, an editor by rol
       .then((t) => app.request('/api/company/co-north', { method: 'PATCH', headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ description: 'x' }) }, env))
       .then((r) => r.status);
   };
-  assert.deepEqual(await Promise.all([BEN, FAY, ADA, EVE, CY].map(patch)), [403, 200, 200, 200, 403]);
+  // Sequential: two editors saving the same second both succeed. Overlapping saves are a 409 (the profile revision).
+  const statuses = [];
+  for (const who of [BEN, FAY, ADA, EVE, CY]) statuses.push(await patch(who));
+  assert.deepEqual(statuses, [403, 200, 200, 403, 403]);
 });
 
-test('edit rule: a support session acts as the person it impersonates, as PATCH does', async () => {
+test('edit rule: a support session reads and writes nothing here (D4960), as PATCH does', async () => {
+  // It used to act as the person it impersonates. The platform's rule is that support reads (Mercury, Carta, Linear, PostHog).
   const db = fixture(); const logos = r2(); const env = envOf(db, logos);
   const asAda = await call(env, ADA, 'POST', LOGO, form(png(64, 64)), { impersonated_by: EVE });
-  assert.equal(asAda.status, 200, 'impersonating an editor may replace the logo');
+  assert.deepEqual([asAda.status, asAda.body.code], [403, 'support_session_refused'], 'impersonating an editor may not replace the logo');
+  assert.equal(logos.store.size, 0, 'and nothing was stored');
   const asBen = await call(env, BEN, 'POST', LOGO, form(png(64, 64)), { impersonated_by: EVE });
   assert.equal(asBen.status, 403, 'impersonating a plain member may not');
   assert.equal((await call(env, BEN, 'DELETE', LOGO, undefined, { impersonated_by: EVE })).status, 403);

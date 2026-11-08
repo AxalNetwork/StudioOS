@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useCompanyDetail } from './useCompanyDetail.js';
-import { api } from '../../../lib/api';
 import { companyLogoApi } from '../../../lib/api/companyLogo';
-import { safeReadJSON } from '../../../lib/storage';
+import { useAuth } from '../../../hooks/useAuthSync';
+import { useLeaveGuard } from '../../../lib/leaveGuard';
 import { useUpdateCompanyDetails } from '../../../contexts/ActiveCompanyContext';
+import { useCompanyDetail } from './useCompanyDetail.js';
 import {
-  CURRENCY_CODES, DESCRIPTION_MAX, LABELS, LEAVE_PROMPT, LOGO_HINT, SECTIONS, STAGES, VERSION_CONFLICT, archivedLine, canEditCompany, changes,
-  conflictLine, formOf, logoProblem, PROSE_MAX, problemOf, readOnlyLine, rebaseOnConflict, REGIONS, regionCodesIn, regionLabel, REVENUE_RANGES, shownLogo, unsavedLine, versionOf,
+  CURRENCY_CODES, DESCRIPTION_MAX, LABELS, LEAVE_PROMPT, LOGO_HINT, PROSE_MAX, REGIONS, REVENUE_RANGES, SECTIONS, STAGES, VERSION_CONFLICT, archivedLine, canEditCompany, changes, conflictLine, failedBeforeWriting, formOf, hasIntent, logoProblem, problemOf, readOnlyReasonLine, rebaseOnConflict, reconcile, regionCodesIn, regionsOf, regionsText, saveIntent, saveLine, shownLogo, unsavedLine, versionOf,
 } from './generalFormModel';
 import { CompanyMark, Failed, INK, MUTED, NotYours, PCard, Reading } from './portfolioUi.jsx';
 
@@ -19,9 +18,8 @@ import { CompanyMark, Failed, INK, MUTED, NotYours, PCard, Reading } from './por
  * preview shows it. No URL box, no internal path, no explanation of the app.
  *
  * #4963: every save sends the `profile_version` it loaded (`expected_version`). A stale save is a 409
- * `version_conflict` carrying the current company: the form is rebuilt on it (`rebaseOnConflict`), keeping every
- * value the other editor committed and this editor's other edits, and says which edits were replaced. An archived
- * company is drawn read-only, as the Worker refuses its writes.
+ * `version_conflict` carrying the current company: the form is rebuilt on it (`rebaseOnConflict`). An archived
+ * company is drawn read-only. D4961: the fields and the logo commit in one `saveSettings` request.
  */
 
 const INPUT = 'w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[13.5px] text-axal-ink disabled:cursor-not-allowed disabled:bg-axal-ground dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:disabled:bg-gray-800';
@@ -32,7 +30,7 @@ const GHOST = 'rounded-lg border border-axal-hairline px-3 py-1.5 text-[13px] fo
  * #4964: regions are canonical codes, chosen from the list (they feed matching), as a labelled group of checkboxes.
  * A legacy text entry no code covers is shown, never dropped, for the editor to place.
  */
-function Regions({ value, onChange, disabled, unmapped }) {
+function RegionCodes({ value, onChange, disabled, unmapped }) {
   const chosen = new Set(regionCodesIn(value));
   const toggle = (code) => onChange(regionCodesIn(chosen.has(code) ? [...chosen].filter((c) => c !== code) : [...chosen, code]));
   return (
@@ -52,6 +50,26 @@ function Regions({ value, onChange, disabled, unmapped }) {
         </p>
       ) : null}
     </fieldset>
+  );
+}
+
+function Regions({ value, onChange, disabled }) {
+  const [draft, setDraft] = useState('');
+  const list = regionsOf(value);
+  const add = () => { if (draft.trim()) { onChange(regionsText([...list, draft])); setDraft(''); } };
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" data-testid="general-regions">
+      {list.map((r) => (
+        <span key={r} className="inline-flex items-center gap-1 rounded-full border border-axal-hairline px-2 py-0.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:text-gray-200">
+          {r}
+          {!disabled && <button type="button" aria-label={`Remove ${r}`} onClick={() => onChange(regionsText(list.filter((x) => x !== r)))}>×</button>}
+        </span>
+      ))}
+      {!disabled && (
+        <input className={`${INPUT} w-40`} value={draft} placeholder="Add a region" aria-label="Add a region"
+          onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} onBlur={add} />
+      )}
+    </div>
   );
 }
 
@@ -75,9 +93,8 @@ function Field({ f, form, set, disabled, row }) {
       </select>
     );
   } else if (f === 'region_codes') {
-    return <Regions value={v} disabled={disabled} unmapped={row?.regions?.source === 'derived' ? row.regions.unmapped : []} onChange={(x) => set(f, x)} />;
+    return <RegionCodes value={v} disabled={disabled} unmapped={row?.regions?.source === 'derived' ? row.regions.unmapped : []} onChange={(x) => set(f, x)} />;
   } else if (f === 'revenue_range') {
-    // A band from the list; a value stored before the list is still shown, as itself, until it is changed.
     const legacy = v && !REVENUE_RANGES.some(([k]) => k === v);
     input = (
       <select id={id} className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} data-testid="general-revenue-range">
@@ -91,7 +108,9 @@ function Field({ f, form, set, disabled, row }) {
       placeholder={f === 'website' ? 'https://example.com' : 'https://www.linkedin.com/company/…'} onChange={(e) => set(f, e.target.value)} />;
   } else if (f === 'employee_count') {
     input = <input id={id} type="number" min={0} step={1} inputMode="numeric" className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} />;
-  } else if (f === 'international_presence' || f === 'current_products' || f === 'expansion_goals') {
+  } else if (f === 'international_presence') {
+    input = <Regions value={v} disabled={disabled} onChange={(x) => set(f, x)} />;
+  } else if (f === 'current_products' || f === 'expansion_goals') {
     input = (
       <>
         <textarea id={id} className={`${INPUT} resize-y`} rows={2} maxLength={PROSE_MAX} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} />
@@ -106,7 +125,7 @@ function Field({ f, form, set, disabled, row }) {
       </>
     );
   } else {
-    input = <input id={id} className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} />;
+    input = <input id={id} className={INPUT} value={v} disabled={disabled} inputMode={f === 'employee_count' ? 'numeric' : undefined} onChange={(e) => set(f, e.target.value)} />;
   }
   return (
     <label htmlFor={id} className="flex flex-col gap-1">
@@ -128,8 +147,6 @@ export function LogoTile({ name, row, pending, onPick, onRemove, onUndo, disable
   return (
     <PCard title="Logo" testId="general-section-logo">
       <div className="flex flex-wrap items-center gap-4">
-        {/* #4964: the tile looks clickable only when it is: then it is a real button (keyboard and pointer) that opens
-            the picker, and a drop target; read-only it is the mark alone, with no pointer and no handler. */}
         {disabled ? (
           <div data-testid="company-logo-tile" className="rounded-xl border border-dashed border-axal-hairline p-2 dark:border-gray-700">
             <CompanyMark name={name} size={64} logoUrl={shown} />
@@ -162,12 +179,12 @@ export function LogoTile({ name, row, pending, onPick, onRemove, onUndo, disable
 
 export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, reader }) {
   const updateCompanyDetails = useUpdateCompanyDetails();
-  // #4964: the page's one company read, shared with the header (`useCompanyDetail`); a write publishes its answer.
+  const { user: me } = useAuth();
+  // #4964: the page's one company read, shared with the header. A write publishes its answer.
   const detail = useCompanyDetail(uid, reader ? { reader } : undefined);
   const state = detail;
   const [form, setForm] = useState(null);
   const [save, setSave] = useState({ status: 'idle', message: '' });
-  // The row the form was last built from; a row this form published itself (a save, a conflict) is not rebuilt over.
   const builtFrom = useRef(null);
   const setState = useCallback((next) => { builtFrom.current = next.row; detail.setRow(next.row); }, [detail.setRow]);
   // #4201: a picked or removed logo, held until Save: { upload: File, preview } | { remove: true } | null.
@@ -177,28 +194,30 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
     setLogo((was) => { if (was?.preview && typeof URL !== 'undefined') URL.revokeObjectURL?.(was.preview); return next; });
     setSave({ status: 'idle', message: '' });
   }, []);
-  // A row read from the Worker (the first load, Try again) rebuilds the form; a row this form just published does not.
+  // A row from the shared read rebuilds the form. A row this form published (builtFrom) does not, and neither does
+  // a re-read made while the editor still holds unsaved changes.
   useEffect(() => {
     if (detail.status !== 'ready' || !detail.row || detail.row === builtFrom.current) return;
+    if (builtFrom.current) return;
     builtFrom.current = detail.row;
     setForm(formOf(detail.row));
   }, [detail.status, detail.row]);
 
   const row = state.row;
+  const busy = save.status === 'saving' || save.status === 'reconciling';
   const patch = useMemo(() => (form && row ? changes(form, row) : {}), [form, row]);
   const dirty = Object.keys(patch).length > 0 || logo !== null;
   const archived = Boolean(row?.archived_at);
-  // The server's own answer when it gives one (#4964), else the same rule on the roster.
-  const canEdit = (typeof row?.viewer_can_edit === 'boolean' ? row.viewer_can_edit : canEditCompany(row, safeReadJSON('user', {}))) && !archived;
+  // D4960's `viewer.can_edit` when the read carries it; #4964's `viewer_can_edit` otherwise. Archived is never editable.
+  const serverEdit = row?.viewer && typeof row.viewer.can_edit === 'boolean'
+    ? row.viewer.can_edit
+    : (typeof row?.viewer_can_edit === 'boolean' ? row.viewer_can_edit : canEditCompany(row, me));
+  const canEdit = serverEdit && !archived;
   const problem = form ? problemOf(form, row) : null;
 
-  // ST6d: a reload or a closed tab with unsaved changes asks first.
-  useEffect(() => {
-    if (!dirty) return undefined;
-    const warn = (e) => { e.preventDefault(); e.returnValue = LEAVE_PROMPT; return LEAVE_PROMPT; };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+  // ST6d, D4961: a reload, a closed tab, a link to Team, Legal or Projects, any other in-app move and the
+  // browser's Back all ask first while there are unsaved changes (lib/leaveGuard.js).
+  useLeaveGuard(dirty, LEAVE_PROMPT);
 
   const set = useCallback((f, v) => { setForm((x) => ({ ...x, [f]: v })); setSave({ status: 'idle', message: '' }); }, []);
   const onPickLogo = (file) => {
@@ -207,48 +226,109 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
     if (why) return;
     holdLogo({ upload: file, preview: typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : null });
   };
-  const onSave = async () => {
-    setSave({ status: 'saving', message: '' });
-    let updated = row;
+  // The company as the server has it now, or null when it cannot be read. Never throws.
+  const readFresh = useCallback(async () => {
+    const next = await detail.reload();
+    return next?.status === 'ready' ? next.row : null;
+  }, [detail]);
+
+  // One authoritative state: the form, the preview, the active company and the switcher all take it (D4961).
+  const settle = (updated, kind) => {
+    setState({ status: 'ready', row: updated });
+    setForm(formOf(updated));
+    holdLogo(null);
+    setLogoError(null);
+    updateCompanyDetails(updated);
+    setSave({ status: 'saved', message: saveLine(kind) });
+  };
+
+  // A failure that may have written something: look at the server before saying anything about what happened.
+  const afterFailure = async (e, intent, before) => {
+    if (failedBeforeWriting(e)) {
+      // The Worker checks everything before it writes, so a 4xx changed nothing.
+      setSave({ status: 'error', check: false, message: saveLine('not_saved', { detail: e?.message || '' }) });
+      return;
+    }
+    setSave({ status: 'reconciling', message: 'Checking what was saved…' });
+    const fresh = await readFresh();
+    if (!fresh) { setSave({ status: 'unknown', check: true, message: saveLine('unknown') }); return; }
+    const result = reconcile(fresh, intent, before, uid);
+    if (result.outcome === 'all') { settle(fresh, 'saved_after_check'); return; }
+    if (result.outcome === 'none') {
+      // A timeout's own sentence says the outcome is unknown; the re-read has now settled it.
+      setSave({ status: 'error', check: false, message: saveLine('not_saved', { detail: e?.code === 'timeout' ? '' : (e?.message || '') }) });
+      return;
+    }
+    // Part of it is in: the row is now the baseline, the rest stays pending.
+    setState({ status: 'ready', row: fresh });
+    updateCompanyDetails(fresh);
+    if (result.logoSaved) { holdLogo(null); setLogoError(null); }
+    setSave({ status: 'partly', check: true, message: saveLine('partly', { result }) });
+  };
+
+  const onSave = async ({ checkFirst = false } = {}) => {
+    let intent = saveIntent(patch, logo);
+    if (!hasIntent(intent)) return;
+    let baseline = row;
+    setSave({ status: checkFirst ? 'reconciling' : 'saving', message: checkFirst ? 'Checking what was saved…' : '' });
+    if (checkFirst) {
+      // A retry never resends what already committed: look first, send only what is missing.
+      const fresh = await readFresh();
+      if (fresh) {
+        const result = reconcile(fresh, intent, row, uid);
+        if (result.outcome === 'all') { settle(fresh, 'saved_after_check'); return; }
+        if (result.outcome === 'some') {
+          baseline = fresh;
+          setState({ status: 'ready', row: fresh });
+          updateCompanyDetails(fresh);
+          if (result.logoSaved) { holdLogo(null); setLogoError(null); }
+          intent = saveIntent(changes(form, fresh), result.logoSaved ? null : logo);
+        }
+      }
+      setSave({ status: 'saving', message: '' });
+    }
     try {
-      // The logo first: its route answers with the company detail (and its new version), and the fields' PATCH then
-      // applies on top of that version, so this save never trips over its own logo.
-      if (logo?.upload) updated = await logoApi.upload(uid, logo.upload, versionOf(row));
-      else if (logo?.remove) updated = await logoApi.remove(uid, versionOf(row));
-      if (logo) { holdLogo(null); setLogoError(null); }
-      if (Object.keys(patch).length) updated = await api.updateCompany(uid, { ...patch, expected_version: versionOf(updated) });
-      setState({ status: 'ready', row: updated });
-      setForm(formOf(updated));
-      updateCompanyDetails(updated);
-      setSave({ status: 'saved', message: '' });
+      settle(await logoApi.saveSettings(uid, { ...intent, expectedVersion: versionOf(baseline) }), 'saved');
     } catch (e) {
       const current = e?.code === VERSION_CONFLICT ? e?.data?.company : null;
       if (current && typeof current === 'object') {
-        // Rebuilt on what is saved now: their values kept, this editor's other edits kept, the clashes named.
-        const { form: next, conflicts } = rebaseOnConflict(form, row, current);
+        const { form: next, conflicts } = rebaseOnConflict(form, baseline, current);
         setState({ status: 'ready', row: current });
         setForm(next);
         updateCompanyDetails(current);
         setSave({ status: 'conflict', message: conflictLine(conflicts) });
         return;
       }
-      if (updated !== row) { setState({ status: 'ready', row: updated }); updateCompanyDetails(updated); }
-      setSave({ status: 'error', message: e?.message || '' });
+      await afterFailure(e, intent, baseline);
     }
+  };
+
+  // Discard goes back to what the server holds, for the logo and for every field, not to a copy kept in the page.
+  const onDiscard = async () => {
+    setSave({ status: 'reconciling', message: 'Reading the saved company…' });
+    builtFrom.current = null;
+    const fresh = await readFresh();
+    const base = fresh || row;
+    setState({ status: 'ready', row: base });
+    setForm(formOf(base));
+    holdLogo(null);
+    setLogoError(null);
+    if (fresh) updateCompanyDetails(fresh);
+    setSave({ status: 'idle', message: '' });
   };
 
   if (state.status === 'loading' || (state.status === 'ready' && !form)) return <PCard title="General"><Reading lines={4} /></PCard>;
   if (state.status === 'notFound') return <NotYours />;
-  if (state.status === 'error') return <PCard title="General" testId="company-general"><Failed what="Settings" onRetry={() => detail.reload()} testId="company-general-unread" /></PCard>;
+  if (state.status === 'error') return <PCard title="General" testId="company-general"><Failed what="Settings" onRetry={() => { builtFrom.current = null; detail.reload(); }} testId="company-general-unread" /></PCard>;
 
   const name = String(form.company_name || row.company_name || '').trim();
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <form className="flex flex-col gap-4" data-testid="company-general-form" onSubmit={(e) => { e.preventDefault(); if (dirty && !problem) onSave(); }}>
+      <form className="flex flex-col gap-4" data-testid="company-general-form" onSubmit={(e) => { e.preventDefault(); if (dirty && !problem && !busy) onSave({ checkFirst: ['error', 'partly', 'unknown'].includes(save.status) && save.check !== false }); }}>
         {archived
           ? <p className={`m-0 ${MUTED}`} data-testid="company-general-archived">{archivedLine(row.company_name)}</p>
-          : !canEdit && <p className={`m-0 ${MUTED}`} data-testid="company-general-read-only">{readOnlyLine(row.company_name)}</p>}
-        <LogoTile name={name} row={row} pending={logo} problem={logoError} disabled={!canEdit || save.status === 'saving'}
+          : !canEdit && <p className={`m-0 ${MUTED}`} data-testid="company-general-read-only">{readOnlyReasonLine(row)}</p>}
+        <LogoTile name={name} row={row} pending={logo} problem={logoError} disabled={!canEdit || busy}
           onPick={onPickLogo} onRemove={() => { setLogoError(null); holdLogo({ remove: true }); }} onUndo={() => { setLogoError(null); holdLogo(null); }} />
         {SECTIONS.map((sec) => (
           <PCard key={sec.key} title={sec.title} testId={`general-section-${sec.key}`}>
@@ -256,7 +336,7 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
             <div className="grid gap-3 sm:grid-cols-2">
               {sec.fields.map((f) => (
                 <div key={f} className={['description', 'international_presence', 'region_codes', 'current_products', 'expansion_goals'].includes(f) ? 'sm:col-span-2' : ''}>
-                  <Field f={f} form={form} set={set} row={row} disabled={!canEdit || save.status === 'saving'} />
+                  <Field f={f} form={form} set={set} row={row} disabled={!canEdit || busy} />
                 </div>
               ))}
             </div>
@@ -264,14 +344,16 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
         ))}
         {canEdit && (dirty || save.status !== 'idle') && (
           <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-2.5 dark:border-gray-700 dark:bg-gray-900" data-testid="company-general-savebar">
-            <span className={`mr-auto ${MUTED}`} role="status">
-              {save.status === 'saved' ? 'Saved · just now'
-                : save.status === 'conflict' ? <span data-testid="company-general-conflict">{save.message}</span>
-                  : save.status === 'error' ? `Your changes were not saved. Try again.${save.message ? ` ${save.message}` : ''}`
-                    : problem || unsavedLine(patch, logo)}
+            <span className={`mr-auto ${MUTED}`} role="status" data-testid="company-general-status">
+              {busy || ['saved', 'error', 'partly', 'unknown'].includes(save.status) ? (save.message || (save.status === 'saving' ? 'Saving…' : ''))
+                : problem || unsavedLine(patch, logo)}
             </span>
-            {dirty && <button type="button" className={GHOST} onClick={() => { setForm(formOf(row)); holdLogo(null); setLogoError(null); setSave({ status: 'idle', message: '' }); }} disabled={save.status === 'saving'}>Discard</button>}
-            {dirty && <button type="submit" className={PRIMARY} disabled={!!problem || save.status === 'saving'} data-testid="company-general-save">{save.status === 'saving' ? 'Saving…' : save.status === 'error' ? 'Try again' : 'Save changes'}</button>}
+            {dirty && <button type="button" className={GHOST} onClick={onDiscard} disabled={busy} data-testid="company-general-discard">Discard</button>}
+            {dirty && (
+              <button type="submit" className={PRIMARY} disabled={!!problem || busy} data-testid="company-general-save">
+                {save.status === 'saving' ? 'Saving…' : save.status === 'reconciling' ? 'Checking…' : ['error', 'partly', 'unknown'].includes(save.status) ? 'Try again' : 'Save changes'}
+              </button>
+            )}
           </div>
         )}
       </form>
@@ -282,7 +364,7 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
           <span className={`text-[13.5px] font-semibold ${INK}`}>{name || 'Untitled company'}</span>
         </span>
         {form.description && <p className={`m-0 mt-2 text-[12.5px] ${INK}`}>{form.description}</p>}
-        {regionCodesIn(form.region_codes).length > 0 && <p className={`m-0 mt-1 ${MUTED}`} data-testid="company-general-preview-regions">{regionCodesIn(form.region_codes).map(regionLabel).join(' · ')}</p>}
+        {regionsOf(form.international_presence).length > 0 && <p className={`m-0 mt-1 ${MUTED}`}>{regionsOf(form.international_presence).join(' · ')}</p>}
       </PCard>
     </div>
   );

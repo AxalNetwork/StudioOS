@@ -3,6 +3,7 @@
 // mounted Worker route GET /api/grow/ads left with no caller. This proves the real route mounts
 // AdsTab, that its own creatives Ask (reusing #4488/#4512's quote/run/accept contract) is wired,
 // and guards every other Distribution tab against the same regression.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

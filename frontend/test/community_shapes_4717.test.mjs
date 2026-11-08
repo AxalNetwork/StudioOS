@@ -211,6 +211,10 @@ test('the empty state is never taken from a broken count', () => {
     o.blocks.events.by_status.counts = { published: 0 };
     o.blocks.jobs.by_status = { draft: 0, pending_review: 0, published: 0, rejected: 0, closed: 0, other: 0 };
     o.blocks.circles = { ...o.blocks.circles, total: 0, published: 0, featured: 0, members_entered: { value: 0 }, by_type: {} };
+    // D4820: the roster, the experts and the bookings are sources of the empty rule too.
+    o.blocks.network = { available: true, by_kind_state: {} };
+    o.blocks.wellbeing.experts = { available: true, verified: 0, unverified: 0, hidden: 0, inactive: 0 };
+    o.blocks.wellbeing.bookings = { ...o.blocks.wellbeing.bookings, window: 0, previous: 0, weekly: [] };
     return o;
   };
   assert.equal(isEmptyCommunity(readsOf(zeros(full()))), true);
@@ -242,8 +246,9 @@ test('mounted: a broken count is drawn as Unreadable, never as 0, and the other 
     const has = (id) => walk(container).some((x) => props(x)?.['data-testid'] === id);
     assert.match(of('community-tile-upcoming'), /Unreadable/);
     assert.doesNotMatch(of('community-tile-upcoming'), /\b0\b|\b3\b/, 'the string count was drawn');
-    assert.match(of('community-tile-experts'), /Unreadable/);
-    assert.doesNotMatch(of('community-tile-experts'), /verified of/);
+    // D4820: the experts figure is drawn in the Wellbeing card.
+    assert.match(of('community-figure-experts'), /Unreadable/);
+    assert.doesNotMatch(of('community-figure-experts'), /verified of/);
     assert.ok(!has('community-by-type'), 'events by type was drawn without every type');
     assert.ok(!has('community-experts'), 'the experts bar was drawn without its verified count');
     // The parts whose counts are whole still draw.
