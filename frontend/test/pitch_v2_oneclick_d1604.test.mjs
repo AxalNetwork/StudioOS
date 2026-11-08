@@ -205,7 +205,7 @@ test('the one-click: Build says what it holds, shows the cards it will write whi
   let finish;
   const m = await mount(h(OneClickBuild, { projectId: 1, q: '?project_id=1', as: 'section' }), {
     'newDeck.context': async () => CTX,
-    'newDeck.quote': async () => ({ ai: true, hold_microusd: 6000 }),
+    'newDeck.quote': async () => ({ ai: true, hold_microusd: 6000, quote_uid: 'dq_synthetic' }),
     'newDeck.build': () => new Promise((r) => { finish = r; }),
   }, '/raise/pitch?project_id=1');
   try {
@@ -230,7 +230,7 @@ test('the one-click: Build says what it holds, shows the cards it will write whi
     assert.match(m.text(m.by('pitch-build-progress-live-later')), /Live progress per card Coming later/);
     const [, body, headers] = m.named('newDeck.build')[0];
     // Mutation checked: drop round_ref from the build body → this fails.
-    assert.deepEqual(body, { project_id: 1, one_click: true, audience: 'pre_seed_fund', length: 'short', round_ref: 'round-1' }, 'the read\'s brief and round, nothing guessed; D1509: the press names itself so grid_generate can stop it');
+    assert.deepEqual(body, { project_id: 1, one_click: true, audience: 'pre_seed_fund', length: 'short', round_ref: 'round-1', quote_uid: 'dq_synthetic' }, 'the read\'s brief and round, nothing guessed, and the accepted quote (D4597); D1509: the press names itself so grid_generate can stop it');
     assert.equal(m.named('newDeck.quote')[0][1].round_ref, 'round-1', 'the quote prices the same build');
     assert.equal(headers['X-Rail-Option'], encodeURIComponent('deck:build'));
     await act(async () => { finish({ proposal: { id: 77 } }); });
@@ -374,7 +374,7 @@ test('D1509 (#3760): grid_generate off — Build is greyed "Not switched on yet.
   // Mutation checked: Build left enabled while the context says grid_generate: false → the disabled assert fails.
   const m = await mount(h(OneClickBuild, { projectId: 1, q: '?project_id=1', as: 'section' }), {
     'newDeck.context': async () => ({ ...CTX, grid_generate: false }),
-    'newDeck.quote': async () => ({ ai: true, hold_microusd: 6000 }),
+    'newDeck.quote': async () => ({ ai: true, hold_microusd: 6000, quote_uid: 'dq_synthetic' }),
   }, '/raise/pitch?project_id=1');
   try {
     assert.equal(m.pr(m.by('pitch-studio-fast-build')).disabled, true);

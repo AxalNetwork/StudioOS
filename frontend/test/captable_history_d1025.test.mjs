@@ -2,6 +2,7 @@
 // (CT11a–c), Record an issuance (CT12a), Void (CT12b) and the admin correction
 // (CT12c). Fixtures follow the Worker's shapes (services/capTableRecord.ts,
 // capTableClose.ts, capTableDocumentRead.ts) and are worked out by hand.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

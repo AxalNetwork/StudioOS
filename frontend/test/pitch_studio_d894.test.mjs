@@ -859,7 +859,7 @@ test('D1604 one-click: the brief is the context read\'s; Build waits for it, and
   let answer;
   const ctx = new Promise((r) => { answer = r; });
   newDeckApi.context = async () => ctx;
-  newDeckApi.quote = async (b) => { sent.quote.push(b); return { ai: true, hold_microusd: 6000 }; };
+  newDeckApi.quote = async (b) => { sent.quote.push(b); return { ai: true, hold_microusd: 6000, quote_uid: 'dq_synthetic' }; };
   newDeckApi.build = async (b) => { sent.build.push(b); return { proposal: { id: 'p1' } }; };
   const m = await mount(h(PitchStudio, { tab: 'decks' }), '/raise/pitch?project_id=7', {
     listProjects: async () => [{ id: 7, name: 'Acme' }], deckListVersions: async () => ({ versions: [V4, V3] }),

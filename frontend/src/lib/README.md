@@ -151,3 +151,5 @@ the existing verification step remains required. Recovery uses the already
 verified stored number and never accepts a new client-supplied destination.
 
 `googleWorkspacePicker.js` (D1091) opens Google’s Picker with a browser-only, drive.file-only token and returns file IDs; the approved page owns its future dialogs.
+
+D4811 (#4811): `contractLifecycle.js` maps HQ › Contracts' stored statuses to three lifecycles (templates, agreements, governance), the Restricted and Incomplete overlays the Worker computes, the gating render rule and the agreements row semantics. Pure; `frontend/src/pages/admin/contracts/LifecycleBadge.jsx` draws it.

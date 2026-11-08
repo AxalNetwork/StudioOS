@@ -1,5 +1,5 @@
 /**
- * #4717 package 6 — The Community page's parts: its classes, a tile, a card, a part in its state, the console door and the lightbox opener.
+ * #4717 package 6 — The Community page's parts: its classes, a tile or in-card figure, a card, a part in its state, a Manage Community row, a domain's actions and the lightbox opener.
  * Split out of AdminCommunity.jsx; nothing here decides anything.
  */
 import React from 'react';
@@ -61,15 +61,23 @@ export function Failed({ reason, onRetry }) {
   );
 }
 
-export function Tile({ t, onRetry, children }) {
+/**
+ * A figure: a KPI tile, or (`figure`) the same figure drawn inside its domain's
+ * card (D4820: show-up in Events, circles and the roster in Network, experts in
+ * Wellbeing), in the same four states.
+ */
+export function Tile({ t, onRetry, children, figure = false }) {
+  const box = figure
+    ? 'flex min-w-0 flex-col gap-1 rounded-[10px] border border-axal-hairline px-3 py-2 dark:border-gray-700'
+    : `${CARD} flex flex-col gap-1.5 px-4 py-3.5`;
   return (
-    <div className={`${CARD} flex flex-col gap-1.5 px-4 py-3.5`} data-testid={`community-tile-${t.key}`}>
+    <div className={box} data-testid={`community-${figure ? 'figure' : 'tile'}-${t.key}`}>
       <span className={EYE}>{t.label}</span>
       {t.state === 'loading' && <><span className="font-mono text-[15px] text-axal-muted">Reading…</span><Skeleton /></>}
       {t.state === 'ready' && (
         <>
           <span className="flex items-center gap-2">
-            <span className={`${MONO} text-[26px] font-medium tracking-[-.01em] text-axal-ink dark:text-gray-100`}>{t.value}</span>
+            <span className={`${MONO} ${figure ? 'text-[17px]' : 'text-[26px]'} font-medium tracking-[-.01em] text-axal-ink dark:text-gray-100`}>{t.value}</span>
             {t.overdue ? <OverdueDot label={`Something has waited more than ${OVERDUE_HOURS} hours`} testId={`community-tile-${t.key}-overdue`} /> : null}
           </span>
           {t.sub ? <span className={`${SUB} ${MONO}`}>{t.sub}</span> : null}
@@ -95,7 +103,7 @@ export function Tile({ t, onRetry, children }) {
  * a body never reads a block that has not answered.
  */
 export function Card({ id, title, span = 6, state, reason, onRetry, children, foot }) {
-  const cls = { 6: 'col-span-12 lg:col-span-6', 12: 'col-span-12' }[span];
+  const cls = { 5: 'col-span-12 lg:col-span-5', 6: 'col-span-12 lg:col-span-6', 7: 'col-span-12 lg:col-span-7', 12: 'col-span-12' }[span];
   return (
     <section className={`${CARD} ${cls} flex min-w-0 flex-col gap-3 px-[18px] py-4`} data-testid={`community-card-${id}`} aria-labelledby={`community-h-${id}`}>
       <h2 id={`community-h-${id}`} className={H2}>{title}</h2>
@@ -108,18 +116,37 @@ export function Card({ id, title, span = 6, state, reason, onRetry, children, fo
   );
 }
 
-/** One console door. The text is the canvas's; the figure is read, or says why not. */
-export function Console({ testId, name, what, figure, children }) {
-  let fig;
-  if (figure.state === 'loading') fig = <span className="font-mono text-[13px] text-axal-muted">Reading…</span>;
-  else if (figure.state === 'unreadable') fig = <span className="text-[12.5px] font-bold text-axal-destructive dark:text-red-400">Unreadable</span>;
-  else fig = <span className={`${MONO} text-[15px] font-bold text-axal-ink dark:text-gray-100`}>{figure.text}</span>;
+/**
+ * D4820 CM01: one Manage Community row: the destination, one short line, its
+ * figure when it has one (read, or saying why not), and Open. `children` is the
+ * row's literal `Link`, so the reachability walk finds it.
+ */
+export function ManageRow({ testId, name, what, figure, children }) {
+  let fig = null;
+  if (figure?.state === 'loading') fig = <span className="font-mono text-[11.5px] text-axal-muted">Reading…</span>;
+  else if (figure?.state === 'unreadable') fig = <span className="text-[11.5px] font-bold text-axal-destructive dark:text-red-400">Unreadable</span>;
+  else if (figure?.state === 'ready') fig = <span className={`${MONO} whitespace-nowrap rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100`}>{figure.text}</span>;
   return (
-    <li className={`${CARD} flex flex-col gap-1.5 px-4 py-3.5`} data-testid={testId}>
-      <span className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">{name}</span>
-      {fig}
-      <span className={SUB}>{what}</span>
-      {children}
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-axal-hairline px-4 py-2.5 first:border-t-0 dark:border-gray-800" data-testid={testId}>
+      <span className="flex min-w-0 flex-col">
+        <span className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">{name}</span>
+        <span className={SUB}>{what}</span>
+      </span>
+      <span className="flex items-center gap-3">{fig}{children}</span>
     </li>
+  );
+}
+
+/**
+ * D4820: a domain's two actions, the same on every card: View details opens
+ * its analytics lightbox (when it has one) and Manage … → its console.
+ * `children` are the Manage links, literal, for the reachability walk.
+ */
+export function DomainActions({ box, onOpen, children }) {
+  return (
+    <span className="flex flex-wrap gap-4" data-testid="community-actions">
+      {box ? <Opener box={box} onOpen={onOpen}>View details</Opener> : null}
+      {children}
+    </span>
   );
 }

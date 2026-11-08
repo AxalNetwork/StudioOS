@@ -136,3 +136,9 @@ then revokes the refused token; future reads ask to reconnect. Legacy Carta
 rows held by other roles keep their own Disconnect path but never enter the
 issuer scheduler or manual sync. A failed local read-log write has its own
 503 code, separate from a Carta read failure.
+- D2407 (#2407 part 1) — `beehiiv.ts` is a founder's own Beehiiv newsletter,
+  read only, in PostHog's shape: `connect` refuses a support session and a
+  key paste (Sign in with Beehiiv only), `disconnect` revokes at Beehiiv, best
+  effort, and removes the connection's `beehiiv_publication_links` rows while
+  its landed figures and ledger stay. Every read is
+  `cloudflare-worker/src/services/beehiiv/reads.ts`.

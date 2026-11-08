@@ -7,6 +7,7 @@
  *     --test cloudflare-worker/test/deck_new_d897.test.ts
  */
 import test, { after } from 'node:test';
+import { quoting } from './_quoted_run.ts';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
@@ -80,13 +81,15 @@ async function fixture(stub: Stub = {}) {
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
-async function call(f: F, who: number, method: string, path: string, json?: unknown, claims: Record<string, unknown> = {}) {
+async function rawCall(f: F, who: number, method: string, path: string, json?: unknown, claims: Record<string, unknown> = {}) {
   const jwt = await new SignJWT({ ...claims, user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await f.app.request(path, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, ...(json === undefined ? {} : { body: JSON.stringify(json) }) }, f.env);
   const text = await res.text();
   let body: any; try { body = JSON.parse(text); } catch { body = text; }
   return { status: res.status, body };
 }
+
+const call = quoting(rawCall);
 
 const aiOff = (f: F, user = 2) => f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES(?,?,?,'','manual')").run(`off-${user}`, user, PAGE.toLowerCase());
 
@@ -361,7 +364,7 @@ test('out of AI tokens: Build deck is refused 402 and nothing is written', async
   const f = await fixture();
   try {
     f.db.exec('UPDATE ai_topup_accounts SET balance_microusd = 0 WHERE user_id = 2');
-    const r = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1 });
+    const r = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, audience: 'angel', length: 'short' });
     assert.equal(r.status, 402, JSON.stringify(r.body));
     assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM pitch_deck_proposals').get() as any).n, 0);
     assert.deepEqual(f.audits(), []);
@@ -425,7 +428,7 @@ test('the plan gate and the venture gate', async () => {
 test('PD4: a record the founder unticked is on no card and in no prompt, and the proposal remembers it', async () => {
   const f = await fixture({ cards: { cards: [] } });
   try {
-    const r = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, length: 'standard', exclude: ['grow.paying_customers'] });
+    const r = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, audience: 'series_a_fund', length: 'standard', exclude: ['grow.paying_customers'] });
     assert.equal(r.status, 201, JSON.stringify(r.body));
     const slides = JSON.stringify(r.body.proposal.slides);
     assert.doesNotMatch(slides, /grow\.paying_customers/);

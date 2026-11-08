@@ -68,3 +68,8 @@ D4563 (#4563): Corporate Governance is the desk's tab after Templates, at its ow
   - its versions, with preview (`PdfPages`), download and upload.
 - `governanceModel.js` holds the tab's pure rules.
 - A confidential document is only counted for an admin who is not the Super Admin. The ownership panel is the Super Admin's alone.
+
+D4811 (#4811) part 1: one lifecycle vocabulary per object kind, from `frontend/src/lib/contractLifecycle.js`, drawn by `LifecycleBadge.jsx`.
+- Templates read Draft, Under legal review, Approved for use (a dashed outline), Superseded or Archived; agreements read Prepared, Ready for signature, Sent, Executed or Voided; governance reads Draft, Reviewed, Approved, Executed or Archived. Only Executed is the filled seal. The stored values do not change.
+- Restricted and Incomplete are overlays beside the state. While either applies, the editor renders no Publish and New envelope offers no such publication; `SafetyBanner` says why. The Worker computes the overlays (`cloudflare-worker/src/services/templateSafety.ts`) and refuses the same actions with 409.
+- An agreements row says where it stands ("Sent 12 May 2026 · Awaiting signature"). A missing company link reads "Unlinked recipient"; the only amber flag (`InconsistencyFlag`) is a contradiction: marked signed with no execution evidence.

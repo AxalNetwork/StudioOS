@@ -21,7 +21,8 @@
  *
  * ADMIN
  *   GET   /admin/queue          everything awaiting review
- *   POST  /admin/:uid/review    approve / reject / pause
+ *   POST  /admin/:uid/review    approve / reject / pause  { expected_revision }
+ *   POST  /admin/:uid/feature   feature / stop featuring a LIVE listing  { featured, expected_revision }
  *   POST  /admin/credits        a Super Admin's manual grant or deduction (D608)
  *   GET   /admin/credits/summary aggregate active non-admin holdings (Super Admin, D957)
  *   GET   /admin/credits/:userId one member's balance and ledger (Super Admin, D633)
@@ -884,6 +885,17 @@ r.get('/admin/credits/:userId', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D4806 (#4806) — A REVIEW APPLIES TO THE LISTING AS THE REVIEWER SAW IT. Every editorial or publication action
+ * names the listing's revision (`expected_revision`, the listing's `updated_at` as the admin list returned it).
+ * A listing that changed since (edited, paused, approved by someone else) is refused as 409 `listing_changed`
+ * and nothing is written; the UPDATE itself repeats the check, so a change landing between the read and the
+ * write loses too. Missing, it is 400.
+ */
+const LISTING_CHANGED = { code: 'listing_changed', message: 'This listing changed after you opened it. Read it again before you decide. Nothing was changed.' };
+const REVISION_REQUIRED = { code: 'expected_revision_required', message: 'Send the revision of the listing you reviewed (expected_revision). Nothing was changed.' };
+const revisionOf = (b: any): string | null => (typeof b?.expected_revision === 'string' && b.expected_revision.trim() ? b.expected_revision.trim() : null);
+
 r.post('/admin/:uid/review', async (c) => {
   try {
     const admin = await requireAdmin(c);
@@ -894,6 +906,9 @@ r.post('/admin/:uid/review', async (c) => {
     const perk = await c.env.DB.prepare('SELECT * FROM perks WHERE uid = ?')
       .bind(c.req.param('uid')).first<PerkRow>();
     if (!perk) return refuse(c, 404, { code: 'not_found', message: 'No listing has that id.' });
+    const expected = revisionOf(b);
+    if (!expected) return refuse(c, 400, REVISION_REQUIRED);
+    if (expected !== perk.updated_at) return refuse(c, 409, LISTING_CHANGED);
     const note = str(b?.review_note, 1000);
     if (action === 'reject' && !note) return refuse(c, 400, { code: 'note_required', message: 'a rejection must say why — the partner sees this' });
     const moves: Record<string, readonly string[]> = {
@@ -901,33 +916,71 @@ r.post('/admin/:uid/review', async (c) => {
     };
     const notReviewable = (state: string) => refuse(c, 409, { code: 'not_reviewable', message: `This listing is ${state}; ${action} does not apply to that state. Read it again.` });
     if (!moves[action].includes(perk.status)) return notReviewable(perk.status);
-    const same = action === 'approve' && perk.status === 'live';
-    // D985 — putting a listing live needs the branch's Perks grant; a reject, a
-    // pause or an edit to a live listing stays open.
-    if (action === 'approve' && !same) {
+    // D4806: approving is putting a listing live. A listing that is already live is featured or un-featured by its
+    // own operation (`/feature`), never by an approve that could republish it.
+    if (action === 'approve' && perk.status === 'live') {
+      return refuse(c, 409, { code: 'already_live', message: 'This listing is already live. Use Feature or Stop featuring to change its feature. Nothing was changed.' });
+    }
+    // D985 — putting a listing live needs the branch's Perks grant; a reject or a
+    // pause stays open.
+    if (action === 'approve') {
       const notGranted = await programRefusal(c.env, 'perks');
       if (notGranted) return c.json(notGranted.body, notGranted.status);
     }
     const status = action === 'approve' ? 'live' : action === 'reject' ? 'rejected' : 'paused';
     const featured = b?.featured === undefined ? perk.featured : (b.featured ? 1 : 0);
     const editorial = b?.editorial_note === undefined ? perk.editorial_note : (str(b.editorial_note, 500) || null);
-    const result = same ? await c.env.DB.prepare(
-      `UPDATE perks SET featured = ?, editorial_note = ?, updated_at = ?
-        WHERE id = ? AND status = ? AND updated_at = ?`,
-    ).bind(featured, editorial, nowIso(), perk.id, perk.status, perk.updated_at).run() : await c.env.DB.prepare(
+    const stamp = nowIso();
+    const result = await c.env.DB.prepare(
       `UPDATE perks SET status = ?, review_note = ?, reviewed_by_user_id = ?, reviewed_at = ?,
               featured = ?, editorial_note = ?, updated_at = ? WHERE id = ? AND status = ? AND updated_at = ?`,
-    ).bind(status, note || perk.review_note, admin.id, nowIso(), featured, editorial, nowIso(), perk.id, perk.status, perk.updated_at).run();
-    if (Number(result.meta?.changes) !== 1) {
-      const current = await c.env.DB.prepare('SELECT status FROM perks WHERE id = ?').bind(perk.id).first<{ status: string }>();
-      return notReviewable(current?.status || 'missing');
-    }
+    ).bind(status, note || perk.review_note, admin.id, stamp, featured, editorial, stamp, perk.id, perk.status, expected).run();
+    if (Number(result.meta?.changes) !== 1) return refuse(c, 409, LISTING_CHANGED);
     await logAdminAction(c.env, admin.id, admin.email,
-      same ? 'perk.feature_updated' : action === 'approve' ? 'perk.approved' : action === 'reject' ? 'perk.rejected' : 'perk.paused', {
+      action === 'approve' ? 'perk.approved' : action === 'reject' ? 'perk.rejected' : 'perk.paused', {
         uid: perk.uid, before: perk.status, after: status, featured_changed: Number(featured) !== Number(perk.featured),
         ...(perk.partner_user_id ? { target_user_id: perk.partner_user_id } : {}),
       });
-    return c.json({ ok: true, status });
+    return c.json({ ok: true, status, revision: stamp });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D4806 (#4806) — POST /admin/:uid/feature { featured, editorial_note?, expected_revision }. Features or stops
+ * featuring a listing that is LIVE and nothing else: it cannot publish, republish or change the status of a
+ * paused, rejected or edited listing, whatever the dialog was showing. A listing that changed since the
+ * reviewer opened it is refused (409 `listing_changed`); one that is not live is refused (409 `not_live`).
+ */
+r.post('/admin/:uid/feature', async (c) => {
+  try {
+    const admin = await requireAdmin(c);
+    await requireBranchNotSuspended(c);
+    const b = await c.req.json().catch(() => ({} as any));
+    if (typeof b?.featured !== 'boolean') return refuse(c, 400, { code: 'bad_featured', message: 'Say whether to feature the listing (featured: true) or stop featuring it (featured: false).' });
+    const perk = await c.env.DB.prepare('SELECT * FROM perks WHERE uid = ?').bind(c.req.param('uid')).first<PerkRow>();
+    if (!perk) return refuse(c, 404, { code: 'not_found', message: 'No listing has that id.' });
+    const expected = revisionOf(b);
+    if (!expected) return refuse(c, 400, REVISION_REQUIRED);
+    if (expected !== perk.updated_at) return refuse(c, 409, LISTING_CHANGED);
+    if (perk.status !== 'live') {
+      return refuse(c, 409, { code: 'not_live', message: `This listing is ${perk.status}. Only a live listing can be featured or stop being featured. Nothing was changed.` });
+    }
+    const featured = b.featured ? 1 : 0;
+    const editorial = b.editorial_note === undefined ? perk.editorial_note : (str(b.editorial_note, 500) || null);
+    if (featured === Number(perk.featured) && (editorial ?? null) === (perk.editorial_note ?? null)) {
+      return refuse(c, 409, { code: 'no_change', message: featured ? 'This listing is already featured with that note. Nothing was changed.' : 'This listing is not featured. Nothing was changed.' });
+    }
+    const stamp = nowIso();
+    const result = await c.env.DB.prepare(
+      `UPDATE perks SET featured = ?, editorial_note = ?, updated_at = ?
+        WHERE id = ? AND status = 'live' AND updated_at = ?`,
+    ).bind(featured, editorial, stamp, perk.id, expected).run();
+    if (Number(result.meta?.changes) !== 1) return refuse(c, 409, LISTING_CHANGED);
+    await logAdminAction(c.env, admin.id, admin.email, 'perk.feature_updated', {
+      uid: perk.uid, before: perk.status, after: perk.status, featured_changed: featured !== Number(perk.featured),
+      ...(perk.partner_user_id ? { target_user_id: perk.partner_user_id } : {}),
+    });
+    return c.json({ ok: true, status: 'live', featured: !!featured, revision: stamp });
   } catch (e) { return mapError(c, e); }
 });
 

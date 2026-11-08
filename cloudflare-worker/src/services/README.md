@@ -294,6 +294,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `raiseProspectWriters.ts` | D1191: narrow canonical legacy prospect create/edit/promotion writers, re-exported by the Raise writer and safe for Contacts imports. |
 | `stripeReadiness.ts` | D1433 (#3703): shared key-mode, signing-secret and per-interval plan readiness for checkout, public plans and HQ checks. |
 | `distribution/` | D4485 overview reads and provenance, invoked after the existing Grow project gate. |
+| `beehiiv/` | D2407 (#2407 parts 1–2): a founder's own Beehiiv newsletter, read only, through Beehiiv's MCP server. `mcp.ts` holds the two frozen tool lists (the draft list unreachable until part 3); `reads.ts` is the only file that opens a Beehiiv session, aggregates only, every rate a fraction; `grow.ts` links one publication per venture and lands Grow's figures and posts through the ledger. It never imports Axal VC's own newsletters. Its README has the rules. |
 
 ## Rules
 
@@ -715,3 +716,5 @@ reminder is sent once.
 D1420 (#3864): `studioLayoutRun.ts` is `studio:layout` on `POST /api/ai/rail/run`: the model's messages (the layout and its revision, the catalogue, a founder's Lab week and readiness tier; no other member's data and no table name), `validateOps` (add, remove, resize and move ops checked against the catalogue, the plan locks, the fixed blocks and the 12-module cap, each dropped op named by its title, never its key) and each profile's /studio rail key (`STUDIO_RAIL_PAGES`). It writes nothing; `../routes/rail_run.ts` files the kept ops as `ai_rail_proposals` rows.
 
 D1456 (#4014): interview processing persists its actual failed step and clears it on a successful recovery claim; session and active reads share the same DTO. See the D1456 decision for the complete contract.
+
+D4811 (#4811): `templateSafety.ts` is the one predicate for a legal template's Restricted overlay (its slug in `COUNSEL_REVIEW_SLUGS`) and Incomplete overlay (a stub or a blank body). Every route that generates from, uses or publishes a template refuses through `templateUseRefusal` with 409 (`template_restricted`, or the existing `template_has_no_body`); reading, editing, previewing and withdrawing are never refused.

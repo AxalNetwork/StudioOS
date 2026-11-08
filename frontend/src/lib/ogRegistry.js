@@ -432,6 +432,10 @@ const ROUTES = [
     description: 'Sign in to Axal VC StudioOS.',
     type: 'website',
     section: 'company',
+    // D4582: the sign-in form is a way in, not something to find in a search. `noindex, follow` is carried three ways,
+    // each checked on its own: this meta tag (prerender and client navigation), and an `X-Robots-Tag` header for the
+    // path in `frontend/public/_headers`. `/register` is shared and indexed as before.
+    robots: 'noindex, follow',
   },
 
   // ---- The Spin-Out demo day's landing page (/lp/*) ----------------------
@@ -554,5 +558,7 @@ export function ogTagsFor(pathname, overrides = {}) {
     siteName: SITE_NAME,
     card: 'summary_large_image',
     imageAlt: title,
+    /** D4582: the route's robots directive, or null when it has none (indexable by default). */
+    robots: entry?.robots || null,
   };
 }

@@ -27,6 +27,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { mapError, nowIso } from './_t13t14t15_helpers';
 import { membershipEvent } from '../services/companyMembershipEvents';
+import { archivedRefusal, isArchived } from '../services/companyAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -95,7 +96,7 @@ r.post('/company/:uid/transfer', async (c) => {
     const user = await requireAuth(c);
     const g = await asPrimaryAdmin(c.env, c.req.param('uid'), user);
     if ('status' in g) return c.json({ detail: g.detail }, g.status);
-    if (g.company.archived_at) return c.json({ detail: 'This company is archived. Restore it before you transfer it.', code: 'archived' }, 409);
+    if (isArchived(g.company)) return archivedRefusal(c); // #4963: the shared archived rule
     const body = await c.req.json().catch(() => ({} as any));
     const targetId = Number(body?.user_id);
     if (!Number.isSafeInteger(targetId) || targetId <= 0) return c.json({ detail: 'user_id is required' }, 400);

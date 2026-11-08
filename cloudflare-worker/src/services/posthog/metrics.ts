@@ -238,18 +238,59 @@ export async function acceptProposal(env: Env, ctx: AcceptContext, id: number, b
   if (typeof row === 'string') return row;
   const acceptor = acceptorFor(row.kind);
   if (!acceptor) return 'not_ready';
-  const landed = await acceptor.accept(env, ctx, row, body);
-  await env.DB.prepare(
-    "UPDATE posthog_proposals SET status = 'accepted', target_ref = ?, decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND status = 'pending'",
-  ).bind(landed.target_ref, ctx.userId, id).run();
-  return landed;
+
+  // CLAIM FIRST, ATOMICALLY — BEFORE THE ACCEPTOR RUNS, not after (D4627,
+  // #4627). The same idiom `routes/founder_validate.ts`'s accept route and
+  // `routes/pipeline.ts`'s `decision_gates` use: `WHERE status = 'pending'`,
+  // checked by its AFFECTED-ROW COUNT, is what stops two overlapping accepts
+  // from both reaching the acceptor. The previous order called the acceptor
+  // FIRST and only checked rows on the write AFTER it — a deterministic
+  // repro with a fake store and a controlled writer produced two writer
+  // calls and two successful responses for one proposal; the conditional
+  // update's own `changes` were `[1, 0]`, but both callers had already
+  // written by the time either update ran. Claiming first means a losing
+  // caller never calls `acceptor.accept` at all.
+  const claim = await env.DB.prepare(
+    `UPDATE posthog_proposals SET status = 'accepted', decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ? AND project_id = ? AND integration_id = ? AND status = 'pending'`,
+  ).bind(ctx.userId, id, ctx.projectId, ctx.integrationId).run();
+  if (!claim.meta?.changes) return 'decided';
+
+  try {
+    const landed = await acceptor.accept(env, ctx, row, body);
+    await env.DB.prepare('UPDATE posthog_proposals SET target_ref = ? WHERE id = ?').bind(landed.target_ref, id).run();
+    return landed;
+  } catch (e) {
+    // RECOVERABLE, NOT LOST. The acceptor may already have written a real
+    // target before throwing — `experiment_evidence` creates an experiment
+    // and then links it as evidence in two separate writer calls, with
+    // nothing wrapping both. `addExperiment`'s `sourceProposalId` (this same
+    // `id`) is what lets a RETRY of this proposal land on that same
+    // experiment instead of writing a second, orphaned one; `addEvidence` is
+    // already an upsert, so repeating it is a no-op. The claim itself goes
+    // back to pending — never left "accepted" with nothing, or only half of
+    // something, behind it — so a retry (or the founder, from the band) can
+    // still decide it.
+    await env.DB.prepare(
+      "UPDATE posthog_proposals SET status = 'pending', decided_by = NULL, decided_at = NULL, updated_at = datetime('now') WHERE id = ?",
+    ).bind(id).run();
+    throw e;
+  }
 }
 
 export async function dismissProposal(env: Env, ctx: AcceptContext, id: number): Promise<'ok' | 'not_found' | 'decided'> {
   const row = await pendingRow(env, ctx, id);
   if (typeof row === 'string') return row;
-  await env.DB.prepare("UPDATE posthog_proposals SET status = 'dismissed', decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
-    .bind(ctx.userId, id).run();
+  const r = await env.DB.prepare(
+    "UPDATE posthog_proposals SET status = 'dismissed', decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND status = 'pending'",
+  ).bind(ctx.userId, id).run();
+  // CHECKED, NOT ASSUMED (D4627, #4627): a concurrent accept can have claimed
+  // this row between the read above and this write. Without checking
+  // affected rows this returned 'ok' for a dismiss that changed nothing —
+  // the same shape of lie `acceptProposal` told before this fix, the other
+  // way round: accept versus dismiss has to settle on one outcome, not
+  // report dismissed over a row that was actually accepted.
+  if (!r.meta?.changes) return 'decided';
   return 'ok';
 }
 
