@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  BASELINE_CUTOFF, LEDGER_DDL, LEDGER_TABLE, LEGACY_DUPLICATES, NUMBERED_CEILING,
+  BASELINE_CUTOFF, LEDGER_DDL, LEDGER_TABLE, LEGACY_DUPLICATES, LEGACY_DUPLICATE_STAMPS, NUMBERED_CEILING,
   applyPlan, compareMigrations, listMigrationFiles, migrationDuplicates, migrationNameProblem, migrationNumber, migrationStamp, planActions,
 } from '../../scripts/lib/migrationPlan.mjs';
 import { ISSUE_NUMBERED_FROM, allDecisionProblems, decisionFileProblems, readDecisionFiles } from '../../scripts/check-decision-ids.mjs';
@@ -58,9 +58,15 @@ test('duplicates: a shared number or a shared stamp is refused, naming both file
   assert.deepEqual(migrationDuplicates(['202611021015_a.sql', '202611021016_b.sql', '764_a.sql']), []);
   assert.deepEqual(migrationDuplicates(['259_a.sql', '259_b.sql']), [], 'a historical pair stays as it is');
   assert.deepEqual(migrationDuplicates(realNames()), []);
+  // The one same-minute pair on main is ledgered by name; a third file in that minute still fails.
+  const [x, y] = LEGACY_DUPLICATE_STAMPS[0];
+  assert.deepEqual(migrationDuplicates([x, y]), []);
+  const third = migrationDuplicates([x, y, '202611072219_a_third.sql']);
+  assert.ok(third.length > 0 && third.every((m) => m.includes('202611072219_a_third.sql')), 'a third file in that minute is named');
+  for (const pair of LEGACY_DUPLICATE_STAMPS) for (const f of pair) assert.ok(realNames().includes(f), `${f} is on main`);
   const counts = new Map<number, number>();
   for (const n of realNames()) counts.set(migrationNumber(n), (counts.get(migrationNumber(n)) ?? 0) + 1);
-  assert.deepEqual([...counts].filter(([, c]) => c > 1).map(([n]) => n).sort((a, b) => a - b), [...LEGACY_DUPLICATES], 'the list is exactly the pairs on main, no more');
+  assert.deepEqual([...counts].filter(([, c]) => c > 1).map(([n]) => n).sort((a, b) => a - b), [...LEGACY_DUPLICATES, ...LEGACY_DUPLICATE_STAMPS.map(([f]) => migrationNumber(f))], 'the lists are exactly the pairs on main, no more');
 });
 
 test('the ledger runner applies a stamped migration once, after the numbered ones, on a SQLite copy', () => {
