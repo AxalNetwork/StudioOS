@@ -20,7 +20,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import Lightbox from '../../ui/Lightbox';
 import { Unreadable } from '../../ui';
 import { mailApi } from '../../lib/api/mail.js';
-import { founderPeople, mailboxLine, MODULE_OF_KIND, networkCard, quotedLine, recipientFor, sendingAccount, stateFor } from './emailModel.js';
+import { draftChain, draftRowText, founderPeople, mailboxLine, MODULE_OF_KIND, networkCard, quotedLine, recipientFor, sendingAccount, stateFor } from './emailModel.js';
 import { BODY, BTN, CARD, ERROR, EYEBROW, H3, MUTED, PRIMARY, StateCard } from './emailParts.jsx';
 import ComposeSheet from './ComposeSheet.jsx';
 import ConnectPanel, { ConnectOutcome } from './ConnectPanel.jsx';
@@ -110,6 +110,7 @@ function Person({ refId, api, account, shares, params, onCloseCompose, onSent, o
   const [sent, setSent] = useState(null);
   const [drafts, setDrafts] = useState(null);
   const [composing, setComposing] = useState(params.get('compose') === '1');
+  const [resume, setResume] = useState(null);
 
   const load = useCallback(() => {
     setFailed(null);
@@ -129,7 +130,13 @@ function Person({ refId, api, account, shares, params, onCloseCompose, onSent, o
   const to = recipientFor(person, shares);
   const refs = pack.items.filter((i) => !off.has(i.ref)).map((i) => i.ref);
   const blocked = person.kind === 'member' && !(share?.ready);
-  const write = () => setComposing(true);
+  const write = () => { setResume(null); setComposing(true); };
+  // #4660: a stored draft opens in the composer with its versions and the member's saved text, and sends without another run.
+  const open = (uid) => { const chain = draftChain(drafts, uid); if (chain) { setResume(chain); setComposing(true); } };
+  const closeComposer = () => {
+    setComposing(false); setResume(null); onCloseCompose();
+    api.drafts(refId).then((r) => setDrafts(r?.drafts ?? [])).catch(() => setDrafts(false));
+  };
 
   return <>
     <section className={`${CARD} flex min-w-0 flex-col gap-3`} data-testid="email-thread">
@@ -140,7 +147,7 @@ function Person({ refId, api, account, shares, params, onCloseCompose, onSent, o
       </div>
       {person.kind === 'member' && share && !share.ready && <NetworkCard share={share} api={api} onShared={onShared} />}
       {!to && person.kind !== 'member' && <StateCard state={stateFor('no_address', { name: person.name, module: MODULE_OF_KIND[person.kind] ?? 'their record' })} />}
-      <ThreadRows sent={sent} drafts={drafts} />
+      <ThreadRows sent={sent} drafts={drafts} onOpen={open} />
       {!account?.can_read && account && <p className={`text-[12px] ${MUTED}`}>Replies arrive in your mailbox, not here.</p>}
     </section>
 
@@ -156,12 +163,12 @@ function Person({ refId, api, account, shares, params, onCloseCompose, onSent, o
       <p className={`text-[12px] ${MUTED}`}>Nothing else is shared. Turn a record off and Eadwyn will not read it for this email.</p>
     </aside>
 
-    {composing && !blocked && <ComposeSheet pack={pack} refs={refs} to={to} account={account} from={params.get('from')} api={api}
-      onClose={() => { setComposing(false); onCloseCompose(); }} onSent={() => { setComposing(false); onSent(); }} />}
+    {composing && !blocked && <ComposeSheet key={resume?.versions?.[resume.at]?.uid ?? 'new'} pack={pack} refs={refs} to={to} account={account} from={params.get('from')} api={api} resume={resume}
+      onClose={closeComposer} onSent={() => { setComposing(false); setResume(null); onSent(); }} />}
   </>;
 }
 
-function ThreadRows({ sent, drafts }) {
+function ThreadRows({ sent, drafts, onOpen }) {
   if (sent === false || drafts === false) return <p className={ERROR} role="alert">What you sent this person could not be read. Try again.</p>;
   if (sent === null || drafts === null) return <p className={MUTED}>Reading your emails…</p>;
   if (!sent.items.length && !drafts.length) return <p className={BODY}>Nothing written to them yet.</p>;
@@ -171,11 +178,12 @@ function ThreadRows({ sent, drafts }) {
         <span className={`font-mono text-[11.5px] ${MUTED}`}>{String(r.sent_at ?? r.created_at ?? '').slice(0, 16).replace('T', ' · ')}</span></div>
       <span className={`text-[12px] ${r.status === 'failed' ? 'text-red-700 dark:text-red-300' : MUTED}`}>{r.status === 'failed' ? `Not sent: ${r.error || 'the mail server refused it.'}` : quotedLine(r)}</span>
     </li>)}
-    {drafts.map((d) => <li key={d.uid} className="rounded-axal-md border border-dashed border-axal-hairline p-3 dark:border-gray-700" data-testid="thread-draft">
-      <span className={EYEBROW}>Draft · {String(d.created_at ?? '').slice(0, 10)}</span>
-      <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{d.subject}</p>
-      <p className={`m-0 line-clamp-3 ${BODY}`}>{d.body}</p>
-    </li>)}
+    {drafts.map((d) => { const t = draftRowText(d); return <li key={d.uid} className="rounded-axal-md border border-dashed border-axal-hairline p-3 dark:border-gray-700" data-testid="thread-draft">
+      <span className={EYEBROW}>Draft · {String(d.created_at ?? '').slice(0, 10)}{t.edited ? ' · edited' : ''}</span>
+      <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{t.subject}</p>
+      <p className={`m-0 line-clamp-3 ${BODY}`}>{t.body}</p>
+      <button type="button" className={`mt-2 ${BTN}`} onClick={() => onOpen?.(d.uid)} data-testid="thread-draft-open">Open draft</button>
+    </li>; })}
   </ul>;
 }
 

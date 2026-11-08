@@ -150,6 +150,7 @@ function freshDb() {
   // behaviour and still do.
   db.exec(migration('241_advisor_money_model'));
   db.exec(migration('369_advisor_client_notes'));
+  db.exec(migration('202611071558_advisor_booking_decision')); // #4702: the advisor's answer, apart from the status
   // D4472: the assignable picker includes active additional Advisor grants.
   const licenceMigration=readdirSync(`${SQL}/migrations`).find(name=>name.endsWith('_account_licences.sql'))!;
   db.exec(readFileSync(`${SQL}/migrations/${licenceMigration}`,'utf8'));
@@ -1111,4 +1112,82 @@ test('D4703: two payout onboarding starts make one provider account, and a store
       'acct_synthetic_winner', 'the account attached first is not overwritten');
     assert.deepEqual(linkedFor, ['acct_synthetic_winner']);
   } finally { globalThis.fetch = realFetch; }
+});
+
+// ── #4702 (D4702): the advisor's answer is its own fact ─────────────────────
+
+const answerOf = (db: InstanceType<typeof DatabaseSync>, id: number) =>
+  ({ ...(db.prepare('SELECT status, advisor_decision, advisor_decided_at, cancelled_by FROM advisor_bookings WHERE id = ?').get(id) as any) });
+
+test('#4702: a confirm records the accept; a client cancelling afterwards leaves it accepted, cancelled by the client', async () => {
+  // Mutation checked: the cancel UPDATE writing advisor_decision = 'declined' → the accept is overwritten.
+  const db = freshDb();
+  seedBooking(db, 41, 1, 'pending');
+  const e = env(db);
+  assert.equal((await call(e, 'POST', '/bookings/41/confirm', ada)).status, 200);
+  const accepted = answerOf(db, 41);
+  assert.deepEqual([accepted.status, accepted.advisor_decision, accepted.cancelled_by], ['confirmed', 'accepted', null]);
+  assert.ok(accepted.advisor_decided_at, 'when the advisor answered');
+  const cancelled = await call(e, 'POST', '/bookings/41/cancel', fran, { reason: 'Schedule clash' });
+  assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
+  assert.deepEqual(answerOf(db, 41), { ...accepted, status: 'cancelled', cancelled_by: 'client' }, 'still accepted; the client cancelled');
+  assert.equal(cancelled.body.advisor_decision, undefined, 'the founder\'s own read does not carry the advisor\'s answer');
+  const mine = (await call(e, 'GET', '/me/bookings', ada)).body.items.find((b: any) => b.id === 41);
+  assert.deepEqual([mine.status, mine.advisor_decision, mine.cancelled_by], ['cancelled', 'accepted', 'client']);
+});
+
+test('#4702: the advisor cancelling a request still waiting is a decline; the client withdrawing one is not; the system\'s cancel is neither', async () => {
+  // Mutation checked: treating every pending cancel as a decline → the client's withdrawal records 'declined'.
+  const db = freshDb();
+  seedBooking(db, 42, 1, 'pending'); seedBooking(db, 43, 1, 'pending'); seedBooking(db, 44, 1, 'pending');
+  const e = env(db);
+  assert.equal((await call(e, 'POST', '/bookings/42/cancel', ada, { reason: 'Not a fit' })).status, 200);
+  assert.deepEqual([answerOf(db, 42).advisor_decision, answerOf(db, 42).cancelled_by], ['declined', 'advisor']);
+  assert.equal((await call(e, 'POST', '/bookings/43/cancel', fran, { reason: 'Changed my mind' })).status, 200);
+  assert.deepEqual([answerOf(db, 43).advisor_decision, answerOf(db, 43).cancelled_by], [null, 'client'], 'withdrawn before any answer');
+  const slot = (db.prepare('SELECT slot_id FROM advisor_bookings WHERE id = 44').get() as any).slot_id;
+  assert.equal((await callCollecting(e, 'DELETE', `/me/slots/${slot}`, ada)).status, 200);
+  assert.deepEqual([answerOf(db, 44).advisor_decision, answerOf(db, 44).cancelled_by], [null, 'system']);
+});
+
+test('#4702: the migration backfills only what the row proves', () => {
+  const db = freshDb();
+  db.exec("DELETE FROM advisor_bookings");
+  const ins = db.prepare('INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status, cancel_reason) VALUES (?,?,?,?,?,?,?)');
+  ins.run(1, 'b1', 1, 1, FOUNDER_USER, 'confirmed', null);
+  ins.run(2, 'b2', 2, 1, FOUNDER_USER, 'completed', null);
+  ins.run(3, 'b3', 3, 1, FOUNDER_USER, 'no_show', null);
+  ins.run(4, 'b4', 4, 1, FOUNDER_USER, 'cancelled', 'slot_cancelled');
+  ins.run(5, 'b5', 5, 1, FOUNDER_USER, 'cancelled', 'a reason somebody typed');
+  ins.run(6, 'b6', 6, 1, FOUNDER_USER, 'pending', null);
+  db.exec("UPDATE advisor_bookings SET advisor_decision = NULL, cancelled_by = NULL");
+  db.exec(readFileSync(`${SQL}/migrations/202611071558_advisor_booking_decision.sql`, 'utf8').split('\n').filter((l) => /^UPDATE/.test(l)).join('\n'));
+  const got = (db.prepare('SELECT id, advisor_decision AS d, cancelled_by AS c FROM advisor_bookings ORDER BY id').all() as any[]).map((r) => [r.id, r.d, r.c]);
+  assert.deepEqual(got, [[1, 'accepted', null], [2, 'accepted', null], [3, 'accepted', null], [4, null, 'system'], [5, null, null], [6, null, null]],
+    'a cancelled row with a typed reason stays unknown: it may be a decline or a client leaving');
+});
+
+// ── #4702: review coverage in one read, over every held session ─────────────
+
+test('#4702: review coverage counts EVERY held session in one read, not the first twenty', async () => {
+  // Mutation checked: the coverage query capped at 20 sessions → held is 20, not 25.
+  const db = freshDb();
+  for (let id = 100; id < 125; id += 1) seedBooking(db, id, 1, 'completed');
+  const rv = db.prepare('INSERT INTO advisor_reviews (uid, booking_id, reviewer_user_id, reviewer_role, rating) VALUES (?,?,?,?,?)');
+  rv.run('r1', 100, FOUNDER_USER, 'founder', 5);       // oldest sessions reviewed: the ones a "newest 20" read would never reach
+  rv.run('r2', 100, ADVISOR_USER, 'advisor', 4);
+  rv.run('r3', 101, FOUNDER_USER, 'founder', 3);
+  const e = env(db);
+  const r = await call(e, 'GET', '/me/review-coverage', ada);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual([r.body.held, r.body.reviewed, r.body.awaiting], [25, 2, 23]);
+  assert.deepEqual(r.body.ratings, { count: 3, sum: 12 });
+  assert.equal(r.body.items.length, 25);
+  const one = r.body.items.find((i: any) => i.booking_id === 100);
+  assert.deepEqual([one.reviews, one.advisor_filed, one.rating], [2, true, 4.5]);
+  assert.equal(r.body.items.find((i: any) => i.booking_id === 101).advisor_filed, false);
+  assert.equal(r.body.items_complete, true);
+  assert.equal((await call(e, 'GET', '/me/review-coverage', grace)).body.held, 0, 'another advisor\'s sessions are not counted');
+  const list = await call(e, 'GET', '/me/bookings?status=completed', ada);
+  assert.deepEqual([list.body.total, list.body.items.length], [25, 25], 'the list says how many there are');
 });

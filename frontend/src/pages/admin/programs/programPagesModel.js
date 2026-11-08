@@ -242,6 +242,8 @@ export function playbookFrom(read, superAdmin) {
     publishedAt: pb.published_at || null,
     editedAt: draft?.edited_at || null,
     differs: Boolean(draft?.differs),
+    // D4806: the revision of the draft the reviewer sees; Publish names it.
+    draftHash: typeof draft?.hash === 'string' ? draft.hash : null,
     sections,
   };
 }
@@ -741,8 +743,9 @@ export const ACTION_WORD = Object.freeze({ approve: 'Approve', reject: 'Reject',
 /**
  * Each action's dialog: what it does, and what it sends. Approve keeps the
  * stored note unless one is typed (N8); Reject needs the note the partner
- * sees and is final; the feature switch is an approve on a live listing,
- * which the Worker treats as an edit of the feature only.
+ * sees and is final; the feature switch is its own operation on a live listing
+ * (`POST /perks/admin/:uid/feature`, D4806), never an approve, so it cannot put a
+ * paused or edited listing back on the shelf.
  */
 export function listingDialog(action, p) {
   const offer = p?.offer || 'this listing';
@@ -753,17 +756,25 @@ export function listingDialog(action, p) {
   return { title: `Stop featuring ${offer}?`, lines: ['It leaves “Featured this month”. It stays live.'], button: 'Stop featuring' };
 }
 
+/** Feature and Stop featuring are one operation of their own; every other action is a review. */
+export const isFeatureAction = (action) => action === 'feature' || action === 'unfeature';
+
+/**
+ * D4806 (#4806): every body names the listing revision the reviewer saw (`expected_revision`, the row's
+ * `updated_at`), so a listing that changed while the dialog was open is refused, not overwritten.
+ */
 export function listingBody(action, p, { note = '', editorial = '', featured = false } = {}) {
   const typed = String(note || '').trim();
-  if (action === 'reject') return { action: 'reject', review_note: typed };
-  if (action === 'pause') return { action: 'pause', ...(typed ? { review_note: typed } : {}) };
-  if (action === 'feature' || action === 'unfeature') {
-    const body = { action: 'approve', featured: action === 'feature' };
+  const expected_revision = typeof p?.updated_at === 'string' ? p.updated_at : null;
+  if (action === 'reject') return { action: 'reject', review_note: typed, expected_revision };
+  if (action === 'pause') return { action: 'pause', ...(typed ? { review_note: typed } : {}), expected_revision };
+  if (isFeatureAction(action)) {
+    const body = { featured: action === 'feature', expected_revision };
     const line = String(editorial || '').trim();
     if (action === 'feature' && line) body.editorial_note = line;
     return body;
   }
-  const body = { action: 'approve', review_note: typed || p?.review_note || '' };
+  const body = { action: 'approve', review_note: typed || p?.review_note || '', expected_revision };
   if (featured) body.featured = true;
   const line = String(editorial || '').trim();
   if (line) body.editorial_note = line;

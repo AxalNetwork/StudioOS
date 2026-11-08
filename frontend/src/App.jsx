@@ -3,6 +3,7 @@ import LegacyContractsRedirect from './pages/admin/LegacyContractsRedirect';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
+import { usePageMeta } from './lib/seo';
 import { preserveReloadGuards } from './lib/reloadGuard';
 import { consumePendingNextOnce, loginRedirectFor, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
@@ -2001,6 +2002,9 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
 // the server-side cookie/session revoke completes in the background. A signed-
 // out visitor renders the form immediately with no teardown.
 function AuthScreen({ user, clearSession, children, heldFor = null }) {
+  // D4582: /login and /register carry their own head on a client-side arrival too (a protected route redirecting
+  // here keeps no other page's title, canonical or social URL). No pageview beacon: these pages never sent one.
+  usePageMeta({ path: useLocation().pathname, analytics: false });
   const startedRef = React.useRef(false);
   // #4651: a signed-in visitor who follows a plan link to /register is told so and given the choice, instead of
   // being signed out in silence with the plan they chose lost. `heldFor` reads that plan from the address.
@@ -2605,7 +2609,11 @@ function AppInner() {
       {/* Graduation Certificate (design: Graduation Certificate.dc) — the
           Week-4 credential, conferred on the incorporation_completed
           milestone and downloadable as a vector A4-landscape PDF. */}
-      <Route path="/spinout-lab/certificate" element={guard(labRoles(['admin', 'founder']), <SpinoutLabCertificatePage />)} />
+      {/* #4661: any signed-in account opens it. The page and `GET /certificates/mine`
+          are the member's own, and the page decides from the Worker's graduation
+          rule: a graduate of any role (an Explorer too) keeps their certificate
+          after enrollment ends, which a role gate here took away. */}
+      <Route path="/spinout-lab/certificate" element={authOnly(<SpinoutLabCertificatePage />)} />
       {/* Office Hours tool page (design: Office Hours.dc) — founder-side
           partner session booking; /office-hours stays the advisor console. */}
       <Route path="/spinout-lab/office-hours" element={guard(labRoles(['admin']), <SpinoutLabOfficeHoursPage />)} />

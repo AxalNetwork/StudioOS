@@ -34,6 +34,8 @@ const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8');
 const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
 const M757 = readFileSync(new URL('../sql/migrations/757_company_default_currency.sql', import.meta.url), 'utf8');
+// #4963: a General write is conditioned on profile_version, which every upgraded database carries.
+const M4963 = readFileSync(new URL('../sql/migrations/202611072255_company_profile_version.sql', import.meta.url), 'utf8');
 
 // Ada is Northwind's primary admin (an editor); Ben is a plain member; Cy belongs elsewhere.
 const ADA = 1, BEN = 2, CY = 3;
@@ -52,7 +54,7 @@ function base() {
   l.run('l-2', NORTH, BEN, 'Member', 0, '2026-01-02');
   return db;
 }
-const upgrade = (db: DatabaseSync) => { db.exec(M757); return db; };
+const upgrade = (db: DatabaseSync) => { db.exec(M757); db.exec(M4963); return db; };
 const fixture = () => upgrade(base());
 const envOf = (db: DatabaseSync): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) });
 

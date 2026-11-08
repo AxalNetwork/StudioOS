@@ -121,7 +121,9 @@ async function api(method: string, path: string, body?: unknown) {
 // The one-click build, then Accept, on the fake binding.
 const brief = await api('GET', `/api/decks/new/context?project_id=${ONE_CLICK.projectId}`);
 const pickBrief = brief.inferred ? { audience: brief.inferred.audience, length: brief.inferred.length } : brief.fast_path;
-const built = await api('POST', '/api/decks/generate', { project_id: ONE_CLICK.projectId, ...pickBrief });
+// D4597 (#4597): a metered build names the quote it was shown.
+const priced = await api('POST', '/api/decks/new/quote', { project_id: ONE_CLICK.projectId, step: 'build', ...pickBrief });
+const built = await api('POST', '/api/decks/generate', { project_id: ONE_CLICK.projectId, ...pickBrief, ...(priced.quote_uid ? { quote_uid: priced.quote_uid } : {}) });
 const accepted = await api('POST', `/api/decks/proposals/${built.proposal.id}/keep-slides`, { all: true, save: true });
 db.prepare('UPDATE pitch_decks SET created_at = ? WHERE project_id = ?').run(SAVED_AT, ONE_CLICK.projectId);
 const oneClick = { projectId: ONE_CLICK.projectId, deckId: accepted.deck.id, cards: accepted.deck.slides.length, theme: 'neutral_light', aspect: '16:9' };

@@ -96,16 +96,16 @@ test('gates: a non-member reads 404 everywhere; a member reads; a member who is 
   assert.equal(legal.body.registered_address.value, null);
 });
 
-test('gates: a Founder-role member, the primary admin and a platform admin each write', async () => {
+test('gates: a Founder-role member and the primary admin write; a platform admin without a seat is read-only (D4960)', async () => {
   const db = fixture(); const env = envOf(db);
   assert.equal((await call(env, CY, 'PUT', '/api/company/co-north/legal', { legal_form: 'c_corp' })).status, 200);
   assert.equal((await call(env, ADA, 'PUT', '/api/company/co-north/legal', { jurisdiction: 'us-de' })).status, 200);
   const eve = await call(env, EVE, 'PUT', '/api/company/co-north/legal', { registration_number: '7654321' });
-  assert.equal(eve.status, 200);
+  assert.deepEqual([eve.status, eve.body.error ?? eve.body.code], [403, 'company_read_only']);
   const row = db.prepare('SELECT legal_form, jurisdiction, registration_number FROM company_profiles WHERE id = ?').get(NORTH) as any;
-  assert.deepEqual({ ...row }, { legal_form: 'c_corp', jurisdiction: 'US-DE', registration_number: '7654321' });
+  assert.deepEqual({ ...row }, { legal_form: 'c_corp', jurisdiction: 'US-DE', registration_number: null }, 'HQ\'s write changed nothing');
   const audit = db.prepare("SELECT details FROM activity_logs WHERE action = 'company_legal_updated'").all() as any[];
-  assert.equal(audit.length, 1, 'only the admin write is audited');
+  assert.equal(audit.length, 0, 'a refused admin write is not recorded as an edit');
 });
 
 // ── Legal record ────────────────────────────────────────────────────────────
@@ -183,12 +183,11 @@ test('tax ID: sealed v1 only, bound to its company, the number to an editor and 
   assert.ok(!refused.text.includes('987654321') && !refused.text.includes('SECRET'), 'a refused value is never echoed');
   assert.equal((await call(env, ADA, 'PUT', '/api/company/co-north/tax-id', { kind: 'ssn', tax_id: '12-3456789' })).body.error, 'tax_id_kind_invalid');
 
+  // D4960: HQ without a seat reads; the write is refused and the stored number is the editor's.
   const vat = await call(env, EVE, 'PUT', '/api/company/co-north/tax-id', { kind: 'vat', tax_id: 'gb 123 4567 89' });
-  assert.equal(vat.status, 200, 'an admin writes');
-  assert.equal(vat.body.last4, '6789');
+  assert.equal(vat.status, 403, 'an admin without a seat does not write');
   const audit = db.prepare("SELECT details FROM activity_logs WHERE action = 'company_tax_id_recorded'").all() as any[];
-  assert.equal(audit.length, 1);
-  assert.ok(!audit[0].details.includes('123456789') && !audit[0].details.includes('6789'), 'the audit row carries no digits');
+  assert.equal(audit.length, 0);
   assert.equal((db.prepare('SELECT COUNT(*) n FROM company_tax_ids').get() as any).n, 1, 'one tax ID per company, replaced');
 });
 

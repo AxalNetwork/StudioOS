@@ -39,7 +39,8 @@ const at = (key) => `/admin/programs/${encodeURIComponent(key)}`;
 export const programsApi = {
   program: (key) => request(at(key)),
   editSection: (key, section, body) => request(`${at(key)}/playbook/sections/${encodeURIComponent(section)}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
-  publish: (key) => request(`${at(key)}/playbook/publish`, { method: 'POST', body: '{}' }),
+  // D4806: the revision of the draft that was reviewed (`draft.hash`); a draft that changed since is refused.
+  publish: (key, expectedHash) => request(`${at(key)}/playbook/publish`, { method: 'POST', body: JSON.stringify({ expected_hash: expectedHash }) }),
   activity: (key, params = {}) => request(`${at(key)}/activity${query(params)}`),
   mentorSessions: () => request('/admin/programs/mentor-cohorts/sessions'),
   learningWeekly: (weeks = 12) => request(`/learning/programs/mine/enrolments${query({ weeks })}`),

@@ -8,13 +8,15 @@ import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
-import { mergeValues, renderContract } from '../services/licenceContract';
+import { mergeValues, renderContract, unresolvedFields } from '../services/licenceContract';
 import { COUNSEL_REVIEW_SLUGS } from '../services/templateFormat';
+import { templateSafety, templateUseRefusal } from '../services/templateSafety';
 import { createAndSendEnvelope, templateBodyRefusal, TemplateBodyError } from './esign';
+import { sha256Hex } from '../services/pdf';
 import { refuse } from '../util/refusal';
 import { pushLicenceToBranch } from '../services/licencePush';
 import { readLicenceTerms, type LicenceTerms } from '../services/licenceTerms';
-import { type LicenceRow, str, byUid, logEvent } from '../services/licenceLedgerCore';
+import { str, byUid, logEvent } from '../services/licenceLedgerCore';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -31,19 +33,6 @@ export function contractStatusFromEnvelope(envelopeStatus: string): 'draft' | 's
   if (envelopeStatus === 'void') return 'void';
   if (envelopeStatus === 'sent' || envelopeStatus === 'partially_signed') return 'sent';
   return 'draft';
-}
-
-export function mergeFieldsForEnvelope(
-  licence: LicenceRow,
-  territories: string[],
-  seats: Array<{ seat_type: string; seats_licensed: number }>,
-): Record<string, string> {
-  const raw = mergeValues(licence, territories, seats);
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (v !== null && v !== undefined) out[k] = String(v);
-  }
-  return out;
 }
 
 /** D451 — status on read follows the envelope row when one exists (D110 deferred leg). */
@@ -99,7 +88,7 @@ r.get('/:uid/contract', async (c) => {
     let store = true;
     try {
       const q = await c.env.DB.prepare(
-        `SELECT uid, template_slug, template_version, template_title, unfilled_fields,
+        `SELECT uid, template_slug, template_version, template_title, body_sha256, unfilled_fields,
                 status, envelope_uid, superseded_at, created_at, sent_at, signed_at
            FROM licence_contracts WHERE licence_uid = ? ORDER BY created_at DESC, id DESC`,
       ).bind(licence.uid).all<any>();
@@ -131,6 +120,8 @@ r.get('/:uid/contract', async (c) => {
         slug: t.slug, title: t.title, category: t.category, version: t.version,
         // D803: a body counsel has not reviewed, said where HQ picks it.
         counsel_review: COUNSEL_REVIEW_SLUGS.has(t.slug),
+        // D4811: the overlays the instantiate route refuses on.
+        safety: templateSafety(t),
       })),
       ...(templates.length ? {} : {
         templates_reason:
@@ -161,9 +152,11 @@ r.post('/:uid/contract', async (c) => {
     const tpl = await getTemplate(c.env, slug);
     if (!tpl) return c.json({ error: 'template_not_found', template_slug: slug }, 404);
     // D758 — a row with no body is refused before anything is written, so the
-    // current draft is not superseded by an empty one.
-    if (Number(tpl.is_stub) === 1 || !String(tpl.body_md || '').trim()) {
-      const r = templateBodyRefusal(new TemplateBodyError('no_body', tpl.slug), 'admin')!;
+    // current draft is not superseded by an empty one. D4811 — so is a
+    // restricted one (legal review required), through the shared predicate.
+    const blocked = templateUseRefusal(tpl);
+    if (blocked) {
+      const r = templateBodyRefusal(new TemplateBodyError(blocked.code === 'template_restricted' ? 'restricted' : 'no_body', tpl.slug), 'admin')!;
       return refuse(c, r.status, { code: r.code, message: r.message });
     }
 
@@ -188,22 +181,34 @@ r.post('/:uid/contract', async (c) => {
     // The prior contract is SUPERSEDED, never deleted or edited — the same
     // rule licence_events runs on, and for the same reason: a contract
     // dispute is exactly the case where the overwritten copy was the one that
-    // mattered.
+    // mattered. D4671: the supersede and the insert are ONE batch (one D1
+    // transaction), so a failed insert cannot leave the licence with no current
+    // contract, and the partial unique index (migration 202611071500) means two
+    // concurrent instantiations cannot leave it with two.
     const now = nowIso();
-    await c.env.DB.prepare(
-      'UPDATE licence_contracts SET superseded_at = ?, updated_at = ? WHERE licence_uid = ? AND superseded_at IS NULL',
-    ).bind(now, now, licence.uid).run();
-
     const uid = newUid();
-    await c.env.DB.prepare(
-      `INSERT INTO licence_contracts
-         (uid, licence_uid, template_slug, template_version, template_title, body_md,
-          unfilled_fields, status, created_by_user_id, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?, 'draft', ?,?,?)`,
-    ).bind(
-      uid, licence.uid, tpl.slug, tpl.version, tpl.title, body,
-      JSON.stringify(unfilled), admin.id, now, now,
-    ).run();
+    const bodySha = await sha256Hex(body);
+    try {
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          'UPDATE licence_contracts SET superseded_at = ?, updated_at = ? WHERE licence_uid = ? AND superseded_at IS NULL',
+        ).bind(now, now, licence.uid),
+        c.env.DB.prepare(
+          `INSERT INTO licence_contracts
+             (uid, licence_uid, template_slug, template_version, template_title, body_md, body_sha256,
+              unfilled_fields, status, created_by_user_id, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?, 'draft', ?,?,?)`,
+        ).bind(
+          uid, licence.uid, tpl.slug, tpl.version, tpl.title, body, bodySha,
+          JSON.stringify(unfilled), admin.id, now, now,
+        ),
+      ]);
+    } catch (e) {
+      if (/UNIQUE|constraint/i.test(String((e as Error)?.message))) {
+        return c.json({ error: 'contract_conflict', message: 'Another contract was being issued for this licence at the same moment. Reload and try again.' }, 409);
+      }
+      throw e;
+    }
 
     await logEvent(c.env, licence.id, 'contract_instantiated', admin.id, {
       contract_uid: uid, template_slug: tpl.slug, template_version: tpl.version,
@@ -221,6 +226,7 @@ r.post('/:uid/contract', async (c) => {
       status: 'draft',
       unfilled_fields: unfilled,
       body_md: body,
+      body_sha256: bodySha,
       // Said here because the screen's next control is Activate, and the rule
       // is the canvas's own.
       note: 'Instantiated unsigned. A pending signature does not block activation; a territory conflict does.',
@@ -241,11 +247,13 @@ r.post('/:uid/contract/:contractUid/send', async (c) => {
 
     const contractUid = c.req.param('contractUid');
     const row = await c.env.DB.prepare(
-      `SELECT id, uid, template_slug, status, envelope_uid, superseded_at
+      `SELECT id, uid, template_slug, template_version, template_title, body_md, body_sha256,
+              status, envelope_uid, superseded_at
          FROM licence_contracts
         WHERE uid = ? AND licence_uid = ?`,
     ).bind(contractUid, licence.uid).first<{
-      id: number; uid: string; template_slug: string; status: string;
+      id: number; uid: string; template_slug: string; template_version: number; template_title: string;
+      body_md: string; body_sha256: string | null; status: string;
       envelope_uid: string | null; superseded_at: string | null;
     }>();
     if (!row || row.superseded_at) {
@@ -259,6 +267,29 @@ r.post('/:uid/contract/:contractUid/send', async (c) => {
     }
     if (row.status !== 'draft') {
       return c.json({ error: 'not_draft', message: 'Only a draft contract can be sent for the first time.' }, 409);
+    }
+
+    // D4671 — what is sent is the STORED body, byte for byte. Refusals, all
+    // before a recipient lookup, an envelope or an email exists:
+    //  · the stored text no longer matches the fingerprint taken when it was
+    //    instantiated (an edit to the row after review);
+    //  · any `{{field}}` is still standing in it, namespaced or not.
+    // The counsel-review marking is not lifted by sending: the body carries its
+    // own DRAFT banner, which goes out with it.
+    const storedSha = await sha256Hex(row.body_md);
+    if (row.body_sha256 && row.body_sha256 !== storedSha) {
+      return c.json({
+        error: 'contract_body_changed',
+        message: 'The stored contract text no longer matches the fingerprint taken when it was drafted. Issue a new contract from the template.',
+      }, 409);
+    }
+    const unresolved = unresolvedFields(row.body_md);
+    if (unresolved.length) {
+      return c.json({
+        error: 'contract_incomplete',
+        message: 'This contract still has fields that are not filled. Complete them on the licence, then issue the contract again.',
+        unresolved_fields: unresolved,
+      }, 409);
     }
 
     const recipient = await c.env.DB.prepare(
@@ -276,15 +307,6 @@ r.post('/:uid/contract/:contractUid/send', async (c) => {
       }, 409);
     }
 
-    const [terr, seats] = await Promise.all([
-      c.env.DB.prepare(
-        'SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code',
-      ).bind(licence.id).all<{ country_code: string }>(),
-      c.env.DB.prepare(
-        'SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ? ORDER BY seat_type',
-      ).bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
-    ]);
-
     let sent: Awaited<ReturnType<typeof createAndSendEnvelope>>;
     try {
       sent = await createAndSendEnvelope(c.env, {
@@ -296,12 +318,10 @@ r.post('/:uid/contract/:contractUid/send', async (c) => {
         documentType: row.template_slug,
         dealId: row.id,
         appUrl: c.env.APP_URL || 'https://axal.vc',
-        mergeFields: mergeFieldsForEnvelope(
-          licence,
-          (terr.results || []).map((t) => t.country_code),
-          seats.results || [],
-        ),
-        refuseUnfilled: false,
+        // The stored, reviewed body goes through the rendered-body path (D416):
+        // it is hashed exactly as given and nothing is merged into it.
+        renderedBody: { title: row.template_title, body: row.body_md },
+        templateVersion: row.template_version,
       });
     } catch (e) {
       // D758 — the row lost its body after drafting (or the store could not
@@ -312,6 +332,22 @@ r.post('/:uid/contract/:contractUid/send', async (c) => {
     }
     if (!sent) {
       return c.json({ error: 'envelope_send_failed', message: 'The envelope could not be created or sent.' }, 502);
+    }
+
+    // D4671 — the envelope that now exists must carry the stored body's hash.
+    // createAndSendEnvelope can answer with an envelope that was already
+    // pending for this signer and document (`already_pending`); such an
+    // envelope was built from some earlier text, and linking it would put an
+    // unreviewed document behind this contract's "sent". Nothing is linked.
+    const env = await c.env.DB.prepare(
+      'SELECT body_sha256 FROM esign_envelopes WHERE envelope_uuid = ?',
+    ).bind(sent.envelope_uuid).first<{ body_sha256: string | null }>();
+    if (!env || env.body_sha256 !== storedSha) {
+      return c.json({
+        error: 'envelope_body_mismatch',
+        message: 'The envelope on file for this signer does not carry this contract\'s text, so it was not linked. Void the pending envelope, then send again.',
+        envelope_uuid: sent.envelope_uuid,
+      }, 409);
     }
 
     const now = nowIso();

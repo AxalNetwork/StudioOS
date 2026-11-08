@@ -126,11 +126,13 @@ function freshDb() {
   // because the note is keyed to the same windows the ledger answers for
   // and a test that could not read one could not check the other.
   db.exec(migration('242_advisor_quarter_notes'));
+  // #4713 (D4713): the audit trail of a reprice.
+  db.exec(migration('202611071525_advisor_booking_price_events'));
   db.exec(`CREATE TABLE IF NOT EXISTS advisor_engagements (
     id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
     advisor_id INTEGER NOT NULL, founder_user_id INTEGER, client_name TEXT NOT NULL,
     lane TEXT NOT NULL DEFAULT 'signed', shape TEXT NOT NULL DEFAULT 'retainer',
-    amount_cents INTEGER);`);
+    amount_cents INTEGER, started_at TEXT, ended_at TEXT);`);
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');
@@ -801,4 +803,235 @@ test('a drafting engagement is not a client yet', async () => {
   const r = await call(e, 'GET', '/me/ledger', ada);
   assert.equal(r.body.clients.length, 0,
     'a contract nobody has sent is not revenue and not a row');
+});
+
+// ── #4702 (D4702): the ledger covers every booking, and says how complete it is ──
+
+function bulk(db: InstanceType<typeof DatabaseSync>, n: number, clients: number, over: { priced?: boolean; created?: string } = {}) {
+  const ins = db.prepare(`INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id, status, created_at, amount_cents, billing_state, platform_cut_cents, take_rate_bps)
+    VALUES (?, 1, 1, ?, 'completed', ?, ?, ?, ?, ?)`);
+  db.exec('BEGIN');
+  for (let i = 0; i < n; i += 1) {
+    const priced = over.priced !== false && i % 10 !== 0;   // every tenth is unpriced
+    ins.run(`bulk-${n}-${i}-${Math.random().toString(36).slice(2, 8)}`, 1000 + (i % clients), over.created ?? '2026-08-01T10:00:00.000Z',
+      priced ? 10_000 : null, priced ? 'billed' : 'unpriced', priced ? 1_500 : null, priced ? 1500 : null);
+  }
+  db.exec('COMMIT');
+}
+
+test('#4702: more than 2,000 bookings reconcile between the ledger, its clients and the annual summary; totals stay complete', async () => {
+  // Mutation checked: LIMIT 2000 back on the booking read → sessions 2000, not 2,600.
+  const db = freshDb();
+  const e = env(db);
+  bulk(db, 2_600, 650);          // 650 clients: more than the 500 listed one by one
+  const l = await call(e, 'GET', '/me/ledger?from=2026-01-01T00:00:00.000Z&until=2027-01-01T00:00:00.000Z', ada);
+  assert.equal(l.status, 200, JSON.stringify(l.body).slice(0, 300));
+  const unpriced = 260;          // every tenth of 2,600
+  const priced = 2_600 - unpriced;
+  assert.deepEqual([l.body.totals.sessions, l.body.totals.priced_sessions, l.body.totals.unpriced_sessions], [2_600, priced, unpriced]);
+  assert.deepEqual([l.body.totals.gross_cents, l.body.totals.cut_cents, l.body.totals.net_cents], [priced * 10_000, priced * 1_500, priced * 8_500]);
+  // The client list is capped and says so; the rest is one summed row, so the rows reconcile to the totals.
+  assert.equal(l.body.clients.length, 500);
+  assert.deepEqual(l.body.completeness.clients, { listed: 500, total: 650, complete: false });
+  assert.equal(l.body.clients_other.clients, 150);
+  const sum = (k: string) => l.body.clients.reduce((a: number, c: any) => a + c[k], 0) + l.body.clients_other[k];
+  assert.equal(sum('gross_cents'), l.body.totals.gross_cents);
+  assert.equal(sum('cut_cents'), l.body.totals.cut_cents);
+  assert.equal(sum('sessions'), l.body.totals.sessions);
+  assert.equal(l.body.clients.reduce((a: number, c: any) => a + c.unpriced_sessions, 0) + l.body.clients_other.unpriced_sessions, unpriced);
+  assert.equal(l.body.completeness.sessions, 2_600);
+  // The annual summary for the same window is the same population and the same arithmetic.
+  const t = await call(e, 'GET', '/me/tax-summary?year=2026', ada);
+  assert.deepEqual([t.body.sessions, t.body.priced_sessions, t.body.unpriced_sessions, t.body.gross_cents, t.body.platform_cut_cents, t.body.net_cents],
+    [l.body.totals.sessions, l.body.totals.priced_sessions, l.body.totals.unpriced_sessions, l.body.totals.gross_cents, l.body.totals.cut_cents, l.body.totals.net_cents]);
+  // 65 of the 650 clients only ever have an unpriced booking (every tenth), so they have no priced one.
+  assert.equal(t.body.clients, 585, 'distinct clients with a priced booking');
+  assert.equal(l.body.completeness.clients.total, 650, 'while the ledger counts every client');
+  // A window with no bookings is a real empty ledger, not an error.
+  const empty = await call(e, 'GET', '/me/ledger?from=2030-01-01T00:00:00.000Z&until=2031-01-01T00:00:00.000Z', ada);
+  assert.deepEqual([empty.body.totals.sessions, empty.body.clients.length, empty.body.clients_other, empty.body.completeness.clients.complete], [0, 0, null, true]);
+});
+
+test('#4702: a line priced before the cut was stored is derived at its own rate, the same way in the ledger and the summary', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.prepare(`INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id, status, created_at, amount_cents, billing_state, platform_cut_cents, take_rate_bps)
+    VALUES ('old1', 1, 1, ?, 'completed', '2026-03-01T00:00:00.000Z', 9_999, 'billed', NULL, 1200), ('old2', 1, 1, ?, 'completed', '2026-03-02T00:00:00.000Z', 9_999, 'billed', NULL, NULL)`).run(CLIENT_A, CLIENT_A);
+  const l = await call(e, 'GET', '/me/ledger', ada);
+  // 9,999 at 12% rounds down to 1,199; with no stored rate the current 15% applies: 1,499.
+  assert.equal(l.body.totals.cut_cents, 1_199 + 1_499);
+  const t = await call(e, 'GET', '/me/tax-summary?year=2026', ada);
+  assert.equal(t.body.platform_cut_cents, 1_199 + 1_499);
+});
+
+test('#4702: the retainer is the contract value per cycle, only for contracts in effect during the window', async () => {
+  // Mutation checked: the window filter dropped → the 2025 contract appears in a 2026 table.
+  const db = freshDb();
+  const e = env(db);
+  const ins = db.prepare(`INSERT INTO advisor_engagements (uid, advisor_id, founder_user_id, client_name, lane, shape, amount_cents, started_at, ended_at)
+    VALUES (?, 1, ?, ?, ?, 'retainer', ?, ?, ?)`);
+  ins.run('live', CLIENT_A, 'Meridian Labs', 'signed', 400_000, '2026-01-10T00:00:00Z', null);
+  ins.run('old', CLIENT_B, 'Halverton', 'ended', 300_000, '2024-02-01T00:00:00Z', '2025-03-31T00:00:00Z');
+  ins.run('later', null, 'Aperture', 'signed', 250_000, '2027-02-01T00:00:00Z', null);
+  ins.run('proposal', null, 'Verwood', 'proposed', 200_000, null, null);
+  const win = await call(e, 'GET', '/me/ledger?from=2026-07-01T00:00:00.000Z&until=2026-10-01T00:00:00.000Z', ada);
+  const by = Object.fromEntries(win.body.clients.map((c: any) => [c.client_name, c.retainer_cents]));
+  assert.deepEqual(by, { 'Meridian Labs': 400_000 }, 'only the contract in effect in Q3 2026');
+  const all = await call(e, 'GET', '/me/ledger', ada);
+  const names = all.body.clients.map((c: any) => c.client_name).sort();
+  assert.deepEqual(names, ['Aperture', 'Halverton', 'Meridian Labs'], 'all time: every signed or ended contract, no unsent proposal');
+  assert.equal(win.body.completeness.engagements.read, true);
+});
+
+// ── #4713 (D4713): financial history is not restated by an unrelated edit ───
+
+const rowOf = (db: InstanceType<typeof DatabaseSync>, id: number) =>
+  ({ ...(db.prepare('SELECT amount_cents, billing_state, platform_cut_cents, take_rate_bps FROM advisor_bookings WHERE id = ?').get(id) as any) });
+
+test('#4713: a status-only change keeps the stored rate and cut after the platform rate moves', async () => {
+  // Mutation checked: the route re-reading takeRate() on every write → 12% / $12 here.
+  const db = freshDb();
+  const e = env(db);
+  const id = booking(db, 'b1', 1, CLIENT_A);
+  const priced = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 10_000 });
+  assert.deepEqual([priced.body.take_rate_bps, priced.body.platform_cut_cents], [1500, 1500]);
+  db.prepare('UPDATE platform_settings SET value = ? WHERE key = ?').run('1200', 'advisor_take_rate_bps');
+  // Marking it collected sends only the state; and sending the SAME amount with the state is also status-only.
+  const collected = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { billing_state: 'collected' });
+  assert.equal(collected.status, 200, JSON.stringify(collected.body));
+  assert.deepEqual([collected.body.billing_state, collected.body.take_rate_bps, collected.body.platform_cut_cents], ['collected', 1500, 1500]);
+  assert.deepEqual(rowOf(db, id), { amount_cents: 10_000, billing_state: 'collected', platform_cut_cents: 1500, take_rate_bps: 1500 });
+  const id2 = booking(db, 'b2', 1, CLIENT_A);
+  await call(e, 'PATCH', `/me/bookings/${id2}/billing`, ada, { amount_cents: 10_000 });
+  await call(e, 'PATCH', `/me/bookings/${id2}/billing`, ada, { amount_cents: 10_000, billing_state: 'written_off' });
+  assert.deepEqual([rowOf(db, id2).take_rate_bps, rowOf(db, id2).platform_cut_cents], [1200, 1200], 'priced at 12%, kept at 12%');
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM advisor_booking_price_events').get() as any).n, 0, 'a status change is not a reprice');
+});
+
+test('#4713: repricing is explicit and audited: new amount at the current rate, with who and the before and after', async () => {
+  // Mutation checked: the audit insert dropped → no event row.
+  const db = freshDb();
+  const e = env(db);
+  const id = booking(db, 'b1', 1, CLIENT_A);
+  await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 10_000 });
+  db.prepare('UPDATE platform_settings SET value = ? WHERE key = ?').run('1200', 'advisor_take_rate_bps');
+  // main's #4936 makes a change of a priced amount explicit: without `reprice: true` it is refused.
+  const implicit = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 20_000 });
+  assert.deepEqual([implicit.status, implicit.body.code], [409, 'reprice_required']);
+  const r = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 20_000, reprice: true });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual([r.body.amount_cents, r.body.take_rate_bps, r.body.platform_cut_cents], [20_000, 1200, 2400]);
+  const ev = db.prepare('SELECT * FROM advisor_booking_price_events WHERE booking_id = ?').all(id) as any[];
+  assert.equal(ev.length, 1);
+  assert.deepEqual(
+    [ev[0].actor_user_id, ev[0].impersonated_by, ev[0].from_amount_cents, ev[0].to_amount_cents, ev[0].from_take_rate_bps, ev[0].to_take_rate_bps, ev[0].from_cut_cents, ev[0].to_cut_cents],
+    [ADVISOR_USER, null, 10_000, 20_000, 1500, 1200, 1500, 2400]);
+  assert.ok(ev[0].created_at);
+  // Pricing a line for the first time is not a reprice and writes no event.
+  const id2 = booking(db, 'b2', 1, CLIENT_A);
+  await call(e, 'PATCH', `/me/bookings/${id2}/billing`, ada, { amount_cents: 5_000 });
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM advisor_booking_price_events WHERE booking_id = ?').get(id2) as any).n, 0);
+});
+
+test('#4713: a collected or written-off line cannot be repriced; clearing a billed price is a reprice', async () => {
+  // Mutation checked: the settled-history guard dropped → the collected line takes the new amount.
+  const db = freshDb();
+  const e = env(db);
+  const id = booking(db, 'b1', 1, CLIENT_A);
+  await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 10_000, billing_state: 'collected' });
+  const refused = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 99_000, reprice: true });
+  assert.deepEqual([refused.status, refused.body.code], [409, 'settled_price']);
+  assert.equal(rowOf(db, id).amount_cents, 10_000);
+  // The explicit two-step correction: back to billed (status-only), then an audited reprice.
+  const back = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { billing_state: 'billed' });
+  assert.equal(back.status, 200, JSON.stringify(back.body));
+  const fixed = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 12_000, reprice: true });
+  assert.deepEqual([fixed.status, fixed.body.amount_cents], [200, 12_000]);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM advisor_booking_price_events WHERE booking_id = ?').get(id) as any).n, 1);
+  const id2 = booking(db, 'b2', 1, CLIENT_A);
+  await call(e, 'PATCH', `/me/bookings/${id2}/billing`, ada, { amount_cents: 10_000 });
+  const cleared = await call(e, 'PATCH', `/me/bookings/${id2}/billing`, ada, { amount_cents: null, billing_state: 'unpriced', reprice: true });
+  assert.equal(cleared.status, 200);
+  const ev = db.prepare('SELECT from_amount_cents, to_amount_cents FROM advisor_booking_price_events WHERE booking_id = ?').all(id2) as any[];
+  assert.deepEqual(ev.map((x) => [x.from_amount_cents, x.to_amount_cents]), [[10_000, null]]);
+});
+
+test('#4713: the ledger names priced, unpaid (billed), collected and written off apart, and priced work is never "received"', async () => {
+  // Mutation checked: collected figure taken from every priced line → collected equals priced.
+  const db = freshDb();
+  const e = env(db);
+  const mk = async (uid: string, amount: number, state?: string) => {
+    const id = booking(db, uid, 1, CLIENT_A);
+    await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: amount, ...(state ? { billing_state: state } : {}) });
+    return id;
+  };
+  await mk('p1', 10_000, 'collected');
+  await mk('p2', 20_000, 'billed');
+  await mk('p3', 30_000, 'written_off');
+  await mk('p4', 40_000, 'billed');
+  booking(db, 'unpriced', 1, CLIENT_A);
+  db.prepare('UPDATE platform_settings SET value = ? WHERE key = ?').run('1000', 'advisor_take_rate_bps');
+  const r = await call(e, 'GET', '/me/ledger', ada);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  // main's #4936 `states`: `billed` is billed and not yet settled (the PR's "outstanding").
+  const f = r.body.states;
+  const g = (k: string) => [f[k].sessions, f[k].gross_cents, f[k].cut_cents, f[k].net_cents];
+  const t = r.body.totals;
+  assert.deepEqual([t.priced_sessions, t.gross_cents, t.cut_cents, t.net_cents], [4, 100_000, 15_000, 85_000], 'each line at its own stored 15%, not today\'s 10%');
+  assert.deepEqual(g('collected'), [1, 10_000, 1_500, 8_500]);
+  assert.deepEqual(g('written_off'), [1, 30_000, 4_500, 25_500]);
+  assert.deepEqual(g('billed'), [2, 60_000, 9_000, 51_000]);
+  assert.equal(t.net_cents, f.collected.net_cents + f.written_off.net_cents + f.billed.net_cents, 'priced = collected + written off + unpaid');
+  assert.equal(t.received_cents, 8_500, 'received is the collected net');
+  assert.notEqual(t.received_cents, t.net_cents, 'priced work is not what was received');
+});
+
+test('#4713: paid out counts only paid payouts inside the window; an unreadable payout ledger is null, never 0', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const ins = db.prepare(`INSERT INTO advisor_payouts (uid, advisor_id, amount_cents, state, paid_at) VALUES (?, 1, ?, ?, ?)`);
+  ins.run('po1', 5_000, 'paid', '2026-08-10T10:00:00.000Z');
+  ins.run('po2', 7_000, 'scheduled', null);
+  ins.run('po3', 9_000, 'paid', '2026-02-01T10:00:00.000Z');
+  const win = await call(e, 'GET', '/me/ledger?from=2026-07-01T00:00:00.000Z&until=2026-10-01T00:00:00.000Z', ada);
+  assert.equal(win.body.states.paid_out_cents, 5_000);
+  const all = await call(e, 'GET', '/me/ledger', ada);
+  assert.equal(all.body.states.paid_out_cents, 14_000);
+  db.exec('DROP TABLE advisor_payouts');
+  const gone = await call(e, 'GET', '/me/ledger', ada);
+  assert.equal(gone.status, 200);
+  assert.equal(gone.body.states.paid_out_cents, null);
+});
+
+test('#4713: availability replacement with a stale revision is refused and overwrites nothing', async () => {
+  // Mutation checked: the revision condition dropped from the UPDATE → the second tab's save wins.
+  const db = freshDb();
+  db.exec(migration('240_advisor_sessions_config'));
+  const e = env(db);
+  const first = await call(e, 'GET', '/me/availability', ada);
+  assert.deepEqual([first.body.configured, first.body.revision], [false, '']);
+  const blackout = { day: 'sat', from: '09:00', to: '17:00' };
+  const put1 = await call(e, 'PUT', '/me/availability', ada, { weekly_paid_cap: 4, buffer_minutes: 10, min_notice_hours: 24, blackouts: [blackout], timezone: 'Europe/London', expected_revision: '' });
+  assert.equal(put1.status, 200, JSON.stringify(put1.body));
+  assert.ok(put1.body.revision, 'a revision comes back');
+  // Tab B holds the old revision and a default-filled form: refused, rules intact.
+  const stale = await call(e, 'PUT', '/me/availability', ada, { weekly_paid_cap: null, buffer_minutes: null, min_notice_hours: null, blackouts: [], timezone: null, expected_revision: '' });
+  assert.deepEqual([stale.status, stale.body.code], [409, 'rules_changed']);
+  assert.equal(stale.body.current.timezone, 'Europe/London');
+  const kept = await call(e, 'GET', '/me/availability', ada);
+  assert.deepEqual([kept.body.weekly_paid_cap, kept.body.timezone, kept.body.blackouts.length], [4, 'Europe/London', 1]);
+  // The UPDATE path: a non-empty revision that is no longer current is refused too.
+  const oldRevision = (await call(e, 'GET', '/me/availability', ada)).body.revision;
+  db.prepare("UPDATE advisor_availability_rules SET updated_at = '2099-01-01T00:00:00.000Z' WHERE advisor_id = 1").run();
+  const staleUpdate = await call(e, 'PUT', '/me/availability', ada, { weekly_paid_cap: 99, blackouts: [], timezone: null, expected_revision: oldRevision });
+  assert.deepEqual([staleUpdate.status, staleUpdate.body.code], [409, 'rules_changed']);
+  assert.equal((db.prepare('SELECT weekly_paid_cap FROM advisor_availability_rules WHERE advisor_id = 1').get() as any).weekly_paid_cap, 4, 'nothing overwritten');
+  db.prepare('UPDATE advisor_availability_rules SET updated_at = ? WHERE advisor_id = 1').run(oldRevision);
+  // Editing ONE field with the current revision, sending the rest as read, preserves timezone and blackouts.
+  const one = await call(e, 'PUT', '/me/availability', ada, { ...kept.body, weekly_paid_cap: 6, expected_revision: kept.body.revision });
+  assert.equal(one.status, 200, JSON.stringify(one.body));
+  assert.deepEqual([one.body.weekly_paid_cap, one.body.buffer_minutes, one.body.timezone, one.body.blackouts.length], [6, 10, 'Europe/London', 1]);
+  // A caller that sends no revision keeps the route's old unconditional replace.
+  const plain = await call(e, 'PUT', '/me/availability', ada, { weekly_paid_cap: 1, blackouts: [], timezone: null });
+  assert.equal(plain.status, 200);
 });

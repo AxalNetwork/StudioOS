@@ -9,7 +9,8 @@ import { ventureScoresApi } from '../../../lib/api/ventureScores.js';
 import { reportError } from '../../../lib/log';
 import { YourWeighting } from './ScorecardDialogs';
 
-export default function WeightingControl({ api = ventureScoresApi }) {
+/** D4635 (#4635): `onSaved` tells the page the accepted weighting changed, so its sort reads the same weights. */
+export default function WeightingControl({ api = ventureScoresApi, onSaved = null }) {
   const [s, setS] = useState({ status: 'loading', data: null });
   const [open, setOpen] = useState(false);
   const load = useCallback(async () => {
@@ -27,7 +28,7 @@ export default function WeightingControl({ api = ventureScoresApi }) {
       {s.status === 'unreadable'
         ? <button type="button" className="font-semibold text-violet-700 underline dark:text-violet-300" onClick={load}>Try again</button>
         : s.status === 'ready' ? <button type="button" className="font-semibold text-violet-700 underline dark:text-violet-300" onClick={() => setOpen(true)} data-testid="scorecard-weighting-edit">Edit weighting</button> : null}
-      {open ? <YourWeighting initial={s.data?.weights} api={api} onClose={() => setOpen(false)} onDone={() => { setOpen(false); load(); }} /> : null}
+      {open ? <YourWeighting initial={s.data?.weights} api={api} onClose={() => setOpen(false)} onDone={() => { setOpen(false); load(); onSaved?.(); }} /> : null}
     </span>
   );
 }
