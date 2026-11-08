@@ -5,7 +5,13 @@
  * refused, and throws away what was typed when the server says no.
  */
 
-/** Each ask: its dialog title, its question, the shortest reason the Worker accepts (0 = optional). */
+/**
+ * Each ask: its dialog title, its question, the shortest reason the Worker
+ * accepts (0 = optional), and optionally `consequence`, the rule the action
+ * carries, said before the reason is asked for. D4819 (#4819) moved the
+ * suspension rule here from the ledger's header: the ledger states what is
+ * true, the action says what it will do.
+ */
 export const LICENCE_REASONS = Object.freeze({
   demoteAdmin: {
     title: 'Demote this administrator',
@@ -24,6 +30,7 @@ export const LICENCE_REASONS = Object.freeze({
   },
   suspendLicence: {
     title: 'Suspend this licence',
+    consequence: 'A suspended licence still holds its countries, so no other licence can be issued over them. Releasing them is a termination, not a suspension.',
     question: 'Why is this licence being suspended? The reason is recorded, and its holder reads it.',
     min: 1, confirm: 'Suspend', tone: 'warn',
   },

@@ -199,36 +199,22 @@ export function usePerksReads(tab) {
   return { inReview, perks, claims, reload };
 }
 
-/** Learning: R9 on Overview and People; P4 on Overview; R10 for the program People picked. */
-export function useLearningReads(tab, programUid) {
+/** D4810: a learners page on People; the page size and the cap are the Worker's. */
+export const LEARNERS_PAGE = 50;
+
+/**
+ * Learning: R9 on Overview and People; P4 on Overview; on Overview, D4810's
+ * one completion read for every published program (it replaced one learners
+ * read per program); on People, one page of the picked program's learners.
+ */
+export function useLearningReads(tab, programUid, learnerOffset = 0) {
   const [tick, reload] = useTick();
   const learning = useRead('learning', 'learning', tick, tab === 'overview' || tab === 'people', readLearning);
   const weekly = useRead('learning:weekly', 'weekly', tick, tab === 'overview', () => programsApi.learningWeekly(12));
-  const learners = useRead('learners', `learners:${programUid || ''}`, tick, tab === 'people' && Boolean(programUid),
-    () => learningApi.programLearners(programUid).then(listed('learners', 'The learners')));
-  return { learning, weekly, learners, reload, tick };
+  const completion = useRead('learning:completion', 'completion', tick, tab === 'overview',
+    () => learningApi.programsCompletion().then(listed('programs', 'Completion by program')));
+  const learners = useRead('learners', `learners:${programUid || ''}:${learnerOffset}`, tick, tab === 'people' && Boolean(programUid),
+    () => learningApi.programLearners(programUid, { limit: LEARNERS_PAGE, offset: learnerOffset }).then(listed('learners', 'The learners')));
+  return { learning, weekly, completion, learners, reload, tick };
 }
 
-/**
- * D962: R10 for each program `uids` names, each read alone, so a program
- * whose learners cannot be read marks only its own row (Completion by
- * program, OD9's Finished).
- */
-export function useLearnersFor(uids, tick, enabled) {
-  const [reads, setReads] = useState({});
-  const key = uids.join(',');
-  useEffect(() => {
-    if (!enabled) return undefined;
-    let live = true;
-    setReads(Object.fromEntries(uids.map((u) => [u, { status: 'loading', data: null, error: null, at: null }])));
-    uids.forEach((u) => {
-      learningApi.programLearners(u).then(listed('learners', 'The learners')).then(
-        (data) => { if (live) setReads((r) => ({ ...r, [u]: { status: 'ready', data, error: null, at: Date.now() } })); },
-        (error) => { reportError('admin-programs:learners', error); if (live) setReads((r) => ({ ...r, [u]: { status: 'error', data: null, error, at: null } })); },
-      );
-    });
-    return () => { live = false; };
-    // `uids` is keyed by `key`.
-  }, [key, tick, enabled]);
-  return reads;
-}

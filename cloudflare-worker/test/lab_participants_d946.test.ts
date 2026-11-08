@@ -98,7 +98,10 @@ function fixture(db: DatabaseSync) {
   ms(B, W1, 1, '2026-11-05 10:00:00'); ms(B, ['okrs_created'], 2, '2026-11-09 10:00:00');
   ms(C, W1.slice(0, 2), 1, '2026-11-05 10:00:00');
   ms(D, W1.slice(0, 1), 1, '2026-11-05 10:00:00');
-  ms(E, [...W1], 1, '2026-10-05 10:00:00'); ms(E, ['incorporation_completed'], 4, '2026-10-26 10:00:00');
+  // D4659: E graduated, so every week of the programme is on record.
+  ms(E, [...W1], 1, '2026-10-05 10:00:00'); ms(E, W2, 2, '2026-10-12 10:00:00');
+  ms(E, ['scoring_run_completed', 'advisor_meeting_booked'], 3, '2026-10-19 10:00:00');
+  ms(E, ['incorporation_completed'], 4, '2026-10-26 10:00:00');
   // Outsider H has a milestone but is not in the Lab by the rule.
   ms(H, ['project_created'], 1, '2026-11-02 10:00:00');
   db.exec(`INSERT INTO spinout_moderation_cases (user_id, status, reason_code, opened_by, opened_at) VALUES

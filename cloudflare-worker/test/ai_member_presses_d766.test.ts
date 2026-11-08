@@ -150,7 +150,7 @@ test('a budget stop answers 402 in the budget\'s words; a model that cannot be r
   const gate = w.f.db.prepare('SELECT status, ai_recommendation, ai_explanation FROM decision_gates').get();
   assert.equal(gate.status, 'pending', 'a gate is a recommendation for a person to decide');
   assert.equal(gate.ai_recommendation, 'iterate', 'a recorded zero still supports the rule-based gate');
-  assert.match(gate.ai_explanation, /^Rule-based: traction score 0\/100/);
+  assert.match(gate.ai_explanation, /^Rule-based: traction score 0\/110 \(formula v1\)/);
   // #3938 (IN2): Clef decides first; with no decision there is nothing for gpt-oss-120b to explain.
   assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_option, x.record_ref, x.surface]), [['module_decision', 'review:decision-gate', 'deal:7', '/pipeline']]);
 });
