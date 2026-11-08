@@ -89,8 +89,10 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/settings/:section', keep: true },
   { path: '/dashboard', keep: true },
   { path: '/product-testing', keep: true }, // #2314: historical member notifications
-  // D4254 (#4254): Pitch's old addresses. The Worker's Raise links still name /raise/pitch-deck, so it is kept.
+  // D4254 (#4254): Pitch's old addresses. #4853: the Worker's Raise links now name /raise/pitch and /raise/pitch/share,
+  // but a bookmark or a link already sent can still carry either old address, so both are kept and counted.
   { path: '/raise/pitch-deck', keep: true },
+  { path: '/raise/pitch-deck/new', keep: true },
   { path: '/insights' }, // #2333: the briefs are a section of /articles
   { path: '/wellbeing/expert-dashboard', keep: true },
   { path: '/notifications', keep: true },

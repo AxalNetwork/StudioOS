@@ -375,8 +375,12 @@ export function linkPage(records) {
   return { page, pages: Math.max(1, Math.ceil(total / size)), total, from, to: shown ? from + shown - 1 : 0 };
 }
 
-/** The module's own "New link" address, when it offers one. */
-export const newLinkHref = (records) => (records?.add?.href && /^\/raise\/pitch-deck\/new/.test(records.add.href) ? records.add.href : null);
+/**
+ * The module's own "New link" address, when it offers one. #4853: it is the Studio's Share tab
+ * (`/raise/pitch/share?project_id=`); the module cycle's old Add form address is still read, so an
+ * older read keeps its link, and lands on the same tab through its redirect.
+ */
+export const newLinkHref = (records) => (records?.add?.href && /^\/raise\/(pitch\/share|pitch-deck\/new)(\?|$)/.test(records.add.href) ? records.add.href : null);
 
 /** Whether the module says nobody has opened a link yet (an empty card with a deck). */
 export const noViewsYet = (card) => card?.state === 'empty' && /No one has opened/i.test(String(card?.reason || ''));

@@ -11,6 +11,7 @@ import {
 import { companyHref } from '../../lib/companyDirectoryView.js';
 import { useRailOption } from '../../ui/railCrumbs';
 import { railPressHeaders } from '../../lib/railPage.js';
+import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
 
 /**
  * `/research/companies/:id` — one saved competitor analysis (canvas 90eb4cf2).
@@ -115,12 +116,31 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     });
   }, []);
 
+  // D4607: the record this page loaded, by its route identity. Writes go to
+  // it, and only while it is still the one the route names.
+  const routeKey = recordKey(id);
+  const [loadedKey, setLoadedKey] = useState(null);
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
+  useEffect(() => () => gate.current.invalidate(), []);
+
   const load = useCallback(async () => {
+    const fresh = gate.current.begin();
+    const key = recordKey(id);
     setState('loading');
+    // The previous record's editor goes with it: nothing of A stays on B's
+    // page while B loads, so nothing of A can be saved to B.
+    setAnalysis(null);
+    setDraft(null);
+    setLoadedKey(null);
     try {
-      take(await api.competitors.get(id));
+      const full = await api.competitors.get(id);
+      if (!fresh()) return;
+      take(full);
+      setLoadedKey(key);
       setState('ready');
     } catch (e) {
+      if (!fresh()) return;
       setAnalysis(null);
       // D278 — branch on the code; the route answers `not_found` for an id
       // that is not the caller's and for one that does not exist alike.
@@ -128,12 +148,14 @@ export default function CompanyAnalysis({ role = 'founder' }) {
     }
   }, [id, take]);
   useEffect(() => { load(); }, [load]);
+  const current = sameRecord(loadedKey, routeKey);
 
   // D778 part 9 (#2103): a press answers only the analysis it was pressed on.
   // Opening another analysis (or leaving) moves this on; a press that comes
   // back after that is dropped with its result, its notice and its busy state.
   const runFor = useRef(0);
-  useEffect(() => { runFor.current += 1; setBusy(''); }, [id]);
+  // D4607: and the notice, the preview and the Add form belong to the record they were made on.
+  useEffect(() => { runFor.current += 1; setBusy(''); setNotice(null); setPreview(''); setManual(EMPTY_MANUAL); }, [id]);
   useEffect(() => () => { runFor.current += 1; }, []);
 
   const run = async (key, fn, ok) => {
@@ -171,9 +193,15 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   });
   // Title and output only — see the docblock on why the candidate set never
   // travels with a save.
-  const save = () => run('save',
-    () => api.competitors.save(id, { title: draft.title.trim().slice(0, 200), output: outputFrom(draft) }),
-    'Saved.');
+  // Bound to the loaded record: the id it was read with, and only while the
+  // route still names it (D4607).
+  const save = () => {
+    if (!current || !draft) return Promise.resolve();
+    const target = JSON.parse(loadedKey)[0];
+    return run('save',
+      () => api.competitors.save(target, { title: draft.title.trim().slice(0, 200), output: outputFrom(draft) }),
+      'Saved.');
+  };
 
   const status = analysis?.status || 'draft';
   const running = status === 'running';
@@ -257,7 +285,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
           </Card>
         )}
 
-        {state === 'ready' && analysis && draft && (
+        {state === 'ready' && current && analysis && draft && (
           <>
             {notice && (
               <p className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>

@@ -308,7 +308,13 @@ export function hiddenFrom(assignRead) {
 }
 export const HIDDEN_LINE = 'A founder can hide from one mentor. Each founder counts once.';
 
-const isAdvisorRow = (r) => String(r?.advisor_role || '').toLowerCase() === 'advisor';
+// D4807: the Worker answers "is this account an eligible mentor?" once
+// (`advisor_eligible`: active AND holds the Advisor licence, primary or
+// additional). Role-alone is the fallback for a row from an older read.
+// An inactive account is reported as inactive, not as having lost the role.
+const isAdvisorRow = (r) => (typeof r?.advisor_eligible === 'boolean'
+  ? r.advisor_eligible || r.advisor_is_active === false
+  : String(r?.advisor_role || '').toLowerCase() === 'advisor');
 const isOpenRow = (r) => r?.is_active === true || r?.is_active === 1;
 const isLiveRow = (r) => isOpenRow(r) && isAdvisorRow(r) && r?.advisor_is_active === true;
 

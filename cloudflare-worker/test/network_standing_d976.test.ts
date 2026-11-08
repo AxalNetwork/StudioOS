@@ -65,6 +65,8 @@ function fixture() {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
   db.exec(read('cloudflare-worker/sql/migrations/313_lab_host_applications.sql'));
+  // D4695: booking reads the advisor's availability rules and a slot's blocked_reason (migration 240).
+  db.exec(read('cloudflare-worker/sql/migrations/240_advisor_sessions_config.sql'));
   db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/238_advisor_engagements.sql'), 'advisor_engagements')));
   db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/241_advisor_money_model.sql'), 'advisor_payout_accounts')));
   db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/361_partner_booking_ratings.sql'), 'partner_booking_ratings')));
