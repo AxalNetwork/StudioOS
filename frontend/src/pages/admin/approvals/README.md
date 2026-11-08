@@ -33,3 +33,12 @@ is cards below `md` with ⋯ as a bottom sheet, Filters (with its count) and Sor
 open one bottom sheet, and each drawer has "‹ [where it came from]" with
 full-width buttons. Every colour carries its dark pair, and
 `scripts/check-dark-mode.mjs` stays green.
+
+D4814 (#4814, part 1): the Inbox leads with work. The header and tabs, one
+urgency strip (Waiting · Overdue · Unassigned · Oldest), the work views (Needs
+attention · Assigned to me · Unassigned · All, in the address as `assigned=me`,
+`assigned=none` and `view=all`), then the queue (Request · Waiting · Owner ·
+Review · ⋯) with one Filters panel and one Sort, then Workload (the two
+charts). The Inbox tab, Waiting and All all read `waitingFigure`, so they show
+one number; a figure short by an unread lane is "N+" from the Worker's
+`tiles.at_least`, never 0. Waiting on HQ is drawn only in a studio shell.

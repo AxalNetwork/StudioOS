@@ -1260,6 +1260,8 @@ export const BRAND_MONOGRAM = Object.freeze({
   teams: Object.freeze({ name: 'Microsoft Teams', reason: MS_TERMS }),
   // D1385 (#3731): PostHog's connector. Its mark is on Simple Icons, but the path data was not reachable from the build environment; initials until it is recorded from the package.
   posthog: Object.freeze({ name: 'PostHog', reason: 'PostHog publishes its logo at https://posthog.com/handbook/company/brand-assets and on Simple Icons; neither was reachable from the build environment on 2026-10-31, so the mark is not copied by hand. Initials until the Simple Icons path is recorded.' }),
+  // D2407 (#2407): Beehiiv's connector. Its brand assets were not reachable from the build environment; initials until a mark is recorded with its source.
+  beehiiv: Object.freeze({ name: 'Beehiiv', reason: 'Beehiiv publishes its brand assets on beehiiv.com, which refused a direct read from the build environment on 2026-10-21 and 2026-11-07, so the mark is not copied by hand. Initials until a mark is recorded with its source and licence.' }),
   affinity: Object.freeze({ name: 'Affinity', reason: 'Affinity CRM is affinity.co, not the Affinity design suite. The vendor newsroom (https://www.affinity.co/company/newsroom, read 2026-10-16) has no downloadable icon kit. Brandfetch and an n8n SVG were located, but their current vendor provenance and permitted treatment remain unverified. Initials until that is recorded.' }),
 });
 

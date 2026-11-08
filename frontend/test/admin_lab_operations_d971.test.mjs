@@ -17,7 +17,7 @@ import { stamp, sizeProblem, pageOf, supportRows, byWord } from '../src/pages/ad
 
 const h = React.createElement;
 const catalogue = [{ key: 'purpose', title: 'Purpose', position: 0 }, { key: 'calendar', title: 'The calendar', position: 1 }];
-const book = { section_catalogue: catalogue, playbook: { published: true, version: 2, published_at: '2026-11-01 03:30:00', sections: [{ key: 'purpose', title: 'Purpose', body: 'Published purpose' }] }, draft: { sections: [{ key: 'purpose', title: 'Purpose', body: 'HQ draft' }], differs: true, edited_at: '2026-11-02 14:00:00' } };
+const book = { section_catalogue: catalogue, playbook: { published: true, version: 2, published_at: '2026-11-01 03:30:00', sections: [{ key: 'purpose', title: 'Purpose', body: 'Published purpose' }] }, draft: { sections: [{ key: 'purpose', title: 'Purpose', body: 'HQ draft' }], differs: true, edited_at: '2026-11-02 14:00:00', hash: 'cd'.repeat(32) } };
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const flush = () => act(async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0)); });
 async function mount(Component, o = {}, props = {}) {
@@ -104,6 +104,8 @@ test('Super Admin draft and publish are separate confirmed writes; refusal retai
     assert.equal(m.calls.filter((c) => c.method === 'POST').length, 0, 'opening dialog is not publishing');
     assert.match(m.of('lab-playbook-dialog'), /new published version/); await m.click('lab-playbook-dialog-go');
     assert.equal(m.calls.filter((c) => c.method === 'POST')[0].path, '/api/admin/programs/spinout-lab/playbook/publish');
+    // D4806: Publish names the revision of the draft that was on screen.
+    assert.deepEqual(m.calls.filter((c) => c.method === 'POST')[0].body, { expected_hash: 'cd'.repeat(32) });
   } finally { await m.close(); }
 });
 test('failed playbook retries without hiding the monthly checklist or granting write access', async () => {

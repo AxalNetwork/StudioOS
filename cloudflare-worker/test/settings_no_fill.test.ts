@@ -23,6 +23,9 @@
  *   international_presence   cite — so neither `restatement` nor `sourced` can
  *                            keep its promise, and `composition` may not occupy a
  *                            column holding a measured value.
+ *   region_codes             FACTS ONLY THE COMPANY HOLDS (#4964): the same
+ *                            fact as international_presence, as codes from a
+ *                            list. A list makes a guess look precise, not true.
  *   expansion_goals          INTENT, which only the founder has.
  *   default_currency         A CHOICE ONLY THE COMPANY MAKES (#3932, #3696 Q4):
  *                            the currency it reports and invoices in. Nothing to
@@ -65,11 +68,15 @@ import { FILL_KINDS } from '../src/services/fills/registry.ts';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p: string) => readFileSync(resolve(HERE, '..', p), 'utf8');
 
-/** Every column `PATCH /company/:uid` will write. The route's own allow-list. */
+/**
+ * Every column `PATCH /company/:uid` will write: `GENERAL_FIELDS` (D4962), which the route loops over.
+ * `logo_url` is not one of them any more: the logo changes only through POST and DELETE /company/:uid/logo,
+ * and a link in a PATCH is refused (`logo_url_not_writable`), so there is no column left to fill there.
+ */
 const EDITABLE = [
   'company_name', 'stage', 'revenue_range', 'employee_count',
   'current_products', 'international_presence', 'expansion_goals',
-  'logo_url', 'website', 'linkedin_url', 'description',
+  'website', 'linkedin_url', 'description',
   // #3932 (migration 757): reasoned about in the header, refused like the rest.
   'default_currency',
 ];
@@ -80,9 +87,11 @@ test('the route still edits exactly the columns this refusal was reasoned about'
   // question "is it fillable" has to be asked about it, and this is where it gets
   // asked.
   const route = read('src/routes/company.ts');
-  const at = route.indexOf("const updatable = ['company_name'");
+  assert.ok(route.includes('for (const f of GENERAL_FIELDS)'), 'the company PATCH no longer writes from the shared allow-list');
+  const fields = read('src/services/companyProfileFields.ts');
+  const at = fields.indexOf('export const GENERAL_FIELDS = [');
   assert.ok(at > 0, 'the company PATCH no longer declares an allow-list');
-  const list = route.slice(at, route.indexOf('] as const;', at));
+  const list = fields.slice(at, fields.indexOf('] as const;', at));
   for (const field of EDITABLE) {
     assert.ok(list.includes(`'${field}'`), `${field} left the allow-list — re-check this file`);
   }

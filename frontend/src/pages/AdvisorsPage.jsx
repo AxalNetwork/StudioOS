@@ -229,7 +229,7 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
                     {slotMinutes(s) != null && (
                       <span className="flex items-center gap-1"><Clock size={12} /> {slotMinutes(s)} min</span>
                     )}
-                    {s.meetingUrl && <span className="flex items-center gap-1"><Video size={12} /> video</span>}
+                    {s.hasMeetingLink && <span className="flex items-center gap-1"><Video size={12} /> video</span>}
                     {s.capacity > 1 && <span>group · {s.available}/{s.capacity} left</span>}
                   </div>
                 </div>

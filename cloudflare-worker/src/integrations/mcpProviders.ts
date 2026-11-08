@@ -46,7 +46,8 @@
  * not a success and reads `0` in any of them is `rate_limited`, whatever its
  * status, so a spent complexity budget is not mistaken for a bad request.
  *
- * This file imports types only, and names no provider's write tool.
+ * This file imports types only. The one write tool it names is Beehiiv's
+ * planned draft tool (D2407), which the session refuses before any request.
  */
 
 export type McpEra = 'auto' | 'legacy' | 'modern';
@@ -345,6 +346,56 @@ const LINEAR = mcpProvider({
   callback_path: '/api/integrations/mcp/linear/callback',
 });
 
+/**
+ * D2407 (#2407 parts 1–2): a founder's own Beehiiv newsletter, through
+ * Beehiiv's hosted MCP server. READ ONLY IN THIS PART.
+ *
+ * - `read_tools` are the four reads `services/beehiiv/reads.ts` calls: the
+ *   workspace's publications, one publication's audience figures, its sent
+ *   posts and one post's figures. No subscriber tool is on the list
+ *   (decision F1): a subscriber list is third-party personal data.
+ * - `write_tools` is the one draft tool, under `publish_issue: 2407`, as #2407
+ *   plans for its part 3. It is listed so the record says what part 3 will
+ *   ask for; the session refuses every write tool before any request (no
+ *   publish ticket exists yet), and no file calls it
+ *   (`beehiiv_connection_2407.test.ts`). Beehiiv's MCP cannot publish,
+ *   schedule or send, and nothing here asks it to.
+ * - CIMD first, DCR as the fallback (#2404's order); a client connects with
+ *   the server URL alone, which suggests one of the two (UNVERIFIED).
+ * - SCOPES: none asked for, none accepted, as Notion's record. No Beehiiv page
+ *   names an MCP scope, so a grant that reports any is refused and revoked
+ *   until the first live sign-in shows what Beehiiv reports.
+ *
+ * EVERY BEEHIIV FACT HERE IS UNVERIFIED (D2407.md §5): beehiiv.com and
+ * developers.beehiiv.com refused a direct read from the building session, so
+ * the server URL comes from Beehiiv's support pages read through search on
+ * 2026-10-21, and the TOOL NAMES are #2407's candidates (only
+ * `get_publication_stats` and `get_post_stats` appear in any write-up). The
+ * names live in this record and at their call sites in `reads.ts` only; the
+ * first live `tools/list` fixes them, with the era and `tool_pins`.
+ */
+const BEEHIIV = mcpProvider({
+  key: 'beehiiv',
+  resources: ['https://mcp.beehiiv.com/mcp'],
+  hosts: ['beehiiv.com'],
+  scopes: [],
+  accepted_scopes: [],
+  read_tools: ['list_publications', 'get_publication_stats', 'list_posts', 'get_post_stats'],
+  write_tools: ['create_post_draft'],
+  publish_issue: 2407,
+  registration: ['cimd', 'dcr'],
+  cimd_url: 'https://axal.vc/api/integrations/mcp/beehiiv/client.json',
+  era: 'auto',
+  budget: 24,
+  headers: {},
+  session: 'per_request',
+  tool_pins: null,
+  lease: 'mcp:beehiiv',
+  state_provider: 'mcp_beehiiv',
+  client_key_prefix: 'mcp_client:beehiiv:',
+  callback_path: '/api/integrations/mcp/beehiiv/callback',
+});
+
 /** Every MCP provider, Mercury first. */
 export const MCP_PROVIDERS: Readonly<Record<string, McpProvider>> = Object.freeze({
   mercury: MERCURY,
@@ -352,6 +403,7 @@ export const MCP_PROVIDERS: Readonly<Record<string, McpProvider>> = Object.freez
   whatsapp_business: WHATSAPP_BUSINESS,
   posthog: POSTHOG,
   linear: LINEAR,
+  beehiiv: BEEHIIV,
 });
 
 export function mcpProviderFor(key: string): McpProvider | null {

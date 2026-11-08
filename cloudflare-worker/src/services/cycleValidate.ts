@@ -898,7 +898,9 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
 }
 
 export async function experimentsCard(ctx: Ctx): Promise<Card> {
-  return safeCard(meta('experiments', 'Last 8 weeks', 'Hypotheses by status; evidence added per week.', 'Hypotheses and their evidence'), async (): Promise<CardBody> => {
+  // D4585: the status and the weekly bars both count pain-theme links (the interview population the status uses); the
+  // caption says so, since a claim's record also lists evidence linked directly.
+  return safeCard(meta('experiments', 'Last 8 weeks', 'Hypotheses by status; interview-theme links added per week.', 'Hypotheses and their evidence'), async (): Promise<CardBody> => {
     const [{ hyps, links }, interviews, model] = await Promise.all([loadHypotheses(ctx), loadInterviews(ctx), loadPainGroupModel(ctx.env, ctx.projectId, { strict: true })]);
     const lab = interviewClaimsOf(interviews);
     if (hyps.length === 0 && lab.total === 0) {
@@ -1070,7 +1072,8 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'newest', label: 'Newest' }],
   },
   experiments: {
-    cols: ['Hypothesis', 'Status', 'Evidence', 'Sprint', 'Owner', 'Source'],
+    // D4585: the status counts interviews only (the approved policy), so the column says so.
+    cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
     filters: [
       { key: 'status', label: 'Status', options: [
         opt('untested', 'Untested'), opt('testing', 'Testing'), opt('supported', 'Supported'), opt('refuted', 'Refuted'),
@@ -1499,6 +1502,11 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     ...paged(LISTS.experiments.cols, rows.map(({ c, status, moved }) => ({
       id: c.id, hypothesis: `${c.code} · ${c.claim}`, status,
       evidence: c.evidence, strength: c.strength, sprint: c.sprint, owner: c.owner,
+      // D4585 (#4585): `evidence` is the interviews the claim's status is computed from (its pain links). The claim's
+      // other linked evidence (direct interviews, demand signals, metrics, experiments) is counted apart, by kind, so a
+      // claim with a pre-sale and no interview reads "0 interviews, 1 other", never as having no evidence.
+      interview_support: c.evidence,
+      linked_evidence: linkedCounts(evidenceBy.get(c.id) || []),
       provenance: provenanceOf(c.id),
       moved,
       ...(retired ? { retired: true } : {}),
@@ -1524,6 +1532,8 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
           withheld: count('not_recorded'),
           fit_not_recorded: interviews.filter((i) => i.icp_fit == null).length,
           bar: VALIDATION_BAR,
+          // D4585: what `supported`, `refuted` and each row's `evidence` count. Other linked evidence is `linked_evidence`.
+          status_basis: 'interviews',
           // When the record starts, or null with none: a window opening before
           // it is not an answer, and the page says where the record starts.
           history_since: history.since,
@@ -1540,6 +1550,13 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     }),
     fills_recorded: fillsRecorded,
   };
+}
+
+/** D4585: a claim's evidence links by kind; these are outside the interview-only status calculation. */
+export function linkedCounts(links: Array<{ kind: string }>) {
+  const n = { interview: 0, signal: 0, metric: 0, experiment: 0 };
+  for (const l of links) if (l.kind in n) n[l.kind as keyof typeof n] += 1;
+  return n;
 }
 
 export const RECORDS_FOR: Record<ModuleSlug, (ctx: Ctx, rq: RecordQuery) => Promise<Records>> = {

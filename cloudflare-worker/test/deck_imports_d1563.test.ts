@@ -18,6 +18,7 @@
  *     --test cloudflare-worker/test/deck_imports_d1563.test.ts
  */
 import test, { after } from 'node:test';
+import { quoting } from './_quoted_run.ts';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, copyFileSync, rmSync, readFileSync } from 'node:fs';
@@ -225,7 +226,7 @@ async function fixture() {
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
-async function call(f: F, who: number, method: string, path: string, body?: unknown) {
+async function rawCall(f: F, who: number, method: string, path: string, body?: unknown) {
   const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const form = body instanceof FormData;
   const res = await f.app.request(path, {
@@ -236,6 +237,7 @@ async function call(f: F, who: number, method: string, path: string, body?: unkn
   let json: any; try { json = JSON.parse(text); } catch { json = text; }
   return { status: res.status, body: json };
 }
+const call = quoting(rawCall);
 const upload = (bytes: Uint8Array, name: string, type = 'application/octet-stream', extra: Record<string, string> = {}) => {
   const fd = new FormData();
   fd.append('file', new File([bytes], name, { type }));

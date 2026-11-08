@@ -293,7 +293,7 @@ test('mounted grid: the tabs at their addresses, the tiles, both charts and a ce
   pin(t);
   const m = await mount('/admin/licences/programs');
   try {
-    assert.match(m.of('grants-header'), /Program grants.*HQ only.*Grid.*Requests.*1.*Default terms/s);
+    assert.match(m.of('grants-header'), /Program access by licence.*HQ only.*Grid.*Requests.*1.*Default terms/s);
     assert.equal(m.prop('grants-tab-requests', 'href'), '/admin/licences/programs/requests');
     assert.equal(m.prop('grants-tab-defaults', 'href'), '/admin/licences/programs/defaults');
     assert.match(m.of('grants-tile-studios'), /4.*2 active · 1 suspended · 1 pending activation/s);

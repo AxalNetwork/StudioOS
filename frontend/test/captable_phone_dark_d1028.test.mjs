@@ -3,6 +3,7 @@
 // (`matchMedia` matching PHONE_QUERY, below 1024px) and, where the layout
 // differs, at desktop width too. Fixtures follow the Worker's shapes
 // (services/capTableRecord.ts, routes/captable.ts) and are worked out by hand.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';

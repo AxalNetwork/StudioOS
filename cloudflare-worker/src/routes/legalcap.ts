@@ -487,7 +487,8 @@ legalcap.post('/subsidiary/spinout', async (c) => {
   // Verify the deal has a passed decision_gate (spinout_ready) — soft check
   const gateRow: any = await c.env.DB.prepare(`SELECT id, final_decision FROM decision_gates WHERE deal_id = ? AND final_decision = 'passed' ORDER BY id DESC LIMIT 1`).bind(dealId).first().catch(() => null);
   await sql.end();
-  if (!gateRow && !data?.force) return c.json({ error: 'Spin-out requires a passed decision gate. Pass {force:true} to override.' }, 412);
+  const override = gateRow ? null : gateOverride(user, data);
+  if (!gateRow && !override?.ok) return c.json({ error: NO_GATE_MESSAGE }, 412);
 
   // Idempotency: if a subsidiary already exists, return it
   const existing: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
@@ -500,12 +501,15 @@ legalcap.post('/subsidiary/spinout', async (c) => {
   // === Stripe Atlas placeholder ===
   // Real integration would call Atlas API with env.STRIPE_ATLAS_API_KEY here.
   // For now we stamp a mock reference + 'pending' status, which a future cron/webhook can flip to 'incorporated'.
-  const stripeKey = c.env.STRIPE_ATLAS_API_KEY;
-  const stripeRef = stripeKey ? `atlas_pending_${Date.now()}` : `mock_atlas_${Date.now()}`;
-  const stripeStatus = stripeKey ? 'pending' : 'pending'; // identical until real API is wired
+  // D4677: no reference is invented. The Atlas id, EIN and date are recorded
+  // from the incorporation itself (POST /spinout/stripe-atlas with its evidence).
+  const stripeRef: string | null = null;
+  const stripeStatus = 'pending';
 
   const sub: any = await c.env.DB.prepare(`INSERT INTO subsidiaries (deal_id, subsidiary_name, jurisdiction, stripe_atlas_status, stripe_atlas_ref, equity_allocated) VALUES (?, ?, ?, ?, ?, ?) RETURNING *`)
     .bind(dealId, subName, jurisdiction, stripeStatus, stripeRef, JSON.stringify(equityAlloc)).first();
+
+  if (override?.ok) await logSpinoutEvent(c.env, sub.id, 'override_no_passed_gate', { reason: override.reason }, user.id);
 
   // Auto-generate the 3 standard docs (template-only, no AI to keep this orchestration cheap)
   const docVars = { ...suppliedVars, holding_equity_pct: equityAlloc.holding_pct, founder_equity_pct: equityAlloc.founders_pct, option_pool_pct: equityAlloc.option_pool_pct };
@@ -551,7 +555,7 @@ legalcap.post('/subsidiary/spinout', async (c) => {
     subsidiary: { ...sub, equity_allocated: safeJson(sub.equity_allocated, {}) },
     legal_docs: docResults,
     capital_call: null,
-    stripe_atlas: { status: stripeStatus, ref: stripeRef, real_api: !!stripeKey },
+    stripe_atlas: { status: stripeStatus, ref: stripeRef, real_api: false },
     next_steps: ['Sign legal documents', 'Confirm Atlas incorporation', 'File 83(b) elections'],
   }, 201);
 });
@@ -559,6 +563,21 @@ legalcap.post('/subsidiary/spinout', async (c) => {
 // ============================================================
 // SPIN-OUT WIZARD (step-by-step orchestration with audit trail)
 // ============================================================
+
+/**
+ * D4677: the one override a spin-out allows, and it is narrow and recorded: HQ
+ * (role admin) starting a spin-out for a deal with no passed decision gate, with
+ * a written reason of at least ten characters. It replaces a bare `force: true`
+ * that any operator could send; it does not reach incorporation, which is never
+ * overridable (go-independent needs the evidence the step records).
+ */
+function gateOverride(user: { role: string }, data: any): { ok: true; reason: string } | { ok: false } {
+  const o = data?.override;
+  const reason = typeof o?.reason === 'string' ? o.reason.trim() : '';
+  if (o?.kind === 'no_passed_gate' && user.role === 'admin' && reason.length >= 10 && reason.length <= 500) return { ok: true, reason };
+  return { ok: false };
+}
+const NO_GATE_MESSAGE = 'Spin-out requires a passed decision gate. An admin can start one without it by sending override { kind: "no_passed_gate", reason } (at least ten characters, recorded).';
 
 async function logSpinoutEvent(env: Env, subId: number, type: string, details: any, userId: number) {
   try {
@@ -590,9 +609,11 @@ legalcap.post('/spinout/execute', async (c) => {
   if (!project) return c.json({ error: 'Deal not found' }, 404);
 
   const gate: any = await c.env.DB.prepare(`SELECT id, final_decision FROM decision_gates WHERE deal_id = ? AND final_decision = 'passed' ORDER BY id DESC LIMIT 1`).bind(dealId).first().catch(() => null);
-  if (!gate && !data?.force) return c.json({ error: 'Spin-out requires a passed decision gate. Pass {force:true} to override.' }, 412);
+  const override = gate ? null : gateOverride(user, data);
+  if (!gate && !override?.ok) return c.json({ error: NO_GATE_MESSAGE }, 412);
 
   const { sub, created } = await getOrCreateSubForDeal(c.env, dealId, { name: data?.subsidiary_name || `${project.name}, Inc.`, jurisdiction: data?.jurisdiction, userId: user.id });
+  if (override?.ok && created) await logSpinoutEvent(c.env, sub.id, 'override_no_passed_gate', { reason: override.reason }, user.id);
 
   // Prevent duplicate completed spin-outs
   if (sub.spinout_status === 'independent') {
@@ -651,24 +672,52 @@ legalcap.post('/spinout/ip-transfer', async (c) => {
     return c.json({ error: `Invalid state for IP transfer: ${sub.spinout_status}` }, 412);
   }
 
-  const userVars = data?.variables && typeof data.variables === 'object' ? data.variables : {};
-  const vars = { ...defaultDocVars(project, user), ...userVars };
-  const body = fillTemplate(TEMPLATES.IP_license, vars);
-  const content = JSON.stringify({ template: 'IP_license', vars, body, model: 'template-only' });
+  // D4677: this step used to write the licence as `signed` the moment it was
+  // generated, with nobody having signed it, and to mark the transfer complete
+  // before the document existed. Now it generates a DRAFT, and the transfer
+  // completes only when HQ records the signature (who signed, on what date),
+  // in one batch with the document turning `signed`.
+  const sig = data?.signed;
+  let signedBy = '';
+  let signedOn = '';
+  if (sig !== undefined) {
+    signedBy = typeof sig?.signed_by_name === 'string' ? sig.signed_by_name.trim() : '';
+    signedOn = typeof sig?.signed_on === 'string' ? sig.signed_on.trim() : '';
+    if (!signedBy || signedBy.length > 200 || !/^\d{4}-\d{2}-\d{2}$/.test(signedOn) || Number.isNaN(Date.parse(signedOn))) {
+      return c.json({ error: 'signed needs signed_by_name (who signed) and signed_on (YYYY-MM-DD).' }, 400);
+    }
+    if (signedOn > new Date().toISOString().slice(0, 10)) return c.json({ error: 'signed_on cannot be in the future.' }, 400);
+  }
 
-  const upd = await c.env.DB.prepare(`UPDATE subsidiaries SET spinout_status = 'ip_transferred', ip_transfer_complete = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND ip_license_doc_id IS NULL`)
-    .bind(sub.id).run();
-  if (!upd.meta?.changes) {
+  let draft: any = await c.env.DB.prepare(`SELECT id, content FROM legal_documents WHERE deal_id = ? AND type = 'IP_license' AND status = 'generated' ORDER BY id DESC LIMIT 1`).bind(dealId).first();
+  if (!draft) {
+    const userVars = data?.variables && typeof data.variables === 'object' ? data.variables : {};
+    const vars = { ...defaultDocVars(project, user), ...userVars };
+    const body = fillTemplate(TEMPLATES.IP_license, vars);
+    const content = JSON.stringify({ template: 'IP_license', vars, body, model: 'template-only' });
+    draft = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, 'IP_license', 'generated', ?, ?) RETURNING id, content`)
+      .bind(dealId, content, user.id).first();
+    await logSpinoutEvent(c.env, sub.id, 'ip_license_drafted', { doc_id: draft.id, deal_id: dealId }, user.id);
+  }
+  if (sig === undefined) {
+    return c.json({ ok: true, ip_license_doc_id: null, draft_doc_id: draft.id, awaiting: 'signature', spinout_status: sub.spinout_status || 'pending' });
+  }
+
+  const stamped = JSON.stringify({ ...safeJson(draft.content, {}), signature: { signed_by_name: signedBy, signed_on: signedOn, recorded_by_user_id: user.id } });
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE subsidiaries SET spinout_status = 'ip_transferred', ip_transfer_complete = 1, ip_license_doc_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND ip_license_doc_id IS NULL`)
+      .bind(draft.id, sub.id),
+    c.env.DB.prepare(`UPDATE legal_documents SET status = 'signed', signed_by = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'generated' AND EXISTS (SELECT 1 FROM subsidiaries s WHERE s.id = ? AND s.ip_license_doc_id = ?)`)
+      .bind(user.id, stamped, draft.id, sub.id, draft.id),
+  ]);
+  if (!Number((results[0] as any)?.meta?.changes)) {
     const fresh: any = await c.env.DB.prepare(`SELECT ip_license_doc_id FROM subsidiaries WHERE id = ?`).bind(sub.id).first();
     return c.json({ error: 'IP transfer already complete', ip_license_doc_id: fresh?.ip_license_doc_id }, 409);
   }
-  const doc: any = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, 'IP_license', 'signed', ?, ?) RETURNING id`)
-    .bind(dealId, content, user.id).first();
-  await c.env.DB.prepare(`UPDATE subsidiaries SET ip_license_doc_id = ? WHERE id = ?`).bind(doc.id, sub.id).run();
-  await logSpinoutEvent(c.env, sub.id, 'ip_transfer', { doc_id: doc.id, deal_id: dealId }, user.id);
-  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: sub.id, metadata: { step: 'ip_transfer', doc_id: doc.id } });
+  await logSpinoutEvent(c.env, sub.id, 'ip_transfer', { doc_id: draft.id, deal_id: dealId, signed_by_name: signedBy, signed_on: signedOn }, user.id);
+  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: sub.id, metadata: { step: 'ip_transfer', doc_id: draft.id } });
 
-  return c.json({ ok: true, ip_license_doc_id: doc.id, spinout_status: 'ip_transferred' });
+  return c.json({ ok: true, ip_license_doc_id: draft.id, spinout_status: 'ip_transferred' });
 });
 
 // Step 2: Equity allocation — Replit AI recommends fair split; user can override
@@ -766,24 +815,31 @@ legalcap.post('/spinout/stripe-atlas', async (c) => {
   if (sub.spinout_status !== 'equity_allocated') {
     return c.json({ error: `Stripe Atlas requires equity_allocated state (current: ${sub.spinout_status})` }, 412);
   }
-  // Conditional reservation to prevent concurrent double-incorporation
-  const reserve = await c.env.DB.prepare(`UPDATE subsidiaries SET stripe_atlas_status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (stripe_atlas_status IS NULL OR stripe_atlas_status = '') AND spinout_status = 'equity_allocated'`)
-    .bind(sub.id).run();
-  if (!reserve.meta?.changes) return c.json({ error: 'Incorporation already in progress' }, 409);
+  // D4677: nothing here incorporates anyone. The old step minted a random EIN
+  // and marked the company incorporated, and its reservation guard could never
+  // match the 'pending' status every subsidiary is created with. Incorporation
+  // is recorded from its evidence: the Atlas company id, the EIN the IRS issued
+  // and the date it was incorporated, entered by the person who has them. Without
+  // them the step only notes that incorporation was requested and stays where it is.
+  const ev = data?.confirmation;
+  if (ev === undefined) {
+    await logSpinoutEvent(c.env, sub.id, 'stripe_atlas_requested', { deal_id: dealId }, user.id);
+    return c.json({ ok: true, awaiting: 'incorporation_evidence', spinout_status: sub.spinout_status, message: 'Incorporation is not recorded until you enter the Atlas company id, the EIN and the incorporation date.' });
+  }
+  const atlasId = typeof ev?.atlas_id === 'string' ? ev.atlas_id.trim() : '';
+  const ein = typeof ev?.ein === 'string' ? ev.ein.trim() : '';
+  const on = typeof ev?.incorporation_date === 'string' ? ev.incorporation_date.trim() : '';
+  if (!atlasId || atlasId.length > 120 || !/^[A-Za-z0-9_.-]+$/.test(atlasId)) return c.json({ error: 'confirmation.atlas_id is required (letters, digits, - _ .).' }, 400);
+  if (!/^\d{2}-\d{7}$/.test(ein)) return c.json({ error: 'confirmation.ein must look like 12-3456789.' }, 400);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(on) || Number.isNaN(Date.parse(on)) || on > new Date().toISOString().slice(0, 10)) {
+    return c.json({ error: 'confirmation.incorporation_date must be a past or present date (YYYY-MM-DD).' }, 400);
+  }
+  const inc = await c.env.DB.prepare(`UPDATE subsidiaries SET stripe_atlas_id = ?, stripe_atlas_ref = ?, stripe_atlas_status = 'incorporated', spinout_status = 'incorporated', incorporation_date = ?, ein = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND spinout_status = 'equity_allocated'`)
+    .bind(atlasId, atlasId, on, ein, sub.id).run();
+  if (!inc.meta?.changes) return c.json({ error: 'Concurrent state change; refresh and retry' }, 409);
+  await logSpinoutEvent(c.env, sub.id, 'stripe_atlas_complete', { stripe_atlas_id: atlasId, ein, incorporation_date: on, recorded_by_user_id: user.id }, user.id);
 
-  const stripeKey = c.env.STRIPE_ATLAS_API_KEY;
-  // Real flow would: POST to Atlas API with company name + jurisdiction → poll for incorporation.
-  // For now: mock the start + mock immediate completion to keep wizard end-to-end testable.
-  const atlasId = stripeKey ? `atlas_${crypto.randomUUID().slice(0, 12)}` : `mock_atlas_${Date.now()}`;
-  await logSpinoutEvent(c.env, sub.id, 'stripe_atlas_start', { stripe_atlas_id: atlasId, real_api: !!stripeKey }, user.id);
-
-  // Simulate incorporation (in prod: defer to webhook or polling worker)
-  const mockEin = `${Math.floor(10 + Math.random() * 89)}-${Math.floor(1000000 + Math.random() * 8999999)}`;
-  await c.env.DB.prepare(`UPDATE subsidiaries SET stripe_atlas_id = ?, stripe_atlas_ref = ?, stripe_atlas_status = 'incorporated', spinout_status = 'incorporated', incorporation_date = CURRENT_TIMESTAMP, ein = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-    .bind(atlasId, atlasId, mockEin, sub.id).run();
-  await logSpinoutEvent(c.env, sub.id, 'stripe_atlas_complete', { stripe_atlas_id: atlasId, ein: mockEin, mock: !stripeKey }, user.id);
-
-  return c.json({ ok: true, stripe_atlas_id: atlasId, ein: mockEin, real_api: !!stripeKey, spinout_status: 'incorporated' });
+  return c.json({ ok: true, stripe_atlas_id: atlasId, ein, incorporation_date: on, spinout_status: 'incorporated' });
 });
 
 // Step 4: Go Independent — flips the switch, moves project out of pipeline
@@ -798,28 +854,26 @@ legalcap.post('/spinout/go-independent', async (c) => {
 
   const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
   if (!sub) return c.json({ error: 'No subsidiary' }, 412);
-  if (sub.spinout_status !== 'incorporated' && !data?.force) {
-    return c.json({ error: 'Subsidiary must be incorporated before going independent. Pass {force:true} to override.', current_status: sub.spinout_status }, 412);
-  }
   if (sub.spinout_status === 'independent') return c.json({ error: 'Already independent' }, 409);
+  // D4677: no force. The company must be recorded as incorporated WITH its
+  // evidence (Atlas id, EIN, incorporation date) before it can go independent.
+  if (sub.spinout_status !== 'incorporated' || !sub.stripe_atlas_id || !sub.ein || !sub.incorporation_date) {
+    return c.json({ error: 'Subsidiary must be incorporated, with its Atlas id, EIN and incorporation date recorded, before going independent.', current_status: sub.spinout_status }, 412);
+  }
 
   const dashUrl = data?.dashboard_url || `https://axal.vc/independent/${sub.id}`;
-  const indUpd = await c.env.DB.prepare(`UPDATE subsidiaries SET spinout_status = 'independent', independent_scaling_enabled = 1, post_spinout_dashboard_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND spinout_status != 'independent'`)
-    .bind(dashUrl, sub.id).run();
-  if (!indUpd.meta?.changes) return c.json({ error: 'Already independent' }, 409);
-
-  // Move project out of main pipeline.
-  // `stage` only: `pipeline_stage` exists on no table in this schema, and
-  // SQLite rejects the whole statement on an unknown column rather than
-  // ignoring it — so the `stage = 'spun_out'` beside it never landed either,
-  // and a spun-out project stayed in the main pipeline. The two were being
-  // set to the same value anyway; `stage` is the one that exists.
-  try {
-    await c.env.DB.prepare(`UPDATE projects SET stage = 'spun_out', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId).run();
-  } catch (e: any) {
-    // Schema may differ — ignore non-existent column
-    console.error('go-independent project update:', e?.message);
-  }
+  // One batch: the subsidiary goes independent, the venture leaves the active
+  // board (stage 'spun_out') and its active stage closes, or none of it happens.
+  // A failure is not swallowed: it fails the request.
+  const indRes = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE subsidiaries SET spinout_status = 'independent', independent_scaling_enabled = 1, post_spinout_dashboard_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND spinout_status = 'incorporated'`)
+      .bind(dashUrl, sub.id),
+    c.env.DB.prepare(`UPDATE projects SET stage = 'spun_out', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND EXISTS (SELECT 1 FROM subsidiaries s WHERE s.id = ? AND s.spinout_status = 'independent')`)
+      .bind(dealId, sub.id),
+    c.env.DB.prepare(`UPDATE project_stages SET status = 'completed', end_date = CURRENT_TIMESTAMP WHERE deal_id = ? AND status = 'active' AND EXISTS (SELECT 1 FROM subsidiaries s WHERE s.id = ? AND s.spinout_status = 'independent')`)
+      .bind(dealId, sub.id),
+  ]);
+  if (!Number((indRes[0] as any)?.meta?.changes)) return c.json({ error: 'Already independent' }, 409);
 
   await logSpinoutEvent(c.env, sub.id, 'independent_scale', { dashboard_url: dashUrl }, user.id);
   await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: sub.id, metadata: { step: 'independent', deal_id: dealId } });
@@ -891,12 +945,18 @@ legalcap.post('/spinout/iterate', async (c) => {
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const dealId = parseInt(data?.deal_id);
   if (!dealId) return c.json({ error: 'deal_id required' }, 400);
-  try {
-    // `stage`, not `pipeline_stage` — see the spun_out site above. This one
-    // set no other column, so the "continue to iterate" decision recorded
-    // nothing at all while still returning ok: true.
-    await c.env.DB.prepare(`UPDATE projects SET stage = 'mvp', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId).run();
-  } catch (e: any) { console.error('iterate:', e?.message); }
+  // D4677: "continue / iterate" is one batch that moves the project, its stage
+  // history and its status together, and its failure is a failure, not `ok`.
+  // A company that has been incorporated or gone independent cannot be sent back.
+  const subRow: any = await c.env.DB.prepare(`SELECT spinout_status FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (subRow && ['incorporated', 'independent'].includes(subRow.spinout_status)) {
+    return c.json({ error: `This company is already ${subRow.spinout_status}; it cannot be sent back to MVP.` }, 409);
+  }
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE projects SET stage = 'mvp', status = CASE WHEN status = 'spinout' THEN 'active' ELSE status END, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId),
+    c.env.DB.prepare(`UPDATE project_stages SET status = 'completed', end_date = CURRENT_TIMESTAMP WHERE deal_id = ? AND status = 'active'`).bind(dealId),
+    c.env.DB.prepare(`INSERT INTO project_stages (deal_id, stage_name, status, metadata) VALUES (?, 'mvp_dev', 'active', json_object('via', 'spinout_iterate', 'decided_by', ?))`).bind(dealId, user.id),
+  ]);
   await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: dealId, metadata: { decision: 'iterate' } });
   return c.json({ ok: true, decision: 'continue_iterate' });
 });

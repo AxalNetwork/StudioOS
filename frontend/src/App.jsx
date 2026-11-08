@@ -3,6 +3,7 @@ import LegacyContractsRedirect from './pages/admin/LegacyContractsRedirect';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
+import { usePageMeta } from './lib/seo';
 import { preserveReloadGuards } from './lib/reloadGuard';
 import { consumePendingNextOnce, loginRedirectFor, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
@@ -164,6 +165,7 @@ const AdminCommunity = lazy(() => import('./pages/admin/community/AdminCommunity
 const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
+const LicenceDeepLink = lazy(() => import('./pages/admin/licences/LicenceDeepLink'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
 const ProgramGrantsHistory = lazy(() => import('./pages/admin/grants/ProgramGrantsHistory'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
@@ -1223,7 +1225,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
       {hqStrip === 'Licences' && (
         <HqSubNavStrip label="Licences">
           <StripLink to="/admin/licences">Ledger</StripLink>
-          <StripLink to="/admin/licences/programs">Program grants</StripLink>
+          <StripLink to="/admin/licences/programs">Program access by licence</StripLink>
         </HqSubNavStrip>
       )}
       {hqStrip === 'Content' && (
@@ -2000,6 +2002,9 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
 // the server-side cookie/session revoke completes in the background. A signed-
 // out visitor renders the form immediately with no teardown.
 function AuthScreen({ user, clearSession, children, heldFor = null }) {
+  // D4582: /login and /register carry their own head on a client-side arrival too (a protected route redirecting
+  // here keeps no other page's title, canonical or social URL). No pageview beacon: these pages never sent one.
+  usePageMeta({ path: useLocation().pathname, analytics: false });
   const startedRef = React.useRef(false);
   // #4651: a signed-in visitor who follows a plan link to /register is told so and given the choice, instead of
   // being signed out in silence with the plan they chose lost. `heldFor` reads that plan from the address.
@@ -2604,7 +2609,11 @@ function AppInner() {
       {/* Graduation Certificate (design: Graduation Certificate.dc) — the
           Week-4 credential, conferred on the incorporation_completed
           milestone and downloadable as a vector A4-landscape PDF. */}
-      <Route path="/spinout-lab/certificate" element={guard(labRoles(['admin', 'founder']), <SpinoutLabCertificatePage />)} />
+      {/* #4661: any signed-in account opens it. The page and `GET /certificates/mine`
+          are the member's own, and the page decides from the Worker's graduation
+          rule: a graduate of any role (an Explorer too) keeps their certificate
+          after enrollment ends, which a role gate here took away. */}
+      <Route path="/spinout-lab/certificate" element={authOnly(<SpinoutLabCertificatePage />)} />
       {/* Office Hours tool page (design: Office Hours.dc) — founder-side
           partner session booking; /office-hours stays the advisor console. */}
       <Route path="/spinout-lab/office-hours" element={guard(labRoles(['admin']), <SpinoutLabOfficeHoursPage />)} />
@@ -2931,12 +2940,16 @@ function AppInner() {
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
-      {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
+      {/* D981 (#2376) — Program access by licence (D4819's name for Program grants): which programs each licensed studio may run. */}
       <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/history" element={guard(['admin'], hqOnly(<ProgramGrantsHistory />))} />
       <Route path="/admin/licences/programs/requests" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/defaults" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/studio/:uid" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      {/* D4819 (#4819): a licence's deep link, opened in today's detail view. The static
+          /programs paths above outrank these, so Program access keeps its addresses. */}
+      <Route path="/admin/licences/:uid" element={guard(['admin'], hqOnly(<LicenceDeepLink />))} />
+      <Route path="/admin/licences/:uid/:section" element={guard(['admin'], hqOnly(<LicenceDeepLink />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />

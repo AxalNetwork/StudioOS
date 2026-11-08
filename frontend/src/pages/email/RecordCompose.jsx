@@ -16,6 +16,12 @@
  *                send, with the accepted draft's uid when there is one. Nothing
  *                is sent any other way.
  *
+ * #4660 (part 3): once Accept has placed a draft, the member's To, Subject and
+ * Body are saved to THAT draft (`PATCH /api/mail/drafts/:uid`, `useDraftEdits`)
+ * with a visible save state; a failed save keeps the text and says so, and
+ * closing never discards it in silence. The fund-GP question check reads the
+ * accepted draft's own intent.
+ *
  * The `/email` page keeps D1344's "Compose with Eadwyn" (`ComposeSheet`).
  *
  * D1357 (#3572, RI4e): "Write the intro" opens this composer with `introUid`,
@@ -25,18 +31,22 @@
  * sender's, or not accepted. `ask={false}` keeps Eadwyn's Body trigger off
  * until its intro drafts land (part 8b).
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Sheet from '../../ui/Sheet';
 import Lightbox from '../../ui/Lightbox';
 import { FillMark, FillTrigger } from '../../ui/FillMark.jsx';
 import { mailApi } from '../../lib/api/mail.js';
+import SendUncertain from './SendUncertain.jsx';
+import DraftSaveLine, { CloseNotice } from './DraftSaveLine.jsx';
+import { useDraftEdits } from './useDraftEdits.js';
+import { makeSendOperation, NOT_RECORDED_LINE, PENDING_LINE, readOutcome, sendFailure } from './sendOperation.js';
 import EmailDraftIntent from './EmailDraftIntent.jsx';
 import { bodyText, showBodyTrigger } from './emailModel.js';
 import { BODY, BTN, ERROR, EYEBROW, INPUT, MUTED, PRIMARY } from './emailParts.jsx';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function RecordCompose({ pack, refs, project = null, to, account, from = null, readOnly = false, onClose, onSent, api = mailApi, introUid = null, initialSubject = '', initialBody = '', ask = true, title = 'Email' }) {
+export default function RecordCompose({ pack, refs, project = null, to, account, from = null, readOnly = false, onClose, onSent, api = mailApi, introUid = null, initialSubject = '', initialBody = '', ask = true, title = 'Email', saveDelayMs }) {
   const person = pack.person;
   const [address, setAddress] = useState(to ?? '');
   const [subject, setSubject] = useState(initialSubject);
@@ -46,22 +56,56 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [confirm, setConfirm] = useState(false);
+  const [unsure, setUnsure] = useState(null);
+  const operation = useRef(null);
+  if (!operation.current) operation.current = makeSendOperation();
+  const edits = useDraftEdits({ api, to: address, delayMs: saveDelayMs });
 
   const accept = (draft) => {
+    edits.adopt(draft);
     setSubject(draft.subject ?? '');
     setBody(draft.body ?? '');
-    setPlaced({ uid: draft.uid, body: draft.body ?? '', intent: draft.intent ?? null });
+    // The draft's own intent (what it was generated for), never the form's live one: the fund-GP check reads it.
+    setPlaced({ uid: draft.uid, body: draft.body ?? '', intent: draft.intent ?? null, draft });
     setAsking(false);
   };
+  // Once a draft is placed, every change to the form is also the member's saved text of that draft.
+  const edit = (patch) => {
+    const next = { to: address, subject, body, ...patch };
+    if ('to' in patch) setAddress(patch.to);
+    if ('subject' in patch) setSubject(patch.subject);
+    if ('body' in patch) setBody(patch.body);
+    if (placed) edits.queue(placed.uid, next);
+  };
+  const saveState = placed ? edits.stateOf(placed.draft) : null;
+  const guardedClose = edits.guardClose(onClose);
   const send = async () => {
     setBusy(true); setError(null);
     try {
       const { nonce } = await api.confirmSend(account.uid);
-      const r = await api.send({ account_uid: account.uid, to: address.trim(), subject, body, ...(placed ? { draft_uid: placed.uid } : {}), ...(introUid ? { intro_uid: introUid } : {}), nonce });
+      const key = operation.current.keyFor([account.uid, address.trim(), subject, body, placed?.uid ?? null, introUid ?? null]);
+      const r = await api.send({ account_uid: account.uid, to: address.trim(), subject, body, ...(placed ? { draft_uid: placed.uid } : {}), ...(introUid ? { intro_uid: introUid } : {}), operation_key: key, nonce });
       setConfirm(false);
-      setPlaced(null);
-      onSent?.(r?.sent ?? null);
-    } catch (e) { setConfirm(false); setError(e?.message || 'The mail server refused it. Nothing was sent.'); }
+      const out = readOutcome(r);
+      if (out.state === 'accepted') { operation.current.forget(); setPlaced(null); onSent?.(out.sent); }
+      else if (out.state === 'uncertain') setUnsure(out.operation.uid);
+      else setError(out.state === 'pending' ? PENDING_LINE : NOT_RECORDED_LINE);
+    } catch (e) {
+      setConfirm(false);
+      const f = sendFailure(e);
+      if (f.ended) operation.current.forget();
+      setError(f.line);
+    }
+    finally { setBusy(false); }
+  };
+  const resolve = async (outcome) => {
+    setBusy(true); setError(null);
+    try {
+      await api.resolveSend(unsure, outcome);
+      operation.current.forget();
+      setUnsure(null);
+      if (outcome === 'arrived') { setPlaced(null); onSent?.(null); } else setError('Marked as not sent. You can send it again.');
+    } catch (e) { setError(e?.message || 'That could not be recorded. Try again.'); }
     finally { setBusy(false); }
   };
 
@@ -73,26 +117,26 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
 
   const footer = (
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" className={PRIMARY} disabled={!sendable || busy} onClick={() => setConfirm(true)} data-testid="record-compose-send">
+      <button type="button" className={PRIMARY} disabled={!sendable || busy || !!unsure} onClick={() => setConfirm(true)} data-testid="record-compose-send">
         {account ? `Send from ${account.address}` : 'Connect a mailbox to send'}
       </button>
       <span className={`text-[12px] ${MUTED}`}>Nothing is sent until you press Send.</span>
     </div>
   );
 
-  return <Sheet title={title} eyebrow="Email" sub={`Email to ${person.name}`} onClose={onClose} footer={readOnly ? null : footer} width={560} testId="record-compose">
+  return <Sheet title={title} eyebrow="Email" sub={`Email to ${person.name}`} onClose={guardedClose} footer={readOnly ? null : footer} width={560} testId="record-compose">
     <div className="flex flex-col gap-4">
       {from && <p className="rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-950/40 dark:text-violet-300">Opened from {from}.</p>}
       <label className="flex flex-col gap-1">
         <span className={EYEBROW}>To</span>
-        <input type="email" className={INPUT} value={address} onChange={(e) => setAddress(e.target.value)} placeholder={`${person.name}’s address`} readOnly={readOnly}
+        <input type="email" className={INPUT} value={address} onChange={(e) => edit({ to: e.target.value })} placeholder={`${person.name}’s address`} readOnly={readOnly}
           aria-describedby={to ? undefined : 'record-compose-no-address'} data-testid="record-compose-to" />
         {!to && <span id="record-compose-no-address" className={`text-[12px] ${MUTED}`}>No address is recorded for {person.name}. Type the one to send to.</span>}
       </label>
       <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="record-compose-from">From {account ? account.address : 'no mailbox yet'}</p>
       <label className="flex flex-col gap-1">
         <span className={EYEBROW}>Subject</span>
-        <input className={INPUT} value={subject} onChange={(e) => setSubject(e.target.value)} readOnly={readOnly} data-testid="record-compose-subject" />
+        <input className={INPUT} value={subject} onChange={(e) => edit({ subject: e.target.value })} readOnly={readOnly} data-testid="record-compose-subject" />
       </label>
       <div className="flex flex-col gap-1">
         <span className="flex min-h-[32px] items-center justify-between gap-2">
@@ -100,10 +144,13 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
           {/* The shared 20px trigger; its hit area is 44px below 1024px (touch). */}
           {trigger ? <span className="max-lg:[&>button]:h-11 max-lg:[&>button]:w-11" data-testid="record-compose-trigger"><FillTrigger label="the body" onOpen={() => setAsking(true)} /></span> : null}
         </span>
-        <textarea id="record-compose-body" className={`${INPUT} min-h-[220px] py-2`} value={body} onChange={(e) => setBody(e.target.value)} readOnly={readOnly}
+        <textarea id="record-compose-body" className={`${INPUT} min-h-[220px] py-2`} value={body} onChange={(e) => edit({ body: e.target.value })} readOnly={readOnly}
           aria-describedby={questionOpening ? 'record-compose-question' : undefined} data-testid="record-compose-body-field" />
+        {placed && !readOnly && <DraftSaveLine state={saveState} onRetry={() => edits.retry(placed.uid)} testId="record-compose-save-state" />}
         {questionOpening && <p id="record-compose-question" className={`m-0 text-[12.5px] ${BODY}`} data-testid="record-compose-question">Eadwyn wrote an opening. Add your question to the body before sending.</p>}
       </div>
+      <CloseNotice closing={edits.closing} onRetry={guardedClose} onCloseAnyway={edits.closeAnyway(onClose)} testId="record-compose-close-notice" />
+      {unsure && <SendUncertain busy={busy} onArrived={() => resolve('arrived')} onNotArrived={() => resolve('not_arrived')} testId="record-compose-unsure" />}
       {error && <div className={ERROR} role="alert" data-testid="record-compose-error">{error}</div>}
     </div>
 

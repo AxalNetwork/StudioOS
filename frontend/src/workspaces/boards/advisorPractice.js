@@ -1,4 +1,8 @@
 import { count, day, summary, title, top, usdCents, total } from './format.js';
+import { bookingView } from '../../pages/advisor/advisory/kit.jsx';
+import { classifyBooking } from '../../pages/advisor/practice/opportunityLog.js';
+import { LANE_LABEL } from '../../pages/advisor/practice/engagementBoard.js';
+import { STATE_LABEL } from '../../pages/advisor/practice/deliveryTrail.js';
 
 /*
  * `/practice` — Advisor Canvas V3, "Run my advisory business".
@@ -30,13 +34,45 @@ import { count, day, summary, title, top, usdCents, total } from './format.js';
  *     A booking has a status and a topic; it has no renewal date, and nothing
  *     records that a client opened anything. Neither is inferred.
  *
- * All three Practice sections that read bookings share one fetch. The zone
- * pages read the same endpoint, so the board's counts and theirs cannot drift.
+ * #4702 (D4702): EACH SECTION SUMMARISES THE SAME ENTITIES AS THE PAGE IT LINKS
+ * TO. Engagements used to count confirmed BOOKINGS and Delivery completed
+ * BOOKINGS, so an advisor with three contracts and one session saw one active
+ * engagement here and three on Engagements. Now:
+ *
+ *   · Opportunities: the bookings, classified by `classifyBooking`, the function
+ *     the Opportunities page uses, so a request whose slot has passed unanswered
+ *     is "expired" here exactly where the page says expired;
+ *   · Active engagements: `advisor_engagements` (`listMyAdvisorEngagements`),
+ *     the page's own `totals.active`;
+ *   · Delivery desk: `advisor_deliverables` (`listMyAdvisorDeliverables`), the
+ *     page's own work products and `totals`;
+ *   · Sessions: the bookings, as before.
+ *
+ * Opportunities and Sessions share one bookings fetch; the other sections read
+ * the store their page reads.
  */
+/**
+ * The pending requests of a bookings read, split the way the Opportunities page
+ * splits them (`classifyBooking`, one instant for every row): still awaiting an
+ * answer, or expired because the slot passed unanswered.
+ */
+function unanswered(d) {
+  const now = Date.now();
+  const out = { awaiting: [], expired: [] };
+  for (const b of Array.isArray(d?.items) ? d.items : []) {
+    const view = bookingView(b);
+    const bucket = classifyBooking(view, now);
+    if (bucket === 'awaiting' || bucket === 'expired') out[bucket].push({ ...view, bucket });
+  }
+  return out;
+}
+
 export default function advisorPracticeBoard(role, api) {
   return {
     sources: {
       bookings: () => api.listMyAdvisorBookings(),
+      engagements: () => api.listMyAdvisorEngagements(),
+      deliverables: () => api.listMyAdvisorDeliverables(),
       earnings: () => api.getMyAdvisorEarnings(),
     },
     sections: [
@@ -49,12 +85,22 @@ export default function advisorPracticeBoard(role, api) {
         cols: '1.3fr 1.9fr 1fr 1fr',
         columns: ['Client', 'They asked about', 'State', 'When'],
         empty: 'Nobody has requested a session yet.',
-        summary: (d) => summary(
-          count((d?.items || []).filter((b) => b.status === 'pending').length, 'awaiting you', 'awaiting you'),
-        ),
-        rows: (d) => top((d?.items || []).filter((b) => b.status === 'pending')).map((b) => [
-          b.client_name, b.topic, title(b.status), day(b.slot_starts_at),
-        ]),
+        // The page's own classification: still waiting, or expired because the
+        // slot passed unanswered. A pending row is not "awaiting you" once its
+        // time has gone.
+        summary: (d) => {
+          const buckets = unanswered(d);
+          return summary(
+            count(buckets.awaiting.length, 'awaiting you', 'awaiting you'),
+            buckets.expired.length ? count(buckets.expired.length, 'expired unanswered', 'expired unanswered') : null,
+          );
+        },
+        rows: (d) => {
+          const buckets = unanswered(d);
+          return top([...buckets.awaiting, ...buckets.expired]).map((v) => [
+            v.client_name, v.topic, v.bucket === 'expired' ? 'Expired unanswered' : 'Awaiting a decision', day(v.slot_starts_at),
+          ]);
+        },
         footnote: () =>
           'The topic and the questions are the client’s own words, written when they asked for '
           + 'the session. That is the half of a client brief this practice already holds.',
@@ -64,39 +110,48 @@ export default function advisorPracticeBoard(role, api) {
         anchor: 'pr-engage',
         title: 'Active engagements',
         span: 'half',
-        source: 'bookings',
+        source: 'engagements',
         cols: '1.4fr 1fr 1fr',
-        columns: ['Client', 'State', 'When'],
-        empty: 'No session is confirmed yet.',
+        columns: ['Client', 'State', 'Term ends'],
+        empty: 'No engagement is under contract yet.',
+        // The engagement store, not bookings: a client with a signed contract and
+        // no session yet is an active engagement, and three sessions with one
+        // client are not three. `totals.active` is the number the page shows.
         summary: (d) => summary(
-          count(new Set((d?.items || []).filter((b) => b.status === 'confirmed').map((b) => b.client_user_id)).size, 'client'),
+          count(d?.totals?.active, 'active engagement'),
+          d?.totals?.renewal_due ? count(d.totals.renewal_due, 'renewal due', 'renewals due') : null,
         ),
-        rows: (d) => top((d?.items || []).filter((b) => b.status === 'confirmed')).map((b) => [
-          b.client_name, title(b.status), day(b.slot_starts_at),
+        total: (d) => total(d?.items),
+        rows: (d) => top((d?.items || []).filter((e) => e.lane === 'signed' || e.lane === 'renewal_due')).map((e) => [
+          e.client_name, LANE_LABEL[e.lane] || title(e.lane), day(e.term_ends_at),
         ]),
         footnote: () =>
-          'The canvas also flags a renewal falling due. A booking records a status and a time; '
-          + 'nothing records a term or a renewal date, so no renewal is claimed here.',
+          'Contracts you have recorded, by state. A contract that is up for a decision stays under '
+          + 'Signed and is marked on the page itself.',
       },
       {
         slug: 'delivery',
         anchor: 'pr-delivery',
         title: 'Delivery desk',
         span: 'half',
-        source: 'bookings',
+        source: 'deliverables',
         cols: '1.4fr 1.6fr 1fr',
-        columns: ['Client', 'Topic', 'When'],
-        empty: 'No session has been completed yet.',
+        columns: ['Client', 'Work product', 'State'],
+        empty: 'No work product is on file yet.',
+        // The work-product store, not completed sessions: delivery here is what
+        // you have recorded sending a client, as the page counts it.
         summary: (d) => summary(
-          count((d?.items || []).filter((b) => b.status === 'completed').length, 'delivered', 'delivered'),
+          count(d?.totals?.work_products, 'work product'),
+          d?.totals?.sent ? count(d.totals.sent, 'sent', 'sent') : null,
+          d?.totals?.opened ? count(d.totals.opened, 'opened', 'opened') : null,
         ),
-        rows: (d) => top((d?.items || []).filter((b) => b.status === 'completed')).map((b) => [
-          b.client_name, b.topic, day(b.slot_starts_at),
+        total: (d) => total(d?.items),
+        rows: (d) => top(d?.items).map((i) => [
+          i.client_name, i.title, STATE_LABEL[i.state] || title(i.state),
         ]),
         footnote: () =>
-          'Completed sessions, from the state you set. The canvas reads work product as sent and '
-          + 'opened; nothing in this product records that a client opened anything, so only what '
-          + 'you marked is shown.',
+          'Work products and their latest version, from what you recorded sending. Whether a client '
+          + 'opened one is theirs to say and is shown only once they have.',
       },
       {
         slug: 'sessions',

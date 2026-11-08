@@ -35,6 +35,8 @@ export const adminInfluencersApi = {
   tierDefaults: () => request('/admin/influencers/tier-defaults'),
   setTierDefault: (tier, body) => request(`/admin/influencers/tier-defaults/${enc(tier)}`, { method: 'PUT', body: JSON.stringify(body) }),
   offers: (userUid) => request(`/admin/influencers/${enc(userUid)}/offers`),
+  // D4810: every influencer's offers, a page at a time ({ items: [{ influencer, offer }], total }).
+  allOffers: ({ limit = 50, offset = 0 } = {}) => request(`/admin/influencer-offers?limit=${Number(limit)}&offset=${Number(offset)}`),
   linkOffer: (userUid, body) => request(`/admin/influencers/${enc(userUid)}/offers`, { method: 'POST', body: JSON.stringify(body) }),
   changeOffer: (userUid, offerUid, body) => request(`/admin/influencers/${enc(userUid)}/offers/${enc(offerUid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
 };

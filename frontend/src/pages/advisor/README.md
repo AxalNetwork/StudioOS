@@ -3,7 +3,7 @@
 `AdvisorStudioHome.jsx` and `AdvisorWorkspaceShell.jsx` frame the advisor's
 workspace; `advisorStudioHome.css` styles the home. `AdvisorPreviewNotice.jsx`
 and `AdvisorSectionStub.jsx` explain previews and sections whose stores are
-not yet available. `advisorEarnings.js` derives recorded earnings facts.
+not yet available. `advisorEarnings.js` derives recorded earnings facts. `advisorToday.js` builds the Studio's Today list from the bookings, the calendar and the slots, and says which of the three failed or is still loading (D4620).
 
 `AdvisorProfilePage.jsx` is the approved Ops A5 public profile.
 `PublicAdvisorBookingPage.jsx` opens a session type's `/b/*` link and reuses

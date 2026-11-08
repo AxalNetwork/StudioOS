@@ -308,6 +308,9 @@ test('remittance: another fund\'s statements name no Axal payee and never read t
   assert.deepEqual(read.filter((sql) => /entity_bank_account/.test(sql)), [], 'the registry was read');
   for (const b of [period.body, s.body]) {
     const text = JSON.stringify(b);
-    for (const no of ['Axal VC GP LLC', GP_NUMBER.slice(-4), '121145433', 'CLNOUS66MER', 'Column N.A.']) assert.ok(!text.includes(no), no);
+    // The masked form, not four bare digits: the body carries a random hex uid and digest
+    // that can contain those digits by chance (CI run 42466726911).
+    for (const no of ['Axal VC GP LLC', `••••${GP_NUMBER.slice(-4)}`, '121145433', 'CLNOUS66MER', 'Column N.A.']) assert.ok(!text.includes(no), no);
+    assert.ok(!('instructions' in b) && !text.includes('account_masked'), 'the masked account leaked');
   }
 });

@@ -22,7 +22,8 @@
 
 export const PATH = '/admin/approvals';
 export const TITLE = 'Approvals';
-export const LINE = 'Everything that waits on an admin, oldest first. Decide here, or open the page that decides it.';
+// D4814: the intro copy, as the issue words it.
+export const LINE = 'Review every waiting decision here. Continue to the relevant review surface when required.';
 export const LANES_LINE = 'Each lane is one kind of decision. Most are decided on their own page.';
 export const DECIDED_LINE = 'Decisions made here and on each lane’s own page, newest first.';
 export const RAIL_NOTE = 'Eadwyn reads what is waiting here. Nothing is decided until you decide it.';
@@ -94,7 +95,7 @@ export const HQ_LANES = [
   { key: 'notices', label: 'Notice responses', door: 'Licences' },
   { key: 'support', label: 'Requests from studios', door: 'Support' },
   { key: 'proposals', label: 'Program proposals', door: null, waits: 'Programs › Proposals is not built yet (#2371).' },
-  { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program grants › Requests' },
+  { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program access by licence › Requests' },
 ];
 export const isHqLane = (key) => HQ_LANES.some((l) => l.key === key);
 export const HQ_ONLY_TITLE = 'This lane belongs to the Super Admin.';

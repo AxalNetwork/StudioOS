@@ -562,13 +562,8 @@ function CompanyProfileCard({ uid, flash }) {
           <Field label="International presence" hint="e.g. US, EU, APAC" status={fieldStatus.international_presence}>
             {text('international_presence')}
           </Field>
-          {/* The canvas draws "Upload image". There is no image store for a
-              company logo — the column is `logo_url`, a link to an image you
-              host — so the field says that instead of drawing an upload that
-              would have nowhere to put the file. */}
-          <Field label="Logo URL" hint="Upload is not available: there is no image store for company logos yet, so paste a link to an image you host." status={fieldStatus.logo_url}>
-            {text('logo_url', { placeholder: 'https://…' })}
-          </Field>
+          {/* D4962: no logo box here. A logo is uploaded or removed in Company settings › General (POST and DELETE
+              /company/:uid/logo); a link typed here is refused by the Worker (`logo_url_not_writable`). */}
           <div className="sm:col-span-2">
             <Field label="Description" status={fieldStatus.description}>
               {canEdit ? (

@@ -403,13 +403,27 @@ async function sessionBody(env: Env, session: SessionRow) {
 }
 
 /**
- * Insert the session for an interview, then its points and any pasted chat.
- *
- * `create` is the INSERT of a new interview (POST /sessions with no pick). It
- * runs in the same D1 batch as the session's INSERT, which takes the new
- * interview's id from `last_insert_rowid()`: one transaction, so when a second
- * Start racing past the replay check meets the client_key index, its interview
- * rolls back with it and a double click makes one interview (D685 §5.1.1).
+ * D4628 — a confirmed duplicate-key race: two Starts met the unique index on
+ * `(created_by_user_id, client_key)` (migration 452). Checked by column, not
+ * by "any exception", so a genuine failure after the insert (a later write
+ * that throws for its own reason) is never mistaken for the one case the
+ * acceptance criteria ask us to keep answering as a duplicate-start success.
+ */
+const CLIENT_KEY_RACE = /UNIQUE constraint failed:.*interview_sessions\.client_key/i;
+function isClientKeyRace(e: unknown): boolean {
+  return CLIENT_KEY_RACE.test(String((e as Error)?.message ?? e));
+}
+
+/**
+ * Insert the session for an interview. `create` is the INSERT of a new
+ * interview (POST /sessions with no pick); it runs in the same D1 batch as
+ * the session's INSERT, which takes the new interview's id from
+ * `last_insert_rowid()`: one transaction, so when a second Start racing past
+ * the replay check meets the client_key index, its interview rolls back with
+ * it (D685 §5.1.1). `setup_complete_at` is left NULL here on purpose — this
+ * is the one write every retry must find already done before it is safe to
+ * finish the rest (`finishSetup`, D4628, #4628): a row with this `client_key`
+ * now exists, but its setup is not yet the committed result.
  */
 async function openOn(env: Env, user: User, interview: { id: number | null; project_id: number }, plan: OpenPlan, body: any,
   create: D1PreparedStatement | null = null): Promise<SessionRow> {
@@ -434,9 +448,37 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
     .bind(JSON.stringify(parseOutputs(body.outputs)), uid)];
   const ins = selection.length ? (await env.DB.batch([...(create ? [create] : []), insert, ...selection]))[create ? 1 : 0]
     : create ? (await env.DB.batch([create, insert]))[1] : await insert.run();
-  const session = (await loadSession(env, Number(ins.meta?.last_row_id)))!;
-  interview = { id: session.interview_id, project_id: interview.project_id };
+  return (await loadSession(env, Number(ins.meta?.last_row_id)))!;
+}
 
+/**
+ * D4628 (#4628) — the writes `openOn`'s insert does not cover: the output
+ * preference, the talking points, the interview's channel and quote consent,
+ * the audit row, and — for an upload or a pasted chat — the held-stage move
+ * and the content itself. The held-stage move and the pasted content run
+ * first, because each is already its own safe-to-repeat write
+ * (`markInterviewHeld` is best-effort and idempotent by design;
+ * `replaceWithFinal` replaces its segments in one batch, so a retry after a
+ * failed attempt lands the same content, never a second copy); everything
+ * else lands in ONE D1 batch, whose last statement stamps
+ * `setup_complete_at`. So this function either finishes a session in full or
+ * leaves it exactly as it was — a reader never sees a "finished" row that is
+ * missing a point, a preference or its submitted text, and a caller that
+ * sees this throw knows nothing from it landed, and can call it again with
+ * the same `plan`/`body` once the fault clears (that is what a resumed
+ * retry, or a losing racer's own replay, does).
+ */
+async function finishSetup(env: Env, user: User, session: SessionRow, plan: OpenPlan, body: any): Promise<SessionRow> {
+  const up = plan.upload;
+  // An uploaded call has been held.
+  if (up) await markInterviewHeld(env, session, user.id);
+  if (plan.messages && plan.messages.length) {
+    await replaceWithFinal(env, session, plan.messages, plan.channel === 'text' ? 'text_chat' : 'manual_entry', null);
+    // A text session is held the moment its chat is in.
+    await markInterviewHeld(env, session, user.id);
+    // D765 (#2090), D720 §6: the chat is stored; Summarise and Structure are the founder's press.
+  }
+  const interview = { id: session.interview_id, project_id: session.project_id };
   const stmts = [
     ...(body?.outputs === undefined ? [] : [preferenceStatement(env, user.id, interview.project_id, parseOutputs(body.outputs)!)]),
     ...(await pointStatements(env, session.id, interview.project_id, body?.points)),
@@ -445,22 +487,40 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
     ...(plan.quoteConsent ? [env.DB.prepare('UPDATE discovery_interviews SET quote_consent = 1 WHERE id = ?').bind(interview.id)] : []),
     env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`)
       .bind('interview_session_created', JSON.stringify({
-        session_uid: uid, interview_id: interview.id, channel: plan.channel, consent: plan.consent,
+        session_uid: session.uid, interview_id: interview.id, channel: plan.channel, consent: plan.consent,
         // D872: the attestation, with its method; its time is the session's consent_at.
         ...(up ? { source: UPLOAD_SOURCE, attested: plan.method } : {}),
       }), `user:${user.id}`, user.id, interview.project_id),
+    // D4628 — the last statement: set only once everything above committed
+    // with it, so "exists" and "finished" are never the same question.
+    env.DB.prepare(`UPDATE interview_sessions SET setup_complete_at = datetime('now') WHERE id = ?`).bind(session.id),
   ];
   await env.DB.batch(stmts);
-  // An uploaded call has been held.
-  if (up) await markInterviewHeld(env, session, user.id);
-
-  if (plan.messages && plan.messages.length) {
-    await replaceWithFinal(env, session, plan.messages, plan.channel === 'text' ? 'text_chat' : 'manual_entry', null);
-    // A text session is held the moment its chat is in.
-    await markInterviewHeld(env, session, user.id);
-    // D765 (#2090), D720 §6: the chat is stored; Summarise and Structure are the founder's press.
-  }
   return (await loadSession(env, session.id))!;
+}
+
+/**
+ * D4628 — a session already opened under this `client_key`. Complete, it is
+ * the replay's answer exactly as before (the committed result, not run
+ * again). Incomplete — the insert landed but `finishSetup` never committed —
+ * this request's own `plan`/`body` carries the same content a retry must,
+ * so finishing it now IS the resume the acceptance criteria ask for: never a
+ * silent "it worked" for writes that have not run. If finishing it still
+ * fails, the caller is told plainly that setup has not finished, instead of
+ * being handed a false success.
+ */
+async function resumeOrReplay(env: Env, user: User, existing: SessionRow, plan: OpenPlan, body: any): Promise<Response> {
+  if (existing.setup_complete_at) return json(await sessionBody(env, existing), 200);
+  try {
+    const finished = await finishSetup(env, user, existing, plan, body);
+    return json(await sessionBody(env, finished), 200);
+  } catch {
+    return json({
+      detail: 'setup_incomplete',
+      message: 'This session was opened but its setup has not finished. Retry the same request (the same client key) to complete it.',
+      session: existing,
+    }, 202);
+  }
 }
 
 /**
@@ -486,10 +546,24 @@ sessions.post('/interviews/:id/sessions', async (c) => {
   const plan = planSession(body, true);
   if (plan instanceof Response) return plan;
   const again = await replayed(c.env, s.user.id, plan.clientKey);
-  if (again) return json(await sessionBody(c.env, again), 200);
+  if (again) return resumeOrReplay(c.env, s.user, again, plan, body);
   const busy = await liveRefusal(c.env, s.user.id, plan);
   if (busy) return busy;
-  const session = await openOn(c.env, s.user, s.interview, plan, body);
+  let session: SessionRow;
+  try {
+    session = await openOn(c.env, s.user, s.interview, plan, body);
+  } catch (e) {
+    // D4628 — only a confirmed client_key race is swallowed as a duplicate
+    // Start; any other failure here stays visible (it throws, uncaught).
+    if (!isClientKeyRace(e)) throw e;
+    const raced = await replayed(c.env, s.user.id, plan.clientKey);
+    if (!raced) throw e;
+    return resumeOrReplay(c.env, s.user, raced, plan, body);
+  }
+  // D4628 — a failure here is NOT swallowed into a false "success": it
+  // throws, uncaught, and the row (already inserted, not yet finished) is
+  // resumed on the next request carrying this same client_key.
+  session = await finishSetup(c.env, s.user, session, plan, body);
   return json(await sessionBody(c.env, session), 201);
 });
 
@@ -510,7 +584,7 @@ sessions.post('/sessions', async (c) => {
   const plan = planSession(body, false);
   if (plan instanceof Response) return plan;
   const again = await replayed(c.env, user.id, plan.clientKey);
-  if (again) return json(await sessionBody(c.env, again), 200);
+  if (again) return resumeOrReplay(c.env, user, again, plan, body);
   // D685 §5.1.1 — one live session per member: the setup call refuses while
   // the caller is recording or paused, as Start does (audio only; see liveRefusal).
   const busy = await liveRefusal(c.env, user.id, plan);
@@ -553,12 +627,19 @@ sessions.post('/sessions', async (c) => {
   try {
     session = await openOn(c.env, user, interview, plan, body, create);
   } catch (e) {
-    // Two Start clicks racing past the replay check meet the unique index:
-    // the second answers the first's session.
+    // D4628 — two Start clicks racing past the replay check meet the unique
+    // index: the second answers the first's session. Any other failure here
+    // stays visible (it throws, uncaught) instead of being reported as a
+    // false success.
+    if (!isClientKeyRace(e)) throw e;
     const raced = await replayed(c.env, user.id, plan.clientKey);
-    if (raced) return json(await sessionBody(c.env, raced), 200);
-    throw e;
+    if (!raced) throw e;
+    return resumeOrReplay(c.env, user, raced, plan, body);
   }
+  // D4628 — a failure here is NOT swallowed into a false "success": it
+  // throws, uncaught, and the row (already inserted, not yet finished) is
+  // resumed on the next request carrying this same client_key.
+  session = await finishSetup(c.env, user, session, plan, body);
   return json(await sessionBody(c.env, session), 201);
 });
 

@@ -34,7 +34,7 @@ import { readAllExperts } from '../src/pages/admin/approvals/ExpertBoard.jsx';
 import { oldestApproved } from '../src/pages/admin/approvals/PitchBoard.jsx';
 import {
   assigneeOf, assignChoices, assignTitle, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef, hasNextPage,
-  hqBandLine, hqLaneViews, inboxGroupCounts, inboxQueryOf, inboxRows, inboxTiles, itemOfPath, itemPath, itemView, laneAgeChart,
+  hqBandLine, hqLaneViews, inboxGroupCounts, inboxQueryOf, inboxRows, summaryStrip, weeklyTile, itemOfPath, itemPath, itemView, laneAgeChart,
   notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart, historyLines, cardAge, filterCount, sortLabel,
 } from '../src/pages/admin/approvals/inboxModel.js';
 import { glancesFromStudioGlance } from '../src/pages/admin/adminStudioOverview.js';
@@ -207,7 +207,7 @@ test('rows: the band pill, the group, and who holds it — "Not read" is never "
   ]);
   assert.equal(rows[0].href, '/admin/approvals/items/kyc-41');
   assert.deepEqual(assigneeOf({}), { kind: 'unread', text: 'Not read' });
-  assert.equal(pageLine(INBOX), '1–3 of 123 +', 'a failed lane leaves the total short, and says so');
+  assert.equal(pageLine(INBOX), '1–3 of 123+', 'a failed lane leaves the total short, and says so');
   assert.equal(pageLine({ ...INBOX, unreadable: [] }), '1–3 of 123');
   assert.equal(pageLine({ ...INBOX, total: null }), '1–3 of —');
   assert.equal(hasNextPage({ ...INBOX, total: 123 }), true);
@@ -215,15 +215,18 @@ test('rows: the band pill, the group, and who holds it — "Not read" is never "
 });
 
 test('the four tiles: numbers from the reads, "Could not be read" with why, never a 0 for a gap', () => {
-  const t = inboxTiles({ status: 'ready', reply: INBOX }, { status: 'ready', reply: WEEKLY });
-  assert.deepEqual([t.waiting.value, t.waiting.sub], ['123 +', 'LP applications could not be read']);
-  assert.deepEqual([t.over72.value, t.mine.value, t.decided.value, t.decided.sub], ['5', '2', '12', 'median wait 1 d 9 h']);
-  const whole = inboxTiles({ status: 'ready', reply: { ...INBOX, unreadable: [] } }, null);
+  // D4814: the four tiles gave way to the strip (Waiting · Overdue · Unassigned · Oldest); Decided this week moved to Workload.
+  const t = summaryStrip({ status: 'ready', reply: INBOX });
+  assert.deepEqual([t.waiting.value, t.waiting.sub], ['123+', 'LP applications could not be read']);
+  assert.equal(t.overdue.value, '5');
+  const d = weeklyTile({ status: 'ready', reply: WEEKLY });
+  assert.deepEqual([d.value, d.sub], ['12', 'median wait 1 d 9 h']);
+  const whole = summaryStrip({ status: 'ready', reply: { ...INBOX, unreadable: [] } });
   assert.equal(whole.waiting.sub, 'across 5 lanes');
-  assert.equal(whole.decided.state, 'loading');
-  const withheld = inboxTiles({ status: 'ready', reply: { ...INBOX, tiles: { over_72h: null, assigned_to_me: null, reason: 'Assignments could not be read.' } } }, { status: 'error' });
-  assert.deepEqual([withheld.over72.state, withheld.mine.reason, withheld.decided.state], ['unreadable', 'Assignments could not be read.', 'unreadable']);
-  assert.equal(inboxTiles({ status: 'error' }, null).waiting.state, 'unreadable');
+  assert.equal(weeklyTile(null).state, 'loading');
+  const withheld = summaryStrip({ status: 'ready', reply: { ...INBOX, tiles: { over_72h: null, assigned_to_me: null, reason: 'Assignments could not be read.' } } });
+  assert.deepEqual([withheld.overdue.state, withheld.unassigned.reason, weeklyTile({ status: 'error' }).state], ['unreadable', 'Assignments could not be read.', 'unreadable']);
+  assert.equal(summaryStrip({ status: 'error' }).waiting.state, 'unreadable');
   const counts = inboxGroupCounts(INBOX, false);
   assert.deepEqual([counts.people, counts.deals, counts.all], [10, null, null], 'a failed lane leaves its group with no total');
 });
@@ -443,29 +446,33 @@ test('mounted, Inbox (APR1): the tiles, the two charts with their sentences, the
   try {
     assert.equal(v.h1s(), 1);
     assert.match(v.of('approvals-header'), /Approvals has a new address\. Update your bookmark\./);
-    assert.match(v.of('approvals-tab-inbox'), /Inbox\s*123 \+/);
-    assert.match(v.of('approvals-tile-waiting'), /Waiting\s*123 \+\s*LP applications could not be read/);
-    assert.match(v.of('approvals-tile-over72'), /Over 72 hours\s*5\s*oldest 6 d 2 h, Due diligence/);
-    assert.match(v.of('approvals-tile-assigned'), /Assigned to you\s*2/);
-    assert.match(v.of('approvals-tile-decided'), /Decided this week\s*12\s*median wait 1 d 9 h/);
+    // D4814: the four tiles are the strip (Waiting · Overdue · Unassigned · Oldest); "+" when a lane failed, no space.
+    assert.match(v.of('approvals-tab-inbox'), /Inbox\s*123\+/);
+    assert.match(v.of('approvals-strip-waiting'), /Waiting\s*123\+\s*LP applications could not be read/);
+    assert.match(v.of('approvals-strip-overdue'), /Overdue\s*5\s*over 72 hours/);
+    assert.match(v.of('approvals-view-mine'), /Assigned to me\s*2/, 'Assigned to me moved from the headline to the work views');
+    assert.match(v.of('approvals-decided-week'), /Decided this week · 12 · median wait 1 d 9 h/, 'and Decided this week to Workload');
     assert.equal(v.props('approvals-chart-lanes-img')['aria-label'], laneAgeChart(INBOX).sum, 'the chart\'s one sentence');
     assert.equal(v.props('approvals-chart-weeks-img').role, 'img');
     assert.match(v.of('approvals-chart-weeks'), /Wellbeing experts, Exploring do not record when they were decided/);
     await v.click('approvals-chart-lanes-toggle');
     assert.match(v.of('approvals-chart-lanes'), /View as chart.*KYC\s*2\s*3\s*5\s*0\s*10 waiting/s, 'View as table: the same rows');
     assert.deepEqual(v.ids('approvals-row-'), ['approvals-row-kyc:41', 'approvals-row-due_diligence:9', 'approvals-row-jobs:3']);
-    assert.match(v.of('approvals-row-kyc:41'), /4 d 7 h\s*Over 72 hours\s*KYC\s*People and accounts\s*Person A\s*Identity check\s*Admin A\s*KYC & KYB/);
-    assert.match(v.of('approvals-row-due_diligence:9'), /Unassigned\s*Due diligence/);
-    assert.match(v.of('approvals-row-jobs:3'), /Age not recorded.*Not read\s*Jobs/s, 'an unread assignment is never "Unassigned"');
+    // D4814: Request (who, what, lane) · Waiting · Owner · Review "in [destination]".
+    assert.match(v.of('approvals-row-kyc:41'), /Person A\s*Identity check\s*KYC · People and accounts\s*4 d 7 h\s*! Overdue\s*Admin A\s*Review\s*in KYC & KYB/);
+    assert.match(v.of('approvals-row-due_diligence:9'), /Unassigned\s*Assign\s*Review\s*in Due diligence/);
+    assert.match(v.of('approvals-row-jobs:3'), /Age not recorded.*Not read\s*Review\s*in Jobs/s, 'an unread assignment is never "Unassigned"');
     assert.equal(v.props('approvals-open-kyc:41').href, '/admin/approvals/items/kyc-41?moved=held-approvals');
     assert.match(v.of('approvals-partial'), /LP applications could not be read, so its items are missing below\. The other 4 lanes are complete\. Try again/);
-    assert.equal(v.of('approvals-count'), '1–3 of 123 +');
-    assert.match(v.of('approvals-waiting-on-hq'), /What this studio asked HQ\.\s*Renewal\s*sent 20 Oct 2026/);
-    assert.doesNotMatch(v.of('approvals-waiting-on-hq'), /Seat increase/, 'an answered request is not waiting');
-    assert.match(v.of('approvals-group-people'), /People and accounts\s*10/);
-    assert.match(v.of('approvals-group-deals'), /Deals and portfolio\s*—/, 'a failed lane is a dash, never 0');
-    assert.ok(!v.has('approvals-group-hq'), 'an Admin has no HQ group');
-    assert.deepEqual(api(v), ['/api/admin/approvals', '/api/admin/approvals/decided/weekly', '/api/admin/studio/glance', '/api/licence/mine/requests']);
+    assert.equal(v.of('approvals-count'), '1–3 of 123+');
+    // D4814: Waiting on HQ is a studio shell's; this is the HQ-held shell, which neither draws nor reads it.
+    assert.ok(!v.has('approvals-waiting-on-hq'));
+    // D4814: the group chips live in the one Filters panel.
+    await v.click('approvals-filters-open');
+    assert.match(v.of('approvals-sheet-group-people'), /People and accounts\s*10/);
+    assert.match(v.of('approvals-sheet-group-deals'), /Deals and portfolio\s*—/, 'a failed lane is a dash, never 0');
+    assert.ok(!v.has('approvals-sheet-group-hq'), 'an Admin has no HQ group');
+    assert.deepEqual(api(v), ['/api/admin/approvals', '/api/admin/approvals/decided/weekly', '/api/admin/studio/glance']);
     assert.ok(!v.seen.some((p) => /decide|approve|reject/.test(p.split('?')[0].replace('/decided', ''))), 'nothing decides here');
   } finally { await v.unmount(); }
 });
@@ -475,7 +482,7 @@ test('mounted, Inbox: filters live in the address and reach the Worker; one sear
   try {
     const sent = v.seen.find((p) => p.startsWith('/api/admin/approvals?'));
     assert.equal(sent, '/api/admin/approvals?page=1&group=people&age=past&assigned=me&sort=lane');
-    assert.equal(v.props('approvals-assigned').value, 'me');
+    assert.equal(v.props('approvals-view-mine')['aria-checked'], true, 'D4814: assigned=me is the Assigned to me view');
     await v.click('approvals-next');
     assert.equal(v.at.path, '/admin/approvals?group=people&age=past&assigned=me&sort=lane&q=k&page=2');
     assert.ok(v.seen.includes('/api/admin/approvals?page=2&group=people&age=past&assigned=me&sort=lane'));
@@ -556,7 +563,7 @@ test('mounted, states: skeletons while reading (APR12); nothing waiting (APR11a)
   } finally { await v.unmount(); }
   v = await mount('/admin/approvals', h(AdminApprovals), { inbox: () => json({ ...INBOX, items: [], total: 0, unfiltered_total: 0, unreadable: [] }) });
   try {
-    assert.match(v.of('approvals-empty'), /Nothing is waiting on you\..*See what was decided/s);
+    assert.match(v.of('approvals-empty'), /Nothing needs approval\..*All approval queues currently read as clear\..*See what was decided/s, 'D4814: AP-18a\'s words');
     assert.ok(v.hrefs().includes('/admin/approvals/decided'));
   } finally { await v.unmount(); }
   v = await mount('/admin/approvals?age=past', h(AdminApprovals), { inbox: () => json({ ...INBOX, items: [], total: 0, unreadable: [] }) });
@@ -568,7 +575,7 @@ test('mounted, states: skeletons while reading (APR12); nothing waiting (APR11a)
     assert.match(v.of('approvals-failed'), /We could not load Approvals\.\s*The rest of the admin still works/);
     assert.match(v.of('approvals-failed-details'), /HTTP 503 · assigned_unreadable/);
     assert.ok(!v.has('approvals-empty'), 'a failed read is not "nothing waiting"');
-    assert.match(v.of('approvals-tile-waiting'), /Could not be read/);
+    assert.match(v.of('approvals-strip-waiting'), /Could not be read/);
   } finally { await v.unmount(); }
   v = await mount('/admin/approvals?lane=payouts', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 0 } }));
   try {
@@ -577,12 +584,14 @@ test('mounted, states: skeletons while reading (APR12); nothing waiting (APR11a)
   } finally { await v.unmount(); }
 });
 
-test('mounted, Super Admin: the HQ decides band and the HQ group chip', async () => {
+test('mounted, Super Admin: the HQ group in Filters, and the tab counting HQ\'s lanes', async () => {
+  // D4814: the HQ decides band left the Inbox (Lanes keeps it); the Waiting cell says HQ's share instead.
   const glance = { ...GLANCE, approvals: { ...GLANCE.approvals, hq_decides: { lanes: [{ key: 'payouts', count: 22, oldest_age_hours: 30 }], pending_total: 22, unreadable: [] } } };
   const v = await mount('/admin/approvals', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 1 } }), { glance: () => json(glance) });
   try {
-    assert.equal(v.of('approvals-hq-band'), 'HQ decides · 22 waiting · only Super Admins see this group');
-    assert.ok(v.has('approvals-group-hq'));
+    assert.ok(!v.has('approvals-hq-band'));
+    await v.click('approvals-filters-open');
+    assert.ok(v.has('approvals-sheet-group-hq'));
   } finally { await v.unmount(); }
   const admin = await mount('/admin/approvals', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 0 } }), { glance: () => json(glance) });
   try {
@@ -628,7 +637,7 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
     assert.match(v.of('approvals-tab-lanes'), /Lanes\s*20/);
     // D1041: KYB is counted now (the stub's glance answers 0); D1132: so is Product testers.
     assert.match(v.of('approvals-lane-kyb'), /KYB\s*New\s*0/);
-    assert.match(v.of('approvals-lane-product_testers'), /Product testers\s*New\s*0\s*—\s*Here/);
+    assert.match(v.of('approvals-lane-product_testers'), /Product testers\s*New\s*0\s*—\s*Product testers/);
     assert.match(v.of('approvals-lane-events'), /Events\s*0\s*—\s*Events › Review/);
     assert.match(v.of('approvals-not-a-queue'), /Partner invitations: An open invitation waits on the invitee, not an admin\./);
     assert.ok(!v.has('approvals-hq-lanes'), 'an Admin never sees the HQ group');
@@ -642,7 +651,7 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
     assert.match(v.of('approvals-tab-lanes'), /Lanes\s*29/);
     assert.match(v.of('approvals-hq-proposals'), /not built yet/);
     // D1132: Program-grant requests opens HQ's Requests page (D987), not "not built yet".
-    assert.match(v.of('approvals-hq-grants'), /Licences › Program grants › Requests/);
+    assert.match(v.of('approvals-hq-grants'), /Licences › Program access by licence › Requests/);
     assert.doesNotMatch(v.of('approvals-hq-grants'), /not built yet/);
     assert.ok(v.hrefs().includes('/admin/licences/programs/requests'));
   } finally { await v.unmount(); s.restore(); }
@@ -1091,11 +1100,11 @@ test('D1047 (APR15a): on a phone the inbox is cards — lane, who, what, the age
   const v = await mount('/admin/approvals', h(AdminApprovals));
   try {
     assert.deepEqual(v.ids('approvals-card-').filter((x) => /^approvals-card-[a-z_]+:\d+$/.test(x)), ['approvals-card-kyc:41', 'approvals-card-due_diligence:9', 'approvals-card-jobs:3']);
-    assert.match(v.of('approvals-card-kyc:41'), /KYC\s*Person A\s*Identity check\s*4 d 7 h · Over 72 hours\s*Decided on KYC & KYB ›/);
+    assert.match(v.of('approvals-card-kyc:41'), /KYC\s*Person A\s*Identity check\s*4 d 7 h · Over 72 hours\s*Review in KYC & KYB ›/);
     assert.equal(v.of('approvals-card-age-jobs:3'), 'Age not recorded');
     assert.equal(v.props('approvals-card-open-kyc:41').href, '/admin/approvals/items/kyc-41');
     assert.match(v.props('approvals-cards').className, /\bmd:hidden\b/);
-    assert.match(v.props('approvals-tiles').className, /\bgrid-cols-2\b/, 'the tiles are two by two');
+    assert.match(v.props('approvals-strip').className, /\bgrid-cols-2\b/, 'the strip is two by two (D4814)');
     assert.match(v.props('approvals-card-more-kyc:41').className, /\bh-11 w-11\b/, 'the ⋯ is 44 by 44');
     await v.click('approvals-card-more-kyc:41');
     assert.ok(v.has('approvals-row-sheet'));
@@ -1107,27 +1116,28 @@ test('D1047 (APR15a): on a phone the inbox is cards — lane, who, what, the age
   } finally { await v.unmount(); }
 });
 
-test('D1047 (APR15b): Filters with its count and Sort open one bottom sheet; each choice lands in the address; Clear empties it', async () => {
+test('D1047 (APR15b): Filters with its count opens one bottom sheet; each choice lands in the address; Clear empties it', async () => {
+  // D4814: one toolbar on every width — search, Filters and the one Sort; the Sort is no longer inside the sheet.
   const v = await mount('/admin/approvals?age=past', h(AdminApprovals));
   try {
-    assert.match(v.props('approvals-filters').className, /\bhidden\b.*\bsm:flex\b/, 'the desktop filters are not drawn on a phone');
-    assert.match(v.props('approvals-phone-filters').className, /\bsm:hidden\b/);
+    assert.ok(!v.has('approvals-phone-filters'), 'no second, phone-only toolbar');
     assert.equal(v.of('approvals-filters-count'), '1');
-    assert.equal(v.of('approvals-sort-open'), 'Sort: Waiting longest ▾');
     await v.click('approvals-filters-open');
     assert.equal(v.props('approvals-filters-sheet-layer')['data-phone'], 'sheet');
-    assert.match(v.of('approvals-filters-sheet'), /Filters and sort.*Search.*Group.*Lane.*Age.*Assigned.*Sort/s);
+    assert.match(v.of('approvals-filters-sheet'), /Filters.*Group.*Lane.*Age.*Owner/s);
+    assert.doesNotMatch(v.of('approvals-filters-sheet'), /Sort/);
     assert.equal(v.of('approvals-filters-done'), 'Show 123');
     await v.change('approvals-sheet-lane', 'kyc');
     assert.match(v.at.path, /lane=kyc/);
     assert.match(v.at.path, /age=past/);
     assert.equal(v.of('approvals-filters-count'), '2');
     assert.ok(v.has('approvals-filters-sheet'), 'the sheet stays open while choosing');
-    await v.change('approvals-sheet-sort', 'who');
+    await v.change('approvals-sort', 'who');
     assert.match(v.at.path, /sort=who/);
     assert.equal(v.of('approvals-filters-count'), '2', 'the order does not count');
     await v.click('approvals-filters-clear');
-    assert.equal(v.at.path, '/admin/approvals');
+    assert.doesNotMatch(v.at.path, /lane=|age=/, 'Clear all empties the filters');
+    assert.match(v.at.path, /sort=who/, 'and keeps the order and the view');
     await v.click('approvals-filters-done');
     assert.ok(!v.has('approvals-filters-sheet'));
   } finally { await v.unmount(); }
