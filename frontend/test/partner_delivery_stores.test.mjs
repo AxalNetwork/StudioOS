@@ -189,6 +189,10 @@ const KNOWN_DUPLICATE_NUMBERS = {
   '229': ['229_fit_rule_signal.sql', '229_research_market_directory.sql'],
   '230': ['230_partner_capacity.sql', '230_research_fund_reports.sql'],
   '259': ['259_hq_escalations.sql', '259_licence_contracts.sql'],
+  // #4970 (D4675) and #4991 (D4691) each wrote a migration in the same minute and both
+  // merged; renaming either would edit an applied migration (D269). The same pair is
+  // LEGACY_DUPLICATE_STAMPS in scripts/lib/migrationPlan.mjs.
+  '202611072219': ['202611072219_dsr_close_key.sql', '202611072219_security_events_support_actor.sql'],
 };
 
 test('the migration numbers are free and in order', () => {
