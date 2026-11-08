@@ -31,7 +31,6 @@ const SLUG = 'board-meeting-brief';
 const REAL = readSources();
 const MD = REAL.definitions[`${SLUG}.md`];
 const CASE = REAL.cases[`${SLUG}.json`];
-const entryOf = (slug: string, md: string, kase: string) => ({ slug, skill_md: md, cases: [JSON.parse(kase)] });
 
 /** A one-skill catalogue, mutated by `over`. */
 async function check(over: { definitions?: Record<string, string>; cases?: Record<string, string>; fresh?: boolean; generated?: any[] } = {}) {
