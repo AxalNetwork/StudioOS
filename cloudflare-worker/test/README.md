@@ -28,6 +28,11 @@ ids, company boundaries, unchanged models after refused writes, and owner/admin
 access. It also pins the separate deal-room partner reader and the recompute
 edit gate so future read-only relationships cannot acquire writes accidentally.
 
+`authz_share_links_d4570.test.ts` (#4570, D4570 slice 3) asks the share-link routes through the real Worker on the
+migrated schema: the cap table scenario and venture links and the scoring report link refuse a forged, unstored,
+cross-kind, spent or revoked token and every account the link does not name, with nothing of the record in the
+refusal and no view, open or audit row written; another founder or an admin cannot revoke or mint the owner's link.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.
