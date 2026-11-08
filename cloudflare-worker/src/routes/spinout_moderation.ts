@@ -299,11 +299,13 @@ app.post('/:userId', async (c) => {
       ).bind(admin.id, userId).run();
     }
 
-    // ONLY the Lab flag. users.is_active is never written here.
+    // ONLY the Lab flag. users.is_active is never written here. D4658: a
+    // reinstatement never reopens a sprint that ended — a founder who has
+    // graduated or exited (`is_incorporated = 1`) stays closed.
     if (after !== before) {
       await c.env.DB.prepare(
-        'UPDATE users SET spinout_lab_active = ? WHERE id = ?',
-      ).bind(after, userId).run();
+        'UPDATE users SET spinout_lab_active = ? WHERE id = ? AND (? = 0 OR COALESCE(is_incorporated, 0) = 0)',
+      ).bind(after, userId, after).run();
     }
 
     await logAdminAction(c.env, admin.id, admin.email, 'spinout_moderation', {

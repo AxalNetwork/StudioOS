@@ -8,7 +8,16 @@
  *   GET  /summary                                   PG11's four tiles
  *   POST /           { investor_user_id, cohort_cycle_id, ends_at, scope?, note? }
  *   POST /:uid/end   ends an open grant
- *   POST /:uid/nda   sends the cohort NDA from HQ's template (O-NDA B)
+ *   POST /:uid/nda   { void_previous? } sends the cohort NDA from HQ's template (O-NDA B)
+ *
+ * D4809: sending is explicit. Give access creates the grant and sends nothing;
+ * the grant's Send NDA sends it. The grant records how each send went
+ * (`nda_delivery`): a send that could not create the envelope or email it is
+ * `delivery_failed`, and Send NDA again recovers it from the same grant,
+ * voiding a still-open envelope first. A declined or voided envelope is sent
+ * again the same way. An envelope that is out and delivered is replaced only
+ * with `void_previous: true` (Void and resend). Access opens only when the
+ * envelope completes (`onCohortNdaEnvelopeCompleted`).
  *
  * Every route takes `requireAdmin`; the writes also take the branch gate
  * (`requireBranchNotSuspended`, S-GATE). Each write records its decision in the
@@ -29,7 +38,7 @@ import { activeTemplate } from '../services/legalTemplateStore';
 import { applyMergeFields } from '../services/mergeFields';
 import { mapError, newUid } from './_t13t14t15_helpers';
 import {
-  COHORT_NDA_DOC_TYPE, COHORT_NDA_SLUG, GRANT_STATES, NDA_STATES, NOTE_MAX,
+  COHORT_NDA_DOC_TYPE, COHORT_NDA_SLUG, GRANT_STATES, NDA_STATES, NDA_STATE_SQL, NOTE_MAX,
   cohortLabel, expireGrants, isVerifiedInvestor, ndaStateOf, parseScope, scopeOf,
   syncInvestorCohortNotices, todayUtc, validEndDate, type GrantRow,
 } from '../services/investorCohortAccess';
@@ -41,10 +50,11 @@ export const INVESTOR_COHORT_ACTIONS = {
   granted: 'investor_cohort.granted',
   ended: 'investor_cohort.ended',
   ndaSent: 'investor_cohort.nda_sent',
+  // D4809: a send that failed, and an open envelope voided so a new one can go.
+  ndaSendFailed: 'investor_cohort.nda_send_failed',
+  ndaVoided: 'investor_cohort.nda_voided',
 } as const;
 
-/** An envelope in one of these states can be replaced by a new send. */
-const ENVELOPE_DEAD = new Set(['void', 'rejected']);
 
 const PAGE_MAX = 100;
 
@@ -76,20 +86,21 @@ async function ndaTemplate(env: Env): Promise<'published' | 'missing' | 'unreada
  * count reads from. `?1` is today. No value is ever spliced into this text.
  */
 const GRANTS = `SELECT g.id, g.uid, g.investor_user_id, g.cohort_cycle_id, g.granted_at, g.ends_at, g.ended_at, g.end_reason,
-       g.note, g.scope_json, g.nda_envelope_uuid, g.nda_sent_at, g.nda_signed_at,
+       g.note, g.scope_json, g.nda_envelope_uuid, g.nda_sent_at, g.nda_signed_at, g.nda_delivery, g.nda_delivery_at,
        u.name AS investor_name, u.email AS investor_email, p.firm_name AS firm, c.year, c.month,
        CASE WHEN (lower(u.role) = 'investor' AND u.is_active = 1 AND u.kyc_status = 'approved') THEN 1 ELSE 0 END AS verified,
        CASE WHEN g.ended_at IS NOT NULL OR g.ends_at < ?1 THEN 'ended'
             WHEN NOT (lower(u.role) = 'investor' AND u.is_active = 1 AND u.kyc_status = 'approved') THEN 'waits_for_verification'
             WHEN g.nda_signed_at IS NULL THEN 'waits_for_nda'
             ELSE 'active' END AS state,
-       CASE WHEN g.nda_signed_at IS NOT NULL THEN 'signed' WHEN g.nda_envelope_uuid IS NOT NULL THEN 'sent' ELSE 'not_sent' END AS nda_state,
+       ` + NDA_STATE_SQL + ` AS nda_state,
        (SELECT COUNT(*) FROM investor_cohort_intro_requests i WHERE i.grant_id = g.id) AS intro_requests,
        (SELECT COUNT(*) FROM investor_cohort_intro_requests i WHERE i.grant_id = g.id AND i.decision = 'accepted') AS intros_accepted
   FROM investor_cohort_access g
   LEFT JOIN users u ON u.id = g.investor_user_id
   LEFT JOIN investor_profiles p ON p.user_id = g.investor_user_id
-  LEFT JOIN cohort_cycles c ON c.id = g.cohort_cycle_id`;
+  LEFT JOIN cohort_cycles c ON c.id = g.cohort_cycle_id
+  LEFT JOIN esign_envelopes e ON e.envelope_uuid = g.nda_envelope_uuid`;
 
 const FILTER = ` WHERE (?2 IS NULL OR x.cohort_cycle_id = ?2) AND (?3 IS NULL OR x.nda_state = ?3) AND (?4 IS NULL OR x.state = ?4)
    AND (?5 IS NULL OR lower(COALESCE(x.investor_name, '')) LIKE ?5 ESCAPE '\\' OR lower(COALESCE(x.firm, '')) LIKE ?5 ESCAPE '\\')`;
@@ -102,6 +113,8 @@ function grantView(x: any) {
     cohort: { id: Number(x.cohort_cycle_id), label: cohortLabel(x.year, x.month) },
     state: x.state,
     nda_state: x.nda_state,
+    // D4809: the NDA's history on the grant, so each step can be read back.
+    nda: { sent_at: x.nda_sent_at ?? null, signed_at: x.nda_signed_at ?? null, delivery: x.nda_delivery ?? null, delivery_at: x.nda_delivery_at ?? null },
     scope: scopeOf(x.scope_json),
     note: x.note ?? null,
     intro_requests: Number(x.intro_requests) || 0,
@@ -306,28 +319,29 @@ r.post('/:uid/nda', async (c) => {
     await requireBranchNotSuspended(c);
     const uid = c.req.param('uid');
     const today = todayUtc();
+    const input = await c.req.json().catch(() => ({})) as { void_previous?: unknown };
     const g = await c.env.DB.prepare(
-      `SELECT g.id, g.investor_user_id, g.cohort_cycle_id, g.ends_at, g.ended_at, g.nda_envelope_uuid, g.nda_signed_at,
+      `SELECT g.id, g.investor_user_id, g.cohort_cycle_id, g.ends_at, g.ended_at, g.nda_envelope_uuid, g.nda_signed_at, g.nda_delivery,
+              e.status AS envelope_status,
               u.name, u.email, u.role, u.is_active, u.kyc_status, p.firm_name AS firm, c.year, c.month
          FROM investor_cohort_access g
          JOIN users u ON u.id = g.investor_user_id
          LEFT JOIN investor_profiles p ON p.user_id = g.investor_user_id
          LEFT JOIN cohort_cycles c ON c.id = g.cohort_cycle_id
+         LEFT JOIN esign_envelopes e ON e.envelope_uuid = g.nda_envelope_uuid
         WHERE g.uid = ?`,
-    ).bind(uid).first<GrantRow & { name: string | null; email: string | null; role: string; is_active: number; kyc_status: string | null; firm: string | null; year: number | null; month: number | null }>();
+    ).bind(uid).first<GrantRow & { envelope_status: string | null; name: string | null; email: string | null; role: string; is_active: number; kyc_status: string | null; firm: string | null; year: number | null; month: number | null }>();
     if (!g) return refuse(c, 404, { code: 'grant_not_found', message: 'No such grant.' });
     if (g.ended_at || g.ends_at < today) return refuse(c, 409, { code: 'grant_ended', message: 'This access has ended, so no NDA is sent for it.' });
     if (!isVerifiedInvestor(g)) return refuse(c, 400, { code: 'not_verified', message: 'This investor is not verified now, so no NDA is sent.' });
-    if (ndaStateOf(g) === 'signed') return refuse(c, 409, { code: 'already_signed', message: 'The cohort NDA is already signed.' });
-    if (g.nda_envelope_uuid) {
-      let status: string | null = null;
-      try {
-        status = (await c.env.DB.prepare('SELECT status FROM esign_envelopes WHERE envelope_uuid = ?')
-          .bind(g.nda_envelope_uuid).first<{ status: string }>())?.status ?? null;
-      } catch { status = null; }
-      if (!status || !ENVELOPE_DEAD.has(status)) {
-        return refuse(c, 409, { code: 'already_sent', message: 'The cohort NDA is already out for signature. It is sent again only once that envelope is voided or declined.', extra: { envelope_status: status } });
-      }
+    const ndaState = ndaStateOf(g, g.envelope_status);
+    if (ndaState === 'signed') return refuse(c, 409, { code: 'already_signed', message: 'The cohort NDA is already signed.' });
+    // D4809: an envelope still open is replaced only after it is voided. A
+    // delivered one needs Void and resend; one whose send failed is voided as
+    // part of sending again, since its email never reached the investor.
+    const open = g.nda_envelope_uuid && (g.envelope_status === 'sent' || g.envelope_status === 'partially_signed');
+    if (open && ndaState === 'sent' && input.void_previous !== true) {
+      return refuse(c, 409, { code: 'already_sent', message: 'The cohort NDA is already out for signature. Use Void and resend to replace it.', extra: { envelope_status: g.envelope_status } });
     }
     let template: { title: string; body: string } | null;
     try { template = await activeTemplate(c.env, COHORT_NDA_SLUG); } catch (e) {
@@ -339,7 +353,23 @@ r.post('/:uid/nda', async (c) => {
     const body = applyMergeFields(template.body, {
       investor_name: g.name ?? '', firm_name: g.firm ?? '', cohort: cohortLabel(g.year, g.month), ends_at: g.ends_at,
     });
-    const { createAndSendEnvelope, UnfilledFieldsError } = await import('./esign');
+    const { createAndSendEnvelope, UnfilledFieldsError, voidEnvelopeForResend } = await import('./esign');
+    if (open && g.nda_envelope_uuid) {
+      const voided = await voidEnvelopeForResend(c.env, g.nda_envelope_uuid, ndaState === 'delivery_failed' ? 'cohort NDA sent again after a failed delivery' : 'cohort NDA voided and resent by HQ', admin.id);
+      if (!voided) return refuse(c, 409, { code: 'signature_in_progress', message: 'The investor has started signing this NDA, so it is not voided or sent again.' });
+      await logAdminAction(c.env, admin.id, admin.email, INVESTOR_COHORT_ACTIONS.ndaVoided, {
+        target_user_id: g.investor_user_id, grant_uid: uid, cohort_cycle_id: g.cohort_cycle_id,
+      });
+    }
+    /** D4809: a send that did not reach the investor is recorded on the grant, which keeps its envelope (if any) for history. */
+    const recordFailure = async () => {
+      await c.env.DB.prepare(
+        `UPDATE investor_cohort_access SET nda_delivery = 'failed', nda_delivery_at = datetime('now') WHERE id = ? AND nda_signed_at IS NULL`,
+      ).bind(g.id).run();
+      await logAdminAction(c.env, admin.id, admin.email, INVESTOR_COHORT_ACTIONS.ndaSendFailed, {
+        target_user_id: g.investor_user_id, grant_uid: uid, cohort_cycle_id: g.cohort_cycle_id,
+      });
+    };
     let sent: Awaited<ReturnType<typeof createAndSendEnvelope>>;
     try {
       sent = await createAndSendEnvelope(c.env, {
@@ -359,13 +389,20 @@ r.post('/:uid/nda', async (c) => {
       if (e instanceof UnfilledFieldsError) {
         return refuse(c, 409, { code: 'nda_template_unfilled', message: 'The cohort NDA template has a field this send cannot fill. Nothing was sent.', extra: { fields: e.fields } });
       }
-      throw e;
+      console.warn('[investor-cohorts] nda send threw', (e as Error)?.name);
+      sent = null;
     }
-    if (!sent) return refuse(c, 502, { code: 'envelope_send_failed', message: 'The cohort NDA could not be created or sent. Nothing was recorded.' });
+    if (!sent) {
+      await recordFailure();
+      return refuse(c, 502, { code: 'envelope_send_failed', message: 'The cohort NDA could not be created or sent. The grant records the failed send; Send NDA again from the grant.' });
+    }
+    // The email is part of the send: an envelope whose email did not go is a failed delivery, recovered by sending again.
+    const delivered = sent.email_sent === true;
     await c.env.DB.prepare(
-      `UPDATE investor_cohort_access SET nda_envelope_uuid = ?, nda_sent_at = datetime('now') WHERE id = ? AND nda_signed_at IS NULL`,
-    ).bind(sent.envelope_uuid, g.id).run();
-    await logAdminAction(c.env, admin.id, admin.email, INVESTOR_COHORT_ACTIONS.ndaSent, {
+      `UPDATE investor_cohort_access SET nda_envelope_uuid = ?, nda_sent_at = datetime('now'), nda_delivery = ?, nda_delivery_at = datetime('now')
+        WHERE id = ? AND nda_signed_at IS NULL`,
+    ).bind(sent.envelope_uuid, delivered ? 'delivered' : 'failed', g.id).run();
+    await logAdminAction(c.env, admin.id, admin.email, delivered ? INVESTOR_COHORT_ACTIONS.ndaSent : INVESTOR_COHORT_ACTIONS.ndaSendFailed, {
       target_user_id: g.investor_user_id, grant_uid: uid, cohort_cycle_id: g.cohort_cycle_id,
     });
     return c.json({ grant: grantView(await grantByUid(c.env, uid, today)), envelope: { uuid: sent.envelope_uuid, email_sent: sent.email_sent } });

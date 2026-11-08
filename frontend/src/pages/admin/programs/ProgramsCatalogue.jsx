@@ -26,7 +26,7 @@ import {
   StudioSelect, SUB, Skeleton, Tile, Unread,
 } from './parts';
 import { useCatalogueReads } from './useProgramReads';
-import { ProposalsFromStudios, YourProposals } from './ProposalTables';
+import { ProposalsSummary, YourProposals } from './ProposalTables';
 import { ProgramsTabs, useWaitingProposals } from './ProposalsPage';
 import NewProgramDialog from './NewProgramDialog';
 import { NEW_PROGRAM } from './proposalsModel';
@@ -322,7 +322,8 @@ function CatalogueBody() {
         );
       }
       default:
-        return <ProgramCard key={p.key} p={p} superAdmin={superAdmin} />;
+        // D4808: a program an approval or New program made has the generic registry-backed page at its key.
+        return <ProgramCard key={p.key} p={p} superAdmin={superAdmin} door={<Link to={`/admin/programs/${p.key}`} className={OPEN} aria-label={`Open ${p.name || p.key}`} data-testid={`programs-card-${p.key}-open`}>Open</Link>} />;
     }
   };
 
@@ -355,7 +356,10 @@ function CatalogueBody() {
       {superAdmin ? <ProgramsTabs waiting={waitingProposals} /> : null}
 
       {created ? (
-        <Done testId="programs-new-done">{`${created.name} is added as Proposed, with an empty playbook draft. This page draws its nine programs, so the new one has no card here yet.`}</Done>
+        <Done testId="programs-new-done">
+          {`${created.name} is added as Proposed, with an empty playbook draft you edit and publish on its page.`}
+          {created.key ? <> <Link to={`/admin/programs/${created.key}`} className="font-bold underline" data-testid="programs-new-open">Open program</Link></> : null}
+        </Done>
       ) : null}
 
       <MovedNotice text={moved} onDismiss={() => navigate({ pathname: loc.pathname, search: withoutMoved(loc.search), hash: loc.hash }, { replace: true })} />
@@ -395,10 +399,10 @@ function CatalogueBody() {
         {shown.map(card)}
       </div>
 
-      {superAdmin ? <ProposalsFromStudios onDecided={waitingProposals.reload} /> : <YourProposals />}
+      {superAdmin ? <ProposalsSummary waiting={waitingProposals} /> : <YourProposals />}
 
       {newOpen ? (
-        <NewProgramDialog onClose={() => setNewOpen(false)} onCreated={(c) => { setNewOpen(false); setCreated(c); }} />
+        <NewProgramDialog onClose={() => setNewOpen(false)} onCreated={(c) => { setNewOpen(false); setCreated(c); retry(); waitingProposals.reload(); }} />
       ) : null}
     </div>
   );

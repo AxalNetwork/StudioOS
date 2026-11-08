@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Check, Circle } from 'lucide-react';
 import { Pill, Unrecorded } from '../../ui';
 import { SectionCard, stateBlock } from './LearningStates';
 import { NOT_LIVE, SUBMISSION_STATUS, formatDay } from './learningModel';
 import { answerCounter, checkedOf, exerciseAnswer } from './assessmentModel';
+import { DRAFT_WORDS } from './learningDrafts';
+import { useLearningDraft } from './useLearningDraft';
 
 const ACCEPTED_LINE = 'Accepted. There is nothing to resubmit.';
 
@@ -37,8 +39,20 @@ export default function ExercisePanel({
   const isChecklist = exercise?.submission_kind === 'checklist';
   const items = Array.isArray(exercise?.checklist) ? exercise.checklist : [];
   const redo = submission?.status === 'needs_work';
-  const [draft, setDraft] = useState(!isChecklist ? submission?.body || '' : '');
-  const [checked, setChecked] = useState(() => (redo && isChecklist ? checkedOf(submission.body, items.length) || [] : []));
+  // #4646: unsent text or ticks of this learner for this exercise come back after a refresh, a closed tab or a lost
+  // connection. They live on this device until the server has the answer, and the panel says so.
+  const saved = useLearningDraft({ kind: 'exercise', uid: exercise?.uid });
+  const restoredText = typeof saved.initial?.text === 'string' ? saved.initial.text : null;
+  const restoredChecked = Array.isArray(saved.initial?.checked) ? saved.initial.checked.filter((i) => Number.isInteger(i) && i >= 0 && i < items.length) : null;
+  const [draft, setDraft] = useState(!isChecklist ? (restoredText ?? (submission?.body || '')) : '');
+  const [checked, setChecked] = useState(() => (restoredChecked ?? (redo && isChecklist ? checkedOf(submission.body, items.length) || [] : [])));
+  useEffect(() => { saved.write(isChecklist ? { checked } : { text: draft }); }, [draft, checked]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A new submission means the server has the answer: the copy on the device goes.
+  const lastSubmission = useRef(submission?.uid);
+  useEffect(() => {
+    if (submission?.uid && submission.uid !== lastSubmission.current) saved.clear();
+    lastSubmission.current = submission?.uid;
+  }, [submission?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const block = stateBlock({
     status, reason, onRetry,
     what: 'the exercise',
@@ -119,6 +133,11 @@ export default function ExercisePanel({
                     data-testid="input-exercise-answer"
                   />
                 </>
+              )}
+              {saved.state !== 'none' && (
+                <p role="status" className={`text-[11.5px] ${saved.state === 'failed' ? 'text-amber-800 dark:text-amber-300' : 'text-axal-muted dark:text-gray-400'}`} data-testid="exercise-draft-state" data-state={saved.state}>
+                  {DRAFT_WORDS[saved.state]}
+                </p>
               )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11.5px] tabular-nums text-axal-faint dark:text-gray-500" data-testid="text-exercise-count">

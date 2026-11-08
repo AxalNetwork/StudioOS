@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useR
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { preserveReloadGuards } from './lib/reloadGuard';
-import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
+import { consumePendingNextOnce, loginRedirectFor, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
@@ -37,6 +37,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { collectRouteModules } from './lib/routeModules';
 const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));
 import { useRedirectBeacon } from './lib/redirectBeacon';
+import { ventureSearch } from './pages/raise/pitch/pitchRoutes';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -163,6 +164,7 @@ const AdminCommunity = lazy(() => import('./pages/admin/community/AdminCommunity
 const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
+const LicenceDeepLink = lazy(() => import('./pages/admin/licences/LicenceDeepLink'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
 const ProgramGrantsHistory = lazy(() => import('./pages/admin/grants/ProgramGrantsHistory'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
@@ -614,7 +616,9 @@ export { ValidateZoneRedirect };
 // D4254 (#4254): an old Pitch address lands on its new one, venture and hash kept.
 function KeepQueryRedirect({ to }) {
   const loc = useLocation();
-  return <Navigate to={{ pathname: to, search: loc.search, hash: loc.hash }} replace />;
+  // #4853: the venture rides as `project_id`, the only name the Pitch Studio reads. The Raise module's
+  // links said `?project=`, which a redirect that kept the query as written left unread.
+  return <Navigate to={{ pathname: to, search: ventureSearch(loc.search), hash: loc.hash }} replace />;
 }
 
 // D2319: legacy helper contracts remain exported for isolated tests; their
@@ -1220,7 +1224,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
       {hqStrip === 'Licences' && (
         <HqSubNavStrip label="Licences">
           <StripLink to="/admin/licences">Ledger</StripLink>
-          <StripLink to="/admin/licences/programs">Program grants</StripLink>
+          <StripLink to="/admin/licences/programs">Program access by licence</StripLink>
         </HqSubNavStrip>
       )}
       {hqStrip === 'Content' && (
@@ -1773,7 +1777,8 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   }
 
   if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    // #4646: a Learning deep link comes back to the exact course, lesson or webinar after sign-in, through every method.
+    return <Navigate to={loginRedirectFor(location)} state={{ from: location }} replace />;
   }
 
   // Task #1 — route to the stored invite/deep-link target (at most once per
@@ -2927,12 +2932,16 @@ function AppInner() {
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
-      {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
+      {/* D981 (#2376) — Program access by licence (D4819's name for Program grants): which programs each licensed studio may run. */}
       <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/history" element={guard(['admin'], hqOnly(<ProgramGrantsHistory />))} />
       <Route path="/admin/licences/programs/requests" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/defaults" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/studio/:uid" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      {/* D4819 (#4819): a licence's deep link, opened in today's detail view. The static
+          /programs paths above outrank these, so Program access keeps its addresses. */}
+      <Route path="/admin/licences/:uid" element={guard(['admin'], hqOnly(<LicenceDeepLink />))} />
+      <Route path="/admin/licences/:uid/:section" element={guard(['admin'], hqOnly(<LicenceDeepLink />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
@@ -3299,6 +3308,9 @@ function AppInner() {
       <Route path="/raise/pitch/script" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="script" />))} />
       <Route path="/raise/pitch/share" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="analytics" />))} />
       <Route path="/raise/pitch-deck" element={<KeepQueryRedirect to="/raise/pitch" />} />
+      {/* #4853: the module's own Add form was a second sharing flow; it lands on the Studio's Share tab.
+          A static path, so `/raise/:slug/new` never takes it. */}
+      <Route path="/raise/pitch-deck/new" element={<KeepQueryRedirect to="/raise/pitch/share" />} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
       {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. The
           template builder retired with group E: its four actions are the

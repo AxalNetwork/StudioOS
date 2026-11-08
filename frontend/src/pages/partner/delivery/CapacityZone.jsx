@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
@@ -16,6 +16,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { HoursEntries, SeatScopeEditor } from './deliveryEdits';
+import { useMutations, useZoneRead } from './useZoneMutations';
 
 /**
  * Delivery · Capacity — `/delivery/capacity`.
@@ -66,7 +67,7 @@ import { HoursEntries, SeatScopeEditor } from './deliveryEdits';
 
 /**
  * The period label one month on, in the `YYYY-MM` shape `currentPeriod()` on
- * the worker produces. `Next week` reads it; nothing writes it, so a period
+ * the worker produces. `Next month` reads it; nothing writes it, so a period
  * nobody has logged against comes back empty and says so.
  */
 function nextPeriod(now = new Date()) {
@@ -95,77 +96,82 @@ function firstNames(people) {
 }
 
 export default function PartnerCapacityZone() {
-  const [state, setState] = useState({
-    loading: true, error: '', data: null, people: null, engagements: null,
-  });
-  const [busy, setBusy] = useState(false);
+  const [view, setView] = useState('this_week');
+  const period = view === 'next_week' ? nextPeriod() : undefined;
+
+  // The first read shows the skeleton; every later one (a save, or the week
+  // chip) keeps the forms and what was typed into them on screen (#4698).
+  const { state: read, load: loadMain } = useZoneRead(async () => {
+    const [capacity, ppl, health] = await Promise.all([
+      api.getPartnerCapacity(period),
+      api.listPartnerPeople(),
+      api.getPartnerDeliveryHealth(),
+    ]);
+    return {
+      data: capacity || {},
+      people: Array.isArray(ppl?.items) ? ppl.items : [],
+      engagements: Array.isArray(health?.items) ? health.items : [],
+    };
+  }, 'The capacity record did not load.', [period]);
+  const state = {
+    loading: read.loading,
+    error: read.error,
+    data: read.data?.data ?? null,
+    people: read.data?.people ?? null,
+    engagements: read.data?.engagements ?? null,
+  };
+  const load = loadMain;
+
   const [note, setNote] = useState(null);
   const [granting, setGranting] = useState(false);
-  const [grant, setGrant] = useState({ engagement_id: '', holder_user_id: '', scope: '' });
+  const EMPTY_GRANT = { engagement_id: '', holder_user_id: '', scope: '' };
+  const [grant, setGrant] = useState(EMPTY_GRANT);
   const [hours, setHours] = useState({ engagement_id: '', person_user_id: '', hours: '' });
   const [cap, setCap] = useState({ person_user_id: '', weekly_hours: '', note: '' });
   const [internal, setInternal] = useState({ person_user_id: '', hours: '' });
-  const [view, setView] = useState('this_week');
 
-  // ══ TWO OF THE `pd3` CHIPS CHANGE THE PERIOD, NOT THE ROWS ═══════════════
-  // Hours are logged per period, so `This week` and `Next week` are two reads
-  // of the same store rather than two views of one read — which is why the
-  // period is part of the load rather than a filter over what came back, and
-  // why next week is usually empty rather than quiet.
-  const period = view === 'next_week' ? nextPeriod() : undefined;
-
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      const [capacity, ppl, health] = await Promise.all([
-        api.getPartnerCapacity(period),
-        api.listPartnerPeople(),
-        api.getPartnerDeliveryHealth(),
-      ]);
-      setState({
-        loading: false,
-        error: '',
-        data: capacity || {},
-        people: Array.isArray(ppl?.items) ? ppl.items : [],
-        engagements: Array.isArray(health?.items) ? health.items : [],
-      });
-    } catch (e) {
-      setState({
-        loading: false,
-        error: e?.message || 'The capacity record did not load.',
-        data: null, people: null, engagements: null,
-      });
-    }
-  }, [period]);
-  useEffect(() => { load(); }, [load]);
-
-  // D637 — hours by entry, read on its own so a failure here says so here and
-  // leaves the rest of the page standing.
+  // Client hours by entry. A reload keeps the table that is already drawn
+  // rather than replacing it with "Loading hours…", and an older response
+  // never overwrites a newer one.
   const [entries, setEntries] = useState({ kind: 'loading' });
+  const entriesSeq = useRef(0);
   const loadEntries = useCallback(async () => {
-    setEntries({ kind: 'loading' });
+    entriesSeq.current += 1;
+    const mine = entriesSeq.current;
+    setEntries((prev) => (prev.kind === 'ready' ? prev : { kind: 'loading' }));
     try {
       const r = await api.listPartnerHourEntries(period);
+      if (mine !== entriesSeq.current) return;
       setEntries({ kind: 'ready', periods: r?.periods || [], entries: Array.isArray(r?.entries) ? r.entries : [] });
     } catch (e) {
+      if (mine !== entriesSeq.current) return;
       setEntries({ kind: 'unreadable', message: e?.message || '' });
     }
   }, [period]);
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
+  const { run: runMutation, isPending } = useMutations();
+  const grantToggle = useRef(null);
+  const [focusGrant, setFocusGrant] = useState(0);
+  useEffect(() => {
+    if (focusGrant) grantToggle.current?.focus?.();
+  }, [focusGrant, read.data]);
+
+  // One operation, one key (see `useMutations`). Resolves true only for a
+  // confirmed success; the caller resets its form on that and on nothing else.
+  const act = useCallback(async (key, fn, ok, scope) => {
     setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await Promise.all([load(), loadEntries()]);
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
+    const r = await runMutation(key, fn);
+    if (r.skipped) return false;
+    if (!r.ok) {
+      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      return false;
     }
-  }, [load, loadEntries]);
+    setNote({ ok: true, text: ok, scope });
+    load();
+    loadEntries();
+    return true;
+  }, [runMutation, load, loadEntries]);
 
   const d = state.data;
   const people = Array.isArray(d?.people) ? d.people : [];
@@ -204,6 +210,247 @@ export default function PartnerCapacityZone() {
   // arrived, and `error` is cleared so the shared "This did not load" card —
   // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
   const unlinked = isNoPartnerProfile(state.error);
+  const grantForm = (
+            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700" data-testid="seat-grant-form">
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Engagement">
+                  <select className={inputClass} value={grant.engagement_id}
+                    onChange={(e) => setGrant({ ...grant, engagement_id: e.target.value })}>
+                    <option value="">Choose one</option>
+                    {engagements.map((e) => (
+                      <option key={e.engagement_id} value={e.engagement_id}>
+                        {e.founder_name || e.need_title || e.engagement_uid}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Who holds it" hint="Your firm's own people only — a seat register naming anyone else would be false.">
+                  <select className={inputClass} value={grant.holder_user_id}
+                    onChange={(e) => setGrant({ ...grant, holder_user_id: e.target.value })}>
+                    <option value="">Choose one</option>
+                    {roster.map((p) => (
+                      <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Scope" hint="In the client's words — “Board, KPIs”, “prod read-only”.">
+                  <input className={inputClass} value={grant.scope} maxLength={400}
+                    onChange={(e) => setGrant({ ...grant, scope: e.target.value })} />
+                </Field>
+              </div>
+              <button
+                type="button" className={`${buttonClass} mt-3`}
+                disabled={!grant.engagement_id || !grant.holder_user_id}
+                aria-disabled={isPending('grant') || undefined}
+                onClick={async () => {
+                  if (isPending('grant')) return;
+                  const sending = grant;
+                  const ok = await act(
+                    'grant',
+                    () => api.grantPartnerSeat(sending.engagement_id, {
+                      holder_user_id: Number(sending.holder_user_id), scope: sending.scope,
+                    }),
+                    'Seat recorded.', 'grant',
+                  );
+                  // Reset and close only on a confirmed seat; a refusal keeps
+                  // the engagement, holder and scope as chosen.
+                  if (ok) {
+                    setGrant(EMPTY_GRANT);
+                    setGranting(false);
+                    setFocusGrant((n) => n + 1);
+                  }
+                }}
+              >
+                {isPending('grant') ? 'Recording…' : 'Record the seat'}
+              </button>
+              {roster.length === 0 && (
+                <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
+                  No one is attached to this firm yet, so there is nobody to hold a
+                  seat. That is an account link an admin makes, not something this
+                  page can do.
+                </p>
+              )}
+              <SaveNote note={note?.scope === 'grant' ? note : null} />
+            </div>
+  );
+
+  const writeSections = (
+    <>
+          {/* ══ THE FIRM'S OWN NUMBER ═════════════════════════════════════════
+              Nothing here computes a cap or offers a default. A firm types what
+              it considers a full week; leaving it empty and saving clears the
+              statement, so the first number typed is never permanent. */}
+          <Section title="The week this firm says it has">
+            <div className="grid gap-3 md:grid-cols-4">
+              <Field label="Whose" hint="The firm's default, or one person's override.">
+                <select className={inputClass} value={cap.person_user_id}
+                  onChange={(e) => setCap({ ...cap, person_user_id: e.target.value })}>
+                  <option value="">The firm’s default</option>
+                  {roster.map((p) => (
+                    <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Hours a week" hint="Leave empty and save to clear the cap.">
+                {/* The placeholder is a SHAPE, not a suggestion. Offering the
+                    canvas's forty in the empty box would put the number this
+                    zone refuses to assume one keystroke from being typed in
+                    and then read back as the firm's own answer. */}
+                <input className={inputClass} value={cap.weekly_hours} inputMode="decimal" placeholder="e.g. 37.5"
+                  onChange={(e) => setCap({ ...cap, weekly_hours: e.target.value })} />
+              </Field>
+              <Field label="Why this number" hint="Shown beside the cap — “four days, one for internal” means something different from “forty, and we mean it”.">
+                <input className={inputClass} value={cap.note} maxLength={300}
+                  onChange={(e) => setCap({ ...cap, note: e.target.value })} />
+              </Field>
+              <div className="flex items-end">
+                <button
+                  type="button" className={buttonClass} aria-disabled={isPending('cap') || undefined}
+                  onClick={async () => {
+                    if (isPending('cap')) return;
+                    const sending = cap;
+                    const raw = sending.weekly_hours.trim();
+                    const ok = await act(
+                      'cap',
+                      () => api.setPartnerCapacityCap({
+                        person_user_id: sending.person_user_id ? Number(sending.person_user_id) : null,
+                        // EMPTY CLEARS, it does not save a zero. Zero hours
+                        // would say this person works none, which is a claim;
+                        // no row says nobody has stated a cap.
+                        weekly_hours: raw === '' ? null : Number(raw),
+                        note: sending.note,
+                      }),
+                      raw === '' ? 'Cap cleared.' : 'Cap saved.', 'cap',
+                    );
+                    if (ok) setCap({ person_user_id: '', weekly_hours: '', note: '' });
+                  }}
+                >
+                  {cap.weekly_hours.trim() === '' ? 'Clear' : 'Save cap'}
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
+              {d?.cap_hours == null
+                ? d?.cap_note
+                : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. Hours are logged by month, so each month is compared with the cap over its own days (${d.period}: ${d.period_cap_hours} h). A person with their own number overrides it.`}
+            </p>
+            <SaveNote note={note?.scope === 'cap' ? note : null} />
+          </Section>
+
+          {/* ══ THE HOURS NO CLIENT PAYS FOR ══════════════════════════════════ */}
+          <Section title={`Internal hours · ${d?.period || ''}`}>
+            <div className="grid gap-3 md:grid-cols-3">
+              <Field label="Person">
+                <select className={inputClass} value={internal.person_user_id}
+                  onChange={(e) => setInternal({ ...internal, person_user_id: e.target.value })}>
+                  <option value="">Choose one</option>
+                  {roster.map((p) => (
+                    <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Hours" hint="Admin, recruiting, the proposal that lost. Empty clears the statement; 0 states there were none.">
+                <input className={inputClass} value={internal.hours} inputMode="decimal" placeholder="e.g. 6"
+                  onChange={(e) => setInternal({ ...internal, hours: e.target.value })} />
+              </Field>
+              <div className="flex items-end">
+                <button
+                  type="button" className={buttonClass}
+                  disabled={!internal.person_user_id}
+                  aria-disabled={isPending('internal') || undefined}
+                  onClick={async () => {
+                    if (isPending('internal')) return;
+                    const sending = internal;
+                    const raw = sending.hours.trim();
+                    const ok = await act(
+                      'internal',
+                      () => api.setPartnerInternalHours({
+                        person_user_id: Number(sending.person_user_id),
+                        period: d.period,
+                        hours: raw === '' ? null : Number(raw),
+                      }),
+                      raw === '' ? 'Statement cleared.' : 'Internal hours saved.', 'internal',
+                    );
+                    if (ok) setInternal({ person_user_id: '', hours: '' });
+                  }}
+                >
+                  {internal.hours.trim() === '' ? 'Clear' : 'Save'}
+                </button>
+              </div>
+            </div>
+            <SaveNote note={note?.scope === 'internal' ? note : null} />
+          </Section>
+
+          <Section title={`Client hours · ${d?.period || ''}`}>
+            <div className="grid gap-3 md:grid-cols-4">
+              <Field label="Engagement">
+                <select className={inputClass} value={hours.engagement_id}
+                  onChange={(e) => setHours({ ...hours, engagement_id: e.target.value })}>
+                  <option value="">Choose one</option>
+                  {engagements.map((e) => (
+                    <option key={e.engagement_id} value={e.engagement_id}>
+                      {e.founder_name || e.need_title || e.engagement_uid}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Person">
+                <select className={inputClass} value={hours.person_user_id}
+                  onChange={(e) => setHours({ ...hours, person_user_id: e.target.value })}>
+                  <option value="">Choose one</option>
+                  {roster.map((p) => (
+                    <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Hours">
+                <input className={inputClass} value={hours.hours} inputMode="decimal" placeholder="e.g. 32"
+                  onChange={(e) => setHours({ ...hours, hours: e.target.value })} />
+              </Field>
+              <div className="flex items-end">
+                <button
+                  type="button" className={buttonClass}
+                  disabled={!hours.engagement_id || !hours.person_user_id || hours.hours.trim() === ''}
+                  aria-disabled={isPending('hours') || undefined}
+                  onClick={async () => {
+                    if (isPending('hours')) return;
+                    const sending = hours;
+                    const ok = await act(
+                      'hours',
+                      () => api.savePartnerHours(
+                        sending.engagement_id, sending.person_user_id, d.period,
+                        { hours: Number(sending.hours) },
+                      ),
+                      'Hours logged.', 'hours',
+                    );
+                    if (ok) setHours({ engagement_id: '', person_user_id: '', hours: '' });
+                  }}
+                >
+                  Log
+                </button>
+              </div>
+            </div>
+            <SaveNote note={note?.scope === 'hours' ? note : null} />
+            <div className="mt-3">
+              <HoursEntries
+                read={entries} onRetry={loadEntries}
+                isBusy={(e, p) => isPending(`hours-delete:${e.engagement_id}:${e.person_user_id}:${p}`)}
+                onDelete={(e, p) => {
+                  if (!window.confirm(`Delete ${e.hours[p]} h for ${e.person_name || 'this person'} in ${p}? The month then reads Not recorded, not 0.`)) return;
+                  act(`hours-delete:${e.engagement_id}:${e.person_user_id}:${p}`, () => api.deletePartnerHours(e.engagement_id, e.person_user_id, p), 'Hours entry deleted.', 'hours');
+                }}
+              />
+            </div>
+          </Section>
+    </>
+  );
+  // The seat form closes on success, so its confirmation is drawn outside it.
+  const grantedNote = !granting && note?.scope === 'grant' ? <SaveNote note={note} /> : null;
+  const refreshNote = read.refreshError ? (
+    <p role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300">
+      The capacity record could not be refreshed just now, so what is shown may be out of date. {read.refreshError}
+    </p>
+  ) : null;
 
   return (
     <>
@@ -227,6 +474,7 @@ export default function PartnerCapacityZone() {
         notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || (people.length === 0 && seats.length === 0)}
         empty={(
+          <div className="space-y-4">
           <NothingYet
             title="No seat granted and no hours logged"
             body={
@@ -235,12 +483,24 @@ export default function PartnerCapacityZone() {
               + 'log a period’s hours and the roster starts filling in.'
             }
             action={engagements.length > 0
-              ? <button type="button" className={buttonClass} onClick={() => setGranting(true)}>Grant a seat</button>
+              ? <button type="button" ref={grantToggle} className={buttonClass} aria-expanded={granting} onClick={() => setGranting((v) => !v)}>{granting ? 'Cancel' : 'Grant a seat'}</button>
               : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open proposals</Link>}
           />
+          {refreshNote}
+          {grantedNote}
+          {granting && engagements.length > 0 && grantForm}
+          {/* THE FIRST RECORD IS WRITTEN FROM HERE. The cap, the internal hours
+              and the client hours are the other ways the roster starts filling
+              in, and they were drawn only inside the populated body, so an
+              empty store could not be started (#4698). An account that is not
+              attached to a firm has nothing to write into. */}
+          {!unlinked && writeSections}
+          </div>
         )}
       >
-        <div className="space-y-6">
+        <div className="space-y-6" aria-busy={read.refreshing || undefined}>
+          {refreshNote}
+          {grantedNote}
           <ZoneHeading
             title="Capacity & allocation"
             blurb={
@@ -250,7 +510,7 @@ export default function PartnerCapacityZone() {
               + 'throughput one.'
             }
             action={engagements.length > 0 && (
-              <button type="button" className={ghostButtonClass} onClick={() => setGranting((v) => !v)}>
+              <button type="button" ref={grantToggle} className={ghostButtonClass} aria-expanded={granting} onClick={() => setGranting((v) => !v)}>
                 {granting ? 'Cancel' : 'Grant a seat'}
               </button>
             )}
@@ -292,7 +552,7 @@ export default function PartnerCapacityZone() {
             title="People"
             meta={d?.cap_hours == null
               ? 'No cap stated · seat hours counted, not estimated'
-              : `Cap ${d.cap_hours} h · seat hours counted, not estimated`}
+              : `Cap ${d.cap_hours} h a week = ${d.period_cap_hours} h in ${d.period} · seat hours counted, not estimated`}
             cols="1.1fr 1.6fr .8fr .8fr .8fr 1.1fr"
             head={['Person', 'Seats held', 'Project h', 'Seat h', 'Internal h', 'Total']}
             rows={visible.map((p) => {
@@ -330,25 +590,26 @@ export default function PartnerCapacityZone() {
                   p.internal_hours == null
                     ? { nr: true }
                     : { text: `${p.internal_hours} h`, sub: p.internal_note || undefined },
-                  // THE TOTAL IS THE WEEK, and it says so when it is only part
-                  // of one. Against a stated cap it reads `N of C h` and
-                  // carries `Over`; with no cap it is a number and says there
-                  // is nothing to be over.
+                  // THE TOTAL IS THE MONTH, and it says so when it is only part
+                  // of one. Against a stated cap it reads `N of C h` where C is
+                  // the weekly cap over THIS month's days (the figure the
+                  // Worker compared with), and carries `Over`; with no cap it
+                  // is a number and says there is nothing to be over.
                   p.total_hours == null
                     ? { nr: true }
                     : {
-                      text: p.cap_hours == null
+                      text: p.period_cap_hours == null
                         ? `${p.total_hours} h`
-                        : `${p.total_hours} of ${p.cap_hours} h`,
+                        : `${p.total_hours} of ${p.period_cap_hours} h`,
                       ...(p.over_committed === true ? { pill: 'Over', pillTone: 'danger' } : {}),
                       sub: p.internal_hours == null
                         ? 'internal hours not stated — a floor, not a measurement'
-                        : (p.cap_hours == null ? 'no cap stated' : undefined),
+                        : (p.period_cap_hours == null ? 'no cap stated' : `${p.cap_hours} h a week over ${d?.period_days} days`),
                     },
                 ],
               };
             })}
-            note={'A person over their cap while holding a granted seat is the row this zone exists for, and it is read differently from the rest: a stretched operator inside a client’s own systems is a trust exposure, because the grant assumes attention the calendar no longer has. Reallocating project work does not fix it; renegotiating the seat does. Seat hours are counted from the hours logged against engagements where that person holds the grant — not estimated, and not moved into the project column when a founder later revokes it, because the work was still done inside their systems. A total with no internal hours behind it is marked a floor: the client book cannot hold admin or recruiting time, and a week assembled from billable rows alone under-reports in the reassuring direction.'}
+            note={'A person over their cap while holding a granted seat is the row this zone exists for, and it is read differently from the rest: a stretched operator inside a client’s own systems is a trust exposure, because the grant assumes attention the calendar no longer has. Reallocating project work does not fix it; renegotiating the seat does. Seat hours are counted from the hours logged against engagements where that person holds the grant — not estimated, and not moved into the project column when a founder later revokes it, because the work was still done inside their systems. A total with no internal hours behind it is marked a floor: the client book cannot hold admin or recruiting time, and a month assembled from billable rows alone under-reports in the reassuring direction.'}
           />
 
           {visible.length === 0 && people.length > 0 && (
@@ -368,215 +629,9 @@ export default function PartnerCapacityZone() {
             nothingToDraft="Nobody holds a seat or has logged hours this period, so there is nothing to read."
           />
 
-          {granting && (
-            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-              <div className="grid gap-3 md:grid-cols-3">
-                <Field label="Engagement">
-                  <select className={inputClass} value={grant.engagement_id}
-                    onChange={(e) => setGrant({ ...grant, engagement_id: e.target.value })}>
-                    <option value="">Choose one</option>
-                    {engagements.map((e) => (
-                      <option key={e.engagement_id} value={e.engagement_id}>
-                        {e.founder_name || e.need_title || e.engagement_uid}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Who holds it" hint="Your firm's own people only — a seat register naming anyone else would be false.">
-                  <select className={inputClass} value={grant.holder_user_id}
-                    onChange={(e) => setGrant({ ...grant, holder_user_id: e.target.value })}>
-                    <option value="">Choose one</option>
-                    {roster.map((p) => (
-                      <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Scope" hint="In the client's words — “Board, KPIs”, “prod read-only”.">
-                  <input className={inputClass} value={grant.scope} maxLength={400}
-                    onChange={(e) => setGrant({ ...grant, scope: e.target.value })} />
-                </Field>
-              </div>
-              <button
-                type="button" className={`${buttonClass} mt-3`}
-                disabled={busy || !grant.engagement_id || !grant.holder_user_id}
-                onClick={async () => {
-                  await run(
-                    () => api.grantPartnerSeat(grant.engagement_id, {
-                      holder_user_id: Number(grant.holder_user_id), scope: grant.scope,
-                    }),
-                    'Seat recorded.', 'grant',
-                  );
-                  setGrant({ engagement_id: '', holder_user_id: '', scope: '' });
-                  setGranting(false);
-                }}
-              >
-                Record the seat
-              </button>
-              {roster.length === 0 && (
-                <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
-                  No one is attached to this firm yet, so there is nobody to hold a
-                  seat. That is an account link an admin makes, not something this
-                  page can do.
-                </p>
-              )}
-              <SaveNote note={note?.scope === 'grant' ? note : null} />
-            </div>
-          )}
+          {granting && grantForm}
 
-          {/* ══ THE FIRM'S OWN NUMBER ═════════════════════════════════════════
-              Nothing here computes a cap or offers a default. A firm types what
-              it considers a full week; leaving it empty and saving clears the
-              statement, so the first number typed is never permanent. */}
-          <Section title="The week this firm says it has">
-            <div className="grid gap-3 md:grid-cols-4">
-              <Field label="Whose" hint="The firm's default, or one person's override.">
-                <select className={inputClass} value={cap.person_user_id}
-                  onChange={(e) => setCap({ ...cap, person_user_id: e.target.value })}>
-                  <option value="">The firm’s default</option>
-                  {roster.map((p) => (
-                    <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Hours a week" hint="Leave empty and save to clear the cap.">
-                {/* The placeholder is a SHAPE, not a suggestion. Offering the
-                    canvas's forty in the empty box would put the number this
-                    zone refuses to assume one keystroke from being typed in
-                    and then read back as the firm's own answer. */}
-                <input className={inputClass} value={cap.weekly_hours} inputMode="decimal" placeholder="e.g. 37.5"
-                  onChange={(e) => setCap({ ...cap, weekly_hours: e.target.value })} />
-              </Field>
-              <Field label="Why this number" hint="Shown beside the cap — “four days, one for internal” means something different from “forty, and we mean it”.">
-                <input className={inputClass} value={cap.note} maxLength={300}
-                  onChange={(e) => setCap({ ...cap, note: e.target.value })} />
-              </Field>
-              <div className="flex items-end">
-                <button
-                  type="button" className={buttonClass} disabled={busy}
-                  onClick={async () => {
-                    const raw = cap.weekly_hours.trim();
-                    await run(
-                      () => api.setPartnerCapacityCap({
-                        person_user_id: cap.person_user_id ? Number(cap.person_user_id) : null,
-                        // EMPTY CLEARS, it does not save a zero. Zero hours
-                        // would say this person works none, which is a claim;
-                        // no row says nobody has stated a cap.
-                        weekly_hours: raw === '' ? null : Number(raw),
-                        note: cap.note,
-                      }),
-                      raw === '' ? 'Cap cleared.' : 'Cap saved.', 'cap',
-                    );
-                    setCap({ person_user_id: '', weekly_hours: '', note: '' });
-                  }}
-                >
-                  {cap.weekly_hours.trim() === '' ? 'Clear' : 'Save cap'}
-                </button>
-              </div>
-            </div>
-            <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
-              {d?.cap_hours == null
-                ? d?.cap_note
-                : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. A person with their own number overrides it.`}
-            </p>
-            <SaveNote note={note?.scope === 'cap' ? note : null} />
-          </Section>
-
-          {/* ══ THE HOURS NO CLIENT PAYS FOR ══════════════════════════════════ */}
-          <Section title={`Internal hours · ${d?.period || ''}`}>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Field label="Person">
-                <select className={inputClass} value={internal.person_user_id}
-                  onChange={(e) => setInternal({ ...internal, person_user_id: e.target.value })}>
-                  <option value="">Choose one</option>
-                  {roster.map((p) => (
-                    <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Hours" hint="Admin, recruiting, the proposal that lost. Empty clears the statement; 0 states there were none.">
-                <input className={inputClass} value={internal.hours} inputMode="decimal" placeholder="e.g. 6"
-                  onChange={(e) => setInternal({ ...internal, hours: e.target.value })} />
-              </Field>
-              <div className="flex items-end">
-                <button
-                  type="button" className={buttonClass}
-                  disabled={busy || !internal.person_user_id}
-                  onClick={async () => {
-                    const raw = internal.hours.trim();
-                    await run(
-                      () => api.setPartnerInternalHours({
-                        person_user_id: Number(internal.person_user_id),
-                        period: d.period,
-                        hours: raw === '' ? null : Number(raw),
-                      }),
-                      raw === '' ? 'Statement cleared.' : 'Internal hours saved.', 'internal',
-                    );
-                    setInternal({ person_user_id: '', hours: '' });
-                  }}
-                >
-                  {internal.hours.trim() === '' ? 'Clear' : 'Save'}
-                </button>
-              </div>
-            </div>
-            <SaveNote note={note?.scope === 'internal' ? note : null} />
-          </Section>
-
-          <Section title={`Client hours · ${d?.period || ''}`}>
-            <div className="grid gap-3 md:grid-cols-4">
-              <Field label="Engagement">
-                <select className={inputClass} value={hours.engagement_id}
-                  onChange={(e) => setHours({ ...hours, engagement_id: e.target.value })}>
-                  <option value="">Choose one</option>
-                  {engagements.map((e) => (
-                    <option key={e.engagement_id} value={e.engagement_id}>
-                      {e.founder_name || e.need_title || e.engagement_uid}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Person">
-                <select className={inputClass} value={hours.person_user_id}
-                  onChange={(e) => setHours({ ...hours, person_user_id: e.target.value })}>
-                  <option value="">Choose one</option>
-                  {roster.map((p) => (
-                    <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Hours">
-                <input className={inputClass} value={hours.hours} inputMode="decimal" placeholder="e.g. 32"
-                  onChange={(e) => setHours({ ...hours, hours: e.target.value })} />
-              </Field>
-              <div className="flex items-end">
-                <button
-                  type="button" className={buttonClass}
-                  disabled={busy || !hours.engagement_id || !hours.person_user_id || hours.hours.trim() === ''}
-                  onClick={async () => {
-                    await run(
-                      () => api.savePartnerHours(
-                        hours.engagement_id, hours.person_user_id, d.period,
-                        { hours: Number(hours.hours) },
-                      ),
-                      'Hours logged.', 'hours',
-                    );
-                    setHours({ engagement_id: '', person_user_id: '', hours: '' });
-                  }}
-                >
-                  Log
-                </button>
-              </div>
-            </div>
-            <SaveNote note={note?.scope === 'hours' ? note : null} />
-            <div className="mt-3">
-              <HoursEntries
-                read={entries} busy={busy} onRetry={loadEntries}
-                onDelete={(e, p) => {
-                  if (!window.confirm(`Delete ${e.hours[p]} h for ${e.person_name || 'this person'} in ${p}? The month then reads Not recorded, not 0.`)) return;
-                  run(() => api.deletePartnerHours(e.engagement_id, e.person_user_id, p), 'Hours entry deleted.', 'hours');
-                }}
-              />
-            </div>
-          </Section>
+          {writeSections}
 
           <Section title="Seats inside client systems">
             {seats.length === 0 ? (
@@ -593,8 +648,8 @@ export default function PartnerCapacityZone() {
                       {s.founder_name || s.need_title || s.engagement_uid}
                     </span>
                     <SeatScopeEditor
-                      seat={s} busy={busy}
-                      onSave={(scope) => run(() => api.updatePartnerSeat(s.id, { scope: scope || null }), 'Scope saved.', `seat:${s.id}`)}
+                      seat={s} busy={isPending(`seat-scope:${s.id}`) || isPending(`seat-revoke:${s.id}`)}
+                      onSave={(scope) => act(`seat-scope:${s.id}`, () => api.updatePartnerSeat(s.id, { scope: scope || null }), 'Scope saved.', `seat:${s.id}`)}
                     />
                     <span className="text-[11px] text-axal-faint">
                       granted {formatDay(s.granted_at)}
@@ -604,9 +659,10 @@ export default function PartnerCapacityZone() {
                       ? <Pill tone="neutral">Revoked {formatDay(s.revoked_at)}</Pill>
                       : (
                         <button
-                          type="button" className={`${ghostButtonClass} ml-auto`} disabled={busy}
+                          type="button" className={`${ghostButtonClass} ml-auto`}
+                          aria-disabled={isPending(`seat-revoke:${s.id}`) || isPending(`seat-scope:${s.id}`) || undefined}
                           title="Records the revocation. The seat stays on this page struck through — the fact that access existed is worth keeping."
-                          onClick={() => run(() => api.revokePartnerSeat(s.id), 'Seat revoked.', `seat:${s.id}`)}
+                          onClick={() => { if (!isPending(`seat-revoke:${s.id}`)) act(`seat-revoke:${s.id}`, () => api.revokePartnerSeat(s.id), 'Seat revoked.', `seat:${s.id}`); }}
                         >
                           Revoke
                         </button>
@@ -631,7 +687,7 @@ export default function PartnerCapacityZone() {
             <p className="mt-2">
               <strong>A total with no internal hours is a floor.</strong> The
               client hours book cannot hold admin, recruiting or the proposal that
-              lost — its rows require an engagement — so a week assembled from it
+              lost — its rows require an engagement — so a month assembled from it
               alone under-reports by exactly the part nobody is billed for, and
               in the reassuring direction. Rows say so rather than quietly
               totalling less.

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fund Admin v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Fund administration · v2 · #4812</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Fund administration — an investment operations workstation</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">One authoritative fund-scope control replaces the duplicated links and select. Nine peer tabs become six workspaces: Overview, Investors, Capital, Portfolio, Reporting, and Banking & Books. Overview opens on Needs attention, then fund position, fund health, recent activity, and banking collapsed to one line when nothing is connected. The primary action follows state: it says Review overdue lines here, not New capital call on a fund with $0 committed. $0, Not recorded and Unreadable are kept distinct. Every money action goes Prepare → Review → Confirm → Authenticate → Receipt, shows its exact effect, and its button names the act and the amount. Eadwyn prepares, explains and navigates; it never moves money.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026, 14:30 UTC · Super Admin · fund figures follow the brief’s examples; LPs, companies and transactions are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Fund Admin v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['FA-01', 'Overview', 'A · All funds: Needs attention (fund, issue, date, amount, next action), the six-figure fund position with NAV carrying its own as-of date, compact fund-health rows, recent activity (backend required) and banking. The Eadwyn rail is open on an answer. B · Nothing waiting: one green line instead of rows of zeros, and the four disconnected entities collapsed into one summary.', [F('FA01', 'A · All funds', 1500), C('FA01b', 'B · Nothing waiting, no bank connected', 900, 300)]],
+      ['FA-02', 'Investors', 'A · LP roster: persistent search, filters with chips, a result count with total committed, right-aligned money, the LP name as the link, an Unreadable identity cell, paging and Export view. B · The LP drawer with tabs that load lazily; opening an audited tab says so in one line.', [F('FA02', 'A · LP roster'), F('FA03', 'B · LP drawer')]],
+      ['FA-03', 'Capital calls and the financial action flow', 'A · Calls with received and outstanding; the overdue lines total $125,000, matching Outstanding and the Overview. B · Review with the exact effect. C · Confirm and authenticate; the button reads “Issue $450,000 capital call”. D · The receipt, confirmed by the server, with an audit link. E · An Admin refusal, permissions that can’t be verified, and a fund with no commitments.', [F('FA04', 'A · Capital calls', 1000), C('FA05a', 'B · Review', 660, 560), C('FA05b', 'C · Confirm + authenticate', 660, 420), C('FA05c', 'D · Receipt', 660, 380), C('FA05d', 'E · Refusals', 620, 280)]],
+      ['FA-04', 'Fund detail and the person picker', 'A · Fund identity first, with six key figures, then local navigation; economics outrank metadata, and service providers and GP documents fold away. B · The reusable person/entity picker, with eligibility reasons and a confirmation that names the change.', [F('FA06', 'A · Fund detail', 900), C('FA06b', 'B · Person picker', 600, 520)]],
+      ['FA-05', 'Portfolio · NAV & performance', 'NAV, TVPI and DPI each as of their own date; IRR is Not recorded rather than estimated. Positions show the mark date, and a mark older than a quarter is Stale. Charts always sit beside a table.', [F('FA07', false, 900)]],
+      ['FA-06', 'Reporting', 'Report packs by period and state, with Review and Issue for prepared packs. The issue confirmation names the pack, recipients and the lock after issue.', [F('FA08', false, 1000)]],
+      ['FA-07', 'Banking & Books', 'A · Transactions for one account, with its balance as of its read time. B · Reconciliation: bank and ledger side by side, with the effect on outstanding before you confirm. C · Books: balanced double entries for the open period, each with its source.', [F('FA09', 'A · Transactions', 800), F('FA10', 'B · Reconciliation', 800), F('FA11', 'C · Books', 800)]],
+      ['FA-08', 'Reusable patterns', 'Fund scope selector, the three money states, attention item, permission refusal, financial confirmation and empty-state summary.', [C('FA12', false, 1400, 560)]],
+      ['FA-09', 'Mobile triage', 'A · Needs attention as records with 44px actions. B · An LP record. C · A reconciliation match in a bottom sheet. D · Confirming a capital call, with the amount in the button.', [P('FA13a', 'A · Attention'), P('FA13b', 'B · LP'), P('FA13c', 'C · Match'), P('FA13d', 'D · Confirm call')]],
+      ['FA-10', 'IA, backend fit and handoff', 'Six workspaces mapped to today’s Worker routes, what is frontend-only, what needs new backend support (recent activity, CSV export of a view), accessibility and React mapping.', [W('FA14')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

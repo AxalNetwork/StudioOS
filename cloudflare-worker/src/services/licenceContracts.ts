@@ -87,4 +87,60 @@ export type LicenceTermsResult = Pushed & {
   token_split_bps: number | null;
   starts_on: string | null;
   renews_on: string | null;
+  /** D4694: the licence's `terms_revision` after this save, and the keys it changed with their before and after. */
+  terms_revision: number;
+  changed: Record<string, { before: unknown; after: unknown }>;
+};
+
+// ── termination and branch sync (D4686) ─────────────────────────────────────
+
+/** The five consequences of a termination, in the order they run. */
+export const TERMINATION_STEPS = ['notices', 'notify', 'admins', 'push', 'unbind'] as const;
+export type TerminationStep = typeof TERMINATION_STEPS[number];
+/** The state of one consequence; `licence_termination_ops`' CHECK. */
+export const TERMINATION_STEP_STATES = ['pending', 'done', 'failed'] as const;
+export type TerminationStepState = typeof TERMINATION_STEP_STATES[number];
+
+export type TerminationOperation = {
+  status: 'complete' | 'incomplete';
+  steps: Record<TerminationStep, TerminationStepState>;
+  failure_step: TerminationStep | null;
+  failure_code: string | null;
+};
+
+/** What `runTerminationConsequences` reports, per consequence, beside the operation. */
+export type TerminationRun = {
+  notices_withdrawn: unknown;
+  admins_deprovisioned: unknown;
+  pushed: unknown;
+  branch_admins_unbound: unknown;
+  operation: TerminationOperation;
+};
+
+/** `POST /:uid/terminate`, first run or resume. */
+export type LicenceTerminateResult = { ok: true; status: 'terminated'; released: string[]; resumed?: true } & TerminationRun;
+
+export type LicenceSyncPending = {
+  revision: number | null; failure_code: string | null; attempts: number; last_attempt_at: string;
+};
+export type LicenceSyncTermination = {
+  status: string;
+  steps: Record<string, string>;
+  failure_step: string | null;
+  failure_code: string | null;
+  attempts: number;
+  created_at: string;
+  completed_at: string | null;
+};
+
+/** `GET /:uid`'s `sync`: what HQ holds, what the branch acknowledged, what is owed. null: not recorded. */
+export type LicenceSyncSummary = {
+  available: boolean;
+  hq_revision: number | null;
+  branch_revision: number | null;
+  last_success_at: string | null;
+  pending: LicenceSyncPending | null;
+  pending_available: boolean;
+  termination: LicenceSyncTermination | null;
+  termination_available: boolean;
 };

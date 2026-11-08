@@ -124,6 +124,9 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // #4577: which field a message is about, so the input it names can say so (aria-invalid); the message itself is always described.
+  const [errorField, setErrorField] = useState(null);
+  useEffect(() => { if (!error) setErrorField(null); }, [error]);
   // D722 — '' | 'waiting' (Google's window is open) | 'signing' (its code is
   // with the Worker) | 'redirecting' (the same-tab fallback is under way).
   const [googleStage, setGoogleStage] = useState('');
@@ -479,12 +482,12 @@ export default function LoginPage() {
 
   // ---- Submit ----
   const submit = async () => {
-    if (!email.trim()) { setError('Enter your email.'); return; }
+    if (!email.trim()) { setErrorField('email'); setError('Enter your email.'); return; }
     if (TURNSTILE_SITE_KEY && !turnstileToken) {
       setError('Please complete the verification challenge.');
       return;
     }
-    if (totpCode.length !== 6) { setError('Enter the 6-digit code from your authenticator.'); return; }
+    if (totpCode.length !== 6) { setErrorField('totp'); setError('Enter the 6-digit code from your authenticator.'); return; }
     setLoading(true); setError('');
     track('login_submit', { method: 'totp' });
     try {
@@ -519,7 +522,7 @@ export default function LoginPage() {
   // ---- Task #10 — request a magic sign-in link ----
   const sendMagicLink = async () => {
     const target = email.trim();
-    if (!target) { setError('Enter your email above, then request a sign-in link.'); return; }
+    if (!target) { setErrorField('email'); setError('Enter your email above, then request a sign-in link.'); return; }
     // Turnstile still gates the request when the widget is working; when it
     // failed to load, the magic link is deliberately the recovery path
     // (the endpoint has its own per-IP + per-email rate limits server-side).
@@ -588,14 +591,17 @@ export default function LoginPage() {
         </p>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+          <div id="login-error" role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
         )}
 
         <div className="mt-6 space-y-4">
           <div>
-            <label className={authV2.label}>Email</label>
+            <label htmlFor="login-email" className={authV2.label}>Email</label>
             <input
+              id="login-email"
               type="email"
+              aria-invalid={error && errorField === 'email' ? true : undefined}
+              aria-describedby={error ? 'login-error' : undefined}
               value={email}
               autoComplete="email"
               inputMode="email"
@@ -697,9 +703,12 @@ export default function LoginPage() {
               )}
 
               <div>
-                <label className={authV2.label}>Authenticator code</label>
+                <label htmlFor="login-totp" className={authV2.label}>Authenticator code</label>
                 <input
+                  id="login-totp"
                   type="text"
+                  aria-invalid={error && errorField === 'totp' ? true : undefined}
+                  aria-describedby={error ? 'login-error' : undefined}
                   value={totpCode}
                   inputMode="numeric"
                   autoComplete="one-time-code"

@@ -53,12 +53,20 @@ function fakeEnv(s: Scenario) {
     if (sql.includes("FROM spinout_certificates WHERE user_id = ? AND status = 'issued'")) {
       return { first: s.existingCert ?? null };
     }
-    if (sql.includes('JOIN spinout_lab_milestones m')) return { first: s.facts ?? null };
+    // D4659: the graduate is read through the rule's view, and the company
+    // through the enrollment's venture (one owned project, recorded).
+    if (sql.includes('JOIN spinout_lab_graduates g')) return { first: s.facts ?? null };
+    if (sql.includes('FROM spinout_lab_enrollments WHERE user_id')) {
+      return { first: s.facts && s.facts.project_id != null ? { id: 1, project_id: s.facts.project_id } : (s.facts ? { id: 1, project_id: null } : null) };
+    }
+    if (sql.includes('FROM projects p JOIN users u ON u.founder_id')) {
+      return { all: { results: s.facts && s.facts.project_id != null ? [{ id: s.facts.project_id, uid: 'p', name: s.facts.project_name ?? null }] : [] } };
+    }
     if (sql.includes("WHERE credential_id = ? AND status <> 'issued'")) return { first: s.revokedSameId ?? null };
     if (sql.includes('INSERT OR IGNORE INTO spinout_certificates')) {
       return { run: { meta: { changes: s.insertChanges ?? 1 } } };
     }
-    if (sql.includes('SELECT DISTINCT m.user_id')) {
+    if (sql.includes('FROM spinout_lab_graduates g')) {
       return { all: { results: s.backfillRows ?? [] } };
     }
     return { first: null, all: { results: [] }, run: { meta: { changes: 0 } } };
@@ -265,10 +273,10 @@ test('the backfill is bounded and reports what it did not reach', async () => {
 test('the backfill clamps an absurd limit rather than trusting the caller', async () => {
   const { env, calls } = fakeEnv({ backfillRows: [], facts: GRADUATE });
   await backfillCertificates(env, 10_000);
-  const q = calls.find((c) => c.sql.includes('SELECT DISTINCT m.user_id'))!;
+  const q = calls.find((c) => c.sql.includes('FROM spinout_lab_graduates g'))!;
   assert.equal(q.binds[0], 501, 'capped at 500 (+1 lookahead)');
   await backfillCertificates(env, 0);
-  const q2 = calls.filter((c) => c.sql.includes('SELECT DISTINCT m.user_id'))[1]!;
+  const q2 = calls.filter((c) => c.sql.includes('FROM spinout_lab_graduates g'))[1]!;
   assert.equal(q2.binds[0], 101, 'a falsy limit takes the default, not zero');
 });
 
@@ -283,10 +291,11 @@ test('a graduate the backfill cannot issue is skipped, not counted as issued', a
 test('the backfill only considers graduates without an issued credential', async () => {
   const { env, calls } = fakeEnv({ backfillRows: [], facts: GRADUATE });
   await backfillCertificates(env, 10);
-  const q = calls.find((c) => c.sql.includes('SELECT DISTINCT m.user_id'))!;
-  assert.match(q.sql, /milestone_key = 'incorporation_completed'/);
+  const q = calls.find((c) => c.sql.includes('FROM spinout_lab_graduates g'))!;
+  // D4659: graduates by the programme rule (not the incorporation step alone).
+  assert.match(q.sql, /g\.by_rule = 1/);
   assert.match(q.sql, /c\.id IS NULL/);
-  assert.match(q.sql, /c\.user_id = m\.user_id AND c\.status = 'issued'/);
+  assert.match(q.sql, /c\.user_id = g\.user_id AND c\.status = 'issued'/);
 });
 
 test('the backfill never throws', async () => {

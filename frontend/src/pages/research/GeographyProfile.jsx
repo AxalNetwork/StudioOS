@@ -6,6 +6,7 @@ import { Unreadable, Unrecorded } from '../../ui/Honesty';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { useRead } from './MarketDirectoryZone';
+import { useResearchLinks } from './researchLinks.js';
 
 /**
  * Research · Geographies · one country (`/research/geographies/:code`), to the
@@ -99,9 +100,10 @@ function CountryStrip({ code }) {
 }
 
 /** The licences whose route table reaches a directory company's page. */
-const COMPANY_PAGE_ROLES = new Set(['admin', 'founder', 'advisor']);
 
 export function GeographyBody({ data, role = 'founder' }) {
+  // D4612: a company profile this reader may not open is named, not linked (`lib/researchAccess.js`).
+  const links = useResearchLinks(role);
   const { item, totals, as_of: asOf, fund_aggregates: agg } = data;
   const labels = data.companies_by_label || [];
   const maxLabel = Math.max(0, ...labels.map((l) => l.count));
@@ -165,7 +167,7 @@ export function GeographyBody({ data, role = 'founder' }) {
                 <tbody>
                   {data.companies.map((co) => (
                     <tr key={co.uid} className="border-b border-axal-hairline/60 dark:border-gray-800">
-                      <td className="py-2 pr-3">{COMPANY_PAGE_ROLES.has(role)
+                      <td className="py-2 pr-3">{links.companies
                         ? <Link to={`/research/companies/company/${encodeURIComponent(co.uid)}`} className="font-semibold text-axal-ink hover:text-axal-violet dark:text-gray-100">{co.name}</Link>
                         : <span className="font-semibold text-axal-ink dark:text-gray-100">{co.name}</span>}</td>
                       <td className="py-2 pr-3">{co.sector || <Unrecorded />}</td>
