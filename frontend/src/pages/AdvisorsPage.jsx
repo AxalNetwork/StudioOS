@@ -16,7 +16,7 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 // Advisory workspace, which is exactly why this page stayed broken against the
 // same DTOs — see their header in that file.
 import {
-  bookingView, formatDateTime, isBookableSlot, slotMinutes, slotView,
+  bookingView, formatDateTime, isBookableSlot, offerFromType, offerLine, slotMinutes, slotView,
 } from './advisor/advisory/kit';
 
 function StarRow({ rating, onChange }) {
@@ -113,6 +113,7 @@ function BookingForm({ slot, advisor, sessionType, bookingLinkSlug, onClose, onB
   const [questions, setQuestions] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const offer = offerFromType(sessionType);
   async function submit() {
     if (!topic.trim()) { setErr('Topic is required'); return; }
     setErr(null); setBusy(true);
@@ -148,6 +149,13 @@ function BookingForm({ slot, advisor, sessionType, bookingLinkSlug, onClose, onB
           </div>
           <button onClick={onClose}><X size={18} className="text-gray-500" /></button>
         </div>
+        {/* D4715: the exact offer being booked, as the worker will copy it onto the booking. */}
+        {offer && (
+          <div data-testid="booking-offer" className="mb-3 rounded border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-100">
+            You are booking: <span className="font-medium">{offerLine(offer)}</span>
+            {offer.cadence_note && <div className="mt-0.5 text-violet-700 dark:text-violet-300">{offer.cadence_note}</div>}
+          </div>
+        )}
         <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Topic</label>
         <input value={topic} onChange={(e) => setTopic(e.target.value)}
           placeholder="GTM strategy review"
@@ -199,7 +207,12 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
         )}
         {advisor.bio && <p className="text-sm text-gray-700 mb-4 dark:text-gray-300">{advisor.bio}</p>}
         <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-          <div><span className="text-gray-500">Rate:</span> {advisor.hourly_rate_usd == null ? 'Not recorded — no rate set' : advisor.hourly_rate_usd > 0 ? `$${advisor.hourly_rate_usd}/hr` : 'Free'}</div>
+          {/* D4715: a booking made for one session type states that offer, not the general hourly rate. */}
+          {sessionType ? (
+            <div data-testid="detail-offer" className="col-span-2"><span className="text-gray-500">Session:</span> {offerLine(offerFromType(sessionType))}</div>
+          ) : (
+            <div><span className="text-gray-500">Rate:</span> {advisor.hourly_rate_usd == null ? 'Not recorded — no rate set' : advisor.hourly_rate_usd > 0 ? `$${advisor.hourly_rate_usd}/hr` : 'Free'}</div>
+          )}
           <div><span className="text-gray-500">Capacity:</span> Not recorded — no weekly capacity published</div>
           {advisor.timezone && <div><span className="text-gray-500">Timezone:</span> {advisor.timezone}</div>}
           {advisor.calcom_username && <div><span className="text-gray-500">Cal.com:</span> @{advisor.calcom_username}</div>}
@@ -342,6 +355,7 @@ function MyBookings({ refreshKey }) {
           <div className="flex items-center justify-between">
             <div>
               <div className="font-medium text-gray-900 dark:text-gray-100">{b.topic}</div>
+              {b.offer && <div data-testid={`booking-offer-${b.id}`} className="text-xs text-gray-700 mt-0.5 dark:text-gray-300">{offerLine(b.offer)}</div>}
               <div className="text-xs text-gray-500 mt-0.5">
                 {b.startsAt ? formatDateTime(b.startsAt) : 'Time not recorded'} · status:{' '}
                 <span className="font-medium">{b.status}</span>
