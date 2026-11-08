@@ -160,6 +160,7 @@ export async function decideApplicant(env: Env, admin: User, row: Record<string,
     env.DB.prepare(
       `UPDATE cohort_applicants SET status = ?, decided_at = datetime('now'), decided_by = ?, decision_reason = ?
        WHERE id = ? AND status = ?
+         AND COALESCE((SELECT a.status FROM spinout_applications a WHERE a.id = cohort_applicants.application_id), '') <> 'withdrawn'
          AND (? <> 'approved' OR status = 'approved' OR ? = 1 OR
            (SELECT COUNT(*) FROM cohort_applicants WHERE cohort_cycle_id = ? AND id <> ? AND status IN ('approved', 'activated')) < ?)`
     ).bind(status, `admin:${admin.id}`, reason, applicantId, row.status, status, confirmed ? 1 : 0, row.cohort_cycle_id, applicantId, max),
@@ -176,8 +177,12 @@ export async function decideApplicant(env: Env, admin: User, row: Record<string,
     ).bind(status, status, appId, status, status),
   ]);
   if (Number(updated.meta?.changes ?? 0) !== 1) {
-    const current = await env.DB.prepare('SELECT status FROM cohort_applicants WHERE id = ?').bind(applicantId).first<{ status: string }>();
-    if (!current || current.status !== row.status) return { ok: false, status: 409, code: 'decision_conflict', message: 'This application changed while you were deciding it. Refresh and try again.' };
+    const current = await env.DB.prepare(
+      `SELECT ca.status, a.status AS application_status FROM cohort_applicants ca
+         LEFT JOIN spinout_applications a ON a.id = ca.application_id WHERE ca.id = ?`,
+    ).bind(applicantId).first<{ status: string; application_status: string | null }>();
+    // D4658: a withdrawal that won is a conflict, never "over the places".
+    if (!current || current.status !== row.status || current.application_status === 'withdrawn') return { ok: false, status: 409, code: 'decision_conflict', message: 'This application changed while you were deciding it. Refresh and try again.' };
     return { ok: false, status: 409, code: 'over_places', message: `This approval would exceed the ${max} cohort places. Confirm approving past the places to continue.` };
   }
   // null when no note was sent; false when one was sent and did not save, so
