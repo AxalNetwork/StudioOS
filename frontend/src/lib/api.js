@@ -4351,6 +4351,8 @@ export const api = {
     request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorEngagement: (id, data) =>
     request(`/advisors/me/engagements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // #4715 (D4715): signing, renewals, endings and corrections to signed terms, oldest first.
+  listMyAdvisorEngagementEvents: (id) => request(`/advisors/me/engagements/${id}/events`),
   // D4695: `expectedLane` is the lane the board showed; a row that has moved since is a 409 `lane_changed`.
   advanceMyAdvisorEngagement: (id, lane, expectedLane) =>
     request(`/advisors/me/engagements/${id}/advance`, {

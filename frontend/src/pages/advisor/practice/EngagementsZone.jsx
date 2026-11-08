@@ -15,6 +15,7 @@ import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import useScrollToHash from '../../../hooks/useScrollToHash';
 import AdvisorAccessLog from './ClientAccessLog';
 import { partialLine, readEveryPage } from './everyPage';
+import { correctionBody, correctionForm, historyLine } from './engagementCorrection';
 import MyTasks from '../../work/MyTasks.jsx';
 
 /**
@@ -77,6 +78,10 @@ export default function EngagementsZone() {
     client_name: '', shape: 'retainer', scope_label: '', scope_includes: '',
     scope_excludes: '', amount: '', term_ends_at: '',
   });
+  // #4715 (D4715): the signed engagement whose terms are being corrected, and each one's history as read.
+  const [correcting, setCorrecting] = useState(null);
+  const [fix, setFix] = useState(correctionForm(null));
+  const [history, setHistory] = useState({});
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
@@ -189,6 +194,35 @@ export default function EngagementsZone() {
     setDeciding(null);
     setDecision({ decision: 'renewed', note: '', term_ends_at: '' });
   }, 'That renewal decision could not be recorded.');
+
+  const showHistory = async (e) => {
+    if (history[e.id]?.items) { setHistory((h) => ({ ...h, [e.id]: undefined })); return; }
+    setHistory((h) => ({ ...h, [e.id]: { loading: true } }));
+    try {
+      const res = await api.listMyAdvisorEngagementEvents(e.id);
+      setHistory((h) => ({ ...h, [e.id]: { items: res?.items || [] } }));
+    } catch (error) {
+      setHistory((h) => ({ ...h, [e.id]: { error: error?.message || 'The history could not be read.' } }));
+    }
+  };
+
+  const correct = async (e) => {
+    const res = correctionBody(e, fix);
+    if (res.error) { setNote({ ok: false, text: res.error }); return; }
+    await act(e.id, async () => {
+      try {
+        await api.updateMyAdvisorEngagement(e.id, res.body);
+      } catch (error) {
+        if (error?.code === 'engagement_changed') {
+          throw Object.assign(new Error('This engagement changed since you opened it. It has been reloaded; check the terms and correct them again.'), { code: 'lane_changed' });
+        }
+        throw error;
+      }
+      setCorrecting(null);
+      setHistory((h) => ({ ...h, [e.id]: undefined }));
+      setNote({ ok: true, text: 'The correction was recorded in the engagement’s history.' });
+    }, 'That correction could not be recorded.');
+  };
 
   const create = async () => {
     const parsed = dollarsToCents(draft.amount);
@@ -414,6 +448,62 @@ export default function EngagementsZone() {
                 <p className="mt-1.5 text-[10.5px] leading-relaxed text-amber-700 dark:text-amber-300">
                   {e.scope_excludes || <Unrecorded>No exclusion recorded</Unrecorded>}
                 </p>
+                {/* #4715 (D4715): signed terms change only as a recorded correction, and the history shows it. */}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" className={ghostButtonClass} disabled={busy === e.id}
+                    aria-expanded={correcting === e.id} aria-controls={`correct-${e.id}`}
+                    onClick={() => { setCorrecting(correcting === e.id ? null : e.id); setFix(correctionForm(e)); }}>
+                    {correcting === e.id ? 'Cancel correction' : 'Correct terms'}
+                  </button>
+                  <button type="button" className={ghostButtonClass}
+                    aria-expanded={!!history[e.id]?.items} aria-controls={`history-${e.id}`}
+                    onClick={() => showHistory(e)}>
+                    {history[e.id]?.items ? 'Hide history' : 'History'}
+                  </button>
+                </div>
+                {correcting === e.id && (
+                  <form id={`correct-${e.id}`} data-testid={`correct-form-${e.id}`} className="mt-2 grid gap-2"
+                    onSubmit={(ev) => { ev.preventDefault(); correct(e); }}>
+                    <p className="text-[11px] leading-relaxed text-axal-muted">
+                      These terms were signed. A correction keeps both versions and your reason in the history.
+                    </p>
+                    <Field label="Scope line">
+                      <input className={inputClass} name="scope_label" value={fix.scope_label}
+                        onChange={(ev) => setFix({ ...fix, scope_label: ev.target.value })} />
+                    </Field>
+                    <Field label="In scope">
+                      <textarea className={inputClass} rows={2} name="scope_includes" value={fix.scope_includes}
+                        onChange={(ev) => setFix({ ...fix, scope_includes: ev.target.value })} />
+                    </Field>
+                    <Field label="Not in scope">
+                      <textarea className={inputClass} rows={2} name="scope_excludes" value={fix.scope_excludes}
+                        onChange={(ev) => setFix({ ...fix, scope_excludes: ev.target.value })} />
+                    </Field>
+                    <Field label="Amount per cycle">
+                      <input className={inputClass} name="amount" inputMode="decimal" value={fix.amount}
+                        onChange={(ev) => setFix({ ...fix, amount: ev.target.value })} />
+                    </Field>
+                    <Field label="Term ends">
+                      <input className={inputClass} type="date" name="term_ends_at" value={fix.term_ends_at}
+                        onChange={(ev) => setFix({ ...fix, term_ends_at: ev.target.value })} />
+                    </Field>
+                    <Field label="Reason for the correction" hint="Required. Kept with the change.">
+                      <textarea className={inputClass} rows={2} name="reason" required value={fix.reason}
+                        onChange={(ev) => setFix({ ...fix, reason: ev.target.value })} />
+                    </Field>
+                    <div><button type="submit" className={buttonClass} disabled={busy === e.id}>Record correction</button></div>
+                  </form>
+                )}
+                {history[e.id] && (
+                  <div id={`history-${e.id}`} data-testid={`history-${e.id}`} className="mt-2" aria-live="polite">
+                    {history[e.id].loading ? <p className="text-[11px] text-axal-muted">Reading the history…</p>
+                      : history[e.id].error ? <p className="text-[11px] text-amber-700 dark:text-amber-300">{history[e.id].error}</p>
+                        : history[e.id].items.length === 0 ? <p className="text-[11px] text-axal-muted">No history recorded for this engagement.</p>
+                          : <ol className="space-y-1">{history[e.id].items.map((ev) => (
+                            <li key={ev.uid} className="text-[11px] leading-relaxed">{historyLine(ev)}</li>
+                          ))}</ol>}
+                  </div>
+                )}
               </div>
             ))}</div>}
           <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
