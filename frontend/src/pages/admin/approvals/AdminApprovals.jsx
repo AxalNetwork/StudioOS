@@ -61,8 +61,6 @@ const BTN_SM = 'inline-flex min-h-[44px] items-center justify-center rounded-[7p
 const BTN_PRIMARY = 'inline-flex min-h-[44px] items-center justify-center rounded-[8px] sm:min-h-[36px] bg-axal-violet px-3 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50';
 const SELECT = 'min-h-[44px] rounded-[7px] sm:min-h-[36px] border border-axal-hairline bg-white px-2 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
-const same = (x) => x;
-
 const PILL = {
   warn: 'border-amber-300 bg-amber-50 text-axal-amber-deep dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200',
   bad: 'border-axal-destructive-edge bg-axal-destructive-tint text-axal-destructive dark:border-red-900 dark:bg-red-950/40 dark:text-red-300',
@@ -84,50 +82,69 @@ export function UrgencyPill({ sla }) {
 }
 
 /** The page that decides a lane, as a literal link (see the header comment). */
-export function LaneDoor({ k, cls = LINK, t = same }) {
+export function LaneDoor({ k }) {
   switch (k) {
-    case 'kyc': case 'kyb': return <Link to="/admin/kyc" className={cls}>{t('KYC & KYB')}</Link>;
-    case 'partner_profiles': return <Link to="/admin/partner-profiles" className={cls}>{t('Partner profiles')}</Link>;
-    case 'exploring': return <Link to="/admin/exploring" className={cls}>{t('Exploring board')}</Link>;
-    case 'product_testers': return <Link to="/admin/approvals/product-testers" className={cls}>{t('Product testers')}</Link>;
-    case 'lp': return <Link to="/admin/lp-applications" className={cls}>{t('LP applications')}</Link>;
-    case 'cohort': return <Link to="/admin/programs/spinout-lab/applications" className={cls}>{t('Spin-Out Lab')}</Link>;
-    case 'lab_hosts': return <Link to="/admin/programs/spinout-lab/hosts" className={cls}>{t('Spin-Out Lab › Hosts')}</Link>;
-    case 'moderation': return <Link to="/admin/spinout-moderation" className={cls}>{t('Spin-Out moderation')}</Link>;
-    case 'referrals': return <Link to="/admin/programs/refer-and-earn/queue" className={cls}>{t('Refer & Earn › Queue')}</Link>;
-    case 'strategic_access': return <Link to="/admin/programs/refer-and-earn" className={cls}>{t('Refer & Earn')}</Link>;
-    case 'perk_listings': return <Link to="/admin/programs/perks" className={cls}>{t('Perks')}</Link>;
+    case 'kyc': case 'kyb': return <Link to="/admin/kyc" className={LINK}>KYC & KYB</Link>;
+    case 'partner_profiles': return <Link to="/admin/partner-profiles" className={LINK}>Partner profiles</Link>;
+    case 'exploring': return <Link to="/admin/exploring" className={LINK}>Exploring board</Link>;
+    case 'product_testers': return <Link to="/admin/approvals/product-testers" className={LINK}>Product testers</Link>;
+    case 'lp': return <Link to="/admin/lp-applications" className={LINK}>LP applications</Link>;
+    case 'cohort': return <Link to="/admin/programs/spinout-lab/applications" className={LINK}>Spin-Out Lab</Link>;
+    case 'lab_hosts': return <Link to="/admin/programs/spinout-lab/hosts" className={LINK}>Spin-Out Lab › Hosts</Link>;
+    case 'moderation': return <Link to="/admin/spinout-moderation" className={LINK}>Spin-Out moderation</Link>;
+    case 'referrals': return <Link to="/admin/programs/refer-and-earn/queue" className={LINK}>Refer & Earn › Queue</Link>;
+    case 'strategic_access': return <Link to="/admin/programs/refer-and-earn" className={LINK}>Refer & Earn</Link>;
+    case 'perk_listings': return <Link to="/admin/programs/perks" className={LINK}>Perks</Link>;
     case 'best_fit': return <span className={SUB}>Best-Fit · no review page yet</span>;
-    case 'events': return <Link to="/admin/events/review" className={cls}>{t('Events › Review')}</Link>;
-    case 'jobs': return <Link to="/admin/jobs" className={cls}>{t('Jobs')}</Link>;
-    case 'wellbeing_experts': return <Link to="/admin/approvals/wellbeing-experts" className={cls}>{t('Wellbeing experts')}</Link>;
-    case 'comarketing': return <Link to="/admin/approvals/co-marketing" className={cls}>{t('Co-marketing')}</Link>;
-    case 'articles': return <Link to="/admin/articles" className={cls}>{t('Content queue')}</Link>;
-    case 'due_diligence': return <Link to="/admin/due-diligence" className={cls}>{t('Due diligence')}</Link>;
-    case 'score_flags': return <Link to="/monitoring" className={cls}>{t('Monitoring')}</Link>;
+    case 'events': return <Link to="/admin/events/review" className={LINK}>Events › Review</Link>;
+    case 'jobs': return <Link to="/admin/jobs" className={LINK}>Jobs</Link>;
+    case 'wellbeing_experts': return <Link to="/admin/approvals/wellbeing-experts" className={LINK}>Wellbeing experts</Link>;
+    case 'comarketing': return <Link to="/admin/approvals/co-marketing" className={LINK}>Co-marketing</Link>;
+    case 'articles': return <Link to="/admin/articles" className={LINK}>Content queue</Link>;
+    case 'due_diligence': return <Link to="/admin/due-diligence" className={LINK}>Due diligence</Link>;
+    case 'score_flags': return <Link to="/monitoring" className={LINK}>Monitoring</Link>;
     default: return <span className={SUB}>Not recorded</span>;
   }
 }
 
 /** HQ's own queue pages (APR9), literal; a page not built yet says so. */
-export function HqDoor({ lane, cls = LINK, t = same }) {
+export function HqDoor({ lane }) {
   switch (lane.key) {
-    case 'testing_programs': return <Link to="/admin/platform/product-testing" className={cls}>{t('Platform › Product testing')}</Link>;
-    case 'learning': return <Link to="/learning/studio" className={cls}>{t('Learning studio')}</Link>;
-    case 'tickets': return <Link to="/hq/review" className={cls}>{t('HQ review')}</Link>;
-    case 'payouts': return <Link to="/admin/commissions" className={cls}>{t('Commissions')}</Link>;
-    case 'ai_runs': return <Link to="/admin/platform/allowances" className={cls}>{t('Platform › AI allowances')}</Link>;
-    case 'notices': return <Link to="/admin/licences" className={cls}>{t('Licences')}</Link>;
-    case 'support': return <Link to="/admin/hq-support" className={cls}>{t('Support')}</Link>;
-    case 'grants': return <Link to="/admin/licences/programs/requests" className={cls}>{t('Licences › Program access by licence › Requests')}</Link>;
+    case 'testing_programs': return <Link to="/admin/platform/product-testing" className={LINK}>Platform › Product testing</Link>;
+    case 'learning': return <Link to="/learning/studio" className={LINK}>Learning studio</Link>;
+    case 'tickets': return <Link to="/hq/review" className={LINK}>HQ review</Link>;
+    case 'payouts': return <Link to="/admin/commissions" className={LINK}>Commissions</Link>;
+    case 'ai_runs': return <Link to="/admin/platform/allowances" className={LINK}>Platform › AI allowances</Link>;
+    case 'notices': return <Link to="/admin/licences" className={LINK}>Licences</Link>;
+    case 'support': return <Link to="/admin/hq-support" className={LINK}>Support</Link>;
+    case 'grants': return <Link to="/admin/licences/programs/requests" className={LINK}>Licences › Program access by licence › Requests</Link>;
     default: return <span className={SUB}>{lane.waits}</span>;
   }
 }
 
-/** Either door for a lane key: the studio's lanes, or HQ's for a Super Admin. `cls` and `t` dress it (a button, "Open in … ↗"). */
-function DoorFor({ lane, cls, t }) {
+/** Either door for a lane key: the studio's lanes, or HQ's for a Super Admin. */
+function DoorFor({ lane }) {
   const hq = HQ_LANES.find((l) => l.key === lane);
-  return hq ? <HqDoor lane={hq} cls={cls} t={t} /> : <LaneDoor k={lane} cls={cls} t={t} />;
+  return hq ? <HqDoor lane={hq} /> : <LaneDoor k={lane} />;
+}
+
+/**
+ * D4814: a lane's door dressed as a button or a list action — "Continue
+ * review in KYC & KYB →", "Open in Due diligence ↗". The door itself stays the
+ * literal link above (the reachability walk and the lane tests read those
+ * lines); the words go around it and the link is stretched over the whole
+ * control, so all of it is the target. A lane with no page to open (Best-Fit,
+ * an HQ page not built yet) is plain words, never a control that goes nowhere.
+ */
+function DressedDoor({ lane, before, after, className, plain, testId }) {
+  const dest = reviewDestination(lane);
+  if (/no review page yet|not built yet|^its own page$/.test(dest)) return <span className={plain} data-testid={testId}>{dest}</span>;
+  return (
+    <span data-testid={testId}
+      className={`relative ${className} [&_a]:font-[inherit] [&_a]:text-inherit [&_a]:after:absolute [&_a]:after:inset-0 [&_a]:after:content-[''] [&_a]:focus-visible:outline-none focus-within:ring-2 focus-within:ring-axal-violet`}>
+      {before}<DoorFor lane={lane} />{after}
+    </span>
+  );
 }
 
 /**
@@ -235,7 +252,7 @@ function RowActions({ row, onAssign, onCopy }) {
         <div id={popId} aria-label={`Actions for ${row.who}`} role="group" className={`${CARD} absolute right-0 z-10 mt-1 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
           <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(false); onAssign([row]); }}>Assign…</button>
           <button type="button" data-testid={`approvals-menu-${row.key}-copy`} className={ITEM} onClick={() => { close(true); onCopy(row); }}>Copy link</button>
-          <span onClickCapture={() => close(false)} data-testid={`approvals-menu-${row.key}-open-in`}><DoorFor lane={row.lane} cls={ITEM} t={(x) => `Open in ${x} ↗`} /></span>
+          <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>
         </div>
       ) : null}
     </div>
@@ -328,7 +345,7 @@ function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTake }) {
       footer={ready ? (
         <div className="flex flex-col gap-2" data-testid="approvals-item-continue">
           <div className="flex flex-wrap items-center gap-2 max-sm:flex-col-reverse max-sm:items-stretch">
-            <DoorFor lane={v.lane} cls={`${BTN_PRIMARY} flex-1`} t={(x) => `Continue review in ${x} →`} />
+            <DressedDoor lane={v.lane} before="Continue review in " after=" →" className={`${BTN_PRIMARY} flex-1`} plain={`flex-1 ${SUB}`} testId="approvals-item-continue-link" />
             <button type="button" className={BTN} onClick={onClose}>Close</button>
           </div>
           <p className={`m-0 ${SUB}`} data-testid="approvals-item-why">{continueLine(v.lane)}</p>
@@ -453,7 +470,7 @@ function RowSheet({ row, onAssign, onCopy, onClose }) {
       <div className="flex flex-col gap-1 px-3 py-3">
         <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onAssign([row]); }} data-testid="approvals-row-sheet-assign">Assign…</button>
         <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onCopy(row); }} data-testid="approvals-row-sheet-copy">Copy link</button>
-        <span onClickCapture={onClose} data-testid="approvals-row-sheet-open-in"><DoorFor lane={row.lane} cls={SHEET_ITEM} t={(x) => `Open in ${x} ↗`} /></span>
+        <span onClickCapture={onClose}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={SHEET_ITEM} plain={`${SHEET_ITEM} text-axal-muted dark:text-gray-400`} testId="approvals-row-sheet-open-in" /></span>
       </div>
     </Lightbox>
   );
