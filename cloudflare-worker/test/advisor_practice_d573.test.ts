@@ -137,6 +137,8 @@ function freshDb() {
   db.exec(migration('240_advisor_sessions_config'));
   db.exec(migration('218_advisor_client_grants'));
   db.exec(migration('394_advisor_practice'));
+  // #4702: confirm and decline now record the advisor's decision on the booking (advisor_decision / advisor_decided_at).
+  db.exec(migration('202611071558_advisor_booking_decision'));
   const activitySchema = readFileSync(`${SQL}/schema_baseline.sql`, 'utf8')
     .match(/CREATE TABLE activity_logs\s*\([\s\S]*?\);/)?.[0];
   if (!activitySchema) throw new Error('Activity schema not found');

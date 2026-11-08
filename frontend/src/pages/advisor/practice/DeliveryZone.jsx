@@ -68,7 +68,12 @@ export default function DeliveryZone() {
   // and empty state. It used to ride the deliverables read and live inside the
   // children `ZoneBody` never draws for an empty collection, so an advisor with
   // completed sessions and no work product yet could not reach their reviews.
-  const [held, setHeld] = useState({ loading: true, unavailable: false, sessions: [], reviews: {} });
+  // #4702: `coverage` is the database aggregate over EVERY held session when
+  // that read answers; `coverageFailed` is unknown, never "no review".
+  const [held, setHeld] = useState({
+    loading: true, unavailable: false, sessions: [], heldTotal: null, reviews: {},
+    coverage: null, coverageFailed: false,
+  });
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -85,26 +90,40 @@ export default function DeliveryZone() {
   const loadHeld = useCallback(async () => {
     setHeld((c) => ({ ...c, loading: true }));
     const res = await api.listMyAdvisorBookings('completed').catch(() => null);
-    if (res === null) { setHeld({ loading: false, unavailable: true, sessions: [], reviews: {} }); return; }
+    if (res === null) {
+      setHeld({
+        loading: false, unavailable: true, sessions: [], heldTotal: null, reviews: {},
+        coverage: null, coverageFailed: false,
+      });
+      return;
+    }
     const sessions = res?.items || [];
-    // Every session's reviews are read at once; one that fails is `null` (unknown), never `[]` ("No review").
-    const read = await Promise.all(sessions.map(async (b) => {
-      const r = await api.listBookingReviews(b.id).catch(() => null);
-      return [b.id, Array.isArray(r?.items) ? r.items : null];
-    }));
-    setHeld({ loading: false, unavailable: false, sessions, reviews: Object.fromEntries(read) });
+    const heldTotal = Number.isFinite(Number(res.total)) ? Number(res.total) : sessions.length;
+    // The coverage aggregate and each session's reviews are read together, and
+    // neither is awaited before the work-product list (#4702). A review read
+    // that fails is `null` (unknown), never `[]` ("No review") (#4712).
+    const [coverageRes, ...read] = await Promise.all([
+      api.getMyAdvisorReviewCoverage().catch(() => null),
+      ...sessions.map(async (b) => {
+        const r = await api.listBookingReviews(b.id).catch(() => null);
+        return [b.id, Array.isArray(r?.items) ? r.items : null];
+      }),
+    ]);
+    const coverage = coverageRes && Number.isFinite(Number(coverageRes.held)) && Array.isArray(coverageRes.items)
+      ? coverageRes : null;
+    setHeld({
+      loading: false, unavailable: false, sessions, heldTotal, reviews: Object.fromEntries(read),
+      coverage, coverageFailed: coverageRes === null,
+    });
   }, []);
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
       const data = await api.listMyAdvisorDeliverables();
-      // The engagements feed the create form's picker; a tolerated second
-      // source, so an advisor whose engagements will not load still has a
-      // delivery record. The held sessions and their reviews are read apart
-      // (`loadHeld`) and never block this list.
-      const engs = await api.listMyAdvisorEngagements().catch(() => null);
-      setEngagements(engs?.items || []);
+      // THE PRIMARY LIST RENDERS AS SOON AS IT ARRIVES. Engagements, held
+      // sessions and review coverage are secondary and must not hold this list
+      // on a skeleton (#4702). Engagements only feed the create form.
       setState({ loading: false, error: '', items: data?.items || [], totals: data?.totals || null });
     } catch (error) {
       setState({
@@ -112,7 +131,10 @@ export default function DeliveryZone() {
         error: error?.message || 'The delivery record could not be read.',
         items: [], totals: null,
       });
+      return;
     }
+    const engs = await api.listMyAdvisorEngagements().catch(() => null);
+    setEngagements(engs?.items || []);
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadHeld(); }, [loadHeld]);
@@ -230,10 +252,18 @@ export default function DeliveryZone() {
     },
   };
 
-  const coverage = reviewCoverage(held.sessions, held.reviews);
-  const ratings = Object.values(held.reviews).filter(Array.isArray).flat().map((r) => Number(r.rating)).filter(Boolean);
-  const avg = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
-
+  // #4702: when the coverage route answered, the tiles are its database counts
+  // over EVERY held session. A failed read stays unknown. Otherwise the tiles
+  // are this page's own sessions and their review reads (#4712).
+  const cov = held.coverage;
+  const covById = new Map((cov?.items || []).map((i) => [i.booking_id, i]));
+  const localCoverage = reviewCoverage(held.sessions, held.reviews);
+  const localRatings = Object.values(held.reviews).filter(Array.isArray).flat().map((r) => Number(r.rating)).filter(Boolean);
+  const ratingCount = cov ? (cov.ratings?.count ?? 0) : localRatings.length;
+  const avg = cov
+    ? (ratingCount > 0 ? Number(cov.ratings.sum) / ratingCount : null)
+    : (localRatings.length ? localRatings.reduce((a, b) => a + b, 0) / localRatings.length : null);
+  const heldCount = cov?.held ?? held.heldTotal ?? held.sessions.length;
 
   const createForm = (
           <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
@@ -519,19 +549,34 @@ export default function DeliveryZone() {
               No session is marked as held yet. Once you mark one held under Sessions, you can review it here.
             </p>
             : <>
+              {/* #4702: the tiles are database counts over EVERY held session when
+                  the coverage read answered. A failed read says so, and never
+                  turns an unread session into "without a review". */}
               <div className="grid grid-cols-3 gap-3">
-                <Stat label="Sessions held" value={held.sessions.length} note="marked completed" />
-                <Stat label="Reviewed" value={coverage.reviewed}
-                  note={`${coverage.awaiting} without a review${coverage.unknown ? ` · ${coverage.unknown} not read` : ''}`} />
+                <Stat label="Sessions held" value={heldCount}
+                  note={heldCount ? 'marked completed' : 'none marked completed yet'} />
+                <Stat label="Reviewed"
+                  value={cov ? cov.reviewed : (held.coverageFailed ? <Unrecorded>Not read</Unrecorded> : localCoverage.reviewed)}
+                  note={cov ? `${cov.awaiting} without a review`
+                    : held.coverageFailed ? 'review coverage could not be read'
+                      : `${localCoverage.awaiting} without a review${localCoverage.unknown ? ` · ${localCoverage.unknown} not read` : ''}`} />
                 {/* THE EM-DASH THIS PAGE INHERITED AND DOES NOT KEEP (D56/D68). */}
                 <Stat label="Average rating"
                   value={avg == null ? <Unrecorded>Not recorded</Unrecorded> : avg.toFixed(1)}
-                  note={ratings.length ? `${ratings.length} review${ratings.length === 1 ? '' : 's'}` : 'no review has been read'} />
+                  note={held.coverageFailed && !cov ? 'review coverage could not be read'
+                    : ratingCount ? `${ratingCount} review${ratingCount === 1 ? '' : 's'}` : 'no review has been filed'} />
               </div>
               <ul className="mt-3 space-y-2">{held.sessions.slice(0, 10).map((b) => {
+                const item = cov ? covById.get(b.id) : undefined;
                 const rs = held.reviews[b.id];
-                const unread = !Array.isArray(rs);
-                const mine = unread ? null : rs.find((r) => r.reviewer_role === 'advisor');
+                // The coverage route, when it answered, is the one definition:
+                // a session it did not list was not read. When that route failed,
+                // every row is unread. Otherwise the session's own review read
+                // decides (#4712).
+                const unread = cov ? !item : (held.coverageFailed || !Array.isArray(rs));
+                const mine = cov ? item?.advisor_filed === true : (unread ? null : rs.find((r) => r.reviewer_role === 'advisor'));
+                const none = cov ? item?.reviews === 0 : (!unread && rs.length === 0);
+                const rating = cov ? item?.rating : (unread ? null : rs[0]?.rating);
                 return (
                   <li key={b.id} data-testid={`row-pr3-session-${b.id}`}
                     className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
@@ -545,11 +590,11 @@ export default function DeliveryZone() {
                       </div>
                       {unread
                         ? <Pill tone="neutral">Reviews not read</Pill>
-                        : rs.length === 0
+                        : none
                           ? <Pill tone="warn">No review</Pill>
                           : <span className="flex items-center gap-1 text-[11px] font-semibold">
                             <Star size={11} fill="currentColor" className="text-amber-400" />
-                            {Number(rs[0].rating).toFixed(1)}
+                            {rating == null ? '' : Number(rating).toFixed(1)}
                             {mine ? <Pill tone="ok">Yours filed</Pill> : <Pill tone="neutral">Theirs only</Pill>}
                           </span>}
                     </div>
@@ -561,6 +606,11 @@ export default function DeliveryZone() {
                   </li>
                 );
               })}</ul>
+              {held.heldTotal != null && held.heldTotal > held.sessions.length && (
+                <p className="mt-2 text-[11px] text-axal-faint" data-testid="held-truncated">
+                  Showing the {Math.min(10, held.sessions.length)} newest of {held.heldTotal} held sessions. The counts above cover all {held.heldTotal}.
+                </p>
+              )}
             </>}
     </Card>
     </>
