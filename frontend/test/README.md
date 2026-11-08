@@ -163,6 +163,8 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `distribution_integration_4488.test.mjs` | Mounted campaign Ask acceptance, manual Save and canonical creative retries (D4488). |
 | `distribution_states_4496.test.mjs` | D4496 cross-tab triggers, fixed error copy, manual/AI separation and responsive Overview. |
 | `dashboard_lazy_panels_d4574.test.mjs` | D4574 (#4574 H6): the Studio radar and Product testing panels mount through their lazy boundaries, the imports stay dynamic, and `/studio` keeps its route and mounts. |
+| `cycle_route_lazy_steps_d4574.test.mjs` | D4574 (#4574 H5): `lazyStep` draws its skeleton then the step, a failed chunk reaches the error boundary as a chunk error, every lazy step is a dynamic import of a module that still exports it, and the cycle routes and render sites are unchanged. |
+| `_cycleSteps.mjs` | D4574 (#4574 H5): loads every module CycleRoute names through `lazyStep` (read from its source) before a suite mounts CycleRoute, so a fixed-tick settle sees the step as the browser does once its chunk has arrived. |
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
 
