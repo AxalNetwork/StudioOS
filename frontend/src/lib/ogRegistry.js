@@ -425,10 +425,6 @@ const ROUTES = [
       'Join the Axal VC network as a founder, investor, advisor, or service partner.',
     type: 'website',
     section: 'company',
-    // D4582: the sign-up and sign-in pages are public entry points, listed in
-    // sitemap.xml and allowed by robots.txt, so they are indexable. Said here
-    // so the prerendered head and a client-side visit agree.
-    robots: 'index, follow',
   },
   {
     path: '/login',
@@ -436,7 +432,11 @@ const ROUTES = [
     description: 'Sign in to Axal VC StudioOS.',
     type: 'website',
     section: 'company',
-    robots: 'index, follow', // D4582, as for /register
+    // D4582: the sign-in form is a way in, not something to find in a search. `noindex, follow` is carried three ways,
+    // each checked on its own: this meta tag (prerender and client navigation), and an `X-Robots-Tag` header for the
+    // path in `frontend/public/_headers`. `/register` stays without a directive: it is a shared entry point, listed
+    // in sitemap.xml and allowed by robots.txt, and indexable by the default.
+    robots: 'noindex, follow',
   },
 
   // ---- The Spin-Out demo day's landing page (/lp/*) ----------------------
@@ -559,7 +559,7 @@ export function ogTagsFor(pathname, overrides = {}) {
     siteName: SITE_NAME,
     card: 'summary_large_image',
     imageAlt: title,
-    // D4582: every route states its indexing policy; the default is indexable.
-    robots: entry?.robots || 'index, follow',
+    /** D4582: the route's robots directive, or null when it has none (indexable by default). */
+    robots: entry?.robots || null,
   };
 }

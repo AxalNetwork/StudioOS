@@ -1,9 +1,7 @@
 /**
- * D4582 (#4582) — the sign-in and sign-up routes carry their own head, whether
- * the document was loaded directly or reached by a client-side redirect from a
- * protected route (/grow → /login). The direct load is the real prerendered
- * HTML (`scripts/prerender-og.mjs`); the redirect is `applyHeadTags` run on the
- * shell's homepage head. Both are read from the top-level document head.
+ * D4582 (#4582) — a protected Grow route that redirects to sign-in no longer leaves the homepage's title, canonical and
+ * social URL in the head. /login is noindex, follow, carried by the prerender, the client head and an X-Robots-Tag.
+ * A cold load and a client apply of the same tags agree, and only the top-level <head> is read.
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/auth_route_meta_4582.test.mjs
@@ -15,21 +13,15 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyHeadTags } from '../src/lib/seo.js';
+import { applyHeadTags, applyPageMeta } from '../src/lib/seo.js';
 import { ogTagsFor, OG_ROUTES } from '../src/lib/ogRegistry.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
 
-// The shell the build starts from: the homepage's head, with an embedded verification iframe in the body.
-const SHELL = `<!doctype html><html><head>
-<title>From idea to funded company — Axal VC StudioOS</title>
-<meta name="description" content="Home description" />
-<link rel="canonical" href="https://axal.vc/" />
-<meta property="og:url" content="https://axal.vc/" />
-<meta property="og:title" content="From idea to funded company — Axal VC StudioOS" />
-</head><body><iframe src="https://challenges.example.invalid/widget"></iframe><div id="root"></div></body></html>`;
+const homeTags = ogTagsFor('/');
 
-/** The tags a head holds, read from the top-level document only (never the iframe). */
+/** The tags a head holds, read from the top-level document only (never an iframe). */
 function readHead(html) {
   const head = /<head[^>]*>([\s\S]*?)<\/head>/i.exec(html)[1];
   const meta = (attr, key) => new RegExp(`<meta\\s+${attr}="${key}"\\s+content="([^"]*)"`, 'i').exec(head)?.[1] ?? null;
@@ -44,44 +36,57 @@ function readHead(html) {
   };
 }
 
-/** A document just big enough for the head manager: title, head.querySelector, createElement, appendChild, remove. */
-function fakeDocument(html) {
-  const els = [];
+/** A document with a head you can query by the selectors seo.js uses. */
+function fakeDocument(seed) {
+  const nodes = [];
   const make = (tag, attrs = {}) => {
     const el = {
       tag, attrs: { ...attrs },
-      setAttribute(k, v) { this.attrs[k] = String(v); },
       getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
-      remove() { const i = els.indexOf(this); if (i >= 0) els.splice(i, 1); },
+      setAttribute(k, v) { this.attrs[k] = String(v); },
+      remove() { const i = nodes.indexOf(this); if (i >= 0) nodes.splice(i, 1); },
     };
     return el;
   };
-  const head = /<head[^>]*>([\s\S]*?)<\/head>/i.exec(html)[1];
-  for (const m of head.matchAll(/<(meta|link)\s+([^>]*?)\/?>/gi)) {
-    const attrs = {};
-    for (const a of m[2].matchAll(/([\w:-]+)="([^"]*)"/g)) attrs[a[1]] = a[2];
-    els.push(make(m[1].toLowerCase(), attrs));
-  }
+  const match = (el, selector) => {
+    const m = selector.match(/^(meta|link)\[(name|property|rel)="([^"]+)"\]$/);
+    return m && el.tag === m[1] && el.attrs[m[2]] === m[3];
+  };
   const doc = {
-    title: /<title>([\s\S]*?)<\/title>/i.exec(head)[1],
-    createElement: (tag) => make(tag),
+    title: seed.title,
     head: {
-      appendChild(el) { els.push(el); },
-      querySelector(sel) {
-        const m = /^(meta|link)\[(\w+)="([^"]+)"\]$/.exec(sel);
-        return els.find((e) => e.tag === m[1] && e.attrs[m[2]] === m[3]) || null;
-      },
+      querySelector: (sel) => nodes.find((n) => match(n, sel)) || null,
+      appendChild: (el) => { nodes.push(el); return el; },
     },
+    createElement: (tag) => make(tag, {}),
+    value(sel) { const n = nodes.find((x) => match(x, sel)); return n ? n.getAttribute(n.tag === 'link' ? 'href' : 'content') : null; },
   };
-  doc.read = () => {
-    const get = (attr, key, val = 'content') => els.find((e) => e.attrs[attr] === key)?.attrs[val] ?? null;
-    return {
-      title: doc.title, description: get('name', 'description'), canonical: get('rel', 'canonical', 'href'), robots: get('name', 'robots'),
-      ogUrl: get('property', 'og:url'), ogTitle: get('property', 'og:title'), twitterTitle: get('name', 'twitter:title'),
-    };
-  };
+  for (const [sel, v] of Object.entries(seed.tags || {})) {
+    const m = sel.match(/^(meta|link)\[(name|property|rel)="([^"]+)"\]$/);
+    nodes.push(make(m[1], { [m[2]]: m[3], [m[1] === 'link' ? 'href' : 'content']: v }));
+  }
   return doc;
 }
+
+const homeSeed = () => ({
+  title: homeTags.title,
+  tags: {
+    'meta[name="description"]': homeTags.description,
+    'meta[property="og:title"]': homeTags.title,
+    'meta[property="og:url"]': homeTags.url,
+    'meta[property="og:description"]': homeTags.description,
+    'link[rel="canonical"]': homeTags.url,
+  },
+});
+
+// The shell the build starts from: the homepage's head, with an embedded verification iframe in the body.
+const SHELL = `<!doctype html><html><head>
+<title>${homeTags.title}</title>
+<meta name="description" content="Home description" />
+<link rel="canonical" href="https://axal.vc/" />
+<meta property="og:url" content="https://axal.vc/" />
+<meta property="og:title" content="${homeTags.title}" />
+</head><body><iframe src="https://challenges.example.invalid/widget"></iframe><div id="root"></div></body></html>`;
 
 function prerendered() {
   const dir = mkdtempSync(path.join(tmpdir(), 'og4582-'));
@@ -90,22 +95,105 @@ function prerendered() {
   return dir;
 }
 
+test('the registry gives /login its own title, canonical, social URL and a noindex; /register and home are as they were', () => {
+  const login = ogTagsFor('/login');
+  assert.match(login.title, /^Sign in/);
+  assert.equal(login.url, 'https://axal.vc/login');
+  assert.equal(login.robots, 'noindex, follow');
+  assert.notEqual(login.title, homeTags.title);
+  assert.equal(ogTagsFor('/register').robots, null, 'registration stays indexable');
+  assert.equal(ogTagsFor('/register').url, 'https://axal.vc/register');
+  assert.equal(homeTags.robots, null);
+  assert.equal(homeTags.url, 'https://axal.vc/');
+});
+
+test('arriving at /login by client navigation replaces the homepage head, and leaving puts it back', () => {
+  globalThis.document = fakeDocument(homeSeed());
+  try {
+    const doc = globalThis.document;
+    const restore = applyPageMeta(ogTagsFor('/login'));
+    assert.match(doc.title, /^Sign in/);
+    assert.equal(doc.value('link[rel="canonical"]'), 'https://axal.vc/login');
+    assert.equal(doc.value('meta[property="og:url"]'), 'https://axal.vc/login');
+    assert.equal(doc.value('meta[property="og:title"]'), ogTagsFor('/login').title);
+    assert.equal(doc.value('meta[name="description"]'), 'Sign in to Axal VC StudioOS.');
+    assert.equal(doc.value('meta[name="robots"]'), 'noindex, follow');
+    restore();
+    assert.equal(doc.title, homeTags.title);
+    assert.equal(doc.value('link[rel="canonical"]'), homeTags.url);
+    assert.equal(doc.value('meta[property="og:url"]'), homeTags.url);
+    assert.equal(doc.value('meta[name="robots"]'), null, 'the noindex it added goes with it');
+  } finally { delete globalThis.document; }
+});
+
+test('a shell with no canonical gets one, and registration carries no robots directive', () => {
+  const seed = homeSeed(); delete seed.tags['link[rel="canonical"]'];
+  globalThis.document = fakeDocument(seed);
+  try {
+    const doc = globalThis.document;
+    const restore = applyPageMeta(ogTagsFor('/register'));
+    assert.equal(doc.value('link[rel="canonical"]'), 'https://axal.vc/register');
+    assert.equal(doc.value('meta[name="robots"]'), null);
+    restore();
+    assert.equal(doc.value('link[rel="canonical"]'), null);
+  } finally { delete globalThis.document; }
+});
+
+test('the prerender writes /login with its robots tag, and no other route gets one', () => {
+  const src = read('scripts/prerender-og.mjs');
+  assert.match(src, /tags\.robots \? \[`<meta name="robots"/, 'emitted only when the route has a directive');
+  assert.ok(src.includes("name=[\"']robots[\"']"), 'a shell\'s own robots tag is stripped first, so a re-run converges');
+});
+
+test('the header policy is on the static shell and the live smoke names it', () => {
+  const headers = read('frontend/public/_headers');
+  assert.match(headers, /^\/login\n  X-Robots-Tag: noindex, follow$/m, 'a path rule, not the /* block that every route gets');
+  assert.doesNotMatch(headers.split('/login')[0].split('/*')[1] || '', /X-Robots-Tag/, 'not sitewide');
+  assert.match(read('scripts/check-spa-live.mjs'), /x-robots-tag/i, 'the post-deploy smoke reads it');
+});
+
+test('the sign-in and registration screen applies its head on arrival, without a pageview beacon', () => {
+  const app = read('frontend/src/App.jsx');
+  const screen = app.slice(app.indexOf('function AuthScreen'), app.indexOf('function AppInner'));
+  assert.match(screen, /usePageMeta\(\{ path: useLocation\(\)\.pathname, analytics: false \}\);/);
+  assert.match(app, /import \{ usePageMeta \} from '\.\/lib\/seo';/);
+  for (const f of ['LoginPage.jsx', 'RegisterPage.jsx']) {
+    assert.doesNotMatch(read(`frontend/src/pages/${f}`), /usePageMeta\(/, `${f} does not apply the head a second time`);
+  }
+});
+
 test('direct /login and /grow → /login carry the same sign-in head, not the homepage head', () => {
   const dir = prerendered();
   try {
     const direct = readHead(readFileSync(path.join(dir, 'login', 'index.html'), 'utf8'));
-    const fromHome = fakeDocument(SHELL); // /grow is protected and carries the homepage head
-    assert.equal(fromHome.read().canonical, 'https://axal.vc/');
-    applyHeadTags(Object.assign(globalThis, { document: fromHome }).document, ogTagsFor('/login'));
-    const redirected = fromHome.read();
-
+    const fromHome = fakeDocument({
+      title: homeTags.title,
+      tags: {
+        'meta[name="description"]': 'Home description',
+        'link[rel="canonical"]': 'https://axal.vc/',
+        'meta[property="og:url"]': 'https://axal.vc/',
+        'meta[property="og:title"]': homeTags.title,
+      },
+    });
+    assert.equal(fromHome.value('link[rel="canonical"]'), 'https://axal.vc/');
+    applyHeadTags(fromHome, ogTagsFor('/login'));
+    const redirected = {
+      title: fromHome.title,
+      description: fromHome.value('meta[name="description"]'),
+      canonical: fromHome.value('link[rel="canonical"]'),
+      robots: fromHome.value('meta[name="robots"]'),
+      ogUrl: fromHome.value('meta[property="og:url"]'),
+      ogTitle: fromHome.value('meta[property="og:title"]'),
+      twitterTitle: fromHome.value('meta[name="twitter:title"]'),
+    };
     assert.equal(direct.title, 'Sign in — Axal VC StudioOS');
+    assert.equal(direct.robots, 'noindex, follow');
     assert.deepEqual(redirected, direct, 'client navigation and a cold load advertise identical values');
     assert.equal(redirected.canonical, 'https://axal.vc/login');
     assert.equal(redirected.ogUrl, 'https://axal.vc/login');
-    assert.notEqual(redirected.title, 'From idea to funded company — Axal VC StudioOS');
+    assert.notEqual(redirected.title, homeTags.title);
     assert.notEqual(redirected.description, 'Home description');
-  } finally { rmSync(dir, { recursive: true, force: true }); delete globalThis.document; }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('the registration head is unchanged by the same path, and the homepage is untouched', () => {
@@ -114,45 +202,50 @@ test('the registration head is unchanged by the same path, and the homepage is u
     const register = readHead(readFileSync(path.join(dir, 'register', 'index.html'), 'utf8'));
     assert.equal(register.title, 'Create your account — Axal VC StudioOS');
     assert.equal(register.canonical, 'https://axal.vc/register');
+    assert.equal(register.robots, null, 'registration carries no robots directive');
     const home = readHead(readFileSync(path.join(dir, 'index.html'), 'utf8'));
     assert.equal(home.canonical, 'https://axal.vc/');
     assert.equal(home.title, ogTagsFor('/').title);
+    assert.equal(home.robots, null);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('the indexing policy of the auth routes is explicit in the top-level head and matches sitemap and robots.txt', () => {
+test('the indexing policy is in the top-level head: /login is noindex, both paths stay in the sitemap, and an iframe is not read', () => {
   const dir = prerendered();
   try {
-    const sitemap = readFileSync(path.join(ROOT, 'frontend', 'public', 'sitemap.xml'), 'utf8');
-    const robotsTxt = readFileSync(path.join(ROOT, 'frontend', 'public', 'robots.txt'), 'utf8');
+    const sitemap = read('frontend/public/sitemap.xml');
+    const robotsTxt = read('frontend/public/robots.txt');
     for (const p of ['/login', '/register']) {
-      const head = readHead(readFileSync(path.join(dir, p.slice(1), 'index.html'), 'utf8'));
-      assert.equal(head.robots, 'index, follow', `${p} states its policy in the top-level head`);
-      assert.match(sitemap, new RegExp(`<loc>https://axal\\.vc${p}</loc>`), `${p} is listed in the sitemap, so it must be indexable`);
+      assert.match(sitemap, new RegExp(`<loc>https://axal\\.vc${p}</loc>`), `${p} stays listed in the sitemap`);
       assert.doesNotMatch(robotsTxt, new RegExp(`^Disallow:\\s*${p}\\b`, 'm'), `${p} is not blocked by robots.txt`);
     }
+    assert.equal(readHead(readFileSync(path.join(dir, 'login', 'index.html'), 'utf8')).robots, 'noindex, follow');
+    assert.equal(readHead(readFileSync(path.join(dir, 'register', 'index.html'), 'utf8')).robots, null);
     // The iframe's own document is never what is checked: only tags in the top-level <head> count.
     assert.equal(readHead(SHELL.replace('</body>', '<meta name="robots" content="noindex"></body>')).robots, null);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('every route states a robots policy, and leaving the page restores the head it came from', () => {
-  for (const r of OG_ROUTES) assert.match(ogTagsFor(r.path).robots, /^(no)?index, (no)?follow$/, r.path);
-  const doc = fakeDocument(SHELL);
-  Object.assign(globalThis, { document: doc });
-  try {
-    const before = doc.read();
-    const restore = applyHeadTags(doc, ogTagsFor('/login'));
-    assert.notDeepEqual(doc.read(), before);
-    restore();
-    assert.deepEqual(doc.read(), before, 'the shell\'s own head is back; tags the route created are gone');
-  } finally { delete globalThis.document; }
-});
-
-test('the Login and Register pages apply their own head on mount, without adding a pageview beacon', () => {
-  for (const f of ['LoginPage.jsx', 'RegisterPage.jsx']) {
-    const src = readFileSync(path.join(ROOT, 'frontend', 'src', 'pages', f), 'utf8');
-    assert.match(src, /import \{ usePageMeta \} from '..\/lib\/seo';/, f);
-    assert.match(src, /usePageMeta\(\{ analytics: false \}\);/, f);
+test('only a route that declares a robots directive has one, and leaving the page restores the head it came from', () => {
+  for (const r of OG_ROUTES) {
+    const robots = ogTagsFor(r.path).robots;
+    assert.ok(robots === null || /^(no)?index, (no)?follow$/.test(robots), r.path);
   }
+  assert.equal(OG_ROUTES.filter((r) => ogTagsFor(r.path).robots).map((r) => r.path).join(','), '/login');
+  const doc = fakeDocument(homeSeed());
+  const before = {
+    title: doc.title,
+    canonical: doc.value('link[rel="canonical"]'),
+    robots: doc.value('meta[name="robots"]'),
+    ogUrl: doc.value('meta[property="og:url"]'),
+  };
+  const restore = applyHeadTags(doc, ogTagsFor('/login'));
+  assert.equal(doc.value('meta[name="robots"]'), 'noindex, follow');
+  restore();
+  assert.deepEqual({
+    title: doc.title,
+    canonical: doc.value('link[rel="canonical"]'),
+    robots: doc.value('meta[name="robots"]'),
+    ogUrl: doc.value('meta[property="og:url"]'),
+  }, before, 'the shell\'s own head is back; tags the route created are gone');
 });

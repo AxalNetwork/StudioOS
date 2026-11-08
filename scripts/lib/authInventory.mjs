@@ -54,6 +54,10 @@ export const EVIDENCE_TOKENS = [
   'entityListScope', 'canViewLpData', 'canViewPartnerDemand', 'canEdit', 'canView', 'canRead', 'canWrite', 'canManage',
   'requireProjectAccess', 'requireCompanyAccess', 'requireCompanyMember', 'requireCompanyEditor', 'requireFundAccess',
   'assertOwner', 'requireOwner', 'ownsProject', 'isCompanyMember', 'companyRoleOf', 'memberRole', 'scopeAccess',
+  // D4595 (#4720): the Pitch deck management gate (services/decks/access.ts), which scopes the deck's project to its
+  // owner, an accepted cofounder or HQ through getProjectMembershipRole. It lived in routes/decks.ts, where its body
+  // was readable here; in the service it is named instead.
+  'projectOwned',
 ];
 const EVIDENCE_RE = new RegExp(`\\b(${EVIDENCE_TOKENS.join('|')})\\s*\\(`, 'g');
 // A domain helper named for an access check: requireCaseWriter, canReadFund, assertDealParticipant, ensureVentureMember…

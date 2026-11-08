@@ -18,6 +18,7 @@ import { quickStats } from './investorStudioParts';
 import StudioModules from '../studio/StudioModules';
 import { CustomiseButton, StudioFixedLock } from '../studio/StudioParts';
 import { PURPOSE } from '../studio/studioLayoutModel';
+import { INVESTOR_AGENDA_KINDS, calendarCoverage, upcomingActive } from '../studio/studioAgenda';
 import { useStudioLayout } from '../studio/useStudioLayout';
 import { investorTiles } from '../studio/tiles/investorTiles';
 import InvestorThesisBand from './InvestorThesisBand';
@@ -67,12 +68,15 @@ export default function InvestorStudioHome({
   // D4362 (#4362): an admin previewing arranges their own Investor Studio; its tiles stay withheld (`withheld`).
   const studio = useStudioLayout({ profile: 'investor', viewer: user });
   const opportunities = useMemo(() => list(dashboard?.ai_scored_opportunities, ['items', 'opportunities']).filter(Boolean).slice(0, 4), [dashboard]);
-  const dealCount = list(dashboard?.proprietary_deal_flow, ['items', 'deals']).length;
+  // D4620 (#4620): the count is the ELIGIBLE total the worker counted, never the preview's length (the
+  // preview is capped, and was cut before eligibility); null when the read failed or the payload predates it.
+  const dealSummary = dashboard?.proprietary_deal_flow_summary;
+  const dealCount = dealSummary && Number.isFinite(dealSummary.total) ? dealSummary.total : null;
   const stages = list(lifecycle?.stages, ['items']);
-  const events = list(records.events, ['events', 'items']).filter((event) => {
-    const when = event?.start_at || event?.starts_at || event?.date;
-    return when && new Date(when).getTime() >= Date.now();
-  }).sort((a, b) => new Date(a.start_at || a.starts_at || a.date) - new Date(b.start_at || b.starts_at || b.date)).slice(0, 2);
+  // Upcoming = active (not cancelled / no-show) and ahead of now, soonest first. A 200 whose relevant
+  // sources failed is a partial answer, and the tile says so.
+  const eventsCoverage = calendarCoverage(records.events, INVESTOR_AGENDA_KINDS);
+  const events = upcomingActive(eventsCoverage.items, { limit: 2 });
   const refreshContext = () => {
     setRetry((n) => n + 1);
     onRetryDashboard?.();
@@ -82,9 +86,9 @@ export default function InvestorStudioHome({
   // own (the dashboard itself failed, so the lifecycle was never asked for),
   // retrying the dashboard is what reads it again.
   const retryLifecycle = onRetryLifecycle || refreshContext;
-  const quick = quickStats({ previewing, dashboard, dashboardUnavailable, lifecycle, dealCount });
+  const quick = quickStats({ previewing, dashboard, dashboardUnavailable, lifecycle, dealCount, dealCountIsLowerBound: dealSummary?.total_is_lower_bound === true });
   const tiles = investorTiles({
-    user, previewing, dashboard, dashboardUnavailable, lifecycle, records, failures, opportunities, stages, events, quick, refreshContext, retryLifecycle, retrySources,
+    user, previewing, dashboard, dashboardUnavailable, lifecycle, records, failures, opportunities, stages, events, eventsCoverage, quick, refreshContext, retryLifecycle, retrySources,
   });
 
   return (

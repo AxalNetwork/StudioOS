@@ -31,7 +31,9 @@ import {
 } from './_programs_catalogue_fixture.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import ProgramsCatalogue from '../src/pages/admin/programs/ProgramsCatalogue.jsx';
-import { GRANT_UNREADABLE, LINE_ADMIN, LINE_SUPER, NOT_READ_YET, grantBadgeOf, NOT_RECORDED, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_TITLE } from '../src/pages/admin/programs/programsModel.js';
+import { DIMENSIONS, GRANT_UNREADABLE, LINE_ADMIN, LINE_SUPER, NOT_READ_YET, PROGRAMS, grantBadgeOf, NOT_RECORDED, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_TITLE, programDimensions } from '../src/pages/admin/programs/programsModel.js';
+import { StaleNote } from '../src/pages/admin/programs/parts.jsx';
+import { programsTitle } from '../src/pages/admin/programs/useProgramsTitle.js';
 import {
   CREDIT_FOOT, DEFAULT_WEEKS, JOIN_SERIES, NOTHING_OVER_72, NOT_PER_STUDIO, PERIODS, REENROLMENT_LINE, WAITING_ROWS, WAIT_BANDS,
   blockState, catalogueCards, catalogueTiles, creditsChart, deltaText, joinsChart, labApplications, waitingChart, weekLabel, weeksFrom, withWeeks,
@@ -497,4 +499,90 @@ test('D1124 · the grant badge from D956\'s field (#2789): the canvas\'s words p
   assert.equal(cards.find((c) => c.key === 'perks').grantBadge.word, 'Requested');
   assert.equal(cards.find((c) => c.key === 'learning').grantBadge, null);
   assert.equal(cards.find((c) => c.key === 'learning').grant, 'HQ-held');
+});
+
+/* ------------------------------------------------------------------ *
+ * D4807: five dimensions, never one status word; honest loading and failure; stale; scope; title
+ * ------------------------------------------------------------------ */
+
+const dim = (card, opts) => Object.fromEntries(programDimensions(card, opts).map((d) => [d.key, d.value]));
+const program = (key) => PROGRAMS.find((p) => p.key === key);
+
+test('D4807: five dimensions, each its own row: Learning is Live and running yet not open to members, and its offering is not its grants', () => {
+  assert.deepEqual(DIMENSIONS.map((d) => d.label), ['Build state', 'Operation', 'Member access', 'Studio offering', 'Studio grants']);
+  const learning = dim(program('learning'), { grantBadge: grantBadgeOf({ state: 'granted_to', granted_count: 0 }) });
+  assert.equal(learning.build, 'Live');
+  assert.equal(learning.operation, 'Running');
+  assert.equal(learning.access, program('learning').who === 'Not open to members yet' ? 'Not open to members yet' : 'Open or by invitation');
+  assert.equal(learning.offering, 'Held by HQ');
+  assert.equal(learning.grants, 'Granted to 0 studios', 'the policy says HQ holds it; the grants say no studio does');
+  // A program that is not built has no operation, whatever its assignment door says.
+  const investors = dim(program('investor-cohorts'), {});
+  assert.deepEqual([investors.build, investors.operation, investors.access, investors.offering], ['Not built yet', 'Not running', 'Assigned by an admin', 'Not offered to studios yet']);
+  assert.equal(dim(program('referral-partners'), {}).operation, 'Running in part');
+});
+
+test('D4807: a Super Admin reads the HQ offering; no grant field is "Not read here yet", an unreadable one "Could not be read"; a paused or unrecorded status is not guessed', () => {
+  assert.equal(dim(program('product-testing'), { superAdmin: true }).offering, 'HQ only');
+  assert.equal(dim(program('product-testing'), { superAdmin: false }).offering, 'Runs at HQ only');
+  assert.equal(dim(program('perks'), {}).grants, NOT_READ_YET);
+  assert.equal(dim(program('perks'), { grantBadge: grantBadgeOf({ available: false, unreadable: true, reason: 'down' }) }).grants, 'Could not be read');
+  const paused = dim({ ...program('perks'), status: 'Paused' }, {});
+  assert.deepEqual([paused.build, paused.operation], [NOT_RECORDED, 'Paused'], 'a paused program records no build state here');
+  const unrecorded = dim({ ...program('perks'), status: 'Status not recorded' }, {});
+  assert.deepEqual([unrecorded.build, unrecorded.operation], [NOT_RECORDED, NOT_RECORDED]);
+});
+
+test('D4807: while the registry reads or fails, every dimension says so in words about the read, not the constant\'s facts', () => {
+  for (const [state, word] of [['loading', 'Reading…'], ['unreadable', 'Could not be read'], ['pending', NOT_READ_YET], ['unrecorded', NOT_RECORDED]]) {
+    const dims = programDimensions(program('perks'), { state });
+    assert.equal(dims.length, 5);
+    assert.ok(dims.every((d) => d.value === word && d.state === state), `${state}: ${word}`);
+  }
+});
+
+test('D4807: cards from a registry that has not answered carry the read\'s word, never "Live" or "HQ-held" as if it were known', () => {
+  const loading = catalogueCards({ status: 'loading', data: null, error: null });
+  assert.equal(loading.cards.length, 10, 'the doors are still drawn');
+  assert.ok(loading.cards.every((c) => c.status === 'Reading…' && c.grant === 'Reading…' && c.hqGrant === 'Reading…' && c.fallback === 'loading'));
+  const failed = catalogueCards({ status: 'error', data: null, error: new Error('down') });
+  assert.ok(failed.cards.every((c) => c.status === 'Could not be read' && c.grant === 'Could not be read' && c.fallback === 'unreadable'));
+  const ok = catalogueCards(ready(catalogueBody()));
+  assert.ok(ok.cards.every((c) => c.fallback === undefined && c.status !== 'Reading…'));
+  assert.equal(ok.cards.find((c) => c.key === 'perks').status, 'Live');
+});
+
+test('D4807: the stale note is a status that says the last reading is on screen; a fresh one draws nothing', () => {
+  assert.match(renderToStaticMarkup(React.createElement(StaleNote, { stale: true })), /role="status"[^>]*>Showing the last reading while the new one loads\./);
+  assert.equal(renderToStaticMarkup(React.createElement(StaleNote, { stale: false })), '');
+});
+
+test('D4807: the tab title names the page and scope, not the public site\'s default', () => {
+  assert.equal(programsTitle('Programs', 'HQ'), 'Programs · HQ — Axal VC StudioOS');
+  assert.equal(programsTitle('Perks · Programs'), 'Perks · Programs — Axal VC StudioOS');
+  assert.ok(!/From idea to funded company/.test(programsTitle('Programs', 'HQ')));
+});
+
+test('D4807: mounted, the cards draw their five dimensions, the scope control says Scope, and the tab title is the page\'s', async () => {
+  const view = await mounted('/admin/programs', worker({ user: SUPER, scopes: WITH_NORTH, catalogue: (q) => response(catalogueBody({ superAdmin: true, weeks: Number(q.get('weeks')) })) }), { user: SUPER });
+  try {
+    const dims = view.textOf('programs-card-learning-dimensions');
+    for (const label of ['Build state', 'Operation', 'Member access', 'Studio offering', 'Studio grants']) assert.ok(dims.includes(label), label);
+    assert.match(view.textOf('programs-studio'), /^Scope · /);
+    assert.equal(document.title, 'Programs · HQ — Axal VC StudioOS');
+  } finally { await view.close(); }
+});
+
+test('D4807: mounted, a catalogue that never answers draws Reading… on its cards, and one that fails draws Could not be read, not Live', async () => {
+  const waiting = await mounted('/admin/programs', worker({ catalogue: never }));
+  try {
+    assert.match(waiting.textOf('programs-card-perks-status'), /Reading…/);
+    assert.doesNotMatch(waiting.textOf('programs-card-perks'), /\bLive\b/);
+    assert.match(waiting.textOf('programs-card-perks-dimensions'), /Build stateReading…/);
+  } finally { await waiting.close(); }
+  const failing = await mounted('/admin/programs', worker({ catalogue: () => down() }));
+  try {
+    assert.match(failing.textOf('programs-card-perks-status'), /Could not be read/);
+    assert.doesNotMatch(failing.textOf('programs-card-perks'), /\bLive\b/);
+  } finally { await failing.close(); }
 });

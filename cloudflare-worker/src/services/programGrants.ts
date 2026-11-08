@@ -411,5 +411,33 @@ export function openDraftStatements(env: Env, d: { licenceId: number; programKey
   ];
 }
 
+/**
+ * D4806 (#4806): `openDraftStatements` for an approval whose decision may lose. Both writes carry the same gate
+ * as the registry row (`insertProgramStatementsOnApproval`): the proposal is `approved`, by this actor, at this
+ * instant. A losing decision opens no draft and leaves no history line.
+ */
+export function openDraftStatementsOnApproval(
+  env: Env,
+  d: { licenceId: number; programKey: string; proposalUid: string; proposalId: number; actorId: number; at: string },
+) {
+  const uid = crypto.randomUUID().replace(/-/g, '');
+  const detail = {
+    action: 'draft_opened', program_key: d.programKey, proposal_uid: d.proposalUid,
+    changed: [{ key: 'state', before: null, after: 'draft' }],
+  };
+  return [
+    env.DB.prepare(
+      `INSERT INTO program_grants (uid, licence_id, program_key, state, proposal_uid, set_by_user_id, set_at)
+       SELECT ?, ?, ?, 'draft', ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?)`,
+    ).bind(uid, d.licenceId, d.programKey, d.proposalUid, d.actorId, d.at, d.proposalId, d.at, d.actorId),
+    env.DB.prepare(
+      `INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
+       SELECT ?, 'program_changed', ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?)`,
+    ).bind(d.licenceId, JSON.stringify(detail), DRAFT_NOTE, d.actorId, d.at, d.proposalId, d.at, d.actorId),
+  ];
+}
+
 /** The line the licence's history keeps for a draft opened by an approval. */
 export const DRAFT_NOTE = 'HQ approved this studio\'s proposal for this studio only. The grant is a draft until HQ grants it.';

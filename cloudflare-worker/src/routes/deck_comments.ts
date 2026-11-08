@@ -38,7 +38,7 @@ import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { logCycleWriteStatement } from '../services/cycleActivity';
 import { cardRefOf } from '../services/decks/cardUids';
 import { approvalSentence, pendingApprovers } from '../services/decks/deckApproval';

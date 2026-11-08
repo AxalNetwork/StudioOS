@@ -17,15 +17,15 @@ import { ogTagsFor, SITE_NAME, SITE_URL } from './ogRegistry';
 
 export { SITE_NAME, SITE_URL };
 
-function setMeta(selector, attr, value) {
-  if (typeof document === 'undefined') return null;
-  let el = document.head.querySelector(selector);
+function setMeta(doc, selector, attr, value) {
+  if (!doc?.head) return null;
+  let el = doc.head.querySelector(selector);
   const created = !el;
   if (!el) {
-    el = document.createElement('meta');
+    el = doc.createElement('meta');
     const [, kind, name] = selector.match(/meta\[(name|property)="([^"]+)"\]/) || [];
     if (kind && name) el.setAttribute(kind, name);
-    document.head.appendChild(el);
+    doc.head.appendChild(el);
   }
   const prev = el.getAttribute(attr) || '';
   el.setAttribute(attr, value);
@@ -57,33 +57,51 @@ export function fireAnalytics(path) {
   }
 }
 
+/** Set `<link rel="canonical">` on `doc`, creating it when the shell has none. Returns what is needed to put it back. */
+function setCanonical(doc, href) {
+  if (!doc?.head) return null;
+  let el = doc.head.querySelector('link[rel="canonical"]');
+  const created = !el;
+  if (!el) {
+    el = doc.createElement('link');
+    el.setAttribute('rel', 'canonical');
+    doc.head.appendChild(el);
+  }
+  const prev = el.getAttribute('href') || '';
+  el.setAttribute('href', href);
+  return { el, prev, created, attr: 'href' };
+}
+
 /**
  * D4582 (#4582): write one route's head onto `doc` and return the function that
  * puts it back. It sets the same tags `scripts/prerender-og.mjs` bakes into the
- * route's HTML, including the canonical link and the robots policy, so a visit
- * reached by client-side navigation (for example /grow redirecting to /login)
- * carries the destination's head, never the page it came from.
+ * route's HTML, including the canonical link and, when the route has one, the
+ * robots directive. A visit reached by client-side navigation (for example
+ * /grow redirecting to /login) carries the destination's head, never the page
+ * it came from. A route with no robots directive leaves the shell's robots tag
+ * alone and does not invent `index, follow`.
  */
 export function applyHeadTags(doc, tags) {
+  if (!doc) return () => {};
   const { title: fullTitle, description: desc, url, image: ogImage } = tags;
   const prevTitle = doc.title;
   doc.title = fullTitle;
   const refs = [
-    setMeta('meta[name="description"]', 'content', desc),
-    setMeta('meta[name="robots"]', 'content', tags.robots || 'index, follow'),
-    setMeta('meta[property="og:title"]', 'content', fullTitle),
-    setMeta('meta[property="og:description"]', 'content', desc),
-    setMeta('meta[property="og:type"]', 'content', tags.type),
-    setMeta('meta[property="og:url"]', 'content', url),
-    setMeta('meta[property="og:image"]', 'content', ogImage),
-    setMeta('meta[property="og:image:alt"]', 'content', tags.imageAlt),
-    setMeta('meta[property="og:site_name"]', 'content', tags.siteName),
-    setMeta('meta[name="twitter:card"]', 'content', tags.card),
-    setMeta('meta[name="twitter:title"]', 'content', fullTitle),
-    setMeta('meta[name="twitter:description"]', 'content', desc),
-    setMeta('meta[name="twitter:image"]', 'content', ogImage),
-    setMeta('meta[name="twitter:image:alt"]', 'content', tags.imageAlt),
-    setCanonical(url),
+    setMeta(doc, 'meta[name="description"]', 'content', desc),
+    tags.robots ? setMeta(doc, 'meta[name="robots"]', 'content', tags.robots) : null,
+    setMeta(doc, 'meta[property="og:title"]', 'content', fullTitle),
+    setMeta(doc, 'meta[property="og:description"]', 'content', desc),
+    setMeta(doc, 'meta[property="og:type"]', 'content', tags.type),
+    setMeta(doc, 'meta[property="og:url"]', 'content', url),
+    setMeta(doc, 'meta[property="og:image"]', 'content', ogImage),
+    setMeta(doc, 'meta[property="og:image:alt"]', 'content', tags.imageAlt),
+    setMeta(doc, 'meta[property="og:site_name"]', 'content', tags.siteName),
+    setMeta(doc, 'meta[name="twitter:card"]', 'content', tags.card),
+    setMeta(doc, 'meta[name="twitter:title"]', 'content', fullTitle),
+    setMeta(doc, 'meta[name="twitter:description"]', 'content', desc),
+    setMeta(doc, 'meta[name="twitter:image"]', 'content', ogImage),
+    setMeta(doc, 'meta[name="twitter:image:alt"]', 'content', tags.imageAlt),
+    setCanonical(doc, url),
   ].filter(Boolean);
   return () => {
     doc.title = prevTitle;
@@ -95,18 +113,14 @@ export function applyHeadTags(doc, tags) {
   };
 }
 
-function setCanonical(href) {
-  if (typeof document === 'undefined') return null;
-  let el = document.head.querySelector('link[rel="canonical"]');
-  const created = !el;
-  if (!el) {
-    el = document.createElement('link');
-    el.setAttribute('rel', 'canonical');
-    document.head.appendChild(el);
-  }
-  const prev = el.getAttribute('href') || '';
-  el.setAttribute('href', href);
-  return { el, prev, created, attr: 'href' };
+/**
+ * D4582: write a route's resolved tags into `document.head` and return a function that puts the head back.
+ * `applyHeadTags` is the same writer with the document passed in, so a test can drive it against a fake document.
+ * A route with no robots directive leaves the shell's robots tag alone.
+ */
+export function applyPageMeta(tags) {
+  if (typeof document === 'undefined') return () => {};
+  return applyHeadTags(document, tags);
 }
 
 /**
@@ -132,11 +146,9 @@ export function usePageMeta({ title, description, path, image, type, analytics =
     if (typeof document === 'undefined') return undefined;
     const pathname =
       path || (typeof window !== 'undefined' ? window.location.pathname : '/');
-    const restore = applyHeadTags(document, ogTagsFor(pathname, { title, description, image, type }));
-
+    const restore = applyPageMeta(ogTagsFor(pathname, { title, description, image, type }));
     // Fire pageview beacon once per mount.
     if (analytics) fireAnalytics(path || window.location.pathname);
-
     return restore;
   }, [title, description, path, image, type, analytics]);
 }

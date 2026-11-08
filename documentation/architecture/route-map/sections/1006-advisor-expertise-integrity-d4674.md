@@ -1,0 +1,7 @@
+### Advisor Expertise: prices, currencies, limits and concurrent edits (D4674, #4674)
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `POST /api/advisors/me/services` | the advisor | `currency` is required and must be one of `USD EUR GBP CHF CAD AUD NZD SEK NOK DKK SGD`: 400 `currency_required`, 400 `currency_unsupported`. `price_cents` is a whole number or a digit string, never `12,50`, `1e3` or `12.5`: 400 `price_invalid`. `title` (200), `duration_note` (200) and `scope` (2000) over their limit are 400 `too_long`, naming the field; nothing is cut. |
+| `PATCH /api/advisors/me/services/:id` | the advisor | One fixed statement writes only the fields the body names, so edits to different fields both land. A body `revision` (the row's `updated_at` as read) makes the edit conditional: a row that has moved answers 409 `revision_conflict` with `current`, and nothing is saved. Changing the currency of a priced service needs `price_cents` in the same body (400 `price_required_with_currency`). |
+| `POST /api/advisors/me` | an Advisor licence holder | Same rules for the profile: fields are written only if named, a `revision` gives 409 `revision_conflict` with `current`, text over its limit is 400 `too_long` (`display_name` 200, `bio` 4000, `linkedin_url` 500, `headline` 200, `country` 100, `timezone` 100, `availability_note` 500, `headshot_url` 1000), a list over 32 entries is 400 `too_many`, a malformed hourly rate is 400 `rate_invalid`. |

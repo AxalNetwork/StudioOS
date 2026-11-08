@@ -132,7 +132,7 @@ function freshDb() {
     id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
     advisor_id INTEGER NOT NULL, founder_user_id INTEGER, client_name TEXT NOT NULL,
     lane TEXT NOT NULL DEFAULT 'signed', shape TEXT NOT NULL DEFAULT 'retainer',
-    amount_cents INTEGER);`);
+    amount_cents INTEGER, started_at TEXT, ended_at TEXT);`);
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');
@@ -803,6 +803,84 @@ test('a drafting engagement is not a client yet', async () => {
   const r = await call(e, 'GET', '/me/ledger', ada);
   assert.equal(r.body.clients.length, 0,
     'a contract nobody has sent is not revenue and not a row');
+});
+
+// ── #4702 (D4702): the ledger covers every booking, and says how complete it is ──
+
+function bulk(db: InstanceType<typeof DatabaseSync>, n: number, clients: number, over: { priced?: boolean; created?: string } = {}) {
+  const ins = db.prepare(`INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id, status, created_at, amount_cents, billing_state, platform_cut_cents, take_rate_bps)
+    VALUES (?, 1, 1, ?, 'completed', ?, ?, ?, ?, ?)`);
+  db.exec('BEGIN');
+  for (let i = 0; i < n; i += 1) {
+    const priced = over.priced !== false && i % 10 !== 0;   // every tenth is unpriced
+    ins.run(`bulk-${n}-${i}-${Math.random().toString(36).slice(2, 8)}`, 1000 + (i % clients), over.created ?? '2026-08-01T10:00:00.000Z',
+      priced ? 10_000 : null, priced ? 'billed' : 'unpriced', priced ? 1_500 : null, priced ? 1500 : null);
+  }
+  db.exec('COMMIT');
+}
+
+test('#4702: more than 2,000 bookings reconcile between the ledger, its clients and the annual summary; totals stay complete', async () => {
+  // Mutation checked: LIMIT 2000 back on the booking read → sessions 2000, not 2,600.
+  const db = freshDb();
+  const e = env(db);
+  bulk(db, 2_600, 650);          // 650 clients: more than the 500 listed one by one
+  const l = await call(e, 'GET', '/me/ledger?from=2026-01-01T00:00:00.000Z&until=2027-01-01T00:00:00.000Z', ada);
+  assert.equal(l.status, 200, JSON.stringify(l.body).slice(0, 300));
+  const unpriced = 260;          // every tenth of 2,600
+  const priced = 2_600 - unpriced;
+  assert.deepEqual([l.body.totals.sessions, l.body.totals.priced_sessions, l.body.totals.unpriced_sessions], [2_600, priced, unpriced]);
+  assert.deepEqual([l.body.totals.gross_cents, l.body.totals.cut_cents, l.body.totals.net_cents], [priced * 10_000, priced * 1_500, priced * 8_500]);
+  // The client list is capped and says so; the rest is one summed row, so the rows reconcile to the totals.
+  assert.equal(l.body.clients.length, 500);
+  assert.deepEqual(l.body.completeness.clients, { listed: 500, total: 650, complete: false });
+  assert.equal(l.body.clients_other.clients, 150);
+  const sum = (k: string) => l.body.clients.reduce((a: number, c: any) => a + c[k], 0) + l.body.clients_other[k];
+  assert.equal(sum('gross_cents'), l.body.totals.gross_cents);
+  assert.equal(sum('cut_cents'), l.body.totals.cut_cents);
+  assert.equal(sum('sessions'), l.body.totals.sessions);
+  assert.equal(l.body.clients.reduce((a: number, c: any) => a + c.unpriced_sessions, 0) + l.body.clients_other.unpriced_sessions, unpriced);
+  assert.equal(l.body.completeness.sessions, 2_600);
+  // The annual summary for the same window is the same population and the same arithmetic.
+  const t = await call(e, 'GET', '/me/tax-summary?year=2026', ada);
+  assert.deepEqual([t.body.sessions, t.body.priced_sessions, t.body.unpriced_sessions, t.body.gross_cents, t.body.platform_cut_cents, t.body.net_cents],
+    [l.body.totals.sessions, l.body.totals.priced_sessions, l.body.totals.unpriced_sessions, l.body.totals.gross_cents, l.body.totals.cut_cents, l.body.totals.net_cents]);
+  // 65 of the 650 clients only ever have an unpriced booking (every tenth), so they have no priced one.
+  assert.equal(t.body.clients, 585, 'distinct clients with a priced booking');
+  assert.equal(l.body.completeness.clients.total, 650, 'while the ledger counts every client');
+  // A window with no bookings is a real empty ledger, not an error.
+  const empty = await call(e, 'GET', '/me/ledger?from=2030-01-01T00:00:00.000Z&until=2031-01-01T00:00:00.000Z', ada);
+  assert.deepEqual([empty.body.totals.sessions, empty.body.clients.length, empty.body.clients_other, empty.body.completeness.clients.complete], [0, 0, null, true]);
+});
+
+test('#4702: a line priced before the cut was stored is derived at its own rate, the same way in the ledger and the summary', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.prepare(`INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id, status, created_at, amount_cents, billing_state, platform_cut_cents, take_rate_bps)
+    VALUES ('old1', 1, 1, ?, 'completed', '2026-03-01T00:00:00.000Z', 9_999, 'billed', NULL, 1200), ('old2', 1, 1, ?, 'completed', '2026-03-02T00:00:00.000Z', 9_999, 'billed', NULL, NULL)`).run(CLIENT_A, CLIENT_A);
+  const l = await call(e, 'GET', '/me/ledger', ada);
+  // 9,999 at 12% rounds down to 1,199; with no stored rate the current 15% applies: 1,499.
+  assert.equal(l.body.totals.cut_cents, 1_199 + 1_499);
+  const t = await call(e, 'GET', '/me/tax-summary?year=2026', ada);
+  assert.equal(t.body.platform_cut_cents, 1_199 + 1_499);
+});
+
+test('#4702: the retainer is the contract value per cycle, only for contracts in effect during the window', async () => {
+  // Mutation checked: the window filter dropped → the 2025 contract appears in a 2026 table.
+  const db = freshDb();
+  const e = env(db);
+  const ins = db.prepare(`INSERT INTO advisor_engagements (uid, advisor_id, founder_user_id, client_name, lane, shape, amount_cents, started_at, ended_at)
+    VALUES (?, 1, ?, ?, ?, 'retainer', ?, ?, ?)`);
+  ins.run('live', CLIENT_A, 'Meridian Labs', 'signed', 400_000, '2026-01-10T00:00:00Z', null);
+  ins.run('old', CLIENT_B, 'Halverton', 'ended', 300_000, '2024-02-01T00:00:00Z', '2025-03-31T00:00:00Z');
+  ins.run('later', null, 'Aperture', 'signed', 250_000, '2027-02-01T00:00:00Z', null);
+  ins.run('proposal', null, 'Verwood', 'proposed', 200_000, null, null);
+  const win = await call(e, 'GET', '/me/ledger?from=2026-07-01T00:00:00.000Z&until=2026-10-01T00:00:00.000Z', ada);
+  const by = Object.fromEntries(win.body.clients.map((c: any) => [c.client_name, c.retainer_cents]));
+  assert.deepEqual(by, { 'Meridian Labs': 400_000 }, 'only the contract in effect in Q3 2026');
+  const all = await call(e, 'GET', '/me/ledger', ada);
+  const names = all.body.clients.map((c: any) => c.client_name).sort();
+  assert.deepEqual(names, ['Aperture', 'Halverton', 'Meridian Labs'], 'all time: every signed or ended contract, no unsent proposal');
+  assert.equal(win.body.completeness.engagements.read, true);
 });
 
 // ── #4713 (D4713): financial history is not restated by an unrelated edit ───

@@ -35,7 +35,7 @@ const ROLE: Record<number, string> = { [ADA]: 'founder', [BEN]: 'founder', [CY]:
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
-  for (const m of ['597_company_archive_and_events.sql', '685_company_legal_record_and_slugs.sql', '749_company_registered_agent_and_mailing.sql', '757_company_default_currency.sql', '202611031619_company_logo_change_event.sql']) db.exec(mig(m));
+  for (const m of ['597_company_archive_and_events.sql', '685_company_legal_record_and_slugs.sql', '749_company_registered_agent_and_mailing.sql', '757_company_default_currency.sql', '202611031619_company_logo_change_event.sql', '202611072255_company_profile_version.sql']) db.exec(mig(m));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   for (const [id, n] of [[ADA, 'Ada'], [BEN, 'Ben'], [CY, 'Cy'], [EVE, 'Eve'], [FAY, 'Fay'], [GUS, 'Gus']] as const) u.run(id, ROLE[id], `${n} Made-up`, `${n.toLowerCase()}@example.test`);
   const c = db.prepare("INSERT INTO company_profiles (id, uid, company_name, description, created_at, updated_at) VALUES (?, ?, ?, 'Before', '2026-01-01', '2026-01-01')");

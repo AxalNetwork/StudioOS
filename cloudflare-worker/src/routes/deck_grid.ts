@@ -28,7 +28,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { ensureSchema, getDeckRow, rowToDeck } from './decks';
 import { GRID_COLS, GRID_ROWS } from '../services/decks/slideModel';
 import { ASPECTS, BASELINE, FRAME, SLIDE_SIZES, STRUCTURES, areasOf, aspectOf, boxOfAt, cellAt } from '../services/decks/structures';

@@ -83,7 +83,7 @@ function metaBlock(tags) {
     `<title>${esc(tags.title)}</title>`,
     `<meta name="description" content="${esc(tags.description)}" />`,
     `<link rel="canonical" href="${esc(tags.url)}" />`,
-    `<meta name="robots" content="${esc(tags.robots)}" />`,
+    ...(tags.robots ? [`<meta name="robots" content="${esc(tags.robots)}" />`] : []),
     '',
     `<meta property="og:type" content="${esc(tags.type)}" />`,
     `<meta property="og:site_name" content="${esc(tags.siteName)}" />`,

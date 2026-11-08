@@ -196,7 +196,7 @@ test('⋯ opens the sheets that keep v1\'s surfaces: Versions, Sources, Check cl
     await open('theme');
     assert.ok(m.by('pitch-sheet-theme'));
     await m.type(m.by('pitch-theme-neutral_dark'), true);
-    assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/, 'a theme is one edit, held until Save');
+    assert.match(m.text(m.by('pitch-editor-save-state')), /Saving…|Unsaved changes/, 'a theme is one edit; D4596 autosaves it with the rest of the draft, and Save version makes it a version');
     await m.press(m.by('pitch-editor-save'));
     assert.match(m.text(m.by('pitch-editor-save-changes')), /The theme becomes Neutral dark\./);
   } finally { await m.close(); }
