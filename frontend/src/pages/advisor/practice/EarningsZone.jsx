@@ -7,7 +7,7 @@ import {
   buttonClass, ghostButtonClass, inputClass, money,
 } from '../expertise/kit';
 import {
-  PAYOUT_STATE_LABEL, PAYOUT_TONE, cutNote, draftFitsPeriod, latestOnly, noteIsStale,
+  PAYOUT_STATE_LABEL, PAYOUT_TONE, cutNote, draftFitsPeriod, latestOnly, noteIsDirty, noteIsStale,
   payoutWhen, periodWindow, stateTiles,
 } from './earningsLedger';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -255,8 +255,20 @@ export default function EarningsZone() {
     // and the text on screen no longer belongs to the period shown.
     draftTicket.current.cancel();
     setDrafting(false); setDraftKey(null); setSaveNote(null);
+    // #4713: the old period's note leaves the screen at once, not when the new
+    // one lands, so it is never read (or filed) under the new period's label.
+    setNote(null); setDraft(''); setModelText(null); setEditing(false);
     loadLedger(window_); loadRest(window_);
   }, [loadLedger, loadRest, window_]);
+
+  // #4713: typed or drafted text that is not filed is resolved before the
+  // period changes; declining keeps the period and the text.
+  const changeView = (next) => {
+    if (next === view) return;
+    if (noteIsDirty(note, draft)
+      && !window.confirm('This period\'s note is not filed. Switch period and discard it?')) return;
+    setView(next);
+  };
 
   const d = state.data;
   const L = ledger.data;
@@ -486,7 +498,7 @@ export default function EarningsZone() {
         role="advisor"
         filters={advisorZoneFilters('practice/earnings', {
           value: view,
-          onChange: setView,
+          onChange: changeView,
           dynamic: { quarters: quarterChips },
         })}
         actions={advisorZoneActions('practice/earnings', { handlers: opsHandlers })}

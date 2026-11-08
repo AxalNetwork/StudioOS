@@ -155,7 +155,7 @@ function world(over: Record<string, unknown> = {}) {
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     '529_meeting_transcript_source.sql',
-    '452_record_session_setup.sql', '454_channel_voice_failures.sql',
+    '452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql', '488_channel_consents.sql']) db.exec(mig(m));
   applyEngineSchema(db);
   const jobs: any[] = [];

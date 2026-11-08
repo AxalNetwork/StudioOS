@@ -1,0 +1,285 @@
+# Skill library: repository, runtime and D1 audit (#4529)
+
+Session 01 of #4528. This is a read-only audit. It changes no code, migration,
+generated file, D1 row, permission, publication or production setting.
+
+- **Repository basis:** `main` at `6ee7647cb` (2026-11-07). Every line
+  reference below is to that commit.
+- **Deployment basis:** not verified in this session. This session had no
+  production credentials and made no production reads. A merge to `main`
+  ships through `.github/workflows/cloudflare-worker-deploy.yml`, but whether
+  a given commit is live, and what rows D1 holds, are **unknown** here. Where
+  this document says "present", it means present in the repository.
+- **Companion contract:** `SKILL_LIBRARY_CONTRACT.md` (#4530) is the v1 source
+  and golden-case contract. This audit does not restate it; it checks the code
+  against it.
+
+## 1. Data flow
+
+```
+skills/<slug>.md ─┐                                       (authored source)
+cases/<slug>.json ┴─ scripts/build-skill-library.mjs ──► skillLibrary.generated.ts
+                                                            (embedded data, never hand-edited)
+        POST /api/admin/ai-agents/skills/library/seed  (Super Admin, reason)
+                  └─ seedLibrary() ─► agent_skills (scope 'hq', status 'draft')
+                                       + agent_skill_tags, agent_skill_roles, agent_skill_cases
+  draft edits: PATCH /api/teams/skills/:uid ──► same rows (no history of the draft text)
+  review:      POST /:uid/review, /approve, /request-changes ──► agent_skill_reviews (by draft_hash)
+  draft evals: POST /:uid/evals ─► runCase() ─► judge() ─► agent_skill_eval_results (by draft_hash)
+  publish:     POST /api/teams/skills/:uid/publish | POST /bulk ─► publishDraft()
+                 ─► publishRefusal() (HQ only) ─► agent_skill_versions (immutable) + current_version
+  attach:      PUT /api/teams/agents/:uid/skills ─► agent_skill_links (agent, skill, version)
+  run:         agentRun ─► skillForRun() (pinned version) ─► skillPrompt() ─► run()
+                 ─► ai_usage_logs.skill_id / skill_version (tagUsage)
+  published evals: POST /evals/published ─► evaluatePublished() or a campaign
+                 ─► runCase() ─► judge() ─► agent_skill_version_evals (+ regression alert)
+```
+
+## 2. Sources of truth
+
+| Thing | Canonical store | Reference |
+| --- | --- | --- |
+| Library skill text | `services/agents/skills/<slug>.md` | `scripts/build-skill-library.mjs:35-43` |
+| Library golden case | `services/agents/skills/cases/<slug>.json`, one per skill | `build-skill-library.mjs:39-41` (`cases: kase ? [kase] : []`) |
+| Generated data | `skillLibrary.generated.ts`, derived; `--check` fails when stale | `build-skill-library.mjs:61-68` |
+| HQ draft | `agent_skills` + `agent_skill_tags` + `agent_skill_roles` (mutable; no draft history) | `759_agent_skills.sql:24-47`, `skillPublish.ts:30-38` |
+| Draft identity | `draftHash()`: SHA-256 over name, purpose, steps, tools, output, tags, roles | `skillLifecycle.ts:35-39` |
+| Draft golden cases | `agent_skill_cases` (a changed case is a new row; the old one gets `removed_at`) | `202611022140_hq_skill_lifecycle.sql:44-57`, `admin_hq_skills.ts:337-350` |
+| Published version | `agent_skill_versions` (immutable, `UNIQUE(skill_id, version)`) | `759_agent_skills.sql:51-68`, `skillPublish.ts:62-76` |
+| What an agent runs | `agent_skill_links.version` (pinned) | `skillEval.ts:95-117` |
+| Draft eval history | `agent_skill_eval_results` (by `draft_hash`, case row, model) | `202611022140_hq_skill_lifecycle.sql:60-73` |
+| Published eval history | `agent_skill_version_evals` (by version, `case_key`, model) | `202611022313_agent_skill_runs.sql:18-34` |
+
+The source files are the truth for what the repository proposes. Once seeded,
+the D1 draft is the truth for what will be reviewed, and the source file no
+longer changes it: `seedLibrary` never rewrites an existing draft's text
+(`skillLibrarySeed.ts:107-117`).
+
+## 3. Field survival
+
+| Field | Source | Generated | Seeded draft | Published version | Run prompt |
+| --- | --- | --- | --- | --- | --- |
+| `name` (slug) | yes | `slug` + `skill_md` | `slug`; display name derived by `nameOfSlug` (`skillLibrarySeed.ts:28`) | `name` | name |
+| `description` | yes | in `skill_md` | `purpose` | `purpose` | yes |
+| steps | yes | in `skill_md` | `steps_json` | `steps_json`, `skill_md` | yes |
+| `tools` | yes | in `skill_md` | `allowed_tools_json` | `allowed_tools_json` | allow-list line |
+| `output` | yes | in `skill_md` | `output_kind` | `output_kind` | yes |
+| `taxonomy` | yes, map | in `skill_md` | `agent_skill_tags` | `taxonomy_json` | **no** (`skillEval.versionParts` sets `tags: []`, `skillEval.ts:81-86`) |
+| `roles` | yes | in `skill_md` | `agent_skill_roles` | `roles_json` | no |
+| `version` (source) | yes | in `skill_md` | **dropped** (`readLibrarySkill` ignores it) | own integer sequence | — |
+| case `skill`, `version`, `note` | yes | yes | **dropped** (only `input`, `expect` reach `checkCase`, `skillLibrarySeed.ts:85`) | — | — |
+| case `refuse_when` | 1 case (`customer-interview-summary.json`) | yes | **dropped** by `checkCase` (`skillLifecycle.ts:68`) | — | — |
+| case name | not in source | not in source | always `"<slug>: golden case"` (`skillLibrarySeed.ts:85`) | — | — |
+
+## 4. Validation: one set of rules, three readers
+
+| Reader | Used by | Notes |
+| --- | --- | --- |
+| `readLibrarySkill` | seed, library list, source tests | strict: `---\n` fences, `key: value` lines, duplicate key refused, every body line `N. step`, flow list/map only (`skillLibrarySeed.ts:47-66`). Accepts unknown keys. Splits the taxonomy map on `,` and `:` with no quoting. |
+| `parseSkillMd` | pasted SKILL.md in the editor | looser: CRLF, BOM, quoted scalars, `-`/`*` bullets, block taxonomy list (`skills.ts:184-212`). Different format from the library files. |
+| `checkDraft` | every writer (create, patch, publish, seed) | the field rules: slug, name ≤ 80, purpose ≤ 300, 1–20 steps ≤ 400, ≤ 12 read-only tools, output kind, 1–12 active tags with a level, ≥ 1 known role (`skills.ts:89-120`). |
+| `checkCase` | seed, case PUT, draft eval, published eval | object shape, ≤ 20,000 chars, **email only** for PII, name ≤ 120, non-empty records, output kind, ≤ 20 phrases of ≤ 200 chars per list, ≥ 1 phrase (`skillLifecycle.ts:51-69`). |
+
+The importer and the interactive path share `checkDraft` and `checkCase`, so
+the field rules are one set. The two parsers differ only in accepted syntax.
+Neither `checkCase` nor any runtime path checks that a case's record keys are
+reads the skill lists. The library test checks it for committed sources only.
+
+## 5. Taxonomy and areas
+
+- A tag is a `skills.slug` with `is_active = 1` (`skillPublish.ts:40-43`); the
+  category slugs (`product`, `design`, …) are rows of `skill_categories`, not
+  tags. The checked-in seed is migration `090_seed_skills_values_taxonomy.sql`.
+- The eight axes are `RADAR_AXES` (`skillsTaxonomySchema.ts:32-41`); a tag's
+  axis is its `category_slug` (`skillLinks.ts:124-127`).
+- **Two definitions of a skill's "area and level"** disagree:
+  - the library list and seed use the **first** tag's category and the first
+    tag's level (`skillLibrarySeed.ts:69-73`, `admin_hq_skills.ts:194`);
+  - the HQ store list uses the first tag that maps to an axis and the
+    **highest** level of any tag (`admin_hq_skills.ts:104-108`, `:176`).
+  - On today's 182 sources these differ on one skill (`case-study-draft`).
+    This is a display inconsistency, not a validation defect.
+
+## 6. Evaluation
+
+| | Draft evaluation | Published evaluation |
+| --- | --- | --- |
+| Entry | `POST /:uid/evals` (`admin_hq_skills.ts:382`) | `POST /evals/published` (`admin_hq_skills.ts:395`), campaigns (D4668) |
+| Cases | live `agent_skill_cases` | the shipped starter case (12 slugs, key `starter`, `skillEval.ts:43-76`) + live `agent_skill_cases` (key = uid) |
+| Runner | `runCase()` → `run()` pinned model, temperature 0 (`skillLifecycle.ts:86-104`) | same |
+| Judge | `judge()` (`skillLifecycle.ts:72-80`) | same |
+| Identity | `draft_hash`, case row id, model | version, `case_key`, model |
+| Result | `pass` / `fail` / `not_run` (a thrown run, a refusal or no text is `not_run`) | same |
+| Gate | `publishRefusal`: a second Super Admin's approval on the current hash, then 9 of 10 over every live case × every model run for this hash; a missing result is `not_run`; nothing run is below the bar (`skillLifecycle.ts:111-175`) | none (monitoring). A regression is a `pass` → `fail` on the same case and model, told to HQ once per skill, version, case and model in 90 days (`skillEval.ts:182-211`) |
+| Bounds | ≤ 5 models per press (`admin_hq_skills.ts:69`) | ≤ 20 skills per press (`SKILLS_PER_RUN`, `skillEval.ts:58`); a campaign continues past 20 |
+
+Findings:
+
+1. **The missing-data assertion is not field-specific (defect, #4531).**
+   `judge()` passes `must_say_not_recorded: ["runway"]` when "runway" appears
+   anywhere and "not recorded" appears anywhere (`skillLifecycle.ts:75-77`).
+   Reproduced on the committed `board-meeting-brief` case: the text "There are
+   37 paying customers. Delaware franchise tax is on the agenda. Runway is 12
+   months. Churn is Not recorded." returns `pass`. Both evaluation paths share
+   `judge()`, so both are affected.
+2. **Phrase checks are substring checks.** `"37"` passes on "370"; a phrase in
+   a hypothetical sentence passes. The judge has no numeric, structural or
+   evidence assertion (#4531 scope).
+3. **A seeded starter skill is evaluated twice after publish.** The 12 starter
+   slugs are also library sources, so a seeded starter has the same case as a
+   live `agent_skill_cases` row and as the `starter` key; `casesOf` returns
+   both (`skillEval.ts:156-167`). Each counts once on the board.
+4. **The regression query is not version-scoped.** The "before" read
+   (`skillEval.ts:190-192`) takes the latest non-`not_run` result for the case
+   and model across all versions, so a v2 fail after a v1 pass alerts as a
+   regression of v2. The board (`skillEval.ts:427-434`) counts a regression
+   only within the current version. Whether a cross-version alert is wanted is
+   **unclear**; the two are inconsistent.
+5. **Library case names are not distinct.** Every seeded case is named
+   `"<slug>: golden case"`, and the seed treats a same-named case as present
+   (`skillLibrarySeed.ts:111-113`). A source with two cases would seed one.
+   The generator allows one case file per skill. Multi-case packaging needs a
+   stable case identity first (#4532, #4588).
+
+## 7. Gates by scope
+
+| | HQ skill (`scope = 'hq'`) | Company skill |
+| --- | --- | --- |
+| Who writes | Super Admin (`team_skills.ts:123-124`) | the company's editors (`team_skills.ts:125`) |
+| Publish | `checkDraft` + second-admin approval + 9 of 10 | `checkDraft`; clears HQ moderation (`skillPublish.ts:49-76`) |
+| Retire | HQ › AI agents with a replacement (`team_skills.ts:381`, `admin_hq_skills.ts:481`) | the company |
+| Uniqueness | `UNIQUE(scope, IFNULL(company_id,0), slug)` (`759_agent_skills.sql:48`) | same index, per company |
+
+## 8. Runtime composition
+
+One skill per run. `agentRun` passes at most one `input.skill`
+(`agentRun.ts:349`), resolved through `skillForRun` to the agent's pinned
+version with six refusals (`skillEval.ts:95-117`). There is no composition or
+dependency between skills in the repository.
+
+## 9. Routes
+
+`/api/admin/ai-agents/skills/*` (Super Admin; `admin_hq_skills.ts:1-29`,
+mounted through `_registry.ts:80`):
+
+| Route | Line | Frontend client |
+| --- | --- | --- |
+| `GET /` | 124 | `adminHqSkillsApi.list` |
+| `GET /library` | 187 | **missing** |
+| `POST /library/seed` | 204 | **missing** |
+| `GET /:uid` | 213 | `get` |
+| `GET /:uid/diff` | 252 | `diff` |
+| `POST /:uid/review`, `/approve`, `/request-changes` | 272, 324, 325 | `requestReview`, `approve`, `requestChanges` |
+| `PUT /:uid/cases` | 329 | `setCases` |
+| `POST /:uid/evals` | 382 | `runEvals` |
+| `POST /evals/published` | 395 | **missing** |
+| `GET /evals/published/campaigns/:uid`, `POST …/cancel` | 442, 449 | **missing** |
+| `POST /:uid/retire` | 481 | `retire` |
+| `POST /bulk` | 495 | `bulk` |
+
+`/api/teams/skills/*` (members; `team_skills.ts`, mounted at `index.ts:1793`):
+`GET /skills` 232, `GET /skills/:uid` 273, `POST /skills` 329,
+`PATCH /skills/:uid` 371, `POST /skills/:uid/publish` 408,
+`GET /agents/:uid/skills/available` 490, `GET`/`PUT /agents/:uid/skills` 513/520,
+cost estimates 611/637, `GET /skills/:uid/agents` 665,
+`GET /skills/:uid/assignable` 704, `POST /skills/:uid/assign` 737,
+`GET /:scope/:id/coverage` 771. Clients in `frontend/src/lib/api/teamAgents.js`.
+
+## 10. Catalogue reconciliation (repository, synthetic-safe)
+
+Run on the repository with the production reader and validators
+(`readLibrarySkill`, `checkLibrary`, `checkCase`, `draftHash`) and the
+checked-in taxonomy (migration 090):
+
+| Check | Result |
+| --- | --- |
+| Source definitions / case files / generated entries | 182 / 182 / 182 |
+| Source-only, case-only | 0, 0 |
+| Generated slugs and `skill_md` equal to sources | yes |
+| `checkLibrary` refused | 0 |
+| Case `skill` ≠ filename; case `output` ≠ skill output | 0, 0 |
+| Case record key outside the skill's tool sources; not a catalogue read key | 0, 0 |
+| Tools not in the `source.read` form | 0 |
+| Skills with more than one taxonomy tag | 179 |
+| Role breadth: 1 / 2 / 3 roles | 46 / 124 / 12 |
+| Unused case fields carried in sources | `refuse_when` (1) |
+
+What this does **not** establish: the D1 side. The persisted catalogue
+(seeded drafts, edits since seeding, published versions) can only be compared
+by a permitted aggregate read, which this session did not make. "Equal counts"
+would not prove equal content in any case; the comparison has to be by
+identity and content hash.
+
+### Reconciliation contract (handed to #4532)
+
+Identity is `(scope, company_id, slug)` for a skill and `draft_hash` for its
+draft content. A library case is identified by `sha256(JSON.stringify({input,
+expect}))` until #4532/#4588 introduce a stable case id.
+
+| Class | Detected by | Proposed disposition |
+| --- | --- | --- |
+| `exact` | same slug, `draft_hash` and case hashes | none |
+| `source_only` | slug in source, not in D1 | seed (existing route, explicit Super Admin action) |
+| `persisted_only` | slug in D1 (`scope = 'hq'`), not in source | report; keep. Never delete or rename. |
+| `content_drift` | same slug, different `draft_hash` | report the differing fields (`diffParts`). A draft is never overwritten; a repair is a reviewed edit through `PATCH`, with the expected prior hash. |
+| `case_drift` | same slug, source case hash not among live case hashes | report. The seed will **not** add it: every library case has the same name, and the seed skips a same-named case (finding 5). A changed case goes in through the reviewed `PUT /:uid/cases`; a historical case is never edited. |
+| `missing_case` | a skill with no live case | report; below the publish bar by construction |
+| `invalid_reference` | `checkLibrary` or `checkCase` refuses | fail CI with the code and message |
+| `duplicate_identity` | two sources or two rows for one identity | fail CI; D1 cannot hold it (`759_agent_skills.sql:48`) |
+
+The machine-readable form of each line is:
+
+```json
+{ "slug": "board-meeting-brief", "class": "content_drift",
+  "source": { "draft_hash": "…", "case_hashes": ["…"] },
+  "persisted": { "uid": "…", "status": "draft", "draft_hash": "…", "live_case_hashes": ["…"] },
+  "fields": ["steps"], "disposition": "report" }
+```
+
+The persisted half needs a read of drafts and cases, which is user content in
+the sense of AGENTS.md. Ordinary CI must use local or synthetic D1 fixtures;
+a production comparison is a separately authorized, read-only run.
+
+## 11. Tests
+
+Existing suites (run from the repo root with the Worker loader):
+`agent_skill_library_d1612`, `skill_library_seed_d4225`,
+`skill_library_contract_4530`, `hq_skill_lifecycle_d4160`,
+`agent_skill_runs_d1612d`, `skill_eval_campaigns_d4668`,
+`skill_enforcement_d4534`, `company_skill_moderation_d4161`,
+`team_skills_d1612`, `team_agent_skills_d1612`, `skill_run_cost_d4121`,
+`skills_sdk_adapter_4555`; `node scripts/build-skill-library.mjs --check`.
+
+Missing regressions: field-specific missing-data (finding 1); substring
+numbers (finding 2); starter double-count (finding 3); cross-version
+regression (finding 4); duplicate case names on multi-case sources (finding
+5); case record keys checked at runtime against the skill's tools.
+
+## 12. Gaps for Sessions 02–10
+
+| Capability | Status | Next |
+| --- | --- | --- |
+| v1 source contract | present (`SKILL_LIBRARY_CONTRACT.md`) | — |
+| Field-specific missing-data assertion | missing | #4531 slice 1 |
+| Numeric, structural, evidence assertions | missing | #4531 |
+| Model-judged rubric | missing | #4531, after deterministic assertions |
+| CI command with per-file errors and a summary | partial (tests and `--check` exist) | #4532 |
+| Source ↔ D1 reconciliation | missing (contract above) | #4532 |
+| Stable case ids, multi-case sources | missing | #4532 / #4588 |
+| Release evidence | unclear | #4533 |
+| Campaign traversal past 20 skills | present (D4668) | — |
+| Frontend: library list, seed, published evals, campaigns | missing client methods | a UI session |
+| Skill composition | missing | out of scope until specified |
+
+Deliverable without a migration: findings 1, 2 and 5 (judge and seed code),
+the CI command, the reconciliation report, and the frontend client methods.
+Findings 3 and 4 change evaluation semantics and need an owner decision first.
+
+## 13. Do not rebuild
+
+The lifecycle (`skillLifecycle.ts`), the publish path (`skillPublish.ts`),
+the seed (`skillLibrarySeed.ts`), the generator, the two evaluation histories
+and their tables, campaigns (D4668), the run gate (`skillForRun`), usage
+attribution and the HQ routes. Extend them. In particular, there is no case
+for a second case table, a second evaluation runner, or a second evaluation
+board (#3851 evaluates agent proposals, not skill definitions).

@@ -205,6 +205,10 @@ and the old README advertised it, but `checkCase()` neither validates nor
 evaluates it. It is therefore ignored today and must become the explicit v2
 `refusal` assertion before it can gate a result.
 
+## CI validation (#4532)
+
+`node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs scripts/check-skill-library.mjs` runs in `npm run test:guards`. It checks this contract on the runtime's validators, adds pairing, read-scope, area and generated-module checks, and fails on any error. A field this contract does not evaluate (`refuse_when` today) is a warning, so a reviewer sees that it proves nothing. Reconciliation with a store is by identity and content hash, and reports only. CI never runs a model, so the summary always says `model_evaluation: not_run`. Rules, classes and dispositions: D4532.
+
 ## Provenance, compatibility, and rollout
 
 | Concern | Current source / persisted state | v1 rule | Proposed extension and impact |
