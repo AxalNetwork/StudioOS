@@ -121,7 +121,8 @@ function freshDb() {
       delivered_at TEXT, delivery_notes TEXT, cancelled_at TEXT, cancel_reason TEXT,
       invoice_id TEXT, invoiced_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      company_id INTEGER -- D4693: the pipeline reads are company-scoped
     );
   `);
   db.exec(migration('208_partner_delivery_stores'));
