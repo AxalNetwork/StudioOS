@@ -79,7 +79,8 @@ test('“in Ask” is computed by the worker, and a shared document is never in 
   // `index_state`, and that second copy of the rule is exactly where the two
   // would disagree — a client's document is `indexed`, in their namespace, and
   // a client-side `index_state === 'indexed'` would call it answerable.
-  assert.match(WORKER, /in_ask: source === 'own' && r\.index_state === 'indexed',/,
+  // D4605: answerable is `indexed` or `partial`, one list the worker keeps.
+  assert.match(WORKER, /in_ask: source === 'own' && ANSWERABLE_STATES\.includes\(r\.index_state\),/,
     'the reach is no longer computed from BOTH the provenance and the index state');
   assert.match(WORKER, /read_only: source === 'client',/,
     'the read-only flag is gone from the payload');
@@ -126,8 +127,11 @@ test('the ops row’s Re-index acts on what Ask cannot read, and says so when th
   // document Ask cannot currently see rather than on a selection the page has
   // no way to express. It is disabled with a reason rather than hidden: a
   // control that vanishes leaves a reader wondering whether it ever existed.
-  assert.match(LIBRARY, /const stale = items\.filter\(\(d\) => d\.source !== 'client' && d\.index_state !== 'indexed'\);/,
+  // D4612: the selection lives in `reindexTargets`, which also leaves what is already being read alone.
+  assert.match(LIBRARY, /const stale = reindexTargets\(items\);/,
     'the re-index op no longer selects the documents Ask cannot read');
+  assert.match(read('frontend/src/pages/research/libraryIndexing.js'),
+    /d\.source !== 'client'\s*&& d\.index_state !== 'indexed' && d\.index_state !== 'pending'/);
   // Bounded at the block's own close, not at the next `return (` — there is an
   // earlier one in this file and the slice came back empty, which passes a
   // `doesNotMatch` and fails a `match` for a reason that has nothing to do with
