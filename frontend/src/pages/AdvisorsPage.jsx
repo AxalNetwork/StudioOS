@@ -4,10 +4,11 @@
  * open an advisor's profile to see open office-hour slots, request a
  * booking, and after a booking is completed file a 1-5 star review.
  */
-import { useEffect, useState } from 'react';
-import { Search, Star, Calendar, Clock, Video, X, MessageCircle, Loader2 } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { Search, Star, Calendar, Clock, Video, MessageCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 import Sheet from '../ui/Sheet.jsx';
+import Lightbox from '../ui/Lightbox';
 import { useAuth } from '../hooks/useAuthSync';
 import UserTrustBadge from '../components/UserTrustBadge';
 import PageExplainer from '../components/PageExplainer';
@@ -19,18 +20,35 @@ import {
   bookingView, formatDateTime, isBookableSlot, offerFromType, offerLine, slotMinutes, slotView,
 } from './advisor/advisory/kit';
 
-function StarRow({ rating, onChange }) {
+/**
+ * #4715 (D4715): a rating someone sets is five named, pressed-state buttons; a
+ * rating someone reads is one image with its value in words, not five unnamed
+ * buttons that do nothing.
+ */
+export function StarRow({ rating, onChange }) {
   const stars = [1, 2, 3, 4, 5];
+  const value = Number(rating || 0);
+  if (!onChange) {
+    return (
+      <div className="flex items-center gap-1" role="img" aria-label={`Rated ${value} of 5`}>
+        {stars.map((n) => (
+          <Star key={n} size={14} aria-hidden="true" className={n <= value ? 'text-amber-400' : 'text-zinc-300'} fill={n <= value ? 'currentColor' : 'none'} />
+        ))}
+      </div>
+    );
+  }
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" role="group" aria-label={`Rating: ${value} of 5`}>
       {stars.map((n) => (
         <button
           key={n}
           type="button"
-          onClick={() => onChange?.(n)}
-          className={n <= (rating || 0) ? 'text-amber-400' : 'text-zinc-300'}
+          onClick={() => onChange(n)}
+          aria-label={`${n} star${n === 1 ? '' : 's'}`}
+          aria-pressed={n === value}
+          className={`${n <= value ? 'text-amber-400' : 'text-zinc-300'} min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600`}
         >
-          <Star size={onChange ? 22 : 14} fill={n <= (rating || 0) ? 'currentColor' : 'none'} />
+          <Star size={22} aria-hidden="true" fill={n <= value ? 'currentColor' : 'none'} />
         </button>
       ))}
     </div>
@@ -114,6 +132,7 @@ function BookingForm({ slot, advisor, sessionType, bookingLinkSlug, onClose, onB
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const offer = offerFromType(sessionType);
+  const ids = useId();
   async function submit() {
     if (!topic.trim()) { setErr('Topic is required'); return; }
     setErr(null); setBusy(true);
@@ -136,19 +155,13 @@ function BookingForm({ slot, advisor, sessionType, bookingLinkSlug, onClose, onB
       }
     } finally { setBusy(false); }
   }
+  // #4715 (D4715): a real dialog (Lightbox: role, name, focus in and back, Escape, ×), labelled fields,
+  // and an error that is announced rather than only drawn.
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-md w-full p-6 dark:bg-gray-900">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">Book {advisor.display_name}</div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              {formatDateTime(slot.startsAt)}
-              {slotMinutes(slot) != null && ` · ${slotMinutes(slot)} min`}
-            </div>
-          </div>
-          <button onClick={onClose}><X size={18} className="text-gray-500" /></button>
-        </div>
+    <Lightbox label={`Book ${advisor.display_name || 'this advisor'}`} title={`Book ${advisor.display_name || 'this advisor'}`}
+      sub={`${formatDateTime(slot.startsAt)}${slotMinutes(slot) != null ? ` · ${slotMinutes(slot)} min` : ''}`}
+      onClose={onClose} width={460} phone="sheet" testId="booking-dialog">
+      <form className="p-1" onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
         {/* D4715: the exact offer being booked, as the worker will copy it onto the booking. */}
         {offer && (
           <div data-testid="booking-offer" className="mb-3 rounded border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-100">
@@ -156,22 +169,24 @@ function BookingForm({ slot, advisor, sessionType, bookingLinkSlug, onClose, onB
             {offer.cadence_note && <div className="mt-0.5 text-violet-700 dark:text-violet-300">{offer.cadence_note}</div>}
           </div>
         )}
-        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Topic</label>
-        <input value={topic} onChange={(e) => setTopic(e.target.value)}
-          placeholder="GTM strategy review"
-          className="w-full px-3 py-2 border border-gray-300 rounded mb-3 text-sm dark:border-gray-700" />
-        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Questions / context</label>
-        <textarea value={questions} onChange={(e) => setQuestions(e.target.value)}
+        <label htmlFor={`${ids}-topic`} className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Topic</label>
+        <input id={`${ids}-topic`} value={topic} onChange={(e) => setTopic(e.target.value)}
+          placeholder="GTM strategy review" required aria-required="true"
+          aria-invalid={err === 'Topic is required' ? 'true' : undefined}
+          aria-describedby={err ? `${ids}-error` : undefined}
+          className="w-full px-3 py-2 border border-gray-300 rounded mb-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-gray-700" />
+        <label htmlFor={`${ids}-notes`} className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Questions / context</label>
+        <textarea id={`${ids}-notes`} value={questions} onChange={(e) => setQuestions(e.target.value)}
           rows={4} placeholder="What I want to walk away with…"
-          className="w-full px-3 py-2 border border-gray-300 rounded mb-3 text-sm dark:border-gray-700" />
-        {err && <div className="text-sm text-red-600 mb-2">{err}</div>}
-        <button disabled={busy} onClick={submit}
-          className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white py-2 rounded text-sm font-medium flex items-center justify-center gap-2">
-          {busy && <Loader2 size={14} className="animate-spin" />}
-          Request booking
+          className="w-full px-3 py-2 border border-gray-300 rounded mb-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-gray-700" />
+        {err && <div id={`${ids}-error`} role="alert" className="text-sm text-red-600 mb-2">{err}</div>}
+        <button type="submit" disabled={busy} aria-busy={busy ? 'true' : undefined}
+          className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white py-2 rounded text-sm font-medium flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600">
+          {busy && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+          {busy ? 'Sending request…' : 'Request booking'}
         </button>
-      </div>
-    </div>
+      </form>
+    </Lightbox>
   );
 }
 
@@ -246,8 +261,9 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
                     {s.capacity > 1 && <span>group · {s.available}/{s.capacity} left</span>}
                   </div>
                 </div>
-                <button onClick={() => setBookSlot(s)}
-                  className="text-xs bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded font-medium">
+                <button type="button" onClick={() => setBookSlot(s)}
+                  aria-label={`Book ${formatDateTime(s.startsAt)}${slotMinutes(s) != null ? `, ${slotMinutes(s)} minutes` : ''}`}
+                  className="text-xs bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 min-h-[44px] rounded font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600">
                   Book
                 </button>
               </div>
@@ -278,11 +294,12 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
   );
 }
 
-function ReviewModal({ booking, onClose, onSubmitted }) {
+export function ReviewModal({ booking, onClose, onSubmitted }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const ids = useId();
   async function submit() {
     setErr(null); setBusy(true);
     try {
@@ -302,25 +319,26 @@ function ReviewModal({ booking, onClose, onSubmitted }) {
       }
     } finally { setBusy(false); }
   }
+  // #4715 (D4715): the same dialog contract as the booking form.
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-md w-full p-6 dark:bg-gray-900">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-lg font-semibold">Review your session</div>
-          <button onClick={onClose}><X size={18} /></button>
-        </div>
-        <div className="mb-3 text-sm text-gray-600">Topic: {booking.topic}</div>
-        <div className="mb-3"><StarRow rating={rating} onChange={setRating} /></div>
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)}
-          rows={4} placeholder="What stood out? (optional)"
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-3 dark:border-gray-700" />
-        {err && <div className="text-sm text-red-600 mb-2">{err}</div>}
-        <button disabled={busy} onClick={submit}
-          className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white py-2 rounded text-sm font-medium">
+    <Lightbox label="Review your session" title="Review your session" sub={booking.topic ? `Topic: ${booking.topic}` : undefined}
+      onClose={onClose} width={460} phone="sheet" testId="review-dialog">
+      <form className="p-1" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <fieldset className="mb-3">
+          <legend className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Rating</legend>
+          <StarRow rating={rating} onChange={setRating} />
+        </fieldset>
+        <label htmlFor={`${ids}-comment`} className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Comment (optional)</label>
+        <textarea id={`${ids}-comment`} value={comment} onChange={(e) => setComment(e.target.value)}
+          rows={4} placeholder="What stood out?"
+          className="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-gray-700" />
+        {err && <div role="alert" className="text-sm text-red-600 mb-2">{err}</div>}
+        <button type="submit" disabled={busy} aria-busy={busy ? 'true' : undefined}
+          className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white py-2 rounded text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600">
           {busy ? 'Submitting…' : 'Submit review'}
         </button>
-      </div>
-    </div>
+      </form>
+    </Lightbox>
   );
 }
 

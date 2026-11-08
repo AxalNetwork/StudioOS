@@ -433,7 +433,7 @@ export default function EngagementsZone() {
         {ordered.filter((e) => canDecideRenewal(e.lane)).length === 0
           ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
             Nothing is under contract, so there is no renewal to decide. A draft or a proposal has no term
-            behind it — the worker refuses a decision on one rather than inventing an outcome for it.
+            behind it, so no decision can be recorded on one; an outcome is never invented for it.
           </p>
           : <ul className="space-y-2">{ordered.filter((e) => canDecideRenewal(e.lane)).map((e) => (
             <li key={e.id} data-testid={`row-pr2-decide-${e.id}`}
@@ -498,9 +498,8 @@ export default function EngagementsZone() {
 
       <StatedLimit title="What this board cannot say">
         <p>
-          <strong>Nothing sends a renewal notice.</strong> The artboard&rsquo;s header offers one in bulk;
-          no notice pipeline exists for an advisor, so the control says so rather than looping over a
-          send that is not there. Recording the decision is what this page does.
+          <strong>Nothing sends a renewal notice.</strong> Axal does not send renewal notices for
+          advisors yet, so no control offers to. Recording the decision is what this page does.
         </p>
         <p className="mt-2">
           <strong>A client is a name here, and a platform account only sometimes.</strong> An engagement
@@ -508,9 +507,8 @@ export default function EngagementsZone() {
           is one. Until a client is linked, nothing joins this contract to the sessions booked under it.
         </p>
         <p className="mt-2">
-          <strong>The board advances by control, not by drag.</strong> The canvas says &ldquo;drag to
-          advance&rdquo;; a per-card control reaches the same state and is keyboard-reachable without a
-          drag-and-drop layer to make accessible. And a signed engagement is never offered
+          <strong>The board advances by control, not by drag.</strong> Each card has its own control,
+          which works from the keyboard. And a signed engagement is never offered
           <em> Move to Ended</em> — that ending is a renewal decision, and it is recorded as one.
         </p>
       </StatedLimit>

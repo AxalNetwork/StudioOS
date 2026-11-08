@@ -521,9 +521,9 @@ export default function SessionsZone() {
           a transcript. `recording_state` names the consent; it does not
           produce the recording. */}
       <StatedLimit title="No batch summary on this page">
-        The Practice canvas puts its AI instrument on Delivery, not here, and the thing it would
-        need does not exist either way: a slot can carry a consent state, but nothing in this
-        product stores a recording or a transcript to summarise. The chip says what was agreed, not
+        A session summary would need a recording and a transcript, and Axal does not record advisory
+        sessions: a slot can carry a consent state, but no recording or transcript is kept to
+        summarise. The chip says what was agreed, not
         what was captured.
       </StatedLimit>
     </div>
