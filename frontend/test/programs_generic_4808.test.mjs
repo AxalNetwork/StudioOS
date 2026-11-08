@@ -18,6 +18,11 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import adminProgramsGenericRoutes from '../src/routes/adminProgramsGeneric.jsx';
+// The route table loads both pages through React.lazy. Loading them here first means the first mount
+// does not wait on a cold import (a transform that, on a loaded machine, outlasts the settle below and
+// leaves the page unmounted); the settle then only covers the page's own reads.
+import '../src/pages/admin/programs/GenericProgramPage.jsx';
+import '../src/pages/admin/programs/ProposalReviewPage.jsx';
 import { catalogueCards } from '../src/pages/admin/programs/catalogueModel.js';
 import {
   approvedRows, capabilityRows, genericKeyFrom, genericTabFrom, metadataRows, proposalSummary, specRows,
@@ -72,6 +77,12 @@ async function mounted(url, element, handle, user) {
   function Probe() { const l = useLocation(); at.path = `${l.pathname}${l.search}`; return null; }
   await act(async () => rootNode.render(h(MemoryRouter, { initialEntries: [url] }, h(AuthProvider, null, element, h(Probe)))));
   const flush = () => act(async () => { for (let i = 0; i < 40; i += 1) await new Promise((r) => setTimeout(r, 5)); });
+  // The routes sit behind Suspense with a null fallback, and the page's module loads on first use. A cold load can take
+  // longer than one flush on a busy runner, so wait (up to 5 s) until the route has drawn something, then let its reads
+  // settle. A fixed 200 ms read the page before it existed and failed CI intermittently.
+  for (let waited = 0; !container.childNodes?.length && waited < 5000; waited += 25) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 25)); });
+  }
   await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');

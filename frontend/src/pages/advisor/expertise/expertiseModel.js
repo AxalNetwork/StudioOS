@@ -52,6 +52,23 @@ export function serviceEditBody(row, draft, cents) {
   return { body };
 }
 
+/** D4711: what a failed service write says. Fixed sentences; never the error's own text. */
+export const SERVICE_FAILED = Object.freeze({
+  add: 'The service could not be saved. Nothing was added.',
+  edit: 'The change could not be saved. The service is as it was.',
+  state: 'That could not be changed. The service is as it was.',
+  remove: 'Nothing was removed. The service is as it was.',
+});
+
+/** D4711: what removing a service takes with it, said before it happens. */
+export function serviceRemoveLines(row) {
+  return [
+    'It is your own record: no session type, booking link or booking points to it, so nothing else changes.',
+    row?.price_cents == null ? 'It has no price recorded.' : 'Its price goes with it. Only the current price is stored, so none is kept.',
+    'It cannot be undone. Add it again to bring it back.',
+  ];
+}
+
 /** The edit form's starting values, from a saved row. */
 export function serviceDraftOf(row) {
   return {

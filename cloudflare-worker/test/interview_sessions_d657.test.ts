@@ -61,6 +61,9 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
   db.exec(readFileSync(new URL('../sql/migrations/452_record_session_setup.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../sql/migrations/453_interview_processing.sql', import.meta.url), 'utf8'));
+  // D4628 (#4628): setup_complete_at, so a retried setup call can tell "the row
+  // exists" from "its setup finished" and resume the missing work.
+  db.exec(readFileSync(new URL('../sql/migrations/202611071550_session_setup_complete.sql', import.meta.url), 'utf8'));
   // 449's call refs: every stop closes the ones attached to its session (#1583).
   db.exec(readFileSync(new URL('../sql/migrations/449_interview_channels.sql', import.meta.url), 'utf8')
     .split(';').filter((sql) => /interview_channel_refs|channel_threads \(/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
@@ -131,6 +134,34 @@ async function call(env: any, user: number, method: string, path: string, body?:
 
 const audioSession = (f: any, consent?: unknown, extra: Record<string, unknown> = {}, user = FOUNDER, interview = 1) =>
   call(f.env, user, 'POST', `/interviews/${interview}/sessions`, { channel: 'in_person', consent, ...extra });
+
+/**
+ * D4628 — makes the next statement whose SQL matches `pattern` throw once,
+ * as a D1 batch does when one of its statements fails (see `_d1_sqlite.mjs`
+ * `batch`: every statement runs inside one SAVEPOINT, so this one failing
+ * rolls the whole batch back, not just itself). Returns the restore
+ * function; callers always call it back, fault injected or not, so a timed
+ * out test never leaves the DB patched for the next one.
+ */
+function failOnce(env: any, pattern: RegExp) {
+  const real = env.DB.prepare.bind(env.DB);
+  let armed = true;
+  env.DB.prepare = (sql: string) => {
+    const stmt = real(sql);
+    if (armed && pattern.test(sql)) {
+      armed = false;
+      return {
+        bind: (...args: unknown[]) => {
+          const bound = stmt.bind(...args);
+          const fail = () => { throw new Error('D4628 fixture: forced failure'); };
+          return { ...bound, run: fail, runSync: fail };
+        },
+      };
+    }
+    return stmt;
+  };
+  return () => { env.DB.prepare = real; };
+}
 const putChunk = (f: any, id: number, seq: number, bytes = new Uint8Array(4000).fill(seq + 1), user = FOUNDER) =>
   call(f.env, user, 'PUT', `/sessions/${id}/chunks/${seq}`, bytes, { 'content-type': 'audio/webm' });
 
@@ -825,6 +856,113 @@ test('D685 §5.1.1 (#1583): two Starts racing past the replay check make one int
   assert.equal(second.status, 200, JSON.stringify(second.body));
   assert.equal(second.body.session.id, first.body.session.id);
   assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM discovery_interviews WHERE interviewee_name = 'Race'").get() as any).n, 1);
+  // D4628: the race's loser finishes the winner's setup rather than just
+  // echoing a row that might still be mid-setup; the committed session is
+  // actually complete, not merely "exists".
+  assert.ok(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(first.body.session.id).setup_complete_at);
+});
+
+test('D685 §5.1.1 (#1583): two Starts racing past the replay check on /interviews/:id/sessions also make one session', async () => {
+  const f = fixture();
+  const body = { channel: 'in_person', consent: { status: 'given', method: 'written' }, client_key: 'race-pi' };
+  const first = await audioSession(f, body.consent, { client_key: body.client_key });
+  assert.equal(first.status, 201, JSON.stringify(first.body));
+  const real = f.env.DB.prepare.bind(f.env.DB);
+  let blind = 1;
+  f.env.DB.prepare = (sql: string) => {
+    const stmt = real(sql);
+    if (blind > 0 && /client_key = \?/.test(sql) && /^SELECT/.test(sql.trim())) {
+      blind--;
+      return { bind: (...args: unknown[]) => ({ ...stmt.bind(...args), first: async () => null }) };
+    }
+    return stmt;
+  };
+  const second = await audioSession(f, body.consent, { client_key: body.client_key });
+  f.env.DB.prepare = real;
+  assert.equal(blind, 0, 'the replay read was raced');
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(second.body.session.id, first.body.session.id);
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_sessions WHERE client_key = ?').get(body.client_key) as any).n, 1);
+  assert.ok(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(first.body.session.id).setup_complete_at);
+});
+
+// ── D4628 (#4628): a failure after the insert is visible, never a false "it worked"; a retry resumes it ──
+
+test("D4628: the setup call's failed activity-log write is not reported as success; the same client_key resumes and completes once", async () => {
+  const f = fixture();
+  f.db.exec("INSERT INTO hypotheses (id, project_id, code, claim) VALUES (71, 10, 'H1', 'Ops leads lose a day a week')");
+  const body = {
+    channel: 'in_person', interviewee: { name: 'Resumable' }, consent: { status: 'given', method: 'verbal' },
+    client_key: 'resume-1', points: [71],
+  };
+  const restore = failOnce(f.env, /INSERT INTO activity_logs/);
+  const failed = await setup(f, body);
+  restore();
+  // D4628: NOT a false 200/201 "it worked" — the write never landed, so the
+  // failure stays visible.
+  assert.equal(failed.status, 500, JSON.stringify(failed.body));
+  const row = f.db.prepare("SELECT id, uid FROM interview_sessions WHERE client_key = 'resume-1'").get() as any;
+  assert.ok(row, 'the insert itself (openOn) is a separate, earlier write and still landed');
+  assert.equal(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(row.id).setup_complete_at, null,
+    'setup is not marked complete: the batch that would have landed its points too never committed');
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_session_points WHERE session_id = ?').get(row.id) as any).n, 0,
+    "the points write was in the SAME atomic batch as the failed one, so it did not land either — never a partial 'point landed, log did not'");
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM discovery_interviews WHERE interviewee_name = 'Resumable'").get() as any).n, 1,
+    'exactly one interview — the failed batch never ran twice and openOn is not retried blindly');
+
+  // The same client_key, same submitted content, retried: finishes the
+  // missing work rather than creating a second interview/session.
+  const resumed = await setup(f, body);
+  assert.equal(resumed.status, 200, JSON.stringify(resumed.body));
+  assert.equal(resumed.body.session.id, row.id, 'the SAME session, not a new one');
+  assert.deepEqual(resumed.body.points.map((p: any) => p.text), ['H1 · Ops leads lose a day a week']);
+  assert.ok(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(row.id).setup_complete_at);
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_session_points WHERE session_id = ?').get(row.id) as any).n, 1,
+    'the point landed exactly once on the resumed attempt');
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM discovery_interviews WHERE interviewee_name = 'Resumable'").get() as any).n, 1,
+    'still exactly one interview after the resume');
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'interview_session_created'").get() as any).n, 1,
+    'the audit row lands exactly once, not once per attempt');
+
+  // A THIRD identical request: genuinely complete now, so it is the plain
+  // replay case again — answered without running finishSetup a second time.
+  const replay = await setup(f, body);
+  assert.equal(replay.status, 200);
+  assert.equal(replay.body.session.id, row.id);
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_session_points WHERE session_id = ?').get(row.id) as any).n, 1,
+    'a genuinely completed replay never re-runs finishSetup: still exactly one point, not two');
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'interview_session_created'").get() as any).n, 1,
+    'and still exactly one audit row');
+});
+
+test('D4628: a failed pasted-transcript write on /interviews/:id/sessions is not reported as success; a retry lands the submitted text once, and holds the interview once', async () => {
+  const f = fixture();
+  const body = { channel: 'text', call_provider: 'paste', client_key: 'resume-text', messages: [{ author: 'Dana', text: 'We lose a day a week to invoicing.' }] };
+  const restore = failOnce(f.env, /INSERT INTO interview_transcript_segments/);
+  const failed = await call(f.env, FOUNDER, 'POST', '/interviews/1/sessions', body);
+  restore();
+  assert.equal(failed.status, 500, JSON.stringify(failed.body));
+  const row = f.db.prepare("SELECT id FROM interview_sessions WHERE client_key = 'resume-text'").get() as any;
+  assert.ok(row, 'the session row landed; the content write (replaceWithFinal) is what failed');
+  assert.equal(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(row.id).setup_complete_at, null);
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_transcript_segments WHERE session_id = ?').get(row.id) as any).n, 0,
+    'the pasted text never landed — exactly the failure mode #4628 describes: submitted text absent');
+  assert.equal(interviewRow(f, 1).transcript, null);
+  assert.equal(interviewRow(f, 1).stage, null, 'not held: the move to done is part of the same unfinished setup');
+
+  const resumed = await call(f.env, FOUNDER, 'POST', '/interviews/1/sessions', body);
+  assert.equal(resumed.status, 200, JSON.stringify(resumed.body));
+  assert.equal(resumed.body.session.id, row.id);
+  assert.ok(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(row.id).setup_complete_at);
+  const segs = f.db.prepare('SELECT text FROM interview_transcript_segments WHERE session_id = ?').all(row.id) as any[];
+  assert.deepEqual(segs.map((s) => s.text), ['We lose a day a week to invoicing.'], 'the submitted text landed exactly once, not lost and not duplicated');
+  assert.equal(interviewRow(f, 1).transcript, 'We lose a day a week to invoicing.');
+  assert.equal(interviewRow(f, 1).stage, 'done', 'held once setup actually finished');
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_sessions WHERE client_key = ?').get('resume-text') as any).n, 1);
+
+  // Read back through the ordinary route too: the digest/segment read agrees.
+  const read = await call(f.env, FOUNDER, 'GET', `/sessions/${row.id}`);
+  assert.deepEqual(read.body.segments.map((s: any) => s.text), ['We lose a day a week to invoicing.']);
 });
 
 test('D685: a text session records quote consent when a method is picked, and nothing when none is', async () => {

@@ -74,9 +74,10 @@ test('the zone reads the pipeline endpoint, and re-reads when the chip changes',
   // THE CHIPS CANNOT NARROW ROWS HERE — this page holds aggregates, not rows —
   // so a `load` that did not depend on `view` would leave every chip showing
   // the first window's figures.
-  assert.match(code, /const load = useCallback\([\s\S]{0,900}?\}, \[view\]\);/,
+  // #4701: the read is keyed to the window AND the company, and an answer for
+  // an earlier key is dropped (see pipeline_retrieval_4701.test.mjs).
+  assert.match(code, /useKeyedRead\(`\$\{view\}\|\$\{company\?\.id \?\? 'none'\}`, \(\) => api\.quotesAnalytics\(windowOf\(view\)\)\)/,
     'the reader’s chosen window is not a dependency of the read');
-  assert.match(code, /useEffect\(\(\) => \{ load\(\); \}, \[load\]\);/);
   // And the api method sends it, without sending the default.
   assert.match(codeOnly(read('frontend/src/lib/api.js')),
     /quotesAnalytics: \(period\) => request\(\s*\n?\s*period && period !== 'all'/,

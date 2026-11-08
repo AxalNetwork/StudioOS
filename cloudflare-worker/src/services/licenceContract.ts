@@ -27,21 +27,36 @@ import { LICENCE_TERM_FIELDS, type LicenceTerms } from './licenceTerms';
 /** `{{field}}`, the spelling `extractMergeFields` already recognises. */
 const PLACEHOLDER = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
 
-/** 3500 → "35%"; 3550 → "35.5%". Basis points, never a float in the store. */
+/**
+ * 3500 → "35%"; 3550 → "35.5%"; 3501 → "35.01%". Basis points, never a float in
+ * the store, and never rounded to one decimal on the way out (D4671): the old
+ * `toFixed(1)` printed 3501 as "35.0%", a contract that said the Licensee's
+ * share was a different number from the one the ledger and the statements use.
+ * A non-integer count of basis points is not a rate anyone agreed, so it reads
+ * as absent and the field stays unfilled.
+ */
 export function pctFromBps(bps: number | null | undefined): string | null {
   if (bps === null || bps === undefined) return null;
   const n = Number(bps);
-  if (!Number.isFinite(n)) return null;
-  return `${(n / 100).toFixed(n % 100 === 0 ? 0 : 1)}%`;
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
+  return pctExact(n);
 }
 
-/** 9000000 cents in EUR → "EUR 90,000.00". */
+/**
+ * 9000000 cents in EUR → "EUR 90,000.00". Exact (D4671): an amount that is not
+ * a whole number of minor units keeps every digit it has, so 1234.5 cents reads
+ * "EUR 12.345" rather than being rounded into a figure nobody agreed.
+ */
 export function moneyFromCents(cents: number | null | undefined, currency: string | null): string | null {
   if (cents === null || cents === undefined) return null;
   const n = Number(cents);
   if (!Number.isFinite(n)) return null;
-  const whole = Math.trunc(Math.abs(n) / 100);
-  const frac = String(Math.abs(n) % 100).padStart(2, '0');
+  const abs = Math.abs(n);
+  const whole = Math.floor(abs / 100);
+  // The minor units left over, to six places, with the trailing zeros dropped:
+  // 50 → "50", 5 → "05", 34.5 → "34" + "5" (the digits after the two that are cents).
+  const [minor, extra = ''] = String(Number((abs - whole * 100).toFixed(6))).split('.');
+  const frac = minor.padStart(2, '0') + extra;
   const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return `${currency || 'EUR'} ${n < 0 ? '-' : ''}${grouped}.${frac}`;
 }
@@ -181,4 +196,17 @@ export function renderContract(
     return v;
   });
   return { body, unfilled };
+}
+
+/**
+ * Every `{{field}}` still standing in a stored contract body, in order, once
+ * each (D4671). `unfilled_fields` is what instantiation reported; this reads
+ * the BODY, which is the document that would be signed, and so catches a
+ * namespaced `{{licence.x}}` / `{{terms.x}}` a hand edit or an older row left
+ * behind as well as the ones the list names.
+ */
+export function unresolvedFields(body: string): string[] {
+  const out: string[] = [];
+  for (const m of String(body ?? '').matchAll(PLACEHOLDER)) if (!out.includes(m[1])) out.push(m[1]);
+  return out;
 }

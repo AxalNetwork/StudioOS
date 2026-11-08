@@ -57,8 +57,7 @@ function fixture() {
     const url = String(input);
     const json = (status: number, j: any) => new Response(JSON.stringify(j), { status, headers: { 'content-type': 'application/json' } });
     if (url.includes('/oauth2/v2.0/token')) return json(200, { access_token: 'synthetic-access', scope: 'Mail.Send offline_access' });
-    if (url === 'https://graph.microsoft.com/v1.0/me/messages') { sends.push(String(init.body || '')); return json(201, { id: 'graph-1', internetMessageId: '<graph-1@outlook.invalid>' }); }
-    if (url.endsWith('/send')) return new Response(null, { status: 202 });
+    if (url === 'https://graph.microsoft.com/v1.0/me/sendMail') { sends.push(String(init.body || '')); return new Response(null, { status: 202 }); }
     throw new Error(`no network in this test: ${url}`);
   }) as any;
   const close = () => { globalThis.fetch = real; db.close(); };

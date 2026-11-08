@@ -192,8 +192,10 @@ test('the on-ramp and the unlock copy describe the invitation that exists, and s
   assert.match(read('frontend/src/App.jsx'), /path="\/company\/invitations\/accept"/, 'the accept route the copy relies on');
 });
 
-test('the logo field says why there is no upload', () => {
+test('the old profile card has no logo box (D4962): a link is refused by the Worker, an upload lives in Settings › General', () => {
   const p = slice(CODE, 'function CompanyProfileCard(', 'function ViewOnlyNotice(');
-  assert.match(p, /label="Logo URL" hint="Upload is not available: there is no image store for company logos yet/);
+  // D4962: the link box is gone; the Worker refuses a link, and the logo is changed in Settings › General.
+  assert.doesNotMatch(p, /label="Logo URL"/);
+  assert.doesNotMatch(p, /text\('logo_url'/);
   assert.doesNotMatch(p, /type="file"/);
 });

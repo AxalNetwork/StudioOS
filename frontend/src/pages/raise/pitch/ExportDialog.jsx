@@ -5,6 +5,7 @@ import { googleWorkspace } from '../../../lib/api/googleWorkspace';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
 import { versionRows } from './pitchStudioModel';
+import { notCheckedLine } from './preflightUiModel';
 import {
   EXPORT_TITLE, FORMATS, OPTIONS_WHERE, GOOGLE_CONNECT, GOOGLE_CONNECT_HREF, GOOGLE_CONNECT_LINK, GOOGLE_STATE_UNREADABLE, OPEN_LINK,
   chartsAsTextLine, exportButton, exportDiagnostic, exportFailure, exportFileName, exportedLine, googleCreatedLine, googleOpenHref, googleState,
@@ -49,7 +50,7 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export default function ExportDialog({ versions, current, onClose }) {
+export default function ExportDialog({ versions, current, checked = null, onClose }) {
   const rows = versionRows(versions);
   const [format, setFormat] = useState('pdf');
   const [versionId, setVersionId] = useState(current?.id ?? rows[0]?.id ?? null);
@@ -170,6 +171,10 @@ export default function ExportDialog({ versions, current, onClose }) {
             {rows.map((r) => <option key={r.id} value={r.id}>{r.label} · saved {r.saved}{r.current ? ' · current' : ''}</option>)}
           </select>
         </label>
+        {/* D4598: the check before Export read one saved version. Picking another is said, never passed off as checked. */}
+        {checked && version?.id != null && String(version.id) !== String(checked.id) ? (
+          <span role="status" className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="pitch-export-not-checked">{notCheckedLine(version.version, checked.version)}</span>
+        ) : null}
         <div className="flex flex-col gap-2 text-[12.5px]">
           <label className={`flex items-center gap-2 ${apply ? INK : 'text-axal-muted dark:text-gray-500'}`}>
             <input type="checkbox" checked={notes} disabled={!apply} onChange={(e) => setNotes(e.target.checked)} data-testid="pitch-export-notes" /> Include speaker notes
