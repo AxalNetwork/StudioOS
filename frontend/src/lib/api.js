@@ -180,6 +180,9 @@ export function isPublicPath(pathname) {
     // D756 (#1894) — an interviewee reaches these from a chat link and has no account here.
     || currentPath === '/privacy'
     || currentPath === '/privacy/interviews'
+    // #4565: the proposed v2 legal texts, for counsel's review (frontend/src/routes/legalDrafts.jsx).
+    || currentPath === '/terms/v2-draft'
+    || currentPath === '/privacy/v2-draft'
     // Task #5 — /articles is the public Articles hub (Browse tab is the
     // default, anonymous-visible surface). Keep it reachable for signed-
     // out visitors when a background fetch (settings/me) 401s. The
