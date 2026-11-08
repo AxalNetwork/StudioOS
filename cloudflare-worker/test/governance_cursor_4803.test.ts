@@ -247,9 +247,11 @@ test('actor, search, outcome and source narrow the read; LIKE wildcards are sear
   const live = await call(db, SUPER, 'outcome=live');
   assert.deepEqual(live.body.rows.map((x: any) => x.outcome), ['live']);
 
+  const lic = licence(db, 'AXL-004', 'Axal VC Iberia');
+  licenceEvent(db, lic, 'suspended', sqlAt(7), 'payment default');
   const one = await call(db, SUPER, 'source=licence_events');
   assert.deepEqual(one.body.sources.map((x: any) => x.table), ['licence_events']);
-  assert.equal(one.body.rows.length, 0);
+  assert.deepEqual(one.body.rows.map((x: any) => [x.source, x.tenant]), [['licence_events', 'Axal VC Iberia']]);
 
   // The quick category and a filter combine.
   const authRefused = await call(db, SUPER, 'filter=auth&outcome=ok');
