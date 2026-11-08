@@ -375,6 +375,6 @@ test('the source: no "Show all" for event types, and Manage Community\'s doors a
   const page = communityPageSource();
   assert.doesNotMatch(page, /types with none/);
   for (const to of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/advisors-partners', '/admin/wellbeing', '/admin/partner-invitations']) {
-    assert.match(page, new RegExp(`<Link to="${to.replace(/\//g, '\\/')}"`), `${to} is not a literal Link`);
+    assert.ok(page.includes(`<Link to="${to}"`), `${to} is not a literal Link`);
   }
 });
