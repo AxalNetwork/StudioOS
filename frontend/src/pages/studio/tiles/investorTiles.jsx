@@ -11,7 +11,7 @@
  */
 import { Link } from 'react-router-dom';
 import InvestorQuotaBars from '../../../components/InvestorQuotaBars';
-import { Unrecorded } from '../../../ui';
+import { Unreadable, Unrecorded } from '../../../ui';
 import { Row, StatGroup, number } from '../../investor/investorStudioParts';
 import { TILE } from '../studioLayoutModel';
 
@@ -54,7 +54,7 @@ export function PortfolioRows({ data }) {
  */
 export function investorTiles({
   user, previewing = false, dashboard, dashboardUnavailable = '', lifecycle, records = {}, failures = {},
-  opportunities = [], stages = [], events = [], quick, refreshContext, retryLifecycle, retrySources,
+  opportunities = [], stages = [], events = [], eventsCoverage = { state: 'ready', failed: [] }, quick, refreshContext, retryLifecycle, retrySources,
 }) {
   const withheld = { state: TILE.WITHHELD };
   if (previewing) {
@@ -71,7 +71,8 @@ export function investorTiles({
             openLabel: 'Open Deals',
             body: (
               <>
-                <div className="is-funnel">{stages.slice(0, 5).map((stage) => <Link to={stage.href || '/deals'} key={stage.id || stage.label} data-testid={`link-investor-stage-${stage.id || stage.label}`}><b>{number(stage.count) ?? <Unrecorded />}</b><span>{stage.label || readable(stage.id)}</span></Link>)}</div>
+                <div className="is-funnel">{stages.slice(0, 5).map((stage) => <Link to={stage.href || '/deals'} key={stage.id || stage.label} data-testid={`link-investor-stage-${stage.id || stage.label}`}><b>{number(stage.count) ?? (lifecycle.partial ? <span className="text-red-700 dark:text-red-300" data-testid={`status-investor-stage-${stage.id || stage.label}-unreadable`}>Unreadable</span> : <Unrecorded />)}</b><span>{stage.label || readable(stage.id)}</span></Link>)}</div>
+                {lifecycle.partial && <Unreadable what="Some funnel stages" claim="This is not a claim that you have none there." onRetry={retryLifecycle} />}
                 <p className="is-card-note">Read-only here — stages move in Deals, never from this surface.</p>
               </>
             ),
@@ -105,15 +106,21 @@ export function investorTiles({
     portfolio_glance: records.portfolio === undefined && !failures.portfolio ? { state: TILE.LOADING }
       : failures.portfolio ? { state: TILE.UNREADABLE, onRetry: retrySources }
         : { state: TILE.READY, href: '/portfolio/performance', openLabel: 'Open Portfolio', body: <PortfolioRows data={records.portfolio} /> },
+    // D4620: a 200 whose calendar sources failed is not an empty calendar. With nothing to show it is Unreadable; with events it shows them and says the list may be incomplete.
     upcoming_events: records.events === undefined && !failures.events ? { state: TILE.LOADING }
-      : failures.events ? { state: TILE.UNREADABLE, onRetry: retrySources }
+      : failures.events || (!events.length && eventsCoverage.state !== 'ready') ? { state: TILE.UNREADABLE, onRetry: retrySources }
         : !events.length ? { state: TILE.EMPTY, empty: 'No upcoming events recorded.', href: '/calendar', openLabel: 'Open events' }
           : {
             state: TILE.READY,
             note: `${events.length} ${events.length === 1 ? 'event' : 'events'}`,
             href: '/calendar',
             openLabel: 'Open events',
-            body: <div className="is-event-list">{events.map((event, index) => <Link to="/calendar" key={event.id || index} data-testid={`link-investor-event-${event.id || index}`}><b>{event.title || event.name || 'Event title not recorded'}</b><span>{formatDate(event.start_at || event.starts_at || event.date)}</span></Link>)}</div>,
+            body: (
+              <>
+                <div className="is-event-list">{events.map((event, index) => <Link to="/calendar" key={event.id || index} data-testid={`link-investor-event-${event.id || index}`}><b>{event.title || event.name || 'Event title not recorded'}</b><span>{formatDate(event.start_at || event.starts_at || event.date)}</span></Link>)}</div>
+                {eventsCoverage.state !== 'ready' && <Unreadable what={`Some calendar sources (${eventsCoverage.failed.map((f) => readable(f.kind)).join(', ')})`} claim="This list may be incomplete." onRetry={retrySources} />}
+              </>
+            ),
           },
   };
 }

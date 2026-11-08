@@ -226,3 +226,35 @@ export function quotedLine(row) {
   const q = Array.isArray(row?.quoted) ? row.quoted : [];
   return `Quoted: ${q.length ? q.join(', ') : 'nothing'}`;
 }
+
+/**
+ * #4660 (part 3): the versions of the draft chain a stored draft belongs to, to
+ * reopen it in the composer: its ancestors by `parent_uid` (oldest first), the
+ * draft itself, then the latest revision of each step after it. `at` is the
+ * index of the draft that was opened. A draft whose parent is not in the list
+ * simply starts the chain; nothing is invented. Null when the uid is not in the
+ * list.
+ */
+export function draftChain(drafts, uid) {
+  const list = Array.isArray(drafts) ? drafts : [];
+  const byUid = new Map(list.map((d) => [d.uid, d]));
+  const chosen = byUid.get(uid);
+  if (!chosen) return null;
+  const before = [];
+  const seen = new Set([chosen.uid]);
+  for (let d = byUid.get(chosen.parent_uid); d && !seen.has(d.uid); d = byUid.get(d.parent_uid)) { before.unshift(d); seen.add(d.uid); }
+  const after = [];
+  for (let tip = chosen; ;) {
+    const kids = list.filter((d) => d.parent_uid === tip.uid && !seen.has(d.uid));
+    if (!kids.length) break;
+    const next = kids.reduce((a, b) => (String(b.created_at ?? '') >= String(a.created_at ?? '') ? b : a));
+    after.push(next); seen.add(next.uid); tip = next;
+  }
+  return { versions: [...before, chosen, ...after], at: before.length };
+}
+
+/** A stored draft as the conversation shows it: the member's own text when they saved one, else what Eadwyn wrote. */
+export function draftRowText(d) {
+  const e = d?.edit ?? null;
+  return { subject: e ? e.subject : (d?.subject ?? ''), body: e ? e.body : (d?.body ?? ''), edited: !!e };
+}

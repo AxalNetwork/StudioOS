@@ -32,8 +32,8 @@ export const ROLES_REVIEW_AT = 3;
 export const TAGS_REVIEW_AT = 7;
 const FRONT_KEYS = ['name', 'description', 'roles', 'tools', 'output', 'taxonomy', 'version'];
 const CASE_KEYS = ['skill', 'version', 'note', 'input', 'expect'];
-/** The `expect` keys `checkCase` keeps and `judge()` evaluates. #4531 adds `numbers` here with the judge that reads it. */
-const EXPECT_KEYS = ['output', 'must_include', 'must_say_not_recorded', 'must_not_include'];
+/** The `expect` keys `checkCase` keeps and `judge()` evaluates (`numbers` since #4531). */
+const EXPECT_KEYS = ['output', 'must_include', 'must_say_not_recorded', 'must_not_include', 'numbers'];
 const READ_SOURCES = new Set(READ_KEYS.map((k) => k.split('.')[0]));
 const AXES = new Set<string>(RADAR_AXES.map((a) => a.slug));
 

@@ -42,7 +42,9 @@ const PAGE = raw('frontend/src/pages/hq/PlatformPage.jsx');
 const P = codeOnly(PAGE);
 const SWITCHES = raw('cloudflare-worker/src/services/platformSwitches.ts');
 const S = codeOnly(SWITCHES);
+// D4859: the summary's readers moved to services/platformSummary.ts; the route and its readers are read as one.
 const ROUTE = codeOnly(raw('cloudflare-worker/src/routes/admin_platform.ts'));
+const SUMMARY = codeOnly(raw('cloudflare-worker/src/services/platformSummary.ts'));
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
 
 const render = (C, props) => renderToStaticMarkup(React.createElement(C, props));
@@ -321,7 +323,7 @@ test('the Feature flags zone does not say the summary failed while it is still b
 });
 
 test("the page's channel states are exactly the states the route can return", () => {
-  const expr = /state: !enabled \? '(\w+)' : !chatBound \? '(\w+)' : '(\w+)'/.exec(ROUTE);
+  const expr = /state: !enabled \? '(\w+)' : !chatBound \? '(\w+)' : '(\w+)'/.exec(SUMMARY);
   assert.ok(expr, "the route's channel-state expression changed shape — re-read it");
   assert.deepEqual([...expr.slice(1)].sort(), Object.keys(CHANNEL_STATE).sort(),
     'the page has a tone for a channel state the route never returns, or lacks one it does');
@@ -456,9 +458,9 @@ test('the registry parses no variable of its own', () => {
   assert.doesNotMatch(S, /toLowerCase|toUpperCase|\/\^\(1\|/, 'platformSwitches normalises a raw value');
   assert.doesNotMatch(S, /MI_FLAG_|DD_FLAG_/, 'platformSwitches builds a variable name');
   // The same holds for the two broadcast facts the route reports.
-  assert.doesNotMatch(ROUTE, /env\.TELEGRAM_BOT_TOKEN|env\.X_CLIENT_/, 'the route reads a broadcast secret directly');
-  assert.ok(importsFrom(ROUTE, 'telegramTokenConfigured', '../services/telegramClient'));
-  assert.ok(importsFrom(ROUTE, 'xClientConfigured', '../services/xClient'));
+  assert.doesNotMatch(ROUTE + SUMMARY, /env\.TELEGRAM_BOT_TOKEN|env\.X_CLIENT_/, 'the route reads a broadcast secret directly');
+  assert.ok(importsFrom(SUMMARY, 'telegramTokenConfigured', './telegramClient'));
+  assert.ok(importsFrom(SUMMARY, 'xClientConfigured', './xClient'));
   assert.ok(calls(codeOnly(raw('cloudflare-worker/src/services/telegramClient.ts')), 'telegramTokenConfigured') >= 1,
     'the Telegram sender no longer refuses through the predicate the console reports');
   assert.ok(calls(codeOnly(raw('cloudflare-worker/src/routes/admin_x.ts')), 'xClientConfigured') >= 2,

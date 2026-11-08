@@ -129,18 +129,48 @@ test('a quote made before a price change settles at the quoted price: the one-cl
   } finally { f.close(); }
 });
 
-test('without the pin, the same run after the same price change charges past the quote (the pin is what holds it)', async () => {
+test('D4597: a metered run without a quote is refused before any hold; the pin is what holds the price', async () => {
   const f = await fixture({ usage: HEAVY });
   try {
-    const q = await call(f, FOUNDER, 'POST', '/api/decks/new/quote', ONE_CLICK);
-    const quoted = q.body.hold_microusd;
+    const holds = () => (f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n;
+    const before = [holds(), f.calls.length];
     f.env.AI_BILLING = 'charged';
-    const g = await call(f, FOUNDER, 'POST', '/api/decks/generate', ONE_CLICK);
-    assert.notEqual(g.status, 201, 'unpinned, the run cost more than its own hold: the settlement is not written');
-    const h = f.db.prepare('SELECT status, included_microusd + topup_microusd AS held FROM ai_budget_reservations ORDER BY rowid DESC LIMIT 1').get() as any;
-    assert.ok(h.held > quoted, 'unpinned, the hold is at the new price');
-    assert.equal(h.status, 'review', 'unpinned, the charge waits for review: it is not held to the quote');
+    for (const path of ['/api/decks/generate', '/api/decks/outline']) {
+      const g = await call(f, FOUNDER, 'POST', path, ONE_CLICK);
+      assert.equal(g.status, 409, path);
+      assert.equal(g.body.error, 'quote_required');
+      assert.match(g.body.message, /Nothing was charged/);
+    }
+    assert.deepEqual([holds(), f.calls.length], before, 'no hold was taken and nothing ran');
   } finally { f.close(); }
+});
+
+test('D4597: AI off for the page is the explicit no-cost path (no quote needed, nothing charged); a quote cannot be taken for other price-relevant inputs', async () => {
+  const f = await fixture();
+  try {
+    f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES('off-4597',?,?,'','manual')").run(FOUNDER, PAGE.toLowerCase());
+    const quote = await call(f, FOUNDER, 'POST', '/api/decks/new/quote', ONE_CLICK);
+    assert.deepEqual([quote.body.ai, quote.body.reason, quote.body.quote_uid], [false, 'assist_off', undefined], 'the Worker says, explicitly, that it is no-cost');
+    const before = f.calls.length;
+    const built = await call(f, FOUNDER, 'POST', '/api/decks/generate', ONE_CLICK);
+    assert.equal(built.status, 201, JSON.stringify(built.body));
+    assert.equal(f.calls.length, before, 'no model ran');
+    assert.deepEqual(f.runs().map((r) => r.charged_microusd ?? 0).filter((n) => n > 0), [], 'nothing was charged');
+  } finally { f.close(); }
+  const g = await fixture();
+  try {
+    // Each price-relevant input is part of what a quote prices: audience, round, exclusions, the outline.
+    const q = await call(g, FOUNDER, 'POST', '/api/decks/new/quote', ONE_CLICK);
+    const outline = [{ card: 'title', title: 'Title', purpose: 'The venture' }];
+    for (const change of [{ audience: 'angel' }, { exclude: ['grow.paying_customers'] }, { outline }]) {
+      const r = await call(g, FOUNDER, 'POST', '/api/decks/generate', { ...ONE_CLICK, ...change, quote_uid: q.body.quote_uid });
+      assert.equal(r.status, 409, JSON.stringify(change));
+      assert.equal(r.body.error, 'quote_stale', JSON.stringify(change));
+    }
+    assert.deepEqual(g.calls, [], 'nothing ran');
+    assert.deepEqual(g.runs(), []);
+    assert.equal((g.db.prepare('SELECT used_at FROM deck_run_quotes WHERE uid = ?').get(q.body.quote_uid) as any).used_at, null, 'and the quote is still usable for the run it priced');
+  } finally { g.close(); }
 });
 
 test('a price change during the run settles at no more than the quote', async () => {
@@ -231,7 +261,8 @@ test('the daily ceiling is off until the owner sets it, and then pauses deck gen
     for (const v of [undefined, '', '0', '-5', 'abc', '1.5']) assert.equal(dailyCeiling({ DECK_DAILY_CEILING_MICROUSD: v } as any), null, String(v));
     assert.equal(dailyCeiling({ DECK_DAILY_CEILING_MICROUSD: ' 5000000 ' } as any), 5_000_000);
     // Off: builds run.
-    const first = await call(f, FOUNDER, 'POST', '/api/decks/generate', ONE_CLICK);
+    const firstQuote = await call(f, FOUNDER, 'POST', '/api/decks/new/quote', ONE_CLICK);
+    const first = await call(f, FOUNDER, 'POST', '/api/decks/generate', { ...ONE_CLICK, quote_uid: firstQuote.body.quote_uid });
     assert.equal(first.status, 201);
     const spent = f.runs()[0].charged_microusd;
     assert.ok(spent > 0);
@@ -258,7 +289,8 @@ test('the daily ceiling is off until the owner sets it, and then pauses deck gen
     // Yesterday's spend does not count today.
     f.db.prepare("UPDATE ai_usage_logs SET created_at = datetime('now', '-1 day')").run();
     f.env.DECK_DAILY_CEILING_MICROUSD = String(q.body.hold_microusd);
-    assert.equal((await call(f, FOUNDER, 'POST', '/api/decks/generate', ONE_CLICK)).status, 201);
+    const today = await call(f, FOUNDER, 'POST', '/api/decks/new/quote', ONE_CLICK);
+    assert.equal((await call(f, FOUNDER, 'POST', '/api/decks/generate', { ...ONE_CLICK, quote_uid: today.body.quote_uid })).status, 201);
   } finally { f.close(); }
 });
 

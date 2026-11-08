@@ -63,6 +63,8 @@ const FOUNDER = 5;  // an account on the branch with a pending Lab application
 const APP_ID = 40;  // FOUNDER's application
 const MEMBER = 9;   // a signed-in account on the branch that is not an admin
 const PERK = 'perk-in-review';
+/** D4806: the listing's revision (its `updated_at`), which every review names. */
+const PERK_REVISION = '2026-10-01T00:00:00Z';
 
 const FR_VARS = {
   BRANCH_CODE: 'fr', APP_URL: 'https://fr.axal.vc', PUBLIC_BASE_URL: 'https://fr.axal.vc',
@@ -240,7 +242,7 @@ const GATED: Act[] = [
   { name: 'submission qualified', program: 'refer-and-earn', method: 'PATCH', path: '/api/refer-earn/admin/submissions/no-such-sub', body: { status: 'qualified' } },
   { name: 'submission converted', program: 'refer-and-earn', method: 'PATCH', path: '/api/refer-earn/admin/submissions/no-such-sub', body: { status: 'converted' } },
   { name: 'submission reward eligible', program: 'refer-and-earn', method: 'PATCH', path: '/api/refer-earn/admin/submissions/no-such-sub', body: { status: 'reward_eligible' } },
-  { name: 'perk approve', program: 'perks', method: 'POST', path: `/api/perks/admin/${PERK}/review`, body: { action: 'approve' } },
+  { name: 'perk approve', program: 'perks', method: 'POST', path: `/api/perks/admin/${PERK}/review`, body: { action: 'approve', expected_revision: PERK_REVISION } },
 ];
 
 /** Writes that wind something down or annotate it: no grant needed. */
@@ -259,7 +261,7 @@ const OPEN: Array<Omit<Act, 'program'>> = [
   { name: 'strategic access decline', method: 'POST', path: `/api/refer-earn/admin/strategic-access/${FOUNDER}/decision`, body: { decision: 'declined', note: 'Synthetic decline reason.' } },
   { name: 'submission rejected', method: 'PATCH', path: '/api/refer-earn/admin/submissions/no-such-sub', body: { status: 'rejected', note: 'Synthetic' } },
   { name: 'submission reward issued', method: 'PATCH', path: '/api/refer-earn/admin/submissions/no-such-sub', body: { status: 'reward_issued' } },
-  { name: 'perk reject', method: 'POST', path: `/api/perks/admin/${PERK}/review`, body: { action: 'reject', review_note: 'Synthetic' } },
+  { name: 'perk reject', method: 'POST', path: `/api/perks/admin/${PERK}/review`, body: { action: 'reject', review_note: 'Synthetic', expected_revision: PERK_REVISION } },
 ];
 
 /** What any gated write could change, read back whole. */
@@ -314,7 +316,7 @@ test('D985: holding one program does not open another', async () => {
   const onlyLab = copyOf([inForce('spinout-lab')]);
   const lab = await req(makeEnv(freshDb('active', onlyLab), FR_VARS), 'POST', `/api/admin/users/${MEMBER}/spinout-admit`, { cycle_id: 1, reason: 'Synthetic' });
   assert.ok(notGrant(lab), JSON.stringify(lab.body));
-  const perk = await req(makeEnv(freshDb('active', onlyLab), FR_VARS), 'POST', `/api/perks/admin/${PERK}/review`, { action: 'approve' });
+  const perk = await req(makeEnv(freshDb('active', onlyLab), FR_VARS), 'POST', `/api/perks/admin/${PERK}/review`, { action: 'approve', expected_revision: PERK_REVISION });
   assert.equal(perk.body?.code, 'program_not_granted');
   assert.equal(perk.body?.program_key, 'perks');
 });
@@ -324,7 +326,7 @@ test('D985: a held grant lets the admission land', async () => {
   const r = await req(makeEnv(db, FR_VARS), 'POST', `/api/admin/users/${MEMBER}/spinout-admit`, { cycle_id: 1, reason: 'Synthetic admission' });
   assert.ok(r.status >= 200 && r.status < 300, `${r.status} ${JSON.stringify(r.body)}`);
   assert.equal((db.prepare('SELECT status FROM cohort_applicants WHERE user_id = ? AND cohort_cycle_id = 1').get(MEMBER) as any)?.status, 'approved');
-  const perk = await req(makeEnv(db, FR_VARS), 'POST', `/api/perks/admin/${PERK}/review`, { action: 'approve' });
+  const perk = await req(makeEnv(db, FR_VARS), 'POST', `/api/perks/admin/${PERK}/review`, { action: 'approve', expected_revision: PERK_REVISION });
   assert.equal(perk.status, 200, JSON.stringify(perk.body));
   assert.equal((db.prepare('SELECT status FROM perks WHERE uid = ?').get(PERK) as any).status, 'live');
 });
@@ -340,7 +342,7 @@ test('D985: rejections, takedowns and annotations are not refused for a missing 
 
 test('D985: a paused Perks grant still lets a listing be rejected, and the rejection lands', async () => {
   const db = freshDb('active', copyOf([inForce('perks', { state: 'paused' })]));
-  const r = await req(makeEnv(db, FR_VARS), 'POST', `/api/perks/admin/${PERK}/review`, { action: 'reject', review_note: 'Synthetic' });
+  const r = await req(makeEnv(db, FR_VARS), 'POST', `/api/perks/admin/${PERK}/review`, { action: 'reject', review_note: 'Synthetic', expected_revision: PERK_REVISION });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal((db.prepare('SELECT status FROM perks WHERE uid = ?').get(PERK) as any).status, 'rejected');
 });

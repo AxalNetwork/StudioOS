@@ -5,7 +5,8 @@
  */
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { daysWord, fitCell, moneyText, scopeCell } from './flowModel';
+import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
+import { SCORE_TITLES, THESIS_PATH, daysWord, fitCell, moneyText, scopeCell, stripScopes } from './flowModel';
 
 const MUTED = 'text-[12px] text-axal-muted dark:text-gray-400';
 const CONF_DOT = { High: 'bg-violet-600 dark:bg-violet-400', Medium: 'bg-violet-400 dark:bg-violet-500', Low: 'bg-violet-200 dark:bg-violet-800' };
@@ -29,7 +30,7 @@ export function ScopeCell({ scores, scope, words = true, testId }) {
 /** Fit to my thesis (D1239): its own number with confidence, "Set your thesis", or why there is none. */
 export function FitCell({ fit, testId }) {
   const c = fitCell(fit);
-  if (c.kind === 'not_set') return <Link to="/account" className="text-[12px] font-semibold text-sky-700 underline hover:text-sky-900 dark:text-sky-300 dark:hover:text-sky-100" title={c.title} data-testid={testId}>{c.word}</Link>;
+  if (c.kind === 'not_set') return <Link to={THESIS_PATH} className="text-[12px] font-semibold text-sky-700 underline hover:text-sky-900 dark:text-sky-300 dark:hover:text-sky-100" title={c.title} data-testid={testId}>{c.word}</Link>;
   if (c.kind !== 'scored') return <span className={MUTED} title={c.title || undefined} data-testid={testId}>{c.word}</span>;
   return <span className="text-[12.5px] font-semibold text-sky-800 dark:text-sky-200" title={c.title} data-testid={testId}>{c.word}{c.confidence && <span className="font-normal text-axal-muted dark:text-gray-400"> · {c.confidence}</span>}</span>;
 }
@@ -61,4 +62,17 @@ export function VentureCell({ row, onPeek = null }) {
       {onPeek && <button type="button" className="w-fit text-[11.5px] font-semibold text-violet-700 underline hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100" onClick={() => onPeek(row)} aria-haspopup="dialog" data-testid={`dealflow-peek-${row.id}`}>Details</button>}
     </span>
   );
+}
+
+/**
+ * D4635 (#4635): one venture's scorecard as a strip, from the supported scoring read (`POST /api/venture-scores/batch`),
+ * with its states named apart: a strip, locked by the founder, not shared with this reader, unreadable, or still reading.
+ */
+export function ScorecardCell({ scores, testId }) {
+  const s = scores?.state;
+  if (s === 'ok') return <span data-testid={testId}><ScopeStrip scopes={stripScopes(scores)} /></span>;
+  if (s === 'locked') return <span title={scores.reason || SCORE_TITLES.locked} data-testid={testId}><ScopeStrip locked /></span>;
+  if (s === 'not_shared') return <span className={MUTED} title={SCORE_TITLES.not_shared} data-testid={testId}>Not shared</span>;
+  if (s === 'failed' || s === 'unreadable') return <span className={MUTED} title={SCORE_TITLES.unreadable} data-testid={testId}>Unreadable</span>;
+  return <span className={MUTED} data-testid={testId}>Reading…</span>;
 }
