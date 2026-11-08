@@ -171,6 +171,8 @@ test('the digest is deterministic: same inputs, same digest, whatever the key or
 function db() {
   const d = new DatabaseSync(':memory:', { ...SCHEMA_OPTIONS });
   loadSchema(d);
+  // D5016 seeds the 49-market catalogue and a v1 draft; these cases build their own, so they start empty.
+  d.exec("DELETE FROM country_market_profiles; DELETE FROM pricing_models WHERE status = 'draft'");
   const m = V1_MODEL_DRAFT;
   d.prepare(`INSERT INTO pricing_models (uid, version, status, currency, reference_annual_fee_cents, reference_initial_fee_cents, default_royalty_bps,
       minimum_royalty_ratio_bps, weight_purchasing_power_bps, weight_startup_ecosystem_bps, weight_market_size_bps, fee_rounding_cents,
