@@ -59,9 +59,9 @@ test('payment is labelled as setting the total paid, not adding a receipt', () =
 });
 
 test('a dispute can be cleared with 0, and a positive one still needs a reason', () => {
-  assert.deepEqual(statementDisputePayload({ amountText: '0', note: '' }).body, { disputed_cents: 0 });
-  assert.ok(statementDisputePayload({ amountText: '5', note: '' }).error);
-  assert.ok(statementDisputePayload({ amountText: '-1', note: 'x' }).error);
+  assert.deepEqual(statementDisputePayload({ amountText: '0', note: '', currency: 'EUR' }).body, { disputed_cents: 0 });
+  assert.ok(statementDisputePayload({ amountText: '5', note: '', currency: 'EUR' }).error);
+  assert.ok(statementDisputePayload({ amountText: '-1', note: 'x', currency: 'EUR' }).error);
   assert.match(renderedText(actions(row({ status: 'issued', ...COMPLETE }))), /0 clears the dispute/);
 });
 

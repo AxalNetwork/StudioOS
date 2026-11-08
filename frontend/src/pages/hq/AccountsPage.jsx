@@ -8,9 +8,9 @@ import { Unrecorded, RailFrame, WorkerRail, useMovedNotice } from '../../ui';
 import { TEAM_MOVED_NOTICES } from '../admin/accountsAddress';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
-import { branchCoverageLine } from './hqTeamBranchModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { reportError } from '../../lib/log';
+import { branchCoverageLine } from './hqTeamBranchModel';
 import { leaveHq } from './handoverNote';
 
 /**

@@ -63,12 +63,12 @@ test('cents are money and bps a percentage, converted exactly both ways, and a c
   const cents = firstOf('cents');
   const bps = firstOf('bps');
   for (const v of [0, 5, 100, 123450, 9000000, 123456789]) {
-    const back = fromInput(cents, toInput(cents, v));
+    const back = fromInput(cents, toInput(cents, v, 'EUR'), 'EUR');
     assert.deepEqual(back, { ok: true, value: v }, `cents ${v}`);
   }
-  assert.equal(toInput(cents, 123450), '1234.50');
-  assert.equal(toInput(cents, 5), '0.05');
-  assert.deepEqual(fromInput(cents, '1,234.5'), { ok: true, value: 123450 });
+  assert.equal(toInput(cents, 123450, 'EUR'), '1234.50');
+  assert.equal(toInput(cents, 5, 'EUR'), '0.05');
+  assert.deepEqual(fromInput(cents, '1,234.5', 'EUR'), { ok: true, value: 123450 });
   for (const v of [0, 1, 50, 1205, 1250, 2000, 10000]) {
     assert.deepEqual(fromInput(bps, toInput(bps, v)), { ok: true, value: v }, `bps ${v}`);
   }
@@ -76,8 +76,8 @@ test('cents are money and bps a percentage, converted exactly both ways, and a c
   assert.equal(toInput(bps, 1205), '12.05');
   assert.equal(toInput(bps, 1), '0.01');
   for (const f of LICENCE_TERM_FIELDS) assert.deepEqual(fromInput(f, '  '), { ok: true, value: null }, f.key);
-  assert.equal(fromInput(cents, '1.234').ok, false, 'three decimals are refused, never rounded');
-  assert.equal(fromInput(cents, '-5').ok, false);
+  assert.equal(fromInput(cents, '1.234', 'EUR').ok, false, 'three decimals are refused, never rounded');
+  assert.equal(fromInput(cents, '-5', 'EUR').ok, false);
   assert.equal(fromInput(bps, '100.01').ok, false);
   assert.equal(fromInput(bps, '12.345').ok, false);
   const day = field('usage_report_day');

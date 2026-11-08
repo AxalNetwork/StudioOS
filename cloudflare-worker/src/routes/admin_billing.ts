@@ -8,6 +8,8 @@ import { logAdminAction } from '../services/adminAudit';
 import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../services/referralCommissions';
 import { refusalBody } from '../util/refusal';
 import { paymentChangeReason } from '../services/catalog';
+import { currencyCode } from '../services/currencies';
+import { exponentOf, parseMinor } from '../../../frontend/src/lib/money.js';
 
 // Task #11 (II) — Admin billing actions. Mounted at `/api/admin/billing`
 // BEFORE the catch-all `/api/admin` in index.ts so the nested routes resolve
@@ -91,6 +93,9 @@ interface RefundPolicyDecision {
   chargeAmountCents?: number | null;
   // Resolved PaymentIntent id (so the clawback can key off it).
   paymentIntentId?: string | null;
+  // D5029: the charge's ISO 4217 currency when Stripe named a listed one; null when it could not be read. A refund
+  // amount typed in major units is converted in THIS currency, and is refused when it is null.
+  currency?: string | null;
 }
 
 /**
@@ -109,6 +114,16 @@ async function evaluateRefundPolicy(
   env: Env,
   opts: { paymentIntentId?: string; chargeId?: string },
 ): Promise<RefundPolicyDecision> {
+  const seen: { currency: string | null } = { currency: null };
+  const decision = await decideRefundPolicy(env, opts, seen);
+  return { ...decision, currency: seen.currency };
+}
+
+async function decideRefundPolicy(
+  env: Env,
+  opts: { paymentIntentId?: string; chargeId?: string },
+  seen: { currency: string | null },
+): Promise<RefundPolicyDecision> {
   let pi: StripePaymentIntent | null = null;
   let charge: StripeCharge | null = null;
   try {
@@ -126,6 +141,7 @@ async function evaluateRefundPolicy(
     return { allowed: true, kind: 'unknown', note: `policy_lookup_failed:${(e as Error).message.slice(0, 80)}` };
   }
 
+  seen.currency = currencyCode(String(charge?.currency ?? pi?.currency ?? '').toUpperCase());
   const meta = pi?.metadata || charge?.metadata || {};
   const kind = (meta.kind || '').toLowerCase();
   const paymentIntentId = pi?.id || charge?.payment_intent || opts.paymentIntentId || null;
@@ -222,11 +238,17 @@ adminBilling.post('/refund', async (c) => {
     }, 400);
   }
 
-  // Optional partial-refund amount: positive integer minor units (e.g. cents).
+  // Optional partial-refund amount, in ONE of two forms. `amount`: positive integer minor units of the charge's
+  // currency, as Stripe takes it (the form callers used before D5029). `amount_major`: what a person typed, in
+  // major units ("25.50", "2500"), converted below in the charge's own currency.
   let amount: number | null = null;
+  const amountMajor = body.amount_major == null ? null : String(body.amount_major).trim();
+  if (body.amount != null && amountMajor !== null) {
+    return c.json({ error: 'Send amount or amount_major, not both', code: 'invalid_amount' }, 400);
+  }
   if (body.amount != null) {
     const n = Number(body.amount);
-    if (!Number.isInteger(n) || n <= 0) {
+    if (!Number.isSafeInteger(n) || n <= 0) {
       return c.json({ error: 'amount must be a positive integer in minor units', code: 'invalid_amount' }, 400);
     }
     amount = n;
@@ -248,10 +270,48 @@ adminBilling.post('/refund', async (c) => {
     }, 409);
   }
 
+  // D5029: a typed major-unit amount is read in the charge's currency, exactly, or refused. No currency read from
+  // Stripe means no conversion: it is never guessed as two decimals.
+  if (amountMajor !== null) {
+    if (!policy.currency) {
+      return c.json({
+        error: 'The charge\'s currency could not be read from Stripe, so the amount cannot be converted to its minor unit. Nothing was refunded.',
+        code: 'currency_unknown',
+      }, 409);
+    }
+    const parsed = parseMinor(amountMajor, policy.currency);
+    if (!parsed.ok || parsed.minor <= 0) {
+      return c.json({
+        error: parsed.ok ? 'The amount must be positive.' : parsed.message,
+        code: 'invalid_amount',
+        currency: policy.currency,
+        decimals: exponentOf(policy.currency),
+      }, 400);
+    }
+    amount = parsed.minor;
+  }
+  // Stripe's own quirks at the boundary, not the app's units: a three-decimal currency is refunded in multiples of
+  // ten of its minor unit, and ISK and UGX (no decimals in ISO 4217) are sent to Stripe as two-decimal amounts.
+  let stripeAmount: number | null = amount;
+  if (amount != null && policy.currency && amountMajor !== null) {
+    const exp = exponentOf(policy.currency);
+    if (exp === 3 && amount % 10 !== 0) {
+      return c.json({
+        error: `Stripe refunds ${policy.currency} in steps of 0.010: ${amountMajor} is not a multiple of that.`,
+        code: 'invalid_amount',
+        currency: policy.currency,
+      }, 400);
+    }
+    if (policy.currency === 'ISK' || policy.currency === 'UGX') stripeAmount = amount * 100;
+    if (stripeAmount != null && !Number.isSafeInteger(stripeAmount)) {
+      return c.json({ error: 'That amount is larger than can be sent to Stripe exactly.', code: 'invalid_amount' }, 400);
+    }
+  }
+
   const form: Record<string, string> = {};
   if (paymentIntent) form.payment_intent = paymentIntent;
   else form.charge = charge;
-  if (amount != null) form.amount = String(amount);
+  if (stripeAmount != null) form.amount = String(stripeAmount);
   // Stripe's own `reason` is its closed enum, taken from `stripe_reason` when
   // the caller names one (or from `reason` when that is itself an enum value,
   // the shape callers used before D224). The written reason goes to metadata.
