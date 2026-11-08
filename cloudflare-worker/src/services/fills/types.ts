@@ -143,6 +143,15 @@ export interface FillContext {
   env: Env;
   user: User;
   projectId: number;
+  /**
+   * D4627 (#4627): the `validate_proposals` row being accepted, when `apply`
+   * is running from the accept route rather than the manual form. A kind
+   * whose target creation is not already an upsert (`hypothesis`) uses it as
+   * the idempotency key that lets a retry after a partial failure land on
+   * the row it already created instead of allocating a second one. Absent
+   * (undefined) for every caller that is not accepting a specific proposal.
+   */
+  proposalId?: number | null;
 }
 
 export interface FillKind {

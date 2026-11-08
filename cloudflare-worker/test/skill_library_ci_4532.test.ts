@@ -51,6 +51,12 @@ test('the committed library passes with no error, and the manifest covers every 
   assert.equal(new Set(manifest.flatMap((m) => m.cases.map((c) => c.case_id))).size, manifest.length, 'distinct case identities');
   // `refuse_when` is carried but never evaluated: a warning, so nobody reads it as an assertion.
   assert.ok(findings.some((f) => f.rule === 'expect_key_unknown' && f.field === 'expect.refuse_when'));
+  // #4531: `numbers` is judged, so a case that asserts one is not told it proves nothing.
+  const withNumbers = JSON.parse(CASE);
+  withNumbers.expect.numbers = [{ metric: 'Runway', value: 14, unit: 'months', tolerance: 0 }];
+  const numbered = await check({ cases: { [`${SLUG}.json`]: JSON.stringify(withNumbers) } });
+  assert.deepEqual(errors(numbered.findings), []);
+  assert.ok(!numbered.findings.some((f) => f.rule === 'expect_key_unknown'));
 });
 
 test('each targeted defect fails with its own rule, file and slug', async () => {

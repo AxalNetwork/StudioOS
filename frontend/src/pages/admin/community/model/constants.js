@@ -15,8 +15,6 @@ export const PAGE_LINE = 'What members did in events, jobs, circles and wellbein
 
 export const PAGE_UNREADABLE = 'Community figures could not be read. Nothing here is a zero.';
 
-export const EMPTY_LINE = 'Community starts with a first circle or event.';
-
 export const AS_ENTERED_TIP = 'An admin types this number on each circle. It is not counted from sign-ups.';
 
 /** D915: an item waiting longer than this is Overdue (D931's `overdue_hours`). */
@@ -42,3 +40,18 @@ export const NOT_RECORDED = [
     reason: 'Circles have no discussion store. The number on a circle is typed by an admin.',
   },
 ];
+
+/** D4820 CM02d: Needs your attention when both queues were read and nothing waits. */
+export const QUEUE_CLEAR = 'Nothing needs your attention · Approvals are currently clear.';
+
+/** D4820 CM04a: a genuinely empty Community. */
+export const BUILD_TITLE = 'Build your community';
+export const BUILD_LINE = 'Create your first event or circle to start seeing participation, opportunities and community activity here.';
+
+/** D4820: the Additional insights row, one line for every figure no store records (`NOT_RECORDED`). */
+export const insightsLabel = (n) => `Additional insights · ${n} unavailable`;
+export const INSIGHTS_EMPTY_LEAD = 'Activity analytics will appear once there is enough community activity';
+
+/** D4820 CM01: Manage Community, six destinations, one short line each (the canvas's words). */
+export const MANAGE_TITLE = 'Manage Community';
+export const MANAGE_LINE = 'Where decisions and changes happen';

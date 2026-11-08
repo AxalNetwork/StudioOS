@@ -49,6 +49,12 @@ export function safeHref(url) {
   return /^https?:\/\/\S+$/i.test(s) ? s : null;
 }
 
+/** An https web address, or null: the one shape a version's content link may take (the worker refuses anything else). */
+export function httpsHref(url) {
+  const s = safeHref(url);
+  return s && /^https:\/\//i.test(s) ? s : null;
+}
+
 /** A link's host, for a cell too narrow for the whole address. */
 export function linkHost(url) {
   try { return new URL(url).host || null; } catch { return null; }
@@ -104,13 +110,39 @@ export function deliverableEdit(item, draft) {
   return { body, confirm: sent && engagement !== current };
 }
 
-/** The body for a link attached as the next version, or the reason it cannot be. */
+/**
+ * The body for the next version of a work product, or the reason it cannot be
+ * recorded. #4712 (D4712): a revision is never empty — it carries the content
+ * (a web link) AND a line saying what changed, the same two things the worker
+ * requires (422 `empty_version`). Older versions are never edited; this only
+ * ever records the next one.
+ */
 export function attachmentBody(draft) {
-  const link = String(draft?.link_url ?? '').trim();
-  if (!safeHref(link)) return { error: 'Enter a web address that starts with https://' };
-  if (link.length > 2000) return { error: 'A link is at most 2,000 characters.' };
   const summary = String(draft?.summary ?? '').trim();
-  return { body: { link_url: link, summary: summary || null } };
+  if (!summary) return { error: 'Say what changed in this version.' };
+  if (summary.length > 2000) return { error: 'The note is at most 2,000 characters.' };
+  const link = String(draft?.link_url ?? '').trim();
+  if (!httpsHref(link)) return { error: 'Enter a web address that starts with https://' };
+  if (link.length > 2000) return { error: 'A link is at most 2,000 characters.' };
+  return { body: { link_url: link, summary } };
+}
+
+/**
+ * What sending a work product's latest version would send, said before it
+ * goes: the version, its change note and where the content lives. `sendable`
+ * is false when there is nothing to send (no link), which the worker also
+ * refuses (422 `empty_version`).
+ */
+export function sendPreview(item) {
+  const v = item?.latest_version;
+  if (!v) return { sendable: false, line: 'There is no version to send.' };
+  const tag = `v${v.version}`;
+  const link = typeof v.link_url === 'string' ? v.link_url.trim() : '';
+  let host = '';
+  if (link && httpsHref(link)) { try { host = new URL(link).hostname; } catch { host = ''; } }
+  if (!host) return { sendable: false, line: `${tag} has no content to send. Add a version with a link, then send that one.` };
+  const note = String(v.summary ?? '').trim();
+  return { sendable: true, line: `Sends ${tag}${note ? ` — “${note}”` : ''} · opens ${host}` };
 }
 
 // ───────────────────────────── A2 · Session types ─────────────────────────────
@@ -371,4 +403,54 @@ export function initialsOf(name) {
 export function sinceYear(advisor) {
   const t = stampMs(advisor?.created_at);
   return t == null ? null : new Date(t).getUTCFullYear();
+}
+
+// ───────────────────── #4712 · Publishing a slot, running a session ─────────────────────
+
+/**
+ * The body for a published slot, or the reason it cannot be.
+ *
+ * The same four fields the legacy Opportunities form collected (start, end,
+ * seats, optional meeting link), checked here BEFORE the request so a refusal is
+ * a sentence next to the field rather than a 400. `datetime-local` values are
+ * the advisor's own clock; they are sent as instants (`toISOString`), which is
+ * what the worker stores.
+ */
+export function slotBody(draft, now = new Date()) {
+  const startRaw = String(draft?.starts_at ?? '').trim();
+  const endRaw = String(draft?.ends_at ?? '').trim();
+  if (!startRaw || !endRaw) return { error: 'Choose when the slot starts and when it ends.' };
+  const start = new Date(startRaw);
+  const end = new Date(endRaw);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return { error: 'Those times are not dates.' };
+  if (end.getTime() <= start.getTime()) return { error: 'The slot must end after it starts.' };
+  if (start.getTime() <= now.getTime()) return { error: 'A slot starts in the future.' };
+  const seatsRaw = String(draft?.capacity ?? '1').trim();
+  const seats = seatsRaw === '' ? 1 : Number(seatsRaw);
+  if (!Number.isInteger(seats) || seats < 1 || seats > 20) return { error: 'Seats is a whole number from 1 to 20.' };
+  const url = String(draft?.meeting_url ?? '').trim();
+  if (url && !safeHref(url)) return { error: 'The meeting link must start with https://' };
+  return {
+    body: { starts_at: start.toISOString(), ends_at: end.toISOString(), capacity: seats, meeting_url: url || null },
+  };
+}
+
+/** The three ways a confirmed session ends, with what each says to the client and whether it takes a reason. */
+export const SESSION_OUTCOMES = Object.freeze({
+  complete: { label: 'Session held', done: 'marked held', reason: false },
+  no_show: { label: 'No-show', done: 'marked a no-show', reason: true },
+  cancel: { label: 'Cancel', done: 'cancelled', reason: true },
+});
+
+/**
+ * The note a session outcome sends, or the reason it cannot go. A cancel needs a
+ * reason the client will read; a no-show may carry one; "held" never takes one.
+ */
+export function outcomeBody(outcome, note) {
+  const spec = SESSION_OUTCOMES[outcome];
+  if (!spec) return { error: 'Choose what happened to the session.' };
+  const text = String(note ?? '').trim();
+  if (text.length > 1000) return { error: 'A note is at most 1,000 characters.' };
+  if (outcome === 'cancel' && !text) return { error: 'Say why you are cancelling: the client is told.' };
+  return { note: spec.reason ? (text || null) : null };
 }

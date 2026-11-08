@@ -982,8 +982,13 @@ founderValidate.post('/proposals/:id/accept', async (c) => {
   }
 
   try {
+    // `proposalId` (D4627, #4627) is the idempotency key a kind's `apply` may
+    // use to make its own target creation safe to run twice: a RETRY of this
+    // same proposal after `recordFill` below fails claims the row again and
+    // calls `apply` again, and a kind that keys off this (today: `hypothesis`)
+    // lands on the SAME row rather than allocating a second one.
     const applied = await spec.apply(
-      { env: c.env, user: s.user, projectId: row.project_id }, applyPayload, String(row.target_ref || ''),
+      { env: c.env, user: s.user, projectId: row.project_id, proposalId: row.id }, applyPayload, String(row.target_ref || ''),
     );
     // RECORDED AFTER THE WRITE AND NOT SWALLOWED. A value written with no
     // provenance row is the state `fill_provenance` exists to prevent — on this

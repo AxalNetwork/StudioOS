@@ -227,8 +227,11 @@ test('A1: the attachment is the newest version with a web link; anything else is
   assert.equal(safeHref('javascript:alert(1)'), null);
   assert.equal(safeHref('www.example.com'), null);
   assert.equal(safeHref(' https://x.example/a '), 'https://x.example/a');
-  assert.deepEqual(attachmentBody({ link_url: 'ftp://x' }), { error: 'Enter a web address that starts with https://' });
-  assert.deepEqual(attachmentBody({ link_url: 'https://x.example', summary: ' ' }), { body: { link_url: 'https://x.example', summary: null } });
+  // #4712 (D4712): a revision carries what changed AND a web link; neither alone is a version.
+  assert.deepEqual(attachmentBody({ link_url: 'ftp://x', summary: 'Second pass' }), { error: 'Enter a web address that starts with https://' });
+  assert.deepEqual(attachmentBody({ link_url: 'https://x.example', summary: ' ' }), { error: 'Say what changed in this version.' });
+  assert.deepEqual(attachmentBody({ link_url: '', summary: '' }), { error: 'Say what changed in this version.' });
+  assert.deepEqual(attachmentBody({ link_url: 'https://x.example', summary: ' Second pass ' }), { body: { link_url: 'https://x.example', summary: 'Second pass' } });
 });
 
 test('A1: an edit sends what changed, refuses what the route would quietly drop, and confirms a move once sent', () => {

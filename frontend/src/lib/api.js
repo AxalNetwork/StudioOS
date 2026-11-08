@@ -3465,6 +3465,9 @@ export const api = {
   perkReviewQueue: () => request('/perks/admin/queue'),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  // D4806: Feature and Stop featuring are their own operation on a live listing, with the revision reviewed.
+  perkFeature: (uid, data) =>
+    request(`/perks/admin/${encodeURIComponent(uid)}/feature`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkGrantCredits: (data) =>
     request('/perks/admin/credits', { method: 'POST', body: JSON.stringify(data || {}) }),
 

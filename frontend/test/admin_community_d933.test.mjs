@@ -392,12 +392,15 @@ test('mounted CM9: every new block is drawn from the Community read', async () =
     assert.match(m.of('community-tile-waiting'), /4.*2 events · 2 jobs · oldest 4 days/s);
     assert.ok(m.has('community-tile-waiting-overdue'), 'no amber dot past 72 hours');
     assert.match(m.props('community-tile-waiting-overdue')['aria-label'], /more than 72 hours/);
-    assert.match(m.of('community-tile-show-up'), /65%/);
-    assert.match(m.of('community-tile-experts'), /9 verified of 12/);
+    // D4820: show-up is drawn in Events and the experts in Wellbeing, not in the KPI row.
+    assert.match(m.of('community-figure-show-up'), /65%/);
+    assert.match(m.of('community-figure-experts'), /9 verified of 12/);
     assert.match(m.of('community-activity-sentence'), /Event registrations moved most/);
     assert.match(m.of('community-funnel-confirmed'), /Confirmed\s*64 · 80%/);
     assert.match(m.of('community-waitlisted'), /9.*on 2 upcoming events · not a step/s);
-    assert.match(m.of('community-by-type-all'), /Show all · 9 types with none/);
+    // D4820: types with none are no longer listed on the overview ("Show all · 9 types with none" is gone).
+    assert.ok(!m.has('community-by-type-all'));
+    assert.match(m.of('community-by-type'), /Workshop/);
     assert.match(m.of('community-who-sentence'), /Founders took the largest share/);
     assert.match(m.of('community-checkins'), /10 to 14 founders checked in/);
     assert.match(m.of('community-need-wait-event-9'), /Overdue.*waiting 4 days/s);
