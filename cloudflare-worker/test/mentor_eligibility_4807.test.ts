@@ -92,7 +92,8 @@ test('a statement without the placeholder is returned untouched; every placehold
 test('every reader asks the one rule: no route or service tests the primary role alone', () => {
   for (const f of [
     'cloudflare-worker/src/services/programCatalogue.ts',
-    'cloudflare-worker/src/routes/advisors.ts',
+    // #4715: the advisor routes split into routes/advisors_*.ts; this code lives in advisors_cohorts.ts.
+    'cloudflare-worker/src/routes/advisors_cohorts.ts',
     'cloudflare-worker/src/services/cohortAdvisorAccess.ts',
   ]) {
     const text = src(f);

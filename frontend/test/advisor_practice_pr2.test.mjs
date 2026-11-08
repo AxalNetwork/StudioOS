@@ -33,12 +33,14 @@ import {
   BOARD_LANES, SIGNED_LANES, boardLaneOf, canDecideRenewal, clientNote,
   dueLine, laneMoves, shapeNote, shortDay,
 } from '../src/pages/advisor/practice/engagementBoard.js';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/advisor/practice/EngagementsZone.jsx');
 const P = codeOnly(PAGE);
 const ROUTES = read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx');
-const WORKER = read('cloudflare-worker/src/routes/advisors.ts');
+// #4715: the advisor router is advisors.ts plus the route modules it mounts.
+const WORKER = advisorRoutesSource();
 const APP = read('frontend/src/App.jsx');
 
 const eng = (over = {}) => ({
