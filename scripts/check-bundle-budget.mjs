@@ -23,8 +23,13 @@ import { join } from 'node:path';
 import { DOCS, analyse, stem } from './perf/bundle-baseline.mjs';
 
 export const BUDGET = Object.freeze({
-  /** The shell's critical path, brotli bytes. */
-  criticalBrotli: 500 * 1024,
+  /**
+   * The shell's critical path, brotli bytes. 500 KiB until 2026-11-08, when main reached
+   * 500.0 KiB with the one sidebar for every held licence (D4473, #5006), which App.jsx builds
+   * for every member and so belongs in the shell; #4565's draft legal routes add 0.2 KiB. Raised
+   * to 504 KiB by the owner's call: the same few KiB of room the baseline had.
+   */
+  criticalBrotli: 504 * 1024,
   /** The files on it. */
   criticalFiles: 95,
   /** The entry chunk alone, raw bytes (what the browser parses before anything renders). */
