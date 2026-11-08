@@ -116,7 +116,7 @@ function world() {
     // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
     '529_meeting_transcript_source.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
-    '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql',
+    '452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store and channel_threads.consent_state.
     '488_channel_consents.sql', '492_whatsapp_sender_links.sql', '504_whatsapp_link_settings.sql', '528_telegram_captures.sql']) db.exec(mig(m));
     applySessionTranslationColumns(db); // D857: migration 527's segment columns

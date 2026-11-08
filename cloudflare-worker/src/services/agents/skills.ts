@@ -34,6 +34,8 @@ export const SKILL_MD_MAX = 20_000;
 export const NOT_RECORDED = 'Not recorded';
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+/** A skill slug as `checkDraft` takes one (#4532 checks a catalogue file name against it). */
+export const isSkillSlug = (s: string) => SLUG.test(s);
 const TOOL = /^[a-z][a-z0-9_]{0,31}\.[a-z][a-z0-9_]{0,63}$/;
 const LEVEL_SCORE: Record<SeniorityLevel, number> = { aware: 1, working: 2, proficient: 3, advanced: 4, expert: 5 };
 

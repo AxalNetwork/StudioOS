@@ -28,6 +28,11 @@ ids, company boundaries, unchanged models after refused writes, and owner/admin
 access. It also pins the separate deal-room partner reader and the recompute
 edit gate so future read-only relationships cannot acquire writes accidentally.
 
+`authz_share_links_d4570.test.ts` (#4570, D4570 slice 3) asks the share-link routes through the real Worker on the
+migrated schema: the cap table scenario and venture links and the scoring report link refuse a forged, unstored,
+cross-kind, spent or revoked token and every account the link does not name, with nothing of the record in the
+refusal and no view, open or audit row written; another founder or an admin cannot revoke or mint the owner's link.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.
@@ -237,3 +242,34 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 advisor CTA and stored search-result URLs after redirect retirement (#4415).
 
 `ai_gateway_slice_4556.test.ts` (D4556) runs one third-party model through AI Gateway on a stubbed binding over the real AI budget migrations: every switch, config, task, data-class and Advisor refusal makes no call, success settles once from the exact reported usage, missing usage is never zero, retries honour `retry-after` within a bound, a timeout is unknown completion and is not retried, payload logging is off on every call, and no Advisor module can import the provider path.
+
+`lab_admission_evidence_4657.test.ts` (D4657) runs the Lab's real routes and services on `_storage_schema.ts`'s migrated template. It covers:
+- `/start` refusing an account that was never admitted, a sanctioned one, a graduate and one whose cohort opens later;
+- an explicit legacy enrollment;
+- a retryable 503 for a read that fails;
+- milestones that need saved work from the founder's own project, and a replay that pays once;
+- the reconciler catching up a lost grant and unrecorded work;
+- the bounded cron walk;
+- the activation writing the enrollment, and the gate following it;
+- every completion rule run on the real schema.
+
+`_lab_evidence.ts` is its helper, and the helper other Lab tests use: it applies the enrollment migration and writes the invented saved work that proves a milestone.
+
+`lab_lifecycle_4658.test.ts` (D4658) runs the Lab's lifecycle services and routes on the migrated template. It covers:
+- a stale week never written over a higher one;
+- a graduate never reopened by a start, a reinstatement or the activation;
+- the cycle activation interrupted at its batch, then resumed until it converges, completing only when every applicant is done and duplicating nothing on a rerun;
+- approval against withdrawal in both orders, including the race where the approval lands between the withdrawal's read and its write;
+- notification retry: failed and cut-off sends, the conditional re-claim, and abandonment.
+
+`lab_graduation_venture_4659.test.ts` (D4659) runs the Lab's routes and services on the migrated template. It covers:
+- the graduation view pinned to the catalog;
+- incorporation recorded before weeks 1–3, which is not graduation, and the credential issued once the rule is met;
+- several projects needing the founder's choice, and an older project never proving a step;
+- binding the only project, rename, deletion, and a live venture never switched;
+- the public lists naming the venture;
+- the migration's credential, single-project and needs-choice paths;
+- a held credential grandfathered until it is revoked.
+D4856 (#4856): `catalog_modes_4856.test.ts` holds Platform's catalogue summary to `getCatalog`'s mode rule (current, other and unknown rows), and `storage_populations_4856.test.ts` holds the storage read's members, staff and unattributed populations to their sum.
+
+#4569 (D4569): `_topology_model_4569.mjs` is the synthetic topology model of D4569's options A (one D1) and D (balance homes keyed by the payer, with a directory, home markers and an outbox relay), over in-memory node:sqlite with `poc_` tables; a test of the design, imported by nothing in `src`. `d1_topology_4569.test.mjs` drives it at 1, 10 and 1,000 tenants with a hot member, cross-company work, scope and sponsor moves, a member move behind a stale cache, injected settlement faults, outages and concurrent same-key retries, asserts the financial invariants after each, and shows each guard and each check is load-bearing.

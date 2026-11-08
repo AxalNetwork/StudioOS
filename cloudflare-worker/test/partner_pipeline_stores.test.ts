@@ -149,6 +149,7 @@ function freshDb() {
       notes TEXT, status TEXT NOT NULL DEFAULT 'submitted', decided_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      company_id INTEGER,
       UNIQUE (need_id, partner_id)
     );
     CREATE TABLE engagements (
@@ -160,7 +161,8 @@ function freshDb() {
       delivered_at TEXT, delivery_notes TEXT, cancelled_at TEXT, cancel_reason TEXT,
       invoice_id TEXT, invoiced_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      company_id INTEGER
     );
   `);
 
@@ -547,7 +549,7 @@ test('MRR skips an unpriced retainer and says how many it counted', async () => 
   const r = (await call(e, 'GET', '/retainers', ours)).body;
   assert.equal(r.retainer_count, 2);
   assert.equal(r.mrr_cents, 800000, 'the unpriced retainer was summed as zero');
-  assert.match(r.mrr_basis, /^1 retainer with a recorded amount/);
+  assert.match(r.mrr_basis, /^1 active retainer with a recorded amount/, 'D4693: only active retainers are counted, and it says so');
   assert.match(r.mrr_note, /1 retainer has no amount recorded/);
 });
 
@@ -559,7 +561,7 @@ test('a quarterly amount is divided by three rather than counted whole', async (
   const r = (await call(e, 'GET', '/retainers', ours)).body;
   // Summing raw would make MRR three times too big on every quarterly line.
   assert.equal(r.mrr_cents, 300000);
-  assert.match(r.mrr_basis, /quarterly amounts divided by three/);
+  assert.match(r.mrr_basis, /quarterly divided by three/);
 });
 
 test('a monthly retainer refuses a quarterly period label', async () => {

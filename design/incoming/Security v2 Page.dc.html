@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security v2 · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "1250px"}, "board": {"editor": "enum", "default": "SE01", "options": ["SE01", "SE12", "SE02", "SE03a", "SE03b", "SE04a", "SE04b", "SE05a", "SE05b", "SE05c", "SE05d", "SE05e", "SE05f", "SE05g", "SE06a", "SE06b", "SE06c", "SE06d", "SE07a", "SE07b", "SE07c", "SE08", "SE09", "SE10a", "SE10b", "SE10c", "SE10d", "SE10e", "SE10f", "SE10g", "SE10h", "SE10i", "SE10j", "SE11a", "SE11b", "SE11c", "SE11d", "SE11e", "SE11f", "SEA", "SEB", "SEC", "SED", "SEE"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'SE01';
+    const P = { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#e7e5ee', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f3effe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#e7e5ee' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const pill = (tone, t) => '<span class="pl ' + (tone || '') + '">' + t + '</span>';
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- the shared state vocabulary: label + shape + accessible description ---------- */
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SHAPE = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      st: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 1.6"/>'),
+      un: SV('<path d="M4.2 4.3a1.9 1.9 0 1 1 2.4 1.8c-.4.2-.6.5-.6 1V8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="10" r=".9" fill="currentColor"/>'),
+      ua: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 10.5l9-9" stroke="currentColor" stroke-width="1.6"/>'),
+      ni: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="1 1.8"/>'),
+      us: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.8 9.2l6.4-6.4" stroke="currentColor" stroke-width="1.6"/>'),
+      na: SV('<path d="M2.5 6h7" stroke="currentColor" stroke-width="2"/>'),
+      mz: SV('<text x="6" y="9.5" text-anchor="middle" font-size="9.5" font-weight="700" font-family="monospace" fill="currentColor">0</text>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>')
+    };
+    const ST = {
+      Verified: ['ok', 'ok', 'Checked against evidence and confirmed.'],
+      Healthy: ['ok', 'ok', 'Read recently; nothing needs attention.'],
+      'Action required': ['xar', 'ar', 'An operator needs to act.'],
+      Failed: ['fl', 'fl', 'The last attempt or check failed.'],
+      Pending: ['pd', 'pd', 'Started or scheduled; not finished yet.'],
+      Stale: ['xst', 'st', 'Last good evidence is older than its threshold.'],
+      Unknown: ['un', 'un', 'Evidence exists but cannot say which way.'],
+      Unavailable: ['un', 'ua', 'The source could not be read this time.'],
+      'Not instrumented': ['ni', 'ni', 'Nothing records this yet.'],
+      Unsupported: ['ni', 'us', 'The product does not do this.'],
+      'Not applicable': ['na', 'na', 'Does not apply to this scope.'],
+      'Measured zero': ['mz', 'mz', 'Read successfully; the count is 0.'],
+      'No data yet': ['ni', 'nd', 'Instrumented, but nothing has happened yet.']
+    };
+    const stt = (s, label) => { const x = ST[s] || ['', 'nd', '']; return '<span class="stt ' + x[0] + '" title="' + x[2] + '">' + SHAPE[x[1]] + (label || s) + '</span>'; };
+    const scope = (t) => '<span class="scope" title="Scope">◎ ' + t + '</span>';
+
+    /* ---------- shell ---------- */
+    const NAV = ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const PROMPTS = ['Summarize unresolved security items', 'Explain the failed restore drill', 'Identify sessions that warrant review', 'Summarize events since yesterday', 'Explain recent refusals'];
+    const spine = (open) => open
+      ? '<aside class="sp eadx" aria-label="Eadwyn" style="width:340px"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:8px;align-items:center"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span><b style="font-size:13.5px">Eadwyn</b><span class="pl v">Security context</span></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div>'
+        + '<div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;font-size:12.5px;line-height:1.55;flex:1">'
+        + '<span class="eye">Ask about this page</span><div class="prm">' + J(PROMPTS.map(p => '<button type="button">' + p + '</button>')) + '<button type="button">Explain why a status is unavailable</button></div>'
+        + '<div class="cs2" style="margin-top:4px"><span class="eye">Answer · Explain the failed restore drill</span><p>The drill on <b>1 Nov 03:10 UTC</b> found and verified the backup and created the drill database, then failed at the <b>restore</b> step (exit code 1). The backup itself exists; it is <b>not verified restorable</b> until a drill passes.</p><p class="foot">From the drill record in the backups bucket. Eadwyn did not run anything.</p><div style="display:flex;gap:6px;flex-wrap:wrap"><a class="btn p bsm" href="#">Open Resilience</a><button type="button" class="btn bsm">Copy summary</button></div></div></div>'
+        + '<div style="padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px"><div class="inp" style="min-width:0;min-height:38px">Ask about Security…</div><button type="button" class="disc2" aria-expanded="false">Model and usage ▾</button></div></aside>'
+      : '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about Security" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const shell = (body, overlay, h, ead) => '<div class="sh" style="min-height:' + (h || 900) + 'px' + (ead ? ';grid-template-columns:196px minmax(0,1fr) 340px' : '') + '">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">HQ</span><nav aria-label="HQ">' + J(NAV.map(t => '<a href="#"' + (t === 'Security' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><span class="bdg" style="background:#881337">HQ</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">GL</span></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + spine(ead) + (overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o.overlay, o.h || 900, o.ead) + '</div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+
+    /* ---------- header + workspace tabs ---------- */
+    const WS = [['Overview', '', ''], ['Events', '', ''], ['Access', '2 admins without MFA', 'a'], ['Privacy', '', ''], ['Trust', '', ''], ['AI Safety', '', ''], ['Resilience', 'Drill failed', 'r']];
+    const head = (cur, sub) => '<header class="hd"><div><span class="eye">HQ · Security</span><h1>' + (cur === 'Overview' ? 'Security' : cur) + '</h1><p>' + (sub || 'What needs action, the evidence behind it, and the audit trail.') + '</p></div>'
+      + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="ver"><span aria-live="polite">Observed <b>14:30 UTC</b></span><button type="button" class="lk">Refresh</button>' + scope('HQ-held accounts') + '</div>'
+      + '<div class="srcl"><span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><b>5 of 5 sources read</b><button type="button" class="disc2" aria-expanded="false">Source details ▾</button></div></div></header>'
+      + '<nav class="wst" aria-label="Security workspaces">' + J(WS.map(w => '<a href="#"' + (w[0] === cur ? ' aria-current="page"' : '') + '>' + w[0] + (w[1] ? '<span class="n ' + w[2] + '">' + (w[2] === 'r' ? '✕ ' : '▲ ') + (w[0] === 'Access' ? '2' : '1') + '</span>' : '') + '</a>')) + '</nav>';
+
+    /* ---------- OVERVIEW ---------- */
+    const AR = [
+      ['Failed', 'Restore drill failed', 'The 1 Nov drill stopped at the restore step. Backups exist but are not verified restorable.', '1 Nov 03:10 UTC · 6 days', 'Open drill evidence', 'Resilience'],
+      ['Action required', 'Administrators without MFA', '0 of 2 HQ administrators have a second factor. Both can still sign in with a password alone.', 'Read 14:30', 'Review administrators', 'Access']
+    ];
+    const arList = (rows, sm) => '<section class="cd" aria-labelledby="arh"><div class="ch"><h2 id="arh">Action required</h2><span class="sm">' + (sm || '2 items · most severe first') + '</span></div><ol class="arq">'
+      + J(rows.map(r => '<li><span>' + stt(r[0]) + '</span><div><div class="t">' + r[1] + '</div><div class="d">' + r[2] + '</div></div><span class="w">' + r[3] + '<br>' + r[5] + '</span><a class="btn bsm' + (r[0] === 'Failed' ? ' p' : '') + '" href="#">' + r[4] + '</a></li>')) + '</ol>'
+      + '<p class="foot" style="display:flex;gap:16px;flex-wrap:wrap">Checked and clear: ' + stt('Measured zero', '0 live impersonations') + stt('Measured zero', '0 DSRs near deadline') + stt('Measured zero', '0 unreviewed sanctions hits') + stt('Healthy', '5 of 5 sources read') + '</p></section>';
+    const OPS = [
+      ['Authentication', 'Action required', '<span class="mo">0 of 2</span> admins have MFA', 'Read 14:30 · D1 users'],
+      ['Sessions & access', 'Healthy', '<span class="mo">2</span> active sessions · <span class="mo">0</span> live impersonations', 'Read 14:30'],
+      ['Privacy & DSR', 'Healthy', '<span class="mo">1</span> open · next due <span class="mo">19 Nov</span>', 'Read 14:30'],
+      ['Trust & sanctions', 'Measured zero', '<span class="mo">0</span> unreviewed sanctions hits · KYC separate', 'Screened on request'],
+      ['AI safety', 'Healthy', '<span class="mo">2 of 2</span> evaluated outputs safe · small sample', 'Last 7 days · HQ only'],
+      ['Backup & recovery', 'Failed', 'Backup present · restore drill <b>failed</b>', 'Drill 1 Nov 03:10'],
+      ['Security events', 'Healthy', '<span class="mo">5 of 5</span> sources · newest 14:12', 'Read 14:30'],
+      ['Subprocessor notices', 'Not instrumented', 'Per-notice delivery is not recorded', 'Subscriber counts only']
+    ];
+    const ops = () => '<section aria-labelledby="osh" style="display:flex;flex-direction:column;gap:10px"><div class="ch"><h2 id="osh" style="font-size:15px;font-weight:800">Status by area</h2><span class="foot">No overall score: each area reports its own evidence.</span></div><div class="ops">'
+      + J(OPS.map(o => '<a href="#"><div class="h"><b>' + o[0] + '</b>' + stt(o[1]) + '</div><div class="v">' + o[2] + '</div><div class="f">' + o[3] + '</div></a>')) + '</div></section>';
+    const EVR = [
+      ['14:12', 'Guillaume L.', 'HQ', 'Multi-factor authentication required', 'gate.totp detail=factor_required', ['Action required', 'Refused'], 'security_events'],
+      ['13:40', 'Guillaume L.', 'HQ', 'Step-up verification passed', 'gate.step_up detail=passed', ['Healthy', 'Allowed'], 'security_events'],
+      ['11:05', 'M. Okafor', 'Lisbon branch', 'Licence suspended', 'licence.suspended', ['Recorded', 'Recorded'], 'licence_events'],
+      ['10:22', 'Guillaume L.', 'HQ', 'Members export downloaded', 'admin.export members_csv', ['Recorded', 'Recorded'], 'admin_audit_log'],
+      ['09:47', 'M. Okafor', 'HQ', 'Signed in', 'auth.login', ['Healthy', 'Allowed'], 'activity_logs'],
+      ['6 Nov 18:40', 'Guillaume L.', 'HQ', 'Support session ended', 'impersonation.end', ['Healthy', 'Ended'], 'impersonation_sessions']
+    ];
+    const recent = () => '<section class="cd"><div class="ch"><h2>Recent security activity</h2><a class="btn t bsm" href="#">Open Events →</a></div><ol class="feed">'
+      + J(EVR.slice(0, 5).map(e => '<li><span class="w">' + e[0] + '</span><span>' + e[1] + '</span><span><b>' + e[3] + '</b></span>' + stt(e[5][0], e[5][1]) + '</li>')) + '</ol></section>';
+    const overview = () => head('Overview') + arList(AR) + ops() + '<div class="g"><div style="grid-column:span 8;display:flex;flex-direction:column;gap:16px">' + recent() + '</div>'
+      + '<div style="grid-column:span 4;display:flex;flex-direction:column;gap:16px"><section class="cd"><div class="ch"><h2>Emergency</h2></div><p style="font-size:12.5px;line-height:1.5">Sign out every HQ-held account, including you. Branch databases are not touched.</p><button type="button" class="btn dg bsm" style="align-self:flex-start">Emergency re-authentication…</button><p class="foot">Super admin with a fresh step-up · reason required · audited</p></section>'
+      + '<section class="cd"><div class="ch"><h2>Evidence sources</h2><span class="sm">5 of 5</span></div><p style="font-size:12.5px">Activity from 5 security and administrative sources.</p><button type="button" class="disc2" aria-expanded="false">View source details ▾</button></section></div></div>';
+
+    /* ---------- EVENTS ---------- */
+    const QF = [['All actions', '60+'], ['Impersonations', '3'], ['Licence changes', '9'], ['Suspensions', '2'], ['Exports', '4'], ['Sign-ins and step-ups', '41']];
+    const evFilters = (cur) => '<div class="tools"><div class="inp" style="min-width:300px"><span aria-hidden="true">⌕</span>Search actor, event or ID</div><button type="button" class="dd on">Last 7 days ▾</button><button type="button" class="dd">Actor ▾</button><button type="button" class="dd">Event type ▾</button><button type="button" class="dd">Outcome ▾</button><button type="button" class="dd">Source · 5 ▾</button><button type="button" class="dd" aria-disabled="true" title="Branch is recorded on licence events only">Branch ▾</button></div>'
+      + '<div class="chips" role="radiogroup" aria-label="Quick categories">' + J(QF.map(q => '<button type="button" role="radio" aria-checked="' + (q[0] === cur) + '">' + q[0] + '<span>' + q[1] + '</span></button>')) + '</div>';
+    const evTable = (sel, foot) => '<div class="cd" style="padding:0;gap:0;overflow:hidden"><table class="etb"><caption class="eye" style="text-align:left;padding:10px 12px;caption-side:top">Newest first · 60 of 60+ loaded · times in UTC</caption><thead><tr><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Scope</th><th scope="col">Event</th><th scope="col">Outcome</th><th scope="col">Source</th></tr></thead><tbody>'
+      + '<tr class="day"><th colspan="6" scope="colgroup">Today · Sat 7 Nov</th></tr>'
+      + J(EVR.map((e, i) => (i === 5 ? '<tr class="day"><th colspan="6" scope="colgroup">Fri 6 Nov</th></tr>' : '') + '<tr' + (i === sel ? ' class="sel" aria-selected="true"' : '') + '><td class="w">' + e[0].replace('6 Nov ', '') + '</td><td>' + e[1] + '</td><td>' + (e[2] === 'HQ' ? 'HQ' : e[2]) + '</td><td><b>' + e[3] + '</b><small class="raw">' + e[4] + '</small></td><td>' + stt(e[5][0], e[5][1]) + '</td><td class="w">' + e[6].replace(/_/g, ' ') + '</td></tr>'))
+      + '</tbody></table>' + (foot || '<div class="lo"><button type="button" class="btn bsm">Load older events</button><small>Older than 6 Nov 18:40 · keeps your filters</small></div>') + '</div>';
+    const evDrawer = () => '<div class="dim1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="edh" style="width:520px"><div class="drh"><div class="tr"><span class="eye">Event · security_events #88214</span><button type="button" class="ib" aria-label="Close event detail">✕</button></div><h2 id="edh">Multi-factor authentication required</h2><div class="mt">' + stt('Action required', 'Refused') + '<span class="mu">Sat 7 Nov 2026, 14:12:08 UTC</span></div></div>'
+      + '<div class="drb"><section><h3>What happened</h3><p style="font-size:13px;line-height:1.55">Guillaume L. tried a super-admin action. It was refused because the account has no second factor enrolled. Nothing was changed.</p></section>'
+      + '<section><h3>Who and where</h3><dl class="fx"><dt>Actor</dt><dd>Guillaume L. · Super admin</dd><dt>Scope</dt><dd>HQ</dd><dt>Session</dt><dd><a href="#">Session 4410 · Chrome on macOS</a></dd><dt>Route</dt><dd class="mo">POST /api/admin/security/force-reauth</dd></dl></section>'
+      + '<section><h3>Related</h3><ul class="hist"><li><span>13:40</span>Step-up verification passed</li><li><span>Fri 18:40</span>Support session ended</li></ul><a class="btn t bsm" href="#">All events for this actor →</a></section>'
+      + '<section><button type="button" class="disc2" aria-expanded="true">Raw event ▴</button><div class="code" style="margin-top:6px">{ "store": "security_events", "id": 88214,\n  "kind": "gate.totp", "detail": "factor_required",\n  "user_id": 1, "ip": "203.0.113.24",\n  "created_at": "2026-11-07T14:12:08Z" }</div></section></div>'
+      + '<div class="drf"><div style="display:flex;gap:8px"><button type="button" class="btn bsm">Copy event ID</button><button type="button" class="btn bsm">Copy raw JSON</button></div><p class="ln">Read-only. The ledger cannot be edited from here.</p></div></aside>';
+    const events = () => head('Events', 'Investigate activity across security and administrative sources.') + evFilters('All actions') + evTable(0);
+
+    /* ---------- ACCESS ---------- */
+    const SESS = [
+      ['Guillaume L. (you)', 'Super admin', 'Chrome 131', 'macOS 15', '7 Nov 08:02', '14:30 · now', 'Current', 'This session'],
+      ['M. Okafor', 'HQ admin', 'Firefox 132', 'Windows 11', '7 Nov 09:47', '13:58', 'Active', 'HQ']
+    ];
+    const MFA = [['Guillaume L. (you)', 'Super admin', 'Password only'], ['M. Okafor', 'HQ admin', 'Password only']];
+    const access = (open) => head('Access', 'Sessions, administrator sign-in strength and support access.')
+      + '<div class="dl3"><div><small>Active sessions</small><b>2</b><small>HQ-held accounts</small></div><div><small>Admins with MFA</small><b style="color:var(--amT)">0 of 2</b><small>' + stt('Action required') + '</small></div><div><small>Live support sessions</small><b>0</b><small>' + stt('Measured zero') + '</small></div><div><small>Revoked in last 7 days</small><b>3</b><small>see Events</small></div></div>'
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:12px 14px"><h2>Active sessions</h2><div class="tools"><div class="inp" style="min-width:220px">Filter by account</div><button type="button" class="btn bsm" aria-disabled="true">Revoke selected</button></div></div><table class="etb"><thead><tr><th scope="col"><input type="checkbox" aria-label="Select all sessions"></th><th scope="col">Account</th><th scope="col">Device</th><th scope="col">Started</th><th scope="col">Last active</th><th scope="col">State</th><th scope="col"><span class="sr">Actions</span></th></tr></thead><tbody>'
+      + J(SESS.map((s, i) => '<tr' + (open && i === 1 ? ' class="sel"' : '') + '><td><input type="checkbox" aria-label="Select ' + s[0] + '"' + (i === 0 ? ' disabled title="Your current session — use Sign out"' : '') + '></td><td><b>' + s[0] + '</b><small>' + s[1] + '</small></td><td>' + s[2] + '<small>' + s[3] + '</small></td><td class="w">' + s[4] + '</td><td class="w">' + s[5] + '</td><td>' + (i === 0 ? stt('Pending', 'Current') : stt('Healthy', 'Active')) + '</td><td><div class="acts"><button type="button" class="btn t bsm" aria-expanded="' + (open && i === 1) + '">Details</button>' + (i === 0 ? '' : '<button type="button" class="btn bsm">Revoke</button>') + '<button type="button" class="ib" aria-label="More actions for ' + s[0] + '" style="width:28px;height:28px">⋯</button></div></td></tr>'
+        + (open && i === 1 ? '<tr class="sel"><td></td><td colspan="6"><dl class="kv2" style="grid-template-columns:150px minmax(0,1fr) 150px minmax(0,1fr)"><dt>Session ID</dt><dd class="mo">4417</dd><dt>IP address</dt><dd class="mo">203.0.113.71</dd><dt>Issued</dt><dd class="mo">2026-11-07 09:47:12Z</dd><dt>Expires</dt><dd class="mo">2026-11-14 09:47:12Z</dd><dt>User agent</dt><dd class="mo" style="grid-column:span 3;font-size:11px">Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0</dd></dl><div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="btn bsm">Sign out M. Okafor everywhere…</button><a class="btn t bsm" href="#">Events for this account →</a></div></td></tr>' : ''))) + '</tbody></table></section>'
+      + '<div class="g"><section class="cd" style="grid-column:span 7"><div class="ch"><h2>Administrator sign-in strength</h2>' + stt('Action required', '0 of 2 with MFA') + '</div><table class="tbl"><thead><tr><th>Administrator</th><th>Role</th><th>Second factor</th><th></th></tr></thead><tbody>' + J(MFA.map(m => '<tr><td><b>' + m[0] + '</b></td><td>' + m[1] + '</td><td>' + stt('Action required', m[2]) + '</td><td style="text-align:right">' + (m[0].indexOf('you') > 0 ? '<a class="btn p bsm" href="#">Set up MFA</a>' : '<button type="button" class="btn bsm">Copy setup reminder</button>') + '</td></tr>')) + '</tbody></table></section>'
+      + '<section class="cd" style="grid-column:span 5"><div class="ch"><h2>Support access</h2>' + stt('Measured zero', '0 live') + '</div><p style="font-size:12.5px;color:var(--mu)">No one is acting as another user right now. Ended sessions are in Events → Impersonations.</p><div class="ch" style="border-top:1px solid var(--hair);padding-top:12px"><h2 style="font-size:13.5px">Emergency re-authentication</h2></div><p style="font-size:12.5px">Signs out every HQ-held account, you included. Branch databases are not affected.</p><button type="button" class="btn dg bsm" style="align-self:flex-start">Emergency re-authentication…</button></section></div>';
+
+    /* ---------- destructive-action dialogs ---------- */
+    const steps = (n) => '<div class="steps3" aria-label="Step ' + n + ' of 3">' + J(['Scope', 'Review', 'Result'].map((s, i) => '<span class="' + (i + 1 < n ? 'dn' : i + 1 === n ? 'on' : '') + '"><i>' + (i + 1 < n ? '✓' : i + 1) + '</i>' + s + '</span>')) + '</div>';
+    const dlg = (h, title, sub, body, foot, w) => '<div role="dialog" aria-modal="true" aria-labelledby="' + h + '" style="width:' + (w || 560) + 'px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.18);display:flex;flex-direction:column"><div class="mdh"><div style="display:flex;flex-direction:column;gap:6px"><h2 id="' + h + '">' + title + '</h2>' + (sub || '') + '</div><button type="button" class="ib" aria-label="Cancel and close">✕</button></div><div class="mdb">' + body + '</div><div class="mdf">' + foot + '</div></div>';
+    const reason = (txt, err) => '<div class="fld"><label for="rsn">Reason <span>· required, at least 10 characters, saved to the audit log</span></label><div class="ta" id="rsn"' + (err ? ' style="border-color:var(--neg);box-shadow:0 0 0 1px var(--neg)" aria-invalid="true" aria-describedby="rsne"' : '') + '>' + (txt || '<span class="mu">Why are you doing this?</span>') + '</div>' + (err ? '<span id="rsne" role="alert" style="color:var(--neg);font-size:12px;font-weight:600">✕ ' + err + '</span>' : '') + '</div>';
+    const D1 = () => dlg('d1', 'Revoke this session?', steps(1), '<div class="scopebox"><b>Affects exactly one session</b><ul><li><span>•</span>M. Okafor · Firefox 132 on Windows 11 · session 4417</li><li><span>•</span>Their other sessions stay signed in</li><li><span>✓</span>You are not affected</li></ul></div>' + reason('Unrecognised device reported by M. Okafor', false), '<button type="button" class="btn">Cancel</button><button type="button" class="btn dg">Revoke session</button>');
+    const D2 = () => dlg('d2', 'Review: revoke 3 sessions', steps(2), '<div class="scopebox"><b>3 sessions on 2 accounts</b><ul><li><span>•</span>M. Okafor — 2 sessions (Firefox on Windows, Safari on iOS)</li><li><span>•</span>R. Haddad — 1 session (Chrome on Android)</li><li><span>✓</span>You are not affected — your current session can’t be selected</li><li><span>•</span>Each revoke is audited separately with this reason</li></ul></div><dl class="kv2"><dt>Reason</dt><dd>Lost laptop reported in #ops, 7 Nov</dd><dt>Limit</dt><dd>Up to 100 sessions per request</dd></dl>', '<button type="button" class="btn">Back</button><button type="button" class="btn dg">Revoke 3 sessions</button>');
+    const D3 = () => dlg('d3', 'Revoked 2 of 3 sessions', steps(3) + '<p role="status" style="font-size:12.5px;color:var(--mu)">Results confirmed by the server at 14:31:07 UTC.</p>', '<ul class="rz"><li><b>M. Okafor · Firefox on Windows</b><small>session 4417</small>' + stt('Verified', 'Revoked') + '</li><li><b>M. Okafor · Safari on iOS</b><small>session 4402</small>' + stt('Verified', 'Revoked') + '</li><li><b>R. Haddad · Chrome on Android</b><small>session 4391 · had already ended at 14:20 — nothing changed</small>' + stt('Not applicable', '– Already ended') + '</li></ul><a class="btn t bsm" href="#" style="align-self:flex-start">View the 2 audit entries →</a>', '<button type="button" class="btn">Copy results</button><button type="button" class="btn p">Done</button>');
+    const D4 = (n) => n === 1
+      ? dlg('d4', 'Emergency re-authentication', steps(1), '<div class="scopebox" style="border-color:var(--neg)"><b>Signs out every HQ-held account</b><ul><li><span>•</span>All active accounts in the HQ database must sign in again</li><li><span>•</span>Branch databases are <b>not</b> touched — branch users stay signed in</li><li><span>•</span>Sessions issued before now stop working at their next request</li></ul></div><div class="you"><span aria-hidden="true">▲</span><div><b>You will be signed out too.</b> You’ll need your password and a fresh step-up to come back.</div></div>' + reason('', 'Add a reason of at least 10 characters.'), '<button type="button" class="btn">Cancel</button><button type="button" class="btn dg" aria-disabled="true">Continue to review</button>', 600)
+      : dlg('d4b', 'Confirm emergency re-authentication', steps(2), '<dl class="kv2"><dt>Scope</dt><dd>HQ-held accounts · 14 active</dd><dt>Not affected</dt><dd>Branch-held accounts</dd><dt>You</dt><dd style="color:var(--amT)">Signed out after this completes</dd><dt>Reason</dt><dd>Credential leak suspected, incident INC-112</dd><dt>Authority</dt><dd>Super admin · step-up at 14:29 UTC</dd></dl><div class="fld"><label for="cf">Type <b class="mo">SIGN OUT HQ</b> to confirm</label><div class="ta" id="cf" style="min-height:36px">SIGN OUT HQ</div></div>', '<button type="button" class="btn">Back</button><button type="button" class="btn dg">Sign out 14 HQ accounts</button>', 600);
+    const D5 = () => dlg('d5', 'End support session?', steps(1), '<div class="scopebox"><b>Ends one support session</b><ul><li><span>•</span>Guillaume L. acting as founder@lumen.example · started 14:02</li><li><span>•</span>The member is not signed out of their own sessions</li><li><span>✓</span>Your own admin session continues</li></ul></div>' + reason('Support ticket SUP-4471 resolved'), '<button type="button" class="btn">Cancel</button><button type="button" class="btn dg">End support session</button>');
+    const D6 = () => dlg('d6', 'Couldn’t revoke the session', '<p role="alert" style="font-size:12.5px;color:var(--neg);font-weight:600">✕ The server didn’t confirm the change. Nothing is shown as revoked.</p>', '<dl class="kv2"><dt>Session</dt><dd>4417 · M. Okafor</dd><dt>Server said</dt><dd>Network error after 10 s · no response</dd><dt>State now</dt><dd>' + stt('Unknown', 'Unknown — re-read before retrying') + '</dd></dl>', '<button type="button" class="btn">Close</button><button type="button" class="btn">Re-read session</button><button type="button" class="btn dg">Try again</button>');
+
+    /* ---------- PRIVACY ---------- */
+    const DSR = [
+      ['DSR-0031', 'Erasure', 'founder@lumen.example', '20 Oct', '19 Nov', '12 days left', 'Open', 'Confirm records are removed, then close as fulfilled'],
+      ['DSR-0030', 'Access', 'lp@harbor.example', '2 Oct', '1 Nov', 'Closed 28 Oct', 'Fulfilled', '—'],
+      ['DSR-0029', 'Erasure', 'member@kite.example', '29 Sep', '29 Oct', 'Withdrawn 3 Oct', 'Withdrawn', 'By the requester'],
+      ['DSR-0027', 'Rectification', 'cfo@aster.example', '14 Sep', '14 Oct', 'Closed 9 Oct', 'Denied', '—']
+    ];
+    const dsrTone = { Open: 'Pending', Fulfilled: 'Verified', Withdrawn: 'Not applicable', Denied: 'Not applicable' };
+    const privacy = (det) => head('Privacy', 'Data subject requests, their legal due dates and what HQ has recorded.')
+      + '<div class="dl3"><div><small>Open</small><b>1</b><small>next due 19 Nov</small></div><div><small>Due within 7 days</small><b>0</b><small>' + stt('Measured zero') + '</small></div><div><small>Overdue</small><b>0</b><small>' + stt('Measured zero') + '</small></div><div><small>Closed in last 90 days</small><b>3</b><small>2 closed by HQ · 1 withdrawn</small></div></div>'
+      + '<div class="' + (det ? 'ws' : '') + '" style="' + (det ? 'grid-template-columns:minmax(0,1fr) 460px' : '') + '"><section class="cd" style="padding:0;gap:0;overflow:hidden"><table class="etb"><thead><tr><th scope="col">Request</th><th scope="col">Subject</th><th scope="col">Received</th><th scope="col">Due</th><th scope="col">Remaining</th><th scope="col">State</th></tr></thead><tbody>'
+      + J(DSR.map((d, i) => '<tr' + (det && i === 0 ? ' class="sel"' : '') + '><td><b>' + d[0] + '</b><small>' + d[1] + '</small></td><td>' + d[2] + '</td><td class="w">' + d[3] + '</td><td class="w"><b style="color:var(--ink)">' + d[4] + '</b></td><td class="w">' + d[5] + '</td><td>' + stt(dsrTone[d[6]], d[6]) + '</td></tr>')) + '</tbody></table><p class="foot" style="padding:10px 12px">Due date = received + 30 days, as the product counts it. Shown as a date so no one has to do the arithmetic.</p></section>'
+      + (det ? '<section class="cd"><div class="ch"><div><span class="eye">DSR-0031 · Erasure</span><h2 style="font-size:17px">founder@lumen.example</h2></div>' + stt('Pending', 'Open') + '</div>'
+        + '<div class="life" aria-label="Lifecycle: received, open, closed"><span class="dn">✓ Received 20 Oct</span><span class="on">Open · HQ reviewing</span><span>Closed</span></div>'
+        + '<dl class="kv2"><dt>Received</dt><dd>Tue 20 Oct 2026, 10:14 UTC</dd><dt>Due</dt><dd>Thu 19 Nov 2026</dd><dt>Remaining</dt><dd>12 days</dd><dt>Scope</dt><dd>HQ-held account · user 2214</dd><dt>Next action</dt><dd>Confirm the member’s records are removed, then record the outcome</dd></dl>'
+        + '<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Closing records a decision. It does not erase data.</b><div>Erasure is done separately. Close as Fulfilled only after you have confirmed it.</div></div></div>'
+        + '<div style="display:flex;gap:8px"><button type="button" class="btn p bsm">Record outcome…</button><button type="button" class="btn bsm">Copy request summary</button></div>'
+        + '<section><h3 class="eye" style="margin-bottom:6px">History</h3><ul class="hist"><li><span>20 Oct 10:14</span>Request received from the member’s privacy page</li><li><span>21 Oct 09:02</span>Seen by Guillaume L.</li></ul></section></section>' : '') + '</div>';
+    const D7 = () => dlg('d7', 'Record outcome for DSR-0031', steps(1), '<div class="rv" role="radiogroup" aria-label="Outcome"><label class="on"><input type="radio" checked><span>✓</span><span><b>Fulfilled</b><br><small>You have completed what was asked</small></span><span></span></label><label><input type="radio"><span>✕</span><span><b>Denied</b><br><small>You are refusing, with a legal basis</small></span><span></span></label></div><p class="foot">Withdrawn isn’t offered: only the requester can withdraw.</p>' + reason('Records removed from members and documents, checked 7 Nov'), '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Close as Fulfilled</button>');
+    const D8 = () => dlg('d8', 'This request changed while you were working', '<p role="alert" style="font-size:12.5px;color:var(--amT);font-weight:600">▲ Nothing was saved.</p>', '<dl class="kv2"><dt>You saw</dt><dd>Open</dd><dt>Now</dt><dd>' + stt('Not applicable', 'Withdrawn by the requester at 14:28') + '</dd></dl><p style="font-size:12.5px">A withdrawn request can’t be closed by HQ. Your reason has been kept in this dialog in case you need it.</p>', '<button type="button" class="btn">Copy my reason</button><button type="button" class="btn p">Reload request</button>');
+
+    /* ---------- TRUST ---------- */
+    const trust = () => head('Trust', 'Screening, obligations and what the public Trust Center says.')
+      + '<div class="g"><section class="cd" style="grid-column:span 6"><div class="ch"><h2>Sanctions screening</h2>' + stt('Measured zero', '0 unreviewed hits') + '</div><dl class="kv2"><dt>How it runs</dt><dd>On request, per entity · not on a schedule</dd><dt>Last screening</dt><dd>5 Nov 16:20 · Aster Robotics · no match</dd><dt>Reviewed hits</dt><dd>1 (false positive, 12 Oct)</dd></dl><a class="btn t bsm" href="#" style="align-self:flex-start">Screening history →</a></section>'
+      + '<section class="cd" style="grid-column:span 6"><div class="ch"><h2>KYC</h2>' + stt('Not instrumented', 'Not summarised here') + '</div><p style="font-size:12.5px">Identity checks are a separate process from sanctions. Their status lives with each member’s onboarding.</p><a class="btn t bsm" href="#" style="align-self:flex-start">Open onboarding →</a></section>'
+      + '<section class="cd" style="grid-column:span 7"><div class="ch"><h2>Trust Center publishing</h2>' + stt('Action required', '2 draft changes') + '</div><dl class="kv2"><dt>Published</dt><dd>Revision 18 · 28 Oct by Guillaume L.</dd><dt>Draft</dt><dd>2 blocks differ from published</dd></dl><div style="display:flex;gap:8px"><button type="button" class="btn p bsm">Review changes…</button><a class="btn t bsm" href="#">Change history →</a></div></section>'
+      + '<section class="cd" style="grid-column:span 5"><div class="ch"><h2>Subprocessor notices</h2></div><dl class="kv2"><dt>Subscribers</dt><dd>38 confirmed · 4 pending</dd><dt>Per-notice delivery</dt><dd>' + stt('Not instrumented') + '</dd></dl><p class="lim">Delivery isn’t recorded per notice, so Scheduled, Sending, Delivered and Failed can’t be shown yet.</p></section>'
+      + '<section class="cd" style="grid-column:span 12"><div class="ch"><h2>Trust obligations</h2><a class="btn t bsm" href="#">Open obligations →</a></div><p style="font-size:12.5px;color:var(--mu)">Owned commitments with evidence and review dates live on the obligations page; nothing here duplicates them.</p></section></div>';
+    const T2 = () => dlg('t2', 'Publish Trust Center changes', steps(2) + '<p style="font-size:12.5px;color:var(--mu)">Draft compared with published revision 18</p>',
+      '<div class="diff"><div class="hd2"><span>Subprocessors</span><span class="pl">1 added</span></div><div class="ln add"><span>+</span><span>Resend · transactional email · EU and US · since 1 Dec 2026</span></div></div>'
+      + '<div class="diff"><div class="hd2"><span>Data retention</span><span class="pl">1 line changed</span></div><div class="ln del"><span>−</span><span>Backups are kept for 30 days.</span></div><div class="ln add"><span>+</span><span>Backups are kept for 35 days.</span></div></div>'
+      + '<dl class="kv2"><dt>Publishes to</dt><dd>axal.vc/trust — public</dd><dt>Draft read at</dt><dd>14:29:40 UTC</dd></dl><div class="fld"><label>Change note <span>· shown in the public change log</span></label><div class="ta" style="min-height:44px">Add Resend; retention 35 days</div></div>',
+      '<button type="button" class="btn">Back</button><button type="button" class="btn p">Publish 2 changes</button>', 620);
+    const T3 = () => dlg('t3', 'The draft changed since you opened it', '<p role="alert" style="font-size:12.5px;color:var(--amT);font-weight:600">▲ Not published. Someone edited the draft at 14:30:12.</p>', '<p style="font-size:12.5px">You reviewed the draft as of 14:29:40. Reload to see the newer draft and review again before publishing.</p>', '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Reload and review</button>');
+
+    /* ---------- AI SAFETY ---------- */
+    const ai = () => head('AI Safety', 'What the guard decided, what delivery enforced, and unusual usage.')
+      + '<div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>HQ only.</b> AI records carry no branch, so these figures can’t be split by branch or tenant.</div></div>'
+      + '<div class="g">'
+      + '<section class="cd" style="grid-column:span 4"><div class="ch"><h2>Content safety</h2>' + stt('Healthy') + '</div><div class="frac"><b>2 <span>of 2</span></b><small>evaluated outputs received a safe verdict in the last 7 days</small><span class="sam">◆ Small sample — not a rate</span></div><dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Unsafe verdicts</dt><dd>' + stt('Measured zero', '0') + '</dd><dt>Rules violated</dt><dd>None</dd></dl></section>'
+      + '<section class="cd" style="grid-column:span 4"><div class="ch"><h2>Delivery enforcement</h2>' + stt('Measured zero', 'None') + '</div><div class="frac"><b>0 <span>of 37</span></b><small>inputs blocked before reaching the model</small></div><div class="frac"><b>0 <span>of 2</span></b><small>evaluated outputs withheld from the user</small></div></section>'
+      + '<section class="cd" style="grid-column:span 4"><div class="ch"><h2>Usage anomalies</h2>' + stt('Measured zero', 'None flagged') + '</div><div class="frac"><b>0 <span>of 9</span></b><small>accounts checked used more than 3× their 30-day daily median</small></div><button type="button" class="disc2" aria-expanded="false">How the threshold works ▾</button></section>'
+      + '</div><section class="cd"><div class="ch"><h2>Recent guard verdicts</h2><span class="sm">2 in 7 days</span></div><table class="tbl"><thead><tr><th>When</th><th>Feature</th><th>Verdict</th><th>Delivered</th></tr></thead><tbody><tr><td class="mo">6 Nov 15:02</td><td>Memo draft</td><td>' + stt('Healthy', 'Safe') + '</td><td>Yes</td></tr><tr><td class="mo">4 Nov 09:40</td><td>Diligence summary</td><td>' + stt('Healthy', 'Safe') + '</td><td>Yes</td></tr></tbody></table></section>';
+
+    /* ---------- RESILIENCE ---------- */
+    const res = () => head('Resilience', 'Backups exist; restore drills prove they can be used.')
+      + '<section class="fail" aria-labelledby="rdh"><div class="top"><span class="ic" style="background:var(--neg);width:22px;height:22px" aria-hidden="true">✕</span><div style="flex:1"><h2 id="rdh" style="font-size:16px;font-weight:800">Restore drill failed at the restore step</h2><p style="font-size:12.5px;margin-top:3px">Sun 1 Nov 2026, 03:10 UTC · 6 days ago. Until a drill passes, backups are <b>present but not verified restorable</b>.</p></div><a class="btn p bsm" href="#">Open runbook</a></div>'
+      + '<div class="pipe" aria-label="Drill steps"><span>✓ Find backup</span><span>✓ Verify backup</span><span>✓ Create drill database</span><span class="x">✕ Restore</span><span class="sk2">– Smoke test</span><span class="sk2">– Teardown</span></div>'
+      + '<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:8px"><dl class="kv2"><dt>Failed step</dt><dd class="mo">restore · exit code 1</dd><dt>Duration</dt><dd>4 min 12 s</dd><dt>Backup used</dt><dd class="mo">d1/2026-11-01.sql.gz</dd><dt>Evidence</dt><dd>Drill record <span class="mo">drill-d1.json</span> in the backups bucket · run 18822</dd><dt>Next drill</dt><dd>Monthly workflow · or run it now from GitHub Actions</dd></dl><button type="button" class="disc2" aria-expanded="false">Raw drill record ▾</button></div></section>'
+      + '<div class="ev2"><section class="cd"><div class="ch"><h2>Backup evidence</h2>' + stt('Healthy', 'Present · fresh') + '</div><dl class="kv2"><dt>Latest D1 export</dt><dd>Sat 7 Nov 02:00 UTC · 12 h ago</dd><dt>Size</dt><dd>48.2 MB</dd><dt>Runner</dt><dd>Scheduled export job</dd><dt>Freshness limit</dt><dd>26 hours</dd></dl><p class="lim">A present export is evidence of a <b>backup</b>, not of a <b>restore</b>.</p></section>'
+      + '<section class="cd"><div class="ch"><h2>KV snapshots</h2>' + stt('Healthy', 'Present') + '</div><dl class="kv2"><dt>Latest</dt><dd>Sat 7 Nov 02:05 UTC</dd><dt>Namespaces</dt><dd>4 of 4 written</dd><dt>Restore drill</dt><dd>' + stt('Unsupported', 'No drill for KV') + '</dd></dl></section></div>'
+      + '<section class="cd"><div class="ch"><h2>Drill history</h2>' + stt('Not instrumented', 'Latest run only') + '</div><p class="lim">The drill record keeps only its latest run, so earlier outcomes can’t be listed here. Past runs are in the GitHub Actions log.</p><a class="btn t bsm" href="#" style="align-self:flex-start">Open drill workflow runs →</a></section>';
+
+    /* ---------- states ---------- */
+    const box = (title, inner) => '<section class="cd" style="gap:10px"><div class="ch"><h2 style="font-size:14px">' + title + '</h2></div>' + inner + '</section>';
+    const STATES = {
+      SE10a: () => crop(box('Loading', '<div aria-busy="true" style="display:flex;flex-direction:column;gap:8px"><span class="sk" style="height:14px;width:60%"></span><span class="sk" style="height:14px;width:85%"></span><span class="sk" style="height:14px;width:40%"></span><span class="foot">Reading 5 sources…</span></div>'), 420),
+      SE10b: () => crop(box('Empty (measured)', '<div class="nt"><span class="ic" aria-hidden="true">0</span><div><b>No exports in the last 7 days.</b><div class="mu">All 5 sources were read; this is a real zero.</div></div></div>'), 420),
+      SE10c: () => crop(box('Partial', '<div class="srcl"><span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i class="x"></i></span><b>4 of 5 sources read</b></div><div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Licence events couldn’t be read.</b><div>Licence changes and suspensions may be missing from this list.</div></div><span class="bt"><button type="button" class="btn bsm">Retry</button></span></div>'), 420),
+      SE10d: () => crop(box('Failed', '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">✕</span><div><b>Sessions couldn’t be loaded.</b><div>The server returned an error. Nothing below is current.</div></div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div><p class="foot">Last good read 14:12 UTC</p>'), 420),
+      SE10e: () => crop(box('Stale', '<div style="display:flex;gap:8px;align-items:center">' + stt('Stale') + '<span style="font-size:12.5px">Backup export is 31 h old (limit 26 h)</span></div><dl class="kv2"><dt>Last export</dt><dd>6 Nov 07:00 UTC</dd><dt>Last checked</dt><dd>7 Nov 14:30 UTC</dd></dl>'), 420),
+      SE10f: () => crop(box('Success', '<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>Session 4417 revoked.</b><div>Confirmed by the server at 14:31:07 UTC · <a href="#">audit entry</a></div></div></div>'), 420),
+      SE10g: () => crop(box('Permission denied', '<div class="nt"><span class="ic" aria-hidden="true">⦸</span><div><b>Only a super admin can do this.</b><div class="mu">You can see sessions but not revoke them. Ask a super admin, or view the audit trail.</div></div></div>'), 420),
+      SE10h: () => crop(box('Unsupported', '<div style="display:flex;gap:8px;align-items:center">' + stt('Unsupported') + '<span style="font-size:12.5px">Branch filter for AI records</span></div><p class="foot">AI records don’t store a branch, so this filter isn’t offered — not hidden, not zero.</p>'), 420),
+      SE10i: () => crop(box('Unavailable', '<div style="display:flex;gap:8px;align-items:center">' + stt('Unavailable') + '<span style="font-size:12.5px">Restore drill record</span></div><p class="foot">The backups bucket didn’t respond at 14:30. The last drill result can’t be shown — this is not a pass.</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button>'), 420),
+      SE10j: () => crop(box('Not instrumented', '<div style="display:flex;gap:8px;align-items:center">' + stt('Not instrumented') + '<span style="font-size:12.5px">Subprocessor notice delivery</span></div><p class="foot">Nothing records per-notice delivery yet. Tracked as a backend gap (see handoff).</p>'), 420)
+    };
+    const taxonomy = () => crop('<span class="eye">Shared state vocabulary · every workspace</span><div class="stx">' + J(Object.keys(ST).map(k => '<div>' + stt(k) + '<small>' + ST[k][2] + '</small></div>')) + '</div><p class="foot">Never colour alone: each state has a word, a distinct shape and a tooltip/accessible description. “Not recorded” is retired — it split into Unavailable, Not instrumented, Unsupported, Measured zero and No data yet.</p>', 1360);
+
+    /* ---------- mobile ---------- */
+    const phone = (title, body, sheet) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative"><div class="pt"><button type="button" class="pi" aria-label="Menu">☰</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Ask Eadwyn">E</button></div><div class="pbd" style="overflow:hidden">' + body + '</div>' + (sheet || '') + '</div></div>';
+    const mtabs = (cur) => '<nav class="wst" aria-label="Security workspaces">' + J(['Overview', 'Events', 'Access', 'Privacy', 'More ▾'].map(w => '<a href="#"' + (w === cur ? ' aria-current="page"' : '') + '>' + w + '</a>')) + '</nav>';
+    const MOB = {
+      SE11a: () => phone('Security', mtabs('Overview') + '<div class="srcl" style="font-size:12px"><span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>5 of 5 sources · 14:30 UTC</div><section class="cd" style="padding:14px"><div class="ch"><h2>Action required</h2><span class="sm">2</span></div><ol class="arq">' + J(AR.map(r => '<li><span>' + stt(r[0]) + '</span><div><div class="t">' + r[1] + '</div><div class="d">' + r[2] + '</div></div><a class="btn' + (r[0] === 'Failed' ? ' p' : '') + '" href="#" style="min-height:44px">' + r[4] + '</a></li>')) + '</ol></section>' + J(OPS.slice(0, 4).map(o => '<button type="button" class="disc"><b>' + o[0] + '</b><span>' + stt(o[1]) + '</span><i aria-hidden="true">›</i></button>'))),
+      SE11b: () => phone('Events', mtabs('Events') + '<div class="inp" style="min-width:0;min-height:44px">⌕ Search events</div><div class="chips"><button type="button" aria-checked="true">All</button><button type="button">Sign-ins</button><button type="button">Filters · 1</button></div>' + J(EVR.slice(0, 4).map(e => '<div class="mc"><div class="r1"><b>' + e[3] + '</b>' + stt(e[5][0], e[5][1]) + '</div><small>' + e[0] + ' · ' + e[1] + ' · ' + e[2] + '</small></div>')) + '<button type="button" class="btn" style="min-height:44px">Load older events</button>'),
+      SE11c: () => phone('Access', mtabs('Access') + '<div class="mc"><div class="r1"><b>M. Okafor</b>' + stt('Healthy', 'Active') + '</div><small>Firefox 132 · Windows 11 · last active 13:58</small><button type="button" class="disc2" aria-expanded="false">Session details ▾</button></div><div class="mc"><div class="r1"><b>Guillaume L. (you)</b>' + stt('Pending', 'Current') + '</div><small>Chrome 131 · macOS 15 · now</small></div>',
+        '<div class="dim2"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ms"><div class="grab" aria-hidden="true"></div><div style="padding:14px 18px 22px;display:flex;flex-direction:column;gap:12px"><h2 id="ms" style="font-size:18px;font-weight:800">Revoke this session?</h2>' + steps(1) + '<div class="scopebox"><b>One session</b><ul><li><span>•</span>M. Okafor · Firefox on Windows</li><li><span>✓</span>You are not affected</li></ul></div>' + reason('Unrecognised device') + '<button type="button" class="btn dg" style="min-height:48px">Revoke session</button><button type="button" class="btn" style="min-height:48px">Cancel</button></div></div>'),
+      SE11d: () => phone('DSR-0031', '<a class="btn t" href="#" style="min-height:44px;align-self:flex-start">‹ Privacy</a><div class="mc"><div class="r1"><b>Erasure · founder@lumen.example</b></div>' + stt('Pending', 'Open') + '</div><dl class="kv2" style="grid-template-columns:110px minmax(0,1fr)"><dt>Received</dt><dd>20 Oct 2026</dd><dt>Due</dt><dd>19 Nov 2026</dd><dt>Remaining</dt><dd>12 days</dd><dt>Next action</dt><dd>Confirm removal, then record outcome</dd></dl><div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Closing doesn’t erase data.</b></div></div><button type="button" class="btn p" style="min-height:48px">Record outcome…</button>'),
+      SE11e: () => phone('Resilience', mtabs('More ▾') + '<section class="fail"><div class="top"><span class="ic" style="background:var(--neg)" aria-hidden="true">✕</span><div><b>Restore drill failed</b><p style="font-size:12.5px">1 Nov 03:10 UTC · stopped at Restore</p></div></div><ol style="padding:10px 14px;display:flex;flex-direction:column;gap:6px;font-size:13px"><li>✓ Find and verify backup</li><li>✓ Create drill database</li><li style="color:var(--neg);font-weight:800">✕ Restore · exit code 1</li><li class="mu">– Smoke test · not reached</li></ol></section><button type="button" class="disc"><b>Backup evidence</b><span>' + stt('Healthy', 'Present · 12 h old') + '</span><i aria-hidden="true">›</i></button><a class="btn p" href="#" style="min-height:48px">Open runbook</a>'),
+      SE11f: () => phone('AI Safety', mtabs('More ▾') + '<div class="nt"><span class="ic" aria-hidden="true">i</span><div>HQ only · no branch attribution</div></div>' + ['Content safety|2 of 2|evaluated outputs safe · small sample', 'Delivery enforcement|0 of 37|inputs blocked', 'Usage anomalies|0 of 9|accounts over threshold'].map(x => { const y = x.split('|'); return '<div class="mc"><span class="eye">' + y[0] + '</span><div class="frac"><b>' + y[1].replace(' of ', ' <span>of ') + '</span></b><small>' + y[2] + '</small></div></div>'; }).join(''))
+    };
+
+    /* ---------- docs (spec boards) ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const DOCS = {
+      SEA: () => dk('<h1>Audit of the live page and before/after IA</h1><p>Observed on the live /admin/security page and in SecurityPage.jsx (1,346 lines) on 7 Nov 2026.</p>'
+        + tbl(['Finding', 'Why it hurts', 'Change'], [
+          ['One long page mixes triage, investigation, action and explanation', 'A failed restore drill sits below unrelated content; an operator scrolls past engineering notes to act', 'Seven workspaces under one header; Overview leads with Action required'],
+          ['Emergency action labelled “Force re-auth · all tenants”', 'The handler updates the HQ database only. Branch users are not signed out, so the label overclaims', '“Emergency re-authentication” scoped to HQ-held accounts, with “you will be signed out” stated'],
+          ['Raw identifiers as primary labels (gate.totp detail=factor_required)', 'Readable only to engineers', 'Human label first, raw ID in small mono beneath and in the detail drawer'],
+          ['“60 newest” with “there are more” and no way to continue', 'Investigation stops at row 60', 'Load older (needs a cursor on /governance)'],
+          ['Raw user-agent and IP as session columns', 'Hard to scan; the important columns get squeezed', 'Browser and OS parsed; UA, IP, IDs in an expandable row'],
+          ['“Not recorded” used for several meanings', 'Measured zero, unavailable and never-instrumented look the same', '13-state shared vocabulary with shapes'],
+          ['AI safety mixes verdicts, enforcement and token anomalies; percentages on n=2', '“100% safe” overstates a tiny sample', 'Three blocks, always “x of n”, small-sample flag'],
+          ['Eadwyn rail leads with model descriptions, pricing and top-up', 'Competes with incident work', 'Security prompts first; model and usage folded under a disclosure']])
+        + '<h2>Information architecture</h2><div class="cols"><div><p><b>Before</b> — one scroll: overview counters → sessions table → governance ledger (60 rows) → DSR → sanctions → AI safety → backups → force re-auth, with implementation notes interleaved.</p></div><div><p><b>After</b> — <span class="mo">/admin/security</span> with workspaces <b>Overview · Events · Access · Privacy · Trust · AI Safety · Resilience</b> (?tab= deep links). Each workspace: triage strip → working table → detail drawer → actions in dialogs → explanation behind “How this is measured”.</p></div></div>'),
+      SEB: () => dk('<h1>Components and states</h1>' + tbl(['Component', 'Use', 'Props / rules'], [
+          ['StatusBadge', 'Every state in every workspace', '<code>state</code> one of the 13; renders word + shape + title. Never colour alone.'],
+          ['SourceAvailability', 'Header and Events', '<code>read</code>/<code>total</code>, per-source list in a disclosure; partial reads show which source failed and Retry'],
+          ['Freshness', 'Every block', '“Observed 14:30 UTC”; Stale when older than the block’s threshold, with last good + last checked'],
+          ['ActionRequiredList', 'Overview', 'Severity → title → one-line why → when → one action; “Checked and clear” row of measured zeros beneath'],
+          ['ActionDialog', 'All destructive actions', '3 steps Scope → Review → Result; ScopeBox, YouAffected, Reason (≥ 10 chars, server’s MIN_REASON), typed confirm only for emergency'],
+          ['PerItemResults', 'Bulk revoke', 'Row per target with server outcome (revoked / already ended / not found); totals in the title'],
+          ['EventRow + EventDrawer', 'Events', 'Human label, raw id beneath; drawer: what happened, who/where, related, raw JSON (collapsed)'],
+          ['Fraction', 'AI Safety, Access', '“x of n” with a small-sample flag when n &lt; 20; no percentages under that'],
+          ['EvidenceLimit', 'Anywhere a source can’t answer', 'Short grey left-rule note, plain language, links to technical detail']])
+        + '<h2>Copy rules</h2><p>Primary line answers what is wrong; one short sentence of why; technical detail behind a disclosure. Dates absolute (“Thu 19 Nov 2026”) plus relative (“12 days left”). Scope always named: “HQ-held accounts”, never “all tenants”.</p>'),
+      SEC: () => dk('<h1>Accessibility annotations</h1><p>Targets WCAG 2.2 AA in design decisions. Not a compliance claim until tested.</p>' + tbl(['Area', 'Specification'], [
+          ['Workspace tabs', '<code>nav</code> of links with <code>aria-current="page"</code> (they are routes, not ARIA tabs); counts read as “Access, 2 items need action”'],
+          ['Keyboard', 'Tab order: header → workspace nav → filters → table → row actions. Rows open the drawer on Enter. Esc closes drawer/dialog.'],
+          ['Focus', 'Visible 2px violet ring on every control. Dialogs and drawers trap focus and return it to the control that opened them; after a revoke, focus moves to the result message, then back to the row (or the table caption if the row is gone).'],
+          ['Announcements', 'Results and errors in <code>role="status"</code> / <code>role="alert"</code>. Field errors linked by <code>aria-describedby</code>. “Observed” time is <code>aria-live="polite"</code> on refresh only.'],
+          ['Tables', 'Real <code>table</code> with <code>caption</code>, <code>th scope</code>; day groups as <code>colgroup</code> headers. Checkbox labels name the account.'],
+          ['Status', 'Every state has text + shape; tooltips repeat as visually hidden text, not only <code>title</code>.'],
+          ['Contrast', 'Body ≥ 4.5:1; amber text #92400e on #fffbeb; Failed is white on #b91c1c. Dashed/dotted outlines distinguish Stale/Unknown/Not instrumented in greyscale.'],
+          ['Touch', 'Mobile targets ≥ 44px; destructive buttons 48px, full width, Cancel adjacent.'],
+          ['Motion', 'Drawer/sheet slide 160ms; none under <code>prefers-reduced-motion</code>. No pulsing alerts.'],
+          ['Small screens', 'Tables become cards (Events, Sessions, DSR); filters move to a sheet; destructive dialogs become bottom sheets with the same three steps.']])),
+      SED: () => dk('<h1>React handoff — SecurityPage.jsx</h1>' + tbl(['Today', 'Becomes', 'Notes'], [
+          ['<code>SecurityPage.jsx</code> (one component, 1,346 lines)', '<code>pages/hq/security/</code>: <code>SecurityShell</code> + one file per workspace', 'Shell owns header, SourceAvailability, workspace nav, <code>?tab=</code> routing'],
+          ['Overview counters', '<code>OverviewWorkspace</code> · ActionRequiredList + StatusByArea', 'Derives from GET <code>/overview</code>; no new fields'],
+          ['Governance ledger + FILTERS', '<code>EventsWorkspace</code> + <code>EventDrawer</code>', 'Keeps the six quick categories; label map <code>eventLabels.js</code> (raw kind → human label)'],
+          ['Sessions table + force re-auth', '<code>AccessWorkspace</code> + <code>ActionDialog</code>', 'UA parsed client-side (<code>parseUserAgent.js</code>); bulk uses the existing per-item <code>results</code>; “Sign out everywhere” is the existing POST <code>/force-reauth/:userId</code>'],
+          ['DSR block', '<code>PrivacyWorkspace</code> + <code>DsrDetail</code>', 'Due date computed from received + <code>DSR_CLOCK_DAYS</code> sent by the server'],
+          ['Sanctions, AI, backups blocks', '<code>TrustWorkspace</code>, <code>AiSafetyWorkspace</code>, <code>ResilienceWorkspace</code>', 'TrustContentPage / TrustObligationsPage stay; Trust links to them'],
+          ['Eadwyn rail', 'Security prompt set on this route', 'Model/usage under a disclosure']])
+        + '<div class="cols"><div><h2>Frontend only</h2><p>Workspaces and routing · state vocabulary · human event labels + drawer · UA parsing · per-item bulk results (already returned) · HQ-held wording · reason validation · draft-vs-published diff (both are readable today) · AI fractions · restore-drill failure layout · mobile cards and sheets · Eadwyn prompts.</p></div>'
+        + '<div><h2>Backend required</h2><p><b>Events:</b> cursor (<code>before</code>) on <code>/governance</code>, plus server-side search, date, actor and outcome filters. <b>Trust:</b> publish pinned to a draft revision so stale previews are refused. <b>Subprocessor notices:</b> per-notice delivery records. <b>Privacy:</b> DSR history entries beyond open/closed. <b>Resilience:</b> drill history (the record keeps only the latest run) and an error message beside the step and exit code.</p></div></div>'),
+      SEE: () => dk('<h1>Limitations that stay visible</h1><p>These are true of the product today. The design shows them plainly instead of hiding the block.</p>' + tbl(['Limitation', 'Where it shows', 'Wording'], [
+          ['Emergency re-auth reaches the HQ database only', 'Access, Overview, dialog', '“Signs out every HQ-held account. Branch databases are not touched.”'],
+          ['AI records carry no branch', 'AI Safety header, Unsupported branch filter', '“HQ only. These figures can’t be split by branch.”'],
+          ['Sanctions run on request, not on a schedule', 'Trust', '“On request, per entity”'],
+          ['Ledger returns 60 newest with a “more” flag, no cursor', 'Events footer', 'Load older shown; until the cursor ships it reads “Showing newest 60 — narrow the filters to see older”'],
+          ['Subprocessor notice delivery not recorded', 'Trust', 'Not instrumented'],
+          ['DSR closing records a decision; erasure is separate', 'Privacy detail and close dialog', '“Closing records a decision. It does not erase data.”'],
+          ['Only the requester can withdraw a DSR', 'Close dialog', '“Withdrawn isn’t offered: only the requester can withdraw.”'],
+          ['No restore drill for KV', 'Resilience', 'Unsupported'], ['Drill record keeps only the latest run', 'Resilience · Drill history', 'Not instrumented · “Latest run only”']]))
+    };
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'SE01') html = page(overview(), { h: 1250 });
+    else if (B === 'SE12') html = page(overview(), { h: 1250, ead: true });
+    else if (B === 'SE02') html = taxonomy();
+    else if (B === 'SE03a') html = page(events(), { h: 1000 });
+    else if (B === 'SE03b') html = page(events(), { h: 1000, overlay: evDrawer() });
+    else if (B === 'SE04a') html = page(access(false), { h: 1100 });
+    else if (B === 'SE04b') html = page(access(true), { h: 1150 });
+    else if (B === 'SE05a') html = crop(D1(), 600);
+    else if (B === 'SE05b') html = crop(D2(), 600);
+    else if (B === 'SE05c') html = crop(D3(), 600);
+    else if (B === 'SE05d') html = crop(D4(1), 640);
+    else if (B === 'SE05e') html = crop(D4(2), 640);
+    else if (B === 'SE05f') html = crop(D5(), 600);
+    else if (B === 'SE05g') html = crop(D6(), 600);
+    else if (B === 'SE06a') html = page(privacy(false), { h: 900 });
+    else if (B === 'SE06b') html = page(privacy(true), { h: 1050 });
+    else if (B === 'SE06c') html = crop(D7(), 600);
+    else if (B === 'SE06d') html = crop(D8(), 600);
+    else if (B === 'SE07a') html = page(trust(), { h: 1000 });
+    else if (B === 'SE07b') html = crop(T2(), 660);
+    else if (B === 'SE07c') html = crop(T3(), 600);
+    else if (B === 'SE08') html = page(ai(), { h: 1000 });
+    else if (B === 'SE09') html = page(res(), { h: 1150 });
+    else if (STATES[B]) html = STATES[B]();
+    else if (MOB[B]) html = MOB[B]();
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = page(overview(), { h: 1250 });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

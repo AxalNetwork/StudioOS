@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Landmark } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Card, Unrecorded, Unreadable } from '../../ui';
-import { KINDS, STATES, STORAGE_HQ, countText, kindColumns, planRows, sizeText, stateBars, tiles } from './platformStorageModel';
+import { KINDS, STATES, STORAGE_HQ, countText, kindColumns, planRows, populationRows, sizeText, stateBars, tiles } from './platformStorageModel';
 
 /**
  * HQ › Platform › Storage (D1172, #3085): board STG20 of the owner's
@@ -231,6 +231,37 @@ function PlanTable({ read }) {
   );
 }
 
+/** D4856: who holds the bytes. Every row is one population; the total is their sum. */
+function PopulationTable({ read }) {
+  const rows = populationRows(read);
+  return (
+    <Card className="overflow-hidden p-0" data-testid="hq-storage-populations">
+      <div className="border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+        <h2 className="text-[15px] font-extrabold tracking-[-.01em]">{STORAGE_HQ.populations}</h2>
+      </div>
+      {!rows ? <div className="px-4 py-3"><Unreadable what="Who holds the bytes" claim={read.populations_reason || 'No split is shown instead.'} /></div> : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-[12.5px]">
+            <thead className={HEAD}><tr>{['Holder', 'Accounts', 'Files', 'Stored', 'Size not recorded'].map((c, i) => <th key={c} className={`px-3 py-2 ${i ? 'text-right' : 'text-left'}`}>{c}</th>)}</tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key} className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800" data-population={r.key}>
+                  <td className="px-3 py-2.5 font-bold">{r.label}</td>
+                  <td className={`px-3 py-2.5 ${NUM}`}>{r.key === 'total' ? '' : r.accounts ?? <Unrecorded />}</td>
+                  <td className={`px-3 py-2.5 ${NUM}`}>{r.files ?? <Unrecorded />}</td>
+                  <td className={`px-3 py-2.5 ${NUM}`}>{r.stored ?? <Unrecorded />}</td>
+                  <td className={`px-3 py-2.5 ${NUM}`}>{r.unknown === null ? <Unrecorded /> : `${r.unknown} files`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="border-t border-axal-hairline px-4 py-2.5 text-[12px] text-axal-muted dark:border-gray-800 dark:text-gray-400">{read.populations_note || STORAGE_HQ.populationsFoot}</p>
+    </Card>
+  );
+}
+
 export default function PlatformStoragePage() {
   const read = useStorageRead();
   const data = read.status === 'ready' ? read.data : null;
@@ -272,6 +303,7 @@ export default function PlatformStoragePage() {
               </Card>
             ))}
           </div>
+          <PopulationTable read={data} />
           <div className="grid min-w-0 gap-3 lg:grid-cols-2">
             <KindChart read={data} />
             <StateChart read={data} />

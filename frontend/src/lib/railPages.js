@@ -305,6 +305,7 @@ const ADMIN = [
   alias('/admin/programs/investor-cohorts', key(AD, 'Programs'), 'Investor cohort access, one program page under Programs (D953).'),
   alias('/admin/programs/ai-native-venture', key(AD, 'Programs'), 'AI-native Venture, one program page under Programs (D953).'),
   alias('/admin/programs/influencer', key(AD, 'Programs'), 'Influencers, one program page under Programs (D4298).'),
+  alias('/admin/programs/:key', key(AD, 'Programs'), 'Any program the registry holds, one generic page under Programs (D4808).'),
   alias('/admin/programs/propose', key(AD, 'Programs'), 'Programs › Propose a program, a studio’s proposal (D964).'),
   alias('/admin/programs/proposals', key(AD, 'Programs'), 'Programs › Proposals, HQ’s queue of studio proposals (D964).'),
   own('/admin/programs/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),
@@ -348,8 +349,8 @@ const SUPER = [
   off('/hq', key(SA, 'Home')),
   off('/admin/analytics', key(SA, 'Analytics')),
   own('/admin/licences', key(SA, 'Licences')),
-  alias('/admin/licences/programs', key(SA, 'Licences'), 'Program grants, the Licences strip’s second item (D981).'),
-  alias('/admin/licences/programs/history', key(SA, 'Licences'), 'Program grants’ History tab (D1126).'),
+  alias('/admin/licences/programs', key(SA, 'Licences'), 'Program access by licence (D981’s Program grants, renamed by D4819), the Licences strip’s second item.'),
+  alias('/admin/licences/programs/history', key(SA, 'Licences'), 'Program access by licence’s History tab (D1126).'),
   own('/admin/funds', key(SA, 'Funds')),
   alias('/admin/fund-admin', key(SA, 'Funds'), 'HQ’s Fund admin row sits after Funds and has no board yet.'),
   own('/admin/contracts', key(SA, 'Contracts')),
@@ -452,10 +453,16 @@ const parsed = (route) => {
 function score(entry, path, tab, hash) {
   const r = parsed(entry.route);
   if (r.segments.length > path.length || (entry.exact && r.segments.length !== path.length)) return -1;
-  for (let i = 0; i < r.segments.length; i += 1) if (r.segments[i] !== path[i]) return -1;
+  // D4808: a `:param` segment matches any one segment and scores below a literal one, so a literal address always wins.
+  let score = 0;
+  for (let i = 0; i < r.segments.length; i += 1) {
+    if (r.segments[i].startsWith(':')) { score += 5; continue; }
+    if (r.segments[i] !== path[i]) return -1;
+    score += 10;
+  }
   if (r.tab && r.tab !== tab) return -1;
   if (r.hash && r.hash !== hash) return -1;
-  return r.segments.length * 10 + (r.tab || r.hash ? 5 : 0);
+  return score + (r.tab || r.hash ? 5 : 0);
 }
 
 function best(pages, path, tab, hash) {

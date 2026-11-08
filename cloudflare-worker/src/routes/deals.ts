@@ -1,5 +1,5 @@
 import { holdsLicence, heldLicences } from '../services/accountLicences';
-import { investorHasDealRelationship } from '../services/dealAccess';
+import { dealAudience, hasActiveDealNda, investorHasDealRelationship, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
@@ -11,23 +11,21 @@ import { requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFo
 import { assertAdminAct } from '../services/fundAdminAccess';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
-import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
+import { ensureDealPassSchema, stageRecordingStartedAt } from '../services/dealStageHistory';
 import { newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
 import { logDealRoomAction } from '../services/dealRoomAudit';
 import { INTAKE_LINE, LEAD_ADMIN_ONLY, NOT_YOUR_ROUND, canMoveRound, readStudioLens } from '../services/dealStudioLens';
 import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
+import {
+  DEAL_MOVED, DEAL_STATUSES, DB_NOW, MOVE_COLUMNS, PASS_THROUGH_ROUTE, PASSED_STATUS, PIPELINE as DEAL_PIPELINE,
+  createDeal, initialStatus, runMove, writeFields, type MoveColumn,
+} from '../services/dealTransitions';
 
 const deals = new Hono<{ Bindings: Env }>();
 
-// Task #4 — Deal Flow pipeline stages (excludes the terminal `rejected`).
-const PIPELINE = ['applied', 'scored', 'active', 'funded'];
-
-// Task #127 — every value `deals.status` accepts, mirroring the column's CHECK.
-// PUT validates against this rather than letting an arbitrary string reach D1,
-// where the constraint failure surfaces to the caller as an opaque 400.
-const DEAL_STATUSES = [...PIPELINE, 'rejected'];
-const PASSED_STATUS = 'rejected';
+// Task #4, #127, D4632 — the stages, and the one policy for birth and moves.
+const PIPELINE: readonly string[] = DEAL_PIPELINE;
 
 // SQLite datetime('now') yields 'YYYY-MM-DD HH:MM:SS' in UTC — normalise so
 // `new Date` parses it as UTC rather than local.
@@ -144,7 +142,8 @@ deals.get('/', async (c) => {
         : await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`);
   }
   await sql.end();
-  return c.json((rows as any[]).map(row => serializeDeal(row, user.role)));
+  // D4631: the studio's internal fields leave to staff by licence, not by primary role.
+  return c.json((rows as any[]).map(row => serializeDeal(row, isDealStaff(user) ? 'admin' : 'member')));
 });
 
 // ---------------------------------------------------------------------------
@@ -264,6 +263,9 @@ deals.get('/pass-analytics', async (c) => {
   }
 
   await sql.end();
+  // D4631: the pass taxonomy (counts and reasons) is a shared aggregate; the pass's own note and who passed are the
+  // studio's, so they leave only to deal staff.
+  if (!isDealStaff(user)) matches = matches.map(({ pass_note: _note, passed_by_name: _by, ...rest }) => rest);
   return c.json({
     total: breakdown.total,
     buckets: breakdown.buckets,
@@ -346,7 +348,9 @@ deals.get('/screening', async (c) => {
   const sql = getSQL(c.env);
   let desk: unknown;
   try {
-    let rows = user.role === 'investor' ? await sql`
+    // D4631: anyone who is not deal staff is narrowed to their own relationships, whatever their primary role.
+    const narrowed = !isDealStaff(user);
+    let rows = narrowed ? await sql`
       SELECT d.id AS deal_id, d.status AS deal_status, p.name AS company, p.sector
         FROM deals d JOIN projects p ON p.id = d.project_id
        WHERE p.deleted_at IS NULL AND (
@@ -356,7 +360,7 @@ deals.get('/screening', async (c) => {
       SELECT d.id AS deal_id, d.status AS deal_status, p.name AS company, p.sector
         FROM deals d JOIN projects p ON p.id = d.project_id
        WHERE p.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 200`;
-    if (user.role === 'investor') {
+    if (narrowed) {
       // D1254 preserves the deal reader's invited-or-committed rule, including
       // historical deals/commitments. The open-deal rule for trust is separate.
       const allowed = await userReadableDealIds(c.env, user, (rows as any[]).map(row => Number(row.deal_id)));
@@ -398,25 +402,22 @@ deals.post('/', async (c) => {
   // D463 — where the deal came from. Free text: the source taxonomy is the
   // owner's call, and a CHECK written before it would enshrine a guess.
   const source = data.source != null ? String(data.source).trim().slice(0, 120) || null : null;
-  // D614: a status the column's CHECK refuses surfaced as a 500. Refuse it
-  // here, naming the statuses the table allows.
-  if (data.status != null && data.status !== '' && !DEAL_STATUSES.includes(String(data.status))) {
+  // D614, D4632: an unknown status, a pass, and (for a founder) any stage but
+  // `applied` are refused, naming why. A founder never names the partner.
+  const staff = String((user as any)?.role) === 'admin';
+  const born = initialStatus(data.status, staff);
+  if ('refuse' in born) { await sql.end(); return c.json(born.refuse.body, born.refuse.status); }
+  if (!staff && data.partner_id != null && data.partner_id !== '') {
     await sql.end();
-    return c.json({ error: 'unknown_status', detail: `Unknown deal status '${data.status}'`, allowed: DEAL_STATUSES }, 400);
+    return c.json({ error: 'partner_staff_only', detail: 'The studio assigns the partner. Nothing was saved.' }, 403);
   }
-  const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at, source, currency) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now'), ${source}, ${currency}) RETURNING *`;
-  // Task #127 — the deal's arrival is its first stage entry. Without this the
-  // funnel can measure conversion OUT of the first stage but never has a
-  // cohort that entered it, so the first column reads 0 forever.
-  await recordStageEvent(sql, {
-    dealId: Number((deal as any)?.id),
-    fromStage: null,
-    fromStageChangedAt: null,
-    toStage: String((deal as any)?.status || 'applied'),
-    kind: 'set',
-    actorUserId: (user as any)?.id ?? null,
-  });
   await sql.end();
+  // Task #127 — the deal's arrival is its first stage entry, written with it.
+  const dealId = await createDeal(c.env, {
+    project_id: data.project_id, partner_id: staff ? data.partner_id || null : null, notes: data.notes || null,
+    amount: data.amount || null, source, currency,
+  }, born.status, (user as any)?.id ?? null);
+  const deal = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ?').bind(dealId).first();
   return c.json(deal, 201);
 });
 
@@ -434,42 +435,24 @@ deals.post('/draft', async (c) => {
   const sql = getSQL(c.env);
   const p = await sql`SELECT id FROM projects WHERE id = ${data.project_id}`;
   if (p.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
-  // Task #127 — a deal may not be BORN passed. Drafting straight into the
-  // terminal stage was the third door into 'rejected' with no reason attached;
-  // the pass route is the only one, so draft it and then pass it. The UI never
-  // offered this (its select lists pipeline stages only), so nothing regresses.
-  if (String(data.status) === PASSED_STATUS) {
-    await sql.end();
-    return c.json({
-      detail: 'Draft the deal in a pipeline stage, then record the pass through POST /api/deals/:id/pass — a reason is required.',
-    }, 400);
-  }
-  const status = PIPELINE.includes(data.status) ? data.status : 'applied';
+  await sql.end();
+  // Task #127, D4632 — a deal may not be BORN passed (a pass needs its reason,
+  // so draft it and then pass it), and an unknown stage is refused, not
+  // silently drafted as `applied`.
+  const born = initialStatus(data.status, true);
+  if ('refuse' in born) return c.json(born.refuse.body, born.refuse.status);
   // D463 — the source is recorded at draft. Free text: the taxonomy is the
   // owner's call (which sources exist, and which count as the Lab).
   const source = data.source != null ? String(data.source).trim().slice(0, 120) || null : null;
-  const [deal] = await sql`
-    INSERT INTO deals (
-      project_id, partner_id, lead_partner_id, status, notes, description, website,
-      amount, target_raise, minimum_check, valuation_cap, carry_pct, management_fee_pct,
-      instrument, spv_jurisdiction, closing_deadline, capital_committed, stage_changed_at, source, currency
-    ) VALUES (
-      ${data.project_id}, ${data.partner_id || null}, ${data.lead_partner_id || null}, ${status},
-      ${data.notes || null}, ${data.description || null}, ${data.website || null},
-      ${data.amount ?? null}, ${data.target_raise ?? null}, ${data.minimum_check ?? null},
-      ${data.valuation_cap ?? null}, ${data.carry_pct ?? null}, ${data.management_fee_pct ?? null},
-      ${data.instrument || null}, ${data.spv_jurisdiction || null}, ${data.closing_deadline || null},
-      0, datetime('now'), ${source}, ${currency}
-    ) RETURNING *`;
-  await recordStageEvent(sql, {
-    dealId: Number((deal as any)?.id),
-    fromStage: null,
-    fromStageChangedAt: null,
-    toStage: String((deal as any)?.status || 'applied'),
-    kind: 'set',
-    actorUserId: (user as any)?.id ?? null,
-  });
-  await sql.end();
+  const dealId = await createDeal(c.env, {
+    project_id: data.project_id, partner_id: data.partner_id || null, lead_partner_id: data.lead_partner_id || null,
+    notes: data.notes || null, description: data.description || null, website: data.website || null,
+    amount: data.amount ?? null, target_raise: data.target_raise ?? null, minimum_check: data.minimum_check ?? null,
+    valuation_cap: data.valuation_cap ?? null, carry_pct: data.carry_pct ?? null, management_fee_pct: data.management_fee_pct ?? null,
+    instrument: data.instrument || null, spv_jurisdiction: data.spv_jurisdiction || null, closing_deadline: data.closing_deadline || null,
+    capital_committed: 0, source, currency,
+  }, born.status, (user as any)?.id ?? null);
+  const deal = await c.env.DB.prepare('SELECT * FROM deals WHERE id = ?').bind(dealId).first();
   return c.json(enrichDeal(deal), 201);
 });
 
@@ -523,7 +506,9 @@ deals.get('/transfers', async (c) => {
   // The column list is written out in both branches rather than interpolated:
   // this file's `sql` tag binds every ${} as a VALUE, so a column list must
   // never travel through it.
-  const rows = String(user.role) === 'investor'
+  // D4631: only deal staff read every transfer; anyone else reads their own deals' transfers, whatever their
+  // primary role. (Which firm a transfer belongs to is #4633's: `company_id` is the recording firm today.)
+  const rows = !isDealStaff(user)
     ? await sql`
       SELECT t.uid, t.deal_id, t.amount_cents, t.reference, t.phone_verified, t.note,
              t.recorded_by, t.recorded_at, u.name AS recorded_by_name, p.name AS project_name,
@@ -601,7 +586,7 @@ deals.get('/:id', async (c) => {
     return c.json({ detail: 'Forbidden: you do not own this deal' }, 403);
   }
   await sql.end();
-  const deal = serializeDeal(rows[0], user.role);
+  const deal = serializeDeal(rows[0], isDealStaff(user) ? 'admin' : 'member');
   if (user.role === 'investor' && effectiveInvestorTier(user as InvestorUser) === 'free') {
     let own = null;
     let ownUnreadable = false;
@@ -665,77 +650,64 @@ deals.put('/:id', async (c) => {
       await sql.end();
       return c.json({ detail: `Unknown deal status '${data.status}'` }, 400);
     }
-    // Task #127 — a pass may not be recorded through this route.
-    //
-    // This is the load-bearing half of the taxonomy. Requiring a reason on
-    // POST /:id/pass achieves nothing while a plain status write still reaches
-    // the same terminal state with no reason attached: the reason becomes
-    // optional in practice and the aggregate silently fills with blanks. One
-    // door, and it asks the question.
+    // Task #127 — a pass may not be recorded through this route: one door
+    // into the terminal stage, and it asks for the reason.
     if (String(data.status) === PASSED_STATUS) {
       await sql.end();
-      return c.json({
-        detail: 'Record a pass through POST /api/deals/:id/pass — a reason is required.',
-      }, 400);
+      return c.json({ ...PASS_THROUGH_ROUTE.body, detail: 'Record a pass through POST /api/deals/:id/pass — a reason is required.' }, PASS_THROUGH_ROUTE.status);
     }
   }
 
-  // D469 — every write below is collected in `written`, and a failure part
-  // way through is held, not thrown, until the admin audit has run. Each
-  // UPDATE commits on its own: an amount written before a later field fails
-  // (a lead_partner_id that is no user, say) stays written, so the audit has
-  // to record it rather than be skipped by the throw.
+  // D4632 — every field below is written by ONE statement, so the request
+  // lands whole or not at all (D469's partial writes are gone). With a stage
+  // change, that statement and its history row are conditional on the stage
+  // and stage_changed_at read above: a move that landed meanwhile leaves this
+  // request with nothing written and a 409. A status equal to the current
+  // one is not a move (a retried PUT writes no second history row).
+  const before = rows[0] as any;
+  const fields: Partial<Record<MoveColumn, unknown>> = {};
+  const text = (v: unknown, max: number) => (v ? String(v).slice(0, max) : null);
+  if (data.partner_id !== undefined) fields.partner_id = data.partner_id;
+  if (data.notes !== undefined) fields.notes = data.notes;
+  if (data.amount !== undefined) fields.amount = data.amount;
+  // D463 — the terms are editable after the draft, by the same operator the
+  // draft admitted. Each field is written only when its key is present, so a
+  // partial edit cannot blank a term it did not send.
+  if (data.lead_partner_id !== undefined) fields.lead_partner_id = data.lead_partner_id || null;
+  for (const k of ['target_raise', 'minimum_check', 'valuation_cap', 'carry_pct', 'management_fee_pct'] as const) {
+    if (data[k] !== undefined) fields[k] = data[k] ?? null;
+  }
+  if (data.instrument !== undefined) fields.instrument = text(data.instrument, 120);
+  if (data.spv_jurisdiction !== undefined) fields.spv_jurisdiction = text(data.spv_jurisdiction, 120);
+  if (data.closing_deadline !== undefined) fields.closing_deadline = text(data.closing_deadline, 40);
+  if (data.website !== undefined) fields.website = text(data.website, 300);
+  if (data.description !== undefined) fields.description = text(data.description, 20000);
+  // The source is free text for the same reason it is at draft.
+  if (data.source !== undefined) fields.source = data.source ? String(data.source).trim().slice(0, 120) : null;
+  const moving = !!data.status && String(data.status) !== String(before.status);
   const written: string[] = [];
   let writeError: unknown = null;
+  let moved = true;
   try {
-    // Task #4 — maintain stage_changed_at whenever the pipeline stage moves.
-    if (data.status) {
-      const prev = rows[0] as any;
-      // Recorded BEFORE the update: the update overwrites stage_changed_at, so
-      // reading it afterwards measures zero days for every transition.
-      await recordStageEvent(sql, {
-        dealId: id,
-        fromStage: prev.status ?? null,
-        fromStageChangedAt: prev.stage_changed_at ?? null,
-        toStage: String(data.status),
-        kind: 'set',
-        actorUserId: (user as any)?.id ?? null,
+    if (moving) {
+      moved = await runMove(c.env, {
+        dealId: id, from: { status: String(before.status), stage_changed_at: before.stage_changed_at ?? null },
+        to: String(data.status), kind: 'set', actorUserId: (user as any)?.id ?? null, fields,
       });
-      await sql`UPDATE deals SET status = ${data.status}, stage_changed_at = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-      written.push('status');
+    } else {
+      await writeFields(c.env, id, fields);
     }
-    if (data.partner_id !== undefined) { await sql`UPDATE deals SET partner_id = ${data.partner_id}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('partner_id'); }
-    if (data.notes !== undefined) { await sql`UPDATE deals SET notes = ${data.notes}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('notes'); }
-    if (data.amount !== undefined) { await sql`UPDATE deals SET amount = ${data.amount}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('amount'); }
-    // D463 — the terms are editable after the draft, by the same operator the
-    // draft admitted. A deal's terms change in negotiation; a store that only
-    // writes them at birth freezes the first answer as the permanent one. Each
-    // field is written only when the key is present, so a partial edit cannot
-    // blank a term it did not send.
-    if (data.lead_partner_id !== undefined) { await sql`UPDATE deals SET lead_partner_id = ${data.lead_partner_id || null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('lead_partner_id'); }
-    if (data.target_raise !== undefined) { await sql`UPDATE deals SET target_raise = ${data.target_raise ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('target_raise'); }
-    if (data.minimum_check !== undefined) { await sql`UPDATE deals SET minimum_check = ${data.minimum_check ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('minimum_check'); }
-    if (data.valuation_cap !== undefined) { await sql`UPDATE deals SET valuation_cap = ${data.valuation_cap ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('valuation_cap'); }
-    if (data.carry_pct !== undefined) { await sql`UPDATE deals SET carry_pct = ${data.carry_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('carry_pct'); }
-    if (data.management_fee_pct !== undefined) { await sql`UPDATE deals SET management_fee_pct = ${data.management_fee_pct ?? null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('management_fee_pct'); }
-    if (data.instrument !== undefined) { await sql`UPDATE deals SET instrument = ${data.instrument ? String(data.instrument).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('instrument'); }
-    if (data.spv_jurisdiction !== undefined) { await sql`UPDATE deals SET spv_jurisdiction = ${data.spv_jurisdiction ? String(data.spv_jurisdiction).slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('spv_jurisdiction'); }
-    if (data.closing_deadline !== undefined) { await sql`UPDATE deals SET closing_deadline = ${data.closing_deadline ? String(data.closing_deadline).slice(0, 40) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('closing_deadline'); }
-    if (data.website !== undefined) { await sql`UPDATE deals SET website = ${data.website ? String(data.website).slice(0, 300) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('website'); }
-    if (data.description !== undefined) { await sql`UPDATE deals SET description = ${data.description ? String(data.description).slice(0, 20000) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('description'); }
-    // The source is free text for the same reason it is at draft: the taxonomy
-    // is the owner's call.
-    if (data.source !== undefined) { await sql`UPDATE deals SET source = ${data.source ? String(data.source).trim().slice(0, 120) : null}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`; written.push('source'); }
+    if (moved) written.push(...(moving ? ['status'] : []), ...MOVE_COLUMNS.filter((k) => Object.hasOwn(fields, k)));
   } catch (err) {
     writeError = err;
   }
+  if (!moved) return c.json(DEAL_MOVED.body, DEAL_MOVED.status);
 
   // D469 — an admin's edit to a deal that is not theirs (its lead partner is
   // someone else, or nobody) is recorded through logAdminAction: which deal,
   // which fields, the amount before and after when it moved, and whether the
   // whole request landed. The error, if any, is rethrown after this.
   if (isAdminCaller) {
-    const before = rows[0] as any;
     if (Number(before.lead_partner_id) !== Number((user as any).id)) {
       const fields = Object.keys(data || {}).filter((k) => data[k] !== undefined).sort();
       await logAdminAction(c.env, Number((user as any).id), String((user as any).email || ''), 'deal_update_by_admin', {
@@ -749,7 +721,7 @@ deals.put('/:id', async (c) => {
       });
     }
   }
-  if (writeError !== null) { await sql.end(); throw writeError; }
+  if (writeError !== null) throw writeError;
 
   const [updated] = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
@@ -829,23 +801,24 @@ deals.post('/:id/advance', async (c) => {
   // D1242: an Operating Partner moves only the rounds they lead.
   if (!canMoveRound(user, (rows[0] as any).lead_partner_id)) { await sql.end(); return c.json(NOT_YOUR_ROUND, 403); }
   const cur = String((rows[0] as any).status);
+  // D4632: a client names the stage it is advancing FROM. A retry of an
+  // advance that already landed then finds another stage and moves nothing,
+  // instead of advancing the round a second time.
+  const body = await c.req.json().catch(() => ({} as any));
+  if (body?.from != null && String(body.from) !== cur) return c.json(DEAL_MOVED.body, DEAL_MOVED.status);
   const idx = PIPELINE.indexOf(cur);
   if (idx < 0 || idx >= PIPELINE.length - 1) {
     await sql.end();
     return c.json({ detail: 'Deal cannot advance further' }, 400);
   }
   const next = PIPELINE[idx + 1];
-  // Task #127 — recorded BEFORE the update, which overwrites stage_changed_at
-  // and would otherwise report every stage as zero days long.
-  await recordStageEvent(sql, {
-    dealId: id,
-    fromStage: cur,
-    fromStageChangedAt: (rows[0] as any).stage_changed_at ?? null,
-    toStage: next,
-    kind: 'advance',
-    actorUserId: (user as any)?.id ?? null,
+  // Task #127, D4632 — the history row and the move are one conditional batch
+  // (services/dealTransitions.ts): both or neither.
+  const ok = await runMove(c.env, {
+    dealId: id, from: { status: cur, stage_changed_at: (rows[0] as any).stage_changed_at ?? null },
+    to: next, kind: 'advance', actorUserId: (user as any)?.id ?? null,
   });
-  await sql`UPDATE deals SET status = ${next}, stage_changed_at = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (!ok) return c.json(DEAL_MOVED.body, DEAL_MOVED.status);
   const [updated] = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
   // Notify the owning founder about the stage change.
@@ -907,26 +880,16 @@ deals.post('/:id/pass', async (c) => {
     return c.json({ detail: 'This deal has already been passed.' }, 409);
   }
 
-  // Recorded BEFORE the update — stage_changed_at is about to be overwritten.
-  await recordStageEvent(sql, {
-    dealId: id,
-    fromStage: cur,
-    fromStageChangedAt: (rows[0] as any).stage_changed_at ?? null,
-    toStage: PASSED_STATUS,
-    kind: 'pass',
-    actorUserId: (user as any)?.id ?? null,
+  // D4632 — the history row and the pass (status, reason, note, who and
+  // when) are one batch, conditional on the stage read above. A pass or a move
+  // that landed meanwhile leaves this one with nothing written: two passes in
+  // flight cannot overwrite each other's reason.
+  const ok = await runMove(c.env, {
+    dealId: id, from: { status: cur, stage_changed_at: (rows[0] as any).stage_changed_at ?? null },
+    to: PASSED_STATUS, kind: 'pass', actorUserId: (user as any)?.id ?? null,
+    fields: { pass_reason: reason, pass_note: note || null, passed_at: DB_NOW, passed_by_user_id: (user as any)?.id ?? null },
   });
-
-  await sql`
-    UPDATE deals
-       SET status = ${PASSED_STATUS},
-           pass_reason = ${reason},
-           pass_note = ${note || null},
-           passed_at = datetime('now'),
-           passed_by_user_id = ${(user as any)?.id ?? null},
-           stage_changed_at = datetime('now'),
-           updated_at = CURRENT_TIMESTAMP
-     WHERE id = ${id}`;
+  if (!ok) return c.json(DEAL_MOVED.body, DEAL_MOVED.status);
 
   const [updated] = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
@@ -961,7 +924,7 @@ deals.post('/:id/pass', async (c) => {
 // ---------------------------------------------------------------------------
 type ReadCtx =
   | { error: Response; user?: undefined; sql?: undefined; deal?: undefined }
-  | { error?: undefined; user: User; sql: ReturnType<typeof getSQL>; deal: any };
+  | { error?: undefined; user: User; sql: ReturnType<typeof getSQL>; deal: any; audience: DealAudience };
 
 // Deal-room read authorization, kept in lockstep with the FastAPI
 // `_ensure_deal_read_access` helper:
@@ -975,7 +938,9 @@ type ReadCtx =
 async function canReadDeal(env: Env, user: User, dealId: number, projectFounderId: any): Promise<boolean> {
   // #2460 narrows the generic founder guard; deal-room policy is separate
   // and deliberately retains the existing partner reader pending #2450.
-  if (holdsLicence(user, 'partner')) return true;
+  // D4631: the same rule as `dealAudience` (services/dealAccess.ts): staff by licence, the venture's founder,
+  // or an invited or committed investor. Written out here so the reader's own relationship query stays in sight.
+  if (isDealStaff(user)) return true;
   if (canAccessFounderResource(user as any, projectFounderId)) return true;
   if (holdsLicence(user, 'investor')) return investorHasDealRelationship(env, (user as any).id, dealId);
   return false;
@@ -1027,19 +992,26 @@ async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
   const sql = getSQL(c.env);
   const rows = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name AS project_name, p.founder_id AS project_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return { error: c.json({ error: 'Deal not found' }, 404) }; }
-  if (!(await canReadDeal(c.env, user, id, (rows[0] as any).project_founder_id))) {
+  const audience = await dealAudience(c.env, user, id, (rows[0] as any).project_founder_id);
+  if (audience === 'none') {
     await sql.end();
     return { error: c.json({ detail: 'Forbidden: you do not own this deal' }, 403) };
   }
-  return { user, sql, deal: rows[0] as any };
+  return { user, sql, deal: rows[0] as any, audience };
 }
 
 deals.get('/:id/documents', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal } = ctx;
+  const { sql, deal, user, audience } = ctx;
   if (!deal.project_id) { await sql.end(); return c.json([]); }
+  // D4631: the venture's document list is behind the venture's NDA, as its team, market and traction sections are.
+  // The platform admin and the venture's own founder are exempt; an investor without an active NDA is told why, not given [].
+  if (!ndaExempt(audience, user as any) && !(await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id))) {
+    await sql.end();
+    return c.json({ error: 'nda_required', masked: true, reason: 'no_pairwise_nda', detail: 'Sign the venture\'s NDA to see its documents.' }, 403);
+  }
   const docs = await sql`SELECT id, uid, title, doc_type, status, created_at FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`;
   await sql.end();
   return c.json(docs);
@@ -1084,14 +1056,30 @@ deals.get('/:id/commitments', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, user } = ctx;
-  if (user.role === 'investor') {
-    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} ORDER BY c.created_at DESC`;
+  const { sql, user, audience } = ctx;
+  // D4631: who is named follows the caller's relationship to THIS deal, not their primary role.
+  // D4633: an investor's own commitments under ONE firm, the one the commit
+  // and withdrawal routes act under (the active firm, else the only one).
+  // Each row names its firm and whether it belongs to that context. A row
+  // recorded before commitments named a firm (company_id NULL) is listed
+  // too, marked `legacy` when a firm is selected: it is the investor's, but
+  // no firm's, so the page shows it and offers no action on it.
+  if (audience === 'investor') {
+    const firm = await transferFirm(c, user, COMMITMENT_FIRM_REQUIRED);
+    if ('refuse' in firm) { await sql.end(); return firm.refuse; }
+    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.company_id, cp.company_name, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name
+      FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id LEFT JOIN company_profiles cp ON cp.id = c.company_id
+      WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} AND (c.company_id IS ${firm.companyId} OR c.company_id IS NULL) ORDER BY c.created_at DESC`;
     await sql.end();
-    return c.json(rows);
+    return c.json((rows as any[]).map((r) => {
+      const legacy = r.company_id == null && firm.companyId != null;
+      return { ...r, company_name: r.company_name ?? null, firm_context: firm.companyId, in_context: !legacy, legacy };
+    }));
   }
-  if (user.role === 'admin' || user.role === 'founder' || user.role === 'partner') {
-    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+  if (namesInvestors(audience)) {
+    // D4633: each row names the firm it is held for (null: recorded before commitments named one).
+    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.company_id, cp.company_name, c.amount, c.status, c.created_at, u.name AS investor_name
+      FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id LEFT JOIN company_profiles cp ON cp.id = c.company_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
     await sql.end();
     return c.json(rows);
   }
@@ -1143,19 +1131,16 @@ deals.post('/:id/commitments', async (c) => {
   return c.json({ ok: true, uid: saved?.uid, capital_committed: total?.total ?? 0 });
 });
 
+// D4632 — RETIRED. A withdrawal records its reason with its status and its
+// audit row in one batch, and that is POST /:id/commitments/:uid/withdrawal
+// (deal_workroom.ts) only. This door wrote no reason and logged after the
+// write; no page calls it. It answers 410 and changes nothing.
 deals.post('/:id/commitments/:uid/withdraw', async (c) => {
-  const user = await requireRole(c, 'investor');
-  const id = Number(c.req.param('id'));
-  const firm = await transferFirm(c, user);
-  if ('refuse' in firm) return firm.refuse;
-  const results = await c.env.DB.batch([
-    c.env.DB.prepare(`UPDATE commitments SET status = 'withdrawn' WHERE uid = ? AND deal_id = ? AND investor_user_id = ? AND company_id IS ? AND status IN ('pending','confirmed')`)
-      .bind(c.req.param('uid'), id, user.id, firm.companyId),
-    c.env.DB.prepare(`UPDATE deals SET capital_committed = (SELECT COALESCE(SUM(amount), 0) FROM commitments WHERE deal_id = ? AND status = 'confirmed') WHERE id = ? AND changes() > 0`).bind(id, id),
-  ]);
-  if (!results[0].meta?.changes) return c.json({ detail: 'Commitment not found or already withdrawn' }, 404);
-  await logDealRoomAction(c.env, user, 'deal_commitment_withdrawn', id, { commitment_uid: c.req.param('uid'), company_id: firm.companyId });
-  return c.json({ ok: true });
+  await requireRole(c, 'investor');
+  return c.json({
+    error: 'route_retired',
+    detail: 'Withdraw through POST /api/deals/:id/commitments/:uid/withdrawal, with the reason. Nothing was changed.',
+  }, 410);
 });
 
 /**
@@ -1170,9 +1155,10 @@ deals.get('/:id/activity', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal, user } = ctx;
+  const { sql, deal, user, audience } = ctx;
   // D1155 (DL15): an Operating Partner reads the activity in full, as the commitments read.
-  const named = user.role === 'admin' || user.role === 'founder' || user.role === 'partner';
+  // D4631: named for this deal's staff and its own founder, by relationship, not by primary role.
+  const named = namesInvestors(audience);
   const money = (amount: unknown) => (amount == null ? 'Not recorded' : `${Math.round(Number(amount)).toLocaleString()} ${deal.currency ?? 'USD'}`);
   const events: any[] = [];
   events.push({ type: 'created', label: 'Deal created', at: deal.created_at, mine: false });
@@ -1244,7 +1230,11 @@ function withFirm(row: any): any {
   };
 }
 
-async function transferFirm(c: any, user: User): Promise<{ companyId: number | null } | { refuse: Response }> {
+const COMMITMENT_FIRM_REQUIRED = {
+  error: 'firm_required',
+  message: 'You belong to more than one firm. Choose the firm in the company switcher to read your commitment to this deal.',
+};
+async function transferFirm(c: any, user: User, refusal?: Record<string, string>): Promise<{ companyId: number | null } | { refuse: Response }> {
   const active = await activeCompanyFor(c, user);
   if (active != null) return { companyId: active };
   const links = await c.env.DB.prepare(
@@ -1253,6 +1243,7 @@ async function transferFirm(c: any, user: User): Promise<{ companyId: number | n
   const ids = ((links?.results || []) as Array<{ company_id: number }>).map((r) => Number(r.company_id));
   if (ids.length === 0) return { companyId: null };
   if (ids.length === 1) return { companyId: ids[0] };
+  if (refusal) return { refuse: c.json(refusal, 400) };
   return {
     refuse: c.json({
       error: 'transfer_firm_required',
@@ -1434,8 +1425,10 @@ deals.post('/:id/closing-checklist/apply', async (c) => {
   const data = await c.req.json().catch(() => ({} as any));
   const slug = String(data?.template_slug || '');
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT id, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  // D4631: a deal's closing checklist is changed by whoever may move the round (as PUT, advance and pass).
+  if (!canMoveRound(user, (rows[0] as any).lead_partner_id)) { await sql.end(); return c.json(NOT_YOUR_ROUND, 403); }
   if (!CLOSING_TEMPLATE_SLUGS.has(slug)) {
     await sql.end();
     return c.json({
@@ -1473,8 +1466,10 @@ deals.post('/:id/closing-checklist/apply', async (c) => {
 });
 
 deals.post('/:id/closing-checklist/items', async (c) => {
-  await requireRole(c, 'partner');
+  const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
+  const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
+  if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
   const data = await c.req.json().catch(() => ({} as any));
   const label = data?.label != null ? String(data.label).trim().slice(0, 300) : '';
   if (!label) {
@@ -1507,6 +1502,8 @@ deals.post('/:id/closing-checklist/items', async (c) => {
 deals.patch('/:id/closing-checklist/items/:itemUid', async (c) => {
   const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
+  const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
+  if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
   const itemUid = c.req.param('itemUid');
   const data = await c.req.json().catch(() => ({} as any));
   const state = String(data?.state || '');
