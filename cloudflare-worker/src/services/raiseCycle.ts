@@ -63,12 +63,21 @@ export type ModuleSlug = (typeof MODULES)[number]['slug'];
 
 export type Ctx = { env: Env; projectId: number; today: string };
 
-const href = (ctx: Ctx, slug: string) => `/raise/${slug}?project=${ctx.projectId}`;
+// #4853: the deck's module page IS the Pitch Studio, so its address is the Studio's (see `pitchHref`).
+const href = (ctx: Ctx, slug: string) => (slug === 'pitch-deck' ? pitchHref(ctx) : `/raise/${slug}?project=${ctx.projectId}`);
 /**
  * D695 (#1657) decision 11: a module's Add form, which its empty card and its
  * records' Add both open (D688: a card and its module page's Add go to one place).
  */
 const addHref = (ctx: Ctx, slug: string) => `/raise/${slug}/new?project=${ctx.projectId}`;
+/**
+ * #4853: the Pitch Studio is one route family, `/raise/pitch` (D4254), and it reads the venture as
+ * `?project_id=`. The deck's entries name it, not the module cycle's `/raise/pitch-deck` addresses,
+ * whose Add form was a second sharing flow. `frontend/src/pages/raise/pitch/pitchRoutes.js` keeps the
+ * two legacy addresses as redirects, and maps any href still naming them.
+ */
+const pitchHref = (ctx: Ctx) => `/raise/pitch?project_id=${ctx.projectId}`;
+const shareHref = (ctx: Ctx) => `/raise/pitch/share?project_id=${ctx.projectId}`;
 /**
  * The full tools the module pages summarise; the pages link to them.
  * D1109 (#2989): the Data room has no tool beside its module any more: the
@@ -914,7 +923,7 @@ export async function pitchDeckCard(ctx: Ctx): Promise<Card> {
       'SELECT COUNT(*) AS n FROM deck_share_views v JOIN pitch_decks d ON d.id = v.deck_id WHERE d.project_id = ?',
     ).bind(ctx.projectId).first<{ n: number }>();
     if (Number(total?.n ?? 0) === 0) {
-      return { state: 'empty', series: null, next: { text: 'Share the deck with an investor', href: addHref(ctx, 'pitch-deck') }, reason: 'No one has opened a deck link yet.' };
+      return { state: 'empty', series: null, next: { text: 'Share the deck with an investor', href: shareHref(ctx) }, reason: 'No one has opened a deck link yet.' };
     }
     const weeks = await weeklyViews(ctx, 8);
     const slides = await ctx.env.DB.prepare(
@@ -996,7 +1005,7 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     {
       filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'used_up', label: 'Used up' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
       sorts: [{ key: 'last_viewed', label: 'Last viewed' }, { key: 'newest', label: 'Newest' }, { key: 'views', label: 'Most views' }],
-      add: deck ? { text: 'New link', href: addHref(ctx, 'pitch-deck') } : { text: 'Build your deck', href: TOOL_HREF.pitch },
+      add: deck ? { text: 'New link', href: shareHref(ctx) } : { text: 'Build your deck', href: TOOL_HREF.pitch },
     },
   );
 }
@@ -1887,7 +1896,7 @@ export function capTablePlan(user: User): CardPlan {
 /** Where each readiness item is fixed, and the Raise module it belongs to. Team is never a step. */
 const STEP_TARGET: Record<Exclude<ReadinessKey, 'team'>, { module_slug: ModuleSlug; href: (ctx: Ctx) => string }> = {
   narrative: { module_slug: 'investor-narrative', href: (ctx) => href(ctx, 'investor-narrative') },
-  deck: { module_slug: 'pitch-deck', href: (ctx) => href(ctx, 'pitch-deck') },
+  deck: { module_slug: 'pitch-deck', href: pitchHref },
   data_room: { module_slug: 'data-room', href: (ctx) => href(ctx, 'data-room') },
   cap_table: { module_slug: 'cap-table', href: (ctx) => href(ctx, 'cap-table') },
   use_of_funds: { module_slug: 'use-of-funds', href: (ctx) => href(ctx, 'use-of-funds') },

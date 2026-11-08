@@ -58,7 +58,7 @@ function worker(o = {}) {
   const {
     user = null, list = { influencers: [member('jane', { handle: 'jane' }), member('lee', { status: 'paused', handle: null })], counts: { active: 1, paused: 1, ended: 0 } },
     apps = { applications: [application('a1')], counts: { applied: 1, more_requested: 0 } }, flags = { flags: [{ uid: 'f1', handle: 'jane', reason: 'self_email_domain', created_at: '2026-10-21 10:00:00' }] },
-    tiers = { tiers: TIERS }, offers = { offers: [OFFER('o1')] },
+    tiers = { tiers: TIERS }, offers = { offers: [OFFER('o1')] }, page = null,
   } = o;
   const call = (v, ...a) => { const out = typeof v === 'function' ? v(...a) : v; return out && typeof out.json === 'function' ? out : response(out); };
   return (url, options = {}) => {
@@ -71,6 +71,11 @@ function worker(o = {}) {
     if (path === '/api/admin/influencers/flags') return call(flags);
     if (path === '/api/admin/influencers/tier-defaults') return call(tiers);
     if (/^\/api\/admin\/influencers\/[^/]+\/offers$/.test(path)) return call(offers);
+    // D4810: one page of every influencer's offers, the Super Admin's read.
+    if (path === '/api/admin/influencer-offers') {
+      if (!user?.is_super_admin) return response({ error: 'forbidden', code: 'forbidden' }, 403);
+      return call(page ?? { items: (offers.offers || []).map((x) => ({ influencer: { user_uid: 'u-jane', handle: 'jane', name: 'Jane' }, offer: x })), total: (offers.offers || []).length, limit: 50, offset: 0 });
+    }
     if (/^\/api\/admin\/programs\/[^/]+\/activity$/.test(path)) return call({ rows: [], next_before: null, not_audited: null });
     const key = /^\/api\/admin\/programs\/([^/]+)$/.exec(path)?.[1];
     if (key) return call({ program: { key, status: 'partly_built' }, playbook: { published: true, version: 1, published_at: null, sections: [] } });
@@ -257,11 +262,11 @@ test('a flagged sign-up is kept or reversed only with a reason', async () => {
 });
 
 test('Offers: an admin reads them; the Super Admin links one and pauses one, each with a reason, on the account uid', async () => {
+  // D4810: offers carry budgets and spend; the Worker reads them to the Super Admin only, and the tab says so once.
   const plain = await mounted('/admin/programs/influencer/offers', worker({ user: ADMIN }), { user: ADMIN });
   try {
-    assert.match(plain.textOf('influencers-offer-o1'), /@jane.*20% off.*JANE20.*\$1,000\.00.*3.*\$60\.00.*Active/);
+    assert.match(plain.textOf('influencers-offers-refused'), /only the Super Admin reads them/);
     assert.ok(!plain.has('influencers-offers-new') && !plain.has('influencers-offer-o1-toggle'), 'linking and changing are the Super Admin’s');
-    assert.ok(plain.requests.some((r) => r.url === '/api/admin/influencers/u-jane/offers'), 'offers read on the account uid');
   } finally { await plain.close(); }
   const view = await mounted('/admin/programs/influencer/offers', worker({ user: SUPER }), { user: SUPER });
   try {
@@ -317,5 +322,29 @@ test('How it runs and Activity are part 1\'s reads under the key "influencer"', 
   const view = await mounted('/admin/programs/influencer/activity', worker({ user: ADMIN }), { user: ADMIN });
   try {
     assert.ok(view.requests.some((r) => r.url.startsWith('/api/admin/programs/influencer/activity')));
+  } finally { await view.close(); }
+});
+
+test('D4810: Offers reads two things for 200 influencers, never one per influencer, and pages through every offer', async () => {
+  const influencers = Array.from({ length: 200 }, (_, i) => member(`m${i}`, { handle: `m${i}` }));
+  const all = Array.from({ length: 130 }, (_, i) => ({ influencer: { user_uid: `u-m${i % 200}`, handle: `m${i % 200}`, name: null }, offer: OFFER(`o${i}`) }));
+  const page = (q) => {
+    const off = Number(new URLSearchParams(q || '').get('offset')) || 0;
+    return { items: all.slice(off, off + 50), total: all.length, limit: 50, offset: off };
+  };
+  const base = worker({ user: SUPER, list: { influencers, counts: { active: 200, paused: 0, ended: 0 } } });
+  const handle = (url, options) => {
+    const [path, qs] = url.split('?');
+    return path === '/api/admin/influencer-offers' ? response(page(qs)) : base(url, options);
+  };
+  const view = await mounted('/admin/programs/influencer/offers', handle, { user: SUPER });
+  try {
+    const reads = view.requests.filter((r) => (r.method || 'GET') === 'GET').map((r) => r.url.split('?')[0]);
+    assert.equal(reads.filter((u) => /\/api\/admin\/influencers\/[^/]+\/offers$/.test(u)).length, 0, 'no offers read per influencer');
+    assert.equal(reads.filter((u) => u === '/api/admin/influencer-offers').length, 1);
+    assert.ok(view.has('influencers-offer-o0') && !view.has('influencers-offer-o50'), 'one page');
+    await view.click('influencers-offers-next');
+    assert.ok(view.requests.some((r) => r.url === '/api/admin/influencer-offers?limit=50&offset=50'));
+    assert.ok(view.has('influencers-offer-o50'));
   } finally { await view.close(); }
 });

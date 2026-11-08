@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LAB_PAGE_PAD, LAB_PAGE_PAD_LOOSE } from '../components/spinout/labStyles';
-import { api } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
 import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
 import { pickLabProject } from './SpinoutLabStartupPage';
@@ -625,6 +625,52 @@ export function WeekOneRecord({ startedAt, fixture = null }) {
   );
 }
 
+/**
+ * D4659 — which of your projects is the Lab venture, asked only when the server
+ * could not record it on its own: you own several and none is chosen, or the
+ * recorded one was deleted. Lab steps on project work wait for this answer.
+ */
+export function VentureChooser({ venture }) {
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState('');
+  if (!venture || (venture.status !== 'needs_choice' && venture.status !== 'deleted')) return null;
+  const choices = Array.isArray(venture.choices) ? venture.choices : [];
+  const choose = async (id) => {
+    setBusy(id);
+    setError('');
+    try {
+      await spinoutLab.chooseVenture(id);
+      try { window.dispatchEvent(new Event('spinout-lab:advanced')); } catch { /* non-browser */ }
+    } catch (e) {
+      setError(e?.message || 'Your venture could not be saved. Try again.');
+      reportError('spinout-lab:venture', e);
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="mb-6 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4" data-testid="lab-venture-chooser">
+      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+        {venture.status === 'deleted' ? 'Your Lab venture was deleted. Which project is it now?' : 'Which of your projects is your Lab venture?'}
+      </p>
+      <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">Your Lab steps, certificate and graduate listing all use this one company.</p>
+      {choices.length === 0 ? (
+        <p className="mt-3 text-xs text-amber-800 dark:text-amber-300">You have no live project yet. Create one, and it becomes your venture.</p>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {choices.map((p) => (
+            <button key={p.id} type="button" disabled={busy !== null} onClick={() => choose(p.id)}
+              className="rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs font-semibold text-gray-900 dark:text-gray-100 disabled:opacity-60">
+              {busy === p.id ? 'Saving…' : (p.name || 'Untitled project')}
+            </button>
+          ))}
+        </div>
+      )}
+      {error ? <p className="mt-2 text-xs text-red-700 dark:text-red-300" role="alert">{error}</p> : null}
+    </div>
+  );
+}
+
 export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false, week1Fixture = null }) {
   const navigate = useNavigate();
   const done = useMemo(() => milestoneKeySet(state?.milestones), [state?.milestones]);
@@ -767,6 +813,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
 
   return (
     <div className={`w-full ${LAB_PAGE_PAD} ${LAB_PAGE_PAD_LOOSE}`} data-testid="spinout-workspace">
+      <VentureChooser venture={state?.venture} />
       {/* ---- Program header (sticky, like the design's page header) ---- */}
       <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-gray-50/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 pb-4 mb-8">
         <div className="flex flex-wrap items-center justify-between gap-4">

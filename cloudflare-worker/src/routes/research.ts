@@ -43,7 +43,7 @@ import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
 import { mintDownloadToken } from '../services/signedDownload';
-import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
+import { searchSemanticOutcome, deleteChunkedEntity, researchNamespace, type SearchHit } from '../services/vectorize';
 import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { orderByRanking, rank } from '../services/ai/decide';
@@ -122,6 +122,8 @@ const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'l
  * would be a table pretending to be a control. The page states the value.
  */
 const SCORE_FLOOR = 0.55;
+/** D4605: the index states Ask may answer from. */
+const ANSWERABLE_STATES = ['indexed', 'partial'];
 
 const nowIso = () => new Date().toISOString();
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
@@ -179,7 +181,8 @@ const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | 
   read_only: source === 'client',
   // What Ask can actually reach. An own document is answerable when it is
   // indexed; a shared one never is, because it is indexed somewhere else.
-  in_ask: source === 'own' && r.index_state === 'indexed',
+  // D4605: a partly indexed document answers from the passages it has.
+  in_ask: source === 'own' && ANSWERABLE_STATES.includes(r.index_state),
 });
 
 /** Always scoped to the caller. There is no route here that reads another user's row. */
@@ -235,8 +238,11 @@ research.get('/documents', async (c) => {
   return c.json({
     items,
     // The library's own reach, stated rather than left for a reader to count.
-    indexed: items.filter((i) => i.index_state === 'indexed').length,
-    not_indexed: items.filter((i) => i.index_state !== 'indexed').length,
+    // D4605: `indexed` counts what Ask can answer from, a partly indexed document included.
+    indexed: items.filter((i) => ANSWERABLE_STATES.includes(i.index_state)).length,
+    not_indexed: items.filter((i) => !ANSWERABLE_STATES.includes(i.index_state)).length,
+    // D4612: still being read, so the page knows to keep watching and Re-index leaves it alone.
+    pending: items.filter((i) => i.index_state === 'pending').length,
     // The `pr4` artboard's fourth tile. Counted here rather than in the page so
     // the tile and the `Client docs` chip cannot disagree about what the word
     // means: this is provenance (migration 222), NOT `kind = 'client'`, which
@@ -510,6 +516,8 @@ function askTotals(items: ReturnType<typeof answerDto>[]) {
     answered: items.filter((i) => i.reason === 'answered').length,
     no_source: items.filter((i) => i.reason === 'no_source').length,
     model_unavailable: items.filter((i) => i.reason === 'model_unavailable').length,
+    // D4605: the library could not be searched. Not an evidence gap.
+    retrieval_unavailable: items.filter((i) => i.reason === 'retrieval_unavailable').length,
     saved: items.filter((i) => i.saved).length,
     // Summed from the per-answer receipts, never re-derived from tokens and a
     // current rate: a price list that moves must not silently restate what a
@@ -687,6 +695,68 @@ research.patch('/ask/answers/:uid', async (c) => {
   return c.json({ item: row ? answerDto(row) : null });
 });
 
+/**
+ * D4605 — one passage Ask may answer from: the hit, its document, and the text
+ * the model reads (the whole chunk, or the preview of a vector written before
+ * the chunk was stored whole).
+ */
+export interface EligiblePassage { hit: SearchHit; document_uid: string; revision: string | null; text: string; full: boolean }
+
+/** What the reranker reads of each passage, and the model's whole source budget. */
+export const RANK_CONTEXT_CHARS = 2000;
+export const ASK_CONTEXT_BUDGET = 16000;
+
+/**
+ * D4605: the document row is the authority. A hit counts only while its
+ * document is the caller's, is `indexed` or `partial`, and the hit was written
+ * by the document's current index run (`indexed_at`). A vector with no
+ * revision predates revisions and is accepted for a document indexed before
+ * them, reading its preview; it gains its whole passage on its next re-index.
+ */
+export async function eligiblePassages(env: Env, userId: number, hits: SearchHit[]): Promise<EligiblePassage[]> {
+  const docs = new Map<number, { uid: string; index_state: string; indexed_at: string | null } | null>();
+  const out: EligiblePassage[] = [];
+  for (const hit of hits) {
+    if (!docs.has(hit.entity_id)) {
+      const row = await env.DB.prepare(
+        'SELECT uid, index_state, indexed_at FROM research_documents WHERE id = ? AND owner_user_id = ?'
+      ).bind(hit.entity_id, userId).first<{ uid: string; index_state: string; indexed_at: string | null }>();
+      docs.set(hit.entity_id, row ?? null);
+    }
+    const doc = docs.get(hit.entity_id);
+    if (!doc || !ANSWERABLE_STATES.includes(doc.index_state)) continue;
+    if (hit.revision != null && hit.revision !== doc.indexed_at) continue;
+    const full = typeof hit.passage === 'string' && hit.passage.length > 0;
+    out.push({ hit, document_uid: doc.uid, revision: hit.revision ?? null, text: full ? hit.passage! : hit.snippet, full });
+  }
+  return out;
+}
+
+/** D4605: the passages that fit the model's source budget, best first; the first always fits. */
+export function withinBudget(passages: EligiblePassage[], budget = ASK_CONTEXT_BUDGET): EligiblePassage[] {
+  const kept: EligiblePassage[] = [];
+  let used = 0;
+  for (const p of passages) {
+    const size = p.text.length + p.hit.title.length + 16;
+    if (kept.length && used + size > budget) break;
+    kept.push(kept.length ? p : { ...p, text: p.text.slice(0, budget) });
+    used += size;
+  }
+  return kept;
+}
+
+/** D4605: a citation names the document, the index run, the chunk and its page. */
+function citationOf(p: EligiblePassage, documentUid: string) {
+  return {
+    title: p.hit.title,
+    document_uid: documentUid,
+    revision: p.revision,
+    chunk: p.hit.chunk ?? null,
+    page: p.hit.page ?? null,
+    score: Number(p.hit.score.toFixed(3)),
+  };
+}
+
 research.post('/ask', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
@@ -694,34 +764,50 @@ research.post('/ask', async (c) => {
   if (!question) return c.json({ detail: 'question_required' }, 400);
   const session = await resolveAskSession(c, user.id, String(body?.session_uid || ''));
 
-  const hits = await searchSemantic(c.env, question, {
+  const searched = await searchSemanticOutcome(c.env, question, {
     topK: 8,
     type: 'research_doc',
     namespace: researchNamespace(user.id),
     ownerUserId: user.id,
   });
+  // D4605: a search that could not run is not a search that found nothing.
+  // It is recorded as its own outcome, so history and the strip keep the gap
+  // in the evidence apart from a service failure, and the reader is told to
+  // try again rather than to upload a document that would not have helped.
+  if (!searched.ok) {
+    const answer_uid = await recordAnswer(c, session, {
+      question, answer: null, reason: 'retrieval_unavailable', best_score: null, citations: [],
+    });
+    return c.json({
+      question, answer: null, reason: 'retrieval_unavailable', retryable: true,
+      failure: searched.failure, citations: [], score_floor: SCORE_FLOOR,
+      session_uid: session.uid, answer_uid, cost_usd: 0,
+    });
+  }
+  const hits = searched.hits;
+  // D4605: the document row decides eligibility, not the index. A passage
+  // counts only while its document is the caller's, is indexed (wholly or in
+  // part), and the passage was written by the document's current index run; a
+  // removed document, one being re-indexed, and a vector a previous run left
+  // behind contribute nothing.
+  const eligible = await eligiblePassages(c.env, user.id, hits.filter((h) => h.score >= SCORE_FLOOR));
   // #3938 (task 4): retrieve, then rank, then write. The reranker orders the passages that passed the
   // floor against the question, so the answer reads (and cites) the best first. A refused or failed
   // rank keeps the index's order: the answer's own run below states any refusal.
-  const retrieved = hits.filter((h) => h.score >= SCORE_FLOOR);
-  let usable = retrieved;
-  if (retrieved.length > 1) {
+  let usable = eligible;
+  if (eligible.length > 1) {
     const ranked = await rank(c.env, {
       userId: user.id, surface: AI_SURFACE.researchAsk,
       rail: railFor(c, { page: ASK_PAGE, option: ASK_OPTION }, `research_ask_session:${session.uid}`),
-    }, { query: question, contexts: retrieved.map((h) => `${h.title}\n${h.snippet}`.slice(0, 1500)) });
-    if (ranked.ok) usable = orderByRanking(retrieved, ranked.ranking);
+    }, { query: question, contexts: eligible.map((p) => `${p.hit.title}\n${p.text}`.slice(0, RANK_CONTEXT_CHARS)) });
+    if (ranked.ok) usable = orderByRanking(eligible, ranked.ranking);
   }
-  const documentUids = await Promise.all(usable.map(async (hit) => {
-    const document = await c.env.DB.prepare(
-      'SELECT uid FROM research_documents WHERE id = ? AND owner_user_id = ?'
-    ).bind(hit.entity_id, user.id).first<{ uid: string }>();
-    return document?.uid ?? null;
-  }));
+  usable = withinBudget(usable);
+  const documentUids = usable.map((p) => p.document_uid);
 
   if (!usable.length) {
     const indexed = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM research_documents WHERE owner_user_id = ? AND index_state = 'indexed'`
+      `SELECT COUNT(*) AS n FROM research_documents WHERE owner_user_id = ? AND index_state IN ('indexed', 'partial')`
     ).bind(user.id).first<{ n: number }>();
     const best = hits.length ? Number(hits[0].score.toFixed(3)) : null;
     // Nothing was retrieved, so no model ran and nothing is charged. The row
@@ -748,8 +834,9 @@ research.post('/ask', async (c) => {
     });
   }
 
+  // D4605: the whole passage, not the 280-character preview a list shows.
   const context = usable
-    .map((h, i) => `[${i + 1}] ${h.title}\n${h.snippet}`)
+    .map((p, i) => `[${i + 1}] ${p.hit.title}${p.hit.page != null ? ` (page ${p.hit.page})` : ''}\n${p.text}`)
     .join('\n\n');
   const prompt = [
     'Answer the question using ONLY the sources below.',
@@ -806,10 +893,10 @@ research.post('/ask', async (c) => {
   if (!answer) {
     // The retrieval worked and the model did not. Reporting that as
     // `no_source` would blame the library for a failure that is not its.
-    const citations = usable.map((h, i) => ({ title: h.title, document_uid: documentUids[i], chunk: h.chunk ?? null, score: Number(h.score.toFixed(3)) }));
+    const citations = usable.map((p, i) => citationOf(p, documentUids[i]));
     const answer_uid = await recordAnswer(c, session, {
       question, answer: null, reason: 'model_unavailable',
-      best_score: Number(usable[0].score.toFixed(3)), citations, ...receipt,
+      best_score: Number(usable[0].hit.score.toFixed(3)), citations, ...receipt,
     });
     return c.json({
       question, answer: null, reason: 'model_unavailable',
@@ -821,16 +908,10 @@ research.post('/ask', async (c) => {
     });
   }
 
-  const citations = usable.map((h, i) => ({
-    n: i + 1,
-    title: h.title,
-    document_uid: documentUids[i],
-    chunk: h.chunk ?? null,
-    score: Number(h.score.toFixed(3)),
-  }));
+  const citations = usable.map((p, i) => ({ n: i + 1, ...citationOf(p, documentUids[i]) }));
   const answer_uid = await recordAnswer(c, session, {
     question, answer, reason: 'answered',
-    best_score: Number(usable[0].score.toFixed(3)), citations, ...receipt,
+    best_score: Number(usable[0].hit.score.toFixed(3)), citations, ...receipt,
   });
 
   return c.json({

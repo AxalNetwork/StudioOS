@@ -41,19 +41,25 @@ export function taxCents(subtotal: number, rateBps: number): number {
  * Reads from a dedicated counter rather than MAX(invoice_number) over the
  * invoices: parsing a formatted string back into an integer to increment it
  * is how duplicate numbers happen, and a VOID invoice must keep its number
- * rather than freeing it for reuse. The UPSERT is atomic in SQLite, so two
- * concurrent issues cannot take the same value.
+ * rather than freeing it for reuse.
+ *
+ * D4682 — INCREMENT AND READ ARE ONE STATEMENT. This used to bump the counter
+ * and read it back in a second statement, so two concurrent issues could both
+ * read the larger value and print the same number. `RETURNING` hands each
+ * caller the value its own increment produced. `issueInvoice` does not call
+ * this (it reserves inside the insert's own batch, so a request that loses to
+ * a concurrent one for the same engagement burns no number); it stays for any
+ * caller that needs a number on its own.
  */
 export async function nextInvoiceNumber(env: Env, now = new Date()): Promise<string> {
   const year = String(now.getUTCFullYear());
-  await env.DB.prepare(
-    `INSERT INTO invoice_number_seq (year, last_value) VALUES (?, 1)
-       ON CONFLICT(year) DO UPDATE SET last_value = last_value + 1`,
-  ).bind(year).run();
   const row = await env.DB.prepare(
-    'SELECT last_value FROM invoice_number_seq WHERE year = ?',
+    `INSERT INTO invoice_number_seq (year, last_value) VALUES (?, 1)
+       ON CONFLICT(year) DO UPDATE SET last_value = last_value + 1
+       RETURNING last_value`,
   ).bind(year).first<{ last_value: number }>();
-  const n = Number(row?.last_value) || 1;
+  const n = Number(row?.last_value);
+  if (!Number.isInteger(n) || n < 1) throw new Error('invoice_number_unavailable');
   return `AX-${year}-${String(n).padStart(4, '0')}`;
 }
 
@@ -101,40 +107,78 @@ export interface IssueInput {
 /**
  * Issue the invoice, or return the one that already exists.
  *
- * Idempotent by the UNIQUE index on engagement_id: a retried or double-clicked
- * request gets the first invoice back rather than a second number for the same
- * work. The read-before-insert is the fast path; the index is the guarantee.
+ * D4682 — ONE BATCH, ONE TRANSACTION, THREE STATEMENTS:
+ *
+ *   1. reserve the next number for the year, only if this engagement has no
+ *      invoice yet and is in a state that can be invoiced;
+ *   2. insert the invoice with that number, under the same two conditions;
+ *   3. mark the engagement `invoiced`, pointing at the invoice's number.
+ *
+ * A request that loses to a concurrent one for the same engagement finds the
+ * invoice there, reserves nothing (statement 1 is guarded by the same test),
+ * and returns the existing invoice. Two engagements issued at once serialise on
+ * the counter row and take different numbers. A failure anywhere rolls the
+ * whole batch back, so the engagement can never claim a document that was not
+ * written, and a retry never issues a second one. An engagement left
+ * `delivered` by an older partial failure that already has an invoice is
+ * reconciled by statement 3 on the next call, with no new document.
+ *
+ * Idempotent also by the UNIQUE index on engagement_id, which remains the
+ * guarantee underneath.
  */
 export async function issueInvoice(env: Env, input: IssueInput, uid: string, nowIso: string) {
-  const existing = await env.DB.prepare(
-    'SELECT * FROM engagement_invoices WHERE engagement_id = ?',
-  ).bind(input.engagementId).first<any>();
-  if (existing) return { invoice: existing, created: false };
-
   const subtotal = toCents(input.priceDollars);
   const rate = Math.min(10000, Math.max(0, Math.trunc(input.taxRateBps ?? 0)));
   const tax = taxCents(subtotal, rate);
   const items = lineItemsFromQuote(input.deliverables, subtotal);
-  const number = await nextInvoiceNumber(env, new Date(nowIso));
+  const year = String(new Date(nowIso).getUTCFullYear());
+  const id = input.engagementId;
 
-  await env.DB.prepare(
-    `INSERT INTO engagement_invoices
-       (uid, invoice_number, engagement_id, partner_user_id, founder_user_id,
-        bill_from_name, bill_to_name, line_items_json, subtotal_cents,
-        tax_rate_bps, tax_cents, total_cents, currency, notes, status,
-        issued_at, due_at, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'issued', ?,?,?,?)`,
-  ).bind(
-    uid, number, input.engagementId, input.partnerUserId, input.founderUserId,
-    input.billFromName, input.billToName, JSON.stringify(items), subtotal,
-    rate, tax, subtotal + tax, (input.currency || 'USD').toUpperCase(),
-    input.notes ?? null, nowIso, input.dueAt ?? null, nowIso, nowIso,
-  ).run();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO invoice_number_seq (year, last_value)
+       SELECT ?, 1
+        WHERE NOT EXISTS (SELECT 1 FROM engagement_invoices WHERE engagement_id = ?)
+          AND EXISTS (SELECT 1 FROM engagements WHERE id = ? AND status IN ('delivered', 'reviewed', 'invoiced'))
+       ON CONFLICT(year) DO UPDATE SET last_value = last_value + 1`,
+    ).bind(year, id, id),
+    env.DB.prepare(
+      `INSERT INTO engagement_invoices
+         (uid, invoice_number, engagement_id, partner_user_id, founder_user_id,
+          bill_from_name, bill_to_name, line_items_json, subtotal_cents,
+          tax_rate_bps, tax_cents, total_cents, currency, notes, status,
+          issued_at, due_at, created_at, updated_at)
+       SELECT ?, 'AX-' || ? || '-' || printf('%04d', (SELECT last_value FROM invoice_number_seq WHERE year = ?)),
+              ?,?,?,?,?,?,?,?,?,?,?,?, 'issued', ?,?,?,?
+        WHERE NOT EXISTS (SELECT 1 FROM engagement_invoices WHERE engagement_id = ?)
+          AND EXISTS (SELECT 1 FROM engagements WHERE id = ? AND status IN ('delivered', 'reviewed', 'invoiced'))`,
+    ).bind(
+      uid, year, year,
+      id, input.partnerUserId, input.founderUserId,
+      input.billFromName, input.billToName, JSON.stringify(items), subtotal,
+      rate, tax, subtotal + tax, (input.currency || 'USD').toUpperCase(),
+      input.notes ?? null, nowIso, input.dueAt ?? null, nowIso, nowIso,
+      id, id,
+    ),
+    env.DB.prepare(
+      `UPDATE engagements
+          SET status = 'invoiced',
+              invoiced_at = CASE WHEN status = 'invoiced' THEN invoiced_at
+                                 ELSE (SELECT issued_at FROM engagement_invoices WHERE engagement_id = ?) END,
+              invoice_id = (SELECT invoice_number FROM engagement_invoices WHERE engagement_id = ?),
+              updated_at = ?
+        WHERE id = ?
+          AND status IN ('delivered', 'reviewed', 'invoiced')
+          AND EXISTS (SELECT 1 FROM engagement_invoices WHERE engagement_id = ?)
+          AND (status != 'invoiced'
+               OR invoice_id IS NOT (SELECT invoice_number FROM engagement_invoices WHERE engagement_id = ?))`,
+    ).bind(id, id, nowIso, id, id, id),
+  ]);
 
   const invoice = await env.DB.prepare(
-    'SELECT * FROM engagement_invoices WHERE uid = ?',
-  ).bind(uid).first<any>();
-  return { invoice, created: true };
+    'SELECT * FROM engagement_invoices WHERE engagement_id = ?',
+  ).bind(id).first<any>();
+  return { invoice, created: !!invoice && invoice.uid === uid };
 }
 
 /** Parse the stored snapshot back out, tolerating a bad row rather than throwing. */

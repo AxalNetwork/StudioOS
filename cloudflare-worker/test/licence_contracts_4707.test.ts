@@ -31,7 +31,7 @@ const listIn = (sql: string, col: string) => {
 };
 
 test('the SPA mirrors every value the Worker contract names', () => {
-  for (const k of ['LICENCE_STATUSES', 'LICENCE_KINDS', 'SEAT_TYPES', 'EVENT_OUTCOMES', 'ACTOR_STATES'] as const) {
+  for (const k of ['LICENCE_STATUSES', 'LICENCE_KINDS', 'SEAT_TYPES', 'EVENT_OUTCOMES', 'ACTOR_STATES', 'TERMINATION_STEPS', 'TERMINATION_STEP_STATES'] as const) {
     assert.deepEqual([...spa[k]], [...worker[k]], k);
   }
   assert.equal(spa.EVENTS_PAGE_DEFAULT, worker.EVENTS_PAGE_DEFAULT);
@@ -74,7 +74,7 @@ test('the SPA\'s field lists are the routes\' real answers', () => {
   assert.deepEqual(answerKeys('admin_licences_terms.ts', 'LicenceTerritoriesResult'), [...F.territories]);
   assert.deepEqual(answerKeys('admin_licences_terms.ts', 'LicenceSeatsResult'), [...F.seats]);
   // `...terms` spreads the terms object; its fields are LicenceTermsResult's, read off the type.
-  assert.deepEqual(answerKeys('admin_licences_terms.ts', 'LicenceTermsResult'), ['ok', '...terms', 'pushed']);
+  assert.deepEqual(answerKeys('admin_licences_terms.ts', 'LicenceTermsResult'), ['ok', '...terms', 'terms_revision', 'changed', 'pushed']);
   const contract = read('cloudflare-worker/src/services/licenceContracts.ts');
   const fieldsOf = (type: string) => {
     const at = contract.indexOf(`export type ${type} =`);
@@ -83,6 +83,10 @@ test('the SPA\'s field lists are the routes\' real answers', () => {
   };
   assert.deepEqual(['ok', ...fieldsOf('LicenceTermsResult').filter((k) => k !== 'ok'), 'pushed'], [...F.terms]);
   assert.deepEqual(fieldsOf('LicenceEventItem'), [...F.event_item]);
+  // D4686 — the termination answer, its operation, and the detail's `sync`.
+  assert.deepEqual(answerKeys('admin_licences_lifecycle.ts', 'LicenceTerminateResult'), [...F.terminate]);
+  assert.deepEqual(fieldsOf('TerminationOperation'), [...F.terminate_operation]);
+  assert.deepEqual(fieldsOf('LicenceSyncSummary'), [...F.sync]);
   assert.deepEqual(fieldsOf('LicenceEventsPage'), [...F.events]);
   assert.deepEqual(answerKeys('admin_licences_history.ts', 'LicenceEventsPage'), [...F.events]);
 });

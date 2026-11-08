@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading,
   Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
@@ -82,7 +84,7 @@ function ProposalTile({ label, value, note, nr = false }) {
 
 export default function PartnerProposalsZone() {
   const { state, load, run, busy, note } = usePipelineZone(
-    () => api.listPartnerProposals(), 'The proposals did not load.',
+    () => readAllPages((cur) => api.listPartnerProposals(cur)), 'The proposals did not load.',
   );
   const [view, setView] = useState('all');
   // TWO SELECTIONS, NOT ONE (#4685). `historyId` is the proposal whose version
@@ -170,6 +172,7 @@ export default function PartnerProposalsZone() {
         )}
       >
         <div className="space-y-6">
+          <PartialRead data={state.data} noun="proposals" onRetry={load} />
           <ZoneHeading
             title="Proposals"
             blurb={

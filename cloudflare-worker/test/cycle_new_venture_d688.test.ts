@@ -268,12 +268,18 @@ test('D688: Raise deck with no views keeps its Share action, and tool actions ag
   db.exec("INSERT INTO pitch_decks(id, project_id, version, slides) VALUES (5, 1, 1, '[]')");
   const { body } = await raiseCall(db, '/overview?project=1');
   assert.deepEqual([body.cards[2].reason, body.cards[2].next?.text, body.cards[2].next?.href],
-    ['No one has opened a deck link yet.', 'Share the deck with an investor', '/raise/pitch-deck/new?project=1']);
+    ['No one has opened a deck link yet.', 'Share the deck with an investor', '/raise/pitch/share?project_id=1']);
   for (const slug of ['pitch-deck', 'data-room', 'cap-table', 'use-of-funds', 'capital-relationships']) {
     const card = body.cards.find((entry: any) => entry.slug === slug);
     const module = await raiseCall(db, `/modules/${slug}?project=1`);
     assert.equal(card.next.href, module.body.records.add.href, slug);
   }
+  // #4853: the Pitch entries name the Studio's own address (`/raise/pitch`, read as `project_id`), never the
+  // module cycle's `/raise/pitch-deck` addresses, whose Add form was a second sharing flow.
+  const pitchModule = await raiseCall(db, '/modules/pitch-deck?project=1');
+  assert.equal(pitchModule.body.records.add.href, '/raise/pitch/share?project_id=1', 'New link opens the Studio\'s Share tab');
+  assert.doesNotMatch(JSON.stringify(body), /\/raise\/pitch-deck/, 'no link in the Raise read names a pitch-deck address');
+  assert.doesNotMatch(JSON.stringify(pitchModule.body), /\/raise\/pitch-deck\/new/);
   const narrative = await raiseCall(db, '/modules/investor-narrative?project=1');
   assert.equal(narrative.body.records.add, undefined, 'no self-link instead of New version form');
   db.close();
