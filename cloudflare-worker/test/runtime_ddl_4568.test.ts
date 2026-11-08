@@ -123,11 +123,12 @@ test('#4568 R2-04: two isolates starting together both succeed and add each colu
   } finally { db.close(); }
 });
 
-test('#4568 R2-04: the bootstrap is migration 157, column for column', () => {
-  const m157 = readFileSync(new URL('../sql/migrations/157_cohort_applications.sql', import.meta.url), 'utf8');
+test('#4568 R2-04: the bootstrap is migrations 157 and 202611071730 (D4658), column for column', () => {
+  const declared = ['157_cohort_applications.sql', '202611071730_cohort_notification_delivery.sql']
+    .map((f) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8')).join('\n');
   for (const s of COHORT_SCHEMA.filter((x) => /^ALTER/.test(x))) {
-    const col = /ADD COLUMN (\w+)/.exec(s)![1];
-    assert.match(m157, new RegExp(`ADD COLUMN ${col}\\b`), `${col} is declared by migration 157`);
+    const [, table, col] = /ALTER TABLE (\w+) ADD COLUMN (\w+)/.exec(s)!;
+    assert.match(declared, new RegExp(`ALTER TABLE ${table} ADD COLUMN ${col}\\b`), `${table}.${col} is declared by a migration`);
   }
 });
 

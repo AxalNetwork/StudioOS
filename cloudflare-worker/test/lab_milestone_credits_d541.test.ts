@@ -25,7 +25,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 import { grantWriteBar } from './_write_bar_session.mjs';
-import { labEnrollmentSchema, evidenceTables, proveMilestone } from './_lab_evidence.ts';
+import { labEnrollmentSchema, evidenceTables, proveMilestone, graduate, GRADUATION_KEYS } from './_lab_evidence.ts';
 
 import spinoutLab from '../src/routes/spinout_lab.ts';
 import certificates from '../src/routes/spinout_certificates.ts';
@@ -45,7 +45,7 @@ function ddl(name: string): string {
   return BASELINE.slice(at, BASELINE.indexOf(');', at) + 2);
 }
 
-function freshDb({ rules = true } = {}) {
+function freshDb({ rules = true, programme = 'full' as 'full' | 'week4' } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'spinout_lab_milestones', 'activity_logs', 'spinout_applications', 'projects',
     'user_spinout_flags', 'spinout_certificates', 'perk_credit_ledger']) db.exec(ddl(t));
@@ -62,8 +62,15 @@ function freshDb({ rules = true } = {}) {
   const f = db.prepare(`INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort) VALUES (?, ?, 'Cohort 4')`);
   f.run(MEMBER, 1); f.run(GRAD, 1); f.run(OLD_GRAD, 1); f.run(OUTSIDER, 0);
   const m = db.prepare(`INSERT INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (?, ?, ?, ?)`);
-  m.run(GRAD, 4, 'incorporation_completed', '2026-10-04 09:00:00');
-  m.run(OLD_GRAD, 4, 'incorporation_completed', '2026-08-01 09:00:00');
+  // D4659: a graduate has the whole programme on record. The backfill tests
+  // keep D541's legacy shape (week 4 only), which is the data that backfill is for.
+  if (programme === 'full') {
+    graduate(db, GRAD, '2026-10-04 09:00:00');
+    graduate(db, OLD_GRAD, '2026-08-01 09:00:00');
+  } else {
+    m.run(GRAD, 4, 'incorporation_completed', '2026-10-04 09:00:00');
+    m.run(OLD_GRAD, 4, 'incorporation_completed', '2026-08-01 09:00:00');
+  }
   // D4657: the enrollment migration, applied after the fixture users exist,
   // records every one of them as a legacy enrollment, as production's would.
   labEnrollmentSchema(db);
@@ -201,6 +208,8 @@ test('the half that paid, granted again, reads already_granted; a grant written 
 
 test('graduation: the certificate issued on the last milestone pays the bonus once', async () => {
   const db = freshDb();
+  // D4659: weeks 1-3 are on record; the paid incorporation completes the programme.
+  graduate(db, MEMBER, '2026-10-04 09:00:00', GRADUATION_KEYS.filter((k) => k !== 'incorporation_completed'));
   paidOrder(db, MEMBER);
   const r = await quiet(() => record(db, MEMBER, 'incorporation_completed'));
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -310,7 +319,7 @@ const SUPER = 950;
 
 /** OLD_GRAD finished the whole path before launch; MEMBER did part of it, one milestone already paid live. */
 function cohortDb() {
-  const db = freshDb();
+  const db = freshDb({ programme: 'week4' });
   db.exec(ddl('super_admins')); db.exec(ddl('admin_audit_log'));
   db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, 'admin', 'Super One', 'super@example.test', 1)`).run(SUPER);
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
