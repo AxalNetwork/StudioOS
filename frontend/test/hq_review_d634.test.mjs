@@ -125,7 +125,8 @@ test('Q5: money to the cent with its code, dates in UTC, and the Disputes card o
     disputes: { disputes: [D, { ...D, id: 'dp_won', status: 'won' }] },
     nowSec: 1760000000,
   }));
-  const link = /<a ([^>]*)>Dispute<\/a>/.exec(card);
+  // D5039 (canvas RV08): the row's action reads "Review dispute".
+  const link = /<a ([^>]*)>Review dispute<\/a>/.exec(card);
   assert.ok(link, 'the dispute row is a link');
   assert.match(link[1], /href="\/admin\/revenue\/disputes\/dp_1"/);
   assert.match(link[1], /data-testid="hq-revenue-dispute-link"/);
