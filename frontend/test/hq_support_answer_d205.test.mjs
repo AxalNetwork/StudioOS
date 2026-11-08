@@ -277,7 +277,8 @@ test('without `decide` the rows stay plain text, as the queue draws on its own',
 // ──────────────────────────────────────────────────────────────── the page ──
 
 test('the page wires the panel, keeps the session list, and reloads quietly after a decision', () => {
-  assert.ok(CODE.includes('escalationCardProps(ready, failed, decide)'), 'the escalation card is drawn without its panels');
+  // D5034 (#5034) — the escalations are Support v2's banded rows, and each row's Review opens the same panel.
+  assert.match(CODE, /<EscalationQueue[\s\S]*?decide=\{decide\}/, 'the escalation rows are drawn without their panels');
   assert.ok(CODE.includes('<RecordedList'), 'the session list is not drawn');
   assert.match(CODE, /<RecordedList\s+recorded=\{recorded\}\s+onResend=\{/);
   const at = CODE.indexOf('const onRecorded = useCallback(');
