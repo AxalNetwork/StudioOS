@@ -26,11 +26,17 @@
  * terms is recorded as signed (it was) on its own row, leaves the grant
  * waiting on an amendment, and writes a history line saying so; it can never
  * make newer terms look signed.
+ *
+ * THE CANONICAL AGREEMENT (D5048, #5048). Each send also writes a
+ * `licence_program_agreements` version (kind `program_schedule`) and each
+ * completion executes it, in the same batches (`services/programAgreements.ts`).
+ * `schedule_contract_uid` stays as the read-through until its callers move.
  */
 import type { Env } from '../types';
 import { programOf, termsHashOf, termsOf, type LicenceLite } from './programGrants';
 import { clearGuard, decisionGuard, runDecision } from './decisionBatch';
 import { queuePushStatement } from './licencePush';
+import { agreementSignedStatements } from './programAgreements';
 
 /** The document type every schedule envelope carries. */
 export const PROGRAM_SCHEDULE_DOC_TYPE = 'program_schedule';
@@ -185,6 +191,8 @@ export async function onProgramScheduleEnvelopeCompleted(
       env.DB.prepare('UPDATE program_grants SET signed_revision = MAX(COALESCE(signed_revision, 0), ?) WHERE id = ?').bind(rec.revision, rec.grant_id),
       event('schedule_signed_stale', 'The studio signed an earlier revision of the program schedule. The grant’s current terms are not signed.',
         { signed_revision: Number(rec.revision), current_revision: Number(grant.terms_revision) }),
+      // D5048: the canonical version records the signature; it was superseded, so it stays superseded.
+      ...agreementSignedStatements(env, envelopeUuid, signedAt),
       clearGuard(env),
     ]);
     return { ...out, changed: false, stale: !run.lost };
@@ -199,6 +207,8 @@ export async function onProgramScheduleEnvelopeCompleted(
         WHERE id = ? AND terms_revision = ? AND schedule_contract_uid = ? AND schedule_signed_at IS NULL`,
     ).bind(signedAt, rec.revision, rec.grant_id, rec.revision, envelopeUuid),
     event('schedule_signed', 'The studio signed the program schedule.', { revision: Number(rec.revision) }),
+    // D5048: the canonical version becomes executed, with its signed document's hash, in the same batch.
+    ...agreementSignedStatements(env, envelopeUuid, signedAt),
     queuePushStatement(env, rec.licence_id, true),
     clearGuard(env),
   ]);
