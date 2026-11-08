@@ -12,6 +12,7 @@
  *     --test cloudflare-worker/test/deck_element_models_d1503.test.ts
  */
 import test, { after } from 'node:test';
+import { quoting } from './_quoted_run.ts';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
@@ -300,13 +301,14 @@ async function fixture(extraEnv: Record<string, unknown> = {}) {
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
-async function call(f: F, who: number, method: string, path: string, json?: unknown) {
+async function rawCall(f: F, who: number, method: string, path: string, json?: unknown) {
   const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await f.app.request(path, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, ...(json === undefined ? {} : { body: JSON.stringify(json) }) }, f.env);
   const text = await res.text();
   let body: any; try { body = JSON.parse(text); } catch { body = text; }
   return { status: res.status, body };
 }
+const call = quoting(rawCall);
 const URL7 = '/api/decks/7/element-models';
 
 test('GET: per element { suggested ≤ 3, more, pick } in #3741\'s shape, groups for the rail, and the free elements', async () => {
