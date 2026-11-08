@@ -162,6 +162,9 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
 | `distribution_integration_4488.test.mjs` | Mounted campaign Ask acceptance, manual Save and canonical creative retries (D4488). |
 | `distribution_states_4496.test.mjs` | D4496 cross-tab triggers, fixed error copy, manual/AI separation and responsive Overview. |
+| `dashboard_lazy_panels_d4574.test.mjs` | D4574 (#4574 H6): the Studio radar and Product testing panels mount through their lazy boundaries, the imports stay dynamic, and `/studio` keeps its route and mounts. |
+| `cycle_route_lazy_steps_d4574.test.mjs` | D4574 (#4574 H5): `lazyStep` draws its skeleton then the step, a failed chunk reaches the error boundary as a chunk error, every lazy step is a dynamic import of a module that still exports it, and the cycle routes and render sites are unchanged. |
+| `_cycleSteps.mjs` | D4574 (#4574 H5): loads every module CycleRoute names through `lazyStep` (read from its source) before a suite mounts CycleRoute, so a fixed-tick settle sees the step as the browser does once its chunk has arrived. |
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
 
@@ -169,3 +172,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 - `network_relationships_fixes_4740.test.mjs` — #4740 (S1 audit): the RI3/RI4/RI6 "Ask Eadwyn to draft…" buttons quote before they run and open in the composer or the reason field, a refusal reads the mapped copy, IntroCompose's unreadable mailboxes get their own alert, `?intro=<uid>` highlights its row or says it left the desk, the D4464 summary reads "Not recorded" (never 0) and Unreadable, and a failed `RecordEmailSheet` shares read is Unreadable for a member.
 `distribution_ads_4490.test.mjs` checks the Ads banner, gaps without bars, budget sliders, unavailable platforms and Later copy.
+`platform_populations_4856.test.mjs` checks HQ › Platform › Storage's populations: the split in the total's note, the members tile's own denominator, and no zero when the plans cannot be read (D4856).

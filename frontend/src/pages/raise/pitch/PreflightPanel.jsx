@@ -12,9 +12,9 @@ import { railPressHeaders } from '../../../lib/railPage';
 import { refusalOf } from './newDeckModel';
 import {
   ADD_TOKENS, ASK_FIX, BUILD, DIRTY_LINE, DISMISS, FIX_FIRST, FIX_WAITING, FREE_LINE, GROUPS, GROUP_NOTES, HELD_HERE, KEEP_EDITING, LATER,
-  NOTHING_TO_FIX, NOT_A_PASS, NOT_KEPT, OUT_OF_DATE, READER_LINE, RECHECK, RECHECK_NOW, RETRYING, SHOW_ME, STALE_LINE, TITLE, TOKENS_OUT, TRY_AGAIN, UNDO,
+  NOTHING_TO_FIX, NOT_A_PASS, NOT_KEPT, OUT_OF_DATE, READER_LINE, RECHECK, RECHECK_NOW, RETRYING, SAVE_FIRST, SHOW_ME, STALE_LINE, TITLE, TOKENS_OUT, TRY_AGAIN, UNDO,
   canAskFix, chargedLine, checkingLine, countsLine, fixBody, fixedLine, fixedSince, holdLine, notYet, passedLine, percent, retryLabel, slideState, stepOf,
-  subLine, uncheckedBanner,
+  sentLine, subLine, uncheckedBanner,
 } from './preflightUiModel';
 
 /**
@@ -298,18 +298,19 @@ export function PreflightPanel({ pf, version, readOnly = false, deckId = null, t
  * warnings left. `gate` is `gateOf()`'s; "Send anyway" / "Export anyway" is
  * there only with nothing to fix.
  */
-export function PreflightGate({ gate, progress = null, version, dirty = false, onShow, onFix, onAnyway, onClose }) {
+export function PreflightGate({ gate, progress = null, version, dirty = false, onShow, onSave = null, onFix, onAnyway, onClose }) {
   const [openLook, setOpenLook] = useState(false);
   const title = gate?.title || (gate?.kind === 'share' ? 'Before you share' : 'Before you export');
   const footer = progress ? null : (
     <div className="flex flex-wrap justify-end gap-2">
+      {onSave ? <button type="button" className={GHOST} onClick={onSave} data-testid="pitch-preflight-gate-save">{SAVE_FIRST}</button> : null}
       {gate?.anyway ? <button type="button" className={GHOST} onClick={onAnyway} data-testid="pitch-preflight-gate-anyway">{gate.anyway}</button> : null}
       <button type="button" className={PRIMARY} onClick={onFix} data-testid="pitch-preflight-gate-fix">{FIX_FIRST}</button>
     </div>
   );
   const showLook = gate && (!gate.fix.length || openLook);
   return (
-    <Sheet label={title} title={title} eyebrow={TITLE} sub={version != null ? `v${version}` : undefined} width={480} onClose={onClose} footer={footer} testId="pitch-preflight-gate">
+    <Sheet label={title} title={title} eyebrow={TITLE} sub={sentLine(version)} width={480} onClose={onClose} footer={footer} testId="pitch-preflight-gate">
       <div className="flex flex-col gap-3">
         {progress ? <Checking progress={progress} testId="pitch-preflight-gate-checking" /> : null}
         {!progress && gate ? (

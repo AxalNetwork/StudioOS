@@ -225,6 +225,44 @@ export function Field({ label, value, onChange, max, rows = 0, placeholder, sub,
   );
 }
 
+const SHOW_AS = [{ value: 'chart', label: 'Chart' }, { value: 'table', label: 'Table' }];
+
+/**
+ * D4873 (#4873): a single choice among a few (the period, Chart or Table),
+ * drawn as chips but announced as what it is: a `radiogroup` whose options
+ * are `radio`s with `aria-checked`, so a screen reader says which one is
+ * selected. One stop in the tab order (the selected option); the arrow keys
+ * move the choice, as a radio group's do.
+ */
+export function ChoiceGroup({ label, options, value, onPick, testId, groupTestId }) {
+  const refs = React.useRef([]);
+  const at = Math.max(0, options.findIndex((o) => o.value === value));
+  const key = (e) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault?.();
+    const next = (at + step + options.length) % options.length;
+    onPick(options[next].value);
+    refs.current[next]?.focus?.();
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={label} data-testid={groupTestId}>
+      {options.map((o, i) => {
+        const on = o.value === value;
+        return (
+          <button key={o.value} ref={(el) => { refs.current[i] = el; }} type="button" role="radio" aria-checked={on} tabIndex={i === at ? 0 : -1}
+            onClick={() => { if (!on) onPick(o.value); }} onKeyDown={key} data-testid={testId(o.value)}
+            className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${on
+              ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300'
+              : 'border-axal-hairline text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800'}`}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * A chart card (D893's parts and palette, `ui/Charts.jsx`): Reading…, could
  * not be read with Try again, a placeholder with its reason, or the chart
@@ -238,14 +276,8 @@ export function ChartCard({ title, b, onRetry, testId, children }) {
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         <h2 className={H2}>{title}</h2>
         {ready && b.chart ? (
-          <span className="flex gap-1" role="group" aria-label="Show as">
-            {['Chart', 'Table'].map((w) => (
-              <button key={w} type="button" aria-pressed={(w === 'Table') === table} onClick={() => setTable(w === 'Table')} data-testid={`${testId}-${w.toLowerCase()}`}
-                className={`rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${(w === 'Table') === table
-                  ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300'
-                  : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>{w}</button>
-            ))}
-          </span>
+          <ChoiceGroup label="Show as" value={table ? 'table' : 'chart'} onPick={(v) => setTable(v === 'table')}
+            options={SHOW_AS} testId={(v) => `${testId}-${v}`} />
         ) : null}
       </div>
       {b.state === 'loading' ? <Skeleton lines={3} /> : null}
@@ -280,10 +312,8 @@ export function ChartBlock({ b, shape = 'lines', onRetry, children, testId }) {
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         <h2 id={`${id}-h`} className={H2}>{b.title}</h2>
         {ready ? (
-          <div className="flex gap-1.5" role="group" aria-label={`${b.title}: show as`}>
-            <Chip on={!table} onClick={() => setTable(false)} testId={`${id}-as-chart`}>Chart</Chip>
-            <Chip on={table} onClick={() => setTable(true)} testId={`${id}-as-table`}>Table</Chip>
-          </div>
+          <ChoiceGroup label={`${b.title}: show as`} value={table ? 'table' : 'chart'} onPick={(v) => setTable(v === 'table')}
+            options={SHOW_AS} testId={(v) => `${id}-as-${v}`} />
         ) : null}
       </div>
       {b.state === 'loading' ? <ChartSkeleton shape={shape} testId={`${id}-loading`} /> : null}
@@ -311,9 +341,8 @@ export function ChartBlock({ b, shape = 'lines', onRetry, children, testId }) {
 /** The period control (`dc:469`): live while the page reads (PG17). */
 export function PeriodControl({ periods, weeks, onPick }) {
   return (
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Period" data-testid="programs-period">
-      {periods.map((p) => <Chip key={p.weeks} on={p.weeks === weeks} onClick={() => onPick(p.weeks)} testId={`programs-period-${p.weeks}`}>{p.label}</Chip>)}
-    </div>
+    <ChoiceGroup label="Period" value={weeks} onPick={onPick} groupTestId="programs-period"
+      options={periods.map((p) => ({ value: p.weeks, label: p.label }))} testId={(v) => `programs-period-${v}`} />
   );
 }
 

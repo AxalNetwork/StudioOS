@@ -82,7 +82,7 @@ function world() {
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // openSession stores the call (call_provider), as production's 452 lets it.
-    '452_record_session_setup.sql', '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
+    '452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     '488_channel_consents.sql', '529_meeting_transcript_source.sql', '656_meet_created_spaces.sql']) db.exec(migration(name));
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).

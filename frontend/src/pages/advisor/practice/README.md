@@ -14,6 +14,7 @@ its `ZONE` map.
 | `EngagementsZone.jsx` | PR2 · Engagements | `/practice/engagements` | WORK BOARD | `advisor_engagements` (migration 238) |
 | `DeliveryZone.jsx` | PR3 · Delivery | `/practice/delivery` | COLLECTION | `advisor_deliverables` + `advisor_deliverable_versions` (migration 239) |
 | `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205). Its emerald header primary "Block a date range" opens the page's own Block form (D1424, replacing D1596's three prompts). A Block card accepted in the Ask panel lands in the same form, filled from the address (`?block=<uid>&from=&until=`, #4737, `../../../ui/sessionsBlockHandoff.js`); the proposal is decided only after Block writes |
+| `SessionActions.jsx` | PR4 · Sessions | `/practice/sessions` | CONTROLS | Publish a slot and close a confirmed session (held, no-show, cancel); no store of its own (D4687) |
 | `EarningsZone.jsx` | **D4** · Earnings | `/practice/earnings` | LEDGER | the take rate, payout account, payouts and per-line cut (241) + the period note (242) + `advisor_bookings` amounts (205) + `advisor_engagements` retainers (238) |
 
 **THE OPS CANVAS'S FOUR PRACTICE SCREENS ARE SECTIONS OF THESE ZONES, NOT
@@ -106,7 +107,7 @@ A zone with real derivations keeps them in a sibling module that imports nothing
 - `sessionGrid.js` — PR4's slot precedence, the four tile counts, day grouping
   and the blackout label. The first module here to hold **both** kinds of time,
   so its header says which is which.
-- `earningsLedger.js` — D4's four windows, its cut note and its payout labels.
+- `earningsLedger.js` — D4's four windows, its cut note and its payout labels. D4679: `latestOnly` (only the newest request writes), `draftFitsPeriod` (text is filed only against its own period) and `stateTiles` ("You received" is the collected net only).
   It holds the third pairing: a period is a **calendar label** (`2026-Q3`, a
   key and a chip) whose **bounds are UTC instants**, because `created_at` is.
 - `practiceTools.js` — D571's: the deliverable flow, the four price modes and

@@ -150,7 +150,7 @@ export const READINESS = Object.freeze(['Round target', 'Round terms', 'Pitch de
 export const READINESS_TOOL = Object.freeze({
   round: { tool: 'Round settings', path: '/raise/capital-relationships/commitments' },
   terms: { tool: 'Cap table', path: '/raise/cap-table' },
-  deck: { tool: 'Pitch deck', path: '/raise/pitch-deck' },
+  deck: { tool: 'Pitch deck', path: '/raise/pitch' },
   data_room: { tool: 'Data room', path: '/raise/data-room' },
   use_of_funds: { tool: 'Use of funds', path: '/raise/use-of-funds' },
   traction: { tool: 'Fundraising readiness', path: '/raise/fundraising-readiness' },

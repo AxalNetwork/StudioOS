@@ -11,6 +11,7 @@ import LicenceHistory from '../LicenceHistory';
 import { AlertCircle, Check, X, Ban, RotateCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { bpsPercent as pct } from '../../../lib/bps';
+import { TOKEN_SPLIT_HQ_LABEL } from '../../../lib/tokenSplit';
 import { reportError } from '../../../lib/log';
 import { useReasonDialog } from '../LicenceReasonDialog';
 import { LICENCE_REASONS } from '../licenceReasonModel';
@@ -23,6 +24,7 @@ import { SeatEditor, TermsEditor } from './CommercialTerms';
 import { ContractStep } from './ContractStep';
 import { DeployStep } from './DeployStep';
 import { NoticesEditor } from './NoticesEditor';
+import { LicenceSyncStrip } from './LicenceSyncStrip';
 import { TerritoryEditor } from './TerritoryEditor';
 import OutcomeNotice from '../../../components/OutcomeNotice';
 import { describeOutcome, outcomeFromError, outcomeOfError } from '../../../lib/mutationOutcome';
@@ -142,12 +144,14 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         </div>
       )}
 
+      <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} />
+
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
         <Field label="Territory" value={d.territories.length ? d.territories.join(' · ') : null} />
         <Field label="Seats licensed" value={n0(d.seats_licensed)} />
         <Field label="Annual fee" value={fee(d.annual_fee_cents, d.currency)} />
         <Field label="Revenue share" value={pct(d.revenue_share_bps)} />
-        <Field label="Token split to HQ" value={pct(d.token_split_bps)} />
+        <Field label={TOKEN_SPLIT_HQ_LABEL} value={pct(d.token_split_bps)} />
         <Field
           label="Renews"
           value={d.renews_on || null}

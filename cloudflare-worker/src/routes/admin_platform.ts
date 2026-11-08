@@ -16,6 +16,12 @@
  *   GET  /capacity       this Worker's D1 size against its plan limit, queue
  *                        backlog and oldest-message age, binding presence;
  *                        unavailable is never zero (D4559)
+ *   GET  /capacity/history  daily snapshots and the D1 projected limit month,
+ *                        with its window and confidence (D4559 part 2)
+ *   GET  /capacity/alerts   open capacity alert episodes and those cleared in
+ *                        the last 30 days (D4559 part 2)
+ *   POST /capacity/alerts/:id/mute  mute an open episode for up to a week,
+ *                        with a reason, audited (D4559 part 2)
  *
  * EVERY BLOCK CARRIES ITS OWN STATE. One store failing to answer makes that
  * block unreadable, with the reason, and leaves the others standing: an
@@ -116,7 +122,11 @@ import {
 } from '../services/catalog';
 import { promoState, readProductIds } from '../services/promos';
 import { readPlatformStorage } from '../services/storageHq';
-import { readPlatformCapacity } from '../services/platformCapacity';
+import { d1Policy, readPlatformCapacity } from '../services/platformCapacity';
+import {
+  HISTORY_DAYS_DEFAULT, HISTORY_DAYS_MAX, MUTE_MAX_HOURS, muteCapacityAlert, readCapacityAlerts, readCapacityHistory,
+} from '../services/platformCapacityHistory';
+import { branchOf } from '../util/branch';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -175,8 +185,12 @@ const PROMO_CAVEATS = [
   + 'only when the recorded count alone reaches its cap.',
   'A code names no licence and no cohort: any buyer can apply it, to the products it lists or '
   + 'to every product when it lists none.',
-  'A promo ceiling is not checked against these codes: nothing enforces one at checkout, and no '
-  + 'screen sets one yet.',
+  'A promo ceiling belongs to a licence, not to a code. A branch checkout refuses a discount that is '
+  + 'more than the ceiling HQ set for the period has left. A branch with no ceiling set for the period '
+  + 'allows discounts until HQ sets one (set on Revenue); its ceiling is Not recorded, which is not 0 and '
+  + 'not unlimited, and what it gives meanwhile is still counted. A checkout on HQ\'s own Worker has no '
+  + 'licence, so no ceiling applies to it. '
+  + 'Only a discount on the first payment is counted: later invoices of a repeating code are not.',
   'For a code that repeats, the number of months is kept by Stripe, not here.',
 ];
 
@@ -941,6 +955,64 @@ r.get('/capacity', async (c) => {
   await requireSuperAdmin(c);
   c.header('Cache-Control', 'private, no-store');
   return c.json(await readPlatformCapacity(c.env));
+});
+
+/**
+ * D4559 part 2 — the trend. `days` is 1..365 (default 90). Each series is the
+ * daily snapshot of one deployment metric; an unreadable day is a null point,
+ * never a zero. `d1_projection` names a month, its window and a confidence, or
+ * says why there is none.
+ */
+r.get('/capacity/history', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  const raw = c.req.query('days');
+  const days = raw === undefined ? HISTORY_DAYS_DEFAULT : Number(raw);
+  if (!Number.isInteger(days) || days < 1 || days > HISTORY_DAYS_MAX) {
+    return c.json({ detail: `days must be a whole number from 1 to ${HISTORY_DAYS_MAX}.` }, 400);
+  }
+  const scope = branchOf(c.env) ? 'branch' : 'hq';
+  const history = await readCapacityHistory(c.env, scope, days, d1Policy(c.env).limit);
+  if (history.state === 'unreadable') return c.json({ ...history, detail: history.reason }, 503);
+  return c.json(history);
+});
+
+/** D4559 part 2 — the alert episodes. An unreadable store is 503, never an empty list. */
+r.get('/capacity/alerts', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  const alerts = await readCapacityAlerts(c.env, branchOf(c.env) ? 'branch' : 'hq');
+  if (alerts.state === 'unreadable') return c.json({ ...alerts, detail: alerts.reason }, 503);
+  return c.json(alerts);
+});
+
+/**
+ * D4559 part 2 — mute one OPEN episode. It is still tracked and still clears on
+ * recovery; only its notices stop until `muted_until`. A reason is required and
+ * audited. A cleared or unknown episode is 404.
+ */
+r.post('/capacity/alerts/:id/mute', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) return c.json({ detail: 'Alert not found.' }, 404);
+  const b = (await c.req.json().catch(() => ({}))) as { hours?: unknown; reason?: unknown };
+  const hours = Number(b.hours);
+  if (!Number.isInteger(hours) || hours < 1 || hours > MUTE_MAX_HOURS) {
+    return c.json({ detail: `hours must be a whole number from 1 to ${MUTE_MAX_HOURS}.` }, 400);
+  }
+  const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
+  if (reason.length < 5 || reason.length > 500) {
+    return c.json({ detail: 'Say why this alert is muted (5 to 500 characters).' }, 400);
+  }
+  let result;
+  try {
+    result = await muteCapacityAlert(c.env, id, hours, reason, actor.id);
+  } catch {
+    return c.json({ detail: 'The alert could not be muted. Nothing changed.' }, 503);
+  }
+  if (!result.changed) return c.json({ detail: 'Alert not found, or it has already cleared.' }, 404);
+  await logAdminAction(c.env, actor.id, actor.email, 'platform_capacity_alert_muted', { alert_id: id, hours, reason });
+  return c.json({ ok: true, muted_until: result.muted_until });
 });
 
 export default r;

@@ -205,6 +205,8 @@ import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
 import './integrations/providers/notion';
 import './integrations/providers/posthog';
+// D2407 (#2407) — a founder's own Beehiiv newsletter, read-only, through Beehiiv's MCP server: sign-in only.
+import './integrations/providers/beehiiv';
 // D855 §4 (#3733 part 1) — a member's own Linear, read-only, through Linear's read-only MCP server: sign-in only, not listed yet.
 import './integrations/providers/linear';
 // D855 §4 (#3733 part 2) — a member's own Cloudflare, read-only, through Cloudflare's REST API: sign-in only, not listed yet.
@@ -2372,6 +2374,17 @@ export default {
             taskFailed('meeting bot operations');
           }
         }
+        // D4559 (#4559) part 2: platform capacity. Every 15 minutes at :11 the
+        // alert episodes move; at 04:11 the day's snapshot is also kept. HQ only:
+        // the alerts go to HQ's Super Admins. It never throws into the tick.
+        if (hqCadences && now.getUTCMinutes() % 15 === 11) {
+          try {
+            const { sweepPlatformCapacity } = await import('./services/platformCapacityHistory');
+            await sweepPlatformCapacity(env, now, { snapshot: now.getUTCHours() === 4 && now.getUTCMinutes() === 11 });
+          } catch {
+            taskFailed('platform capacity');
+          }
+        }
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
@@ -2566,6 +2579,16 @@ export default {
           await runCohortApplicationsTick(env, now);
         } catch (e) {
           taskFailed('cohort applications tick', e);
+        }
+        // D4657 (#4657): Lab progress reconciliation. A few enrolled founders
+        // per tick: record milestones their saved work proves but no request
+        // recorded (a closed tab), and pay grants an interrupted request left
+        // unpaid. Idempotent; bounded by RECONCILE_TICK_LIMIT.
+        try {
+          const { runLabReconcileTick } = await import('./services/labProgress');
+          await runLabReconcileTick(env, { nowMs: now.getTime() });
+        } catch (e) {
+          taskFailed('lab reconcile tick', e);
         }
         // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
         // HMAC on every approved official snapshot; mismatches get flagged
@@ -2808,6 +2831,13 @@ export default {
             if (!r.available) console.warn('[cron] licence push retry', r.reason);
             else if (r.tried) console.info(`[cron] licence push retry tried=${r.tried} ok=${r.ok} failed=${r.failed}`);
           } catch (e) { taskFailed('licence push retry', e); }
+          // D4805 — notices written with a program decision that did not land are sent again; a retry only sends.
+          try {
+            const { retryOutbox } = await import('./services/programOutbox');
+            const o = await retryOutbox(env, now);
+            if (!o.available) console.warn('[cron] program outbox retry', o.reason);
+            else if (o.tried) console.info(`[cron] program outbox retry tried=${o.tried} sent=${o.sent}`);
+          } catch (e) { taskFailed('program outbox retry', e); }
         }
         // D237 — cron_run_history keeps 30 days, and always each trigger's
         // newest row (the reasons and the batch cap are in

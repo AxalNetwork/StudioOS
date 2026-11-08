@@ -393,12 +393,12 @@ const READS = {
     { kind: 'accounting', providers: [{ provider_key: 'xero', display_name: 'Xero' }], sync_editable: true },
   ] },
 };
-async function mountRead(form, slug, { answer } = {}) {
+async function mountRead(form, slug, { answer, upload } = {}) {
   const calls = [];
   const build = new Proxy({}, { get: (_t, name) => async (...args) => { calls.push([name, ...args]); return answer ? answer(name, ...args) : { id: 9 }; } });
   const w = { build, formOptions: async (cycle, projectId, s) => { calls.push(['formOptions', cycle, projectId, s]); return READS[s]; },
-    recordAction: async (...args) => { calls.push(['recordAction', ...args]); return { ok: true }; } };
-  const ui = await mountForm(h(FormLightbox, { form, cycle: 'build', slug, onSubmit: (v) => form.submit(w, P, v), onClose() {}, loadOptions: () => form.loadOptions(w, P) }));
+    recordAction: async (...args) => { calls.push(['recordAction', ...args]); return upload ? upload(...args) : { ok: true }; } };
+  const ui = await mountForm(h(FormLightbox, { form, cycle: 'build', slug, onSubmit: (v, memory) => form.submit(w, P, v, memory), onClose() {}, loadOptions: () => form.loadOptions(w, P) }));
   await ui.flush();
   const inputs = () => ui.nodes().filter((n) => ['INPUT', 'TEXTAREA'].includes(n.tagName));
   const radios = (name) => inputs().filter((n) => propsOf(n).name === name && propsOf(n).type === 'radio');
@@ -474,7 +474,7 @@ test('8 (PR 3b): Add filing sends its Proof through the new step\'s Upload proof
   await mutationCheck(source, path, assertProof, [
     ["      try { await w.recordAction('build', projectId, 'company-creation', `step-${made.id}`, 'upload-proof', body); }", "      try { await w.recordAction('build', projectId, 'company-creation', made.id, 'upload-proof', body); }"],
     ["      body.append('file', file);", "      body.append('proof', file);"],
-    ["    if (made?.id && file && typeof file === 'object' && typeof file.name === 'string') {", '    if (made?.id) {'],
+    ['    if (made?.id && hasFile) {', '    if (made?.id) {'],
   ]);
 });
 

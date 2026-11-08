@@ -14,7 +14,7 @@ import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
 import { projectOwned as sharedProjectOwned } from '../middleware/projectContentAccess';
 import { getProjectMembershipRole } from '../services/projectAccess';
-import { ensureTier, tierCovers } from '../middleware/requireTier';
+import { ensureTier, tierCovers, userMeetsTier } from '../middleware/requireTier';
 import { DECK_STUDIO_TIER } from '../services/decks/studioAccess';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
@@ -1096,6 +1096,11 @@ decks.post('/share/:token/heartbeat', async (c) => {
   const link = await c.env.DB.prepare('SELECT id, deck_id, include_json, variant_id FROM pitch_deck_share_tokens WHERE id = ?')
     .bind(live.id).first<{ id: number; deck_id: number; include_json: string | null; variant_id: number | null }>();
   if (!timePerSlideOn(link?.include_json)) return c.json({ ok: true, counts_only: true });
+  // D4598: the view must be this link's own visit. A view id from another link of the deck is no beat of this one:
+  // nothing is written to that visit (its seconds, its cards, its signals).
+  const own = await c.env.DB.prepare('SELECT id FROM deck_share_views WHERE id = ? AND deck_id = ? AND share_token_id = ?')
+    .bind(viewId, parseInt(m[1]), live.id).first<{ id: number }>();
+  if (!own) return c.json({ ok: false }, 200);
   try {
     await c.env.DB.prepare(
       `UPDATE deck_share_views
@@ -1354,12 +1359,13 @@ decks.get('/video-link', async (c) => {
 decks.get('/methods', async (c) => {
   const user = await requireAuth(c);
   const tier = String((user as any).subscription_tier || 'free').toLowerCase();
-  const isBypass = ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role));
+  // D4729: the lock follows the same rule as the Raise + Grow gate, so a held licence's bypass never unlocks Founder's premium methods.
+  const meetsStudio = userMeetsTier(user, 'studio');
   const items = DECK_METHODS.map((m) => ({
     id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
     best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,
     category: m.category, ai_fill_hint: m.ai_fill_hint,
-    locked: !!m.premium && !isBypass && !tierCovers(tier, 'studio'),
+    locked: !!m.premium && !meetsStudio,
     fields_from_project: m.fields_from_project,
     fields_from_financials: m.fields_from_financials,
     fields_from_captable: m.fields_from_captable,

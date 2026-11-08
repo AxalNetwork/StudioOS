@@ -228,11 +228,11 @@ function ReferBody() {
   const superAdmin = isSuperAdminUser(useAuth()?.user ?? null);
   const { tab } = routeFor(pathname);
   const reads = useReferReads(tab);
-  const detail = useProgramDetail('refer-and-earn', tab === 'how');
+  const detail = useProgramDetail('refer-and-earn');
   const open = totalOf(reads.open);
   const queue = open !== null ? { text: nf(open), amber: open > 0, title: 'Every open referral' } : null;
   return (
-    <ProgramFrame program="refer-and-earn" superAdmin={superAdmin} tabs={<ReferTabs queue={queue} />}>
+    <ProgramFrame detail={detail} program="refer-and-earn" superAdmin={superAdmin} tabs={<ReferTabs queue={queue} />}>
       {tab === 'overview' ? <ReferOverview reads={reads} superAdmin={superAdmin} /> : null}
       {tab === 'how' ? <PlaybookEditor program="refer-and-earn" superAdmin={superAdmin} detail={detail} testId="programs-refer-how" /> : null}
       {tab === 'queue' ? <ReferralReviewBody embedded onChanged={reads.reload} /> : null}

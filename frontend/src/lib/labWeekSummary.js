@@ -101,7 +101,11 @@ export function derivationParts(assumptions) {
  * signal `/graduates` and `/stats` already use on the worker.
  */
 export function labStanding(state, doneKeys) {
+  // D4659: the server's one graduation rule (every week's requirements met)
+  // when it sent it; the older milestone signal only for a state without it.
+  if (state?.graduated === true) return 'graduated';
   if (!state?.is_incorporated) return 'active';
+  if (state?.graduated === false) return 'exited';
   return doneKeys.has('incorporation_completed') ? 'graduated' : 'exited';
 }
 

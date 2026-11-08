@@ -116,11 +116,13 @@ test('the strength is a stored judgement, and it is not a score', () => {
   // defaulting it would put a judgement — the strongest of the three — in the
   // firm's mouth.
   assert.ok(!/signal TEXT[^;]*DEFAULT/.test(sql), 'the signal column has been given a default');
-  // AND NOTHING SCORES ANYBODY. The response still says so, which is the claim
-  // the retired chip reasons were right about.
-  assert.match(worker, /enforcement: 'none',/, 'the response no longer says nothing enforces these rules');
-  assert.ok(zone.includes('<strong>Nothing runs these rules.</strong>'),
-    'the zone no longer states that nothing runs these rules');
+  // THE RESPONSE SAYS WHAT READS THESE (#4696). It said `enforcement: 'none'`
+  // while Pipeline scored and ranked against the same rows.
+  assert.match(worker, /enforcement: 'score_and_rank',/, 'the response no longer says the rules score and rank');
+  assert.match(worker, /auto_decline: false,/, 'the response no longer says nothing is declined for the firm');
+  assert.ok(!/enforcement: 'none',/.test(worker), 'the response says nothing enforces rules Pipeline reads');
+  assert.ok(zone.includes('Pipeline scores and ranks leads with these rules; it never declines one for you.'),
+    'the zone no longer states what the rules are used for');
   assert.ok(migration.includes('`enforcement: \'none\'` stays exactly as true after it as before'),
     'the migration no longer records that it adds no enforcement');
 });
@@ -170,9 +172,14 @@ test('all four chips run, and the two retired reasons are quoted', () => {
     'the docblock no longer says what the chips actually select');
   // THE CHIPS SELECT OVER PROFILES, not over every rule: a declined sector
   // returned under `Weak` would answer a different question from the one asked.
-  assert.match(zone, /const visible = view === 'all' \? items : profiles\.filter\(\(r\) => r\.signal === view\);/,
+  assert.match(zone, /fitView\(items, view\)/,
+    'the strength chips are no longer selecting through the one row-set definition');
+  assert.match(read('frontend/src/lib/fitRuleView.js'), /profiles\.filter\(\(r\) => r\.signal === view\)/,
     'the strength chips are no longer selecting the firm’s profiles by their signal');
-  assert.match(zone, /const profiles = items\.filter\(\(r\) => r\.kind === 'best_fit'\);/,
+  // The export and the editable list take the rows the chip selects (#4696).
+  assert.match(zone, /rows: visible, cells:/, 'the export is no longer the rows the chip selects');
+  assert.match(zone, /\{visible\.map\(\(rule\) => \(/, 'the editable list is no longer the rows the chip selects');
+  assert.match(read('frontend/src/lib/fitRuleView.js'), /const profiles = all\.filter\(\(r\) => r\.kind === 'best_fit'\);/,
     'the profiles and the exclusions are no longer split');
 });
 
@@ -221,7 +228,8 @@ test('the instrument draws the artboard’s three columns, in its order and at i
     'the instrument’s title has left the artboard');
   // IT DRAWS THE PROFILES, not every rule: the exclusions are the card below,
   // which is how the artboard splits them.
-  assert.match(INST, /rows=\{profiles\.map\(/, 'the instrument is no longer drawing only the profiles');
+  // …and the profiles the CHIP selects (#4696), not always the whole library.
+  assert.match(INST, /rows=\{profileRows\.map\(/, 'the instrument is no longer drawing only the selected profiles');
 });
 
 test('an ungraded profile and an unwritten sentence both read absent', () => {
@@ -250,8 +258,12 @@ test('the instNote keeps “not yet” apart from a decline, and refuses the met
   // THE META LINE IS THE ARTBOARD'S AND IT DESCRIBES AN INTENTION. "Signals
   // feed lead scoring" — nothing scores a lead here, and the note says so
   // rather than letting the line stand as a claim about this product.
-  assert.ok(note.includes('nothing scores a lead against these rows'),
-    'the instNote no longer refuses the scoring its own meta line implies');
+  // AND IT IS TRUE NOW (#4696): Pipeline reads best fit and weak intent as
+  // receipts on a lead's score, so the note says which signals it reads.
+  assert.ok(note.includes('Pipeline reads the signals in this table when it scores a lead'),
+    'the instNote no longer says which signals scoring reads');
+  assert.ok(note.includes('qualified is a note you keep that scoring does not read'),
+    'the instNote no longer says qualified is not read');
 });
 
 test('the anti-persona card is first-class, and an unwritten kind says so', () => {
@@ -297,7 +309,7 @@ test('Pass reasons runs, and its reason was wrong about its own store', () => {
     'the retired reason is no longer recorded, so the next reader re-adds it');
   assert.ok(doc.includes('partner_fit_rules .statement is exactly that field'),
     'the correction no longer names the field the reason denied');
-  assert.match(zone, /passReasons: \(\) => \{ setNote\(null\); setShowingPasses\(true\); \}/,
+  assert.match(zone, /passReasons: \(\) => \{ clearNote\(\); setShowingPasses\(true\); \}/,
     'the page no longer supplies the handler');
   assert.match(zone, /partnerZoneActions\('offers\/audience-fit', \{ handlers, view: \{/,
     'the action row drops handlers, so the op renders nowhere');

@@ -351,7 +351,9 @@ export function ProgressStrip({ state = IDLE, onRetry, links = [] }) {
         {(state.tiles || []).map((t) => (
           <Card key={t.key} padding="sm" className="flex flex-col gap-0.5" data-testid="progress-figure">
             <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{t.label}</span>
-            <span className="text-[13px] font-bold">{t.value === 'Not recorded' ? <Unrecorded reason="Not recorded for this month yet.">Not recorded</Unrecorded> : t.value}</span>
+            <span className="text-[13px] font-bold">{t.value === 'Not recorded' ? <Unrecorded reason="Not recorded: the figure could not be read.">Not recorded</Unrecorded> : t.value}</span>
+            {/* #4648: where each figure comes from, what it counts and over what time. */}
+            <span className="text-[10.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="progress-figure-note">{t.definition} {t.window}.</span>
           </Card>
         ))}
       </div>
@@ -490,12 +492,16 @@ function AdminLinks({ links }) {
  * routes. A failed read says so; an exam whose best score is not recorded says
  * "Score not recorded", never 0%.
  */
-export function AssessmentList({ state = IDLE, kind, onPage, onRetry }) {
+export function AssessmentList({ state = IDLE, kind, onPage, onRetry, q = '' }) {
   const what = kind === 'exam' ? 'the exams' : 'the exercises';
   const rows = state.status === 'ready' ? state.rows || [] : [];
+  // #4648: four states, each in its own words: reading, a read that failed, a search that matches nothing, and a
+  // catalogue with nothing published. A search is the member's own; an empty catalogue is not "no match".
+  const empty = q
+    ? { title: `No ${kind} title matches “${q}”`, body: 'Try another word, or clear the search.' }
+    : { title: kind === 'exam' ? 'No exams published yet' : 'No exercises published yet', body: 'They appear here when HQ publishes them.' };
   const block = stateBlock({
-    status: state.status, what, onRetry, claim: `This is not a claim that there are no ${kind}s.`, isEmpty: rows.length === 0,
-    empty: { title: kind === 'exam' ? 'No exams published yet' : 'No exercises published yet', body: 'They appear here when HQ publishes them.' },
+    status: state.status, what, onRetry, claim: `This is not a claim that there are no ${kind}s.`, isEmpty: rows.length === 0, empty,
   });
   if (block) return <div data-testid={`${kind}-list`}>{block}</div>;
   const range = rangeLabel(state.offset || 0, rows.length, state.total);
@@ -573,8 +579,8 @@ function LearningCatalogue({
         {mode === 'live' && tab === 'articles' && <ArticleList state={articles} q={q} onPage={onArticlesPage} onRetry={onRetry.article} />}
         {mode === 'live' && tab === 'publications' && <PublicationList state={publications} q={q} onRetry={onRetry.publication} />}
         {mode === 'live' && tab === 'events' && <EventList state={events} q={q} onRetry={onRetry.event} />}
-        {mode === 'live' && tab === 'exercises' && <AssessmentList state={exercises} kind="exercise" onPage={onAssessmentPage} onRetry={onRetry.exercises} />}
-        {mode === 'live' && tab === 'exams' && <AssessmentList state={exams} kind="exam" onPage={onAssessmentPage} onRetry={onRetry.exams} />}
+        {mode === 'live' && tab === 'exercises' && <AssessmentList state={exercises} kind="exercise" onPage={onAssessmentPage} onRetry={onRetry.exercises} q={q} />}
+        {mode === 'live' && tab === 'exams' && <AssessmentList state={exams} kind="exam" onPage={onAssessmentPage} onRetry={onRetry.exams} q={q} />}
       </div>
     </Card>
   );
@@ -856,11 +862,19 @@ export default function LearningHome({ gated, links = [], learnerLinks = [] }) {
   const [upcoming, retryUpcoming, setUpcoming] = useLearningRead(() => readWebinars('upcoming'), [], { enabled: !gated, scope: 'webinars-upcoming' });
   const [past, retryPast] = useLearningRead(() => readWebinars('past'), [],
     { enabled: live && tab === 'webinars', scope: 'webinars-past' });
-  // #4180: the Exercises and Exams tabs read their own lists, a page at a time.
-  const [assessmentOffset, setAssessmentOffset] = useState(0);
-  const [exercises, retryExercises] = useLearningRead(() => readExercises({ offset: assessmentOffset }), [assessmentOffset],
+  // #4180: the Exercises and Exams tabs read their own lists, a page at a time. #4648: they read the search too, and
+  // a page offset belongs to the tab and query it was read for, so a new query, a restored address or a new tab
+  // starts at the first page (the same rule as the catalogue's).
+  const assessmentKey = JSON.stringify([tab, q]);
+  const [assessmentPage, setAssessmentPage] = useState({ key: assessmentKey, offset: 0 });
+  const assessmentOffset = assessmentPage.key === assessmentKey ? assessmentPage.offset : 0;
+  const setAssessmentOffset = useCallback((value) => setAssessmentPage((previous) => ({
+    key: assessmentKey,
+    offset: typeof value === 'function' ? value(previous.key === assessmentKey ? previous.offset : 0) : value,
+  })), [assessmentKey]);
+  const [exercises, retryExercises] = useLearningRead(() => readExercises({ offset: assessmentOffset, q }), [assessmentOffset, q],
     { enabled: live && tab === 'exercises', scope: 'exercises' });
-  const [exams, retryExams] = useLearningRead(() => readExams({ offset: assessmentOffset }), [assessmentOffset],
+  const [exams, retryExams] = useLearningRead(() => readExams({ offset: assessmentOffset, q }), [assessmentOffset, q],
     { enabled: live && tab === 'exams', scope: 'exams' });
   const onAssessmentPage = (step) => setAssessmentOffset((o) => Math.max(0, o + step * ALL_LIMIT));
   const programs = useMyPrograms(!gated);

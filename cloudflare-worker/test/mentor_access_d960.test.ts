@@ -38,6 +38,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import advisors from '../src/routes/advisors.ts';
+import { labEnrollmentSchema, graduate } from './_lab_evidence.ts';
 import admin from '../src/routes/admin.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -412,7 +413,7 @@ test('O-FND A counts distinct activated founders per cycle from Week 1, on every
   assert.equal(r.status, 200);
   assert.equal(r.body.items.length, 3);
   assert.deepEqual(Object.keys(r.body.items[0]).sort(), [
-    'advisor_email', 'advisor_is_active', 'advisor_name', 'advisor_role', 'advisor_user_id',
+    'advisor_eligible', 'advisor_email', 'advisor_is_active', 'advisor_name', 'advisor_role', 'advisor_user_id',
     'assigned_at', 'cohort_cycle_id', 'founders_hidden', 'founders_in_cohort', 'id', 'is_active',
     'note', 'uid', 'unassigned_at',
   ]);
@@ -512,6 +513,8 @@ function labDb() {
   const db = freshDb();
   for (const t of ['user_spinout_flags', 'spinout_lab_milestones', 'projects']) db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   db.exec(noComments(read('cloudflare-worker/sql/migrations/155_spinout_applications.sql')));
+  // D4659: the graduation view (and the enrollment tables it sits beside).
+  labEnrollmentSchema(db);
   return db;
 }
 
@@ -533,7 +536,8 @@ test('Lab applications: a D1 failure answers 503 lab_applications_unreadable; co
 test('Lab participants: 503 on a failed list, a flag for each failed inner read, and truncated when the page is full', async () => {
   const db = labDb();
   db.prepare('INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted) VALUES (?, 1)').run(FAY);
-  db.prepare(`INSERT INTO spinout_lab_milestones (user_id, milestone_key, week, completed_at) VALUES (?, 'incorporation_completed', 4, '2026-10-01 00:00:00')`).run(FAY);
+  // D4659: a graduate has every step of weeks 1-4 on record, not incorporation alone.
+  graduate(db, FAY, '2026-10-01 00:00:00');
   db.prepare('INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted) VALUES (?, 1)').run(FIN);
 
   const ok = await call(envOf(db), ADMIN, '/api/admin/spinout-participants');

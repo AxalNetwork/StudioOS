@@ -16,7 +16,8 @@ import AdminStudioHome from './admin/AdminStudioHome';
 // duplicated guidance the user already had).
 import ProductTour from '../components/ProductTour';
 // D1337 (#3542): Product testing's card and lists, under each member's Studio home. An Admin sees none.
-import ProductTestingStudio from './testing/member/ProductTestingStudio';
+// D4574 (#4574, H6): through its lazy wrapper, so the section's chunk is not in this page's static closure.
+import ProductTestingStudio from './testing/member/ProductTestingStudioLazy';
 import MyTasks from './work/MyTasks.jsx';
 
 export default function Dashboard({ activeRole, authUser }) {

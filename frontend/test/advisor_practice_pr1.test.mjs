@@ -75,7 +75,11 @@ test('the system-cancel set is exactly what the worker writes, not a guess', () 
   const written = new Set(
     [...worker.matchAll(/cancel_reason = (?:COALESCE\(cancel_reason, )?'([a-z_]+)'/g)].map((m) => m[1]),
   );
-  assert.deepEqual([...written].sort(), [...SYSTEM_CANCELS].sort());
+  // D4695: a client that loses a capacity contention no longer leaves a cancelled row behind (the INSERT decides
+  // capacity), so the Worker writes one system reason now. `capacity_race` stays in the model's set because rows
+  // written before that change still carry it, and they must keep reading as withdrawn, never as a decline.
+  assert.deepEqual([...written].sort(), ['slot_cancelled']);
+  assert.deepEqual([...SYSTEM_CANCELS].sort(), ['capacity_race', 'slot_cancelled']);
 });
 
 test('the two cancellations the WORKER writes are withdrawn, not declined', () => {
