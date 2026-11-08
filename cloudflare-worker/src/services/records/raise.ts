@@ -809,7 +809,15 @@ function splitBody(b: Record<string, unknown>): Record<string, unknown> {
 /** Edit split's sections with their current values (decision 9). */
 async function fundsOptions(rc: RecordContext) {
   const f = await loadFunds(ctxOf(rc));
+  // D5069: the Base scenario's revision at the moment the form opens; Save split sends it back as `expected_revision`.
+  // No Base yet reads 0 (the first save creates it at 0). A store that cannot be read sends none, and the save says so.
+  let revision: number | null = null;
+  try {
+    const r = await rc.env.DB.prepare('SELECT revision FROM uof_scenarios WHERE project_id = ? AND is_base = 1').bind(rc.projectId).first<{ revision: number | null }>();
+    revision = Number(r?.revision ?? 0);
+  } catch { revision = null; }
   return {
+    revision,
     sections: FUND_SECTIONS.map((s, i) => {
       const cells = fundCells(f, i);
       const m = (f.milestones ?? {})[s.key] as { label?: unknown; by?: unknown } | undefined;

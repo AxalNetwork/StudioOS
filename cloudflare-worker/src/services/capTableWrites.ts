@@ -232,13 +232,19 @@ export async function saveScenario(env: Env, args: SaveScenarioArgs): Promise<Sa
     const expected = args.expectedRevision;
     const stamp = expected !== undefined && now <= expected ? new Date(Date.parse(expected) + 1).toISOString() : now;
     try {
-      const done = await env.DB.prepare(
-        `UPDATE cap_table_scenarios
-          SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?,
-              updated_at = ?, project_id = ?
-        WHERE uid = ?${expected === undefined ? '' : ' AND updated_at = ?'}`,
-      ).bind(name, JSON.stringify(inputs), JSON.stringify(result), stamp, stamp, projectId, row.uid,
-        ...(expected === undefined ? [] : [expected])).run();
+      const done = expected === undefined
+        ? await env.DB.prepare(
+          `UPDATE cap_table_scenarios
+            SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?,
+                updated_at = ?, project_id = ?
+          WHERE uid = ?`,
+        ).bind(name, JSON.stringify(inputs), JSON.stringify(result), stamp, stamp, projectId, row.uid).run()
+        : await env.DB.prepare(
+          `UPDATE cap_table_scenarios
+            SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?,
+                updated_at = ?, project_id = ?
+          WHERE uid = ? AND updated_at = ?`,
+        ).bind(name, JSON.stringify(inputs), JSON.stringify(result), stamp, stamp, projectId, row.uid, expected).run();
       if (expected !== undefined && Number((done as any)?.meta?.changes ?? 0) !== 1) {
         const now2 = await loadScenarioByUid(env, row.uid);
         return { ok: false, reason: 'changed_since_open', currentRevision: now2?.updated_at ?? null };
