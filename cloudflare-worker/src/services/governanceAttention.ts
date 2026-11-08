@@ -33,30 +33,31 @@ export const RECORD_STATES = ['current', 'review_required', 'missing', 'not_reco
 export type RecordState = typeof RECORD_STATES[number];
 
 type Expected = { category: GovernanceCategory; label: string; conditional: boolean };
+const expect = (...records: Expected[]): readonly Expected[] => Object.freeze(records);
 
 /** What each entity is expected to hold. Single-member LLCs keep a member register only if they choose to. */
 export const EXPECTED_RECORDS: Readonly<Record<GovernanceEntity, readonly Expected[]>> = Object.freeze({
-  holdings: Object.freeze([
+  holdings: expect(
     { category: 'operating_agreement', label: 'Operating Agreement', conditional: false },
     { category: 'formation_certificate', label: 'Certificate of Formation', conditional: false },
     { category: 'member_register', label: 'Member Register', conditional: false },
     { category: 'resolution', label: 'Written Consents', conditional: false },
     { category: 'signing_authority', label: 'Signing authority', conditional: false },
-  ]),
-  management: Object.freeze([
+  ),
+  management: expect(
     { category: 'operating_agreement', label: 'Sole-Member Operating Agreement', conditional: false },
     { category: 'formation_certificate', label: 'Certificate of Formation', conditional: false },
     { category: 'member_register', label: 'Member Register', conditional: true },
     { category: 'resolution', label: 'Sole-Member Consents', conditional: false },
     { category: 'signing_authority', label: 'Delegation of Authority', conditional: false },
-  ]),
-  gp: Object.freeze([
+  ),
+  gp: expect(
     { category: 'operating_agreement', label: 'GP LLC Operating Agreement', conditional: false },
     { category: 'formation_certificate', label: 'Certificate of Formation', conditional: false },
     { category: 'member_register', label: 'Member Register', conditional: true },
     { category: 'resolution', label: 'Parent Member Consent and GP resolutions', conditional: false },
     { category: 'signing_authority', label: 'Authorized signatories', conditional: false },
-  ]),
+  ),
 });
 
 export type DocFacts = { row: DocRow; versions: number; latestVersion: number | null };
