@@ -361,7 +361,7 @@ test('GR11 C and GR14: an account no licence binds, HQ viewing as an Admin, and 
   } finally { await v.unmount(); }
   v = await render(h(ProgramsUnlinked, { user: { role: 'admin', is_super_admin: 1 } }));
   try {
-    assert.match(v.of('licence-programs-hq'), /You are viewing as an Admin.HQ is not a studio, so it holds no grants.Open Program grants/);
+    assert.match(v.of('licence-programs-hq'), /You are viewing as an Admin.HQ is not a studio, so it holds no grants.Open Program access by licence/);
   } finally { await v.unmount(); }
   const s = stub({ ...ANSWERS, '/api/licence/mine/programs': { linked: false, source: 'hq', programs: [], reason: 'Your account is not linked to a licence.' } });
   v = await render(h(ProgramsTab, { today: TODAY, user: { role: 'admin' } }));

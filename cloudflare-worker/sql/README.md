@@ -63,3 +63,4 @@ legacy sizes NULL and adds no users column. The operator backfill measures R2
 HEAD metadata after deployment; the migration never reads or deletes objects.
 
 | `migrations/202611041900_grow_campaign_details.sql` | D4483 (#4483): nullable audience/channel budget details and plain creative text; ALTERs apply once through the ledger. |
+| `migrations/202611072340_platform_capacity_history.sql` | D4559 (#4559) part 2: daily deployment-metric snapshots (NULL when unreadable, never 0) and capacity alert episodes with one open row per metric. No tenant data. |

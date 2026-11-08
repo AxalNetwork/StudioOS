@@ -58,7 +58,7 @@ async function fixture() {
   applySessionTranslationColumns(db);
   // deleteSession clears the session's proposals too (214, 246, 439, 447).
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '439_validate_proposals_structuring.sql', '447_assistant_interviews.sql']) db.exec(mig(m));
-  for (const m of ['452_record_session_setup.sql', '453_interview_processing.sql', '445_connector_fed_items.sql', '588_google_workspace_files.sql']) db.exec(mig(m));
+  for (const m of ['452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '453_interview_processing.sql', '445_connector_fed_items.sql', '588_google_workspace_files.sql']) db.exec(mig(m));
   db.exec('CREATE TABLE google_oauth_tokens(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER UNIQUE,refresh_token TEXT,scope TEXT,google_sub TEXT,google_email TEXT,updated_at TEXT)');
   db.exec(`INSERT INTO users(id,email,name,role,is_active,founder_id) VALUES (${FOUNDER},'founder@example.test','Synthetic founder','founder',1,11),(${OTHER},'other@example.test','Other founder','founder',1,22),(${PARTNER},'partner@example.test','Synthetic partner','partner',1,NULL)`);
   db.exec("INSERT INTO companies(id,company_name) VALUES (1,'Synthetic venture'),(2,'Other venture')");

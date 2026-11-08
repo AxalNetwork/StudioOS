@@ -20,18 +20,24 @@ import { reportError } from '../../../lib/log';
 import { currentResult, runPreflight } from './preflightModel.js';
 import { BUILD, chipOf, groupsOf } from './preflightUiModel.js';
 
-export default function usePreflight({ deck, kit = null, refresh = null, readOnly = false, api = deckPreflightApi }) {
+/**
+ * `dismissedFrom` (D4598): a second run over the SAME version (the Share and Export gate's, on the saved version)
+ * borrows the first run's dismissed set instead of reading it again, so one version has one set.
+ */
+export default function usePreflight({ deck, kit = null, refresh = null, readOnly = false, api = deckPreflightApi, dismissedFrom = null }) {
   const [running, setRunning] = useState(null);
   const [done, setDone] = useState(null);
   const doneRef = useRef(null);
   const [previous, setPrevious] = useState(null);
-  const [dismissed, setDismissed] = useState(() => new Set());
+  const [ownDismissed, setDismissed] = useState(() => new Set());
+  const dismissed = dismissedFrom ?? ownDismissed;
   const [notKept, setNotKept] = useState(null);
   const deckId = deck?.id ?? null;
   const version = deck?.version ?? null;
 
   // P1: the version's dismissals, read when it opens. Another version starts clean.
   useEffect(() => {
+    if (dismissedFrom) return undefined;
     setDismissed(new Set());
     setNotKept(null);
     if (!BUILD.P1.live || deckId == null || version == null) return undefined;
@@ -41,7 +47,7 @@ export default function usePreflight({ deck, kit = null, refresh = null, readOnl
       (e) => reportError('pitch-preflight:dismissals', e),
     );
     return () => { live = false; };
-  }, [deckId, version, api]);
+  }, [deckId, version, api, dismissedFrom]);
 
   const run = useCallback(() => {
     setRunning((r) => r || { snapshot: deck, done: 0, total: Array.isArray(deck?.slides) ? deck.slides.length : 0, measurements: {}, failed: [] });

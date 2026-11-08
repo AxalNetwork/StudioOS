@@ -6,6 +6,7 @@
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/narrative_positioning_d911.test.mjs
  */
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

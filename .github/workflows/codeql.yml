@@ -15,6 +15,16 @@ permissions:
   security-events: write
   actions: read
 
+# One scan per event and ref at a time. On a pull request a newer push
+# cancels the older scan. On main the running scan is never cancelled: merges
+# land every minute or two, and cancelling in progress meant no main scan ever
+# finished (runs 10067 and 10091-10093 on 2026-11-08). GitHub instead keeps
+# one scan running and only the newest commit waiting; each scan covers the
+# whole tree, so no code goes unscanned. Scheduled runs keep their own group.
+concurrency:
+  group: codeql-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Analyses both the worker (TS) and the FastAPI dev backend (Python) even
 # though FastAPI is not deployed — Python supply-chain issues still hit
 # Replit dev sessions.
@@ -70,7 +80,8 @@ jobs:
     name: analyze (${{ matrix.language }})
     needs: visibility
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 60, not 30: the JavaScript analysis took 28+ minutes on main (2026-11-08).
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

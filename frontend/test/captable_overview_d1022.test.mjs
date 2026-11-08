@@ -2,6 +2,7 @@
 // Needs you, who owns by holder and by class, the tiles and bars, CT2, and the
 // states (CT16, CT19–CT22, CT24). Fixtures follow the Worker's shapes
 // (services/capTableRecord.ts readRecord, D1017) and are worked out by hand.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

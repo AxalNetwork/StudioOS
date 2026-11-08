@@ -216,7 +216,9 @@ test('every licence transition reports the push beside its own outcome', () => {
   // #4686 — ten of them here: the termination's push moved into
   // `runTerminationConsequences` (so a repeat request can resume it), where it is
   // the one `pushLicenceToBranch(env, licence.id)` call — asserted just below.
-  assert.equal(calls.length, 10, `expected ten licence changes to push in the handlers, found ${calls.length}`);
+  // D4671 — eleven: completing the entity and signatory (`PATCH /:uid/entity`) changes the copy's
+  // legal name, address and signatory.
+  assert.equal(calls.length, 11, `expected eleven licence changes to push in the handlers, found ${calls.length}`);
   assert.equal([...src.matchAll(/await pushLicenceToBranch\(env, licence\.id\)/g)].length, 1,
     'the termination must still push the branch its copy, exactly once per run');
   for (const status of ['active', 'suspended', 'terminated']) {

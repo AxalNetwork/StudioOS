@@ -25,11 +25,13 @@
  * sender's, or not accepted. `ask={false}` keeps Eadwyn's Body trigger off
  * until its intro drafts land (part 8b).
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Sheet from '../../ui/Sheet';
 import Lightbox from '../../ui/Lightbox';
 import { FillMark, FillTrigger } from '../../ui/FillMark.jsx';
 import { mailApi } from '../../lib/api/mail.js';
+import SendUncertain from './SendUncertain.jsx';
+import { makeSendOperation, NOT_RECORDED_LINE, PENDING_LINE, readOutcome, sendFailure } from './sendOperation.js';
 import EmailDraftIntent from './EmailDraftIntent.jsx';
 import { bodyText, showBodyTrigger } from './emailModel.js';
 import { BODY, BTN, ERROR, EYEBROW, INPUT, MUTED, PRIMARY } from './emailParts.jsx';
@@ -46,6 +48,9 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [confirm, setConfirm] = useState(false);
+  const [unsure, setUnsure] = useState(null);
+  const operation = useRef(null);
+  if (!operation.current) operation.current = makeSendOperation();
 
   const accept = (draft) => {
     setSubject(draft.subject ?? '');
@@ -57,11 +62,29 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
     setBusy(true); setError(null);
     try {
       const { nonce } = await api.confirmSend(account.uid);
-      const r = await api.send({ account_uid: account.uid, to: address.trim(), subject, body, ...(placed ? { draft_uid: placed.uid } : {}), ...(introUid ? { intro_uid: introUid } : {}), nonce });
+      const key = operation.current.keyFor([account.uid, address.trim(), subject, body, placed?.uid ?? null, introUid ?? null]);
+      const r = await api.send({ account_uid: account.uid, to: address.trim(), subject, body, ...(placed ? { draft_uid: placed.uid } : {}), ...(introUid ? { intro_uid: introUid } : {}), operation_key: key, nonce });
       setConfirm(false);
-      setPlaced(null);
-      onSent?.(r?.sent ?? null);
-    } catch (e) { setConfirm(false); setError(e?.message || 'The mail server refused it. Nothing was sent.'); }
+      const out = readOutcome(r);
+      if (out.state === 'accepted') { operation.current.forget(); setPlaced(null); onSent?.(out.sent); }
+      else if (out.state === 'uncertain') setUnsure(out.operation.uid);
+      else setError(out.state === 'pending' ? PENDING_LINE : NOT_RECORDED_LINE);
+    } catch (e) {
+      setConfirm(false);
+      const f = sendFailure(e);
+      if (f.ended) operation.current.forget();
+      setError(f.line);
+    }
+    finally { setBusy(false); }
+  };
+  const resolve = async (outcome) => {
+    setBusy(true); setError(null);
+    try {
+      await api.resolveSend(unsure, outcome);
+      operation.current.forget();
+      setUnsure(null);
+      if (outcome === 'arrived') { setPlaced(null); onSent?.(null); } else setError('Marked as not sent. You can send it again.');
+    } catch (e) { setError(e?.message || 'That could not be recorded. Try again.'); }
     finally { setBusy(false); }
   };
 
@@ -73,7 +96,7 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
 
   const footer = (
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" className={PRIMARY} disabled={!sendable || busy} onClick={() => setConfirm(true)} data-testid="record-compose-send">
+      <button type="button" className={PRIMARY} disabled={!sendable || busy || !!unsure} onClick={() => setConfirm(true)} data-testid="record-compose-send">
         {account ? `Send from ${account.address}` : 'Connect a mailbox to send'}
       </button>
       <span className={`text-[12px] ${MUTED}`}>Nothing is sent until you press Send.</span>
@@ -104,6 +127,7 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
           aria-describedby={questionOpening ? 'record-compose-question' : undefined} data-testid="record-compose-body-field" />
         {questionOpening && <p id="record-compose-question" className={`m-0 text-[12.5px] ${BODY}`} data-testid="record-compose-question">Eadwyn wrote an opening. Add your question to the body before sending.</p>}
       </div>
+      {unsure && <SendUncertain busy={busy} onArrived={() => resolve('arrived')} onNotArrived={() => resolve('not_arrived')} testId="record-compose-unsure" />}
       {error && <div className={ERROR} role="alert" data-testid="record-compose-error">{error}</div>}
     </div>
 
