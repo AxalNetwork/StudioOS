@@ -39,7 +39,7 @@ test('Delivery and Offers roots are routes, not redirects', () => {
 test('the partner /pipeline root renders the partner bucket, not the investor page', () => {
   const line = app.split('\n').find((l) => l.includes('path="/pipeline"'));
   assert.ok(line, '/pipeline has no route');
-  assert.match(line, /effectiveRole === 'partner' \? <PartnerBucketRoutes \/>/,
+  assert.match(line, /holds\('partner'\) \? <PartnerBucketRoutes \/>/,
     'partners must branch to PartnerBucketRoutes');
   assert.match(line, /investorWorkspace\('deals', <PipelineWorkspace \/>\)/,
     'investors keep the deal pipeline');

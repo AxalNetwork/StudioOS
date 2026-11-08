@@ -620,9 +620,33 @@ export const DILIGENCE_ROLES = Object.freeze(['partner', 'investor', 'advisor'])
 // row is added only for the people above, so it is not one of them.
 export const DILIGENCE_ROW = Object.freeze({ label: 'Diligence', to: '/due-diligence', icon: Shield, match: ['/due-diligence'] });
 
+/**
+ * D4473 (#4473): in a licence shell (`buildLicenceSidebar`'s group carries `licenceShell: true`) the conditional
+ * rows sit after the last licence row and before Trust, Diligence first, so Trust, Network and Research stay last.
+ * Returns the group index and item index to insert at, or null when the shell is not a licence shell.
+ */
+function beforeLicenceFoot(groups, firstOf) {
+  const gi = groups.findIndex((g) => g && g.licenceShell === true);
+  if (gi < 0) return null;
+  const items = groups[gi].items || [];
+  const at = items.findIndex((it) => firstOf.includes(it.to));
+  return { gi, at: at >= 0 ? at : items.length };
+}
+
+function insertAt(groups, { gi, at }, row) {
+  return groups.map((g, i) => {
+    if (i !== gi) return g;
+    const items = [...(g.items || [])];
+    items.splice(at, 0, row);
+    return { ...g, items };
+  });
+}
+
 export function withDiligenceRow(groups, role, involved) {
   if (involved !== true || !DILIGENCE_ROLES.includes(role) || !Array.isArray(groups) || !groups.length) return groups;
   if (groups.some((g) => (g.items || []).some((it) => it.to === DILIGENCE_ROW.to))) return groups;
+  const licenceSpot = beforeLicenceFoot(groups, [INFLUENCER_ROW.to, '/trust/me']);
+  if (licenceSpot) return insertAt(groups, licenceSpot, DILIGENCE_ROW);
   const at = groups.findIndex((g) => (g.items || []).some((it) => it.label === 'Research'));
   const gi = at >= 0 ? at : 0;
   return groups.map((g, i) => {
@@ -655,6 +679,8 @@ export function influencerActiveOf(user) {
 export function withInfluencerRow(groups, role, active) {
   if (active !== true || typeof role !== 'string' || !role || !Array.isArray(groups) || !groups.length) return groups;
   if (groups.some((g) => (g.items || []).some((it) => it.to === INFLUENCER_ROW.to))) return groups;
+  const licenceSpot = beforeLicenceFoot(groups, ['/trust/me']);
+  if (licenceSpot) return insertAt(groups, licenceSpot, INFLUENCER_ROW);
   return groups.map((g, i) => (i === 0 ? { ...g, items: [...(g.items || []), INFLUENCER_ROW] } : g));
 }
 

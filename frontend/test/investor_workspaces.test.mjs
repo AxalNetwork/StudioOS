@@ -101,7 +101,8 @@ test('investor-owned deep links keep the investor workspace shell', () => {
   const dataRoom = routeBlock(app, '/raise/data-room');
   assert.match(
     dataRoom,
-    /effectiveRole === 'investor'\s*\?\s*<Navigate to="\/research\/diligence" replace \/>/,
+    // D4473: a member who also holds Founder is served the founder's room.
+    /effectiveRole === 'investor' && !holds\('founder'\)\s*\?\s*<Navigate to="\/research\/diligence" replace \/>/,
     'the investor branch must be the first arm, ahead of any founder shell',
   );
   assert.doesNotMatch(dataRoom, /investorWorkspace\('deals', <DataRoomPage/,
@@ -131,8 +132,8 @@ test('Axal VC Fund preserves the live LP access implementation', () => {
 
 test('Fund preserves its institutional entitlement and honest locked state', () => {
   // D1160: an admin's /funds and /funds/performance forward to Fund admin; an investor's are unchanged.
-  assert.match(app, /effectiveRole === 'investor' \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsRedirect \/>/);
-  assert.match(app, /path="\/funds\/performance"[^\n]+effectiveRole === 'investor' \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>/);
+  assert.match(app, /holds\('investor'\) \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsRedirect \/>/);
+  assert.match(app, /path="\/funds\/performance"[^\n]+holds\('investor'\) \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>/);
 });
 
 test('investor visual system includes source provenance, responsive layout, and dark mode', () => {

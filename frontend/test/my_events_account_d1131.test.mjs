@@ -8,6 +8,7 @@ const dropdown=app.slice(app.indexOf('function UserDropdown('),app.indexOf('func
 const source=`import React,{useState,useEffect,useRef} from 'react';
 import {Link,useLocation} from 'react-router-dom';
 import {isMyEventsPath} from './pages/events/myEventsModel';
+import {resolveHeldLicences} from './lib/activeRole';
 const ChevronDown=()=>null;
 ${dropdown}
 export default UserDropdown;`;

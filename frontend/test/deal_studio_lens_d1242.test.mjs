@@ -263,7 +263,7 @@ test('a failed read says so in its own block; the header, toolbar and the other 
 test('DealsPage is retired: /deals mounts the lens for an admin or a partner, and no browser pop-up', () => {
   assert.equal(existsSync(resolve(process.cwd(), 'frontend/src/pages/DealsPage.jsx')), false);
   const app = read('frontend/src/App.jsx');
-  assert.ok(app.includes("effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />"));
+  assert.ok(app.includes("holds('investor') ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />"));
   assert.ok(!/DealsPage'\)/.test(app), 'DealsPage is still imported');
   for (const f of ['StudioLens.jsx', 'StudioParts.jsx', 'studioLensModel.js']) {
     assert.ok(!/\b(?:window\.)?(alert|confirm|prompt)\(/.test(read(`frontend/src/pages/investor/dealflow/${f}`)), `a browser pop-up in ${f}`);
