@@ -29,6 +29,8 @@ const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = codeOnly(raw('frontend/src/pages/hq/RevenuePage.jsx'));
 const ADMIN = adminConsoleSource();
 const WORKER = raw('cloudflare-worker/src/routes/admin_billing.ts');
+// D5037: both refund forms are one component now, the review flow.
+const FLOW = codeOnly(raw('frontend/src/components/RefundReviewFlow.jsx'));
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
 
 const NOW = 1_800_000_000;
@@ -147,7 +149,8 @@ test('the page mounts the zone and reads refunds through its own endpoint', () =
   assert.match(PAGE, /<BillingExceptions\b/);
   assert.match(PAGE, /api\.adminBillingRefunds\(\)/);
   assert.match(PAGE, /setRefunds\(UNAVAILABLE\)/, 'a failed refunds read is not recorded as unreadable');
-  assert.match(PAGE, /api\.adminBillingRefund\(/, 'the refund action is not on Revenue');
+  assert.match(PAGE, /refundForm=\{<RefundReviewFlow onDone=\{loadRefunds\} \/>\}/, 'the refund action is not on Revenue');
+  assert.match(FLOW, /api\.adminBillingRefund\(/, 'the review flow does not issue the refund');
 });
 
 test('no margin is computed from est_cost_usd on this screen (D111, D149, D213)', () => {
@@ -162,9 +165,9 @@ test('the reason floor is one number on both sides, and both refund forms requir
   assert.equal(refundReasonOk('x'.repeat(REFUND_REASON_MIN)), true);
   assert.equal(refundReasonOk(` ${'x'.repeat(REFUND_REASON_MIN - 1)} `), false);
   assert.equal(refundReasonOk(undefined), false);
-  assert.match(PAGE, /refundReasonOk\(f\.reason\)/, 'Revenue sends a refund without checking its reason');
-  assert.match(ADMIN, /refundReasonOk\(refForm\.reason\)/, 'the Billing tab sends a refund without checking its reason');
-  assert.match(ADMIN, /body\.reason = refForm\.reason\.trim\(\);/, 'the Billing tab no longer always sends the reason');
+  assert.match(FLOW, /if \(!refundReasonOk\(reason\)\) return \{ error:/, 'the review flow sends a refund without checking its reason');
+  assert.match(FLOW, /const body = \{ review_token: token, reason: String\(reason\)\.trim\(\) \};/, 'the reason is not always sent');
+  assert.match(ADMIN, /<RefundReviewFlow showStripeFields/, 'the Billing tab does not refund through the review flow');
 });
 
 test('Billing stays: its page (D938, /admin/revenue/billing) is linked from Revenue and mounts the panel', () => {

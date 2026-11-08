@@ -12,9 +12,14 @@
  * rather than returning a number for everything and letting the page guess.
  *
  *   By stream
- *     Licence fees   REAL. `territory_licences` carries `annual_fee_cents`,
- *                    `currency` and `status`, so the quarterly share of the
- *                    active annual fees is exactly what the canvas describes.
+ *     Licence fees   TWO FIGURES, NOT ONE (D5036). `licence_fees` is the
+ *                    CONTRACTED QUARTERLY RUN-RATE: a quarter of each active
+ *                    licence's `annual_fee_cents`, which is what the terms
+ *                    would bring in, not what was invoiced or paid.
+ *                    `licence_invoices` is the invoice ledger (migration 513):
+ *                    invoiced, collected, outstanding, overdue and void per
+ *                    currency, and the billable licences not yet invoiced
+ *                    (`services/licenceFeeReceivables.ts`).
  *     Subscriptions  NOT RECORDED. `account_subscriptions` has a plan and a
  *                    status and NO amount, and `/api/admin/billing/ltv` reads
  *                    charges from the Stripe API per customer — there is no
@@ -57,6 +62,7 @@ import {
 } from './licence';
 import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
 import { promoState } from '../services/promos';
+import { licenceFeeReceivables } from '../services/licenceFeeReceivables';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -107,19 +113,39 @@ async function tokenMargin(env: Env, quarter: { start: string; end: string }) {
   }
 }
 
-/** The calendar quarter `now` falls in, as ISO dates and a label. */
-export function quarterOf(now: Date): { start: string; end: string; label: string } {
+/** The calendar quarter `now` falls in, as ISO dates, a label and its `YYYY-Qn` key (D5036). */
+export function quarterOf(now: Date): { start: string; end: string; label: string; key: string } {
   const y = now.getUTCFullYear();
   const q = Math.floor(now.getUTCMonth() / 3);           // 0-3
   const start = new Date(Date.UTC(y, q * 3, 1));
   const end = new Date(Date.UTC(y, q * 3 + 3, 1));       // exclusive
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10), label: `Q${q + 1} ${y}` };
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10), label: `Q${q + 1} ${y}`, key: `${y}-Q${q + 1}` };
+}
+
+/** D5036: a period the summary accepts, `YYYY-Qn`. */
+export const PERIOD_RE = /^(\d{4})-Q([1-4])$/;
+
+/**
+ * D5036: the quarter `?period=YYYY-Qn` names, or the current one when none is given. A malformed period, or one that
+ * has not begun, is refused (null): nothing has been invoiced in it, and a page of zeros would say otherwise.
+ */
+export function quarterFromParam(param: string | undefined | null, now: Date): { start: string; end: string; label: string; key: string } | null {
+  if (param === undefined || param === null || param === '') return quarterOf(now);
+  const m = PERIOD_RE.exec(param);
+  if (!m) return null;
+  const q = quarterOf(new Date(Date.UTC(Number(m[1]), (Number(m[2]) - 1) * 3, 1)));
+  return q.start > now.toISOString().slice(0, 10) ? null : q;
 }
 
 r.get('/summary', async (c) => {
   await requireSuperAdmin(c);
   const env = c.env;
-  const quarter = quarterOf(new Date());
+  const now = new Date();
+  const quarter = quarterFromParam(c.req.query('period'), now);
+  if (!quarter) {
+    return c.json({ error: 'The period is a quarter that has begun, written YYYY-Qn.', code: 'bad_period' }, 400);
+  }
+  const today = now.toISOString().slice(0, 10);
 
   // ── Licence fees ──────────────────────────────────────────────────────
   // Per currency, never added together. `status = 'active'` only: a
@@ -141,11 +167,13 @@ r.get('/summary', async (c) => {
     ).first<{ n: number }>();
     licenceFees = {
       available: true,
-      // A quarter of each active annual fee. NOT pro-rated for a licence
-      // that started mid-quarter — the contract bills annually and the
-      // canvas asks for "the quarterly share of N active annual fees", so
-      // this says which it is rather than implying a proration it does not do.
-      basis: 'One quarter of each active annual fee, not pro-rated for a mid-quarter start.',
+      // D5036: WHAT THIS FIGURE IS. A quarter of each active annual fee, read
+      // from today's licence terms: a contracted run-rate, never "revenue". It
+      // is not invoices issued, not cash collected, and not pro-rated for a
+      // mid-quarter start; `licence_invoices` below carries those.
+      measure: 'contracted_run_rate',
+      label: 'Contracted quarterly run-rate',
+      basis: 'One quarter of each active annual fee at today\'s terms, not pro-rated for a mid-quarter start. This is what the licences are contracted to bring in, not what was invoiced or collected.',
       by_currency: (rows.results || []).map((row) => ({
         currency: String(row.currency || 'EUR'),
         licences: Number(row.licences) || 0,
@@ -239,11 +267,16 @@ r.get('/summary', async (c) => {
     promos = { available: false, reason: 'The promotion codes table could not be read.' };
   }
 
-  const usageCoverage = await subsidiaryUsageCoverage(env, new Date());
+  const usageCoverage = await subsidiaryUsageCoverage(env, now);
+
+  // D5036 — the invoice ledger, its own failure domain: an unreadable ledger
+  // leaves the run-rate on screen and says so, never a zero.
+  const licenceInvoices = await licenceFeeReceivables(env, quarter, today);
 
   return c.json({
     quarter,
     licence_fees: licenceFees,
+    licence_invoices: licenceInvoices,
     token_cost: tokenCost,
     promos,
     usage_coverage: usageCoverage,

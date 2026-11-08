@@ -49,6 +49,11 @@ building blocks.
   safe-area insets and `--mobile-tabbar-h`, which pads the page's content while
   a bar is drawn. The shell (App.jsx) mounts it; it renders nothing for a
   licence with no plan.
+- `RefundReviewFlow.jsx` (D5037, #5037) — the one refund form: look the payment
+  up (`/api/admin/billing/refund/review`, which moves no money), review its
+  gross, refunded to date, what is left, the policy and the clawback, then
+  confirm with the review's token. Revenue's Billing exceptions and the
+  Billing console both mount it.
 
 ## Rules
 

@@ -203,7 +203,7 @@ test('disputes are read from their own endpoint, so Stripe cannot blank the page
 });
 
 test('the page is wired: api method, route, and a super-admin gate', () => {
-  assert.match(API, /hqRevenue: \(\) => request\('\/admin\/revenue\/summary'\)/,
+  assert.match(API, /hqRevenue: \(period\) => request\(`\/admin\/revenue\/summary/,
     'the api method is gone or points elsewhere');
   assert.match(APP, /path="\/admin\/revenue"/, 'the route is not registered');
   assert.match(APP, /HqRevenuePage/, 'the page is not mounted');

@@ -7,8 +7,14 @@
  * now carry figures. What has NOT moved is the token line, and the page says
  * which is which.
  *
- *   By stream          licence fees are real; subscriptions cannot be
- *                      totalled; the token line is a cost with no price.
+ *   By stream          licence fees are a CONTRACTED RUN-RATE (D5036: a
+ *                      quarter of each active annual fee, never called
+ *                      revenue); subscriptions cannot be totalled; the token
+ *                      line is the D762 margin.
+ *   Licence invoices   D5036 — the invoice ledger (migration 513): invoiced,
+ *                      collected, outstanding, overdue and void per currency
+ *                      for the period, the receivable as at today, and the
+ *                      billable licences not yet invoiced, shown as a gap.
  *   Token P&L by sub.  U1 — nothing ties spend to a licence.
  *   Statements         REAL (migration 260) — one row per subsidiary per
  *                      period, owed computed from the branch's reported
@@ -49,8 +55,8 @@ import { api } from '../../lib/api';
 import { licenceLedgerApi } from '../../lib/api/licenceLedger';
 import { bpsPercent } from '../../lib/bps';
 import { currencyCode, formatMicro, formatMinor, parseMinor } from '../../lib/money';
+import RefundReviewFlow from '../../components/RefundReviewFlow.jsx';
 import { reportError } from '../../lib/log';
-import { REFUND_REASON_MIN, refundReasonOk } from '../../lib/refundReason';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { revenueAbsenceForLicence, usageCoverageLabel } from '../../lib/hqRevenuePerSub';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
@@ -266,73 +272,11 @@ export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, o
 }
 
 /**
- * The refund, as HQ's governed action (D224). The worker is the gate — TOTP
- * session, fresh step-up, the elevation, a written reason — and the request
- * helper runs the step-up challenge; this form only refuses early what the
- * worker would refuse anyway.
+ * The refund, as HQ's governed action (D224), reviewed before money moves (D5037): `RefundReviewFlow` looks the
+ * payment up, shows it, and confirms. The worker is the gate — TOTP session, fresh step-up, the elevation, a written
+ * reason, the review's token — and the request helper runs the step-up challenge.
  */
-/** The refund amount as typed, checked for shape only (positive, digits and a point); the currency decides the rest. */
-export function refundAmountShape(text) {
-  const r = parseMinor(text, 'KWD'); // the widest exponent: a shape check, never the conversion
-  if (!r.ok && r.reason !== 'decimals') return { ok: false, message: 'Enter the amount as a positive figure, such as 25 or 25.50.' };
-  if (r.ok && r.minor <= 0) return { ok: false, message: 'The amount must be a positive figure.' };
-  return { ok: true, text: String(text).trim() };
-}
-
-function RefundForm({ onDone }) {
-  const [f, setF] = useState({ target: '', amount: '', reason: '' });
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
-  const submit = async (e) => {
-    e.preventDefault();
-    if (busy) return;
-    const target = f.target.trim();
-    if (!target) { setMsg({ err: true, text: 'Enter a PaymentIntent (pi_…) or Charge (ch_…) id.' }); return; }
-    if (!refundReasonOk(f.reason)) { setMsg({ err: true, text: `Write why this money goes back, in at least ${REFUND_REASON_MIN} characters.` }); return; }
-    const body = { reason: f.reason.trim() };
-    if (target.startsWith('ch_')) body.charge = target; else body.payment_intent = target;
-    if (f.amount !== '') {
-      // D5029: this form is given a Stripe id, not a currency, so it cannot turn the figure into minor units. It
-      // sends what was typed, as major units, and the worker converts it in the charge's own currency (and refuses
-      // an amount that currency cannot hold, such as cents of a yen). The shape is checked here so a typo is
-      // caught before the round trip; how many decimals are allowed is the currency's, and the worker's to say.
-      const shape = refundAmountShape(f.amount);
-      if (!shape.ok) { setMsg({ err: true, text: shape.message }); return; }
-      body.amount_major = shape.text;
-    }
-    setBusy(true); setMsg(null);
-    try {
-      const r = await api.adminBillingRefund(body);
-      setMsg({ err: false, text: `Refund ${r.refund?.id || ''} ${r.refund?.status || 'issued'}.`.replace(/\s+/g, ' ') });
-      setF({ target: '', amount: '', reason: '' });
-      onDone?.();
-    } catch (err) {
-      const d = err?.data || {};
-      setMsg({ err: true, text: d.code === 'refund_policy_blocked'
-        ? `Blocked by the product refund policy (${d.reason || d.kind}). An override is on the Billing tab.`
-        : (d.error || err.message || 'The refund was not issued.') });
-    } finally {
-      setBusy(false);
-    }
-  };
-  const input = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12.5px]';
-  return (
-    <form onSubmit={submit} className="mt-4 grid gap-2 border-t border-axal-hairline pt-3 sm:grid-cols-2" data-testid="hq-revenue-refund-form">
-      <div className="sm:col-span-2 text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Issue a refund · step-up</div>
-      <input className={input} placeholder="pi_… or ch_…" value={f.target} onChange={(e) => set('target', e.target.value)} aria-label="PaymentIntent or Charge id" />
-      <input className={input} type="text" inputMode="decimal" autoComplete="off" placeholder="Amount (blank refunds the rest)" value={f.amount} onChange={(e) => set('amount', e.target.value)} aria-label="Amount" />
-      <textarea className={`${input} sm:col-span-2`} rows={2} required minLength={REFUND_REASON_MIN} placeholder="Why this money goes back — read by whoever audits it" value={f.reason} onChange={(e) => set('reason', e.target.value)} aria-label="Reason" />
-      <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={busy} className="rounded-lg bg-red-700 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50">
-          {busy ? 'Issuing…' : 'Refund'}
-        </button>
-        <span className="text-[11px] text-axal-faint">Asks for your second factor, then writes one audit row.</span>
-        {msg && <span className={`text-[11.5px] ${msg.err ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`} role="status">{msg.text}</span>}
-      </div>
-    </form>
-  );
-}
+export { refundAmountShape } from '../../components/RefundReviewFlow.jsx';
 
 /**
  * D228 — what the ceiling editor sends, or why it will not. Pure, so a test
@@ -785,7 +729,7 @@ export function TokenPnl({ token }) {
         <Stat
           label="Token cost, platform-wide"
           value={v.cost}
-          note={v.state === 'unreadable' ? v.reason : `${num(token.calls)} calls this quarter · USD`}
+          note={v.state === 'unreadable' ? v.reason : `${num(token.calls)} calls in the quarter · USD`}
         />
         <Stat label="Top-up spend" value={v.topupSpend ?? null} note={v.state === 'ok' ? 'paid from tokens, by members' : (v.reason || 'not recorded')} />
         <Stat label="Top-up cost" value={v.topupCost ?? null} note={v.state === 'ok' ? 'the share of the cost that spend caused' : (v.reason || 'not recorded')} />
@@ -803,7 +747,160 @@ export function TokenPnl({ token }) {
   );
 }
 
+/**
+ * D5036 — the quarters the page offers: the current one and the `count - 1` before it, newest first, as YYYY-Qn.
+ * Never a future quarter: the Worker refuses one, because nothing has been invoiced in it.
+ */
+export function recentQuarters(now, count = 8) {
+  const out = [];
+  let y = now.getUTCFullYear();
+  let q = Math.floor(now.getUTCMonth() / 3) + 1;
+  for (let i = 0; i < count; i += 1) {
+    out.push(`${y}-Q${q}`);
+    q -= 1;
+    if (q === 0) { q = 4; y -= 1; }
+  }
+  return out;
+}
+
+/** The reason a billable licence cannot be invoiced, as the page says it. */
+export const CANNOT_INVOICE = Object.freeze({
+  no_annual_fee: 'records no annual fee',
+  no_start_date: 'records no start date, so its licence year cannot be told',
+});
+
+/**
+ * D5036 — licence fees as the invoice ledger records them. Pure over `licence_invoices` (null while loading), so a
+ * test draws every state. Four concepts, never one: the run-rate is in "By stream"; here are invoiced, collected and
+ * outstanding for the invoices issued in the period, the receivable as at today with its overdue part listed, void
+ * invoices apart, and the billable years nobody invoiced. One row per currency, never summed across them.
+ */
+export function LicenceInvoices({ invoices, onRetry }) {
+  if (!invoices) return <p className="text-[12px] text-axal-faint">Loading the invoice ledger…</p>;
+  if (invoices.available !== true) {
+    return (
+      <div data-testid="hq-revenue-invoices-unreadable">
+        <Unreadable what="The licence-fee invoice ledger" claim="This is not a claim that nothing was invoiced or that nothing is owed." onRetry={onRetry} />
+      </div>
+    );
+  }
+  const th = 'py-1.5 pr-3';
+  const head = 'border-b border-axal-hairline text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint';
+  const gaps = invoices.expected_not_invoiced || [];
+  const cannot = invoices.cannot_invoice || [];
+  const overdue = invoices.overdue || [];
+  return (
+    <div data-testid="hq-revenue-invoices">
+      {invoices.by_currency.length === 0 ? (
+        <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-revenue-invoices-none">
+          No licence-fee invoice was issued in {invoices.period?.label}. That is a fact of the ledger, not a reading of zero revenue: the run-rate above is what the terms would bring in.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[12.5px]">
+            <thead>
+              <tr className={head}>
+                <th className={th}>Currency</th>
+                <th className={th}>Invoiced</th>
+                <th className={th}>Collected</th>
+                <th className={th}>Outstanding</th>
+                <th className={th}>Overdue</th>
+                <th className="py-1.5">Void</th>
+              </tr>
+            </thead>
+            <tbody data-testid="hq-revenue-invoices-period">
+              {invoices.by_currency.map((b) => (
+                <tr key={b.currency} className="border-b border-axal-hairline/60">
+                  <td className="py-2 pr-3 font-medium">{b.currency}</td>
+                  <td className="py-2 pr-3 tabular-nums">{money(b.invoiced_cents, b.currency)}<div className="text-[10.5px] text-axal-faint">{b.invoices} {b.invoices === 1 ? 'invoice' : 'invoices'}</div></td>
+                  <td className="py-2 pr-3 tabular-nums">{money(b.collected_cents, b.currency)}</td>
+                  <td className="py-2 pr-3 tabular-nums">{money(b.outstanding_cents, b.currency)}</td>
+                  <td className={`py-2 pr-3 tabular-nums ${b.overdue_invoices ? 'text-red-700 dark:text-red-300' : ''}`}>
+                    {b.overdue_invoices ? `${money(b.overdue_cents, b.currency)} · ${b.overdue_invoices}` : 'None'}
+                  </td>
+                  <td className="py-2 tabular-nums text-axal-faint">{b.void_invoices ? `${b.void_invoices} · ${money(b.void_cents, b.currency)}, in no other figure` : 'None'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4" data-testid="hq-revenue-receivable">
+        {invoices.receivable_by_currency.length === 0
+          ? <Stat label="Receivable today" value="None" note="no open licence-fee invoice, in any period" />
+          : invoices.receivable_by_currency.map((b) => (
+            <Stat
+              key={b.currency}
+              label={`Receivable today · ${b.currency}`}
+              value={money(b.outstanding_cents, b.currency)}
+              tone={b.overdue_invoices ? 'text-red-700 dark:text-red-300' : 'text-axal-ink'}
+              note={`${b.open_invoices} open${b.overdue_invoices ? ` · ${money(b.overdue_cents, b.currency)} overdue on ${b.overdue_invoices}` : ' · none overdue'}`}
+            />
+          ))}
+      </div>
+
+      {overdue.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <div className="text-[11px] font-extrabold uppercase tracking-[.08em] text-red-700 dark:text-red-300">Overdue · {invoices.overdue_total}</div>
+          <table className="mt-1 w-full text-left text-[12px]">
+            <thead>
+              <tr className={head}>
+                <th className={th}>Licence</th>
+                <th className={th}>Invoice</th>
+                <th className={th}>Due</th>
+                <th className="py-1.5">Outstanding</th>
+              </tr>
+            </thead>
+            <tbody data-testid="hq-revenue-invoices-overdue">
+              {overdue.map((o) => (
+                <tr key={o.uid} className="border-b border-axal-hairline/60">
+                  <td className="py-2 pr-3 font-medium">{o.brand_name || o.licence_ref || o.licence_uid}</td>
+                  <td className="py-2 pr-3 text-axal-muted">{o.reference} · {o.period_label}</td>
+                  <td className="py-2 pr-3 tabular-nums">{o.due_at} · {o.days_overdue} {o.days_overdue === 1 ? 'day' : 'days'} late</td>
+                  <td className="py-2 tabular-nums">{money(o.outstanding_cents, o.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {invoices.overdue_total > overdue.length && (
+            <p className="mt-1 text-[10.5px] text-axal-faint">The {overdue.length} longest overdue are listed; the totals above count all {invoices.overdue_total}.</p>
+          )}
+        </div>
+      )}
+
+      {(gaps.length > 0 || cannot.length > 0) && (
+        <div className="mt-3 rounded-xl border border-amber-300 p-2.5 dark:border-amber-500/40" data-testid="hq-revenue-invoice-gaps">
+          <div className="text-[11px] font-extrabold uppercase tracking-[.08em] text-amber-800 dark:text-amber-300">Expected, not invoiced</div>
+          <ul className="mt-1 space-y-0.5 text-[11.5px] leading-relaxed text-axal-muted">
+            {gaps.map((g) => (
+              <li key={`${g.licence_uid}:${g.period_start}`}>
+                {g.brand_name || g.licence_ref} · {g.period_label} · {money(g.amount_cents, g.currency)}
+                {g.gap === 'void_not_reissued' ? ' — its only invoice for this year is void, and a year is invoiced once' : ' — the licence year has started and no invoice is issued'}
+                {g.status === 'suspended' ? ' (suspended, still billable)' : ''}
+              </li>
+            ))}
+            {cannot.map((x) => (
+              <li key={`cannot:${x.licence_uid}`}>{x.brand_name || x.licence_ref} — cannot be invoiced: it {CANNOT_INVOICE[x.reason] || x.reason}.</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[10.5px] leading-relaxed text-axal-faint">
+        <li>{invoices.basis?.invoiced}</li>
+        <li>{invoices.basis?.collected}</li>
+        <li>{invoices.basis?.receivable}</li>
+        <li>{invoices.basis?.void}</li>
+        <li>One row per currency; nothing is added across currencies.</li>
+      </ul>
+    </div>
+  );
+}
+
 export default function RevenuePage() {
+  // D5036: the quarter the summary reads; '' is the current one.
+  const [period, setPeriod] = useState('');
   const [data, setData] = useState(null);            // null = loading, UNAVAILABLE = failed
   // Disputes load separately on purpose: they are the one figure that comes
   // from Stripe, and folding them into the summary would mean an outage
@@ -821,8 +918,8 @@ export default function RevenuePage() {
 
   const load = useCallback(() => {
     setData(null);
-    api.hqRevenue().then(setData, (e) => { reportError('hq-revenue', e); setData(UNAVAILABLE); });
-  }, []);
+    api.hqRevenue(period || undefined).then(setData, (e) => { reportError('hq-revenue', e); setData(UNAVAILABLE); });
+  }, [period]);
   const loadDisputes = useCallback(() => {
     setDisputes(null);
     api.adminBillingListDisputes(100).then(setDisputes, (e) => {
@@ -897,7 +994,7 @@ export default function RevenuePage() {
     fees?.available && num(fees.by_currency.length) !== null
       ? `Licence fees in ${fees.by_currency.length} ${fees.by_currency.length === 1 ? 'currency' : 'currencies'}` : null,
     token?.available && num(token.calls) !== null
-      ? `${num(token.calls)} AI calls this quarter, at cost` : null,
+      ? `${num(token.calls)} AI calls in the quarter, at cost` : null,
     ledger ? `${ledger.items.length} branch ${ledger.items.length === 1 ? 'statement' : 'statements'} · period ${ledger.current_period}` : null,
     ceilingRows ? `${ceilingRows.length} promo ${ceilingRows.length === 1 ? 'ceiling' : 'ceilings'} set` : null,
     openDisputes === null ? null : `${openDisputes} open ${openDisputes === 1 ? 'dispute' : 'disputes'}`,
@@ -937,8 +1034,19 @@ export default function RevenuePage() {
           {/* The canvas puts a single platform-revenue figure here. Two
               currencies and a USD cost cannot be added into one, so the
               quarter is stated and the money is left in its own rows. */}
-          <span className="text-[11px] opacity-80 tabular-nums">
-            {ready ? `${data.quarter.label} · streams shown separately, not summed` : '…'}
+          <span className="flex items-center gap-2 text-[11px] tabular-nums">
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              className="rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] font-bold text-white"
+              aria-label="Period"
+              data-testid="hq-revenue-period"
+            >
+              {recentQuarters(new Date()).map((q, i) => (
+                <option key={q} value={i === 0 ? '' : q} className="text-axal-ink">{i === 0 ? `${q} (current)` : q}</option>
+              ))}
+            </select>
+            <span className="opacity-80">{ready ? `${data.quarter.label} · streams shown separately, not summed` : '…'}</span>
           </span>
         </div>
 
@@ -981,7 +1089,7 @@ export default function RevenuePage() {
                   <thead>
                     <tr className="border-b border-axal-hairline text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
                       <th className="py-1.5 pr-3">Stream</th>
-                      <th className="py-1.5 pr-3">This quarter</th>
+                      <th className="py-1.5 pr-3">Quarter figure</th>
                       <th className="py-1.5 pr-3">Cost</th>
                       <th className="py-1.5">Read</th>
                     </tr>
@@ -989,7 +1097,10 @@ export default function RevenuePage() {
                   <tbody data-testid="hq-revenue-streams">
                     {fees.by_currency.map((row) => (
                       <tr key={row.currency} className="border-b border-axal-hairline/60">
-                        <td className="py-2 pr-3 font-medium">Licence fees · {row.currency}</td>
+                        <td className="py-2 pr-3 font-medium">
+                          Licence fees · {row.currency}
+                          <div className="text-[10.5px] font-normal text-axal-faint" data-testid="hq-revenue-run-rate-label">{fees.label || 'Contracted quarterly run-rate'}, not invoiced or collected</div>
+                        </td>
                         <td className="py-2 pr-3 tabular-nums">{money(row.quarter_cents, row.currency)}</td>
                         <td className="py-2 pr-3 text-axal-faint">No cost of goods</td>
                         <td className="py-2 text-[11.5px] text-axal-muted">
@@ -1030,6 +1141,12 @@ export default function RevenuePage() {
             ) : (
               <Absent reason={fees?.reason || 'The licence ledger could not be read.'} />
             )}
+          </Zone>
+
+          <Zone title="Licence fees · invoiced and collected" sub={ready ? `${data.quarter.label} · from the invoice ledger, per currency` : 'from the invoice ledger'}>
+            {data === UNAVAILABLE
+              ? <Absent reason="The revenue summary could not be read." />
+              : <LicenceInvoices invoices={ready ? data.licence_invoices : null} onRetry={load} />}
           </Zone>
 
           <Zone
@@ -1211,7 +1328,7 @@ export default function RevenuePage() {
             nowSec={Math.floor(Date.now() / 1000)}
             onRetryRefunds={loadRefunds}
             onRetryDisputes={loadDisputes}
-            refundForm={<RefundForm onDone={loadRefunds} />}
+            refundForm={<RefundReviewFlow onDone={loadRefunds} />}
           />
 
           <Zone title="Promotions" sub="the ceiling HQ sets, and the codes it cannot attribute">
