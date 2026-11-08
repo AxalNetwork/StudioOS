@@ -202,7 +202,7 @@ function MentorBody() {
   const phone = usePhoneWidth();
   const { tab } = routeFor(pathname);
   const reads = useMentorReads(tab);
-  const detail = useProgramDetail('mentor-cohorts', tab === 'how');
+  const detail = useProgramDetail('mentor-cohorts');
   const [dialog, setDialog] = useState(null);
   const [writes, setWrites] = useState(0);
   const changed = () => { setWrites((w) => w + 1); reads.reload(); };
@@ -211,6 +211,7 @@ function MentorBody() {
   const open = (o) => setDialog(o);
   return (
     <ProgramFrame
+      detail={detail}
       program="mentor-cohorts"
       superAdmin={superAdmin}
       actionsOnPhone={false}

@@ -123,6 +123,7 @@ function freshDb() {
       invoice_id TEXT, invoiced_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      -- #4693 (D4693): the pipeline reads scope by company; the column it reads.
       company_id INTEGER
     );
   `);
