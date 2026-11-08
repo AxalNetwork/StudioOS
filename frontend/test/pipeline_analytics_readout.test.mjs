@@ -261,7 +261,8 @@ test('the quarter chart is the artboard’s series, and an absent shape draws no
   // colour means one row in both.
   assert.ok(/\.sort\(byShapeName\)/.test(engine), 'the quarter series stopped sharing the table’s ordering');
   const quarterFn = between(engine, 'export function analyseByQuarter', '\n}');
-  assert.ok(/win_rate_pct: s\.decided > 0 \? pct\(s\.accepted \/ s\.decided\) : null/.test(quarterFn),
+  // D4693: every rate in the engine is `winRate(...)` from services/partnerPipelineRules.ts, null with nothing decided.
+  assert.ok(/win_rate_pct: winRate\(s\.accepted, s\.decided - s\.accepted\)\.pct/.test(quarterFn),
     'a shape that decided nothing now carries a rate');
 });
 

@@ -332,6 +332,26 @@ export async function branchSearchAccounts(
   };
 }
 
+export type LicenceCopyAnswer = BranchAnswer<{
+  applied: boolean;
+  /** #4686 — the HQ revision this branch holds after the call (absent on an unnumbered push). */
+  hq_revision?: number | null;
+  /** #4686 — the push carried a revision older than the one held; the copy was kept. */
+  stale?: boolean;
+  /** #4686 — `false` only when a required section of the copy was not written. */
+  ok?: boolean;
+  partial?: boolean;
+  failed_sections?: string[];
+  reason?: string;
+}>;
+
+/** The optional sections of the copy, each in its own write (migrations 512, 554, 555). */
+const COPY_SECTIONS = [
+  { key: 'terms_json', name: 'terms' },
+  { key: 'program_grants_json', name: 'program_grants' },
+  { key: 'partner_deal_types_json', name: 'partner_deal_types' },
+] as const;
+
 /**
  * HQ pushes this branch its licence; the branch writes the copy (migration
  * 256/257).
@@ -343,7 +363,7 @@ export async function branchSearchAccounts(
  */
 export async function applyLicenceCopy(
   env: Env, record: Record<string, unknown>,
-): Promise<BranchAnswer<{ applied: true }>> {
+): Promise<LicenceCopyAnswer> {
   const branch = requireBranch(env);
   const s = (k: string) => {
     const v = record[k];
@@ -354,7 +374,77 @@ export async function applyLicenceCopy(
     return Number.isFinite(v) ? v : null;
   };
   const pushedAt = s('pushed_at') || nowIso();
-  await env.DB.prepare(
+  // #4686 — HQ's licence revision, a monotonic integer. When the push carries
+  // one the copy is ordered by it ALONE: `pushed_at` is a timestamp that SQLite
+  // compares to the second, so two pushes inside one second were "equal" and the
+  // older could overwrite the newer. A push without one (an HQ build that
+  // predates this) keeps the `pushed_at` rule below.
+  const revRaw = record.hq_revision;
+  const revision = revRaw === undefined || revRaw === null ? null : Number(revRaw);
+  if (revision !== null && (!Number.isInteger(revision) || revision < 1)) {
+    throw new Error('rpc: hq_revision must be a positive integer');
+  }
+  const keysSent = COPY_SECTIONS.filter((x) => Object.prototype.hasOwnProperty.call(record, x.key));
+  let wrote: number;
+  if (revision !== null) {
+    const res = await env.DB.prepare(
+    // D137 — the five columns migration 265 adds ride here, because a column
+    // the push does not bind is a column that stays NULL however many times HQ
+    // pushes. `registered_address`, `signatory_name`, `signatory_title`,
+    // `term_years` and `terminated_at` are the five `MyLicencePage` reads and
+    // the copy never carried.
+    //
+    // D206 — and `kind` (migration 284), for the same reason: the branch's
+    // escalation drawer and route read it to know which kinds exist for this
+    // licence. Stored as HQ sent it, with no default and no check — a value
+    // this build does not recognise reads as unknown, not as a refusal.
+    `INSERT INTO branch_licence
+       (id, licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
+        revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
+        renewal_at, template_version, suspended_at, suspended_note,
+        registered_address, signatory_name, signatory_title, term_years, terminated_at,
+        kind, pushed_at, hq_revision, copy_state, copy_failed_sections, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'partial', NULL, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       licence_uid = excluded.licence_uid, licence_ref = excluded.licence_ref,
+       legal_entity = excluded.legal_entity, brand_name = excluded.brand_name,
+       territory = excluded.territory, status = excluded.status, seats_json = excluded.seats_json,
+       revenue_share_bps = excluded.revenue_share_bps, token_split_bps = excluded.token_split_bps,
+       annual_fee_cents = excluded.annual_fee_cents, currency = excluded.currency,
+       term_start = excluded.term_start, term_end = excluded.term_end,
+       renewal_at = excluded.renewal_at, template_version = excluded.template_version,
+       suspended_at = excluded.suspended_at, suspended_note = excluded.suspended_note,
+       registered_address = excluded.registered_address,
+       signatory_name = excluded.signatory_name, signatory_title = excluded.signatory_title,
+       term_years = excluded.term_years, terminated_at = excluded.terminated_at,
+       kind = excluded.kind,
+       pushed_at = excluded.pushed_at, hq_revision = excluded.hq_revision,
+       copy_state = 'partial', copy_failed_sections = NULL, updated_at = datetime('now')
+     -- #4686 — ordered by HQ's revision ALONE. A push numbered below the one this
+     -- branch holds changes nothing, however close its timestamp: datetime()
+     -- truncates to the second, so the old rule let an older copy written in the
+     -- same second as a newer one overwrite it. An EQUAL revision is a re-send
+     -- of the same assertion and is applied again (idempotent).
+     WHERE branch_licence.hq_revision IS NULL
+        OR excluded.hq_revision >= branch_licence.hq_revision`,
+    ).bind(
+    s('licence_uid') ?? '', s('licence_ref'), s('legal_entity'), s('brand_name'),
+    s('territory') ?? '', s('status') ?? 'active', s('seats_json'),
+    n('revenue_share_bps'), n('token_split_bps'), n('annual_fee_cents'), s('currency'),
+    s('term_start'), s('term_end'), s('renewal_at'), s('template_version'),
+    s('suspended_at'), s('suspended_note'),
+    s('registered_address'), s('signatory_name'), s('signatory_title'),
+    n('term_years'), s('terminated_at'), s('kind'), pushedAt, revision,
+    ).run();
+    wrote = Number(res?.meta?.changes ?? 0);
+    if (wrote === 0) {
+      // The branch holds a LATER revision: keep it, and say so.
+      const held = await env.DB.prepare('SELECT hq_revision FROM branch_licence WHERE id = 1')
+        .first<{ hq_revision: number | null }>();
+      return { applied: false, stale: true, hq_revision: held?.hq_revision ?? null, branch, as_of: pushedAt };
+    }
+  } else {
+    await env.DB.prepare(
     // D137 — the five columns migration 265 adds ride here, because a column
     // the push does not bind is a column that stays NULL however many times HQ
     // pushes. `registered_address`, `signatory_name`, `signatory_title`,
@@ -400,38 +490,72 @@ export async function applyLicenceCopy(
     s('registered_address'), s('signatory_name'), s('signatory_title'),
     n('term_years'), s('terminated_at'), s('kind'), pushedAt,
   ).run();
-  // D797 — the terms schedule (migration 512) rides in its own write, so a
-  // branch that has not applied 512 still takes the rest of its copy. Written
-  // only when HQ sent the key, and only onto the copy this push wrote (its
-  // `pushed_at`), so an older push arriving late never overwrites newer terms.
-  if (Object.prototype.hasOwnProperty.call(record, 'terms_json')) {
+  }
+  // D797 / D984 / D986 — the terms schedule (migration 512), the program grants
+  // (554) and the partner deal types (555) each ride in their own write, so a
+  // branch that has not applied one still takes the rest of its copy. Each is
+  // written only when HQ sent the key, and only onto the copy THIS push wrote
+  // (its revision, or its `pushed_at` on an unnumbered push), so an older push
+  // arriving late never overwrites newer sections.
+  //
+  // #4686 — A SECTION THAT FAILED TO WRITE IS NO LONGER A WARNING. The old code
+  // logged and answered `{applied: true}`, so HQ cleared the retry and the
+  // branch kept the previous section for ever. The failure is collected, the
+  // copy is marked `partial` on the branch itself (visible to anything that
+  // reads it, and it survives a crash), and the answer is `ok: false` so HQ keeps
+  // the push pending.
+  const failed: string[] = [];
+  for (const sec of keysSent) {
     try {
-      await env.DB.prepare('UPDATE branch_licence SET terms_json = ? WHERE id = 1 AND pushed_at = ?')
-        .bind(s('terms_json'), pushedAt).run();
+      // One literal statement per section — the column name never reaches SQL text.
+      let res: { meta?: { changes?: number } } | undefined;
+      if (sec.key === 'terms_json') {
+        res = revision !== null
+          ? await env.DB.prepare('UPDATE branch_licence SET terms_json = ? WHERE id = 1 AND hq_revision = ?').bind(s(sec.key), revision).run()
+          : await env.DB.prepare('UPDATE branch_licence SET terms_json = ? WHERE id = 1 AND pushed_at = ?').bind(s(sec.key), pushedAt).run();
+      } else if (sec.key === 'program_grants_json') {
+        res = revision !== null
+          ? await env.DB.prepare('UPDATE branch_licence SET program_grants_json = ? WHERE id = 1 AND hq_revision = ?').bind(s(sec.key), revision).run()
+          : await env.DB.prepare('UPDATE branch_licence SET program_grants_json = ? WHERE id = 1 AND pushed_at = ?').bind(s(sec.key), pushedAt).run();
+      } else {
+        res = revision !== null
+          ? await env.DB.prepare('UPDATE branch_licence SET partner_deal_types_json = ? WHERE id = 1 AND hq_revision = ?').bind(s(sec.key), revision).run()
+          : await env.DB.prepare('UPDATE branch_licence SET partner_deal_types_json = ? WHERE id = 1 AND pushed_at = ?').bind(s(sec.key), pushedAt).run();
+      }
+      // Zero rows on a numbered push: a newer revision took the row between the
+      // two writes. That copy is the newer one's to complete, not a failure here.
+      void res;
     } catch (e) {
-      console.warn('[branchOps] branch_licence.terms_json not written', (e as Error).message);
+      failed.push(sec.name);
+      console.warn(`[branchOps] branch_licence.${sec.key} not written`, (e as Error).message);
     }
   }
-  // D984 — the program grants (migration 554) ride the same way, on the same rule.
-  if (Object.prototype.hasOwnProperty.call(record, 'program_grants_json')) {
+  if (revision !== null) {
     try {
-      await env.DB.prepare('UPDATE branch_licence SET program_grants_json = ? WHERE id = 1 AND pushed_at = ?')
-        .bind(s('program_grants_json'), pushedAt).run();
+      if (failed.length === 0) {
+        await env.DB.prepare(
+          "UPDATE branch_licence SET copy_state = 'complete', copy_failed_sections = NULL WHERE id = 1 AND hq_revision = ?",
+        ).bind(revision).run();
+      } else {
+        await env.DB.prepare(
+          "UPDATE branch_licence SET copy_state = 'partial', copy_failed_sections = ? WHERE id = 1 AND hq_revision = ?",
+        ).bind(failed.join(','), revision).run();
+      }
     } catch (e) {
-      console.warn('[branchOps] branch_licence.program_grants_json not written', (e as Error).message);
+      // The marker could not be written. Without it the copy still reads as
+      // `partial` (it was written that way), which is the safe side.
+      if (failed.length === 0) failed.push('copy_state');
+      console.warn('[branchOps] branch_licence.copy_state not written', (e as Error).message);
     }
   }
-  // D986 — the partner deal types (migration 555), by the same rule: only when
-  // HQ sent the key, and only onto the copy this push wrote.
-  if (Object.prototype.hasOwnProperty.call(record, 'partner_deal_types_json')) {
-    try {
-      await env.DB.prepare('UPDATE branch_licence SET partner_deal_types_json = ? WHERE id = 1 AND pushed_at = ?')
-        .bind(s('partner_deal_types_json'), pushedAt).run();
-    } catch (e) {
-      console.warn('[branchOps] branch_licence.partner_deal_types_json not written', (e as Error).message);
-    }
+  if (failed.length) {
+    return {
+      ok: false, applied: false, partial: true, failed_sections: failed,
+      reason: `The branch wrote the licence but not ${failed.join(', ')}; it is not a full copy.`,
+      hq_revision: revision, branch, as_of: pushedAt,
+    };
   }
-  return { applied: true, branch, as_of: pushedAt };
+  return { applied: true, ...(revision !== null ? { hq_revision: revision } : {}), branch, as_of: pushedAt };
 }
 
 /**
@@ -1939,27 +2063,32 @@ export async function unbindAdmin(
       skipped.push({ id: t.id, reason: 'Carries a super_admins row, which a branch should not have (D106); left for investigation.' });
       continue;
     }
-    const res = await env.DB.prepare(
-      "UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ? AND role = 'admin' AND is_active = 1",
-    ).bind(t.id).run();
-    if (Number(res?.meta?.changes ?? 0) === 0) {
+    // #4686 — THE ROLE CHANGE AND ITS TWO AUDIT ROWS ARE ONE BATCH. They used to
+    // be three writes with the audit in a try/catch that only warned, so a
+    // failure after the UPDATE left a deactivated administrator with no record
+    // of who removed them — and, because a repeat finds no active admin, nothing
+    // would ever write it. The audit rows are inserted only `WHERE changes() > 0`
+    // (the rows the previous statement in this batch changed), so a repeat, or a
+    // row another request already unbound, writes no second pair.
+    const actorTag = `hq:${actor}`.slice(0, 200);
+    const out = await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ? AND role = 'admin' AND is_active = 1",
+      ).bind(t.id),
+      env.DB.prepare(
+        'INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?, ?, ?, ? WHERE changes() > 0',
+      ).bind('hq_admin_unbound', `Unbound as administrator of ${branch} by ${actor}: ${reason}`, actorTag, t.id),
+      env.DB.prepare(
+        'INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?, ?, ?, ? WHERE changes() > 0',
+      ).bind('your_role_changed',
+        `Your administrator role on this branch was removed by HQ and your account deactivated. Reason: ${reason}`,
+        actorTag, t.id),
+    ]);
+    if (Number(out?.[0]?.meta?.changes ?? 0) === 0) {
       skipped.push({ id: t.id, reason: 'Changed while this ran: no longer an active administrator, so left as it is.' });
       continue;
     }
     unbound.push({ id: t.id, name: t.name, email: t.email });
-    try {
-      await env.DB.prepare(
-        'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)',
-      ).bind('hq_admin_unbound', `Unbound as administrator of ${branch} by ${actor}: ${reason}`,
-        `hq:${actor}`.slice(0, 200), t.id).run();
-      await env.DB.prepare(
-        'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)',
-      ).bind('your_role_changed',
-        `Your administrator role on this branch was removed by HQ and your account deactivated. Reason: ${reason}`,
-        `hq:${actor}`.slice(0, 200), t.id).run();
-    } catch (e) {
-      console.warn('[rpc:unbindAdmin] audit rows failed', (e as Error).message);
-    }
   }
 
   return { unbound, skipped, branch, as_of: nowIso() };

@@ -232,3 +232,54 @@ export function noteIsStale(note, totals) {
   }
   return false;
 }
+
+/**
+ * #4679 — ONLY THE LATEST REQUEST MAY WRITE.
+ *
+ * Switching quarters fast starts a ledger read, a note read and maybe a model
+ * draft for each quarter, and they finish in any order. Each starts by taking a
+ * ticket from `begin()`; when it finishes it applies its result only if
+ * `isCurrent(ticket)`. An older response is dropped, not shown under the newer
+ * quarter's heading.
+ */
+export function latestOnly() {
+  let n = 0;
+  return {
+    begin() { n += 1; return n; },
+    isCurrent(ticket) { return ticket === n; },
+    /** Invalidate everything in flight (the window changed). */
+    cancel() { n += 1; },
+  };
+}
+
+/**
+ * A draft or edited note may be filed only against the period it was written
+ * for. `draftKey` is the period key when the text was drafted or loaded;
+ * `windowKey` is the period the page shows now. Absent evidence is a refusal.
+ */
+export function draftFitsPeriod(draftKey, windowKey) {
+  return !!draftKey && !!windowKey && draftKey === windowKey;
+}
+
+/**
+ * The four honest tiles for a window, from the worker's `states`. PRICED is
+ * what the advisor priced; only COLLECTED is "received". Nothing here adds,
+ * subtracts or rounds: every figure arrives in cents from the worker.
+ */
+export function stateTiles(ledger) {
+  const s = ledger?.states;
+  if (!s) return null;
+  return {
+    priced_cents: ledger?.totals?.gross_cents ?? null,
+    received_cents: s.collected?.net_cents ?? null,
+    received_sessions: s.collected?.sessions ?? 0,
+    unpaid_cents: s.billed?.gross_cents ?? null,
+    unpaid_sessions: s.billed?.sessions ?? 0,
+    written_off_cents: s.written_off?.gross_cents ?? null,
+    written_off_sessions: s.written_off?.sessions ?? 0,
+    refunds_owed_cents: s.refunds_owed?.amount_cents ?? null,
+    refunded_cents: s.refunded?.amount_cents ?? null,
+    paid_out_cents: s.paid_out_cents ?? null,
+    void_sessions: s.void_sessions ?? 0,
+  };
+}

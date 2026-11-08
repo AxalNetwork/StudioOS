@@ -7,6 +7,9 @@
  *     POST  /:uid/offers                { promo_id, budget_cents, currency, featured?, reason } link a Promos code
  *     PATCH /:uid/offers/:offerUid      { status?, budget_cents?, featured?, reason } pause, resume, end, re-budget
  *
+ *   D4810, mounted at `/api/admin/influencer-offers` (Super Admin):
+ *     GET   /?limit=&offset=            every influencer's offers, newest first, a page at a time, with `total`
+ *
  *   The influencer, mounted at `/api/influencer/me/offers`:
  *     GET   /                           IN3: plans, discount, who it is for, uses, discount given, remaining budget, end date, status
  *     POST  /request                    { message } "Ask HQ for an offer"; HQ is notified
@@ -22,7 +25,7 @@ import type { RouteMount } from '../util/routeRegistry';
 import { requireAuth, requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
-import { changeOffer, linkOffer, offersRead, readLinkInput, requestOffer } from '../services/influencerOffers';
+import { OFFERS_PAGE_MAX, changeOffer, linkOffer, offersPage, offersRead, readLinkInput, requestOffer } from '../services/influencerOffers';
 
 type Ctx = Context<{ Bindings: Env }>;
 const UID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -108,7 +111,21 @@ mine.post('/request', async (c) => {
   return c.json(await requestOffer(c.env, user.id, message), 201);
 });
 
+/** D4810: the cross-influencer offers page. */
+const all = new Hono<{ Bindings: Env }>();
+all.get('/', async (c) => {
+  await requireSuperAdmin(c);
+  const rawLimit = c.req.query('limit'); const rawOffset = c.req.query('offset');
+  const limit = rawLimit === undefined || rawLimit === '' ? 50 : Number(rawLimit);
+  const offset = rawOffset === undefined || rawOffset === '' ? 0 : Number(rawOffset);
+  if (!Number.isInteger(limit) || limit < 1 || limit > OFFERS_PAGE_MAX || !Number.isInteger(offset) || offset < 0) {
+    return refuse(c, 400, { code: 'bad_page', message: `limit is a whole number from 1 to ${OFFERS_PAGE_MAX}, and offset a whole number from 0.` });
+  }
+  return c.json(await offersPage(c.env, limit, offset));
+});
+
 export const mount: RouteMount[] = [
+  { path: '/api/admin/influencer-offers', router: all },
   { path: '/api/admin/influencers', router: admin },
   { path: '/api/influencer/me/offers', router: mine },
 ];

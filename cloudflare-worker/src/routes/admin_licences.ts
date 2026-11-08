@@ -56,6 +56,7 @@ import { Hono } from 'hono';
 import { requireSuperAdmin } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import { HOLDS_TERRITORY, byUid, hydrate, activationBlockers } from '../services/licenceLedgerCore';
+import { syncSummary } from '../services/licenceSyncView';
 import type { Env } from '../types';
 import adminLicencesLedger from './admin_licences_ledger';
 import adminLicencesTerms from './admin_licences_terms';
@@ -125,6 +126,7 @@ r.get('/:uid', async (c) => {
     return c.json({
       ...full,
       events: events.results || [],
+      sync: await syncSummary(c.env, licence.id),
       blockers: await activationBlockers(c.env, licence),
       holds_territory: HOLDS_TERRITORY.includes(licence.status),
       deployment,

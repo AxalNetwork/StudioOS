@@ -31,12 +31,12 @@
  */
 import type { Env } from '../types';
 import { evaluateWeekOutcome, gateFromRows, sqliteUtcToMs } from './cohortTiming';
-import { MILESTONES, unlockedFeaturesThrough } from './spinoutLabCatalog';
+import { MILESTONES, unlockedFeaturesThrough, isLabGraduate } from './spinoutLabCatalog';
 
 /** Who is in the Lab: admitted, active, or graduated. One rule for every Lab read. */
 export const LAB_PARTICIPANT_WHERE =
   "usf.spinout_lab_admitted = 1 OR u.spinout_lab_active = 1 "
-  + "OR u.id IN (SELECT user_id FROM spinout_lab_milestones WHERE milestone_key = 'incorporation_completed')";
+  + "OR u.id IN (SELECT user_id FROM spinout_lab_graduates)";
 
 /** The user ids `LAB_PARTICIPANT_WHERE` selects, as a sub-select the desks filter on. */
 export const LAB_PARTICIPANT_IDS =
@@ -200,7 +200,8 @@ function build(p: Base, L: Loaded) {
   const started = sqliteUtcToMs(p.spinout_lab_started_at);
   const active = Number(p.spinout_lab_active ?? 0) === 1;
   const ms = L.milestones.ok ? L.milestones.rows.filter((m) => Number(m.user_id) === p.id) : null;
-  const graduated = ms ? ms.some((m) => m.milestone_key === 'incorporation_completed') : null;
+  // D4659: the one programme rule (catalog), not the incorporation step alone.
+  const graduated = ms ? isLabGraduate(new Set(ms.map((m) => String(m.milestone_key)))) : null;
   const status = active ? 'active' : graduated === null ? null : graduated ? 'graduated' : 'admitted';
   const cycle = L.cycles.ok && started !== null
     ? [...L.cycles.rows].sort((a, b) => b.id - a.id).find((c) => {

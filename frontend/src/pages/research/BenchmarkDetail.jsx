@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
@@ -6,6 +6,7 @@ import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { StatedLimit } from '../advisor/expertise/kit';
 import useRecordCrumb from '../admin/useRecordCrumb';
 import { benchmarkTiles, editorFields, editorPatch, readingDraft } from './benchmarkRead';
+import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
 
 /**
  * `/research/benchmarking/:uid` — one benchmark (canvas f2eb2046, D314).
@@ -74,12 +75,32 @@ export default function BenchmarkDetail({ role = 'investor' }) {
     setReading(d.item.reading || '');
   }, []);
 
+  // D4607: the benchmark this page loaded, by its route identity. A read or a
+  // write that answers after the route has moved on is dropped, and writes go
+  // to the loaded benchmark only while the route still names it.
+  const routeKey = recordKey(uid);
+  const [loadedKey, setLoadedKey] = useState(null);
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
+  const writeFor = useRef(0);
+  useEffect(() => { writeFor.current += 1; setBusy(''); setNotice(null); setPreview(''); setConstituent(EMPTY_CONSTITUENT); }, [uid]);
+  useEffect(() => () => { gate.current.invalidate(); writeFor.current += 1; }, []);
+
   const load = useCallback(async () => {
+    const fresh = gate.current.begin();
+    const key = recordKey(uid);
     setState('loading');
+    setDetail(null);
+    setForm(null);
+    setLoadedKey(null);
     try {
-      take(await api.research.benchmarkGet(uid));
+      const d = await api.research.benchmarkGet(uid);
+      if (!fresh()) return;
+      take(d);
+      setLoadedKey(key);
       setState('ready');
     } catch (e) {
+      if (!fresh()) return;
       setDetail(null);
       // D278 — the code decides; a uid that is not yours reads as missing.
       setState(e?.code === 'benchmark_not_found' ? 'missing' : 'unreadable');
@@ -87,19 +108,25 @@ export default function BenchmarkDetail({ role = 'investor' }) {
   }, [uid, take]);
   useEffect(() => { load(); }, [load]);
 
+  const current = sameRecord(loadedKey, routeKey);
+  // The identity every write on this page is sent to: the loaded one.
+  const target = current ? JSON.parse(loadedKey)[0] : null;
   const run = async (key, fn, ok) => {
+    if (!current) return false;
+    const mine = ++writeFor.current;
     setBusy(key);
     setNotice(null);
     try {
       const d = await fn();
+      if (writeFor.current !== mine) return false;
       if (d?.item) take(d);
       if (ok) setNotice({ ok: true, text: ok });
       return true;
     } catch (e) {
-      setNotice({ ok: false, text: e?.message || 'That did not save.' });
+      if (writeFor.current === mine) setNotice({ ok: false, text: e?.message || 'That did not save.' });
       return false;
     } finally {
-      setBusy('');
+      if (writeFor.current === mine) setBusy('');
     }
   };
 
@@ -154,7 +181,7 @@ export default function BenchmarkDetail({ role = 'investor' }) {
           </Card>
         )}
 
-        {state === 'ready' && item && form && (
+        {state === 'ready' && current && item && form && (
           <>
             {notice && (
               <p className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
@@ -229,7 +256,7 @@ export default function BenchmarkDetail({ role = 'investor' }) {
               <div className="flex items-baseline justify-between gap-3">
                 <span className={eyebrow}>What the comparison supports</span>
                 <button type="button" className={ghostBtn} disabled={busy !== '' || reading === (item.reading || '')}
-                  onClick={() => run('reading', () => api.research.benchmarkUpdate(uid, { reading: reading.trim() }), 'Reading saved.')}>
+                  onClick={() => run('reading', () => api.research.benchmarkUpdate(target, { reading: reading.trim() }), 'Reading saved.')}>
                   Save
                 </button>
               </div>
@@ -262,7 +289,7 @@ export default function BenchmarkDetail({ role = 'investor' }) {
                           <td className="py-2 text-right">
                             <button type="button" className="text-[11.5px] font-semibold text-red-700 hover:underline disabled:opacity-50 dark:text-red-300"
                               disabled={busy !== ''}
-                              onClick={() => run('remove', () => api.research.benchmarkConstituentRemove(uid, c.uid))}>
+                              onClick={() => run('remove', () => api.research.benchmarkConstituentRemove(target, c.uid))}>
                               Remove
                             </button>
                           </td>
@@ -295,7 +322,7 @@ export default function BenchmarkDetail({ role = 'investor' }) {
                       value={constituent.as_of} onChange={(e) => setConstituent({ ...constituent, as_of: e.target.value })} />
                     <button type="button" className={`${primaryBtn} mt-1`} disabled={!constituent.name.trim() || busy !== ''}
                       onClick={async () => {
-                        const ok = await run('add', () => api.research.benchmarkConstituentAdd(uid, constituent));
+                        const ok = await run('add', () => api.research.benchmarkConstituentAdd(target, constituent));
                         if (ok) setConstituent(EMPTY_CONSTITUENT);
                       }}>
                       {busy === 'add' ? 'Adding…' : 'Add'}
@@ -333,7 +360,7 @@ export default function BenchmarkDetail({ role = 'investor' }) {
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button type="button" className={primaryBtn} disabled={busy !== '' || !form.metric.trim()}
-                  onClick={() => run('save', () => api.research.benchmarkUpdate(uid, editorPatch(form)), 'Saved.')}>
+                  onClick={() => run('save', () => api.research.benchmarkUpdate(target, editorPatch(form)), 'Saved.')}>
                   {busy === 'save' ? 'Saving…' : 'Save'}
                 </button>
                 <span className="text-[11px] text-axal-muted">
@@ -362,7 +389,7 @@ export default function BenchmarkDetail({ role = 'investor' }) {
                 <button type="button" className={primaryBtn} disabled={!draft || busy !== ''} onClick={() => setPreview(draft)}>Draft</button>
                 <button type="button" className={ghostBtn} disabled={!preview.trim() || busy !== ''}
                   onClick={async () => {
-                    const ok = await run('accept', () => api.research.benchmarkUpdate(uid, { reading: preview.trim() }), 'Written as the reading.');
+                    const ok = await run('accept', () => api.research.benchmarkUpdate(target, { reading: preview.trim() }), 'Written as the reading.');
                     if (ok) setPreview('');
                   }}>
                   Accept
