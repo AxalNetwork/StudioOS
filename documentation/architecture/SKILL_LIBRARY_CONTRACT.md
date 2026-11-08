@@ -150,8 +150,8 @@ defaults to `[]`; at least one phrase across all three lists is required. A
 phrase is a non-empty string up to 200 characters, with at most 20 per list.
 `output` is required and must match the skill output in source CI.
 
-Evaluation is deterministic and case-insensitive (judge version 2, #4531,
-`services/agents/skillAssertions.ts`):
+Evaluation is deterministic and case-insensitive (judge version 3, #4531,
+`services/agents/skillAssertions.ts`; D4531 has the full accepted forms):
 
 - `must_include` must appear and `must_not_include` must not (substrings).
 - `must_say_not_recorded`: each field must be named in a **statement** that
@@ -173,9 +173,42 @@ Evaluation is deterministic and case-insensitive (judge version 2, #4531,
   second statement that gives the metric another value. A conditional
   statement (`if`, `would`, `could`, `assume`, `suppose`, `hypothetical`)
   neither supports nor contradicts. Nothing else is treated as equivalent.
+- `structure` (optional, slice 2): `{ "sections": ["Summary", "Risks"],
+  "ordered": true, "form": "list" | "table" }`. A heading is a whole line:
+  `#`–`###### Summary`, `**Summary**` (colon inside or out), `__Summary__`, or
+  `Summary:` alone, optionally numbered; its text must equal the section. Each
+  section must be present and not empty; `ordered` checks their order; `form`
+  needs a `- `/`* `/`1. ` list line or a `| … |` table with a `| --- |` row.
+- `evidence` (optional): `{ "cite": ["mercury.balances", "grow.records.kpis.0"] }`.
+  A citation is `[path]`, `[path, path]`, `[source: path]` or
+  `(source: path)`, a path being a read key plus keys and indexes into it.
+  Every citation must name something the case's records hold; every `cite`
+  path must be cited (it or a path inside it) outside a conditional statement.
+  A bare `mercury.balances` without brackets is not a citation.
+- `refusal` (optional): `{ "mode": "ask_for_input" | "decline" |
+  "not_recorded" | "none", "subject": "consent" }`. The subject and one of the
+  documented ask or decline phrases in one non-hypothetical statement;
+  `not_recorded` is the missing-data rule; `none` fails on any of the three.
+  Asking or declining and also giving the subject a figure fails.
+- `claims` (optional): `{ "required": [{ "subject", "object" }], "forbidden":
+  [...] }`. A statement states a claim when it is not conditional and names
+  the subject, then the object, as whole words; a negation before the object
+  negates it. A required claim must be affirmed and never negated; a
+  forbidden one must never be affirmed.
+- `output_schema` (optional): `{ "format": "json", "schema": {...} }`, only
+  for a case whose output is a typed artifact. The whole output (an object or
+  array) or its one ```` ```json ```` fence must parse and meet a closed
+  subset of JSON Schema: `type`, `enum`, `required`, `properties`,
+  `additionalProperties: false`, `items`, `minItems`. A miss names the JSON
+  path.
+
+Each assertion refuses unknown keys, so a misspelt field never passes
+silently. A miss never quotes the output. The draft and published paths
+both judge through `judge()`, which re-checks each assertion's shape, so one
+written to the store without `checkCase` fails rather than passes.
 
 Missing expectation values are not a pass: omitted lists normalize to empty,
-but a case with no phrase and no number is rejected; an absent/invalid output
+but a case with no phrase, no number and no other assertion is rejected; an absent/invalid output
 or records is rejected. A failed model run is `not_run`, which cannot satisfy
 the publish bar. The draft and published evaluations share `judge()`.
 
@@ -187,11 +220,15 @@ current draft parts in fixed order. This is the current exact-skill-version
 trace: persist the published integer version plus the evaluation's draft hash
 and case identity.
 
-### Proposed golden-case v2 extension (not implemented)
+### Proposed golden-case v2 extension (partly superseded)
 
-Use this only after schema, parser, generated-type, importer, evaluator, and
-UI changes land together. Until then, place these fields in staged material
-only; the deployed importer will ignore them.
+Judge version 3 (#4531 slice 2) implemented the deterministic parts of this
+proposal under the names above (`evidence`, `refusal`, `structure`, `claims`,
+`output_schema`), as optional keys of the v1 `expect`, without a
+`schema_version` discriminator. What follows is still not implemented: the
+case-level identity and provenance fields, `evaluation_type`, adversarial
+scenario metadata and the named judge rubric. The shapes below are the old
+proposal and are not accepted as written.
 
 ```json
 {
@@ -221,10 +258,11 @@ deterministic assertion; they never mean “pass if anything happens.” A
 rubric/judge assertion must record its rubric version, judge model, and result
 beside the exact skill hash.
 
-`refuse_when` is not a current contract field: some source cases contain it
-and the old README advertised it, but `checkCase()` neither validates nor
-evaluates it. It is therefore ignored today and must become the explicit v2
-`refusal` assertion before it can gate a result.
+`refuse_when` is not a contract field, and the docs no longer describe it as
+one. One source case (`customer-interview-summary.json`) still carries it;
+`checkCase()` drops it and CI warns that it proves nothing. Its condition was
+on the case's own fixed records, so it could never vary within a case. A
+refusal is asserted with `refusal` (judge version 3).
 
 ## CI validation (#4532)
 

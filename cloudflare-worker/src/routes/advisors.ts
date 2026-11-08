@@ -1,5 +1,6 @@
 import { withMentorEligible } from '../services/mentorEligibility';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
+import { actingAdvisor, actsForAdvisor, mayActAsAdvisor, ADVISOR_LICENCE_REQUIRED } from '../services/advisorAccess';
 /**
  * T13 — Advisors + office-hour slots + bookings + reviews.
  * Mounted at /api/advisors. Port of backend/app/api/routes/advisors.py.
@@ -151,6 +152,7 @@ type BookingRow = {
   amount_cents: number | null; billing_state: string;
   created_at: string; updated_at: string;
   session_type_id?: number | null; booking_link_id?: number | null;
+  offer_json?: string | null;
   // #4702: the advisor's answer, kept apart from what happened to the session.
   advisor_decision?: 'accepted' | 'declined' | null; advisor_decided_at?: string | null;
   cancelled_by?: 'advisor' | 'client' | 'admin' | 'system' | null;
@@ -221,6 +223,35 @@ function slotDto(s: SlotRow, taken = 0): any {
   };
 }
 /**
+ * D4715 (#4715) — the offer a booking is made on, copied from its session type
+ * at booking time so a later rename, length change or reprice of the type does
+ * not rewrite what was booked. `pricing` uses the session-type editor's own
+ * modes: `free` (a free intro), `included`, `price` (with `price_cents`) and
+ * `unset`.
+ */
+export type BookingOffer = {
+  session_type_id: number; name: string; duration_minutes: number | null;
+  pricing: 'free' | 'included' | 'price' | 'unset'; price_cents: number | null;
+  cadence_note: string | null;
+};
+export function offerSnapshot(t: {
+  id: number; name: string; duration_minutes: number | null; cadence_note?: string | null;
+  price_cents: number | null; is_free_intro: number | boolean; is_included?: number | boolean | null;
+} | null): BookingOffer | null {
+  if (!t) return null;
+  const pricing = t.is_free_intro ? 'free' : t.is_included ? 'included' : t.price_cents == null ? 'unset' : 'price';
+  return {
+    session_type_id: t.id, name: t.name, duration_minutes: t.duration_minutes ?? null,
+    pricing, price_cents: pricing === 'price' ? Number(t.price_cents) : null,
+    cadence_note: t.cadence_note ?? null,
+  };
+}
+function readOffer(raw: string | null | undefined): BookingOffer | null {
+  if (!raw) return null;
+  try { const o = JSON.parse(raw); return o && typeof o === 'object' && typeof o.name === 'string' ? o : null; } catch { return null; }
+}
+
+/**
  * The booking as BOTH parties may see it. Deliberately no money — see
  * `advisorMoney` below for the two columns that are the advisor's alone.
  */
@@ -231,6 +262,8 @@ function bookingDto(b: BookingRow, extras: any = {}): any {
     topic: b.topic, notes: b.notes, questions: b.notes, client_message: b.notes, status: b.status,
     cancel_reason: b.cancel_reason,
     session_type_id: b.session_type_id ?? null, booking_link_id: b.booking_link_id ?? null,
+    // D4715: the terms the booking was made on, as copied then (null before the copy existed).
+    offer: readOffer(b.offer_json),
     created_at: b.created_at, updated_at: b.updated_at,
     ...extras,
   };
@@ -296,14 +329,9 @@ async function loadAdvisorByUid(env: Env, uid: string): Promise<AdvisorRow | nul
 async function loadAdvisorById(env: Env, id: number): Promise<AdvisorRow | null> {
   return env.DB.prepare('SELECT * FROM advisors WHERE id = ?').bind(id).first<AdvisorRow>();
 }
+/** #4715: the policy's eligibility and ownership checks (services/advisorAccess.ts). */
 async function myAdvisor(env: Env, user: User): Promise<AdvisorRow | null> {
-  if (!holdsLicence(user, 'advisor') && !isAdmin(user)) return null;
-  if ((user as any).advisor_id) {
-    const row = await env.DB.prepare('SELECT * FROM advisors WHERE id = ?')
-      .bind((user as any).advisor_id).first<AdvisorRow>();
-    if (row?.user_id === user.id) return row;
-  }
-  return env.DB.prepare('SELECT * FROM advisors WHERE user_id = ?').bind(user.id).first<AdvisorRow>();
+  return actingAdvisor<AdvisorRow & { user_id: number | null }>(env, user);
 }
 
 async function takenForSlot(env: Env, slotId: number): Promise<number> {
@@ -418,8 +446,7 @@ function mergeProfileFields(existing: AdvisorRow | null, body: any) {
  * POST created an active profile, because `myAdvisor` answered null for them
  * and null read as "make one".
  */
-const mayHoldAdvisorProfile = (user: User) => holdsLicence(user, 'advisor') || isAdmin(user);
-const ADVISOR_LICENCE_REQUIRED = { code: 'advisor_licence_required', message: 'An advisor profile needs the Advisor licence.' } as const;
+const mayHoldAdvisorProfile = mayActAsAdvisor;
 
 /**
  * D4674: a value over its limit, an unsupported currency or a malformed price is
@@ -1094,8 +1121,8 @@ advisors.post('/slots/:id/book', async (c) => {
     try {
       const r = await c.env.DB.prepare(
         `INSERT INTO advisor_bookings
-          (uid, slot_id, advisor_id, founder_user_id, topic, notes, status, session_type_id, booking_link_id, created_at, updated_at)
-         SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?
+          (uid, slot_id, advisor_id, founder_user_id, topic, notes, status, session_type_id, booking_link_id, offer_json, created_at, updated_at)
+         SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?
           WHERE EXISTS (SELECT 1 FROM advisor_office_hour_slots s
                          WHERE s.id = ? AND s.is_cancelled = 0 AND (s.blocked_reason IS NULL OR TRIM(s.blocked_reason) = ''))
             AND (SELECT COUNT(*) FROM advisor_bookings x
@@ -1116,12 +1143,14 @@ advisors.post('/slots/:id/book', async (c) => {
          ON CONFLICT (slot_id, founder_user_id) DO UPDATE SET
            status = 'pending', cancel_reason = NULL, topic = excluded.topic, notes = excluded.notes,
            session_type_id = excluded.session_type_id, booking_link_id = excluded.booking_link_id,
+           offer_json = excluded.offer_json,
            amount_cents = NULL, billing_state = 'unpriced', created_at = excluded.created_at, updated_at = excluded.updated_at
            WHERE advisor_bookings.status = 'cancelled'`
       ).bind(newUid(), slotId, slot.advisor_id, user.id,
              (body.topic || '').toString().slice(0, 200),
              (body.notes || '').toString().slice(0, 2000),
-             type?.id ?? null, context?.link.id ?? null, nowIso(), nowIso(),
+             type?.id ?? null, context?.link.id ?? null,
+             type ? JSON.stringify(offerSnapshot(type)) : null, nowIso(), nowIso(),
              slotId,
              slotId, slotId,
              type?.id ?? null, type?.id ?? null, slot.advisor_id,
@@ -1374,8 +1403,9 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   const user = await requireAuth(c);
   const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?').bind(id).first<BookingRow>();
   if (!b) return c.json({ detail: 'Booking not found' }, 404);
-  const m = b.advisor_id;
-  const isAdvisor = !!(user as any).advisor_id && (user as any).advisor_id === m;
+  // #4715: the advisor side is the policy's answer (licence today, owned row),
+  // never the stored users.advisor_id pointer on its own.
+  const isAdvisor = await actsForAdvisor(c.env, user, b.advisor_id);
   const isOwner = b.founder_user_id === user.id;
   const adm = isAdmin(user);
   let allowed = adm;
@@ -1495,7 +1525,7 @@ advisors.post('/bookings/:id/review', async (c) => {
     const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?').bind(id).first<BookingRow>();
     if (!b) return c.json({ detail: 'Booking not found' }, 404);
     if (b.status !== 'completed') return c.json({ detail: 'Can only review completed bookings' }, 409);
-    const isAdvisor = !!(user as any).advisor_id && (user as any).advisor_id === b.advisor_id;
+    const isAdvisor = await actsForAdvisor(c.env, user, b.advisor_id);
     const isOwner = b.founder_user_id === user.id;
     if (!isAdvisor && !isOwner && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
     const reviewer_role = isAdvisor && !isOwner ? 'advisor' : 'founder';
@@ -3391,6 +3421,9 @@ advisors.get('/me/cohort', async (c) => {
   try {
     const user = await requireAuth(c);
     await ensureAdvisorStoresSchema(c.env);
+    // #4715: eligibility first, as every cohort read: an account that no longer
+    // holds the Advisor licence keeps its assignment rows but lists no cohort.
+    if (!mayHoldCohortAssignment(user)) return c.json({ items: [] });
     // Scoped on the SIGNED-IN USER, not on an advisor profile id and not on a
     // path parameter. 206 keys assignments on `users(id)` precisely so an
     // advisor with no profile row yet is still assignable — see its header.
@@ -3743,6 +3776,11 @@ advisors.patch('/me/guidance/:uid', async (c) => {
     const user = await requireAuth(c);
     await ensureAdvisorStoresSchema(c.env);
     await ensureCohortGuidanceSchema(c.env);
+    // #4715: writing guidance founders read is an advisor's act, so the
+    // licence is checked today, as `requireOwnCohort` does for the other writes.
+    if (!mayHoldCohortAssignment(user)) {
+      return c.json({ detail: 'Only an advisor can open a cohort batch' }, 403);
+    }
     const uid = String(c.req.param('uid') || '');
     // Ownership is the advisor column on the row itself — the assignment may
     // since have been withdrawn, and guidance already written must still be
@@ -4376,6 +4414,18 @@ type EngagementRow = {
   created_at: string; updated_at: string;
 };
 
+/**
+ * #4715 (D4715): the terms of an engagement, and which of them a write changes.
+ * The client account link (`founder_user_id`) is not a term: linking who the
+ * contract is with to their Axal account changes nothing either side signed.
+ */
+export const ENGAGEMENT_TERMS = ['client_name', 'shape', 'scope_label', 'scope_includes', 'scope_excludes', 'amount_cents', 'term_ends_at'] as const;
+export function termChanges(before: Record<string, any>, after: Record<string, any>) {
+  return ENGAGEMENT_TERMS
+    .filter((f) => (before[f] ?? null) !== (after[f] ?? null))
+    .map((f) => ({ field: f, from: before[f] ?? null, to: after[f] ?? null }));
+}
+
 function engagementDto(r: EngagementRow): any {
   return {
     id: r.id, uid: r.uid, advisor_id: r.advisor_id,
@@ -4566,26 +4616,59 @@ advisors.patch('/me/engagements/:id', async (c) => {
     if (!ENGAGEMENT_SHAPES.includes(shape)) {
       return c.json({ detail: `shape must be one of: ${ENGAGEMENT_SHAPES.join(', ')}` }, 400);
     }
-    await c.env.DB.prepare(
-      `UPDATE advisor_engagements
-          SET client_name = ?, founder_user_id = ?, shape = ?, scope_label = ?,
-              scope_includes = ?, scope_excludes = ?, amount_cents = ?,
-              term_ends_at = ?, updated_at = ?
-        WHERE id = ?`
-    ).bind(
+    // D4695-style stale-view refusal: the caller may name the version it read.
+    if (body.expected_updated_at !== undefined && String(body.expected_updated_at) !== row.updated_at) {
+      return c.json({ detail: 'this engagement changed since you opened it — reload it', code: 'engagement_changed' }, 409);
+    }
+    const next = {
       // Merge, not replace: the board edits one field at a time, and an empty
       // client name would blank a card rather than rename it.
-      String(body.client_name ?? '').trim().slice(0, 200) || row.client_name,
-      'founder_user_id' in body
-        ? await engagementClientUser(c.env, m, body.founder_user_id) : row.founder_user_id,
+      client_name: String(body.client_name ?? '').trim().slice(0, 200) || row.client_name,
       shape,
-      'scope_label' in body ? trimOrNull(body.scope_label, 200) : row.scope_label,
-      'scope_includes' in body ? trimOrNull(body.scope_includes, 2000) : row.scope_includes,
-      'scope_excludes' in body ? trimOrNull(body.scope_excludes, 2000) : row.scope_excludes,
-      'amount_cents' in body ? parsePriceCents(body.amount_cents) : row.amount_cents,
-      'term_ends_at' in body ? engagementDate(body.term_ends_at) : row.term_ends_at,
-      nowIso(), row.id,
-    ).run();
+      scope_label: 'scope_label' in body ? trimOrNull(body.scope_label, 200) : row.scope_label,
+      scope_includes: 'scope_includes' in body ? trimOrNull(body.scope_includes, 2000) : row.scope_includes,
+      scope_excludes: 'scope_excludes' in body ? trimOrNull(body.scope_excludes, 2000) : row.scope_excludes,
+      amount_cents: 'amount_cents' in body ? parsePriceCents(body.amount_cents) : row.amount_cents,
+      term_ends_at: 'term_ends_at' in body ? engagementDate(body.term_ends_at) : row.term_ends_at,
+    };
+    const founderUserId = 'founder_user_id' in body
+      ? await engagementClientUser(c.env, m, body.founder_user_id) : row.founder_user_id;
+    // #4715 (D4715): once signed, the terms change only as a recorded correction.
+    const changes = termChanges(row, next);
+    const signed = !!row.started_at;
+    const reason = trimOrNull(body.correction_reason, 500);
+    if (signed && changes.length > 0 && !reason) {
+      return c.json({
+        detail: 'These terms were signed. Say why they are being corrected; the correction is kept in the engagement’s history.',
+        code: 'correction_reason_required', fields: changes.map((x) => x.field),
+      }, 409);
+    }
+    const now = nowIso();
+    const [wrote] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE advisor_engagements
+            SET client_name = ?, founder_user_id = ?, shape = ?, scope_label = ?,
+                scope_includes = ?, scope_excludes = ?, amount_cents = ?,
+                term_ends_at = ?, updated_at = ?
+          WHERE id = ? AND updated_at = ?`
+      ).bind(
+        next.client_name, founderUserId, next.shape, next.scope_label,
+        next.scope_includes, next.scope_excludes, next.amount_cents, next.term_ends_at,
+        now, row.id, row.updated_at,
+      ),
+      // The correction lands only if the update above did (its `updated_at` is this request's), so the history
+      // and the terms cannot disagree.
+      c.env.DB.prepare(
+        `INSERT INTO advisor_engagement_corrections
+           (uid, engagement_id, lane, reason, changes_json, corrected_by_user_id, created_at)
+         SELECT ?, id, lane, ?, ?, ?, ? FROM advisor_engagements
+          WHERE id = ? AND ? = 1 AND updated_at = ?`
+      ).bind(newUid(), reason ?? '', JSON.stringify(changes), user.id, now,
+        row.id, signed && changes.length > 0 ? 1 : 0, now),
+    ]);
+    if (Number((wrote as any)?.meta?.changes ?? 0) !== 1) {
+      return c.json({ detail: 'this engagement changed while you were looking at it — reload it', code: 'engagement_changed' }, 409);
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
       .bind(row.id).first<EngagementRow>();
     return c.json(engagementDto(fresh!));
@@ -4788,7 +4871,19 @@ advisors.get('/me/engagements/:id/events', async (c) => {
       `SELECT uid, kind, from_lane, to_lane, cycles_before, cycles_after, note, created_at
          FROM advisor_engagement_events WHERE engagement_id = ? ORDER BY id ASC LIMIT 200`
     ).bind(row.id).all();
-    return c.json({ items: rows.results || [] });
+    // #4715 (D4715): a correction to signed terms is part of the same history, with what changed.
+    const fixes = await c.env.DB.prepare(
+      `SELECT uid, lane, reason, changes_json, created_at
+         FROM advisor_engagement_corrections WHERE engagement_id = ? ORDER BY id ASC LIMIT 200`
+    ).bind(row.id).all<any>();
+    const corrections = (fixes.results || []).map((r: any) => ({
+      uid: r.uid, kind: 'corrected', from_lane: r.lane, to_lane: r.lane, note: r.reason,
+      changes: (() => { try { return JSON.parse(r.changes_json); } catch { return []; } })(),
+      created_at: r.created_at,
+    }));
+    const items = [...(rows.results || []), ...corrections]
+      .sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
+    return c.json({ items });
   } catch (e) { return mapError(c, e); }
 });
 

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revenue v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Revenue · v2 · #5039</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Revenue — an executive financial cockpit that says what it knows, for which period, and from where</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">RV01 is the populated cockpit: Period, Scope and Stream controls, a read time and a data-coverage button (4 of 9 sources complete). Money is native-currency only — EUR and GBP rows, never summed across currencies — and every figure carries a temporal label (Q4 2026, Live, Last 30 days, As of now). Streams without a full ledger (subscriptions, AI margin) say Not recorded instead of €0. Needs attention ranks a dispute deadline, overdue receivables, an unsynced promotion ceiling and a stale branch report, each with one action. Receivables, subsidiaries, AI economics, billing exceptions and promotions are sections of one page; refunds are a five-step flow with a step-up; data coverage explains every gap once, in a drawer. Eadwyn is a compact launcher with revenue prompts.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sun 8 Nov 2026, 14:30 UTC · every subsidiary, customer, payment id and amount on these boards is sample data, kept consistent across boards</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Revenue v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RV01', 'Cockpit · populated, Q4 2026', 'Header with Period / Scope / Stream, read time and coverage. EUR and GBP positions (Invoiced, Collected, Outstanding, Overdue, Refunds, Open disputes) with their own temporal labels; streams without a full ledger as Not recorded; Needs attention; streams table; trend with gaps; AI economics; receivables; subsidiaries; billing exceptions; promotions.', [F('RV01', false, 3720)]],
+      ['RV02', 'Cockpit · partial and failed reads', 'Invoiced shows €128,400+ with “2 statements not drawn”, Refunds is Unavailable with Retry, and the coverage chip stays honest. Nothing collapses to €0.', [F('RV02', false, 980)]],
+      ['RV03', 'Financial value states and temporal labels', 'Recorded, Zero, Incomplete, Not recorded, Not reported, Stale, Unavailable and Loading — each with a word and a shape, never colour alone — plus the five temporal labels and what the Period selector changes.', [C('RV03', false, 1400, 463)]],
+      ['RV04', 'Revenue streams and trend', 'Streams table (contracted, invoiced, collected, cost, margin, coverage) with an EUR-only total, and a monthly trend whose May and Dec gaps are drawn as gaps, not zero.', [F('RV04', false, 1180)]],
+      ['RV04b', 'Trend · table view', 'The same series as an accessible table; missing months say No data.', [C('RV04b', false, 800, 696)]],
+      ['RV05', 'Receivables and statement drawer', 'Status chips (All 23, Overdue 3, Issued 3, Paid 15 …), 9 of 23 shown overdue-first, and the policy note that statement drawing is held (D514). The drawer explains Axal VC France · Q3 2026: gross, share, owed, paid, outstanding, source and history.', [F('RV05', false, 1120)]],
+      ['RV05b', 'Record a payment', 'Amount in whole cents, bank reference, and the before → after outstanding (€3,800 → €0, status becomes Paid).', [C('RV05b', false, 680, 451)]],
+      ['RV06', 'Subsidiaries', 'Reporting health first, then owed / paid / outstanding per branch; DACH stale 23 days; Portugal amounts not reported; Benelux not drawn.', [F('RV06', false, 820)]],
+      ['RV07', 'AI economics · margin not recorded', 'Margin leads and says Not recorded with partial coverage; one explanation for the block.', [C('RV07', false, 1000, 312)]],
+      ['RV07b', 'AI economics · fully recorded', 'Illustrative complete state: margin $412.08 from top-up revenue minus model cost.', [C('RV07b', false, 1000, 312)]],
+      ['RV08', 'Billing exceptions', 'Disputes, refunds and incomplete subscriptions; actionable exceptions only, each with its deadline and one action.', [F('RV08', false, 860)]],
+      ['RV09', 'Refund flow · five steps', 'Lookup (no money moves), Review (balance, policy, clawback), Confirm (what happens, reason), Step-up (authenticator) and Result (Stripe confirmation, audit link).', [C('RV09a', 'Lookup', 680, 328), C('RV09b', 'Review', 680, 591), C('RV09c', 'Confirm', 680, 481), C('RV09d', 'Step-up', 680, 308), C('RV09e', 'Result', 680, 379)]],
+      ['RV10', 'Promotions', 'Per-licence ceilings with what HQ saved, whether the branch accepted the push, issued amounts and remaining; a no-ceiling row; enforcement read-back marked backend required.', [F('RV10', false, 880)]],
+      ['RV11', 'Data coverage drawer', '4 of 9 sources complete: each source with its status and one plain reason. Every “why” on the page links here.', [F('RV11', false, 1000)]],
+      ['RV12', 'Eadwyn open', 'The rail with revenue prompts and a scoped answer; it reads the same figures and coverage as the page.', [F('RV12', false, 1000)]],
+      ['RV14', 'Tablet and phone', 'Tablet 834: KPI grid, Needs attention, receivables as cards. Phone 390: the cockpit summary, receivables triage and the refund review as a bottom sheet.', [C('RV14a', 'Tablet · 834', 834, 1112), P('RV14b', 'Phone · cockpit'), P('RV14c', 'Phone · receivables'), P('RV14d', 'Phone · refund review')]],
+      ['RV15', 'Backend fit and handoff', 'What today’s routes support on main and what needs backend work: period on /summary, invoice-backed licence revenue, a revenue ledger for the trend, refund lookup (#5037), promotion read-back.', [W('RV15')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

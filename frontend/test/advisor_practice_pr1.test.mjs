@@ -158,7 +158,8 @@ test('the absences are stated on the page, not silently omitted', () => {
   for (const claim of [
     /investor/i,                      // no investor path to a booking
     /referral|Referred by/i,          // no column records where a request came from
-    /used 6/,                         // the artboard's template usage count
+    // #4715 (D4715): the page says it in product words now, not by quoting the design file's "used 6×".
+    /no usage count/i,                // a template carries no usage count
   ]) {
     assert.match(PAGE, claim, 'the artboard draws it and the schema cannot — say so');
   }
