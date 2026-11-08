@@ -46,6 +46,11 @@ jobs:
           node scripts/check-dark-mode.mjs
       - name: Build the root SPA
         run: npm run build
+      # frontend/test/dr_second_copy_d4558.test.mjs (#4795) runs the real `age`
+      # and `age-keygen`, as ci.yml's drift job does; without them its nine
+      # tests fail here and only here (form-lightbox-contracts.yml does the same).
+      - name: Install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
       - name: Full drift suite after build
         run: |
           set +e
