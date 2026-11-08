@@ -38,14 +38,28 @@ const kvKey = (userId: number, companyId: number | null) =>
 
 // Wrap a query so a single missing table or SQL error doesn't 500 the whole dashboard.
 // Returns the fallback value and logs the underlying error for observability.
-async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+//
+// D4620 (#4620): the fallback is still returned (the dashboard must not 500),
+// but the outcome is recorded in `status`, so a caller can tell a read that
+// answered zero rows from one that failed and was given a stand-in. Nothing
+// downstream may read a fallback as a fact.
+type SourceStatus = Map<string, 'ready' | 'unreadable'>;
+async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T, status?: SourceStatus): Promise<T> {
   try {
-    return await fn();
+    const out = await fn();
+    status?.set(label, 'ready');
+    return out;
   } catch (e: any) {
     console.error('[dashboard]', label, String(e?.message || e));
+    status?.set(label, 'unreadable');
     return fallback;
   }
 }
+
+/** The deal list: the newest this many eligible rows are the preview. */
+export const DEAL_PREVIEW_LIMIT = 12;
+/** Candidates read before the eligibility filter. Above this the total is a lower bound, and says so. */
+export const DEAL_CANDIDATE_CAP = 500;
 
 dashboard.get('/', async (c) => {
   const user = await requireAuth(c);
@@ -87,6 +101,8 @@ dashboard.get('/', async (c) => {
 
   // Run all queries in parallel for speed (Cloudflare Workers loves this).
   // Each query is wrapped in safeQuery so one missing table cannot 500 the whole dashboard.
+  const status: SourceStatus = new Map();
+  const sq = <T,>(label: string, fn: () => Promise<T>, fallback: T) => safeQuery(label, fn, fallback, status);
   const [
     deals, scoresMine, syndicatesAll, mySyndicateMemberships, marketplaceCount,
     monthEarnings, lifetimeEarnings, compoundEarnings, pendingPayouts,
@@ -98,9 +114,9 @@ dashboard.get('/', async (c) => {
     // named both, so safeQuery swallowed the error and proprietary_deal_flow
     // was empty for every role. Dashboard.jsx only counts this list, so the
     // columns are dropped rather than replaced with a subquery nothing reads.
-    safeQuery('deals', () =>
+    sq('deals', () =>
       isAdmin
-        ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`
+        ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`
         : isFounder
           // `submitted_by` is a tickets column; projects owns founder_id.
           // The select list above was corrected once already — the WHERE was
@@ -115,50 +131,50 @@ dashboard.get('/', async (c) => {
           // Two full literals; the tagged template binds its values, but the
           // clause itself would still be assembled text if it were built.
           ? (dashCompanyId === null
-              ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`
-              : sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND (company_id = ${dashCompanyId} OR company_id IS NULL) AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`)
+              ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`
+              : sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND (company_id = ${dashCompanyId} OR company_id IS NULL) AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`)
           // Task #3 (Y-1) — investors get the founder_user_id JOIN so
           // the Trust Center mask can null sensitive fields when no
           // active pairwise NDA exists. Partners stay un-masked.
           : isInvestor
-            ? sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.created_at, u.id AS founder_user_id FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.status NOT IN ('rejected', 'archived') AND p.deleted_at IS NULL AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`
-            : sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.created_at FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} WHERE p.status NOT IN ('rejected', 'archived') AND p.deleted_at IS NULL AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT 12`,
+            ? sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.created_at, u.id AS founder_user_id FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.status NOT IN ('rejected', 'archived') AND p.deleted_at IS NULL AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`
+            : sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.created_at FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} WHERE p.status NOT IN ('rejected', 'archived') AND p.deleted_at IS NULL AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`,
       [] as any[]),
-    safeQuery('scoresMine', () => sql`
+    sq('scoresMine', () => sql`
       SELECT ms.*, p.name as deal_name, p.sector, p.stage
       FROM match_scores ms LEFT JOIN projects p ON p.id = ms.deal_id
       WHERE ms.user_id = ${user.id} ORDER BY ms.score DESC LIMIT 10
     `, [] as any[]),
-    safeQuery('syndicatesAll', () => sql`
+    sq('syndicatesAll', () => sql`
       SELECT s.id, s.name, s.description, s.target_cents, s.min_commitment_cents, s.created_at,
         (SELECT COUNT(*) FROM syndicate_members WHERE syndicate_id = s.id) as members,
         (SELECT COALESCE(SUM(commitment_cents), 0) FROM syndicate_members WHERE syndicate_id = s.id) as committed_cents
       FROM syndicates s WHERE s.status = 'open' ORDER BY s.created_at DESC LIMIT 8
     `, [] as any[]),
-    safeQuery('mySyndicateMemberships', () => sql`
+    sq('mySyndicateMemberships', () => sql`
       SELECT sm.commitment_cents, sm.joined_at, s.id, s.name, s.status, s.target_cents
       FROM syndicate_members sm JOIN syndicates s ON s.id = sm.syndicate_id
       WHERE sm.user_id = ${user.id} ORDER BY sm.joined_at DESC LIMIT 10
     `, [] as any[]),
-    safeQuery('marketplaceCount', () =>
+    sq('marketplaceCount', () =>
       sql`SELECT COUNT(*) as n FROM marketplace_profiles WHERE availability = 'available'`,
       [{ n: 0 }] as any[]),
-    safeQuery('monthEarnings', () =>
+    sq('monthEarnings', () =>
       sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', 'start of month')`,
       [{ c: 0 }] as any[]),
-    safeQuery('lifetimeEarnings', () =>
+    sq('lifetimeEarnings', () =>
       sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id}`,
       [{ c: 0 }] as any[]),
-    safeQuery('compoundEarnings', () =>
+    sq('compoundEarnings', () =>
       sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND source_type LIKE '%_compound'`,
       [{ c: 0 }] as any[]),
-    safeQuery('pendingPayouts', () =>
+    sq('pendingPayouts', () =>
       sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND status = 'accrued'`,
       [{ c: 0 }] as any[]),
-    safeQuery('chainCounts', () =>
+    sq('chainCounts', () =>
       sql`SELECT level, COUNT(*) as n FROM referral_chains WHERE root_referrer_id = ${user.id} GROUP BY level`,
       [] as any[]),
-    safeQuery('topReferrers', () => sql`
+    sq('topReferrers', () => sql`
       SELECT u.id, u.name, u.email, COUNT(DISTINCT rc.user_id) as downstream
       FROM referral_chains my_l1
       JOIN users u ON u.id = my_l1.user_id
@@ -168,20 +184,20 @@ dashboard.get('/', async (c) => {
       HAVING COUNT(DISTINCT rc.user_id) > 0
       ORDER BY downstream DESC LIMIT 5
     `, [] as any[]),
-    safeQuery('recentCommissions', () =>
+    sq('recentCommissions', () =>
       sql`SELECT id, amount_cents, source_type, description, status, created_at FROM commissions WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 10`,
       [] as any[]),
-    safeQuery('earningsSeries', () => sql`
+    sq('earningsSeries', () => sql`
       SELECT DATE(created_at) as day, SUM(amount_cents) as cents
       FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', ${`-${days} days`})
       GROUP BY DATE(created_at) ORDER BY day
     `, [] as any[]),
-    safeQuery('myTasks', () => sql`
+    sq('myTasks', () => sql`
       SELECT t.id, t.title, t.status, t.priority, t.due_date, w.title as workflow_title, w.type
       FROM workflow_tasks t JOIN workflows w ON w.id = t.workflow_id
       WHERE t.assignee_user_id = ${user.id} AND t.status != 'done' ORDER BY t.due_date IS NULL, t.due_date LIMIT 10
     `, [] as any[]),
-    safeQuery('notifications', () => sql`
+    sq('notifications', () => sql`
       SELECT 'commission' as kind, id, description as title, amount_cents, created_at FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', '-7 days')
       UNION ALL
       SELECT 'syndicate' as kind, id, name as title, NULL as amount_cents, created_at FROM syndicates WHERE created_by != ${user.id} AND status = 'open' AND created_at >= datetime('now', '-7 days')
@@ -201,7 +217,7 @@ dashboard.get('/', async (c) => {
   // Personalized "AI-recommended syndicates" for partners — open syndicates whose deal_id has a high match_score for the user
   let recommendedSyndicates: any[] = [];
   if (isPartner || isAdmin) {
-    recommendedSyndicates = await safeQuery('recommendedSyndicates', () => sql`
+    recommendedSyndicates = await sq('recommendedSyndicates', () => sql`
       SELECT s.id, s.name, s.description, s.target_cents, s.min_commitment_cents, ms.score, ms.explanation
       FROM syndicates s
       JOIN match_scores ms ON ms.deal_id = s.deal_id AND ms.user_id = ${user.id}
@@ -218,18 +234,40 @@ dashboard.get('/', async (c) => {
   // founder/project payload is reduced to FOUNDER_PUBLIC_KEYS until
   // the pairwise NDA is active. Fail-closed: rows whose
   // founder_user_id couldn't be resolved are masked too.
-  let dealsMasked: any[] = deals as any[];
+  // D4620 (#4620): eligibility comes BEFORE the preview is cut. The read above
+  // takes candidates (newest first, up to DEAL_CANDIDATE_CAP), the filter below
+  // removes what this viewer may not find, and only then are the first
+  // DEAL_PREVIEW_LIMIT rows kept. Cutting first left a preview of 12 candidates
+  // of which some were then dropped (12 became 9 of 14 eligible), or empty
+  // when only older rows qualified.
+  const dealRows = deals as any[];
+  const dealsCapped = dealRows.length > DEAL_CANDIDATE_CAP;
+  const dealCandidates = dealsCapped ? dealRows.slice(0, DEAL_CANDIDATE_CAP) : dealRows;
+  let eligibleDeals = dealCandidates;
   if (isInvestor) {
     // D702 — this list names ventures, so one whose founder chose "through
     // introductions only" is left out for an investor without an introduction.
-    const findable = await keepFindable(c.env, user, deals as any[], (row: any) => row.id);
+    eligibleDeals = await keepFindable(c.env, user, dealCandidates, (row: any) => row.id);
+  }
+  const dealPreview = eligibleDeals.slice(0, DEAL_PREVIEW_LIMIT);
+  let dealsMasked: any[] = dealPreview;
+  if (isInvestor) {
     dealsMasked = await Promise.all(
-      findable.map(row => maskFounderForInvestor(c.env, row, {
+      dealPreview.map(row => maskFounderForInvestor(c.env, row, {
         viewerRole: 'investor',
         viewerUserId: user.id,
       })),
     );
   }
+  // `total` is the count of eligible rows, or null when the read failed (never
+  // 0 for a stand-in). Above the candidate cap it is a floor, and says so.
+  const dealsReadable = status.get('deals') === 'ready';
+  const proprietaryDealFlow = {
+    total: dealsReadable ? eligibleDeals.length : null,
+    total_is_lower_bound: dealsReadable && dealsCapped,
+    preview_limit: DEAL_PREVIEW_LIMIT,
+    previewed: dealsMasked.length,
+  };
 
   // Audit dashboard view (admins only, low volume)
   if (isAdmin) {
@@ -267,6 +305,10 @@ dashboard.get('/', async (c) => {
       marketplace_available: parseInt((marketplaceCount as any)[0]?.n) || 0,
     },
     proprietary_deal_flow: dealsMasked,
+    proprietary_deal_flow_summary: proprietaryDealFlow,
+    // D4620: per-read outcome. A zero or an empty list from a read marked
+    // 'unreadable' is a stand-in for a failed read, not a fact.
+    source_status: Object.fromEntries(status),
     ai_scored_opportunities: scoresMine,
     syndication_tools: {
       open_syndicates: syndicatesAll,
@@ -294,6 +336,10 @@ dashboard.get('/', async (c) => {
 
   // Write through both tiers. KV write is fire-and-forget via waitUntil so
   // the response stays fast; KV failure is logged but never blocks.
+  // D4620: a payload that carries a stand-in for a failed read is not kept, so
+  // the next request asks again instead of serving the failure for 60 seconds.
+  const anyUnreadable = [...status.values()].includes('unreadable');
+  if (anyUnreadable) return c.json(payload);
   l1.map.set(ck, { v: payload, exp: Date.now() + L1_TTL_MS });
   if (c.env.TOKENS) {
     const ctx = (c.executionCtx as any);
@@ -322,7 +368,13 @@ dashboard.get('/', async (c) => {
 dashboard.get('/investor-lifecycle', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
-  const n = (rows: any): number => {
+  // D4620 (#4620): a count whose read failed is null, never the 0 its fallback
+  // stands in with. The route says which reads failed (`sources`), so a funnel
+  // stage the page cannot read is not drawn as a stage the investor has not reached.
+  const status: SourceStatus = new Map();
+  const sq = <T,>(label: string, fn: () => Promise<T>, fallback: T) => safeQuery(label, fn, fallback, status);
+  const n = (label: string, rows: any): number | null => {
+    if (status.get(label) !== 'ready') return null;
     const r = Array.isArray(rows) ? rows[0] : null;
     return r ? parseInt((r as any).n, 10) || 0 : 0;
   };
@@ -331,23 +383,23 @@ dashboard.get('/investor-lifecycle', async (c) => {
     watching, watchlistTotal, intros, introsPending, dealrooms,
     ddTotal, ddOpen, icEngaged, committed, positions, listingsOpen,
   ] = await Promise.all([
-    safeQuery('inv:watching', () => sql`SELECT COUNT(*) AS n FROM watchlist_items WHERE owner_user_id = ${user.id} AND status = 'watching'`, [{ n: 0 }]),
-    safeQuery('inv:watchlistTotal', () => sql`SELECT COUNT(*) AS n FROM watchlist_items WHERE owner_user_id = ${user.id} AND status != 'archived'`, [{ n: 0 }]),
-    safeQuery('inv:intros', () => sql`SELECT COUNT(*) AS n FROM investor_introductions WHERE investor_user_id = ${user.id}`, [{ n: 0 }]),
-    safeQuery('inv:introsPending', () => sql`SELECT COUNT(*) AS n FROM investor_introductions WHERE investor_user_id = ${user.id} AND status = 'pending'`, [{ n: 0 }]),
-    safeQuery('inv:dealrooms', () => sql`SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ${user.id}`, [{ n: 0 }]),
-    safeQuery('inv:ddTotal', () => sql`SELECT COUNT(*) AS n FROM dd_cases WHERE owner_user_id = ${user.id} OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ${user.id})`, [{ n: 0 }]),
-    safeQuery('inv:ddOpen', () => sql`SELECT COUNT(*) AS n FROM dd_cases WHERE (owner_user_id = ${user.id} OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ${user.id})) AND status IN ('open', 'in_review')`, [{ n: 0 }]),
-    safeQuery('inv:icEngaged', () => sql`SELECT COUNT(DISTINCT d.id) AS n FROM ic_decisions d LEFT JOIN ic_votes v ON v.ic_decision_id = d.id WHERE d.created_by = ${user.id} OR v.user_id = ${user.id}`, [{ n: 0 }]),
-    safeQuery('inv:committed', () => sql`SELECT COUNT(*) AS n FROM decision_journal_entries WHERE owner_user_id = ${user.id} AND decision = 'invest'`, [{ n: 0 }]),
-    safeQuery('inv:positions', () => sql`SELECT COUNT(*) AS n FROM portfolio_positions WHERE created_by = ${user.id}`, [{ n: 0 }]),
-    safeQuery('inv:listingsOpen', () => sql`SELECT COUNT(*) AS n FROM secondary_listings WHERE user_id = ${user.id} AND status IN ('open', 'listed', 'matched')`, [{ n: 0 }]),
+    sq('inv:watching', () => sql`SELECT COUNT(*) AS n FROM watchlist_items WHERE owner_user_id = ${user.id} AND status = 'watching'`, [{ n: 0 }]),
+    sq('inv:watchlistTotal', () => sql`SELECT COUNT(*) AS n FROM watchlist_items WHERE owner_user_id = ${user.id} AND status != 'archived'`, [{ n: 0 }]),
+    sq('inv:intros', () => sql`SELECT COUNT(*) AS n FROM investor_introductions WHERE investor_user_id = ${user.id}`, [{ n: 0 }]),
+    sq('inv:introsPending', () => sql`SELECT COUNT(*) AS n FROM investor_introductions WHERE investor_user_id = ${user.id} AND status = 'pending'`, [{ n: 0 }]),
+    sq('inv:dealrooms', () => sql`SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ${user.id}`, [{ n: 0 }]),
+    sq('inv:ddTotal', () => sql`SELECT COUNT(*) AS n FROM dd_cases WHERE owner_user_id = ${user.id} OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ${user.id})`, [{ n: 0 }]),
+    sq('inv:ddOpen', () => sql`SELECT COUNT(*) AS n FROM dd_cases WHERE (owner_user_id = ${user.id} OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ${user.id})) AND status IN ('open', 'in_review')`, [{ n: 0 }]),
+    sq('inv:icEngaged', () => sql`SELECT COUNT(DISTINCT d.id) AS n FROM ic_decisions d LEFT JOIN ic_votes v ON v.ic_decision_id = d.id WHERE d.created_by = ${user.id} OR v.user_id = ${user.id}`, [{ n: 0 }]),
+    sq('inv:committed', () => sql`SELECT COUNT(*) AS n FROM decision_journal_entries WHERE owner_user_id = ${user.id} AND decision = 'invest'`, [{ n: 0 }]),
+    sq('inv:positions', () => sql`SELECT COUNT(*) AS n FROM portfolio_positions WHERE created_by = ${user.id}`, [{ n: 0 }]),
+    sq('inv:listingsOpen', () => sql`SELECT COUNT(*) AS n FROM secondary_listings WHERE user_id = ${user.id} AND status IN ('open', 'listed', 'matched')`, [{ n: 0 }]),
   ]);
 
   // Task #83 — open DD reviewer items assigned to THIS investor feed the
   // lifecycle module's next-actions. Scoped to `assignee_user_id = user` (no
   // cross-user leakage) and only for cases that are still open/in-review.
-  const reviewerRows = await safeQuery('inv:ddNextActions', () => sql`
+  const reviewerRows = await sq('inv:ddNextActions', () => sql`
     SELECT s.title AS section_title, c.uid AS case_uid, c.subject_label AS subject_label
       FROM dd_sections s
       JOIN dd_cases c ON c.id = s.case_id
@@ -368,37 +420,51 @@ dashboard.get('/investor-lifecycle', async (c) => {
   }));
 
   const counts = {
-    watching: n(watching),
-    watchlist_total: n(watchlistTotal),
-    intros: n(intros),
-    intros_pending: n(introsPending),
-    dealrooms: n(dealrooms),
-    dd_total: n(ddTotal),
-    dd_open: n(ddOpen),
-    ic_engaged: n(icEngaged),
-    committed: n(committed),
-    positions: n(positions),
-    listings_open: n(listingsOpen),
+    watching: n('inv:watching', watching),
+    watchlist_total: n('inv:watchlistTotal', watchlistTotal),
+    intros: n('inv:intros', intros),
+    intros_pending: n('inv:introsPending', introsPending),
+    dealrooms: n('inv:dealrooms', dealrooms),
+    dd_total: n('inv:ddTotal', ddTotal),
+    dd_open: n('inv:ddOpen', ddOpen),
+    ic_engaged: n('inv:icEngaged', icEngaged),
+    committed: n('inv:committed', committed),
+    positions: n('inv:positions', positions),
+    listings_open: n('inv:listingsOpen', listingsOpen),
   };
 
   // Ordered funnel. `href` deep-links to the surface that moves the stage.
   const stages = [
     // The Watchlist page was removed (owner, 2026-10-20): Watching opens the
     // deal flow, and Committed the portfolio its commitments become.
-    { id: 'watching', label: 'Watching', count: counts.watching, reached: counts.watching > 0, href: '/deals' },
-    { id: 'intro', label: 'Warm intro', count: counts.intros, reached: counts.intros > 0, href: '/deals' },
-    { id: 'dealroom', label: 'Deal room', count: counts.dealrooms, reached: counts.dealrooms > 0, href: '/deals' },
-    { id: 'diligence', label: 'Diligence', count: counts.dd_total, reached: counts.dd_total > 0, href: '/due-diligence' },
-    { id: 'committed', label: 'Committed', count: counts.committed, reached: counts.committed > 0, href: '/portfolio' },
+    { id: 'watching', label: 'Watching', count: counts.watching, reached: (counts.watching ?? 0) > 0, href: '/deals' },
+    { id: 'intro', label: 'Warm intro', count: counts.intros, reached: (counts.intros ?? 0) > 0, href: '/deals' },
+    { id: 'dealroom', label: 'Deal room', count: counts.dealrooms, reached: (counts.dealrooms ?? 0) > 0, href: '/deals' },
+    { id: 'diligence', label: 'Diligence', count: counts.dd_total, reached: (counts.dd_total ?? 0) > 0, href: '/due-diligence' },
+    { id: 'committed', label: 'Committed', count: counts.committed, reached: (counts.committed ?? 0) > 0, href: '/portfolio' },
   ];
 
   // Current stage = the deepest one with any activity (falls back to the first).
   let currentStage = stages[0].id;
   for (const s of stages) if (s.reached) currentStage = s.id;
 
+  // D4620: every count unreadable means the page has nothing to draw but a
+  // failure; a 200 of nulls would read as an empty funnel.
+  const lifecycleStatus = Object.fromEntries(status);
+  const failedReads = [...status.values()].filter((v) => v === 'unreadable').length;
+  const countReads = Object.keys(lifecycleStatus).filter((k) => k !== 'inv:ddNextActions').length;
+  const failedCounts = Object.entries(lifecycleStatus).filter(([k, v]) => k !== 'inv:ddNextActions' && v === 'unreadable').length;
+  if (countReads > 0 && failedCounts === countReads) {
+    return c.json({ error: 'unreadable', detail: 'The deal lifecycle could not be read.', sources: lifecycleStatus }, 503);
+  }
+
   return c.json({
     stages,
     current_stage: currentStage,
+    // True when a read failed: a null count is unknown, and `current_stage` is
+    // the deepest stage among the stages that could be read.
+    partial: failedReads > 0,
+    sources: lifecycleStatus,
     next_actions: nextActions,
     counts,
     generated_at: new Date().toISOString(),
