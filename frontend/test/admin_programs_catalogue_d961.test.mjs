@@ -329,7 +329,9 @@ test('the catalogue for an Admin: header, period, four tiles, the three charts, 
     assert.match(view.textOf('programs-card-investor-cohorts-status'), /Not built yet$/);
     assert.equal(view.textOf('programs-card-product-testing-foot'), PRODUCT_TESTING_FOOT);
     assert.ok(!view.has('programs-card-product-testing-figure'));
-    assert.equal(view.textOf('programs-card-referral-partners-grant'), 'HQ-held', 'a row names the grant for a screen reader');
+    // D4873: a row draws the offering and the grants as columns; with no grant field read, the grants are not guessed.
+    assert.equal(view.textOf('programs-card-referral-partners-dimensions-offering'), 'Held by HQ');
+    assert.equal(view.textOf('programs-card-referral-partners-dimensions-grants'), NOT_READ_YET);
     const hrefs = view.hrefs();
     assert.ok(!hrefs.includes('/admin/profiling-trends'), 'retired Profiling trends has no catalogue door');
     for (const d of ['/admin/programs/spinout-lab', '/admin/programs/mentor-cohorts', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning',

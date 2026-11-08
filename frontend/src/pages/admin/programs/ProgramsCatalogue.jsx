@@ -139,8 +139,7 @@ function ProgramRow({ p, superAdmin, parts }) {
       <td className={`${cell} text-[12.5px] text-axal-ink dark:text-gray-100`} data-testid={`programs-card-${p.key}-dimensions-access`}>{v.access}</td>
       <td className={`${cell} text-[12.5px] text-axal-ink dark:text-gray-100`} data-testid={`programs-card-${p.key}-dimensions-offering`}>{v.offering}</td>
       <td className={`${cell} text-[12.5px] text-axal-ink dark:text-gray-100`} data-testid={`programs-card-${p.key}-dimensions-grants`}>
-        <span className="sr-only" data-testid={`programs-card-${p.key}-grant`}>{p.grantBadge?.word || (superAdmin ? p.hqGrant : p.grant)}</span>
-        <span aria-hidden="true">{v.grants}</span>
+        {v.grants}
       </td>
       <td className={cell}>{parts.figures || <span className={SUB}>—</span>}{parts.foot ? <p className={`m-0 ${SUB}`} data-testid={`programs-card-${p.key}-foot`}>{parts.foot}</p> : null}</td>
       <td className={`${cell} text-right`}>{parts.door}</td>
