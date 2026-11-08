@@ -244,6 +244,8 @@ export default function PitchEditor() {
   // Share and Export need only the version on screen, so the page opens them
   // itself, editor or not; every other ⋯ item is the editor's.
   const [shareDialog, setShareDialog] = useState(null);
+  // D4598: the saved version the Share/Export gate checked, `{ id, version }`; null when a dialog opens without one.
+  const [checked, setChecked] = useState(null);
   // D1577 (#3824): the other members on the deck. Null (nothing drawn) until presence is switched on.
   const presence = useDeckPresence(current?.id ?? null, { live: !readOnly && !phone });
   const youId = presence.you?.user_id ?? user?.id ?? null;
@@ -268,7 +270,7 @@ export default function PitchEditor() {
     <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}}
       onReviewCards={(uid) => { setShareDialog(null); actionRef.current?.('review_cards', uid); }} />
   ) : shareDialog === 'export' && current ? (
-    <ExportDialog versions={versionList} current={current} onClose={() => setShareDialog(null)} />
+    <ExportDialog versions={versionList} current={current} checked={checked} onClose={() => setShareDialog(null)} />
   ) : null;
   // A decision in the header re-reads the versions without blanking them, so the
   // open Editor (keyed to the version) keeps its unsaved cards.
@@ -322,7 +324,7 @@ export default function PitchEditor() {
         onOpenAsk={onOpenAsk}
         onChrome={setChrome}
         actionRef={actionRef}
-        onSend={setShareDialog}
+        onSend={(kind, cleared) => { setChecked(cleared ?? null); setShareDialog(kind); }}
       />
     </Shell>
   );
@@ -440,6 +442,12 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   // D1370 (#3661): Check before you send, on the deck as it is on screen; a result for another state reads "Out of date".
   const working = useMemo(() => workingDeck(base.deck, cards, theme), [base.deck, cards, theme]);
   const pf = usePreflight({ deck: working, kit: kitData, refresh: refresh.status === 'ok' ? refresh.data : null, readOnly });
+  // D4598 (#4598): Share and Export send the SAVED version. With unsaved edits, the gate checks that version's own
+  // content with a second run, so a clean result on edits cannot authorize the older saved artifact. With none, the
+  // working deck is the saved one and the one run serves both.
+  const savedDeck = useMemo(() => workingDeck(base.deck, base.cards, base.theme), [base.deck, base.cards, base.theme]);
+  const gatePf = usePreflight({ deck: savedDeck, kit: kitData, refresh: refresh.status === 'ok' ? refresh.data : null, readOnly, dismissedFrom: pf.dismissed });
+  const gp = dirty ? gatePf : pf;
   const [gate, setGate] = useState(null);
   const [finding, setFinding] = useState(null);
   const colours = cardColours(theme, kitData);
@@ -700,7 +708,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     // D1370 (#3661): ⋯ › Before you send › Check before you send, and the toolbar chip. The first open runs it.
     if (id === 'preflight') { setFinding(null); setSheet('preflight'); if (!pf.result && !pf.running) pf.run(); return; }
     // D1370 (pf1c/pf1d): Share and Export from the page: check first, then the gate or the dialog.
-    if (id === 'gate') { if (readOnly || (arg !== 'share' && arg !== 'export')) return; setGate(arg); if (!pf.current && !pf.running) pf.run(); return; }
+    if (id === 'gate') { if (readOnly || (arg !== 'share' && arg !== 'export')) return; setGate(arg); if (!gp.current && !gp.running) gp.run(); return; }
     // D1552 (#3799): ⋯ › Whole deck · uses AI › Fix with critique.
     if (id === 'critique') { if (!readOnly) setDialog({ kind: 'critique' }); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
@@ -748,13 +756,15 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     setSheet(null); setGate(null); setFinding(row.id);
   };
   const stripRows = pf.groups ? [...pf.groups.fix, ...pf.groups.look, ...pf.groups.unchecked] : [];
-  const gateView = gate && !pf.running && pf.current ? gateOf(pf.groups, gate) : null;
+  const gateView = gate && !gp.running && gp.current ? gateOf(gp.groups, gate) : null;
+  // The saved version the gate checked, handed to the dialog it opens.
+  const cleared = { id: base.deck.id ?? null, version: base.deck.version ?? null };
   useEffect(() => {
-    if (!gate || pf.running) return;
-    // A check that finished on an older state of the deck runs again on this one.
-    if (!pf.current) { pf.run(); return; }
-    if (gateView && !gateView.open) { setGate(null); onSend?.(gate); }
-  }, [gate, pf.running, pf.current, gateView?.open]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!gate || gp.running) return;
+    // A check that finished on an older state of the version (or of the edits) runs again on this one.
+    if (!gp.current) { gp.run(); return; }
+    if (gateView && !gateView.open) { setGate(null); onSend?.(gate, cleared); }
+  }, [gate, gp.running, gp.current, gateView?.open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const staleMap = useMemo(() => {
     const m = new Map();
@@ -925,9 +935,17 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} deckId={aiOn ? base.deck.id : null} tokensOut={outOfTokens}
           onTokens={onTokens} onProposals={onProposals} onOpenAsk={onOpenAsk} onShow={show} onClose={() => setSheet(null)} />
       ) : null}
-      {gate && (pf.running || gateView?.open) ? (
-        <PreflightGate gate={gateView} progress={pf.running ? pf.progress : null} version={base.deck.version ?? null} dirty={dirty} onShow={show}
-          onFix={() => { setGate(null); setSheet('preflight'); }} onAnyway={() => { const k = gate; setGate(null); onSend?.(k); }} onClose={() => setGate(null)} />
+      {gate && (gp.running || gateView?.open) ? (
+        <PreflightGate gate={gateView} progress={gp.running ? gp.progress : null} version={base.deck.version ?? null} dirty={dirty}
+          onShow={dirty ? null : show} onSave={dirty && !readOnly ? () => { setGate(null); setDialog({ kind: 'save' }); } : null}
+          onFix={() => { setGate(null); setSheet('preflight'); }} onAnyway={() => { const k = gate; setGate(null); onSend?.(k, cleared); }} onClose={() => setGate(null)} />
+      ) : null}
+      {/* D4598: the saved version's own check, measured off screen like the panel's. */}
+      {dirty && gatePf.running && gatePf.running.done < gatePf.running.total ? (
+        <PreflightMeasure key={`saved-${gatePf.running.done}`} card={gatePf.running.snapshot.slides[gatePf.running.done]} index={gatePf.running.done} theme={gatePf.running.snapshot.theme} kit={kitData} onMeasured={gatePf.onMeasured} />
+      ) : null}
+      {dirty && !gatePf.running && gatePf.retrying && gatePf.snapshot ? (
+        <PreflightMeasure key={`saved-retry-${gatePf.retrying.index}`} card={gatePf.snapshot.slides[gatePf.retrying.index]} index={gatePf.retrying.index} theme={gatePf.snapshot.theme} kit={kitData} onMeasured={gatePf.onRetried} />
       ) : null}
       {pf.running && pf.running.done < pf.running.total ? (
         <PreflightMeasure key={pf.running.done} card={pf.running.snapshot.slides[pf.running.done]} index={pf.running.done} theme={pf.running.snapshot.theme} kit={kitData} onMeasured={pf.onMeasured} />
