@@ -46,6 +46,7 @@ write a bordered white box with a title, it already exists here.
 | `linkedinBrand.js` | D1355: official LinkedIn asset provenance, hashes, approved theme variants and minimum dimensions. |
 | `LinkedInSignInButton.jsx` | D1355: unmodified official sign-in artwork at actual LinkedIn OAuth entry points. |
 | `AskProposal.jsx` | D4484: shared Ask proposal presentation; its host owns Accept, Edit and Discard. |
+| `railOperations.js` | D4860 part 2 (#4860, PL-12): an operations rail (`WorkerRail`'s `operations` prop) starts collapsed, opens for the visit when asked, and stays open on a page the viewer pinned (`worker_rail_pinned_pages`). It never touches the shared collapse preference. |
 
 ## Rules
 
