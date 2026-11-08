@@ -158,12 +158,11 @@ const labelOf = (v: unknown, max = 80): string | null => {
 const plain = (p: string) => p.replace(/[’‘]/g, "'").replace(/(?:^|(?<=[^a-z]))can(?:'t| not)(?=$|[^a-z])/g, 'cannot');
 /** Where `term` first occurs as a whole word in `p` at or after `from`. */
 function wordAt(term: string, p: string, from = 0): { start: number; end: number } | null {
-  const re = new RegExp(`(?:^|[^a-z0-9])(${esc(plain(term.toLowerCase()))})(?=$|[^a-z0-9])`, 'g');
-  re.lastIndex = Math.max(0, from - 1);
-  for (let m = re.exec(p); m; m = re.exec(p)) {
-    const start = m.index + m[0].length - m[1].length;
-    if (start >= from) return { start, end: start + m[1].length };
-    re.lastIndex = m.index + 1;
+  const t = plain(term.toLowerCase());
+  if (!t) return null;
+  const inWord = (c: string | undefined) => c !== undefined && /[a-z0-9]/.test(c);
+  for (let i = p.indexOf(t, Math.max(0, from)); i !== -1; i = p.indexOf(t, i + 1)) {
+    if (!inWord(p[i - 1]) && !inWord(p[i + t.length])) return { start: i, end: i + t.length };
   }
   return null;
 }
