@@ -377,6 +377,13 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       let last = -1;
       if (capture) {
         const out = await capture.stop();
+        // D4624: a slice this device could not write is not lost yet. The capture
+        // is kept, so Retry stops it again and tries the write again; `finish`
+        // is never sent with a gap.
+        if (out?.unsaved > 0) {
+          failWith('Part of the recording could not be saved on this device. Free some space, then try again.');
+          return 'failed';
+        }
         if (Number.isFinite(out?.lastSeq)) last = out.lastSeq;
         capture = null;
       } else {

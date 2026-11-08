@@ -97,6 +97,19 @@ const licenceEventsDdl = () => ddlFrom(
 /** Migration 264's `admin_notices`, with its own CHECKs. */
 const noticesDdl = () => ddlFrom('264_admin_notices.sql', 'CREATE TABLE IF NOT EXISTS admin_notices');
 
+/**
+ * #4686 — the revision ledger terminate now commits into: migration 295's
+ * `licence_push_pending` and the 202611071927 migration's tables and ALTERs,
+ * minus the `branch_licence` ones (a branch's table, not part of this fixture).
+ */
+const syncLedgerDdl = () => {
+  const dir = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
+  const m295 = readFileSync(resolve(dir, '295_licence_push_pending.sql'), 'utf8').replace(/^--.*$/gm, '');
+  const m4686 = readFileSync(resolve(dir, '202611071927_licence_sync_revision.sql'), 'utf8')
+    .replace(/^--.*$/gm, '').split(';').filter((x) => x.trim() && !/branch_licence/.test(x)).join(';\n');
+  return `${m295};\n${m4686};`;
+};
+
 function freshDb({ withNotices = true, status = 'active' } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(`
@@ -135,6 +148,7 @@ function freshDb({ withNotices = true, status = 'active' } = {}) {
     CREATE TABLE licence_deployments (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_uid TEXT, code TEXT, hostname TEXT, status TEXT);
   `);
   db.exec(licenceEventsDdl());
+  db.exec(syncLedgerDdl());
   if (withNotices) db.exec(noticesDdl());
   // D4694 — renewing bumps the terms revision; the column is read from its migration.
   db.exec(licenceRevisionAlters('territory_licences'));

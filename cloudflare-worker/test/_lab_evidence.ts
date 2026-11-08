@@ -19,6 +19,9 @@ import type { DatabaseSync } from 'node:sqlite';
 
 const MIGRATION = readFileSync(
   resolve(new URL('../sql/migrations/202611071700_spinout_lab_enrollments.sql', import.meta.url).pathname), 'utf8');
+// D4659: the graduation view and the venture events, applied with it.
+const GRADUATION = readFileSync(
+  resolve(new URL('../sql/migrations/202611071800_lab_graduation_venture.sql', import.meta.url).pathname), 'utf8');
 
 function statements(sql: string): string[] {
   const noComments = sql.split('\n').filter((l) => !/^\s*--/.test(l)).join('\n');
@@ -44,6 +47,8 @@ const PREREQUISITES: Record<string, string> = {
   user_spinout_flags: 'user_id INTEGER PRIMARY KEY, spinout_lab_admitted INTEGER, spinout_lab_cohort TEXT',
   spinout_lab_milestones: 'id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT DEFAULT (datetime(\'now\')), UNIQUE (user_id, milestone_key)',
   spinout_moderation_cases: 'id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, reason_code TEXT, opened_at TEXT, resolved_at TEXT',
+  spinout_certificates: 'id INTEGER PRIMARY KEY, credential_id TEXT, user_id INTEGER, project_id INTEGER, status TEXT, public_issued_on TEXT',
+  projects: 'id INTEGER PRIMARY KEY, founder_id INTEGER, name TEXT, deleted_at TEXT',
 };
 
 export function labEnrollmentSchema(db: DatabaseSync): void {
@@ -53,6 +58,21 @@ export function labEnrollmentSchema(db: DatabaseSync): void {
     db.exec(baselineDdl(t) ?? `CREATE TABLE ${t} (${cols})`);
   }
   for (const s of statements(MIGRATION)) db.exec(s);
+  for (const s of statements(GRADUATION)) db.exec(s);
+}
+
+/** Every requirement of weeks 1-4 (the D4659 graduation rule), as recorded rows. */
+export const GRADUATION_KEYS = ['project_created', 'customer_interview_logged_1', 'customer_interview_logged_2',
+  'customer_interview_logged_3', 'okrs_created', 'brand_basics_filled', 'pitch_deck_drafted', 'scoring_run_completed',
+  'advisor_meeting_booked', 'incorporation_completed'];
+
+/** Record a whole programme for `userId` (rows only, no evidence), completed by `at` (the last). */
+export function graduate(db: DatabaseSync, userId: number, at = '2026-10-04 09:00:00', keys = GRADUATION_KEYS): void {
+  const week = (k: string) => (k === 'incorporation_completed' ? 4 : /okrs|brand|pitch/.test(k) ? 2 : /scoring|advisor/.test(k) ? 3 : 1);
+  for (const k of keys) {
+    db.prepare('INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (?, ?, ?, ?)')
+      .run(userId, week(k), k, at); // the programme is complete at `at`
+  }
 }
 
 /** Each evidence table with the columns the checks read. Created only when absent. */
