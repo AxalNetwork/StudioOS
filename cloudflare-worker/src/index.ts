@@ -2372,6 +2372,17 @@ export default {
             taskFailed('meeting bot operations');
           }
         }
+        // D4559 (#4559) part 2: platform capacity. Every 15 minutes at :11 the
+        // alert episodes move; at 04:11 the day's snapshot is also kept. HQ only:
+        // the alerts go to HQ's Super Admins. It never throws into the tick.
+        if (hqCadences && now.getUTCMinutes() % 15 === 11) {
+          try {
+            const { sweepPlatformCapacity } = await import('./services/platformCapacityHistory');
+            await sweepPlatformCapacity(env, now, { snapshot: now.getUTCHours() === 4 && now.getUTCMinutes() === 11 });
+          } catch {
+            taskFailed('platform capacity');
+          }
+        }
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
