@@ -279,7 +279,13 @@ de797bc2c5a7121c7ed9ea713a7adeaf32ad46be:cloudflare-worker/test/meet_bot_signin_
 # The first copy of this entry, in commit 93be6c5e10, quoted that line, so its
 # comment can match the same rule (5160c63c's did, above). Listed so it cannot.
 93be6c5e10c1823bf247eda03d0c49d4106117e7:.gitleaksignore:generic-api-key:271
-# #4720: af4b56516d's first comment for the entries above quoted the deck-field
-# fixture they ignore, so the comment matched generic-api-key itself; the next
-# commit removed that comment, and this lists the one finding left in history.
+# #4595 (#4720): generic-api-key reads deck-field fixtures (an object whose key
+# names a deck field, kind paragraph) in two test files as key/value secrets.
+# They are field names, never credentials; 2df5404eff reworded the fixtures, and
+# the three findings left in commit 92ce9678 are listed here, one per finding.
+92ce9678147824a3125bcdaedd22a7e8d3d5880a:cloudflare-worker/test/deck_share_d902.test.ts:generic-api-key:284
+92ce9678147824a3125bcdaedd22a7e8d3d5880a:cloudflare-worker/test/deck_access_disclosure_4595.test.ts:generic-api-key:28
+92ce9678147824a3125bcdaedd22a7e8d3d5880a:cloudflare-worker/test/deck_access_disclosure_4595.test.ts:generic-api-key:29
+# af4b56516d's first wording of this comment quoted that fixture and so matched
+# the same rule; its one finding is listed too.
 af4b56516d9a4bdbd3751b585de0c943cd275ab2:.gitleaksignore:generic-api-key:283
