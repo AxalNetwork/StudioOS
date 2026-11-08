@@ -284,7 +284,7 @@ test('recurring revenue is active retainers\' monthly amounts: ended ones are ou
   const row = (id: number) => a.items.find((x: any) => x.engagement_id === id).retainer;
   assert.deepEqual([row(602).monthly_cents, row(602).amount_cents, row(602).cadence], [100000, 300000, 'quarterly'], 'a "Monthly" figure is never the raw quarterly amount');
   assert.deepEqual([row(603).active, row(601).active, row(605).monthly_cents], [false, true, null]);
-  assert.match(a.mrr_basis, /^2 active retainers with a recorded amount; quarterly amounts divided by three; 1 ended not counted\.$/);
+  assert.match(a.mrr_basis, /^2 active retainers with a recorded amount; normalised to a month \(quarterly divided by three\); 1 ended not counted\.$/);
   assert.match(a.mrr_note, /1 retainer has no amount recorded/);
   assert.equal(a.items.every((x: any) => x.engagement_id !== 604), true, 'another company\'s retainer is not in this company\'s book');
 
