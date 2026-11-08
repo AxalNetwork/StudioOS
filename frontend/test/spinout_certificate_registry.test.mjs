@@ -133,9 +133,11 @@ test('the page fetches the caller’s own credential', () => {
   assert.match(PAGE, /setCredential\(cert\)/);
 });
 
-test('a missing credential is a normal state, not an error', () => {
-  // A founder who has not been issued one must still get a working page.
-  assert.match(PAGE, /spinoutCertificateMine\(\)\.then\(\(r\) => r\?\.certificate \?\? null\)\.catch\(\(\) => null\)/);
+test('a missing credential is a normal state, not an error; a failed read is recorded, not read as "none"', () => {
+  // A founder who has not been issued one must still get a working page: `certificate: null` is null, not a failure.
+  // #4661: a read that FAILED is not that. It is recorded (`failed = true`), and the page says it could not be read
+  // (spinout_retained_access_4661.test.mjs mounts both: no row yet opens the page, a failed read is unreadable).
+  assert.match(PAGE, /spinoutCertificateMine\(\)\.then\(\(r\) => r\?\.certificate \?\? null\)\.catch\(\(\) => \{ failed = true; return null; \}\)/);
 });
 
 test('all three lifecycle states render', () => {
