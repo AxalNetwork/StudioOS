@@ -518,3 +518,13 @@ test('D5032: with no version and no branch, the propagation is still not complet
   const p = slaPropagation({ available: true, version: null, source: null, applied_at: null }, [], (c) => c);
   assert.equal(p.complete, false, 'an unnumbered policy was called applied everywhere');
 });
+
+test('D5032: a tier store without all three tiers sends no SLA section, and the licence push is not made partial by it', async () => {
+  const db = hqDb();
+  db.exec("DELETE FROM hq_support_sla_tiers WHERE tier = 'P3'");
+  const bb = binding(branchDb());
+  const { pushLicenceToBranch } = await import('../src/services/licencePush.ts');
+  const res = await pushLicenceToBranch(hqEnv(db, { BRANCH_FR: bb.stub }), 1);
+  assert.equal(res.ok, true, JSON.stringify(res));
+  assert.equal('support_sla_json' in bb.records[0], false, 'a partial policy was sent');
+});

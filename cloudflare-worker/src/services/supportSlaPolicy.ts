@@ -257,15 +257,19 @@ export type SlaPolicyCopy = { version: number; tiers: Array<{ id: SupportSlaTier
  * the hours are HQ's live ones either way, and a branch needs a number to
  * order copies by. Throws when the tiers or the version store cannot be read,
  * so the push reports the section as unreadable rather than sending a guess.
+ * Null when the store holds no complete policy (nothing to send).
  */
-export async function slaPolicyForCopy(env: { DB: import('../types').Env['DB'] }): Promise<SlaPolicyCopy> {
+export async function slaPolicyForCopy(env: { DB: import('../types').Env['DB'] }): Promise<SlaPolicyCopy | null> {
   // Raw reads, so a database without the store throws "no such table" and the
   // push omits the section (nothing recorded), while any other failure makes
   // the push partial — the licence copy's #4686 rule.
   const res = await env.DB.prepare('SELECT tier, hours, description FROM hq_support_sla_tiers ORDER BY tier')
     .all<{ tier: string; hours: number; description: string }>();
   const by = new Map((res.results || []).map((r) => [String(r.tier), r]));
-  if (!SLA_TIERS.every((t) => by.has(t))) throw new Error('The SLA tier store is missing a tier.');
+  // A store without all three tiers holds no policy to send: nothing recorded,
+  // like a missing table, so the copy goes without the section and the branch
+  // keeps the hours it has. Never a partial policy.
+  if (!SLA_TIERS.every((t) => by.has(t))) return null;
   const read = () => env.DB.prepare('SELECT version FROM support_sla_policy_state WHERE id = 1').first<{ version: number }>();
   let row = await read();
   if (!row) {

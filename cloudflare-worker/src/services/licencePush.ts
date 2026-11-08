@@ -216,7 +216,8 @@ export async function assembleLicenceRecordDetailed(
   // and the branch keeps the hours it has; any other failure makes the push
   // partial rather than claiming the branch was sent the policy.
   try {
-    record.support_sla_json = JSON.stringify(await slaPolicyForCopy(env));
+    const policy = await slaPolicyForCopy(env);
+    if (policy) record.support_sla_json = JSON.stringify(policy);
   } catch (e) {
     if (!isMissingTable(e)) unreadable.push('support_sla');
     console.warn('[licencePush] support SLA policy unreadable; the copy goes without it', (e as Error).message);
