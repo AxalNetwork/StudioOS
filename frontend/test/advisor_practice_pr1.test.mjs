@@ -31,7 +31,7 @@ import { codeOnly } from './_codeOnly.mjs';
 // The pure module, not the page: importing the page pulls React and a `.css`
 // through its component tree, which the loader cannot resolve. The split is
 // deliberate — see `opportunityLog.js`'s own docblock.
-import { classifyBooking, SYSTEM_CANCELS } from '../src/pages/advisor/practice/opportunityLog.js';
+import { acceptanceRate, classifyBooking, SYSTEM_CANCELS } from '../src/pages/advisor/practice/opportunityLog.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/advisor/practice/OpportunitiesZone.jsx');
@@ -87,23 +87,44 @@ test('the two cancellations the WORKER writes are withdrawn, not declined', () =
     assert.equal(classifyBooking(booking({ status: 'cancelled', cancel_reason: reason }), NOW),
       'withdrawn', reason);
   }
-  // A reason a PERSON typed is a real decline.
-  assert.equal(
-    classifyBooking(booking({ status: 'cancelled', cancel_reason: 'Wanted implementation' }), NOW),
-    'declined',
-  );
-  // ...and so is a cancellation with no reason at all: it is still an answer.
-  assert.equal(classifyBooking(booking({ status: 'cancelled', cancel_reason: null }), NOW), 'declined');
+  assert.equal(classifyBooking(booking({ status: 'cancelled', cancelled_by: 'system' }), NOW), 'withdrawn');
 });
 
-test('the accept rate is over answered requests only', () => {
-  // Reading the expression rather than re-implementing it: the denominator is
-  // what makes this right or wrong, and it must exclude both the withdrawn
-  // (not the advisor's answer) and the expired (no answer at all).
+test('#4702: the advisor\'s recorded answer decides the bucket, not the status a later cancel left', () => {
+  // A decline the advisor gave is a decline, whatever reason they typed or left blank.
+  assert.equal(classifyBooking(booking({ status: 'cancelled', advisor_decision: 'declined', cancel_reason: null }), NOW), 'declined');
+  assert.equal(classifyBooking(booking({ status: 'cancelled', advisor_decision: 'declined', cancel_reason: 'Wanted implementation' }), NOW), 'declined');
+  // The client cancelling a session the advisor ACCEPTED is still an accept.
+  assert.equal(classifyBooking(booking({ status: 'cancelled', advisor_decision: 'accepted', cancelled_by: 'client', cancel_reason: 'Schedule clash' }), NOW), 'accepted');
+  // The client withdrawing a request before any answer is a withdrawal, not a decline.
+  assert.equal(classifyBooking(booking({ status: 'cancelled', advisor_decision: null, cancelled_by: 'client', cancel_reason: 'Changed my mind' }), NOW), 'withdrawn');
+  // A cancelled row from before the answer was recorded could be either: it is counted as neither.
+  assert.equal(classifyBooking(booking({ status: 'cancelled', cancel_reason: 'Wanted implementation' }), NOW), 'unrecorded');
+  assert.equal(classifyBooking(booking({ status: 'cancelled', cancel_reason: null }), NOW), 'unrecorded');
+});
+
+test('the accept rate is over answered requests only, and a client cancelling an accepted session does not lower it', () => {
+  // Mutation checked: classifying every cancelled row as declined → the client cancellation below lowers the rate.
+  const rows = [
+    booking({ status: 'confirmed' }),
+    booking({ status: 'cancelled', advisor_decision: 'accepted', cancelled_by: 'client' }),   // accepted, then the client left
+    booking({ status: 'completed' }),
+    booking({ status: 'cancelled', advisor_decision: 'declined' }),                           // the one real decline
+    booking({ status: 'cancelled', cancelled_by: 'client' }),                                 // withdrawn before any answer
+    booking({ status: 'cancelled', cancel_reason: 'slot_cancelled' }),                        // the slot went
+    booking({ status: 'cancelled', cancel_reason: 'old row, answer never stored' }),          // unrecorded
+    booking({ status: 'pending', startsAt: '2026-01-01T00:00:00Z' }),                         // expired unanswered
+  ];
+  const counts = { awaiting: 0, accepted: 0, declined: 0, expired: 0, withdrawn: 0, unrecorded: 0 };
+  for (const r of rows) counts[classifyBooking(r, NOW)] += 1;
+  assert.deepEqual(counts, { awaiting: 0, accepted: 3, declined: 1, expired: 1, withdrawn: 2, unrecorded: 1 });
+  assert.equal(acceptanceRate(counts), 75, '3 accepted of 4 answered');
+  assert.equal(acceptanceRate({ accepted: 0, declined: 0 }), null, 'an empty denominator reports nothing, not 0%');
+  assert.equal(acceptanceRate({ accepted: 0, declined: 2 }), 0, 'two real declines is a real 0%');
+  // And the page uses that definition (the expression is what makes it right).
   assert.match(P, /const decided = counts\.accepted \+ counts\.declined;/);
-  assert.doesNotMatch(P, /const decided = [^;]*counts\.(expired|withdrawn)/,
-    'silence and a withdrawn slot are not decisions the advisor made');
-  assert.match(P, /acceptRate = decided > 0/, 'and an empty denominator reports nothing, not 0%');
+  assert.doesNotMatch(P, /const decided = [^;]*counts\.(expired|withdrawn|unrecorded)/);
+  assert.match(P, /const acceptRate = acceptanceRate\(counts\);/);
 });
 
 // ---------------------------------------------------------------------------

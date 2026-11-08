@@ -33,6 +33,8 @@ const TYPED_READS: Record<string, string> = {
   posthog: 'cloudflare-worker/src/services/posthog/reads.ts',
   // D855 §4 (#3733): Linear's read-only reads.
   linear: 'cloudflare-worker/src/services/linear/reads.ts',
+  // D2407 (#2407): Beehiiv's read-only reads.
+  beehiiv: 'cloudflare-worker/src/services/beehiiv/reads.ts',
 };
 
 const records = Object.entries(MCP_PROVIDERS) as Array<[string, McpProvider]>;

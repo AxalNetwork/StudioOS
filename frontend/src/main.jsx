@@ -10,6 +10,7 @@ import { isChunkLoadError } from './lib/chunkLoadError';
 import { readAttempts, recordAttempt, reloadCarryingCount } from './lib/reloadGuard';
 import { isCapturing, whenIdle } from './lib/captureGuard';
 import { reportError } from './lib/log';
+import { installLeaveGate } from './lib/leaveGuard.js';
 
 // Task #37 — tell the un-bundled boot watchdog (index.html) that the entry
 // module actually executed, so it won't trigger a recovery reload. Also strip
@@ -195,6 +196,10 @@ window.addEventListener('vite:preloadError', (e) => {
 // `axal:boot-reboot` is likewise left alone. Clearing it while `main.jsx` also
 // strips `?__reboot=` from the URL removed BOTH of the boot watchdog's loop
 // guards at once, which is the same unbounded-reload shape one layer down.
+
+// D4961: the page-leave gate's one `popstate` listener goes on the window BEFORE the router mounts, because a
+// browser runs listeners in the order they were added and the router adds its own at mount. See lib/leaveGuard.js.
+installLeaveGate();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

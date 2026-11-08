@@ -369,6 +369,20 @@ function assertSecurityHeaders(headers) {
   return problems;
 }
 
+// D4582 — the sign-in page is not indexed, said in its header and in its own head. The header is read here without
+// parsing any HTML, so it holds even if the shell's head is rewritten; the canonical and title are checked too, since
+// the first audit found /login carrying the homepage's.
+function assertSignInPolicy(headers, body) {
+  const problems = [];
+  const robots = headers.get('x-robots-tag');
+  if (!/noindex/i.test(robots || '')) problems.push(`/login x-robots-tag is "${robots ?? '(none)'}" (expected noindex)`);
+  const canonical = /<link rel="canonical" href="([^"]*)"/.exec(body)?.[1];
+  if (!canonical || !/\/login\/?$/.test(canonical)) problems.push(`/login canonical is "${canonical ?? '(none)'}", not its own address`);
+  const title = /<title>([^<]*)<\/title>/.exec(body)?.[1] || '';
+  if (!/^Sign in/i.test(title)) problems.push(`/login title is "${title}", not the sign-in page's`);
+  return problems;
+}
+
 // D722 — the opener policy on the page that opens Google's window. Absent or
 // `unsafe-none` is the only answer that keeps both windows talking.
 function assertOpenerPolicy(headers) {
@@ -498,6 +512,7 @@ async function checkRoute(base, route, assetSink, entrySink) {
         problems.push(...assertShell(body));
         problems.push(...assertSecurityHeaders(headers));
         if (route.path === GOOGLE_WINDOW_ROUTE) problems.push(...assertOpenerPolicy(headers));
+        if (route.path === GOOGLE_WINDOW_ROUTE) problems.push(...assertSignInPolicy(headers, body));
         if (route.card) problems.push(...assertRecordCard(body));
       } else if (!/<html|<!doctype/i.test(body)) {
         problems.push('body is not an HTML document');

@@ -21,6 +21,8 @@ function fixture() {
   // D1415: project create writes a slug, and company create a slug and the legal fields (migration 685).
   db.exec(stripForeignKeys(tableFromBaseline(baseline, 'incorporations')));
   db.exec(readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8'));
+  // #4963: a rename is a compare-and-swap write on profile_version.
+  db.exec(readFileSync(new URL('../sql/migrations/202611072255_company_profile_version.sql', import.meta.url), 'utf8'));
   for (const [id, role, fid] of [[1, 'founder', 10], [2, 'founder', 20], [3, 'exploring', null], [4, 'admin', null]] as const) {
     db.prepare('INSERT INTO users(id,email,name,role,founder_id) VALUES(?,?,?,?,?)').run(id, `synthetic${id}@example.test`, `Synthetic ${id}`, role, fid);
   }

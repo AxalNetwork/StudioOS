@@ -357,6 +357,8 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
       if (e?.status === 402 || e?.data?.code === 'intro_credits_exhausted') {
         setOutOfCredits(e?.data || {});
         if (e?.data?.credits) setData((d) => d && ({ ...d, credits: e.data.credits }));
+      } else if (e?.data?.error === 'credit_conflict') {
+        setErr('Your credits changed at the same moment. Nothing was spent. Try again.'); // D4606
       } else if (e?.status === 409) {
         load(); // someone/something already resolved it — resync
       } else {

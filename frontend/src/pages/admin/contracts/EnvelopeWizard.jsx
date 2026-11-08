@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { contractsApi } from '../../../lib/api/contracts';
 import { reportError } from '../../../lib/log';
 import { SidePanel, ReadState, useRead, button, input, pdfBlob, Pagination } from './parts';
+import { templateActions, templateRefusalMessage } from '../../../lib/contractLifecycle';
+import { SafetyOverlayBadge } from './LifecycleBadge';
 
 const steps = ['Template', 'Recipient', 'Fields', 'Deal', 'Provider', 'Preview and send'];
 const PAGE_LABELS = { letter: 'Letter', a4: 'A4' };
@@ -57,9 +59,9 @@ export default function EnvelopeWizard({ onClose, onTemplates, onSent }) {
     const message = validate(); if (message) { setError(message); return; }
     setBusy(true); setError('');
     try { setPreview(await contractsApi.preview(body)); }
-    catch (e) { reportError('contracts:preview', e); setError(e.code === 'published_version_changed' ? 'The published version changed. Choose the template again; nothing was sent.'
+    catch (e) { reportError('contracts:preview', e); setError(templateRefusalMessage(e) || (e.code === 'published_version_changed' ? 'The published version changed. Choose the template again; nothing was sent.'
       : e.code === 'required_fields_missing' ? `Not recorded: ${(e.data?.fields || []).join(', ') || 'a required recipient field'}. The recipient record must supply this value; nothing was sent.`
-        : 'The preview could not be prepared. Nothing was sent. Try again.'); }
+        : 'The preview could not be prepared. Nothing was sent. Try again.')); }
     finally { setBusy(false); }
   }
   async function send() {
@@ -70,11 +72,11 @@ export default function EnvelopeWizard({ onClose, onTemplates, onSent }) {
       setOutcome(result); onSent(result);
     } catch (e) {
       reportError('contracts:send', e);
-      setError(e.code === 'send_unconfirmed' || !e.status || e.status >= 500
+      setError(templateRefusalMessage(e) || (e.code === 'send_unconfirmed' || !e.status || e.status >= 500
         ? 'The send could not be confirmed. Check Agreements before retrying.'
         : e.status === 412 || e.status === 402 ? 'DocuSign not available. Connect it or choose Native.'
           : e.code === 'preview_changed' || e.code === 'published_version_changed' ? 'The document changed. Preview it again before sending.'
-            : 'The send failed. Nothing was sent. Try again.');
+            : 'The send failed. Nothing was sent. Try again.'));
       setPreview(null);
     } finally { setBusy(false); }
   }
@@ -82,7 +84,14 @@ export default function EnvelopeWizard({ onClose, onTemplates, onSent }) {
     <nav aria-label="Envelope steps" className="flex flex-wrap gap-2">{steps.map((label, i) => <button key={label} type="button" className={button} aria-current={step === i ? 'step' : undefined} disabled={busy || !!outcome} onClick={() => setStep(i)}>{i + 1}. {label}</button>)}</nav>
     <ReadState read={templates} what="Published templates">
       {!templates.loading && !templates.error && !templates.data?.items?.length && <div><b>No published template.</b><p>Publish a template under Templates first.</p><button type="button" className={button} onClick={onTemplates}>Open Templates</button></div>}
-      {step === 0 && templates.data?.items?.length > 0 && <div className="space-y-2">{templates.data.items.map(t => <button key={t.slug} type="button" className={`${button} block w-full text-left ${template?.slug === t.slug ? 'bg-violet-50 dark:bg-violet-950/30' : ''}`} onClick={() => { setTemplate(t); setFields({}); }}>{t.title} · v{t.version}</button>)}</div>}
+      {step === 0 && templates.data?.items?.length > 0 && <div className="space-y-2">{templates.data.items.map(t => {
+        // D4811: a restricted or incomplete publication is not offered as a choice; it says why instead.
+        const gate = templateActions(t);
+        if (!gate.canUseTemplate) return <div key={t.slug} data-testid={`envelope-template-gated-${t.slug}`} className="rounded-lg border border-dashed border-axal-hairline px-3 py-2 text-xs">
+          <p className="flex flex-wrap items-center gap-1.5 font-semibold">{t.title} · v{t.version}{gate.overlays.map(k => <SafetyOverlayBadge key={k} kind={k} />)}</p>
+          <p className="mt-0.5 font-semibold">{gate.banner.title}</p><p className="text-axal-muted">{gate.banner.reason}</p></div>;
+        return <button key={t.slug} type="button" className={`${button} block w-full text-left ${template?.slug === t.slug ? 'bg-violet-50 dark:bg-violet-950/30' : ''}`} onClick={() => { setTemplate(t); setFields({}); }}>{t.title} · v{t.version}</button>;
+      })}</div>}
     </ReadState>
     {step === 1 && <div className="space-y-3"><label>Find by name or email<input className={input} value={recipientQuery} onChange={e => { setRecipientQuery(e.target.value); setRecipientOffset(0); }} /></label>
       <ReadState read={recipients} what="Recipients">{recipients.data && <><div>{recipients.data.items.map(r => <button type="button" className={`${button} block w-full text-left`} key={r.id} onClick={() => { setName(r.name || ''); setEmail(r.email); }}>{r.name} · {r.email}</button>)}</div><Pagination data={recipients.data} offset={recipientOffset} onPage={setRecipientOffset} /></>}</ReadState>

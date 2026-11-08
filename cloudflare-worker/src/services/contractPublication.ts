@@ -1,12 +1,15 @@
 import type { Env } from '../types';
 import { extractMergeFields } from './legalTemplateStore';
+import { restrictedSlugsJson, templateUseRefusal } from './templateSafety';
 
 export class ContractPreparationError extends Error {
   code: string;
   status: 400 | 403 | 404 | 409 | 422;
   fields: string[];
-  constructor(code: string, status: 400 | 403 | 404 | 409 | 422, fields: string[] = []) {
-    super(code); this.code = code; this.status = status; this.fields = fields;
+  /** D4811: the sentence a refusal carries, when it has one (restricted, incomplete). */
+  detail: string | null;
+  constructor(code: string, status: 400 | 403 | 404 | 409 | 422, fields: string[] = [], detail: string | null = null) {
+    super(code); this.code = code; this.status = status; this.fields = fields; this.detail = detail;
   }
 }
 
@@ -22,6 +25,10 @@ export async function preparePublishedContract(env: Env, input: Record<string, u
   const template = (await publishedContractTemplates(env)).find(t => t.slug === slug);
   if (!template) throw new ContractPreparationError('template_not_published', 404);
   if (template.version !== version) throw new ContractPreparationError('published_version_changed', 409);
+  // D4811: a restricted template generates nothing, even from a publication
+  // recorded before the restriction. The snapshot's own body is what is sent.
+  const blocked = templateUseRefusal({ slug: template.slug, is_stub: 0, body_md: template.body_md });
+  if (blocked) throw new ContractPreparationError(blocked.code, blocked.status, [], blocked.message);
   const recipient = await env.DB.prepare(`SELECT id, role, is_active, founder_public_id, partner_public_id FROM users
     WHERE LOWER(email) = ? ORDER BY id LIMIT 1`).bind(email).first<{ id: number; role: string; is_active: number; founder_public_id: string | null; partner_public_id: string | null }>();
   if (recipient && (!recipient.is_active || (recipient.role === 'admin' && recipient.id !== actorId && !superAdmin))) {
@@ -93,6 +100,8 @@ export function publicationFields(template: PublishedContractTemplate) {
 
 export async function publishContractTemplates(env: Env, actorId: number, actor: string) {
   const at = new Date().toISOString();
+  // D4811: the same restricted set `templateUseRefusal` reads, bound, never spliced.
+  const restricted = restrictedSlugsJson();
   // The snapshot and actor audit commit together. The select executes inside
   // the batch, so an edit between a preliminary read and publication cannot
   // publish a body under the wrong version.
@@ -101,8 +110,11 @@ export async function publishContractTemplates(env: Env, actorId: number, actor:
       (template_id, slug, version, title, category, body_md, doc_kind, axal_party, published_at, published_by)
       SELECT id, slug, version, title, category, body_md, doc_kind, axal_party, ?, ? FROM legal_templates
       WHERE is_active = 1 AND is_stub = 0 AND LENGTH(TRIM(body_md)) > 0`).bind(at, actorId),
+    // D4811: a restricted template's publication goes as a stub's does: the
+    // DELETE runs after the INSERT in the same batch, so none survives it.
     env.DB.prepare(`DELETE FROM legal_template_publications WHERE template_id IN
-      (SELECT id FROM legal_templates WHERE is_active <> 1 OR is_stub <> 0 OR LENGTH(TRIM(body_md)) = 0)`),
+      (SELECT id FROM legal_templates WHERE is_active <> 1 OR is_stub <> 0 OR LENGTH(TRIM(body_md)) = 0
+        OR LOWER(slug) IN (SELECT value FROM json_each(?)))`).bind(restricted),
     env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id)
       VALUES ('contract_templates_published', ?, ?, ?)`)
       .bind(JSON.stringify({ published_at: at }), actor, actorId),
@@ -111,7 +123,7 @@ export async function publishContractTemplates(env: Env, actorId: number, actor:
 }
 
 export class PublicationError extends Error {
-  code: 'template_not_found' | 'published_version_changed' | 'template_has_no_body' | 'not_published';
+  code: 'template_not_found' | 'published_version_changed' | 'template_has_no_body' | 'template_restricted' | 'not_published';
   status: 404 | 409;
   constructor(code: PublicationError['code'], status: 404 | 409) { super(code); this.code = code; this.status = status; }
 }
@@ -123,11 +135,13 @@ export class PublicationError extends Error {
  * publishes nothing under the wrong number.
  */
 export async function publishOneTemplate(env: Env, slug: string, version: number, actorId: number, actor: string) {
-  const row = await env.DB.prepare(`SELECT id, version, is_stub, LENGTH(TRIM(body_md)) AS body_len FROM legal_templates
-    WHERE slug = ? AND is_active = 1`).bind(slug).first<{ id: number; version: number; is_stub: number; body_len: number }>();
+  const row = await env.DB.prepare(`SELECT id, slug, version, is_stub, body_md FROM legal_templates
+    WHERE slug = ? AND is_active = 1`).bind(slug).first<{ id: number; slug: string; version: number; is_stub: number; body_md: string }>();
   if (!row) throw new PublicationError('template_not_found', 404);
   if (row.version !== version) throw new PublicationError('published_version_changed', 409);
-  if (row.is_stub || !row.body_len) throw new PublicationError('template_has_no_body', 409);
+  // D4811: restricted and incomplete refuse through the one predicate.
+  const blocked = templateUseRefusal(row);
+  if (blocked) throw new PublicationError(blocked.code, 409);
   const at = new Date().toISOString();
   const [insert] = await env.DB.batch([
     env.DB.prepare(`INSERT OR REPLACE INTO legal_template_publications

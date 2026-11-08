@@ -314,7 +314,15 @@ export function gateOf(groups, kind) {
     waitLine: n > 0 ? `${verb} anyway opens once the ${plural(n, 'item', 'items')} to fix ${n === 1 ? 'is' : 'are'} fixed.` : null,
   };
 }
-export const DIRTY_LINE = 'Checked with your unsaved edits. The link and the export carry the saved version until you save one.';
+/**
+ * D4598 (#4598): the gate before Share and Export checks the version that will be sent, never the edits on screen.
+ * `sentLine` says which; `DIRTY_LINE` says what that leaves out and the way to include it.
+ */
+export const sentLine = (version) => (version != null ? `v${version} · the saved version that will be sent` : 'The saved version that will be sent');
+export const DIRTY_LINE = 'You have unsaved edits. This check read the saved version, not your edits: the link and the export carry the saved version. Save a new version to send your edits, then check again.';
+export const SAVE_FIRST = 'Save a new version…';
+/** Export's version picker: a version other than the one the gate checked has not been checked. */
+export const notCheckedLine = (version, checkedVersion) => `${version != null ? `v${version}` : 'This version'} was not checked. The check before you export read ${checkedVersion != null ? `v${checkedVersion}` : 'another version'}.`;
 
 /** The deck the editor holds now, as `runPreflight` reads a version. */
 export const workingDeck = (deck, cards, theme) => ({ id: deck?.id ?? null, version: deck?.version ?? null, slides: cards, theme: theme ?? null });

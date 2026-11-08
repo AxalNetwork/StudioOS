@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Unrecorded, Unreadable } from '../../ui';
@@ -209,14 +209,31 @@ export function OperatingBrief() {
   );
 }
 
+/**
+ * The reads that did not answer, named for a sentence. Each of the feed's lines
+ * comes from exactly one read, so an unanswered read is a part of the feed that
+ * could not be drawn, whatever the others returned.
+ */
+export const FEED_READS = { board: 'the delivery board', retainers: 'retainers', capacity: 'capacity' };
+export function unreadFeedReads(reads) {
+  return Object.keys(FEED_READS).filter((key) => !reads?.[key]);
+}
+const sentence = (names) => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
 /** The feed: each line with its receipt and where to act on it. */
-export function FirmFeed({ reads }) {
+export function FirmFeed({ reads, onRetry }) {
   const feed = homeFeed(reads);
+  // D4620 (#4620): the all-clear is a claim about every read. With one or two unanswered it is not
+  // made, and a feed that has lines says which part of the firm's record it could not read.
+  const unread = unreadFeedReads(reads);
+  const qualifier = unread.length > 0 && (
+    <Unreadable what={`The feed's ${sentence(unread.map((key) => FEED_READS[key]))}`} claim="What is listed here comes from the rest, and this is not a claim that nothing else is at risk, due or renewing." onRetry={onRetry} />
+  );
   return (
     <section data-testid="partner-home-feed">
       <p className="mb-2 text-[11px] text-axal-faint">Every line carries its receipt</p>
       {feed.length === 0 ? (
-        <p className="text-[12.5px] text-axal-muted">Nothing is at risk, due this week, over a stated cap or renewing soon.</p>
+        unread.length > 0 ? qualifier : <p className="text-[12.5px] text-axal-muted">Nothing is at risk, due this week, over a stated cap or renewing soon.</p>
       ) : (
         <ul className="space-y-2">
           {feed.map((f) => (
@@ -236,6 +253,7 @@ export function FirmFeed({ reads }) {
           ))}
         </ul>
       )}
+      {feed.length > 0 && qualifier}
       <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="partner-home-limits">
         Not on this page: messages from a client (no inbound record feeds it) and whether a proposal was
         opened (the client&apos;s to record, and nothing records it).
@@ -275,37 +293,59 @@ export function partnerTiles(state, onRetry) {
   return {
     firm_tiles: none ? { state: TILE.UNREADABLE, onRetry } : { state: TILE.READY, note, href: '/delivery/board', openLabel: 'Open Delivery', body: <FirmTiles reads={reads} onRetry={onRetry} /> },
     operating_brief: { state: TILE.READY, body: <OperatingBrief /> },
-    firm_feed: none ? { state: TILE.UNREADABLE, onRetry } : { state: TILE.READY, href: '/delivery/health', openLabel: 'Open the feed', body: <FirmFeed reads={reads} /> },
+    firm_feed: none ? { state: TILE.UNREADABLE, onRetry } : { state: TILE.READY, href: '/delivery/health', openLabel: 'Open the feed', body: <FirmFeed reads={reads} onRetry={onRetry} /> },
   };
 }
 
-/** The firm's three reads, once, for the tiles and the feed. No request in a preview. */
+const READS = {
+  board: () => api.getPartnerDeliveryBoard(),
+  retainers: () => api.listPartnerRetainers(),
+  capacity: () => api.getPartnerCapacity(),
+};
+
+/**
+ * The firm's three reads, for the tiles and the feed. No request in a preview.
+ *
+ * D4620 (#4620): `load` asks again only for the reads that did not answer once
+ * the page has the others, and merges the answers, so a retry never throws away
+ * what loaded. It asks for all three on the first load, after an unlinked
+ * sign-in, and when the preview flips.
+ */
 export function usePartnerHome(previewing = false) {
   const [state, setState] = useState({ status: 'loading' });
+  const kept = useRef(null);
+  const generation = useRef(0);
 
   const load = useCallback(async () => {
     if (previewing) {
       // WITHHELD IS NOT UNREADABLE. Nothing failed; the admin preview simply
       // does not read another firm's record, and the page says that instead of
       // drawing five failed tiles.
+      kept.current = null;
       setState({ status: 'preview' });
       return;
     }
-    setState({ status: 'loading' });
-    try {
-      await api.partnerPortal.getProfile();
-    } catch (e) {
-      if (e?.code === NO_PARTNER_PROFILE) { setState({ status: 'unlinked' }); return; }
+    const mine = ++generation.current;
+    const have = kept.current;
+    const wanted = have ? Object.keys(READS).filter((key) => !have[key]) : Object.keys(READS);
+    if (!have || wanted.length === 0) {
+      kept.current = null;
+      setState({ status: 'loading' });
+      try {
+        await api.partnerPortal.getProfile();
+      } catch (e) {
+        if (e?.code === NO_PARTNER_PROFILE) { if (generation.current === mine) setState({ status: 'unlinked' }); return; }
+      }
     }
     const settle = (p) => p.then((v) => v).catch(() => null);
-    const [board, retainers, capacity] = await Promise.all([
-      settle(api.getPartnerDeliveryBoard()),
-      settle(api.listPartnerRetainers()),
-      settle(api.getPartnerCapacity()),
-    ]);
-    setState({ status: 'ready', reads: { board, retainers, capacity } });
+    const answers = await Promise.all((have && wanted.length ? wanted : Object.keys(READS)).map((key) => settle(READS[key]())));
+    if (generation.current !== mine) return;
+    const reads = { ...(have && wanted.length ? have : {}) };
+    (have && wanted.length ? wanted : Object.keys(READS)).forEach((key, index) => { reads[key] = answers[index]; });
+    kept.current = reads;
+    setState({ status: 'ready', reads: { board: reads.board ?? null, retainers: reads.retainers ?? null, capacity: reads.capacity ?? null } });
   }, [previewing]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { kept.current = null; load(); }, [load]);
 
   return { state, load };
 }

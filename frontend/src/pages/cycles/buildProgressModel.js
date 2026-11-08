@@ -105,6 +105,7 @@ export const BUCKETS = [
   { id: 'sent', label: 'Sent' },
   { id: 'progress', label: 'In progress' },
   { id: 'built', label: 'Built or live' },
+  { id: 'tested', label: 'Tested' },
   { id: 'notstarted', label: 'Not started' },
   { id: 'unrecorded', label: 'Not recorded' },
 ];
@@ -213,7 +214,9 @@ const toolsOf = (sent, link) => [...new Set([sent?.provider, link?.provider].fil
 
 /** The furthest stage an item has reached, for the chart and the Stage filter. */
 export function bucketOf(kind, stage, lane) {
-  if (['built', 'live', 'tested'].some((k) => stage[k]?.state === 'done')) return 'built';
+  if (['built', 'live'].some((k) => stage[k]?.state === 'done')) return 'built';
+  // D4600: a completed test is its own bucket. It is not a built or live product.
+  if (stage.tested?.state === 'done') return 'tested';
   if (stage.progress?.state === 'done') return 'progress';
   if (stage.progress?.state === 'unrecorded' && stage.sent?.state === 'done') return 'unrecorded';
   if (stage.sent?.state === 'done') return 'sent';
@@ -288,17 +291,41 @@ export function stageChart(rows) {
 }
 
 /**
- * The chart's lead. It says "None is built or live yet" only when a source
- * reports those stages (D968); when none does, it says they are not recorded,
- * never "0 of N are built".
+ * What an item's Built and Live stages say together (D4600): `done` when either
+ * is done; `no` when every stage that applies is reported "Not yet"; `unknown`
+ * when any stage that applies is not recorded and none is done; `na` when
+ * neither applies (a risk, a prototype test).
+ */
+export function builtLiveRead(r) {
+  const cells = ['built', 'live'].map((k) => r.stages[k]).filter((c) => c && c.state !== 'na');
+  if (!cells.length) return 'na';
+  if (cells.some((c) => c.state === 'done')) return 'done';
+  return cells.every((c) => c.state === 'notyet') ? 'no' : 'unknown';
+}
+
+/**
+ * The chart's lead. Every claim rests on the items it is about (D4600): "None
+ * is built or live yet" only when each item that can be built or live is
+ * reported "Not yet"; an item whose stage is not recorded is counted apart and
+ * is never read as not done. A completed test is not built or live.
  */
 export function stageLead(rows) {
-  const built = rows.filter((r) => r.bucket === 'built').length;
   if (!rows.length) return 'No item is accepted yet, so there is nothing to show by stage.';
-  if (built) return `${built} of ${rows.length} accepted items are built or live.`;
+  const reads = rows.map(builtLiveRead);
+  const count = (w) => reads.filter((x) => x === w).length;
+  const built = count('done');
+  const no = count('no');
+  const unknown = count('unknown');
   const sent = rows.filter((r) => r.stages.sent.state === 'done').length;
-  const reported = rows.some((r) => ['built', 'live'].some((k) => ['done', 'notyet'].includes(r.stages[k]?.state)));
-  return `${rows.length} accepted ${rows.length === 1 ? 'item' : 'items'}, ${sent} sent to a tool. ${reported ? 'None is built or live yet.' : 'Built and live are not recorded here yet.'}`;
+  const tested = rows.filter((r) => r.bucket === 'tested').length;
+  const testedLine = tested ? ` ${tested} tested, not built or live.` : '';
+  const unknownLine = ` Built or live: ${unknown} not recorded.`;
+  if (built) return `${built} of ${rows.length} accepted items are built or live.${unknown ? unknownLine : ''}${testedLine}`;
+  const head = `${rows.length} accepted ${rows.length === 1 ? 'item' : 'items'}, ${sent} sent to a tool.`;
+  if (!no && !unknown) return `${head}${testedLine}`;
+  if (!unknown) return `${head} None is built or live yet.${testedLine}`;
+  if (!no) return `${head} Built and live are not recorded here yet.${testedLine}`;
+  return `${head} Built or live: ${no} not yet, ${unknown} not recorded.${testedLine}`;
 }
 
 /** The chart's text for a screen reader, naming any module with items not recorded. */

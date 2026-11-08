@@ -3465,6 +3465,9 @@ export const api = {
   perkReviewQueue: () => request('/perks/admin/queue'),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  // D4806: Feature and Stop featuring are their own operation on a live listing, with the revision reviewed.
+  perkFeature: (uid, data) =>
+    request(`/perks/admin/${encodeURIComponent(uid)}/feature`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkGrantCredits: (data) =>
     request('/perks/admin/credits', { method: 'POST', body: JSON.stringify(data || {}) }),
 
@@ -3633,6 +3636,12 @@ export const api = {
       `/admin/licences/${encodeURIComponent(uid)}/contract/${encodeURIComponent(contractUid)}/send`,
       { method: 'POST' },
     ),
+  // D4671 — complete the entity and signatory a contract names.
+  licenceEntityComplete: (uid, fields) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/entity`, {
+      method: 'PATCH',
+      body: JSON.stringify(fields),
+    }),
   // D111 — H5's statements ledger. `draw` computes owed from what the branch
   // reported; `update` is the HQ-entered half (paid, disputed, status), which
   // nothing reconciles against Stripe (D.8).
@@ -4211,6 +4220,10 @@ export const api = {
   fileAdvisorReview: (bookingId, data) =>
     request(`/advisors/bookings/${bookingId}/review`, { method: 'POST', body: JSON.stringify(data) }),
   listBookingReviews: (bookingId) => request(`/advisors/bookings/${bookingId}/reviews`),
+  // #4702 (D4702): review coverage over EVERY completed session in one read:
+  // { held, reviewed, awaiting, ratings: { count, sum }, items: [{ booking_id,
+  // reviews, advisor_filed }], items_complete }. A failed read is unknown, never "no review".
+  getMyAdvisorReviewCoverage: () => request('/advisors/me/review-coverage'),
 
   // ---------- The advisor's own stores (migrations 203-206) ----------
   // Every one of these is scoped server-side on the signed-in user; none takes

@@ -33,7 +33,7 @@ import {
   compareHref, opensDeal, viewHref,
 } from './dealFlowModel';
 import {
-  DEFAULT_COLUMNS, STAGE_WORD, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
+  DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
   settingsOfSpec, sortRows, viewChanged,
 } from './flowModel';
 import { FlowBoard, FlowBoardLoading, PhoneBoard } from './FlowBoard';
@@ -58,7 +58,7 @@ const money = (n, currency) => {
 };
 
 /** DLS1's toolbar: the scope switch and the view switch, each an address. */
-export function DealFlowToolbar({ view, scope, hrefFor = viewHref }) {
+export function DealFlowToolbar({ view, scope, hrefFor = viewHref, onWeightsSaved = null }) {
   return (
     <div className="flex flex-wrap items-center gap-3" data-testid="dealflow-toolbar">
       <nav aria-label="Which deals" className="flex gap-1">
@@ -73,7 +73,7 @@ export function DealFlowToolbar({ view, scope, hrefFor = viewHref }) {
         </nav>
       )}
       {/* D1258 (#3281): SC7, the caller's weighting for the scorecard sort. */}
-      {scope !== 'new' && <WeightingControl />}
+      {scope !== 'new' && <WeightingControl onSaved={onWeightsSaved} />}
     </div>
   );
 }
@@ -174,7 +174,7 @@ const CLEAR_BTN = 'inline-flex w-fit items-center rounded-[9px] border border-ax
  * whose default section does not show it. Once any deal is in the
  * flow, the Deals root has no primary.
  */
-export const THESIS_PRIMARY = Object.freeze({ label: 'Set your thesis', to: '/account/security-privacy', accent: 'investor', primary: true, testid: 'dealflow-empty-thesis' });
+export const THESIS_PRIMARY = Object.freeze({ label: 'Set your thesis', to: THESIS_PATH, accent: 'investor', primary: true, testid: 'dealflow-empty-thesis' });
 
 /** DLS13: nothing in the flow yet, with the three ways in. Never "0 deals". */
 function EmptyFlow() {
@@ -216,7 +216,8 @@ export default function DealFlow({ view, scope, board }) {
   const [flow, retryFlow] = useRead(() => (lists ? dealFlowApi.flow() : Promise.resolve(null)), [lists]);
   const [deals, retryDeals] = useRead(() => (lists ? api.listDeals() : Promise.resolve([])), [lists]);
   const [views, retryViews] = useRead(() => dealViewsApi.list(), []);
-  const [weights] = useRead(() => ventureScoresApi.weights(), []);
+  // D4635: one accepted weighting for the control and the sort: a save re-reads it, and the order follows.
+  const [weights, retryWeights] = useRead(() => ventureScoresApi.weights(), []);
   const [entries, setEntries] = useState(null);
   useEffect(() => { setEntries(flow.kind === 'ok' ? flow.data?.items || [] : null); }, [flow]);
 
@@ -325,6 +326,12 @@ export default function DealFlow({ view, scope, board }) {
     body = (
       <>
         {scoresFailed}
+        {settings.sort.by === 'weighting' && weights.kind === 'unreadable' && (
+          <p className="m-0 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200" role="status" data-testid="dealflow-weights-failed">
+            Your weighting could not be read, so this order uses equal weights.
+            <button type="button" className="font-semibold underline" onClick={retryWeights}>Try again</button>
+          </p>
+        )}
         {unshared && <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="dealflow-not-shared-line">Scores and fit show on deals you are invited to or have committed on; the other rounds read Not shared.</p>}
         {nothing || (view === 'board'
           ? (phone ? <PhoneBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
@@ -339,7 +346,7 @@ export default function DealFlow({ view, scope, board }) {
   }
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="dealflow">
-      <DealFlowToolbar view={view} scope={scope} hrefFor={(v) => settingsHref({ ...v, settings })} />
+      <DealFlowToolbar view={view} scope={scope} hrefFor={(v) => settingsHref({ ...v, settings })} onWeightsSaved={retryWeights} />
       {controls}
       {body}
       {toast && (

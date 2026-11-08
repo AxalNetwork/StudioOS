@@ -31,6 +31,7 @@ import { afterMove, sponsorsLeft } from '../services/agents/transfer';
 import { ownerUserId, projectMoveStatements } from '../services/projectMove';
 import { checkSlug, slugHolder, retireSlug, projectPath } from '../services/slugs';
 import { refuse } from '../util/refusal';
+import { archivedById, archivedRefusal, isArchived } from '../services/companyAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -68,8 +69,10 @@ r.post('/:id/move', async (c) => {
     const company = await c.env.DB.prepare('SELECT id, archived_at FROM company_profiles WHERE id = ?').bind(to).first<{ id: number; archived_at: string | null }>();
     // A company the owner does not belong to reads as not found, so the route confirms no company it does not name.
     if (!company || !(await belongs(c.env, owner, to))) return c.json({ detail: 'The venture\'s owner does not belong to that company', code: 'not_owner_company' }, 404);
-    if (company.archived_at) return c.json({ detail: 'That company is archived. Restore it before you move a venture to it.', code: 'archived' }, 409);
+    if (isArchived(company)) return archivedRefusal(c); // #4963: the shared archived rule
   }
+  // #4963: a venture leaves an archived company only once the company is restored, as every write to it waits.
+  if (from !== null && (await archivedById(c.env, from))) return archivedRefusal(c);
   // D1415: a project slug is unique within its scope. A move into a scope that
   // already holds it (current or retired) is refused, changing nothing; else
   // the old address is retired in the same batch, so it still resolves.

@@ -255,11 +255,14 @@ function DealRoomMembership({ dealId }) {
 function DocumentsTab({ dealId }) {
   const [docs, setDocs] = useState(null);
   const [failed, setFailed] = useState(false);
+  const [ndaNeeded, setNdaNeeded] = useState(false);
   const load = () => {
-    setFailed(false);
-    api.dealDocuments(dealId).then(setDocs).catch(() => setFailed(true));
+    setFailed(false); setNdaNeeded(false);
+    // D4631 (#4631): the list is behind the venture's NDA for an investor; that refusal says why, it is not a failure.
+    api.dealDocuments(dealId).then(setDocs).catch((e) => (e?.code === 'nda_required' ? setNdaNeeded(true) : setFailed(true)));
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
+  if (ndaNeeded) return <div className="py-8 text-center text-gray-600 dark:text-gray-300" data-testid="deal-documents-nda">The documents are shared under the venture&rsquo;s NDA. Sign it to see them.</div>;
   // A failed read is unreadable, never an empty list: "No documents yet" was
   // the catch branch, and it asserted something the page cannot know.
   if (failed) return <Unreadable what="The documents" claim="That is not a claim that no documents exist." onRetry={load} />;
