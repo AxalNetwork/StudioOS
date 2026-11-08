@@ -267,14 +267,14 @@ export function AttachForm({ item, busy = false, onCancel, onAttach }) {
           <input className={inputClass} value={draft.link_url} placeholder="https://…"
             onChange={(e) => setDraft((d) => ({ ...d, link_url: e.target.value }))} />
         </Field>
-        <Field label="What changed" hint="The line the version trail shows.">
+        <Field label="What changed" hint="Required. The line the version trail shows.">
           <input className={inputClass} value={draft.summary}
             onChange={(e) => setDraft((d) => ({ ...d, summary: e.target.value }))} />
         </Field>
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
         A link travels with a version, and a recorded version is never edited, so this records
-        <strong> v{next}, not sent</strong>, carrying the link.
+        <strong> v{next}, not sent</strong>, carrying the link. v{next - 1} stays exactly as recorded.
       </p>
       {error && <p className="mt-2 text-[12px] font-semibold text-red-700 dark:text-red-300" role="alert">{error}</p>}
       <div className="mt-3 flex flex-wrap gap-2">
