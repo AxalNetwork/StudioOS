@@ -17,6 +17,7 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const library = read('frontend/src/pages/research/LibraryZone.jsx');
 const ask = read('frontend/src/pages/research/AskZone.jsx');
 const workspace = read('frontend/src/workspaces/ResearchWorkspace.jsx');
+const states = read('frontend/src/pages/research/researchStates.js');
 const api = codeOnly(read('frontend/src/lib/api.js'));
 
 test('every licence that lists these zones can open them', () => {
@@ -111,7 +112,8 @@ test('Ask treats no_source as an answer, and separates it from a broken model', 
  * on dead code.
  */
 function threadCard(code) {
-  const start = code.indexOf('{visible.map((t) => (');
+  // D3701: the card computes its response state first, so the map's body is a block.
+  const start = code.indexOf('{visible.map((t) => {');
   assert.notEqual(start, -1, 'the thread is no longer rendered as a map over the visible rows');
   // BALANCED, NOT THE FIRST `))}`. The naive end marker landed on the CITATION
   // map's own close, a dozen lines above the no-source note — so the slice
@@ -202,7 +204,7 @@ test('a shared document is listed, and the page says why Ask still cannot cite i
   assert.doesNotMatch(railRendered, /Nobody can send you a document yet/,
     'the rail denies a share path the library reads');
 
-  assert.match(library, /indexed in their library, not yours/i,
+  assert.match(states, /Indexed in their library, not yours/,
     'the library no longer says why a shared document is unreachable');
   assert.match(library, /not yours to change or remove/,
     'the library no longer states the read-only asymmetry');
@@ -320,7 +322,7 @@ test('the library lists documents as its artboard’s named columns', () => {
   assert.ok(head, 'the instrument card no longer declares its column heads');
   assert.deepEqual(
     head[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')),
-    ['Document', 'Kind', 'Source year', 'Index state', 'In Ask'],
+    ['Document', 'Kind', 'Source year', 'Index state', 'Answerable in Ask'],
   );
   assert.doesNotMatch(code, /'Year'/, 'a source year column would have nothing to fill it');
 
@@ -328,8 +330,9 @@ test('the library lists documents as its artboard’s named columns', () => {
   // table could go quietly wrong. A client's document can be indexed — in THEIR
   // library — and still be uncitable here, so the last column reads the reach
   // the worker computed rather than the state beside it.
-  assert.match(card, /d\.in_ask/, 'the In Ask column no longer reads the computed reach');
-  assert.match(card, /Indexed in their library, not yours/,
+  // D3701: both columns come from `researchStates.js`, which reads `in_ask`.
+  assert.match(card, /const an = answerabilityOf\(d\);/, 'the In Ask column no longer reads the computed reach');
+  assert.match(states, /if \(d\?\.source === 'client'\) why = 'Indexed in their library, not yours\.';/,
     'a shared document reads as answerable, or as unindexed, instead of as out of reach');
 
   // The scroller lives in the shared `Instrument`, which is why seven artboards
@@ -475,7 +478,7 @@ test('the ask instrument card lists documents as its canvas’s named columns', 
     'the shared instrument table lost its own scroller and the page will scroll sideways');
 });
 
-test('“In Ask” is derived from the index state, never from a stale passage count', () => {
+test('“In Ask” is the worker’s verdict, never a stale passage count', () => {
   // The zone's own question, per row. `chunk_count` is the tempting source and
   // the wrong one: a document that indexed once and later failed a re-index
   // keeps its old count, because the failure path writes the state and leaves
@@ -484,10 +487,13 @@ test('“In Ask” is derived from the index state, never from a stale passage c
   const code = codeOnly(ask);
   const rows = code.slice(code.indexOf('const libRows = items.map('), code.indexOf('title="What Ask can reach"'));
   assert.ok(rows.length > 0, 'the instrument card’s row builder is gone');
-  assert.match(rows, /d\.index_state === 'indexed'\s*\?\s*\{ text: 'Answerable in Ask' \}/,
-    'the In Ask column must read the index state');
-  assert.match(rows, /\{ text: 'Not answerable until indexed' \}/,
+  // D3701: one vocabulary with the Library, read through `answerabilityOf`
+  // (which reads `in_ask`, the worker's verdict) and shown with its reason.
+  // Mutation checked: `sub: an.why` removed → a document Ask cannot see renders no reason.
+  assert.match(rows, /const an = answerabilityOf\(d\);/, 'the In Ask column must read the worker’s verdict');
+  assert.match(rows, /\{ pill: mark\(an\), pillTone: an\.tone, sub: an\.why \}/,
     'a document Ask cannot see must say why, not render a blank cell');
+  assert.match(states, /let why = 'Not answerable until indexed\.';/);
   // `d.chunk_count`, not the bare token: the field is only reachable off the
   // row object, so the property access is the code form and a backticked name
   // in prose is not. Banning the bare token would ban the explanation rather
