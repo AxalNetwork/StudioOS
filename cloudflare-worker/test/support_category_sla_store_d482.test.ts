@@ -178,7 +178,9 @@ test('the queues band with the stored hours, and the taxonomy counts the eight c
   assert.equal(before.taxonomy.items.length, 8);
   assert.equal(before.taxonomy.items.find((x: any) => x.category === 'other').open, 0, 'a ticket with no category, or a resolved one, counted as Other');
   assert.equal(before.taxonomy.uncategorised, 1);
-  assert.equal(before.sla_policy.branch_copy.held, true);
+  // D5032 (#5032) — the copy is no longer held: the licence push carries the
+  // policy, and each branch's applied version is reported beside it.
+  assert.equal(before.sla_policy.branch_copy.held, false);
 
   await call(db, HOLDER, 'PUT', '/api/admin/hq-support/sla-tiers', TIERS(36, 48, 96));
   const after = (await call(db, HOLDER, 'GET', '/api/admin/hq-support')).body;
