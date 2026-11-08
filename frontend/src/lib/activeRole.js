@@ -30,3 +30,23 @@ export function resolveActiveRole({ user, realUser, viewMode, isImpersonating } 
 }
 
 export default resolveActiveRole;
+
+/**
+ * D4473 (#4473) — the licences a session is browsing WITH, beside the role it
+ * browses AS. `resolveActiveRole` keeps its meaning (the primary role, or the
+ * previewed or impersonated one); this is the set the sidebar is built from and
+ * the licence-owned routes are gated on.
+ *
+ *   - An admin's "View as" preview is the single previewed licence: `[viewMode]`.
+ *   - An impersonation is the impersonated member's own `licences`.
+ *   - Everyone else: `user.licences` (`/api/auth/me`, D4472), else `[user.role]`.
+ *
+ * @returns {string[]} never empty for a signed-in session with a role
+ */
+export function resolveHeldLicences({ user, realUser, viewMode, isImpersonating } = {}) {
+  const own = (u) => (Array.isArray(u?.licences) && u.licences.length ? [...u.licences] : (u?.role ? [u.role] : []));
+  if (isImpersonating) return own(user);
+  const isAdmin = (realUser || user)?.role === 'admin';
+  if (isAdmin) return viewMode ? [viewMode] : [];
+  return own(user);
+}

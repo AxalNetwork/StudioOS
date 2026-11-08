@@ -21,6 +21,11 @@ address stays where D1299 put it. The table is All accounts (D1305).
 - `AccountSubAccounts.jsx` — the Sub-accounts tab: the Product tester record
   and the LP status from D1302's `GET /api/admin/sub-accounts/accounts/:userId`.
   Read only; each decision is linked to the page that makes it.
+- `AccountLicencesBlock.jsx` — D4473 (#4473): the Profile tab's Licences
+  block. Lists the member's held licences from D4472's
+  `GET /api/admin/accounts/:id/licences` and grants or revokes an additional
+  one through its POST and DELETE; the primary licence has no Revoke, and
+  every refusal is a fixed sentence by its code (`primary_licence` included).
 
 ### Rules
 
@@ -39,7 +44,7 @@ Admin › Accounts' Overview at `/admin/accounts`, from the owner's "Accounts" c
 | `overviewModel.js` | Pure: each block's state (ok, couldn't be read, not recorded), the four figures, the profile mix, a widget per profile with its eight weeks and facts, readiness by profile, newest accounts and needs attention in words |
 | `allAccountsModel.js` | Pure (D1305): All accounts' state, the query it sends D1300's list read, the filter chips, saved views under D1303's keys, each row and ⋯ menu in the canvas's words, the bulk resend's and export's words |
 | `AllAccounts.jsx` | The All accounts table (ACC2, ACC3, ACC12) that `../consoles/UsersConsole.jsx` mounts: chips, Views, search, Filters, Sort, Columns, the bulk bar and its two dialogs, each row's menu, paging, and the no-match, reading, trust-unreadable and failed states. The record and the row actions stay the console's |
-| `AccountsOverview.jsx` | The Overview over D1301's `GET /api/admin/accounts/overview` (`lib/api/adminAccounts.js`): the blocks, View as table, loading, the empty studio and failures |
+| `AccountsOverview.jsx` | The Overview over D1301's `GET /api/admin/accounts/overview` (`frontend/src/lib/api/adminAccounts.js`): the blocks, View as table, loading, the empty studio and failures |
 
 **On a phone (D1307, ACC14):** below 1024px (`usePhoneWidth()`), `AllAccounts.jsx` draws cards (`cardView`), Filters and sort and the row menu as sheets, and Show more (`moreOf`); the Overview stacks with every target 44px tall. The desktop is unchanged.
 
