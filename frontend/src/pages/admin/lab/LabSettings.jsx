@@ -30,7 +30,7 @@ function GrantTerms({ superAdmin }) {
   return <section className={`${CARD} flex flex-col gap-3 p-4`} data-testid="lab-grant-terms">
     <h2 className={H2}>From your studio’s grant</h2>
     {superAdmin ? <HqGrantTerms /> : <StudioGrantTerms />}
-    <p className={SUB}>These terms are set by HQ on Program grants, not here.</p>
+    <p className={SUB}>These terms are set by HQ on Program access by licence, not here.</p>
   </section>;
 }
 // D1280: the period and the Lab's cohort terms, in the Programs tab's words; every other term is on Licences › Programs.

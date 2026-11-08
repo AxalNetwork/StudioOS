@@ -46,7 +46,7 @@ const HYP_PARTS = {
 const COLS = {
   'customer-research': ['Interviewee', 'Company', 'Date', 'ICP fit', 'Recording consent', 'Quotes OK', 'State'],
   'problem-discovery': ['Theme', 'Mentions', 'Severity', 'Trend', 'Supports'],
-  experiments: ['Hypothesis', 'Status', 'Evidence', 'Sprint', 'Owner', 'Source'],
+  experiments: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
 };
 const PARTS = { 'customer-research': RESEARCH_PARTS, 'problem-discovery': PAIN_PARTS, experiments: HYP_PARTS };
 const moduleRead = (slug, parts = PARTS[slug]) => ({

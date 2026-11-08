@@ -22,6 +22,9 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ email: '', name: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // #4577: which field the message is about, so that input can say so; the message is described to both.
+  const [errorField, setErrorField] = useState(null);
+  useEffect(() => { if (!error) setErrorField(null); }, [error]);
   const [copiedLink, setCopiedLink] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
@@ -191,12 +194,14 @@ export default function RegisterPage() {
 
   const validateStep1 = () => {
     if (!form.name.trim()) {
+      setErrorField('name');
       setError('Please enter your full name');
       track('register_field_error', { field: 'name' });
       return false;
     }
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
     if (!form.email.trim() || !emailRe.test(form.email.trim())) {
+      setErrorField('email');
       setError('Please enter a valid email address (e.g. you@example.com)');
       track('register_field_error', { field: 'email' });
       return false;
@@ -342,21 +347,21 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
+              {error && <div id="register-error" role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
 
               {/* Task #10 — real <form> so Enter submits (audit fix 12);
                   inputs get autocomplete/inputmode and ≥16px mobile font
                   (fix 13, prevents iOS focus zoom). */}
               <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); registerWithMagic(); }}>
                 <div>
-                  <label className="text-xs text-gray-600 block mb-1">Full Name</label>
-                  <input type="text" value={form.name} onChange={e => { markFormStart(); setForm(f => ({ ...f, name: e.target.value })); }}
+                  <label htmlFor="register-name" className="text-xs text-gray-600 block mb-1">Full Name</label>
+                  <input id="register-name" type="text" aria-invalid={error && errorField === 'name' ? true : undefined} aria-describedby={error ? 'register-error' : undefined} value={form.name} onChange={e => { markFormStart(); setForm(f => ({ ...f, name: e.target.value })); }}
                     placeholder="John Smith" autoComplete="name"
                     className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-base sm:text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-600 block mb-1">Email</label>
-                  <input type="email" value={form.email} onChange={e => { markFormStart(); setForm(f => ({ ...f, email: e.target.value })); }}
+                  <label htmlFor="register-email" className="text-xs text-gray-600 block mb-1">Email</label>
+                  <input id="register-email" type="email" aria-invalid={error && errorField === 'email' ? true : undefined} aria-describedby={error ? 'register-error' : undefined} value={form.email} onChange={e => { markFormStart(); setForm(f => ({ ...f, email: e.target.value })); }}
                     placeholder="john@company.com" autoComplete="email" inputMode="email"
                     className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-base sm:text-sm text-gray-900 placeholder-gray-500 focus:border-violet-500 focus:outline-none" />
                 </div>
@@ -448,7 +453,7 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
+              {error && <div id="register-error" role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>}
 
               {emailWarning && verificationUrl ? (
                 <div className="mb-5">

@@ -7,7 +7,8 @@
  *     440): one item per interview that names the linked theme, by the read's
  *     own phrase rule (`resolvePhrase`);
  *   - `hypothesis_evidence_links` (migration 460): an interview, a demand
- *     record, a KPI labelled with its latest value in `project_metrics`, or an
+ *     record, a KPI labelled with its latest value in `project_metrics`, a tracked
+ *     PostHog metric (`posthog-<uid>`, D4585) with its latest connector value, or an
  *     experiment with its result.
  *
  * IDS. Each item's `id` names its link, so it is unique across the venture
@@ -52,6 +53,10 @@ export const KPI_LABEL: Record<KpiKey, string> = {
   mrr: 'MRR', arr: 'ARR', cac: 'CAC', ltv: 'LTV', monthly_churn_pct: 'Monthly churn', active_users: 'Active users',
   new_users: 'New users', net_burn: 'Net burn', cash_balance: 'Cash balance', headcount: 'Headcount',
   nrr_pct: 'NRR', paying_accounts: 'Paying accounts',
+};
+export const POSTHOG_ROLE: Record<string, string> = {
+  active_users: 'Active users', new_users: 'New users', activation: 'Activation', retention: 'Retention',
+  conversion: 'Conversion', sessions: 'Sessions', other: 'PostHog metric',
 };
 const SIGNAL_KIND: Record<string, string> = {
   loi: 'Letter of intent', pre_sale: 'Pre-sale', waitlist: 'Waitlist sign-up', need_to_have: 'Need-to-have mention', would_pay: 'Would pay',
@@ -115,7 +120,20 @@ export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: numbe
   for (const e of ev) {
     let label: string | null = null;
     let date: string | null = e.created_at ? String(e.created_at).slice(0, 10) : null;
-    if (e.kind === 'metric') {
+    if (e.kind === 'metric' && e.ref_id.startsWith('posthog-')) {
+      // D4585 (#4585): a tracked PostHog metric, as `addEvidence` accepts it (D1605): its name, its latest value from
+      // the connector's facts, and that value's date. A metric no longer tracked is left out, as a missing record is;
+      // one tracked with no value now reads "Not recorded", never 0.
+      const m = await env.DB.prepare('SELECT uid, insight_name, role, unit FROM posthog_tracked_metrics WHERE uid = ? AND project_id = ?')
+        .bind(e.ref_id.slice('posthog-'.length), projectId).first<{ uid: string; insight_name: string | null; role: string; unit: string }>();
+      if (!m) continue;
+      const f = await env.DB.prepare(
+        "SELECT value, as_of FROM posthog_metric_facts WHERE project_id = ? AND kind = 'metric' AND fact_key = ? AND value IS NOT NULL ORDER BY as_of DESC, id DESC LIMIT 1",
+      ).bind(projectId, `metric:${m.uid}`).first<{ value: number | null; as_of: string | null }>();
+      const name = `${m.insight_name || POSTHOG_ROLE[m.role] || 'PostHog metric'} (PostHog)`;
+      label = f?.value != null ? `${name} · ${Number(f.value).toLocaleString('en-US', { maximumFractionDigits: 2 })}${m.unit === 'pct' ? '%' : ''}` : `${name} · Not recorded`;
+      date = f?.as_of ? String(f.as_of).slice(0, 10) : date;
+    } else if (e.kind === 'metric') {
       const k = e.ref_id as KpiKey;
       if (!(KPI_KEYS as readonly string[]).includes(k)) continue;
       const v = kpis.get(k);
