@@ -174,6 +174,22 @@ export function StaleNote({ error, onRetry, testid }) {
   );
 }
 
+/**
+ * #4714 (D4714): one source that did not answer, said where its content would
+ * be, with a retry scoped to that source. It is never an empty state: what
+ * could not be read is not "none".
+ */
+export function Unreadable({ children, onRetry }) {
+  return (
+    <p className="flex flex-wrap items-center gap-3 text-[11.5px] font-semibold leading-relaxed text-amber-800 dark:text-amber-300">
+      <span>{children}</span>
+      {onRetry ? (
+        <button type="button" onClick={onRetry} className="font-semibold text-emerald-700 hover:underline dark:text-emerald-300">Try again</button>
+      ) : null}
+    </p>
+  );
+}
+
 export function StatedLimit({ title, children }) {
   return (
     <Card variant="sunken" padding="md" className="mt-3">

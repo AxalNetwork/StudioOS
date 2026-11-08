@@ -130,9 +130,11 @@ test('the accept rate is over answered requests only, and a client cancelling an
 // ---------------------------------------------------------------------------
 // What the page must NOT claim
 // ---------------------------------------------------------------------------
-test('the median decision tile says it is not recorded rather than deriving one', () => {
+test('the median decision tile reads the decision time, never the last-touched stamp', () => {
   assert.match(PAGE, /Median decision/);
-  assert.match(PAGE, /No decision timestamp is stored/);
+  // #4714 (D4714): advisor_decided_at (D4702) is the decision's own time.
+  assert.match(PAGE, /medianDecision\(state\.bookings\)/);
+  assert.match(PAGE, /No answer here has its time recorded/);
   // THE BAN IS ON THE ARITHMETIC, NOT THE WORD. "Median decision" is the
   // tile's own label, so banning /median/ fails against correct code — the
   // self-matching trap. What must not happen is `updated_at` being turned

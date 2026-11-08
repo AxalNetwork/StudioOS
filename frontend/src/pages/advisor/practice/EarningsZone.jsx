@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
+  NothingYet, Pill, SaveNote, StatedLimit, Unreadable, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass, money,
 } from '../expertise/kit';
 import {
@@ -147,6 +147,9 @@ export default function EarningsZone() {
   const [payout, setPayout] = useState(null);
   const [payouts, setPayouts] = useState([]);
   const [note, setNote] = useState(null);
+  // #4714 (D4714): whether each secondary read answered. A failed read is
+  // never drawn as "none": no account, no payouts or no note on file.
+  const [restRead, setRestRead] = useState({ payout: true, payouts: true, note: true });
   const [draft, setDraft] = useState('');
   const [drafting, setDrafting] = useState(false);
   // D773 (#2099): while the band drafts, the run is the Earnings board's
@@ -234,14 +237,20 @@ export default function EarningsZone() {
     // load should still see what they earned, and each card says its own
     // absence rather than taking the page down.
     const t = restTicket.current.begin();
+    const FAILED = Symbol('failed');
     const [acct, hist, n] = await Promise.all([
-      api.getMyAdvisorPayoutAccount().catch(() => null),
-      api.listMyAdvisorPayouts().catch(() => null),
-      api.getMyAdvisorPeriodNote(w.key).catch(() => null),
+      api.getMyAdvisorPayoutAccount().catch(() => FAILED),
+      api.listMyAdvisorPayouts().catch(() => FAILED),
+      api.getMyAdvisorPeriodNote(w.key).catch(() => FAILED),
     ]);
     if (!restTicket.current.isCurrent(t)) return;
-    setPayout(acct);
-    setPayouts(Array.isArray(hist?.items) ? hist.items : []);
+    setRestRead({ payout: acct !== FAILED, payouts: hist !== FAILED, note: n !== FAILED });
+    setPayout(acct === FAILED ? null : acct);
+    setPayouts(hist !== FAILED && Array.isArray(hist?.items) ? hist.items : []);
+    if (n === FAILED) {
+      setNote(null); setDraft(''); setDraftKey(null); setModelText(null); setEditing(false);
+      return;
+    }
     setNote(n?.note || null);
     setDraft(n?.note?.body || '');
     setDraftKey(w.key);
@@ -484,7 +493,8 @@ export default function EarningsZone() {
     />
   );
 
-  const currentState = payout?.state || 'pending';
+  // #4714: an unread account has no state of its own, so no card is "Yours".
+  const currentState = restRead.payout ? (payout?.state || 'pending') : null;
 
   return (
     <div className="space-y-4">
@@ -694,7 +704,12 @@ export default function EarningsZone() {
               {payout?.blocked_reason}
             </p>
           )}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          {!restRead.payout && (
+            <div className="mt-3" role="alert" data-testid="payout-unreadable">
+              <Unreadable onRetry={() => loadRest(window_)}>Your payout account could not be read.</Unreadable>
+            </div>
+          )}
+          {restRead.payout && <div className="mt-3 flex flex-wrap items-center gap-2">
             <button type="button" className={payout?.started ? ghostButtonClass : buttonClass}
               onClick={connect} disabled={connecting} data-testid="button-connect-payout">
               {connecting ? 'Working…' : payout?.started ? 'Continue setup' : 'Connect a payout account'}
@@ -705,13 +720,13 @@ export default function EarningsZone() {
                 Check with the provider
               </button>
             )}
-          </div>
+          </div>}
           <SaveNote note={connectNote} />
 
           {/* NOT YET ASKED IS NOT REFUSED, and the two look identical in the
               card above. `last_checked_at` is what separates them. */}
           <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
-            {payout == null
+            {!restRead.payout
               ? 'Your payout account could not be read, so the state above is not yours — reload to try again.'
               : payout?.started
                 ? (payout?.last_checked_at
@@ -735,7 +750,11 @@ export default function EarningsZone() {
             <h3 className="text-[13px] font-extrabold tracking-tight">Payout history</h3>
             <span className="text-[10.5px] text-axal-faint">Audit trail · only here</span>
           </div>
-          {payouts.length === 0 ? (
+          {!restRead.payouts ? (
+            <div className="mt-3" role="alert" data-testid="payouts-unreadable">
+              <Unreadable onRetry={() => loadRest(window_)}>Your payout history could not be read, so this is not a claim that none was made.</Unreadable>
+            </div>
+          ) : payouts.length === 0 ? (
             <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
               No payout has been recorded. Nothing settles through Axal today, so this is the honest
               state rather than an empty list waiting to fill.
@@ -778,7 +797,11 @@ export default function EarningsZone() {
                   : 'No runs of this yet, so there is no average to quote'}
               </span>
             </div>
-            {note && !editing ? (
+            {!restRead.note ? (
+              <div className="mt-2" role="alert" data-testid="note-unreadable">
+                <Unreadable onRetry={() => loadRest(window_)}>This period's note could not be read, so nothing is drafted or filed over it until it is.</Unreadable>
+              </div>
+            ) : note && !editing ? (
               <>
                 <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed">{note?.body}</p>
                 <p className="mt-1.5 text-[10.5px] text-axal-faint">
@@ -802,7 +825,7 @@ export default function EarningsZone() {
                 placeholder="Draft a short read of this window, or write your own."
                 data-testid="input-aiband-d4" />
             )}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            {restRead.note && <div className="mt-2 flex flex-wrap items-center gap-2">
               <button type="button" className={ghostButtonClass} onClick={narrate} disabled={drafting || busy}>
                 {drafting ? 'Drafting…' : note ? 'Draft again' : 'Draft it'}
               </button>
@@ -822,7 +845,7 @@ export default function EarningsZone() {
                   Discard
                 </button>
               )}
-            </div>
+            </div>}
             <SaveNote note={saveNote} />
             <p className="mt-2 text-[10.5px] leading-relaxed text-axal-faint">
               The draft is written from the figures above as summary lines — counts and totals this

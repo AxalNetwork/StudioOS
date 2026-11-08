@@ -5,7 +5,7 @@ import { EmailAction } from '../../email/emailParts';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
+  Field, NothingYet, Pill, SaveNote, StatedLimit, Unreadable, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass,
 } from '../expertise/kit';
 import {
@@ -117,6 +117,16 @@ export default function DeliveryZone() {
     });
   }, []);
 
+  // #4714 (D4714): the create form's engagement list is its own read. A
+  // failed read says so beside the picker rather than offering only "No
+  // engagement", which reads as "you have none".
+  const [engagementsRead, setEngagementsRead] = useState(true);
+  const loadEngagements = useCallback(async () => {
+    try {
+      const engs = await api.listMyAdvisorEngagements();
+      setEngagements(engs?.items || []); setEngagementsRead(true);
+    } catch { setEngagements([]); setEngagementsRead(false); }
+  }, []);
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
@@ -133,9 +143,8 @@ export default function DeliveryZone() {
       });
       return;
     }
-    const engs = await api.listMyAdvisorEngagements().catch(() => null);
-    setEngagements(engs?.items || []);
-  }, []);
+    loadEngagements();
+  }, [loadEngagements]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadHeld(); }, [loadHeld]);
 
@@ -282,6 +291,11 @@ export default function DeliveryZone() {
                     </option>
                   ))}
                 </select>
+                {!engagementsRead && (
+                  <div className="mt-1" role="alert" data-testid="delivery-engagements-unreadable">
+                    <Unreadable onRetry={loadEngagements}>Your engagements could not be read, so none is offered here.</Unreadable>
+                  </div>
+                )}
               </Field>
               {!draft.engagement_id && (
                 <Field label="Client" hint="Used when there is no engagement to take the name from.">

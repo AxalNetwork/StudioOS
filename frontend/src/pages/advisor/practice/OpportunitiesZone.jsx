@@ -7,7 +7,7 @@ import {
   buttonClass, ghostButtonClass, inputClass, money,
 } from '../expertise/kit';
 import { bookingView, formatDateTime } from '../advisory/kit';
-import { acceptanceRate, classifyBooking } from './opportunityLog';
+import { acceptanceRate, classifyBooking, decisionMoment, medianDecision, spanText } from './opportunityLog';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -111,6 +111,7 @@ export default function OpportunitiesZone() {
   // is neither, so it is counted apart rather than as a decline.
   const decided = counts.accepted + counts.declined;
   const acceptRate = acceptanceRate(counts);
+  const median = useMemo(() => medianDecision(state.bookings), [state.bookings]);
 
   // The queue the artboard asks for: "sorted by what expires first, not what
   // arrived first". A row whose slot is gone cannot expire, so it sorts last.
@@ -123,7 +124,7 @@ export default function OpportunitiesZone() {
 
   const history = useMemo(
     () => rows.filter((r) => r.bucket !== 'awaiting')
-      .sort((a, b) => String(b.raw.updated_at || '').localeCompare(String(a.raw.updated_at || ''))),
+      .sort((a, b) => String(decisionMoment(b.raw)?.at || '').localeCompare(String(decisionMoment(a.raw)?.at || ''))),
     [rows],
   );
   const visible = filter === 'all' ? history : history.filter((r) => r.bucket === filter);
@@ -159,10 +160,10 @@ export default function OpportunitiesZone() {
         filters={advisorZoneFilters('practice/opportunities', { value: filter, onChange: setFilter })}
         actions={advisorZoneActions('practice/opportunities', {
           view: {
-            header: ['Requester', 'Decision', 'When', 'Reason', 'Asked for'],
+            header: ['Requester', 'Decision', 'Decided at', 'Last changed', 'Reason', 'Asked for'],
             rows: exportRows,
             cells: (r) => [
-              r.counterpartyName, VIEW_LABEL[r.bucket], r.raw.updated_at,
+              r.counterpartyName, VIEW_LABEL[r.bucket], r.raw.advisor_decided_at || '', r.raw.updated_at || '',
               r.raw.cancel_reason, r.raw.topic || r.note,
             ],
           },
@@ -176,13 +177,14 @@ export default function OpportunitiesZone() {
               : `${soon} ${soon === 1 ? 'reaches its slot' : 'reach their slots'} within a day`} />
         <Stat label="Accept rate" value={acceptRate == null ? <Unrecorded>Not recorded</Unrecorded> : `${acceptRate}%`}
           note={decided === 0 ? 'No request has been answered yet' : `${counts.accepted} of ${decided} answered`} />
-        {/* NOT COMPUTED, AND THE TILE SAYS WHY RATHER THAN SHOWING A NUMBER
-            FROM THE WRONG COLUMN. `advisor_bookings` has no decided_at:
-            `updated_at` is a LAST-TOUCHED stamp, and `routes/advisors.ts:1287`
-            moves it again whenever Sessions edits a booking's amount. A median
-            off that column would report the billing edit, not the decision. */}
-        <Stat label="Median decision" value={<Unrecorded>Not recorded</Unrecorded>}
-          note="No decision timestamp is stored" />
+        {/* #4714 (D4714): FROM `advisor_decided_at` (D4702), NEVER FROM
+            `updated_at`, which Sessions moves again on every billing edit.
+            Answers given before that column existed carry no time, so the
+            tile says how many of the answers it covers. */}
+        <Stat label="Median decision" value={median.ms == null ? <Unrecorded>Not recorded</Unrecorded> : spanText(median.ms)}
+          note={median.answered === 0 ? 'No request has been answered yet'
+            : median.counted === 0 ? 'No answer here has its time recorded'
+              : `Over ${median.counted} of ${median.answered} answers with a recorded time`} />
         <Stat label="Expired unanswered" value={counts.expired}
           note={counts.expired === 0 ? 'Every request got an answer' : 'Slot passed with no answer given'} />
       </div>
@@ -245,7 +247,7 @@ export default function OpportunitiesZone() {
             : 'No request sits under this view.'}</p>
           : <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[12px]">
             <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-              <th className="pb-2">Requester</th><th className="pb-2">Decision</th><th className="pb-2">When</th><th className="pb-2">Reason</th>
+              <th className="pb-2">Requester</th><th className="pb-2">Decision</th><th className="pb-2">Decided / last changed</th><th className="pb-2">Reason</th>
             </tr></thead>
             <tbody>{visible.map((r) => (
               <tr key={r.raw.id} data-testid={`row-pr1-history-${r.raw.id}`} className="border-t border-axal-hairline dark:border-gray-700">
@@ -253,7 +255,12 @@ export default function OpportunitiesZone() {
                 <td className="py-2 pr-3"><Pill tone={VIEW_TONE[r.bucket]}>{VIEW_LABEL[r.bucket]}</Pill>
                   {r.raw.status === 'no_show' && <span className="mt-1 block text-[10.5px] text-axal-faint">Accepted, then recorded a no-show</span>}
                 </td>
-                <td className="py-2 pr-3 text-axal-muted">{r.raw.updated_at ? formatDateTime(r.raw.updated_at) : <Unrecorded />}</td>
+                <td className="py-2 pr-3 text-axal-muted">{(() => {
+                  // #4714: "Decided" only from the decision's own time.
+                  const m = decisionMoment(r.raw);
+                  if (!m) return <Unrecorded />;
+                  return <span data-testid={`when-${r.raw.id}`}>{m.kind === 'decided' ? 'Decided ' : 'Last changed '}{formatDateTime(m.at)}</span>;
+                })()}</td>
                 <td className="py-2 text-axal-muted">{
                   r.bucket === 'expired' ? 'Never answered. The slot passed.'
                     : r.bucket === 'withdrawn' ? (r.raw.cancel_reason === 'capacity_race' ? 'The last seat went to someone else.' : r.raw.cancelled_by === 'client' ? 'The client withdrew the request.' : 'You withdrew the whole slot.')

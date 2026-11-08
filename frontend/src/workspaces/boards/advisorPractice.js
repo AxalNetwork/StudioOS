@@ -23,16 +23,17 @@ import { STATE_LABEL } from '../../pages/advisor/practice/deliveryTrail.js';
  * rather than denying a cut that now exists or promising one that has not been
  * taken. `advisor_bucket_overview.test.mjs` bans both directions. D75.
  *
- * TWO MORE V3 SUBTITLES THAT NAME NOTHING STORED.
+ * "6 SLOTS OPEN" OVER SESSIONS IS LEFT OUT. Slots are real (`listAdvisorSlots`
+ * reads them), but this zone is about booked sessions and what was billed
+ * against them. A header counting availability over a body about billing is
+ * exactly the overview/zone mismatch a board exists to prevent, so Sessions
+ * counts sessions.
  *
- *   · "6 slots open" over Sessions. Slots are real — `listAdvisorSlots` reads
- *     them — but this zone is about booked sessions and what was billed against
- *     them. A header counting availability over a body about billing is exactly
- *     the overview/zone mismatch a board exists to prevent, so Sessions counts
- *     sessions.
- *   · "1 renewal due" over Engagements, and "sent and opened" over Delivery.
- *     A booking has a status and a topic; it has no renewal date, and nothing
- *     records that a client opened anything. Neither is inferred.
+ * "Renewal due" over Engagements and "sent and opened" over Delivery ARE
+ * drawn, and only from their stores (#4714, D4714): `renewal_due` is
+ * `advisor_engagements`' own lane and total, and sent/opened are
+ * `advisor_deliverables`' recorded states. A booking still carries neither,
+ * so neither is ever inferred from one.
  *
  * #4702 (D4702): EACH SECTION SUMMARISES THE SAME ENTITIES AS THE PAGE IT LINKS
  * TO. Engagements used to count confirmed BOOKINGS and Delivery completed
