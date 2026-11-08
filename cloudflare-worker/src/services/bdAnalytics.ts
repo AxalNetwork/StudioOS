@@ -28,6 +28,7 @@
  * layer aliases it, and `amount` here is the engine's own field name.
  */
 export type QuoteStatus = 'submitted' | 'accepted' | 'rejected' | 'withdrawn';
+import { quoteOutcome, winRate, winRateBasis } from './partnerPipelineRules';
 
 export interface QuoteRow {
   status: QuoteStatus | string;
@@ -119,13 +120,15 @@ export function analysePipeline(quotes: QuoteRow[]): BdPipeline {
   for (const q of rows) {
     const status = String(q?.status || '');
     const amount = Math.max(0, num(q?.amount) ?? 0);
-    if (status === 'accepted') {
+    // D4693: the status means what `quoteOutcome` says everywhere a quote is counted.
+    const outcome = quoteOutcome(status);
+    if (outcome === 'won') {
       accepted++; wonValue += amount;
-    } else if (status === 'rejected') {
+    } else if (outcome === 'lost') {
       rejected++;
-    } else if (PENDING.has(status)) {
+    } else if (outcome === 'open') {
       pending++; openValue += amount;
-    } else if (status === 'withdrawn') {
+    } else if (outcome === 'withdrawn') {
       withdrawn++;
     }
     if (DECIDED.has(status) && q?.created_at && q?.decided_at) {
@@ -135,19 +138,16 @@ export function analysePipeline(quotes: QuoteRow[]): BdPipeline {
     }
   }
 
-  const decided = accepted + rejected;
   const med = median(cycles);
   return {
-    win_rate_pct: decided > 0 ? pct(accepted / decided) : null,
+    win_rate_pct: winRate(accepted, rejected).pct,
     accepted, rejected, pending, withdrawn,
     open_value: money(openValue),
     won_value: money(wonValue),
     median_cycle_days: med === null ? null : Math.round(med * 10) / 10,
     average_deal_size: accepted > 0 ? money(wonValue / accepted) : null,
     quote_count: rows.length,
-    win_rate_basis: decided > 0
-      ? `${accepted} won of ${decided} decided. ${pending} still open and ${withdrawn} withdrawn are excluded — an undecided quote is not a loss, and withdrawing is not losing.`
-      : 'No quotes decided yet, so there is no win rate to report.',
+    win_rate_basis: winRateBasis(accepted, rejected, pending, withdrawn),
   };
 }
 
@@ -370,7 +370,6 @@ export function analyseByShape(quotes: QuoteRow[]): ShapeBreakdown[] {
 
   return [...by.values()]
     .map((v) => {
-      const decided = v.accepted + v.rejected;
       const med = median(v.cycles);
       return {
         shape: v.shape,
@@ -379,7 +378,7 @@ export function analyseByShape(quotes: QuoteRow[]): ShapeBreakdown[] {
         rejected: v.rejected,
         pending: v.pending,
         withdrawn: v.withdrawn,
-        win_rate_pct: decided > 0 ? pct(v.accepted / decided) : null,
+        win_rate_pct: winRate(v.accepted, v.rejected).pct,
         median_cycle_days: med === null ? null : Math.round(med * 10) / 10,
         won_value: money(v.won),
         open_value: money(v.open),
@@ -462,14 +461,14 @@ export function analyseByQuarter(quotes: QuoteRow[]): QuarterBreakdown[] {
         accepted: v.accepted,
         rejected: v.rejected,
         decided,
-        win_rate_pct: decided > 0 ? pct(v.accepted / decided) : null,
+        win_rate_pct: winRate(v.accepted, v.rejected).pct,
         won_value: money(v.won),
         by_shape: [...v.shapes.values()]
           .map((s) => ({
             shape: s.shape,
             decided: s.decided,
             accepted: s.accepted,
-            win_rate_pct: s.decided > 0 ? pct(s.accepted / s.decided) : null,
+            win_rate_pct: winRate(s.accepted, s.decided - s.accepted).pct,
           }))
           .sort(byShapeName),
       };

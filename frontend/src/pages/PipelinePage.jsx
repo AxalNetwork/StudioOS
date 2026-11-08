@@ -5,6 +5,8 @@ import SpinoutWizard from '../components/SpinoutWizard';
 import { useWebSocket } from '../hooks/useWebSocket';
 import Sheet from '../ui/Sheet.jsx';
 import { confidenceLine } from '../lib/decisionConfidence.js';
+import useBoardSync from './pipeline/useBoardSync.js';
+import { routeBoardEvent, acceptTally, mergePushedTally } from './pipeline/liveEvents.js';
 
 const STAGES = [
   { id: 'idea', label: 'Idea', color: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300', border: 'border-gray-300 dark:border-gray-600' },
@@ -15,9 +17,22 @@ const STAGES = [
   { id: 'iterate', label: 'Iterate', color: 'bg-orange-100 text-orange-700', border: 'border-orange-300' },
 ];
 
+// The Build desk list answers an envelope now (every page, `complete`, `total`);
+// a stubbed or dev-mirror client may still answer a bare array. Either is one list.
+const loadBoard = async () => {
+  const r = await api.pipelineActive();
+  return Array.isArray(r) ? { items: r, total: r.length, complete: true } : r;
+};
+
 export default function PipelinePage({ embedded = false }) {
-  const [deals, setDeals] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // The list, its states and its re-reads live in `useBoardSync` (#4701): a
+  // first read that fails is `unreadable` rather than an empty board, a re-read
+  // that fails keeps the rows and says so, a stale answer is dropped, and a live
+  // event or a reconnect that lands during a local move is queued until the
+  // moves settle instead of being dropped.
+  const board = useBoardSync(loadBoard);
+  const deals = board.deals;
+  const reload = board.reload;
   const [openId, setOpenId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [me, setMe] = useState(null);
@@ -26,48 +41,7 @@ export default function PipelinePage({ embedded = false }) {
   const [dragOverStage, setDragOverStage] = useState(null);
   const [pendingMoves, setPendingMoves] = useState({}); // { dealId: true } — cards mid-flight
   const [moveError, setMoveError] = useState(null); // { text, retry: { dealId, toStage } | { reload: true } }
-
-  // Concurrency guards. `pendingDealsRef` allows one in-flight write per deal,
-  // so a later move of the same deal cannot be overtaken by an earlier one.
-  // `reloadGenRef` lets a reload that started BEFORE a write be discarded when
-  // it lands AFTER it, so a stale snapshot cannot undo a confirmed move.
-  // `dealsRef` is the board's current list, kept in step with `deals`: the move
-  // handler reads the deal and its prior stage from it SYNCHRONOUSLY. It used to
-  // read them out of a `setDeals` updater, which React is free to run later (or
-  // twice), so the card could move on screen while the request was never sent.
-  // Updater functions in this file stay pure.
-  const dealsRef = useRef([]);
-  const loadedRef = useRef(false);
-  const reloadGenRef = useRef(0);
-  const pendingDealsRef = useRef(new Set()); // mid-flight deal ids (sync ref)
-  const writeDeals = (next) => { dealsRef.current = next; setDeals(next); };
-
-  // The skeleton shows only until the first board arrives. After that a reload
-  // is a background refresh: the board, the open drawer and anything typed in
-  // it stay mounted, and a refresh that fails keeps the last good board.
-  const reload = async () => {
-    const gen = ++reloadGenRef.current;
-    if (!loadedRef.current) setLoading(true);
-    try {
-      const data = await api.pipelineActive();
-      if (gen !== reloadGenRef.current) return;
-      const inFlight = pendingDealsRef.current;
-      const byId = new Map(dealsRef.current.map(d => [d.id, d]));
-      writeDeals(inFlight.size > 0
-        ? data.map(d => inFlight.has(d.id) && byId.has(d.id)
-          ? { ...d, pipeline_stage: byId.get(d.id).pipeline_stage }
-          : d)
-        : data);
-      loadedRef.current = true;
-      setLoading(false);
-    } catch {
-      if (gen === reloadGenRef.current && !loadedRef.current) {
-        setLoading(false);
-        setMoveError({ text: 'The pipeline did not load. Try again.', retry: { reload: true } });
-      }
-    }
-  };
-  useEffect(() => { (async () => { try { setMe(await api.getCurrentUser()); } catch {} reload(); })(); }, []);
+  useEffect(() => { (async () => { try { setMe(await api.getCurrentUser()); } catch {} })(); }, []);
 
   // Studio-operator write access. The board (create/advance/gate/tasks/metrics)
   // is an operator surface — admins and partners only. Investors observe and
@@ -77,44 +51,21 @@ export default function PipelinePage({ embedded = false }) {
 
   // Live board updates: subscribe to the global pipeline 'overview' room for
   // any authenticated session (the board is watchable — and votable — by all).
-  // Any stage_advanced / project_created event triggers a quick reload so cards
-  // reflect the change without the user pressing refresh. Skipped while a local
-  // move is in flight to avoid clobbering the optimistic UI.
-  const [, setLiveTick] = useState(0);
-  // Vote tallies pushed live via WebSocket — keyed by deal_id. Each entry
-  // mirrors the GET /pipeline/votes/{id} payload. The DealCard widget uses
-  // this as an override so it doesn't have to refetch on every vote event.
+  // A board event asks the sync for a re-read; the sync runs it now, or after
+  // the last local move settles, so an event is never dropped (#4701). A socket
+  // that dropped and came back cannot know what it missed, so it re-reads too.
+  //
+  // Vote tallies pushed live are the PUBLIC aggregate, keyed by deal_id. They
+  // carry no viewer state; the widget merges them over its own `my_vote`.
   const [voteTallies, setVoteTallies] = useState({});
 
-  // Live updates: anyone authenticated can watch the board (voting works
-  // for everyone). The WS upgrade is gated only by having a session.
   useWebSocket('/api/pipeline/ws/overview', {
     enabled: !!me,
-    onMessage: (msg) => {
-      if (!msg || !msg.type) return;
-      // Vote events carry a fresh tally; merge into local state without a
-      // network round-trip so every connected board reflects the change
-      // within ~50ms of the cast.
-      if (msg.type === 'vote_updated' && msg.deal_id) {
-        setVoteTallies(prev => ({ ...prev, [msg.deal_id]: msg.tally }));
-        setLiveTick(t => t + 1);
-        return;
-      }
-      // All backend events that mutate the board state. Keep this list in
-      // sync with notifyPipelineRoom call sites in routes/pipeline.ts so a
-      // new event type is not silently swallowed (which would leave the
-      // board stale until the user pressed Refresh).
-      const BOARD_EVENTS = new Set([
-        'stage_advanced',
-        'project_created',
-        'gate_review_created',
-        'gate_decided',
-      ]);
-      if (BOARD_EVENTS.has(msg.type)) {
-        if (pendingDealsRef.current.size === 0) reload();
-        setLiveTick(t => t + 1);
-      }
-    },
+    onOpen: ({ reconnect }) => { if (reconnect) board.reconnected(); },
+    onMessage: (msg) => routeBoardEvent(msg, {
+      refresh: board.refresh,
+      tally: (dealId, tally, ts) => setVoteTallies((prev) => acceptTally(prev, dealId, tally, ts)),
+    }),
   });
 
   // Optimistic stage move, shared by drag-and-drop, the drawer's buttons and
@@ -124,17 +75,18 @@ export default function PipelinePage({ embedded = false }) {
   // column it came from and `moveError` says so, with a retry.
   const moveDealToStage = async (dealId, toStage) => {
     // One write per deal, decided BEFORE any state changes.
-    if (pendingDealsRef.current.has(dealId)) return false;
-    const target = dealsRef.current.find(d => d.id === dealId);
+    if (board.isMoving(dealId)) return false;
+    const target = board.getDeals().find(d => d.id === dealId);
     if (!target) return false;
     if (target.pipeline_stage === toStage) return true;
     const fromStage = target.pipeline_stage;
     const dealName = target.name;
     const label = (id) => STAGES.find(s => s.id === id)?.label || id;
 
-    pendingDealsRef.current.add(dealId);
-    reloadGenRef.current += 1; // a read that began before this write is now stale
-    writeDeals(dealsRef.current.map(d => d.id === dealId ? { ...d, pipeline_stage: toStage } : d));
+    // Starting a move drops any read that began before it; settling it (below)
+    // drops one that began during it, and runs the re-read that was queued.
+    board.beginMove(dealId);
+    board.writeDeals(board.getDeals().map(d => d.id === dealId ? { ...d, pipeline_stage: toStage } : d));
     setPendingMoves(p => ({ ...p, [dealId]: true }));
     setMoveError(null);
 
@@ -145,18 +97,17 @@ export default function PipelinePage({ embedded = false }) {
     } catch {
       confirmed = false;
     }
-    pendingDealsRef.current.delete(dealId);
-    reloadGenRef.current += 1; // and so is one that began during it
     setPendingMoves(p => { const n = { ...p }; delete n[dealId]; return n; });
 
     if (!confirmed) {
       // Only this deal's stage goes back; every other card and field is as it was.
-      writeDeals(dealsRef.current.map(d => d.id === dealId ? { ...d, pipeline_stage: fromStage } : d));
+      board.writeDeals(board.getDeals().map(d => d.id === dealId ? { ...d, pipeline_stage: fromStage } : d));
       setMoveError({
         text: `Could not move "${dealName}" to ${label(toStage)}. It is back in ${label(fromStage)}.`,
         retry: { dealId, toStage },
       });
     }
+    board.endMove(dealId);
     return confirmed;
   };
 
@@ -166,7 +117,7 @@ export default function PipelinePage({ embedded = false }) {
   const onCardDragStart = (deal) => (e) => {
     // Block dragging a card that already has an in-flight write — prevents
     // out-of-order operations on the same deal.
-    if (!canEdit || pendingDealsRef.current.has(deal.id)) {
+    if (!canEdit || board.isMoving(deal.id)) {
       e.preventDefault();
       return;
     }
@@ -232,7 +183,28 @@ export default function PipelinePage({ embedded = false }) {
         </div>
       )}
 
-      {loading ? <Loading text="Loading pipeline…" /> : (
+      {board.status === 'ready' && board.refreshError && (
+        <div role="alert" data-testid="pipeline-refresh-error" className="mb-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3">
+          <span>The board could not be refreshed. What you see is from the last read that worked.</span>
+          <button type="button" onClick={reload} className="min-h-[44px] px-3 font-semibold underline">Try again</button>
+        </div>
+      )}
+      {board.status === 'ready' && board.partial && (
+        <div role="alert" data-testid="pipeline-partial" className="mb-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3">
+          <span>Showing {deals.length}{board.total != null ? ` of ${board.total}` : ''} projects. The rest could not be read, so this board is not the whole list.</span>
+          <button type="button" onClick={reload} className="min-h-[44px] px-3 font-semibold underline">Read the rest</button>
+        </div>
+      )}
+      {board.status === 'ready' && board.refreshing && (
+        <div className="mb-2 text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1" data-testid="pipeline-refreshing" aria-live="polite"><Loader2 className="animate-spin" size={10} /> Refreshing…</div>
+      )}
+      {board.status === 'unreadable' ? (
+        <div role="alert" data-testid="pipeline-unreadable" className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 rounded-lg px-4 py-6 text-sm text-center">
+          <div className="font-semibold mb-1">The pipeline could not be read.</div>
+          <div className="text-xs mb-3">This is not an empty board — nothing was loaded. Try again in a moment.</div>
+          <button type="button" onClick={reload} className="min-h-[44px] bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 rounded">Try again</button>
+        </div>
+      ) : board.status === 'loading' ? <Loading text="Loading pipeline…" /> : (
         <div className="sm:overflow-x-auto pb-4">
           <div className="flex flex-col sm:flex-row gap-3 sm:min-w-max">
             {STAGES.map(stage => {
@@ -262,7 +234,7 @@ export default function PipelinePage({ embedded = false }) {
                         onDragEnd={onCardDragEnd}
                         isDragging={dragId === d.id}
                         isPending={!!pendingMoves[d.id]}
-                        liveTally={voteTallies[d.id]}
+                        liveTally={voteTallies[d.id]?.tally}
                       />
                     ))}
                   </div>
@@ -309,7 +281,7 @@ function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, 
       )}
       {deal.latest_metrics?.key_metrics && Object.keys(deal.latest_metrics.key_metrics).length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
-          {Object.entries(deal.latest_metrics.key_metrics).slice(0, 3).map(([k, v]) => (
+          {Object.entries(deal.latest_metrics.key_metrics).filter(([k]) => !k.startsWith('_')).slice(0, 3).map(([k, v]) => (
             <span key={k} className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-700 px-1.5 py-0.5 rounded dark:text-gray-300">{k}: {String(v)}</span>
           ))}
         </div>
@@ -354,14 +326,17 @@ function DealVoteWidget({ dealId, liveTally }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
+  const [unreadable, setUnreadable] = useState(false);
+
   useEffect(() => {
     let alive = true;
-    api.getVotes(dealId).then(t => { if (alive) setTally(t); }).catch(() => {});
+    api.getVotes(dealId).then(t => { if (alive) { setTally(t); setUnreadable(false); } }).catch(() => { if (alive) setUnreadable(true); });
     return () => { alive = false; };
   }, [dealId]);
 
-  // WS push from parent — always wins over our cached state.
-  useEffect(() => { if (liveTally) setTally(liveTally); }, [liveTally]);
+  // WS push from the parent is the public aggregate (#4701): it carries no
+  // `my_vote`, so it is merged over the viewer's own rather than replacing it.
+  useEffect(() => { if (liveTally) { setTally((cur) => mergePushedTally(cur, liveTally)); setUnreadable(false); } }, [liveTally]);
 
   const cast = async (vote_type) => {
     setBusy(true); setErr('');
@@ -373,7 +348,12 @@ function DealVoteWidget({ dealId, liveTally }) {
     finally { setBusy(false); }
   };
 
-  if (!tally) return null;
+  if (!tally) {
+    // A tally that could not be read is not "no votes". Say so.
+    return unreadable
+      ? <div className="mt-2 pt-2 border-t border-gray-100 text-[10px] text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>Votes unavailable right now.</div>
+      : null;
+  }
   const my = tally.my_vote;
   const stop = (e) => e.stopPropagation();
 
@@ -524,7 +504,7 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
             {err && <div role="alert" className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 rounded p-2 text-xs mb-3">{err}</div>}
 
             <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-800">
-              {[{id:'overview',label:'Overview',icon:Activity},{id:'tasks',label:`MVP Tasks (${data.tasks.length})`,icon:Target},{id:'metrics',label:`Metrics (${data.metrics.length})`,icon:TrendingUp},{id:'gates',label:`Gates (${data.gates.length})`,icon:Sparkles}].map(t => {
+              {[{id:'overview',label:'Overview',icon:Activity},{id:'tasks',label:`MVP Tasks (${data.tasks.length})`,icon:Target},{id:'metrics',label:`Metrics (${data.metrics_total ?? data.metrics.length})`,icon:TrendingUp},{id:'gates',label:`Gates (${data.gates_total ?? data.gates.length})`,icon:Sparkles}].map(t => {
                 const Icon = t.icon;
                 return (
                   <button key={t.id} onClick={() => setTab(t.id)}
@@ -680,6 +660,9 @@ function MetricsTab({ data, canEdit, dealId, reload, report }) {
         </div>
       )}
 
+      {data.metrics_truncated && (
+        <div className="text-[11px] text-amber-700 mb-2" data-testid="pipeline-metrics-truncated">Showing the latest {data.metrics.length} of {data.metrics_total} snapshots.</div>
+      )}
       <div className="space-y-2">
         {data.metrics.length === 0 ? <Empty text="No snapshots yet." /> : data.metrics.map(m => (
           <div key={m.id} className="bg-white border border-gray-200 dark:border-gray-700 rounded p-2 text-xs dark:bg-gray-900 dark:border-gray-800">
@@ -688,7 +671,7 @@ function MetricsTab({ data, canEdit, dealId, reload, report }) {
               <ScorePill score={m.traction_score} small />
             </div>
             <div className="flex flex-wrap gap-1">
-              {Object.entries(m.key_metrics).map(([k, v]) => <span key={k} className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{k}: {String(v)}</span>)}
+              {Object.entries(m.key_metrics).filter(([k]) => !k.startsWith('_')).map(([k, v]) => <span key={k} className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{k}: {String(v)}</span>)}
             </div>
           </div>
         ))}
@@ -701,6 +684,9 @@ function GatesTab({ data, canEdit, onDecide, busy }) {
   if (data.gates.length === 0) return <Empty text="No decision gates triggered yet. Capture metrics, then click 'Trigger AI Review'." />;
   return (
     <div className="space-y-3">
+      {data.gates_truncated && (
+        <div className="text-[11px] text-amber-700" data-testid="pipeline-gates-truncated">Showing the latest {data.gates.length} of {data.gates_total} gates.</div>
+      )}
       {data.gates.map(g => (
         <div key={g.id} className="bg-white border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-start justify-between mb-2">

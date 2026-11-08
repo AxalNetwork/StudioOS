@@ -179,13 +179,13 @@ test('a save keeps the client-hours table on screen while it re-reads', async ()
   } finally { await view.unmount(); restoreApi(); }
 });
 
-test('the Next week chip re-reads the next period and keeps the forms mounted', async () => {
+test('the Next month chip re-reads the next period and keeps the forms mounted', async () => {
   const calls = stubApi(base());
   const view = await mountZone(Zone, '/delivery/capacity');
   try {
     await view.settle();
     await view.type('Why this number', 'typed before switching');
-    await view.press('Next week');
+    await view.press('Next month');
     await view.settle();
     const periods = calls.filter(([k]) => k === 'getPartnerCapacity').map(([, a]) => a[0]);
     assert.equal(periods.length, 2);

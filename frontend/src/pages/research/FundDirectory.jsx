@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ExternalLink, Search, SlidersHorizontal } from 'lucide-react';
 import { Card, Skeleton, Unrecorded } from '../../ui';
 import Sheet from '../../ui/Sheet.jsx';
@@ -7,7 +7,7 @@ import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
   EMPTY_QUERY, PAGE_SIZES, SIZE_BANDS, SORT_OPTIONS, STAGE_REASON, VERDICT_LABELS,
   activeFilters, backingOf, citationOf, coverageRows, directoryLine, directoryTotalOf, formatCount, pageInfo, pageList,
-  rangeLabel, recorded, sizeOf, toParams,
+  queryFromSearch, rangeLabel, recorded, searchFromQuery, sizeOf, toParams,
 } from './fundDirectoryRead';
 
 /**
@@ -595,8 +595,18 @@ export default function FundDirectory({
   researchedNames = new Set(), onAdd = null, busy = null, dossierOf = null, listState = 'ok', notice = null,
   onTotal = null, band = null,
 }) {
-  const [query, setQuery] = useState(EMPTY_QUERY);
-  const [search, setSearch] = useState('');
+  // D4612: the list on screen is the one the address names, and every change
+  // is written back (replacing the entry, so Back leaves the directory rather
+  // than stepping through each filter).
+  const [params, setParams] = useSearchParams();
+  const [query, setQuery] = useState(() => queryFromSearch(params));
+  const [search, setSearch] = useState(() => queryFromSearch(params).q);
+  useEffect(() => {
+    const next = searchFromQuery(query, params);
+    if (next.toString() !== params.toString()) setParams(next, { replace: true });
+    // `params` is read, not followed: following it would undo a change before it is written.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
   const [result, setResult] = useState({ loading: true, error: null, data: null });
   const [facets, setFacets] = useState(null);
   const [selected, setSelected] = useState(null);
