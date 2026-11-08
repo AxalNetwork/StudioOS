@@ -10,6 +10,7 @@ import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { useAuth } from '../../hooks/useAuthSync';
 import { reportError } from '../../lib/log';
+import { branchCoverageLine } from './hqTeamBranchModel';
 import { leaveHq } from './handoverNote';
 
 /**
@@ -64,10 +65,8 @@ export default function HqAccountsPage({ onImpersonate }) {
       ? 'Licence bindings: unreadable'
       : 'The licence each administrator holds'),
     team && scope && `${scope.branch} read alone — ${scope.status === 'ok' ? 'it answered' : scope.status === 'not_deployed' ? 'not deployed' : 'it did not answer'}`,
-    team && !scope && team.branches_coverage
-      && (team.branches_coverage.total
-        ? `Of ${team.branches_coverage.total} branches, ${team.branches_coverage.answered} answered`
-        : 'No branch is provisioned, so every administrator is HQ-held'),
+    // D5041: said from what HQ established (asked, ready, not deployed, registry unreadable), never from a total alone.
+    team && !scope && branchCoverageLine(team),
   ].filter(Boolean);
 
   const rail = (

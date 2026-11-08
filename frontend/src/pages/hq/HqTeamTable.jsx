@@ -5,6 +5,7 @@ import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import { daysTo, rungRank } from '../../lib/notices';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
+import { branchCoverageLine, branchStateText, registryUnreadable, wholeTeamEstablished } from './hqTeamBranchModel';
 
 /**
  * HQ · Team — the first screen whose SUBJECT is the administrators (H9, D138).
@@ -772,14 +773,22 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
         </div>
       )}
 
+      {registryUnreadable(data) && (
+        <div className="mt-4 border-t border-axal-hairline pt-3" data-testid="hq-team-registry-unreadable">
+          <Unreadable
+            what="HQ's deployment registry"
+            claim="So the set of provisioned branches is not established. This is not a claim that no branch exists, and the administrators above are HQ's own, not necessarily the whole team."
+            onRetry={load}
+          />
+        </div>
+      )}
+
       {branches.map((b) => (
         <div key={b.code} className="mt-4 border-t border-axal-hairline pt-3" data-testid="hq-team-group-branch">
           <div className="flex items-baseline gap-2">
             <span className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-ink">{b.code}</span>
-            <span className="text-[11.5px] text-axal-faint">
-              {b.status === 'ok' && `${(b.data?.results || []).length} matched${b.data?.truncated ? ' (more exist)' : ''}${b.as_of ? ` · as of ${String(b.as_of).slice(0, 19).replace('T', ' ')}` : ''}`}
-              {b.status === 'not_deployed' && 'Not deployed'}
-              {b.status === 'unreadable' && 'Could not be read'}
+            <span className="text-[11.5px] text-axal-faint" data-testid={`hq-team-branch-state-${b.code}`}>
+              {branchStateText(b)}
             </span>
           </div>
           {b.status === 'unreadable' && (
@@ -788,8 +797,8 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
           {b.status === 'not_deployed' && (
             <p className="mt-1 text-[12px] text-axal-faint">{b.reason}</p>
           )}
-          {b.status === 'ok' && !data.searched && (
-            <p className="mt-1 text-[12px] text-axal-faint">
+          {(b.status === 'not_asked' || (b.status === 'ok' && !data.searched)) && (
+            <p className="mt-1 text-[12px] text-axal-faint" data-testid="hq-team-branch-idle">
               Type at least two characters to ask this branch. Its accounts live on its own
               database, so HQ cannot list them from here.
             </p>
@@ -829,9 +838,9 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
             {' '}
           </>
         )}
-        {branches.length === 0
+        {wholeTeamEstablished(data)
           ? 'No branch is provisioned, so every account on the platform is HQ-held and this is the whole team.'
-          : `Of ${data.branches_coverage?.total ?? branches.length} branches, ${data.branches_coverage?.answered ?? 0} answered.`}
+          : (branchCoverageLine(data) ? `${branchCoverageLine(data)}.` : null)}
         {' '}
         Moving an account between branches closes it where it lives and re-invites it where it is
         going — records stay put. Move appears on a branch hit only when another branch code exists.
