@@ -120,6 +120,7 @@ function freshDb() {
       status TEXT NOT NULL DEFAULT 'accepted',
       delivered_at TEXT, delivery_notes TEXT, cancelled_at TEXT, cancel_reason TEXT,
       invoice_id TEXT, invoiced_at TEXT,
+      company_id INTEGER,  -- migration 196; the Pipeline's company scope reads it (#4693)
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
