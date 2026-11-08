@@ -25,6 +25,7 @@ import { mount as admin_licence_pricingMount } from './admin_licence_pricing';
 import { mount as admin_licence_pricing_applyMount } from './admin_licence_pricing_apply';
 import { mount as admin_persona_segment_scopesMount } from './admin_persona_segment_scopes';
 import { mount as admin_platform_buildMount } from './admin_platform_build';
+import { mount as admin_program_pricingMount } from './admin_program_pricing';
 import { mount as company_complianceMount } from './company_compliance';
 import { mount as data_room_proposalsMount } from './data_room_proposals';
 import { mount as deck_accessMount } from './deck_access';
@@ -88,6 +89,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_licence_pricing_apply', mount: admin_licence_pricing_applyMount },
   { file: 'admin_persona_segment_scopes', mount: admin_persona_segment_scopesMount },
   { file: 'admin_platform_build', mount: admin_platform_buildMount },
+  { file: 'admin_program_pricing', mount: admin_program_pricingMount },
   { file: 'company_compliance', mount: company_complianceMount },
   { file: 'data_room_proposals', mount: data_room_proposalsMount },
   { file: 'deck_access', mount: deck_accessMount },

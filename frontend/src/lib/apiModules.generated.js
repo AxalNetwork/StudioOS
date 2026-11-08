@@ -216,6 +216,7 @@ export * from './api/posthog.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/programGrants.js';
+export * from './api/programPricing.js';
 export * from './api/programProposals.js';
 export * from './api/programs.js';
 export * from './api/promoUsage.js';
