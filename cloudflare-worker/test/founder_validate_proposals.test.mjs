@@ -333,7 +333,9 @@ test('accepting writes through the same function the manual route uses', async (
   const bodyOnly = fn.slice(0, fn.indexOf('\n}') + 2);
   // D690 (#1692): the allocation is one INSERT … SELECT in the statement
   // builder that `insertHypothesis` (and `insertHypothesisWithLinks`) run.
-  assert.match(bodyOnly, /insertHypothesisStatement\(env, \{ projectId, claim, userId \}\)/);
+  // D4627 (#4627) added `sourceProposalId` to that same call, so it writes
+  // the row it claimed rather than a second one on retry.
+  assert.match(bodyOnly, /insertHypothesisStatement\(env, \{ projectId, claim, userId, sourceProposalId: proposalId \}\)/);
   const stmtFn = writes.slice(writes.indexOf('export function insertHypothesisStatement'));
   const stmtBody = stmtFn.slice(0, stmtFn.indexOf('\n}') + 2);
   assert.match(stmtBody, /MAX\(CAST\(substr\(code, 2\) AS INTEGER\)\)/);

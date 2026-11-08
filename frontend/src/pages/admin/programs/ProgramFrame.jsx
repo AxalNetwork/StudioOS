@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Lightbox, usePhoneWidth } from '../../../ui';
 import { programsApi } from '../../../lib/api/programs';
-import { DIALOG_BODY, DIALOG_LINES, DialogButtons, GrantBadge, MovedNotice, StatusPill, SUB, Unread } from './parts';
-import { NOT_RECORDED, PAGES, crumbText, grantBadgeOf, movedNotice, programByKey, withoutMoved } from './programsModel';
+import { DIALOG_BODY, DIALOG_LINES, DialogButtons, GrantBadge, MovedNotice, ProgramDimensions, StatusPill, SUB, Unread } from './parts';
+import useProgramsTitle from './useProgramsTitle';
+import { NOT_RECORDED, PAGES, crumbText, grantBadgeOf, movedNotice, programByKey, programDimensions, withoutMoved } from './programsModel';
 import { CSV_DONE, CSV_LINES, CSV_PROGRAMS, refusalSentence } from './programPagesModel';
 
 const CRUMB = 'font-mono text-[11px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
@@ -36,6 +37,7 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
   const moved = movedNotice(loc.pathname, loc.search);
   // D4810: the page's own detail read when it passes one, so the frame never reads it again.
   const grantBadge = useGrantBadge(program, detail);
+  useProgramsTitle(`${page.title} · Programs`);
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-24 pt-6 sm:px-6 lg:pb-10" data-testid={`programs-page-${program}`}>
       <nav aria-label="Breadcrumb" className={CRUMB} data-testid="programs-crumb">
@@ -51,6 +53,7 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
             <StatusPill status={status || card.status} testId="programs-header-status" />
             <GrantBadge grant={superAdmin ? card.hqGrant : card.grant} badge={grantBadge} testId="programs-header-grant" />
           </div>
+          <ProgramDimensions dims={programDimensions({ ...card, status: status || card.status }, { superAdmin, grantBadge })} testId="programs-header-dimensions" />
           {page.line
             ? <p className="m-0 text-[13.5px] leading-normal text-axal-muted dark:text-gray-400" data-testid="programs-header-line">{page.line}</p>
             : <Unread word={NOT_RECORDED} reason={page.lineReason} testId="programs-header-line" />}

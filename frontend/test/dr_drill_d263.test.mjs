@@ -373,6 +373,91 @@ test('D523 drill: an export that cannot be split fails the restore before any im
   assert.ok(!r.out.includes(SENTINEL));
 });
 
+// ------------------------------------------------- FK cycle (run 41307767798) ----
+
+/**
+ * Production's shape on 2026-11-01: legal_documents.fund_id → vc_funds and
+ * vc_funds.lpa_doc_id → legal_documents, one row each, pointing at each other,
+ * in wrangler's `INSERT INTO "t" ("c",...) VALUES(...)` form. A child of the
+ * cycle (fund_lps) comes first in the export, and an unrelated table sits
+ * between. The child of a cycle member exported before it.
+ */
+function cycleSql() {
+  return [
+    'PRAGMA defer_foreign_keys=TRUE;',
+    'CREATE TABLE fund_lps (id INTEGER PRIMARY KEY, fund_id INTEGER NOT NULL REFERENCES vc_funds(id), name TEXT);',
+    `INSERT INTO "fund_lps" ("id","fund_id","name") VALUES(1,7,'${SENTINEL}');`,
+    'CREATE TABLE legal_documents (id TEXT PRIMARY KEY, fund_id INTEGER REFERENCES vc_funds(id), title TEXT NOT NULL);',
+    `INSERT INTO "legal_documents" ("id","fund_id","title") VALUES('doc-1',7,'LPA, signed; v2');`,
+    `INSERT INTO "legal_documents" ("id","fund_id","title") VALUES('doc-2',NULL,'draft');`,
+    'CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT);',
+    `INSERT INTO "notes" ("id","body") VALUES(1,'n');`,
+    "CREATE TABLE vc_funds (id INTEGER PRIMARY KEY, name TEXT NOT NULL, lpa_doc_id TEXT REFERENCES legal_documents(id), CONSTRAINT ck CHECK (name <> 'not null'));",
+    `INSERT INTO "vc_funds" ("id","name","lpa_doc_id") VALUES(7,'Fund I','doc-1');`,
+  ].join('\n') + '\n';
+}
+
+/** Run each statement on its own with foreign keys ON and no deferral at all. */
+function importStatements(chunks) {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON;');
+  for (const c of chunks) for (const s of c.statements) db.exec(s);
+  return db;
+}
+
+test('FK cycle: two tables pointing at each other restore one statement at a time, with no deferral', () => {
+  const sql = cycleSql();
+  const { chunks, counts, error } = planRestore(sql, { chunkBytes: 1024 });
+  assert.equal(error, null);
+  assert.deepEqual(
+    [counts.cyclic_tables, counts.cycle_edges_broken, counts.cycle_rows_updated, counts.cycle_rows_unparsed],
+    [0, 1, 1, 0],
+  );
+  const data = chunks.filter((c) => c.phase === 'data').flatMap((c) => c.statements);
+  const tableOf = (s) => /^(?:INSERT INTO|UPDATE) "(\w+)"/.exec(s)[1];
+  // Parent inserted with the back-edge NULL, then the child, then the UPDATE.
+  assert.equal(data.findIndex((s) => s.startsWith('INSERT INTO "legal_documents"')), 0);
+  assert.equal(data[0], `INSERT INTO "legal_documents" ("id","fund_id","title") VALUES('doc-1',NULL,'LPA, signed; v2');`);
+  assert.ok(data.indexOf(data.find((s) => s.startsWith('INSERT INTO "vc_funds"'))) > 0);
+  assert.equal(data.at(-1), `UPDATE "legal_documents" SET "fund_id"=7 WHERE "id"='doc-1';`);
+  // Members of the cycle and the tables under them are parents-first too.
+  const order = [...new Set(data.map(tableOf))];
+  assert.ok(order.indexOf('vc_funds') < order.indexOf('fund_lps'), order.join(','));
+  // The proof: no statement relies on a deferral, and the rows are the export's.
+  const restored = importStatements(chunks);
+  assert.deepEqual(snapshot(restored), snapshot(importFiles([sql], { fk: false })));
+  assert.deepEqual(restored.prepare('PRAGMA foreign_key_check').all(), []);
+  importFiles(chunks.map(chunkText));
+});
+
+test('FK cycle: the old export-order fallback fails the same import, which is the run 41307767798 failure', () => {
+  const naive = splitStatements(cycleSql()).statements.filter((s) => !s.startsWith('PRAGMA'));
+  const schema = naive.filter((s) => s.startsWith('CREATE'));
+  const rows = naive.filter((s) => s.startsWith('INSERT'));
+  assert.throws(() => importStatements([{ statements: [...schema, ...rows] }]), /FOREIGN KEY/);
+});
+
+test('FK cycle: a cycle with no nullable back-edge keeps the fallback and is counted, never rewritten', () => {
+  const sql = [
+    'CREATE TABLE a (id INTEGER PRIMARY KEY, b_id INTEGER NOT NULL REFERENCES b(id));',
+    'INSERT INTO "a" ("id","b_id") VALUES(1,1);',
+    'CREATE TABLE b (id INTEGER PRIMARY KEY, a_id INTEGER NOT NULL REFERENCES a(id));',
+    'INSERT INTO "b" ("id","a_id") VALUES(1,1);',
+  ].join('\n');
+  const { chunks, counts } = planRestore(sql);
+  assert.deepEqual([counts.cyclic_tables, counts.cycle_edges_broken], [2, 0]);
+  assert.ok(!chunks.flatMap((c) => c.statements).some((s) => s.startsWith('UPDATE')));
+});
+
+test('FK cycle: the split summary prints counts only, never a value or a table name', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cycle-'));
+  writeFileSync(join(dir, 'in.sql'), cycleSql());
+  const r = spawnSync(process.execPath, [resolve(process.cwd(), 'scripts/dr-drill-split.mjs'), join(dir, 'in.sql'), join(dir, 'out')], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /cycle_edges_broken=1 cycle_rows_updated=1/);
+  for (const no of [SENTINEL, 'doc-1', 'legal_documents', 'vc_funds']) assert.ok(!(r.stdout + r.stderr).includes(no), no);
+});
+
 // --------------------------------------------------------------- D4558 ----
 
 const BACKUP_WF = readFileSync(resolve(process.cwd(), '.github/workflows/backup-d1.yml'), 'utf8');

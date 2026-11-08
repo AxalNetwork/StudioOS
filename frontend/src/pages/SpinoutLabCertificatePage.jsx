@@ -58,20 +58,28 @@ export default function SpinoutLabCertificatePage() {
   const [sharingBusy, setSharingBusy] = useState(false);
   const [sharingError, setSharingError] = useState(null);
   const [copied, setCopied] = useState(false);
+  // #4661: a read that failed is not "not a graduate". The two reads that decide
+  // whether this page unlocks say so when they fail, and the page offers a retry
+  // instead of the locked view.
+  const [readFailed, setReadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let dead = false;
+    setStatus('loading');
     (async () => {
       try {
+        let failed = false;
         const [st, me, projects, cert] = await Promise.all([
-          spinoutLab.state().catch(() => null),
+          spinoutLab.state().catch(() => { failed = true; return null; }),
           api.getMe().catch(() => null),
           api.listProjects().catch(() => []),
-          // Best-effort: a founder with no issued credential gets null here,
-          // which is a normal state, not an error.
-          api.spinoutCertificateMine().then((r) => r?.certificate ?? null).catch(() => null),
+          // A founder with no issued credential gets null here, which is a
+          // normal state. A failed read is recorded, never drawn as "none".
+          api.spinoutCertificateMine().then((r) => r?.certificate ?? null).catch(() => { failed = true; return null; }),
         ]);
         if (dead) return;
+        setReadFailed(failed);
         setState(st);
         setUser(me);
         setCredential(cert);
@@ -100,7 +108,7 @@ export default function SpinoutLabCertificatePage() {
       }
     })();
     return () => { dead = true; };
-  }, []);
+  }, [attempt]);
 
   const vm = useMemo(
     () => buildCertificateViewModel({ state, user, project, evidence }),
@@ -119,7 +127,11 @@ export default function SpinoutLabCertificatePage() {
   }, [credential]);
 
   const isAdmin = user?.role === 'admin';
-  const unlocked = isAdmin || Boolean(state?.is_incorporated) || (state?.unlocked_features || []).includes('incorporate');
+  // #4661: a graduate keeps their own certificate after enrollment ends, whatever
+  // their account role: the Worker's graduation rule (`state.graduated`, D4659) or
+  // an issued credential of their own (`/certificates/mine`, owner-scoped) opens it.
+  const unlocked = isAdmin || Boolean(credential) || state?.graduated === true
+    || Boolean(state?.is_incorporated) || (state?.unlocked_features || []).includes('incorporate');
 
   async function download() {
     setDownloading(true);
@@ -146,6 +158,15 @@ export default function SpinoutLabCertificatePage() {
       <div className="max-w-7xl mx-auto px-4 py-16 text-center" data-testid="page-error">
         <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
         <p className="text-sm text-gray-500 dark:text-gray-400">Couldn't load your certificate. Reload to try again.</p>
+      </div>
+    );
+  }
+  if (!unlocked && readFailed) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center" data-testid="page-unreadable">
+        <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Your certificate status could not be read just now. This is not a statement that you have none.</p>
+        <button type="button" onClick={() => setAttempt((n) => n + 1)} data-testid="button-retry" className="text-[13px] font-bold text-violet-600 hover:underline">Try again</button>
       </div>
     );
   }

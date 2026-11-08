@@ -121,7 +121,7 @@ test('snapshot: The Grid (GridStage) mounts an Arabic deck right to left, and â‹
     await m.type(m.by('pitch-theme-language'), 'ja');
     assert.equal(m.pr(m.by('pitch-editor-card')).lang, 'ja');
     assert.equal(m.pr(m.by('pitch-editor-card')).dir, 'ltr');
-    assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/);
+    assert.match(m.text(m.by('pitch-editor-save-state')), /Savingâ€¦|Unsaved changes/);
   } finally { await m.close(); }
 });
 

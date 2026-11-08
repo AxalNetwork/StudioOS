@@ -40,7 +40,8 @@ const API = codeOnly(raw('frontend/src/lib/api.js'));
  */
 const joined = (src) => src.replace(/'\s*\n\s*\+ '/g, '');
 const CROUTE = joined(raw('cloudflare-worker/src/routes/admin_content.ts'));
-const PROUTE = joined(raw('cloudflare-worker/src/routes/admin_platform.ts'));
+// D4859: the summary's readers live in services/platformSummary.ts; the route and its readers are read as one.
+const PROUTE = joined(raw('cloudflare-worker/src/routes/admin_platform.ts') + '\n' + raw('cloudflare-worker/src/services/platformSummary.ts'));
 const INDEX = raw('cloudflare-worker/src/index.ts');
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
 

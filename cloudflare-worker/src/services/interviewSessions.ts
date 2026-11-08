@@ -134,6 +134,11 @@ export interface SessionRow {
   digest_json?: string | null; digest_kept_at?: string | null; digest_kept_by?: number | null;
   // D877 (migration 530): the audio went, the text stayed.
   audio_removed_at?: string | null; audio_removed_reason?: AudioRemovedReason | null;
+  // D4628 (migration 202611071550): null until every required setup write —
+  // points, preferences, channel/quote consent, the audit row, and any
+  // upload/pasted-chat content — has landed. See founder_validate_sessions.ts
+  // `finishSetup`.
+  setup_complete_at?: string | null;
 }
 
 export async function loadSession(env: Env, id: number): Promise<SessionRow | null> {

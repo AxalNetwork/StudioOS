@@ -123,7 +123,10 @@ async function mount(role, { url = '/account/portfolio', handle = worker(), know
   const seen = [];
   globalThis.fetch = async (u, init = {}) => {
     let body = null;
-    try { body = init.body && typeof init.body === 'string' ? JSON.parse(init.body) : null; } catch { body = null; }
+    try {
+      if (init.body && typeof init.body === 'string') body = JSON.parse(init.body);
+      else if (init.body && typeof init.body.get === 'function' && init.body.get('fields')) body = JSON.parse(init.body.get('fields')); // D4961: the one save posts the fields as a form part
+    } catch { body = null; }
     seen.push({ call: `${(init.method || 'GET').toUpperCase()} ${new URL(String(u), 'http://x').pathname}`, body });
     return handle(String(u), init);
   };
@@ -363,6 +366,41 @@ test('PF6a, D4152: General says a failed company read with Try again, never an e
   } finally { await v.close(); }
 });
 
+// D4960: the General form draws what the server will accept (`viewer` on the company read), never what a cached role suggests.
+const VIEWER = {
+  editor: { member: true, can_edit: true, read_only: false, read_only_reason: null },
+  hq: { member: false, can_edit: false, read_only: true, read_only_reason: 'hq_access' },
+  support: { member: true, can_edit: false, read_only: true, read_only_reason: 'support_session' },
+};
+const generalOf = (viewer, members = COMPANY.members) => worker({ 'GET /api/company/nl': () => response({ ...COMPANY, members, viewer }) });
+
+test('D4960: an admin who holds no seat opens the settings URL and gets a read-only form that cannot save', async () => {
+  const v = await mount('admin', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: generalOf(VIEWER.hq, COMPANY.members.filter((m) => m.user_id !== ME)) });
+  try {
+    // Mutation checked: `canEditCompany` back to `role === 'admin'` → the select is enabled and the line is gone.
+    assert.match(v.of('company-general-read-only'), /HQ reads this company; its members make the changes here/);
+    assert.equal(v.prop('general-default-currency', 'disabled'), true);
+    assert.equal(v.count('company-general-savebar'), 0);
+    assert.equal(v.prop('company-logo-replace', 'disabled'), true);
+    assert.deepEqual(v.writes(), []);
+  } finally { await v.close(); }
+});
+
+test('D4960: the server\'s answer wins over a cached admin role, both ways', async () => {
+  // An admin whose seat the server says can edit: enabled, no read-only line.
+  const seated = await mount('admin', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: generalOf(VIEWER.editor) });
+  try {
+    assert.equal(seated.has('company-general-read-only'), false);
+    assert.equal(seated.prop('general-default-currency', 'disabled'), false);
+  } finally { await seated.close(); }
+  // A cached founder who is an Owner in the members list, but whom the server marks read-only: disabled.
+  const refused = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: generalOf(VIEWER.support) });
+  try {
+    assert.match(refused.of('company-general-read-only'), /A support session can read this company but cannot change it/);
+    assert.equal(refused.prop('general-default-currency', 'disabled'), true);
+  } finally { await refused.close(); }
+});
+
 test('PF5: signing out forgets the picked project; a company made or switched to elsewhere clears a project of another company', () => {
   assert.match(read('frontend/src/App.jsx'), /setActiveCompanyId\(null\);[\s\S]{0,400}clearActiveProject\(\);/);
   const src = read('frontend/src/ui/CompanySwitcher.jsx');
@@ -597,7 +635,7 @@ test('#4736: General draws Default currency, Not recorded when the company has n
     assert.equal(v.count('company-general-savebar'), 0, 'an unchanged currency is not a change');
     await v.change('general-default-currency', 'GBP');
     await v.submit('company-general-form');
-    assert.deepEqual(v.writes().map((w) => [w.call, w.body]), [['PATCH /api/company/nl', { default_currency: 'GBP' }]]);
+    assert.deepEqual(v.writes().map((w) => [w.call, w.body]), [['POST /api/company/nl/settings', { default_currency: 'GBP' }]]);
   } finally { await v.close(); }
 });
 

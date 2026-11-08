@@ -167,6 +167,9 @@ globalThis.fetch=async(input,init={})=>{
   return new Response('fixture',{headers:{'content-type':p.endsWith('.css')?'text/css':js}});
  }
  const entry=process.env.STALE_SHELL==='1'?'previous':'current';
+ // D4582: /login is the sign-in page: its own title and canonical in the document, and noindex in its header.
+ if(p==='/login' && process.env.FAULT==='login-home') return new Response('<html><head><title>From idea to funded company — Axal VC StudioOS</title><link rel="canonical" href="https://axal.vc/"></head><div id="root"></div></html>',{headers:{...headers,'content-type':'text/html'}});
+ if(p==='/login') return new Response('<html><head><title>Sign in — Axal VC StudioOS</title><link rel="canonical" href="https://axal.vc/login"><meta property="og:title" content="Sign in — Axal VC StudioOS"></head><div id="root"></div><script type="module" src="/assets/index-'+entry+'.js"></script><link href="/assets/style.css"></html>',{headers:{...headers,'x-robots-tag':'noindex, follow','content-type':'text/html'}});
  return new Response('<html><meta property="og:title" content="Insights — Axal VC"><div id="root"></div><script type="module" src="/assets/index-'+entry+'.js"></script><link href="/assets/style.css"></html>',{headers:{...headers,'content-type':'text/html'}});
 };`;
 
@@ -226,6 +229,14 @@ test('#3590: a nested dependency map in the built generation is checked too', ()
   const result = smoke('', false, false, false, true);
   assert.deepEqual({ status: result.status, leaves: result.requests.filter(([,p]) => p==='/assets/nested-leaf.js') },
     { status: 0, leaves: [['https://apex.test','/assets/nested-leaf.js'],['https://app.test','/assets/nested-leaf.js']] });
+});
+
+test('D4582: a /login that carries the homepage head, or is indexable, fails the live smoke', () => {
+  const result = smoke('login-home');
+  assert.equal(result.status, 1);
+  for (const want of [/\/login x-robots-tag is "\(none\)"/, /\/login canonical is "https:\/\/axal\.vc\/", not its own address/, /\/login title is "From idea to funded company/]) {
+    assert.match(result.stderr, want);
+  }
 });
 
 test('#3590: all failed lazy files are fetched but only the first five per build/host are printed', () => {

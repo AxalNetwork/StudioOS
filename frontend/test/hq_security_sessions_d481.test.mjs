@@ -14,21 +14,30 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { renderedText } from './_renderedText.mjs';
 import {
-  SessionsPanel, TokenAnomalies, NotRecordedList, DsrSubject, DsrKindsNotRecorded, runSessionAct,
+  TokenAnomalies, NotRecordedList, DsrSubject, DsrKindsNotRecorded, runSessionAct,
   UNAVAILABLE as UNAVAILABLE_FROM_PAGE,
 } from '../src/pages/hq/SecurityPage.jsx';
+// D4801 — the Sessions zone became Security v2's Access workspace. Its acts
+// moved into their own Scope → Review → Result dialogs (each with its own
+// reason), so the assertions below follow the list there; the dialogs
+// themselves are pinned in hq_security_access_d4801.test.mjs.
+import AccessWorkspace from '../src/pages/hq/security/AccessWorkspace.jsx';
 
 const html = (C, props) => renderToStaticMarkup(React.createElement(C, props));
 const text = (C, props) => renderedText(html(C, props));
+// The workspace with the page's own sentinel, at a fixed clock.
+const SessionsPanel = (props) => React.createElement(AccessWorkspace, {
+  unavailable: UNAVAILABLE_FROM_PAGE, onRetry: () => {}, now: Date.parse('2026-10-04T10:00:00Z'), ...props,
+});
 
 const LIST = {
   token_hours: 24,
   total: 3,
   expiry_minutes: 30,
   rows: [
-    { id: 11, user_id: 901, email: 'super@axal.example', name: 'Sam Super', role: 'admin', user_agent: 'Chrome', network: '203.0.113.0/24', factor: 'totp', created_at: '2026-10-04 08:02:00', last_seen_at: '2026-10-04 09:00:00', is_current: true },
-    { id: 12, user_id: 903, email: 'fran@example.com', name: 'Fran Target', role: 'founder', user_agent: 'Safari', network: '203.0.113.0/24', factor: 'password', created_at: '2026-10-02 07:50:00', last_seen_at: '2026-10-04 08:30:00', is_current: false },
-    { id: 13, user_id: 904, email: 'olu@example.com', name: null, role: 'founder', user_agent: null, network: 'unknown', factor: null, created_at: null, last_seen_at: '2026-10-04 08:10:00', is_current: false },
+    { id: 11, user_id: 901, email: 'super@axal.example', name: 'Sam Super', role: 'admin', user_agent: 'Chrome', network: '203.0.113.0/24', ip: '203.0.113.1', factor: 'totp', created_at: '2026-10-04 08:02:00', last_seen_at: '2026-10-04 09:00:00', is_current: true },
+    { id: 12, user_id: 903, email: 'fran@example.com', name: 'Fran Target', role: 'founder', user_agent: 'Safari', network: '203.0.113.0/24', ip: '203.0.113.7', factor: 'password', created_at: '2026-10-04 07:50:00', last_seen_at: '2026-10-04 08:30:00', is_current: false },
+    { id: 13, user_id: 904, email: 'olu@example.com', name: null, role: 'founder', user_agent: null, network: 'unknown', ip: null, factor: null, created_at: null, last_seen_at: '2026-10-04 08:10:00', is_current: false },
   ],
   impersonations: {
     available: true,
@@ -38,48 +47,56 @@ const LIST = {
 
 // ─────────────────────────────────────────────────────── sessions ──
 
-test('the list renders every session with its acts; the caller\'s own reads Current and offers none', () => {
+test('the list renders every session with its acts; the caller\'s own reads Current and offers Sign out only', () => {
   const h = html(SessionsPanel, { list: LIST, onAct: async () => ({}) });
   const t = renderedText(h);
   assert.match(t, /Fran Target/);
   assert.match(t, /olu@example\.com/, 'a row with no name must fall back to the address');
-  // D4691 — HQ's list carries the network bucket, never the address.
-  assert.match(t, /no device recorded · no network recorded/, 'an absent device or network rendered blank');
-  assert.match(t, /Safari · network 203\.0\.113\.0\/24/, 'the network bucket is not shown');
+  // D4691 — the row carries the network bucket, never the address.
+  assert.match(t, /network 203\.0\.113\.0\/24/, 'the network bucket is not shown');
+  assert.match(renderedText(h.slice(h.indexOf('data-testid="hq-session-13"'))), /no network recorded/, 'an absent network rendered blank');
+  assert.doesNotMatch(t, /203\.0\.113\.[17]\b/, 'the list showed the address');
+  // D4801 — an absent user agent is said on the row.
+  assert.match(renderedText(h.slice(h.indexOf('data-testid="hq-session-13"'))), /No user agent stored/, 'an absent device rendered blank');
   assert.match(t, /3 active · token under 24h old, not revoked, account not signed out/);
-  // Two actionable rows, each with Revoke and Sign out account; the current
-  // row has neither, and no checkbox.
-  // Counted on the buttons themselves: rendered text runs adjacent labels together.
-  const labels = [...h.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((m) => m[1].trim());
-  assert.equal(labels.filter((l) => l === 'Revoke').length, 2, 'Revoke is offered on the wrong rows');
-  assert.equal(labels.filter((l) => l === 'Sign out account').length, 2);
+  // Two actionable rows with Revoke this session; three with Sign out
+  // account, because the canvas gives your own row Sign out only.
+  const labels = [...h.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map((m) => renderedText(m[1]).trim());
+  assert.equal(labels.filter((l) => l.startsWith('Revoke this session…')).length, 2, 'Revoke is offered on the wrong rows');
+  assert.equal(labels.filter((l) => l.startsWith('Sign out account…')).length, 3);
   assert.match(t, /Current/);
   const own = h.slice(h.indexOf('data-testid="hq-session-11"'), h.indexOf('data-testid="hq-session-12"'));
   assert.doesNotMatch(own, /type="checkbox"/, 'the caller\'s own session can be selected for revoke');
-  assert.doesNotMatch(renderedText(own), /Revoke|Sign out account/, 'the caller\'s own session offers a revoke');
+  assert.doesNotMatch(renderedText(own), /Revoke/, 'the caller\'s own session offers a revoke');
+  assert.match(renderedText(own), /Sign out account…/);
 });
 
-test('a live support session sits in the list with End, as H23 draws it', () => {
+test('a live support session sits in its own table with End, as H23 draws it', () => {
   const h = html(SessionsPanel, { list: LIST, onAct: async () => ({}) });
   const live = h.slice(h.indexOf('data-testid="hq-live-impersonation-7"'));
-  assert.match(renderedText(live), /Sam Super · impersonating Fran Target/);
+  assert.match(renderedText(live), /Sam Super\s*acting as\s*Fran Target/);
   assert.match(renderedText(live), /ticket HQ-4471/);
-  assert.match(renderedText(live), /End/);
+  assert.match(renderedText(live), /End support session…/);
 });
 
-test('every act is disabled until a reason is typed — the server\'s rule, on the button', () => {
-  const h = html(SessionsPanel, { list: LIST, onAct: async () => ({}) });
-  const buttons = [...h.matchAll(/<button[^>]*>/g)].map((m) => m[0]);
-  assert.ok(buttons.length >= 6, 'the acts are missing');
-  for (const b of buttons) assert.match(b, /disabled=""/, `an act is live with no reason: ${b}`);
-  assert.match(renderedText(h), /Reason · required for any act below, stored with it/);
+test('no act is taken from the list: there is no page-level reason, and each act opens its own dialog', () => {
+  // D481 typed one reason above every button and disabled them all until it
+  // was long enough. D4801 moved the reason into each act's own dialog
+  // (#4801: "inside each action confirmation flow"), where Review cannot be
+  // reached without one of the server's length — pinned in the D4801 suite.
+  const h = html(SessionsPanel, { list: LIST, onAct: async () => { throw new Error('the list itself must never write'); } });
+  assert.doesNotMatch(renderedText(h), /Reason · required for any act below/);
+  assert.doesNotMatch(h, /<(textarea|input)[^>]*placeholder="e\.g\. device reported stolen/);
+  assert.doesNotMatch(h, /role="dialog"/, 'a dialog was open before anyone asked');
+  // Bulk revoke is offered, and disabled until a row is selected.
+  assert.match(h, /<button[^>]*disabled=""[^>]*data-testid="hq-sessions-revoke-selected"/);
 });
 
 test('a FAILED list read is Unreadable — never an empty list, never "Not recorded"', () => {
   // The page's own sentinel. Read from the module rather than re-created: a
   // fresh Symbol would never equal it and the test would pass vacuously.
   const t = text(SessionsPanel, { list: undefined, onAct: async () => ({}) });
-  assert.match(t, /Loading/, 'fixture: no list yet is loading');
+  assert.match(t, /Loading sessions/, 'fixture: no list yet is loading');
   const failed = html(SessionsPanel, { list: UNAVAILABLE_FROM_PAGE, onAct: async () => ({}) });
   const ft = renderedText(failed);
   assert.match(ft, /The session list could not be read\. This is not a claim that nobody is signed in\./);
@@ -108,11 +125,13 @@ test('each act goes to its own route — Sign out account is D165\'s per-account
   await runSessionAct(client, 'revoke_selected', [12, 13], 'reason text');
   await runSessionAct(client, 'end', 7, 'reason text');
   await runSessionAct(client, 'sign_out', 903, 'reason text');
+  await runSessionAct(client, 'emergency', undefined, 'reason text');
   assert.deepEqual(seen, [
     ['hqRevokeSession', 12, 'reason text'],
     ['hqRevokeSessions', [12, 13], 'reason text'],
     ['hqEndImpersonation', 7, 'reason text'],
     ['hqForceReauthUser', 903, 'reason text'],
+    ['hqSecurityForceReauth', 'reason text'],
   ]);
   await assert.rejects(runSessionAct(client, 'delete', 12, 'reason text'));
 });

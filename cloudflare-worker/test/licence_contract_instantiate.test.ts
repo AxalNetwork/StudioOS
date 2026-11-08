@@ -72,7 +72,7 @@ function licenceEventsDdl(): string {
 
 import adminLicences from '../src/routes/admin_licences.ts';
 import {
-  mergeValues, renderContract, moneyFromCents, pctFromBps,
+  mergeValues, renderContract, moneyFromCents, pctFromBps, unresolvedFields,
 } from '../src/services/licenceContract.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -126,6 +126,22 @@ test('money and percentages come out of the ledger\'s integers, not out of float
   assert.equal(pctFromBps(3050), '30.5%');
   assert.equal(pctFromBps(0), '0%');
   assert.equal(pctFromBps(null), null);
+});
+
+test('D4671 basis points and minor units keep every digit they have', () => {
+  assert.equal(pctFromBps(3501), '35.01%', 'the old toFixed(1) read this as 35.0%');
+  assert.equal(pctFromBps(1), '0.01%');
+  assert.equal(pctFromBps(10000), '100%');
+  assert.equal(pctFromBps(3550.5), null, 'half a basis point is not an agreed rate, so the field stays unfilled');
+  assert.equal(moneyFromCents(1234.5, 'EUR'), 'EUR 12.345', 'a fraction of a cent is shown, not rounded away');
+  assert.equal(moneyFromCents(5, 'EUR'), 'EUR 0.05');
+  assert.equal(moneyFromCents(-1250, 'EUR'), 'EUR -12.50');
+  assert.equal(moneyFromCents(100000000000, 'USD'), 'USD 1,000,000,000.00');
+});
+
+test('D4671 unresolvedFields reads the body: namespaced fields, once each, in order', () => {
+  assert.deepEqual(unresolvedFields('a {{licence.x}} b {{ terms.y }} c {{licence.x}} d'), ['licence.x', 'terms.y']);
+  assert.deepEqual(unresolvedFields('nothing left'), []);
 });
 
 test('a field the licence cannot fill keeps its placeholder AND is named', () => {
@@ -204,7 +220,7 @@ const SCHEMA = `
     created_at TEXT DEFAULT (datetime('now')));
   CREATE TABLE licence_contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
     licence_uid TEXT NOT NULL, template_slug TEXT NOT NULL, template_version INTEGER NOT NULL,
-    template_title TEXT NOT NULL, body_md TEXT NOT NULL, unfilled_fields TEXT NOT NULL DEFAULT '[]',
+    template_title TEXT NOT NULL, body_md TEXT NOT NULL, body_sha256 TEXT, unfilled_fields TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'draft', envelope_uid TEXT, superseded_at TEXT,
     created_by_user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')),
     sent_at TEXT, signed_at TEXT, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
@@ -441,8 +457,14 @@ function licenceTermsDdl(): string {
 function withSubsidiaryTemplate(db: InstanceType<typeof DatabaseSync>) {
   db.exec("ALTER TABLE legal_templates ADD COLUMN doc_kind TEXT; ALTER TABLE legal_templates ADD COLUMN axal_party TEXT;");
   db.exec(migration('514_subsidiary_licence_agreement.sql'));
+  // D4811: the seeded slug is restricted (counsel has not reviewed it), so the
+  // route refuses to instantiate it. Its merge is still proven through the
+  // route on a reviewed copy: the same body under a slug outside COUNSEL_REVIEW_SLUGS.
+  db.exec(`INSERT INTO legal_templates (slug, title, category, body_md, version, is_active)
+    SELECT '${REVIEWED_COPY}', title, category, body_md, version, is_active FROM legal_templates WHERE slug = 'subsidiary_licence_agreement'`);
   return db;
 }
+const REVIEWED_COPY = 'd4811_reviewed_licence_copy';
 
 test('D803: the seeded template instantiates with the licence\'s terms; a term not recorded stays "{{terms.<key>}}" and is listed', async () => {
   // Mutation checked: leave `terms` out of the route's mergeValues → carry share and governing law are unfilled too.
@@ -450,7 +472,7 @@ test('D803: the seeded template instantiates with the licence\'s terms; a term n
   db.exec(licenceTermsDdl());
   db.prepare(`INSERT INTO licence_terms (licence_uid, governing_law, carry_share_bps, cure_days, renewal_mode)
               VALUES ('lic_fr', 'Delaware', 2000, 30, 'auto')`).run();
-  const r = await app(db)('/lic_fr/contract', post('subsidiary_licence_agreement'));
+  const r = await app(db)('/lic_fr/contract', post(REVIEWED_COPY));
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.match(r.body.body_md, /governed by the law of Delaware\./);
   assert.match(r.body.body_md, /receives 20% of the carried interest/);
@@ -462,13 +484,13 @@ test('D803: the seeded template instantiates with the licence\'s terms; a term n
   for (const f of ['terms.governing_law', 'terms.carry_share_bps', 'terms.cure_days', 'terms.renewal_mode', 'licence.annual_fee']) {
     assert.ok(!r.body.unfilled_fields.includes(f), f);
   }
-  const row = db.prepare("SELECT unfilled_fields FROM licence_contracts WHERE template_slug = 'subsidiary_licence_agreement'").get() as any;
+  const row = db.prepare('SELECT unfilled_fields FROM licence_contracts WHERE template_slug = ?').get(REVIEWED_COPY) as any;
   assert.deepEqual(JSON.parse(row.unfilled_fields), r.body.unfilled_fields, 'stored as returned');
 });
 
 test('D803: with no terms store, every term is unfilled and visible, and the ledger still fills', async () => {
   const db = withSubsidiaryTemplate(seededDb());
-  const r = await app(db)('/lic_fr/contract', post('subsidiary_licence_agreement'));
+  const r = await app(db)('/lic_fr/contract', post(REVIEWED_COPY));
   assert.equal(r.status, 201);
   assert.equal(r.body.unfilled_fields.filter((f: string) => f.startsWith('terms.')).length, LICENCE_TERM_FIELDS.length, 'every D797 term is unfilled');
   assert.match(r.body.body_md, /\{\{terms\.governing_law\}\}/);
@@ -476,4 +498,18 @@ test('D803: with no terms store, every term is unfilled and visible, and the led
   const picker = await app(db)('/lic_fr/contract');
   assert.equal(picker.body.templates.find((t: any) => t.slug === 'subsidiary_licence_agreement')?.counsel_review, true,
     'HQ sees it is a draft subject to counsel where it picks it');
+  assert.equal(picker.body.templates.find((t: any) => t.slug === 'subsidiary_licence_agreement')?.safety?.restricted, true,
+    'D4811: and that it is restricted');
+});
+
+test('D4811: the restricted template is refused 409 template_restricted, and no contract is written or superseded', async () => {
+  // Mutation checked: restore the stub-only check in POST /:uid/contract → this answers 201 and writes a row.
+  const db = withSubsidiaryTemplate(seededDb());
+  const before = (db.prepare('SELECT COUNT(*) AS n FROM licence_contracts').get() as any).n;
+  const r = await app(db)('/lic_fr/contract', post('subsidiary_licence_agreement'));
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, 'template_restricted');
+  assert.match(r.body.message, /Legal review required/);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM licence_contracts').get() as any).n, before);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM licence_contracts WHERE superseded_at IS NOT NULL').get() as any).n, 0);
 });

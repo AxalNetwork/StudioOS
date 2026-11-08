@@ -135,6 +135,30 @@ async function transitionStage(env: Env, dealId: number, newStage: string, metad
   ]);
 }
 
+/**
+ * D4677: a new review, the superseding of every older pending one and the move
+ * into the decision_gate stage are ONE batch. An older pending gate can
+ * therefore never be decided over a newer review (`decide` refuses a gate that
+ * is not the deal's latest), and a failed insert leaves the old gate pending and
+ * the stage where it was.
+ */
+export async function openGateReview(env: Env, dealId: number, aiRec: string, aiExp: string, aiConfidence: number | null): Promise<any> {
+  const cur = await getCurrentStage(env, dealId);
+  const batch = [
+    env.DB.prepare(`UPDATE decision_gates SET status = 'superseded' WHERE deal_id = ? AND status = 'pending'`).bind(dealId),
+    env.DB.prepare(`INSERT INTO decision_gates (deal_id, gate_type, status, ai_recommendation, ai_explanation, ai_confidence) VALUES (?, 'traction_review', 'pending', ?, ?, ?)`)
+      .bind(dealId, aiRec, aiExp, aiConfidence),
+  ];
+  if (cur !== 'decision_gate') {
+    batch.push(
+      env.DB.prepare(`UPDATE project_stages SET status = 'completed', end_date = CURRENT_TIMESTAMP WHERE deal_id = ? AND status = 'active'`).bind(dealId),
+      env.DB.prepare(`INSERT INTO project_stages (deal_id, stage_name, status, metadata) VALUES (?, 'decision_gate', 'active', json_object('gate_id', (SELECT MAX(id) FROM decision_gates WHERE deal_id = ?)))`).bind(dealId, dealId),
+    );
+  }
+  await env.DB.batch(batch);
+  return await env.DB.prepare(`SELECT * FROM decision_gates WHERE deal_id = ? ORDER BY id DESC LIMIT 1`).bind(dealId).first();
+}
+
 // Metric validation and the traction score live in services/tractionScore.ts (D4693).
 
 // ============================================================
@@ -148,6 +172,9 @@ pipeline.get('/active', async (c) => {
   const sql = getSQL(c.env);
   const isAdmin = user.role === 'admin';
   const isFounder = user.role === 'founder';
+  // D4677: a rejected, archived or spun-out (stage 'spun_out', set when the subsidiary goes independent) venture leaves the active board; its
+  // history stays readable (`?include_closed=1`, and every per-deal route).
+  const includeClosed = c.req.query('include_closed') === '1' ? 1 : 0;
   // Score column was removed from projects — it lives in score_snapshots and
   // every LP/partner read goes through getVerifiedLatestSnapshot below so the
   // hash is recomputed and the read is audited. Sandbox rows are never
@@ -172,7 +199,7 @@ pipeline.get('/active', async (c) => {
   const baseRowsPlus = isAdmin
     ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                   p.status as project_status, p.created_at
-                FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
+                FROM projects p WHERE (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))
                   AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
                 ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`
     : isFounder
@@ -182,6 +209,7 @@ pipeline.get('/active', async (c) => {
                     FROM projects p
                     WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
                       AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
+                      AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))
                     ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`
         : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                       p.status as project_status, p.created_at
@@ -189,10 +217,11 @@ pipeline.get('/active', async (c) => {
                     WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
                       AND (p.company_id = ${companyId} OR p.company_id IS NULL)
                       AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
+                      AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))
                     ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`
       : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                     p.status as project_status, p.created_at
-                  FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
+                  FROM projects p WHERE (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))
                     AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
                   ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`;
   const hasMore = (baseRowsPlus as any[]).length > limit;
@@ -202,15 +231,17 @@ pipeline.get('/active', async (c) => {
 
   // The whole authorized population, whatever page this is.
   const [totalRow] = isAdmin
-    ? await sql`SELECT COUNT(*) AS n FROM projects p WHERE p.status NOT IN ('rejected', 'archived')`
+    ? await sql`SELECT COUNT(*) AS n FROM projects p WHERE (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))`
     : isFounder
       ? companyId === null
         ? await sql`SELECT COUNT(*) AS n FROM projects p
-                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})`
+                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
+                      AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))`
         : await sql`SELECT COUNT(*) AS n FROM projects p
                     WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
-                      AND (p.company_id = ${companyId} OR p.company_id IS NULL)`
-      : await sql`SELECT COUNT(*) AS n FROM projects p WHERE p.status NOT IN ('rejected', 'archived')`;
+                      AND (p.company_id = ${companyId} OR p.company_id IS NULL)
+                      AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))`
+      : await sql`SELECT COUNT(*) AS n FROM projects p WHERE (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))`;
   const total = Number((totalRow as any)?.n ?? 0);
 
   // Per-project verified read: HMAC re-checked, audit row written. A row
@@ -483,12 +514,7 @@ pipeline.post('/decision-gate/review', async (c) => {
     aiExp = out.text ? out.text.slice(0, 1000) : `Recommended ${aiRec.replace('_', ' ')} (${confidenceLine(aiConfidence)}); the explanation could not be written.`;
   }
 
-  const gate: any = await c.env.DB.prepare(`INSERT INTO decision_gates (deal_id, gate_type, status, ai_recommendation, ai_explanation, ai_confidence) VALUES (?, 'traction_review', 'pending', ?, ?, ?) RETURNING *`)
-    .bind(dealId, aiRec, aiExp, aiConfidence).first();
-
-  // Move project into decision_gate stage if not already
-  const cur = await getCurrentStage(c.env, dealId);
-  if (cur !== 'decision_gate') await transitionStage(c.env, dealId, 'decision_gate', { gate_id: gate.id });
+  const gate = await openGateReview(c.env, dealId, aiRec, aiExp, aiConfidence);
 
   // Fan out to anyone watching this deal or the overview board.
   await notifyPipelineRoom(c.env, dealId, {
@@ -527,29 +553,52 @@ pipeline.patch('/decision-gate/decide', async (c) => {
   const decision = String(data?.decision || '').toLowerCase();
   if (!gateId || !['passed', 'failed', 'iterate'].includes(decision)) return c.json({ error: 'gate_id and decision (passed|failed|iterate) required' }, 400);
 
-  // Optimistic concurrency: the WHERE status='pending' clause is the actual guard.
-  // We rely on meta.changes (rows affected) — if 0, another admin already decided.
-  const upd = await c.env.DB.prepare(`UPDATE decision_gates SET status = ?, final_decision = ?, decided_by = ?, decided_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'`)
-    .bind(decision, decision, user.id, gateId).run();
-  if (!upd.meta?.changes) {
-    const existing: any = await c.env.DB.prepare(`SELECT id, status, final_decision, decided_by FROM decision_gates WHERE id = ?`).bind(gateId).first();
-    if (!existing) return c.json({ error: 'Gate not found' }, 404);
-    return c.json({ error: 'Gate already decided', current: existing }, 409);
-  }
-  const gate: any = await c.env.DB.prepare(`SELECT * FROM decision_gates WHERE id = ?`).bind(gateId).first();
-
-  // Apply downstream stage transitions
+  // D4677: the decision and everything it moves are ONE batch.
+  //  · The gate is decided only while it is `pending` AND the deal's latest gate;
+  //    an obsolete review is `superseded` and refused (409 gate_superseded).
+  //  · The stage, project status and history statements below match only while
+  //    THIS call's decision is on the gate (`decided_at` is the call's token), so
+  //    a gate cannot end up decided with the project still in its old stage, and
+  //    a lost race moves nothing.
+  const before: any = await c.env.DB.prepare(`SELECT id, deal_id, status FROM decision_gates WHERE id = ?`).bind(gateId).first();
+  if (!before) return c.json({ error: 'Gate not found' }, 404);
+  const at = new Date().toISOString().replace('T', ' ').slice(0, 23);
+  const dealId = before.deal_id;
+  // Every statement below carries the same literal guard: the gate is decided,
+  // by this call (`decided_at` is its token), to this decision.
+  const mineArgs = [gateId, decision, user.id, at];
+  const closeActive = c.env.DB.prepare(`UPDATE project_stages SET status = 'completed', end_date = CURRENT_TIMESTAMP WHERE deal_id = ? AND status = 'active' AND EXISTS (SELECT 1 FROM decision_gates g WHERE g.id = ? AND g.status = ? AND g.decided_by = ? AND g.decided_at = ?)`).bind(dealId, ...mineArgs);
+  const openActive = (name: string) =>
+    c.env.DB.prepare(`INSERT INTO project_stages (deal_id, stage_name, status, metadata) SELECT ?, ?, 'active', json_object('gate_id', ?, 'decided_by', ?) WHERE EXISTS (SELECT 1 FROM decision_gates g WHERE g.id = ? AND g.status = ? AND g.decided_by = ? AND g.decided_at = ?)`)
+      .bind(dealId, name, gateId, user.id, ...mineArgs);
+  const recordCompleted = (name: string) =>
+    c.env.DB.prepare(`INSERT INTO project_stages (deal_id, stage_name, status, metadata, end_date) SELECT ?, ?, 'completed', json_object('gate_id', ?, 'decided_by', ?), CURRENT_TIMESTAMP WHERE EXISTS (SELECT 1 FROM decision_gates g WHERE g.id = ? AND g.status = ? AND g.decided_by = ? AND g.decided_at = ?)`)
+      .bind(dealId, name, gateId, user.id, ...mineArgs);
+  const setProjectStatus = (status: string) =>
+    c.env.DB.prepare(`UPDATE projects SET status = ? WHERE id = ? AND EXISTS (SELECT 1 FROM decision_gates g WHERE g.id = ? AND g.status = ? AND g.decided_by = ? AND g.decided_at = ?)`)
+      .bind(status, dealId, ...mineArgs);
+  const steps = [
+    c.env.DB.prepare(`UPDATE decision_gates SET status = ?, final_decision = ?, decided_by = ?, decided_at = ? WHERE id = ? AND status = 'pending' AND id = (SELECT MAX(id) FROM decision_gates WHERE deal_id = ?)`)
+      .bind(decision, decision, user.id, at, gateId, dealId),
+  ];
   if (decision === 'passed') {
-    await transitionStage(c.env, gate.deal_id, 'spinout_ready', { gate_id: gateId, decided_by: user.id });
-    await c.env.DB.prepare(`UPDATE projects SET status = 'spinout' WHERE id = ?`).bind(gate.deal_id).run();
+    steps.push(closeActive, openActive('spinout_ready'), setProjectStatus('spinout'));
   } else if (decision === 'iterate') {
-    await transitionStage(c.env, gate.deal_id, 'iterate', { gate_id: gateId });
-    // Reset to mvp_dev next so the team can keep building
-    await transitionStage(c.env, gate.deal_id, 'mvp_dev', { gate_id: gateId });
-  } else if (decision === 'failed') {
-    await c.env.DB.prepare(`UPDATE projects SET status = 'rejected' WHERE id = ?`).bind(gate.deal_id).run();
-    await c.env.DB.prepare(`UPDATE project_stages SET status = 'completed', end_date = CURRENT_TIMESTAMP WHERE deal_id = ? AND status = 'active'`).bind(gate.deal_id).run();
+    // The iterate stage is history (completed at once), and the deal returns to mvp_dev.
+    steps.push(closeActive, recordCompleted('iterate'), openActive('mvp_dev'));
+  } else {
+    steps.push(setProjectStatus('rejected'), closeActive);
   }
+  const done = await c.env.DB.batch(steps);
+  if (!Number((done[0] as any)?.meta?.changes)) {
+    const now: any = await c.env.DB.prepare(`SELECT id, status, final_decision, decided_by FROM decision_gates WHERE id = ?`).bind(gateId).first();
+    const latest: any = await c.env.DB.prepare(`SELECT MAX(id) AS id FROM decision_gates WHERE deal_id = ?`).bind(dealId).first();
+    if (now?.status === 'superseded' || (now?.status === 'pending' && latest?.id !== gateId)) {
+      return c.json({ error: 'gate_superseded', message: 'A newer review exists for this venture. Decide the newer one.', latest_gate_id: latest?.id ?? null }, 409);
+    }
+    return c.json({ error: 'Gate already decided', current: now }, 409);
+  }
+  const gate: any = { id: gateId, deal_id: dealId };
 
   await logAction(c.env, 'decision_gate_decided', user.id, { gate_id: gateId, decision, deal_id: gate.deal_id });
 

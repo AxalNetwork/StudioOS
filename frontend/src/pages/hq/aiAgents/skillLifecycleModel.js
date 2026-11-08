@@ -58,6 +58,8 @@ export function caseToForm(c) {
     must_include: lines(c?.expect?.must_include),
     must_say_not_recorded: lines(c?.expect?.must_say_not_recorded),
     must_not_include: lines(c?.expect?.must_not_include),
+    // #4531: number assertions are not edited here, and a save keeps them as they were.
+    numbers: Array.isArray(c?.expect?.numbers) ? c.expect.numbers : null,
     saved: c ? JSON.stringify({ n: c.name, i: c.input, e: c.expect }) : null,
   };
 }
@@ -78,12 +80,13 @@ export function formToCase(f) {
     must_include: phrases(f.must_include),
     must_say_not_recorded: phrases(f.must_say_not_recorded),
     must_not_include: phrases(f.must_not_include),
+    ...(Array.isArray(f.numbers) && f.numbers.length ? { numbers: f.numbers } : {}),
   };
   if (!OUTPUT_KINDS.some((k) => k.key === expect.output)) return { ok: false, field: 'output', problem: 'Say what the case expects: a draft, a record change or a brief.' };
   for (const k of ['must_include', 'must_say_not_recorded', 'must_not_include']) {
     if (expect[k].length > PHRASES_MAX || expect[k].some((p) => p.length > 200)) return { ok: false, field: k, problem: `Each expectation is up to ${PHRASES_MAX} phrases of up to 200 characters.` };
   }
-  if (!expect.must_include.length && !expect.must_say_not_recorded.length && !expect.must_not_include.length) {
+  if (!expect.must_include.length && !expect.must_say_not_recorded.length && !expect.must_not_include.length && !expect.numbers) {
     return { ok: false, field: 'must_include', problem: 'Give the case at least one phrase it must or must not contain.' };
   }
   if (/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(JSON.stringify({ name, records, expect }))) {

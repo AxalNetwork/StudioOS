@@ -10,6 +10,7 @@ import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import { Field, SaveNote, ZoneHeading, buttonClass, ghostButtonClass, inputClass } from '../expertise/kit';
 import { formatDateTime } from '../advisory/kit';
+import { slotBody } from './practiceTools';
 
 const TAP = 'min-h-[44px] sm:min-h-0';
 
@@ -22,24 +23,13 @@ export function PublishAvailabilityCard({ open, onToggle, onPublished }) {
   const [note, setNote] = useState(null);
 
   const publish = async () => {
-    const start = form.starts_at ? new Date(form.starts_at) : null;
-    const end = form.ends_at ? new Date(form.ends_at) : null;
-    if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      setNote({ ok: false, text: 'Choose a start and an end time.' });
-      return;
-    }
-    if (end.getTime() <= start.getTime()) {
-      setNote({ ok: false, text: 'The end comes after the start.' });
-      return;
-    }
+    // #4712: one rule for a slot (future start, end after start, 1 to 20 seats,
+    // an https meeting link or none), checked here before anything is sent.
+    const res = slotBody(form);
+    if (res.error) { setNote({ ok: false, text: res.error }); return; }
     setBusy(true); setNote(null);
     try {
-      await api.createAdvisorSlot({
-        starts_at: start.toISOString(),
-        ends_at: end.toISOString(),
-        capacity: Number(form.capacity) || 1,
-        meeting_url: form.meeting_url.trim() || null,
-      });
+      await api.createAdvisorSlot(res.body);
       setForm(EMPTY_SLOT);
       setNote({ ok: true, text: 'Published. The slot is on the grid and can be booked.' });
       onPublished?.();
@@ -61,15 +51,15 @@ export function PublishAvailabilityCard({ open, onToggle, onPublished }) {
         <div className="mt-1">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Starts">
-              <input type="datetime-local" className={inputClass} value={form.starts_at}
+              <input type="datetime-local" className={inputClass} value={form.starts_at} data-testid="slot-starts"
                 onChange={(e) => setForm({ ...form, starts_at: e.target.value })} />
             </Field>
             <Field label="Ends">
-              <input type="datetime-local" className={inputClass} value={form.ends_at}
+              <input type="datetime-local" className={inputClass} value={form.ends_at} data-testid="slot-ends"
                 onChange={(e) => setForm({ ...form, ends_at: e.target.value })} />
             </Field>
             <Field label="Seats" hint="How many founders can hold this hour. One is a one-to-one.">
-              <input className={inputClass} inputMode="numeric" value={form.capacity}
+              <input className={inputClass} inputMode="numeric" value={form.capacity} data-testid="slot-seats"
                 onChange={(e) => setForm({ ...form, capacity: e.target.value })} />
             </Field>
             <Field label="Meeting link" hint="Optional. Shown to whoever books.">
@@ -113,11 +103,16 @@ export function SessionLifecyclePanel({ bookings, loading, onChanged }) {
   const history = bookings.filter((b) => CLOSED.includes(b.status));
 
   const run = async (b, action) => {
+    // #4712: a cancel needs a reason, because the founder is told why.
+    if (action === 'cancel' && !reason.trim()) {
+      setNote({ ok: false, text: 'Say why you are cancelling. The founder is told.' });
+      return;
+    }
     setBusy(b.id); setNote(null);
     try {
       if (action === 'complete') await api.completeAdvisorBooking(b.id);
       else if (action === 'no-show') await api.noShowAdvisorBooking(b.id, reason.trim() || undefined);
-      else await api.cancelAdvisorBooking(b.id, reason.trim() || 'Cancelled by advisor');
+      else await api.cancelAdvisorBooking(b.id, reason.trim());
       setAsking(null); setReason('');
       setNote({ ok: true, text: action === 'complete' ? 'Marked as held.' : action === 'no-show' ? 'Recorded as a no-show.' : 'Cancelled. The founder is told.' });
       await onChanged?.();
@@ -168,8 +163,9 @@ export function SessionLifecyclePanel({ bookings, loading, onChanged }) {
             {asking?.id === b.id && (
               <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
                 <Field label={asking.action === 'cancel' ? 'Why you are cancelling' : 'Note on the no-show'}
-                  hint="Optional. Stored on the booking.">
-                  <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} />
+                  hint={asking.action === 'cancel' ? 'Required. The founder is told.' : 'Optional. Stored on the booking.'}>
+                  <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)}
+                    aria-required={asking.action === 'cancel' || undefined} data-testid={`lifecycle-note-${b.id}`} />
                 </Field>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button type="button" className={`${buttonClass} ${TAP}`} disabled={busy === b.id}

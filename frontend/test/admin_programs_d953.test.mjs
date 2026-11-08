@@ -753,3 +753,13 @@ test('docs: the folder is documented, the admin README names it, ROUTE_MAP has t
   assert.doesNotMatch(admin, /`HeldPrograms\.jsx`/);
   assert.match(readRouteMap(), /\n\| Admin · Programs \| admin, super-admin \| [^|]+ \| `\/admin\/programs` live \(D953, #2371\)/);
 });
+
+test('D4807: a program page sets its own tab title and draws the five dimensions in its header, with every read still pending', async () => {
+  const view = await mounted('/admin/programs/mentor-cohorts', MentorCohortAccess, () => new Promise(() => {}));
+  try {
+    assert.equal(document.title, 'Mentor cohort access · Programs — Axal VC StudioOS');
+    const dims = view.textOf('programs-header-dimensions');
+    for (const label of ['Build state', 'Operation', 'Member access', 'Studio offering', 'Studio grants']) assert.ok(dims.includes(label), label);
+    assert.ok(dims.includes('Assigned by an admin'), 'member access is how a member gets in');
+  } finally { await view.close(); }
+});

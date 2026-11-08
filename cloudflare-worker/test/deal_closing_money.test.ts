@@ -88,7 +88,7 @@ function freshDb() {
     CREATE TABLE deals (
       id INTEGER PRIMARY KEY, uid TEXT, project_id INTEGER, partner_id INTEGER,
       status TEXT NOT NULL DEFAULT 'applied', notes TEXT, amount REAL,
-      target_raise REAL, capital_committed REAL DEFAULT 0,
+      target_raise REAL, capital_committed REAL DEFAULT 0, lead_partner_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -165,7 +165,8 @@ function freshDb() {
   u.run(INVESTOR, 'investor', 'Ingrid Investor');
   u.run(OTHER_INVESTOR, 'investor', 'Otto Outsider');
   db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run(PROJ, 'Alpha');
-  db.prepare(`INSERT INTO deals (id, uid, project_id, status) VALUES (?, 'd-alpha', ?, 'funded')`).run(DEAL, PROJ);
+  // D4631: the partner leads DEAL; DEAL_B has no lead, so only an admin moves it.
+  db.prepare(`INSERT INTO deals (id, uid, project_id, status, lead_partner_id) VALUES (?, 'd-alpha', ?, 'funded', ?)`).run(DEAL, PROJ, PARTNER);
   db.prepare(`INSERT INTO deals (id, uid, project_id, status) VALUES (?, 'd-beta', ?, 'funded')`).run(DEAL_B, PROJ);
   db.prepare('INSERT INTO deal_invitations (deal_id, investor_user_id) VALUES (?, ?)').run(DEAL, INVESTOR);
   db.prepare(`INSERT INTO legal_templates (slug, title) VALUES ('safe', 'SAFE Agreement'), ('spa', 'Stock Purchase Agreement'), ('subscription', 'Subscription Agreement')`).run();
@@ -301,7 +302,8 @@ test('a template applies once, from the closing set, and starts empty', async ()
   assert.equal(again.status, 409);
   assert.equal(again.body?.error, 'closing_checklist_exists');
 
-  const unknown = await call(partner, `/${DEAL_B}/closing-checklist/apply`, { method: 'POST', body: { template_slug: 'nda' } }, db);
+  // D4631: the partner does not lead DEAL_B, so the validation is proved as the admin.
+  const unknown = await call(admin, `/${DEAL_B}/closing-checklist/apply`, { method: 'POST', body: { template_slug: 'nda' } }, db);
   assert.equal(unknown.status, 400);
   assert.equal(unknown.body?.error, 'closing_template_unknown');
 });
@@ -311,7 +313,7 @@ test('items are added by hand and moved through their states', async () => {
   await call(partner, `/${DEAL}/closing-checklist/apply`, { method: 'POST', body: { template_slug: 'spa' } }, db);
 
   // An item needs the checklist first — proved on the other deal.
-  const noList = await call(partner, `/${DEAL_B}/closing-checklist/items`, { method: 'POST', body: { label: 'x' } }, db);
+  const noList = await call(admin, `/${DEAL_B}/closing-checklist/items`, { method: 'POST', body: { label: 'x' } }, db);
   assert.equal(noList.status, 400);
   assert.equal(noList.body?.error, 'closing_checklist_missing');
 
@@ -340,4 +342,21 @@ test('an investor reads the checklist but may not write it', async () => {
 
   const write = await call(investor, `/${DEAL}/closing-checklist/items`, { method: 'POST', body: { label: 'x' } }, db);
   assert.equal(write.status, 403);
+});
+
+test('D4631: a closing checklist is changed by whoever may move the round, as PUT, advance and pass are', async () => {
+  const db = freshDb();
+  // The partner does not lead DEAL_B: applying a template, adding an item and changing one are all refused.
+  const refused = await call(partner, `/${DEAL_B}/closing-checklist/apply`, { method: 'POST', body: { template_slug: 'safe' } }, db);
+  assert.equal(refused.status, 403);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM deal_closing_checklists').get() as any).n, 0, 'nothing written');
+  const applied = await call(admin, `/${DEAL_B}/closing-checklist/apply`, { method: 'POST', body: { template_slug: 'safe' } }, db);
+  assert.equal(applied.status, 201, 'an admin moves any round');
+  const add = await call(partner, `/${DEAL_B}/closing-checklist/items`, { method: 'POST', body: { label: 'Board consent' } }, db);
+  assert.equal(add.status, 403);
+  const added = await call(admin, `/${DEAL_B}/closing-checklist/items`, { method: 'POST', body: { label: 'Board consent' } }, db);
+  const item = added.body.checklist.items[0];
+  const change = await call(partner, `/${DEAL_B}/closing-checklist/items/${item.uid}`, { method: 'PATCH', body: { state: 'done' } }, db);
+  assert.equal(change.status, 403);
+  assert.equal((db.prepare('SELECT state FROM deal_closing_checklist_items').get() as any).state, 'pending', 'unchanged');
 });

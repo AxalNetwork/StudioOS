@@ -13,7 +13,8 @@ import { VERCEL_READ_BY, VERCEL_READ_REASON } from './vercelFeeds';
  * never 0: zero would say "nothing arrived", which nobody measured.
  */
 // D1096: Vercel's parts land `connector_fed_items` rows (deploy, health, runtime, hosting_step) as each is built.
-export const FED_LEDGER_PROVIDERS = new Set(['github', 'mercury', 'google_workspace', 'notion', 'vercel']);
+// D2407: Beehiiv's Grow facts and posts land through the ledger (`services/beehiiv/grow.ts`).
+export const FED_LEDGER_PROVIDERS = new Set(['github', 'mercury', 'google_workspace', 'notion', 'vercel', 'beehiiv']);
 
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
 export { MODULE_LABELS } from './moduleLabels';
