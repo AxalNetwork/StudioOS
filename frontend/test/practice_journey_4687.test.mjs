@@ -48,6 +48,8 @@ test('Engagements: the empty-state button reveals the create form, and it create
 test('Delivery: the empty-state button reveals the form and the review loop is reachable with no work product', async () => {
   stubEverything();
   api.listMyAdvisorBookings = async (status) => ({ items: status === 'completed' ? [{ id: 7, status: 'completed', topic: 'Held call', founder_name: 'Fran', founder_user_id: 72 }] : [] });
+  // #4702: "No review" is only said when the coverage read answered and listed the session.
+  api.getMyAdvisorReviewCoverage = async () => ({ held: 1, reviewed: 0, awaiting: 1, ratings: { count: 0, sum: 0 }, items: [{ booking_id: 7, reviews: 0, advisor_filed: false, rating: null }], items_complete: true });
   const calls = [];
   api.createMyAdvisorDeliverable = async (b) => { calls.push(b); return {}; };
   const m = await mountContracts(React.createElement(DeliveryZone), '/practice/delivery');

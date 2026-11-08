@@ -66,6 +66,8 @@ export async function pinQuote(env: Env, q: { userId: number; projectId: number;
 
 export interface TakenQuote { uid: string; hold_microusd: number; pricing_version: string }
 
+/** D4597 (#4597): a metered outline or build names the quote it was shown. */
+export const QUOTE_REQUIRED = 'This run is charged by what it uses, so it runs only at a price you were shown. Get the price first, then confirm it. Nothing was charged.';
 export const QUOTE_STALE = 'The price shown is no longer held: it was used, it lapsed, or the deck changed since. Here is the price now; press Build again.';
 
 /**

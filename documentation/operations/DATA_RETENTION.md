@@ -12,6 +12,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 |---|---|---|---|
 | `pitch_decks` | every saved version of a deck: its cards, theme and title, and for a build from the narrative (D1516) the narrative version it read (a number, never the words) | no cascade; a version is never deleted by the app | none (its images are `deck_images` rows) |
 | `pitch_deck_cards` | the per-card autosave drafts of a deck (D1501) | deck cascade; a draft is replaced on save and cleared by Discard draft | none |
+| `pitch_deck_draft_doc` | the autosave draft's deck-level state: the cards it keeps, their order, theme and audience (D4596) | deck cascade; replaced on each autosave and cleared by Discard draft | none |
 | `pitch_deck_proposals` | proposed decks from New deck and Fill from project, before Accept | no cascade | none |
 | `pitch_deck_share_tokens` | share links: a token hash, its expiry and options | no cascade; an expired or withdrawn link stops opening, its row stays for its analytics | none |
 | `deck_images` | uploaded, copied and generated deck images, proposed, kept or discarded | venture cascade. The daily cleanup (D1508) removes a discarded image 24 hours after Discard and a proposal nobody kept 14 days after it was made, unless a version, draft, proposal or derivative names it. A kept image stays | one per row, `deck-images/<project>/<uid>.<ext>`; deleted with its row by the cleanup |

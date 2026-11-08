@@ -231,3 +231,15 @@ export function narrowSlots(slots, view) {
 
 /** The window each view asks the server for, in days. */
 export const VIEW_DAYS = { two_weeks: 14, month: 31, past: 31, unpaid_held: 31 };
+
+/**
+ * #4702 (D4702): where a view's window STARTS. The server reads
+ * `[from, from + days)` and `from` defaults to now, so "Past sessions" asked
+ * for the next 31 days and then filtered them to those already over: nothing.
+ * The past view starts `days` ago, so the window is the 31 days that just
+ * ended; every other view reads forward from now (`undefined` = the server's now).
+ */
+export function windowFrom(view, days, nowMs = Date.now()) {
+  if (view !== 'past') return undefined;
+  return new Date(nowMs - Number(days) * 86_400_000).toISOString();
+}

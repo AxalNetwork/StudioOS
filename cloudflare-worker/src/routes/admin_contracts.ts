@@ -29,6 +29,7 @@ import { renderLegalPdf } from '../services/legalPaperRender';
 import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { refuse } from '../util/refusal';
+import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON } from '../services/templateSafety';
 import {
   listTemplates as storeListTemplates,
   getTemplate as storeGetTemplate,
@@ -52,8 +53,11 @@ adminContracts.get('/published-templates', async (c) => {
   await requireAdmin(c);
   try {
     const templates = await publishedContractTemplates(c.env);
+    // D4811: each publication carries its overlays, so New envelope does not
+    // offer one the send would refuse.
     return c.json({ items: templates.map(({ body_md: _body, ...template }) => ({
       ...template, fields: publicationFields({ ...template, body_md: _body }),
+      safety: templateSafety({ slug: template.slug, is_stub: 0, body_md: _body }),
     })) });
   } catch {
     return c.json({ error: 'Published templates are unreadable. Try again.', code: 'publications_unreadable' }, 503);
@@ -85,6 +89,7 @@ function publicationRefusal(c: AppContext, e: unknown) {
     template_not_found: 'Template not found.',
     published_version_changed: 'This template changed since it was opened. Open it again to publish the saved version.',
     template_has_no_body: 'A stub has no body to publish.',
+    template_restricted: `${RESTRICTED_TITLE}. ${RESTRICTED_REASON} Nothing was published.`,
     not_published: 'This template has no recorded publication.',
   };
   return c.json({ error: text[e.code], code: e.code }, e.status);
@@ -115,12 +120,16 @@ adminContracts.post('/published-templates/push', async (c) => {
   let templates;
   try { templates = await publishedContractTemplates(c.env); }
   catch { return c.json({ error: 'Published templates are unreadable. Try again.', code: 'publications_unreadable' }, 503); }
+  // D4811: a restricted template's publication is not pushed; a branch then
+  // withdraws it, as it withdraws one HQ no longer lists.
+  const withheld = templates.filter(t => templateUseRefusal({ slug: t.slug, is_stub: 0, body_md: t.body_md })).map(t => t.slug);
+  templates = templates.filter(t => !withheld.includes(t.slug));
   const payload = { templates: templates.map(t => ({ slug: t.slug, title: t.title, category: t.category, version: t.version })), pushed_at: new Date().toISOString() };
   const branches = await fanOut<{ stored: number; withdrawn: number }>(c.env, 'publishTemplate', [payload]);
   return c.json({ ok: true, template_count: templates.length, answered: branches.filter(b => b.status === 'ok').length, total: branches.length,
     branches: branches.map(b => ({ code: b.code, status: b.status, ...(b.data ? { stored: b.data.stored, withdrawn: b.data.withdrawn } : {}),
       ...(b.reason ? { reason: b.reason } : {}), ...(b.timed_out ? { timed_out: true } : {}) })),
-    pushed_at: payload.pushed_at,
+    pushed_at: payload.pushed_at, withheld,
     ...(branches.length ? {} : { branches_reason: 'No branch Worker is bound. No branch received the catalogue.' }) });
 });
 
@@ -172,7 +181,8 @@ export function envelopeHandler(operation: 'preview' | 'send', given?: Record<st
     let prepared;
     try { prepared = await preparePublishedContract(c.env, input, admin.id, isSuperAdmin(admin)); }
     catch (e) {
-      if (e instanceof ContractPreparationError) return c.json({ error: e.code, code: e.code, fields: e.fields }, e.status);
+      // D4811: a restricted or incomplete template also says why (`detail`).
+      if (e instanceof ContractPreparationError) return c.json({ error: e.code, code: e.code, fields: e.fields, ...(e.detail ? { message: e.detail } : {}) }, e.status);
       return c.json({ error: 'The document could not be prepared. Nothing was sent. Try again.', code: 'preparation_unreadable' }, 503);
     }
     // D711 — the paper every copy of this envelope prints on.
@@ -1745,6 +1755,8 @@ adminContracts.get('/templates/store', async (c) => {
       ...formatView(t),
       counsel_draft: COUNSEL_DRAFT_SLUGS.has(t.slug),
       counsel_review: COUNSEL_REVIEW_SLUGS.has(t.slug),
+      // D4811: the overlays, computed here so the page never guesses them.
+      safety: templateSafety(t),
       ...(publications ? { published_version: publications.get(t.slug)?.version ?? null,
         has_unpublished_changes: publications.has(t.slug) ? !!t.is_stub || !t.body_md.trim() || publications.get(t.slug)?.version !== t.version
           : !t.is_stub && !!t.body_md.trim() } : {}),
@@ -1842,7 +1854,7 @@ adminContracts.get('/templates/store/:slug', async (c) => {
   if (!tpl) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
   return c.json({
     template: { ...tpl, layer: tpl.category, layer_label: TEMPLATE_LAYERS[tpl.category]?.label || tpl.category,
-      ...formatView(tpl), format_options: formatOptions(tpl.slug, tpl.category) },
+      ...formatView(tpl), format_options: formatOptions(tpl.slug, tpl.category), safety: templateSafety(tpl) },
   });
 });
 

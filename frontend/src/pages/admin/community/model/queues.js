@@ -1,5 +1,5 @@
 /**
- * #4717 package 6 — The two review queues (D918's events, the job board's postings): Waiting on you's counts, the oldest wait, and Needs a decision's rows.
+ * #4717 package 6 — The two review queues (D918's events, the job board's postings): Waiting on you's counts, the oldest wait, and Needs your attention's rows (D4820).
  *
  * Split out of communityModel.js, which re-exports what the page and the
  * tests import. Pure: nothing here fetches.
@@ -66,6 +66,14 @@ export function oldestWait(overview) {
   };
 }
 
+/** D4820 CM02: Needs your attention lists at most five rows; the rest are counted. */
+export const NEEDS_ROWS = 5;
+
+/**
+ * D4820 CM02 — Needs your attention: the two review queues' rows, Overdue
+ * first and then oldest first, at most five, each opening its item in
+ * Approvals. `clear` is true only when both queues were read and count none.
+ */
 export function buildNeeds(reads) {
   const er = blockOf(reads.overview, 'queue.event_rows');
   const eq = eventQueueOf(reads.overview);
@@ -82,21 +90,28 @@ export function buildNeeds(reads) {
   const items = [];
   if (evOk) {
     for (const e of er.block.rows) {
-      items.push({ kind: 'Event', id: `event-${e.event_id}`, title: e.title, sub: null, wait: wait(e.waiting_hours, e.from_created), overdue: e.overdue === true, since: stamp(e.waiting_since) });
+      items.push({ kind: 'Event', id: `event-${e.event_id}`, ref: e.event_id, title: e.title, sub: null, wait: wait(e.waiting_hours, e.from_created), overdue: e.overdue === true, since: stamp(e.waiting_since) });
     }
   }
   if (jbOk) {
     for (const j of jq.review) {
-      items.push({ kind: 'Job', id: `job-${j.posting_id}`, title: j.title, sub: j.company || null, wait: wait(j.waiting_hours, false), overdue: j.overdue === true, since: stamp(j.waiting_since) });
+      items.push({ kind: 'Job', id: `job-${j.posting_id}`, ref: j.posting_id, title: j.title, sub: j.company || null, wait: wait(j.waiting_hours, false), overdue: j.overdue === true, since: stamp(j.waiting_since) });
     }
   }
-  // Oldest first; a wait not recorded is listed after every dated one.
-  items.sort((a, b) => (Number.isNaN(a.since) ? 1 : Number.isNaN(b.since) ? -1 : a.since - b.since));
+  // D4820 CM02: Overdue first, then oldest first; a wait not recorded is listed after every dated one.
+  items.sort((a, b) => (a.overdue !== b.overdue ? (a.overdue ? -1 : 1)
+    : Number.isNaN(a.since) ? (Number.isNaN(b.since) ? 0 : 1) : Number.isNaN(b.since) ? -1 : a.since - b.since));
+  const total = (evOk ? eq.count : 0) + (jbOk ? jq.count : 0);
+  const rows = items.slice(0, NEEDS_ROWS);
   return {
     state: 'ready',
-    total: (evOk ? eq.count : 0) + (jbOk ? jq.count : 0),
+    total,
     overdue: (evOk ? eq.overdue : 0) + (jbOk ? jq.overdue : 0),
-    rows: items.slice(0, 6),
+    rows,
+    // D4820 CM02c: how many wait in Approvals beyond the rows listed (the queues' counts, not the rows').
+    more: Math.max(0, total - rows.length),
+    // D4820 CM02d: clear only when both queues were read and both count none. A queue that could not be read is never clear.
+    clear: evOk && jbOk && total === 0,
     partial: !evOk ? 'The events queue could not be read, so only jobs are listed.' : !jbOk ? 'The job board could not be read, so only events are listed.' : null,
   };
 }

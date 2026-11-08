@@ -263,7 +263,9 @@ export default function EngagementsZone() {
       <NothingYet
         title="No engagement is on file"
         body="This board fills as you record the contracts behind your sessions — who the client is, what the scope says, and whether each term renewed. It is empty because nothing has been recorded, not because anything was lost."
-        action={<button type="button" className={buttonClass} onClick={() => setAdding(true)}>Record an engagement</button>}
+        action={<button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
+          {adding ? 'Close' : 'Record an engagement'}
+        </button>}
       />
       {/* D4687 (#4687): the form used to live only inside the non-empty body,
           so this button set state that nothing rendered. */}

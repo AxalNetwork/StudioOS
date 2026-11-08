@@ -238,6 +238,8 @@ export function normBooking(b) {
     // row simply omits the time rather than inventing one.
     duration_min: Number.isFinite(duration) ? duration : null,
     meeting_uri: b.meeting_uri ?? b.meeting_url ?? null,
+    // #4715: an unconfirmed booking carries no link, only whether one exists.
+    has_meeting_link: Boolean(b.has_meeting_link ?? (b.meeting_uri ?? b.meeting_url)),
   };
 }
 
@@ -836,8 +838,9 @@ export default function SpinoutLabOfficeHoursPage() {
               <div className="text-right shrink-0">
                 <div className="text-[11px] text-gray-400 mb-1">{b.scheduled_start ? countdown(b.scheduled_start) : '—'}</div>
                 {/* The meeting link is the PARTNER'S slot URL: it is set when the
-                    slot is published and the worker's booking list LEFT JOINs it
-                    onto every row regardless of booking status. Confirming does
+                    slot is published, and the worker's booking list carries it only
+                    once the partner has confirmed (#4715); before that the row
+                    says only has_meeting_link. Confirming does
                     NOT mint one (transition() writes only `status`). So Join is
                     gated on a real confirmation, and the fallback never promises
                     a link the backend will not produce. */}
@@ -847,7 +850,7 @@ export default function SpinoutLabOfficeHoursPage() {
                   </a>
                 ) : (
                   <span className="text-[11px] text-gray-400" data-testid={`join-note-${b.id}`}>
-                    {b.meeting_uri ? 'link on confirmation' : 'no link published'}
+                    {b.has_meeting_link ? 'link on confirmation' : 'no link published'}
                   </span>
                 )}
               </div>

@@ -30,7 +30,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 import decks from './decks';
@@ -49,7 +49,7 @@ async function owned(c: any, user: User, projectId: number, write = false) {
     return { refused: refuse(c, 403, { code: 'hq_read_only', message: 'A venture\'s founders set its stage norms. HQ reads them and curates its own on HQ › Decks.' }) };
   }
   try {
-    return { project: await projectOwned(c, user, projectId, write ? { write: true } : {}) };
+    return { project: await projectOwned(c, user, projectId, write ? { write: true } : { advisorRead: true }) };
   } catch (e: any) {
     return { refused: e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403) };
   }

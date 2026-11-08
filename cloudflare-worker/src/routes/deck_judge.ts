@@ -23,7 +23,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { refuse } from '../util/refusal';
 import { quoteRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';

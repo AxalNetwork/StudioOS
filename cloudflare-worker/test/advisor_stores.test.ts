@@ -150,6 +150,7 @@ function freshDb() {
   // behaviour and still do.
   db.exec(migration('241_advisor_money_model'));
   db.exec(migration('369_advisor_client_notes'));
+  db.exec(migration('202611071558_advisor_booking_decision')); // #4702: the advisor's answer, apart from the status
   // D4472: the assignable picker includes active additional Advisor grants.
   const licenceMigration=readdirSync(`${SQL}/migrations`).find(name=>name.endsWith('_account_licences.sql'))!;
   db.exec(readFileSync(`${SQL}/migrations/${licenceMigration}`,'utf8'));
@@ -360,7 +361,7 @@ test('an unanswered list reads as absent, not as an empty list', async () => {
 // ---------------------------------------------------------------------------
 test('a service with no price reads as unpriced, never as free', async () => {
   const e = env(freshDb());
-  const made = await call(e, 'POST', '/me/services', ada, { title: 'Fractional CTO day' });
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Fractional CTO day' });
   assert.equal(made.status, 200);
   assert.equal(made.body.price_cents, null, 'not 0');
   assert.equal(made.body.kind, 'fixed');
@@ -370,16 +371,16 @@ test('a service with no price reads as unpriced, never as free', async () => {
 test('a price is whole cents or it is rejected', async () => {
   const e = env(freshDb());
   for (const bad of [12.5, -1, 'free']) {
-    const r = await call(e, 'POST', '/me/services', ada, { title: 'x', price_cents: bad });
+    const r = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'x', price_cents: bad });
     assert.equal(r.status, 400, `rejected ${JSON.stringify(bad)}`);
   }
-  const ok = await call(e, 'POST', '/me/services', ada, { title: 'x', price_cents: 250000 });
+  const ok = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'x', price_cents: 250000 });
   assert.equal(ok.body.price_cents, 250000);
 });
 
 test('units_sold is null because nothing links a booking to a service', async () => {
   const e = env(freshDb());
-  await call(e, 'POST', '/me/services', ada, { title: 'Advisory hour' });
+  await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Advisory hour' });
   const list = await call(e, 'GET', '/me/services', ada);
   assert.equal(list.body.items[0].units_sold, null,
     'a topic-string match would be a guess presented as a count');
@@ -387,7 +388,7 @@ test('units_sold is null because nothing links a booking to a service', async ()
 
 test('an advisor cannot edit or delete another advisor’s service', async () => {
   const e = env(freshDb());
-  const mine = await call(e, 'POST', '/me/services', ada, { title: 'Mine' });
+  const mine = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Mine' });
   assert.equal((await call(e, 'PATCH', `/me/services/${mine.body.id}`, grace, { title: 'Hers' })).status, 404);
   assert.equal((await call(e, 'DELETE', `/me/services/${mine.body.id}`, grace)).status, 404);
   assert.equal((await call(e, 'GET', '/me/services', grace)).body.items.length, 0);
@@ -396,7 +397,7 @@ test('an advisor cannot edit or delete another advisor’s service', async () =>
 
 test('a service edit merges — an unmentioned price is not cleared', async () => {
   const e = env(freshDb());
-  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', price_cents: 500000 });
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Sprint', price_cents: 500000 });
   const edited = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'Two weeks' });
   assert.equal(edited.body.price_cents, 500000);
   assert.equal(edited.body.scope, 'Two weeks');
@@ -406,7 +407,7 @@ test('a service edit merges — an unmentioned price is not cleared', async () =
 
 test('D4681: one edit changes every field at once, without delete and recreate', async () => {
   const e = env(freshDb());
-  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', price_cents: 500000 });
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Sprint', price_cents: 500000 });
   const edited = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, {
     title: 'Design sprint', kind: 'package', price_cents: 650000, currency: 'eur',
     duration_note: 'Two weeks', scope: 'Discovery and a prototype', is_active: false,
@@ -423,7 +424,7 @@ test('D4681: a blank title or a malformed currency is refused, and nothing chang
   // Mutation checked: the blank-title guard removed → 200 with the old title kept;
   // parseCurrency accepting anything → 'DOLLARS' stored.
   const e = env(freshDb());
-  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', price_cents: 500000 });
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Sprint', price_cents: 500000 });
   for (const body of [{ title: '   ' }, { currency: 'dollars' }, { currency: 'US' }, { kind: 'subscription' }]) {
     const r = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { ...body, scope: 'should not land' });
     assert.equal(r.status, 400, JSON.stringify(body));
@@ -1111,4 +1112,180 @@ test('D4703: two payout onboarding starts make one provider account, and a store
       'acct_synthetic_winner', 'the account attached first is not overwritten');
     assert.deepEqual(linkedFor, ['acct_synthetic_winner']);
   } finally { globalThis.fetch = realFetch; }
+});
+
+// ---------------------------------------------------------------------------
+// D4674 — prices, currencies, limits and concurrent edits
+// ---------------------------------------------------------------------------
+test('D4674: a service is created with a stated, supported currency; CHF 123.45 stays CHF 123.45', async () => {
+  const e = env(freshDb());
+  const missing = await call(e, 'POST', '/me/services', ada, { title: 'x', price_cents: 100 });
+  assert.equal(missing.status, 400);
+  assert.equal(missing.body.error, 'currency_required', 'no silent USD');
+  const odd = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'XYZ' });
+  assert.equal(odd.status, 400);
+  assert.equal(odd.body.error, 'currency_unsupported');
+  const ok = await call(e, 'POST', '/me/services', ada, { title: 'Audit', currency: 'chf', price_cents: 12345 });
+  assert.equal(ok.status, 200);
+  assert.deepEqual([ok.body.price_cents, ok.body.currency], [12345, 'CHF']);
+  const list = await call(e, 'GET', '/me/services', ada);
+  assert.deepEqual([list.body.items[0].price_cents, list.body.items[0].currency], [12345, 'CHF']);
+});
+
+test('D4674: a price that could change magnitude is refused, not guessed', async () => {
+  const e = env(freshDb());
+  for (const bad of ['12,50', '1,5', '1.234,56', '1e3', 12.5, '12.50', ' ', 'NaN']) {
+    if (bad === ' ') continue;
+    const r = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'USD', price_cents: bad });
+    assert.equal(r.status, 400, JSON.stringify(bad));
+    assert.equal(r.body.error, 'price_invalid');
+  }
+  const digits = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'USD', price_cents: '1250' });
+  assert.equal(digits.body.price_cents, 1250);
+});
+
+test('D4674: changing the currency of a priced service needs the price in the same edit', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', price_cents: 500000 });
+  const bare = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { currency: 'EUR' });
+  assert.equal(bare.status, 400);
+  assert.equal(bare.body.error, 'price_required_with_currency');
+  const both = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { currency: 'EUR', price_cents: 450000 });
+  assert.deepEqual([both.body.currency, both.body.price_cents], ['EUR', 450000]);
+});
+
+test('D4674: text over its limit is refused with the field named; nothing is cut and saved', async () => {
+  const e = env(freshDb());
+  const long = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'USD', scope: 'a'.repeat(2001) });
+  assert.equal(long.status, 400);
+  assert.equal(long.body.error, 'too_long');
+  assert.match(long.body.message, /scope is at most 2000/);
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', scope: 'a'.repeat(2000) });
+  assert.equal(made.body.scope.length, 2000, 'exactly at the limit is fine');
+  const edit = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { title: 't'.repeat(201) });
+  assert.equal(edit.status, 400);
+  assert.equal((await call(e, 'GET', '/me/services', ada)).body.items[0].title, 'Sprint');
+  const profile = await call(e, 'POST', '/me', ada, { display_name: 'Ada', bio: 'b'.repeat(4001) });
+  assert.equal(profile.status, 400);
+  assert.equal(profile.body.error, 'too_long');
+  const tags = await call(e, 'POST', '/me', ada, { display_name: 'Ada', expertise: Array.from({ length: 33 }, (_, i) => `t${i}`) });
+  assert.equal(tags.body.error, 'too_many');
+});
+
+test('D4674: two edits to different fields of one service both persist', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', price_cents: 500000 });
+  // Both editors opened the same row; each sends only the field it changed.
+  const a = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'Two weeks' });
+  const b = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { price_cents: 600000 });
+  assert.equal(a.status, 200); assert.equal(b.status, 200);
+  const row = (await call(e, 'GET', '/me/services', ada)).body.items[0];
+  assert.deepEqual([row.scope, row.price_cents], ['Two weeks', 600000]);
+});
+
+test('D4674: an edit made on a stale revision is a 409 with the current row, and saves nothing', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', price_cents: 500000 });
+  const opened = made.body.updated_at;
+  db.prepare("UPDATE advisor_services SET updated_at = '2099-01-01T00:00:00.000Z', scope = 'someone else' WHERE id = ?").run(made.body.id);
+  const stale = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'mine', revision: opened });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.error, 'revision_conflict');
+  assert.equal(stale.body.current.scope, 'someone else');
+  const fresh = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'mine', revision: stale.body.current.updated_at });
+  assert.equal(fresh.status, 200);
+  assert.equal(fresh.body.scope, 'mine');
+});
+
+test('D4674: the profile writes only the fields it names, and a stale revision is a 409', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const made = await call(e, 'POST', '/me', ada, { display_name: 'Ada', bio: 'Original bio', headline: 'Original headline' });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  await call(e, 'POST', '/me', ada, { headline: 'New headline' });
+  const second = await call(e, 'POST', '/me', ada, { bio: 'New bio' });
+  assert.deepEqual([second.body.headline, second.body.bio], ['New headline', 'New bio'], 'neither edit lost the other');
+  db.prepare("UPDATE advisors SET updated_at = '2099-01-01T00:00:00.000Z' WHERE user_id = ?").run(ADVISOR_USER);
+  const stale = await call(e, 'POST', '/me', ada, { bio: 'late', revision: second.body.updated_at });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.current.bio, 'New bio');
+});
+
+// ── #4702 (D4702): the advisor's answer is its own fact ─────────────────────
+
+const answerOf = (db: InstanceType<typeof DatabaseSync>, id: number) =>
+  ({ ...(db.prepare('SELECT status, advisor_decision, advisor_decided_at, cancelled_by FROM advisor_bookings WHERE id = ?').get(id) as any) });
+
+test('#4702: a confirm records the accept; a client cancelling afterwards leaves it accepted, cancelled by the client', async () => {
+  // Mutation checked: the cancel UPDATE writing advisor_decision = 'declined' → the accept is overwritten.
+  const db = freshDb();
+  seedBooking(db, 41, 1, 'pending');
+  const e = env(db);
+  assert.equal((await call(e, 'POST', '/bookings/41/confirm', ada)).status, 200);
+  const accepted = answerOf(db, 41);
+  assert.deepEqual([accepted.status, accepted.advisor_decision, accepted.cancelled_by], ['confirmed', 'accepted', null]);
+  assert.ok(accepted.advisor_decided_at, 'when the advisor answered');
+  const cancelled = await call(e, 'POST', '/bookings/41/cancel', fran, { reason: 'Schedule clash' });
+  assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
+  assert.deepEqual(answerOf(db, 41), { ...accepted, status: 'cancelled', cancelled_by: 'client' }, 'still accepted; the client cancelled');
+  assert.equal(cancelled.body.advisor_decision, undefined, 'the founder\'s own read does not carry the advisor\'s answer');
+  const mine = (await call(e, 'GET', '/me/bookings', ada)).body.items.find((b: any) => b.id === 41);
+  assert.deepEqual([mine.status, mine.advisor_decision, mine.cancelled_by], ['cancelled', 'accepted', 'client']);
+});
+
+test('#4702: the advisor cancelling a request still waiting is a decline; the client withdrawing one is not; the system\'s cancel is neither', async () => {
+  // Mutation checked: treating every pending cancel as a decline → the client's withdrawal records 'declined'.
+  const db = freshDb();
+  seedBooking(db, 42, 1, 'pending'); seedBooking(db, 43, 1, 'pending'); seedBooking(db, 44, 1, 'pending');
+  const e = env(db);
+  assert.equal((await call(e, 'POST', '/bookings/42/cancel', ada, { reason: 'Not a fit' })).status, 200);
+  assert.deepEqual([answerOf(db, 42).advisor_decision, answerOf(db, 42).cancelled_by], ['declined', 'advisor']);
+  assert.equal((await call(e, 'POST', '/bookings/43/cancel', fran, { reason: 'Changed my mind' })).status, 200);
+  assert.deepEqual([answerOf(db, 43).advisor_decision, answerOf(db, 43).cancelled_by], [null, 'client'], 'withdrawn before any answer');
+  const slot = (db.prepare('SELECT slot_id FROM advisor_bookings WHERE id = 44').get() as any).slot_id;
+  assert.equal((await callCollecting(e, 'DELETE', `/me/slots/${slot}`, ada)).status, 200);
+  assert.deepEqual([answerOf(db, 44).advisor_decision, answerOf(db, 44).cancelled_by], [null, 'system']);
+});
+
+test('#4702: the migration backfills only what the row proves', () => {
+  const db = freshDb();
+  db.exec("DELETE FROM advisor_bookings");
+  const ins = db.prepare('INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status, cancel_reason) VALUES (?,?,?,?,?,?,?)');
+  ins.run(1, 'b1', 1, 1, FOUNDER_USER, 'confirmed', null);
+  ins.run(2, 'b2', 2, 1, FOUNDER_USER, 'completed', null);
+  ins.run(3, 'b3', 3, 1, FOUNDER_USER, 'no_show', null);
+  ins.run(4, 'b4', 4, 1, FOUNDER_USER, 'cancelled', 'slot_cancelled');
+  ins.run(5, 'b5', 5, 1, FOUNDER_USER, 'cancelled', 'a reason somebody typed');
+  ins.run(6, 'b6', 6, 1, FOUNDER_USER, 'pending', null);
+  db.exec("UPDATE advisor_bookings SET advisor_decision = NULL, cancelled_by = NULL");
+  db.exec(readFileSync(`${SQL}/migrations/202611071558_advisor_booking_decision.sql`, 'utf8').split('\n').filter((l) => /^UPDATE/.test(l)).join('\n'));
+  const got = (db.prepare('SELECT id, advisor_decision AS d, cancelled_by AS c FROM advisor_bookings ORDER BY id').all() as any[]).map((r) => [r.id, r.d, r.c]);
+  assert.deepEqual(got, [[1, 'accepted', null], [2, 'accepted', null], [3, 'accepted', null], [4, null, 'system'], [5, null, null], [6, null, null]],
+    'a cancelled row with a typed reason stays unknown: it may be a decline or a client leaving');
+});
+
+// ── #4702: review coverage in one read, over every held session ─────────────
+
+test('#4702: review coverage counts EVERY held session in one read, not the first twenty', async () => {
+  // Mutation checked: the coverage query capped at 20 sessions → held is 20, not 25.
+  const db = freshDb();
+  for (let id = 100; id < 125; id += 1) seedBooking(db, id, 1, 'completed');
+  const rv = db.prepare('INSERT INTO advisor_reviews (uid, booking_id, reviewer_user_id, reviewer_role, rating) VALUES (?,?,?,?,?)');
+  rv.run('r1', 100, FOUNDER_USER, 'founder', 5);       // oldest sessions reviewed: the ones a "newest 20" read would never reach
+  rv.run('r2', 100, ADVISOR_USER, 'advisor', 4);
+  rv.run('r3', 101, FOUNDER_USER, 'founder', 3);
+  const e = env(db);
+  const r = await call(e, 'GET', '/me/review-coverage', ada);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual([r.body.held, r.body.reviewed, r.body.awaiting], [25, 2, 23]);
+  assert.deepEqual(r.body.ratings, { count: 3, sum: 12 });
+  assert.equal(r.body.items.length, 25);
+  const one = r.body.items.find((i: any) => i.booking_id === 100);
+  assert.deepEqual([one.reviews, one.advisor_filed, one.rating], [2, true, 4.5]);
+  assert.equal(r.body.items.find((i: any) => i.booking_id === 101).advisor_filed, false);
+  assert.equal(r.body.items_complete, true);
+  assert.equal((await call(e, 'GET', '/me/review-coverage', grace)).body.held, 0, 'another advisor\'s sessions are not counted');
+  const list = await call(e, 'GET', '/me/bookings?status=completed', ada);
+  assert.deepEqual([list.body.total, list.body.items.length], [25, 25], 'the list says how many there are');
 });

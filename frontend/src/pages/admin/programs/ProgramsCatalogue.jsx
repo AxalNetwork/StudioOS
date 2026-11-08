@@ -22,17 +22,18 @@ import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { scopeParam, scopeState } from '../insights/insightsModel';
 import AdminBoardFrame from '../AdminBoardFrame';
 import {
-  BlockFailed, CARD, ChartBlock, Chip, Done, EYE, GrantBadge, H2, LINK, MovedNotice, PeriodControl, Pill, StatusPill,
+  BlockFailed, CARD, ChartBlock, Chip, Done, EYE, GrantBadge, H2, LINK, MovedNotice, PeriodControl, Pill, ProgramDimensions, StaleNote, StatusPill,
   StudioSelect, SUB, Skeleton, Tile, Unread,
 } from './parts';
 import { useCatalogueReads } from './useProgramReads';
+import useProgramsTitle from './useProgramsTitle';
 import { ProposalsSummary, YourProposals } from './ProposalTables';
 import { ProgramsTabs, useWaitingProposals } from './ProposalsPage';
 import NewProgramDialog from './NewProgramDialog';
 import { NEW_PROGRAM } from './proposalsModel';
 import {
   ASSIGNED_TO_YOU, COULD_NOT_READ, GROUPS, INCLUDING_MEMBER, LINE_ADMIN, LINE_SUPER, NOT_READ_YET,
-  NOT_RECORDED, PRODUCT_TESTING_FOOT, READING, TITLE, asOfState, clockLabel, movedNotice, plural, scopeChip, withoutMoved,
+  NOT_RECORDED, PRODUCT_TESTING_FOOT, READING, TITLE, asOfState, clockLabel, movedNotice, plural, programDimensions, scopeChip, withoutMoved,
 } from './programsModel';
 import {
   PERIODS, catalogueCards, catalogueTiles, creditsChart, figureOf, investorsFigure, joinsChart, labApplications, labCohortLine,
@@ -90,6 +91,7 @@ function ProgramCard({ p, superAdmin, who, needs, figures, door, foot }) {
         <GrantBadge grant={superAdmin ? p.hqGrant : p.grant} badge={p.grantBadge} testId={`programs-card-${p.key}-grant`} />
         {superAdmin ? null : <NeedsPill needs={needs} programKey={p.key} />}
       </div>
+      <ProgramDimensions dims={programDimensions(p, { superAdmin, grantBadge: p.grantBadge, state: p.fallback || 'ready' })} testId={`programs-card-${p.key}-dimensions`} />
       <div className="border-t border-axal-hairline pt-2 dark:border-gray-700" data-testid={`programs-card-${p.key}-who`}>
         {who || (p.who
           ? <span className="text-[12px] font-medium text-axal-muted dark:text-gray-400">{`Who: ${p.who} · Join: ${p.join || NOT_RECORDED}`}</span>
@@ -147,6 +149,7 @@ function CatalogueBody() {
   });
   const { scope } = reads.studio;
   const perStudio = Boolean(reads.studio.code);
+  useProgramsTitle('Programs', scope?.kind === 'branch' ? scope.label : superAdmin ? 'HQ' : null);
 
   const setSearch = (search) => navigate({ pathname: loc.pathname, search, hash: loc.hash }, { replace: true });
   const pickWeeks = (w) => setSearch(withWeeks(loc.search, w));
@@ -167,6 +170,8 @@ function CatalogueBody() {
   const waiting = waitingChart(reads.catalogue);
   const credits = creditsChart(reads.catalogue);
   const { cards } = catalogueCards(reads.cards);
+  // D4807: the last answer for this scope stays on screen while the next period reads; it says so.
+  const stale = Boolean(reads.cards?.stale);
   const shown = cards.filter((c) => !group || c.group === group);
   const lab = labApplications(reads.labApps, { perStudio });
 
@@ -388,6 +393,7 @@ function CatalogueBody() {
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className={H2}>Catalogue</h2>
           <span className={SUB} data-testid="programs-catalogue-count">{plural(cards.length, 'program', 'programs')}</span>
+          <StaleNote stale={stale} />
         </div>
         <div className="flex flex-wrap gap-1.5" data-testid="programs-groups">
           <Chip on={group === null} onClick={() => setGroup(null)} testId="programs-group-all">All</Chip>
