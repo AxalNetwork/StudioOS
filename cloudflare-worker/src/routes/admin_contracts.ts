@@ -12,6 +12,7 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { fanOut } from '../services/branches';
 import { usageFromContractRows, usageRowsFor } from '../services/contractTemplateUsage';
+import { agreementFilters, loadLicenceAgreementContexts, matchesAgreementFilters, type AgreementContext } from '../services/contractAgreementSources';
 import { generatedList, generatedSpecimen, isGeneratedKey } from '../services/generatedDocuments';
 import { BUNDLED_SENT_DIRECTLY, librarySlugFor } from '../services/legalDocTypes';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
@@ -417,7 +418,7 @@ interface UnifiedContract {
   file_size: number | null;
   file_content_type: string | null;
   file_sha256: string | null;
-  source: 'documents' | 'esign' | 'pairwise_nda' | 'partner_deal';
+  source: 'documents' | 'esign' | 'pairwise_nda' | 'partner_deal' | 'licence_agreement' | 'licence_contract';
   // Task #2 — e-sign provider for esign-source rows. 'native' = in-house
   // signing flow; 'docusign' = routed through DocuSign. Always 'native'
   // for documents-source rows.
@@ -449,6 +450,13 @@ interface UnifiedContract {
    * signed in, so usage counts that document once, not once per source.
    */
   envelope_uuid?: string | null;
+  /**
+   * D5050 — the licence agreement this document is: a master territory licence agreement, or a package or
+   * program agreement version. On an `esign` row it is that envelope's version (the envelope is the
+   * document, so there is no second row); on a `licence_agreement` / `licence_contract` row it is a version
+   * with no envelope on file. Absent on every other row.
+   */
+  agreement?: AgreementContext;
 }
 
 function decorateDocType<T extends UnifiedContract>(row: T): T {
@@ -734,19 +742,69 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict =
   });
 }
 
+/**
+ * D5050 — the licence agreements into the union. A version whose envelope is an `esign` row of the union is
+ * attached to that row (one document, one row); a version with none becomes its own row, so a draft is listed
+ * too and reads Draft, never as signed.
+ */
+function withLicenceAgreements(esignRows: UnifiedContract[], contexts: AgreementContext[]): UnifiedContract[] {
+  const byEnvelope = new Map(esignRows.map((r) => [r.uid, r]));
+  const own: UnifiedContract[] = [];
+  for (const a of contexts) {
+    const envelopeRow = a.envelope_uuid ? byEnvelope.get(a.envelope_uuid) : undefined;
+    if (envelopeRow) { envelopeRow.agreement = a; continue; }
+    const source = a.store === 'licence_contracts' ? 'licence_contract' : 'licence_agreement';
+    const status = a.legal_status === 'executed' ? 'signed' : a.legal_status === 'voided' ? 'void'
+      : a.legal_status === 'awaiting_signature' ? 'sent' : 'draft';
+    own.push(decorateDocType({
+      id: 0,
+      uid: `${source}:${a.agreement_uid}`,
+      title: [a.program_name || a.package_name || a.template_slug, a.agreement_type_label, a.licence_ref].filter(Boolean).join(' — '),
+      doc_type: a.template_slug,
+      status,
+      template_name: a.template_slug,
+      project_id: null,
+      project_name: null,
+      recipient_email: null,
+      recipient_name: a.counterparty,
+      signed_by: null,
+      signed_at: a.signed_at,
+      signed_ip: null,
+      days_to_sign: null,
+      created_at: a.created_at,
+      updated_at: a.superseded_at || a.created_at,
+      file_key: null,
+      file_size: null,
+      file_content_type: null,
+      file_sha256: null,
+      source,
+      raw_status: a.legal_status,
+      can_resend: false,
+      envelope_uuid: a.envelope_uuid,
+      agreement: a,
+    }));
+  }
+  // A stable id per own row, after the store rows, so the paging order (source, id, uid) is total.
+  own.forEach((r, i) => { r.id = i + 1; });
+  return own;
+}
+
 export async function loadAllContracts(sql: ReturnType<typeof getSQL>, strict = false): Promise<UnifiedContract[]> {
   // Task #3 — true 4-source union: legacy documents + e-sign envelopes
   // (live signing) + pairwise NDAs (Y-1) + partner deals (X-1). Each
   // loader returns rows already normalised to UnifiedContract; failures
   // on the optional sources (table missing on older D1) collapse to []
   // inside the loader so the union is always best-effort.
-  const [docRows, esignRows, pairwiseRows, partnerRows] = await Promise.all([
+  // D5050 — plus the licence agreements (master licence, package and program), folded into their envelopes.
+  const [docRows, esignRows, pairwiseRows, partnerRows, agreementContexts] = await Promise.all([
     loadDocumentsContracts(sql),
     loadEsignContracts(sql),
     loadPairwiseNdaContracts(sql, strict),
     loadPartnerDealContracts(sql, strict),
+    loadLicenceAgreementContexts(sql as any),
   ]);
-  const merged = [...docRows, ...esignRows, ...pairwiseRows, ...partnerRows];
+  const agreementRows = withLicenceAgreements(esignRows, agreementContexts);
+  const merged = [...docRows, ...esignRows, ...pairwiseRows, ...partnerRows, ...agreementRows];
   merged.sort((a, b) => {
     const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
     const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -843,6 +901,9 @@ adminContracts.get('/', async (c) => {
   const template = c.req.query('template') || '';
   const signedRecent = c.req.query('signed_recent');
   if (signedRecent && signedRecent !== 'true') return c.json({ error: 'signed_recent must be true' }, 400);
+  // D5050 — agreement type, legal state, licence, program, package and signed-date filters.
+  const af = agreementFilters(c.req.query());
+  if (!af.ok) return c.json({ error: 'invalid_contract_query', message: `Choose a valid ${af.field.replace(/_/g, ' ')}.`, field: af.field }, 400);
 
   const sql = getSQL(c.env);
   try {
@@ -857,6 +918,7 @@ adminContracts.get('/', async (c) => {
       rows = rows.filter(r => r.status === 'signed' && r.signed_at != null
         && Date.parse(r.signed_at) >= cutoff && Date.parse(r.signed_at) <= now);
     }
+    rows = rows.filter(r => matchesAgreementFilters(r.agreement, af.filters, r.agreement?.signed_at ?? r.signed_at));
     if (docType)   rows = rows.filter(r => r.doc_type === docType);
     if (projectId) rows = rows.filter(r => r.project_id === parseInt(projectId));
     if (provider === 'native' || provider === 'docusign') {
@@ -871,7 +933,10 @@ adminContracts.get('/', async (c) => {
         (r.recipient_email || '').toLowerCase().includes(q) ||
         (r.recipient_name || '').toLowerCase().includes(q) ||
         (r.template_name || '').toLowerCase().includes(q) ||
-        (r.project_name || '').toLowerCase().includes(q)
+        (r.project_name || '').toLowerCase().includes(q) ||
+        // D5050 — the licence, its holder, the program and the package a licence agreement belongs to.
+        [r.agreement?.licence_ref, r.agreement?.counterparty, r.agreement?.program_name, r.agreement?.package_name]
+          .some(v => (v || '').toLowerCase().includes(q))
       );
     }
 
@@ -893,7 +958,7 @@ adminContracts.get('/', async (c) => {
     return c.json({
       total, limit, offset, sort, direction,
       items,
-      meta: { sources: ['documents', 'esign_envelopes', 'pairwise_ndas', 'partner_deals'], unioned: true },
+      meta: { sources: ['documents', 'esign_envelopes', 'pairwise_ndas', 'partner_deals', 'licence_contracts', 'licence_program_agreements'], unioned: true },
     });
   } catch {
     return c.json({ error: 'Contracts are unreadable. Try again.', code: 'contracts_unreadable' }, 503);
