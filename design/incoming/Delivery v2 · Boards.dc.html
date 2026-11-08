@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delivery v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Partner · Delivery · v2 · #4822</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Delivery — one dependable place to run active client work</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/delivery lands on Board, the command centre. Rows lead with client, then next action and why, then health, progress, owner, mode and value. Health is On track, At risk, Blocked or Not rated, and Not rated is never green. One engagement sheet travels across all five zones. The no-engagement workspace is one upstream-aware state (Pipeline → Proposal → Engagement → Delivery) instead of five zero cards. Deliverables never claim a client opened anything: read status is unavailable. Capacity makes its time basis explicit and treats an embedded seat as a commitment, not just workload. Status reports are anchored to client and period, with sent reports as read-only records. Health explains every status and separates what you set from what is calculated. Eadwyn stays collapsed and secondary.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026 · Partner workspace · the live workspace has no engagements (PD7); all clients, people and figures on other boards are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Delivery v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PD1', 'Board · desktop', 'A · Attention view, the strongest when exceptions exist: 2 of 5 engagements with the reason in the second column. B · All engagements, showing Project and Embedded seat progress side by side, and Not rated drawn dashed, not green.', [F('DL01', 'A · Attention', 760), F('DL01b', 'B · All', 840)]],
+      ['PD1m', 'Board · phone', 'Cards in Attention order: client, health, mode and value, progress, then the next action in bold above a 44px Open engagement.', [P('DL01m', false)]],
+      ['PD2', 'Deliverables · desktop', 'Client, deliverable, version, sent date and acknowledgement (sign-off only where the client recorded it). Read status is Unavailable for every row, never red, with a backend-required note for open tracking.', [F('DL02', false, 760)]],
+      ['PD2m', 'Deliverables · phone', 'Each deliverable as a card with its acknowledgement state; Log deliverable is full width.', [P('DL02m', false)]],
+      ['PD3', 'Capacity · desktop', 'An explicit time basis: “This week · Nov 9–15” or monthly planning. People rows show committed/available and room. Tomás is 6h over, and the detail shows the allocations causing it, including an embedded seat flagged as a commitment inside the client’s systems. Priya has no limit set, which says so and offers Set capacity.', [F('DL03', false, 980)]],
+      ['PD3m', 'Capacity · phone', 'One person per card: bar, hours, overage or room, then engagements.', [P('DL03m', false)]],
+      ['PD4', 'Status reports · desktop', 'This period’s reports by client with Draft, Not started and Sent (a read-only record of who marked it sent). The product records sending; it doesn’t deliver.', [F('DL04', false, 760)]],
+      ['PD4a', 'Status report composer', 'Anchored to Verwood · November 2026 · Draft, with the client and period locked. The Shipped, Next and Blocked sections each show recorded evidence beneath. An Eadwyn-drafted section is labelled as a proposal. Save draft → Review → Mark as sent. Blocked needs a backend field.', [C('DL04a', false, 800, 740)]],
+      ['PD4m', 'Status reports · phone', 'Reports as cards; Draft status report is full width.', [P('DL04m', false)]],
+      ['PD5', 'Health · desktop', 'A renewal-risk board: each card says why it has its status, with utilisation (read from Pipeline · Retainers), satisfaction with its source, and owner.', [F('DL05', false, 1000)]],
+      ['PD5a', 'Engagement health detail', 'Owner, scope, milestones, blockers and satisfaction are tagged “You set”; utilisation is tagged “Calculated”. Client review history is backend-required.', [F('DL05a', false, 1000)]],
+      ['PD5m', 'Health · phone', 'Risk cards with the reason first and a 44px Review health.', [P('DL05m', false)]],
+      ['PD6', 'Cross-zone engagement sheet', 'Opened from Board on Verwood: header (health, mode, value, owner), the next action, then compact Progress, Deliverables, Status report, Health and Capacity summaries. Each links to its zone without losing the engagement.', [F('DL06', false, 840)]],
+      ['PD7', 'Empty, loading, unreadable, save-failed and conflict states', 'A · The live no-engagement workspace: one state, the lifecycle, and Open Pipeline as the primary action. B · Loading, background refresh, unreadable, partial, saving, save failed (typed text kept), saved, conflict, and first-use states. C · The Pipeline → Delivery handoff with the engagement preserved.', [F('DL07', 'A · No active client work', 820), C('DL07b', 'B · States', 1400, 620), C('DL07c', 'C · Pipeline handoff', 1000, 260)]],
+      ['PD8', 'Dark mode', 'A · Board on #0b1220 with Ask Eadwyn opened by the user (prompts first, model and usage folded). B · The status report composer.', [F('DL08', 'A · Board', 840), C('DL08b', 'B · Composer', 800, 740)]],
+      ['PD9', 'Backend fit and handoff', 'What partner_delivery.ts supports today and what needs backend work, plus accessibility.', [W('DL09')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

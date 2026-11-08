@@ -2595,3 +2595,14 @@ Two more board sets from the owner's Claude Design canvas "Axal VC – platform 
 - **`Revenue v2 Page.dc.html`**, **`Revenue v2 · Boards.dc.html`**: boards RV01 to RV15 (D5039).
 
 Neither is built yet. Subsidiaries, people, tickets, customers and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-09 — Deals, Delivery, Practice, Pipeline and Cohorts v2 (#4815, #4822, #4874, #4838, #4813)
+
+Five more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-07 from the issue briefs, each as a page plus its boards under the names Claude Design gave them:
+- **`Deals v2 Page.dc.html`**, **`Deals v2 · Boards.dc.html`**: boards DE01 to DE18 (D4815). The shell follows the owner's #3704 rule over the prompt's account switcher.
+- **`Delivery v2 Page.dc.html`**, **`Delivery v2 · Boards.dc.html`**: boards DL01 to DL09 (D4822).
+- **`Practice v2 Page.dc.html`**, **`Practice v2 · Boards.dc.html`**: boards PX00 to PX13 (D4874).
+- **`Pipeline v2 Page.dc.html`**, **`Pipeline v2 · Boards.dc.html`**: boards PP01 to PP10 (D4838).
+- **`Cohorts v2 Page.dc.html`**, **`Cohorts v2 · Boards.dc.html`**: boards CH01 to CH19 (D4813).
+
+None is built yet. Companies, people, clients and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
