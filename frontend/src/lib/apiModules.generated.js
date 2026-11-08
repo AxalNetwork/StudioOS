@@ -208,6 +208,7 @@ export * from './api/partnerSettlements.js';
 export * from './api/payments.js';
 export * from './api/personaSegmentScopes.js';
 export * from './api/personaSegments.js';
+export * from './api/platformBuild.js';
 export * from './api/platformStatus.js';
 export * from './api/pmfExplain.js';
 export * from './api/posthog.js';

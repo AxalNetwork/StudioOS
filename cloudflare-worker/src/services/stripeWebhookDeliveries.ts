@@ -13,6 +13,15 @@
  *               is null ("not logged"), never 0: the log was silent, so how
  *               many deliveries came is unknown. An hour the log did write
  *               in, with no delivery, is 0.
+ *   last_success / last_failure / consecutive_failures
+ *               D4860 (#4860): the newest 2xx delivery, the newest delivery
+ *               whose recorded status is outside 2xx, and how many such
+ *               failures came after the newest 2xx (counted up to
+ *               CONSECUTIVE_FAILURE_CAP, `consecutive_failures_capped` when
+ *               it reached it). A delivery with no recorded status is neither
+ *               a success nor a failure here, as it is not a refusal above.
+ *               These let Platform say whether the webhook is PROVEN healthy:
+ *               "0 not 2xx in 24h" with no delivery at all is silence.
  *
  * Unreadable is its own state: a log that does not answer is
  * `available: false` with the reason, never a count of zero.
@@ -41,6 +50,12 @@ export const WEBHOOK_HOURS_BASIS =
 
 export type WebhookHour = { hour: string; deliveries: number | null; not_2xx: number | null };
 
+/** D4860: failures after the newest success are counted up to this many, never past it. */
+export const CONSECUTIVE_FAILURE_CAP = 1000;
+
+/** One delivery's status and time, as the request log wrote them. */
+export type WebhookStamp = { status_code: number | null; at: string } | null;
+
 export type WebhookDeliveries =
   | {
       available: true;
@@ -48,6 +63,10 @@ export type WebhookDeliveries =
       last: { status_code: number | null; latency_ms: number | null; at: string } | null;
       deliveries: number;
       not_2xx: number;
+      last_success: WebhookStamp;
+      last_failure: WebhookStamp;
+      consecutive_failures: number;
+      consecutive_failures_capped: boolean;
       hours: WebhookHour[];
       basis: string;
       hours_basis: string;
@@ -110,6 +129,34 @@ export async function readWebhookDeliveries(env: Env, now: Date = new Date()): P
         GROUP BY hour`,
     ).bind(STRIPE_WEBHOOK_PATH, STRIPE_WEBHOOK_PATH, `${sqlHour(starts[0])}:00:00`)
       .all<{ hour: string; logged: number; deliveries: number; refused: number }>()).results ?? [];
+    // D4860: the newest success and failure ride the same endpoint index as
+    // `last`. Only a status that was written decides either.
+    const lastOk = await env.DB.prepare(
+      `SELECT status_code, created_at FROM activity_logs
+        WHERE endpoint = ? AND status_code >= 200 AND status_code < 300
+        ORDER BY id DESC LIMIT 1`,
+    ).bind(STRIPE_WEBHOOK_PATH).first<{ status_code: number | null; created_at: string }>();
+    const lastBad = await env.DB.prepare(
+      `SELECT status_code, created_at FROM activity_logs
+        WHERE endpoint = ? AND status_code IS NOT NULL AND (status_code < 200 OR status_code >= 300)
+        ORDER BY id DESC LIMIT 1`,
+    ).bind(STRIPE_WEBHOOK_PATH).first<{ status_code: number | null; created_at: string }>();
+    // The failures after the newest success, bounded: a webhook that never
+    // succeeded counts its failures only up to the cap.
+    const run = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM (
+         SELECT 1 FROM activity_logs
+          WHERE endpoint = ?
+            AND id > COALESCE((SELECT MAX(id) FROM activity_logs
+                                WHERE endpoint = ? AND status_code >= 200 AND status_code < 300), 0)
+            AND status_code IS NOT NULL AND (status_code < 200 OR status_code >= 300)
+          LIMIT ?)`,
+    ).bind(STRIPE_WEBHOOK_PATH, STRIPE_WEBHOOK_PATH, CONSECUTIVE_FAILURE_CAP).first<{ n: number }>();
+    const consecutive = countOf(run?.n, 'consecutive failure count');
+    const stamp = (row: { status_code: number | null; created_at: string } | null): WebhookStamp => (row
+      ? { status_code: row.status_code == null ? null : Number(row.status_code), at: String(row.created_at) }
+      : null);
+
     const byHour = new Map(rows.map((r) => [String(r.hour), r]));
     const hours: WebhookHour[] = starts.map((d) => {
       const r = byHour.get(sqlHour(d));
@@ -133,6 +180,10 @@ export async function readWebhookDeliveries(env: Env, now: Date = new Date()): P
         : null,
       deliveries: countOf(day?.deliveries, 'webhook delivery count'),
       not_2xx: countOf(day?.refused, 'webhook non-2xx count'),
+      last_success: stamp(lastOk),
+      last_failure: stamp(lastBad),
+      consecutive_failures: consecutive,
+      consecutive_failures_capped: consecutive >= CONSECUTIVE_FAILURE_CAP,
       hours,
       basis: WEBHOOK_BASIS,
       hours_basis: WEBHOOK_HOURS_BASIS,
