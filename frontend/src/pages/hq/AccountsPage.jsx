@@ -8,6 +8,7 @@ import { Unrecorded, RailFrame, WorkerRail, useMovedNotice } from '../../ui';
 import { TEAM_MOVED_NOTICES } from '../admin/accountsAddress';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import { branchCoverageLine } from './hqTeamBranchModel';
 
 /**
  * HQ · Team — the cross-tenant people desk (canvas H4, H9 since D138, H20 since D221).
@@ -60,10 +61,8 @@ export default function HqAccountsPage({ onImpersonate }) {
       ? 'Licence bindings: unreadable'
       : 'The licence each administrator holds'),
     team && scope && `${scope.branch} read alone — ${scope.status === 'ok' ? 'it answered' : scope.status === 'not_deployed' ? 'not deployed' : 'it did not answer'}`,
-    team && !scope && team.branches_coverage
-      && (team.branches_coverage.total
-        ? `Of ${team.branches_coverage.total} branches, ${team.branches_coverage.answered} answered`
-        : 'No branch is provisioned, so every administrator is HQ-held'),
+    // D5041: said from what HQ established (asked, ready, not deployed, registry unreadable), never from a total alone.
+    team && !scope && branchCoverageLine(team),
   ].filter(Boolean);
 
   const rail = (

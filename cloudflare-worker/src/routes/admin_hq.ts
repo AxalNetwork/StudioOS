@@ -37,7 +37,7 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { hydrate, type LicenceRow } from './admin_licences';
 import { DERIVED_UNAVAILABLE } from './licence';
-import { fanOut, branchRead, coverage, withRegistry, type BranchResult } from '../services/branches';
+import { fanOut, branchRead, branchBindings, coverage, teamCoverage, withRegistry, type BranchResult } from '../services/branches';
 import { openEscalations } from '../rpc/hqOps';
 import type { BranchOverview, BranchAccountHit, FundsRegistry } from '../rpc/branchOps';
 import { readFundsRegistry } from '../rpc/branchOps';
@@ -87,9 +87,21 @@ const BRANCH_SEARCH_LIMIT = 20;
  * `not_deployed` rows are missing, and an empty registry produces none. Two
  * callers since D138 (`/overview` and `/admins`), which is why it is a function.
  */
-async function deployedBranches(env: Env): Promise<Array<{
-  code: string; hostname: string; status: string; licence_uid: string | null;
-}>> {
+type DeploymentRow = { code: string; hostname: string; status: string; licence_uid: string | null };
+/**
+ * D5041 — WHAT THE REGISTRY READ SAID, not what is convenient. It was `[]` on every failure, so a
+ * registry that could not be read became "no branch is provisioned", and the Team page then told the
+ * operator that "every account on the platform is HQ-held and this is the whole team": a global claim
+ * made from a failed read. `available: false` carries the reason and every caller says so.
+ */
+export type Deployments =
+  | { available: true; rows: DeploymentRow[] }
+  | { available: false; reason: string };
+
+/** A missing `licence_deployments` table (migration 258 not applied) is an empty registry: nothing can be recorded in it. */
+const isMissingTable = (e: unknown) => /no such table:?\s*(\w+\.)?licence_deployments/i.test(String((e as Error)?.message || e));
+
+async function deployedBranches(env: Env): Promise<Deployments> {
   try {
     // D150 — `licence_uid` is selected because it is the only key that joins a
     // branch's read to the licence it trades under. Without it H1's health
@@ -97,12 +109,27 @@ async function deployedBranches(env: Env): Promise<Array<{
     // why they rendered none at all.
     const dep = await env.DB.prepare(
       'SELECT code, hostname, status, licence_uid FROM licence_deployments ORDER BY code',
-    ).all<{ code: string; hostname: string; status: string; licence_uid: string | null }>();
-    return dep.results || [];
-  } catch {
-    return [];
+    ).all<DeploymentRow>();
+    return { available: true, rows: dep.results || [] };
+  } catch (e) {
+    if (isMissingTable(e)) return { available: true, rows: [] };
+    console.error('[admin_hq] deployment registry unreadable', String((e as Error)?.message || e));
+    return { available: false, reason: 'HQ could not read its deployment registry, so the set of provisioned branches is not established.' };
   }
 }
+
+/** The rows a merge needs; an unreadable registry adds none, and the caller says so through `registryFlags`. */
+const rowsOf = (dep: Deployments): DeploymentRow[] => (dep.available ? dep.rows : []);
+
+/** Fields every payload that merges against the registry carries, so a page can tell a failed read from an empty one. */
+const registryFlags = (dep: Deployments) => (dep.available
+  ? { registry_available: true as const }
+  : { registry_available: false as const, registry_reason: dep.reason });
+
+/** `coverage()`, and never complete over a registry that could not be read. */
+const coverageOf = <T,>(results: BranchResult<T>[], dep: Deployments) => (dep.available
+  ? coverage(results)
+  : { ...coverage(results), complete: false });
 
 /**
  * The `?branch=<code>` scope — H12's overlay, on the wire (D153).
@@ -128,7 +155,7 @@ function scopeOf(c: { req: { query: (k: string) => string | undefined } }): stri
 }
 
 async function stampLicence<T>(env: Env, one: BranchResult<T>): Promise<BranchResult<T>> {
-  const reg = await deployedBranches(env);
+  const reg = rowsOf(await deployedBranches(env));
   const row = reg.find((x) => String(x.code).toLowerCase() === one.code);
   if (row?.licence_uid) one.licence_uid = String(row.licence_uid);
   return one;
@@ -274,9 +301,9 @@ r.get('/overview', async (c) => {
   // state so one unreachable territory does not empty the page. Merged with
   // the deployment registry so a licence HQ has provisioned but has no binding
   // to yet reads `not_deployed` rather than vanishing.
-  const registry = await deployedBranches(env);
-  const branches = withRegistry(await fanOut<BranchOverview>(env, 'overview'), registry);
-  const branchCoverage = coverage(branches);
+  const deployments = await deployedBranches(env);
+  const branches = withRegistry(await fanOut<BranchOverview>(env, 'overview'), rowsOf(deployments));
+  const branchCoverage = coverageOf(branches, deployments);
 
   // The H1 zone that had no store until now. An unreadable table is reported
   // as unreadable rather than as an empty queue — the rule the ticket queue
@@ -313,6 +340,7 @@ r.get('/overview', async (c) => {
     // which is correct and different from "could not read them".
     branches,
     branches_coverage: branchCoverage,
+    ...registryFlags(deployments),
     usage_coverage: usageCoverage,
     ...DERIVED_UNAVAILABLE,
   });
@@ -554,10 +582,21 @@ r.get('/admins', async (c) => {
   // so an unasked branch answers nothing and says so rather than rendering as
   // an empty territory.
   const q = String(c.req.query('q') || '').trim();
-  const registry = await deployedBranches(env);
-  const branches = q
-    ? withRegistry(await fanOut<BranchAccountSearch>(env, 'searchAccounts', [q, BRANCH_SEARCH_LIMIT]), registry)
-    : withRegistry([], registry);
+  const deployments = await deployedBranches(env);
+  const searched = q.length > 0;
+  // D5041 — WITH NO SEARCH NOBODY IS ASKED, AND ABSENCE IS NOT "NOT DEPLOYED". The idle rows come from
+  // the bindings this Worker holds plus the registry: a bound branch is `not_asked` (ready to search),
+  // a registry row with no binding is `not_deployed`. No RPC is made. `withRegistry([], registry)`
+  // read every registry row absent from the results as `not_deployed`, bound or not.
+  const branches: BranchResult<BranchAccountSearch>[] = withRegistry<BranchAccountSearch>(
+    searched
+      ? await fanOut<BranchAccountSearch>(env, 'searchAccounts', [q, BRANCH_SEARCH_LIMIT])
+      : branchBindings(env).map((b) => ({ code: b.code, binding: b.binding, status: 'not_asked' as const })),
+    rowsOf(deployments),
+  );
+  // The whole-team claim needs the deployment set ESTABLISHED: the registry read, and no row in it,
+  // and no binding. Anything less is "not known", never "none".
+  const noBranches = deployments.available && branches.length === 0;
 
   return c.json({
     // The HQ-held group: every administrator on this database, complete. The
@@ -571,9 +610,11 @@ r.get('/admins', async (c) => {
     ...(licencesReadable ? {} : { licences_reason: licencesReason }),
     ladder_readable: ladderReadable,
     ...(ladderReadable ? {} : { ladder_reason: ladderReason }),
-    searched: q.length > 0,
+    searched,
     branches,
-    branches_coverage: coverage(branches),
+    branches_coverage: teamCoverage(branches, { searched, registryAvailable: deployments.available }),
+    ...registryFlags(deployments),
+    no_branches: noBranches,
   });
 });
 
@@ -952,8 +993,8 @@ r.get('/funds', async (c) => {
     };
   }
 
-  const registry = await deployedBranches(env);
-  const branches = withRegistry(await fanOut<FundsRegistry>(env, 'fundsRegistry'), registry);
+  const deployments = await deployedBranches(env);
+  const branches = withRegistry(await fanOut<FundsRegistry>(env, 'fundsRegistry'), rowsOf(deployments));
   // Labels only. A registry that cannot be read leaves every branch named by
   // its code, which is what the fan-out knows it by.
   const labels = await registryForAnalytics(env);
@@ -963,7 +1004,8 @@ r.get('/funds', async (c) => {
     read_at: readAt,
     hq,
     branches: branches.map((b) => ({ ...b, label: brandOf.get(b.code) || null })),
-    branches_coverage: coverage(branches),
+    branches_coverage: coverageOf(branches, deployments),
+    ...registryFlags(deployments),
     committed_unit: {
       recorded: false,
       reason: 'No fund table records a currency, so each committed figure is shown as an amount '

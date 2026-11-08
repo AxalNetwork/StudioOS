@@ -345,7 +345,12 @@ test('with no branch bound there are no groups, and searched says whether HQ ask
   const unasked = await getAdmins(db);
   assert.deepEqual(unasked.body.branches, []);
   assert.equal(unasked.body.searched, false);
-  assert.deepEqual(unasked.body.branches_coverage, { total: 0, answered: 0, complete: true, unreadable: [] });
+  assert.deepEqual(unasked.body.branches_coverage, {
+    total: 0, asked: 0, answered: 0, complete: true, unreadable: [], not_deployed: [], not_asked: [],
+  });
+  // D5041: the registry was read and holds no row and nothing is bound, so HQ HAS established there is no branch.
+  assert.equal(unasked.body.no_branches, true);
+  assert.equal(unasked.body.registry_available, true);
   const asked = await getAdmins(db, SUPER, 'hana');
   assert.equal(asked.body.searched, true, 'a query reached the route and it did not notice');
   // Every admin still comes back: `q` asks the BRANCHES; the HQ roster is
@@ -399,4 +404,124 @@ test('the open-status tuple and its bound placeholders cannot drift apart', () =
   // a fourth hand-typed list of the ladder's vocabulary.
   assert.match(src, /\[\.\.\.FREEZING_STATUSES, 'responded', 'issued'\]/,
     'the open statuses were retyped instead of derived from FREEZING_STATUSES');
+});
+
+/* ------------------------------------------------------------------ *
+ * D5041 (#5041) — branch truth states                                 *
+ * ------------------------------------------------------------------ */
+
+const FR_ROW = (db: InstanceType<typeof DatabaseSync>, code = 'fr') => db.prepare(
+  "INSERT INTO licence_deployments (licence_uid, code, hostname, status) VALUES (?,?,?,'live')",
+).run(`${LIC}-${code}`, code, `${code}.axal.vc`);
+
+/** A binding that records every call, so a test can prove nobody was asked. */
+const spyBranch = (calls: any[][], hits: any[] = []) => ({
+  async searchAccounts(...a: any[]) { calls.push(a); return { results: hits, truncated: false, branch: 'x', as_of: '2026-09-16T22:00:00Z' }; },
+});
+const branchOf = (body: any, code: string) => (body.branches || []).find((b: any) => b.code === code);
+
+test('D5041: a registry row with a live binding and no search is ready to search, not "not deployed", and nobody is asked', async () => {
+  const db = freshDb();
+  FR_ROW(db);
+  const calls: any[][] = [];
+  const { body } = await getAdmins(db, SUPER, '', { BRANCH_FR: spyBranch(calls) });
+  assert.deepEqual(calls, [], 'an idle read fanned out to a branch');
+  assert.equal(branchOf(body, 'fr').status, 'not_asked');
+  assert.equal(branchOf(body, 'fr').licence_uid, `${LIC}-fr`, 'the licence stamp is lost on an idle row');
+  assert.equal(body.searched, false);
+});
+
+test('D5041: a registry row with no binding and no search is not deployed', async () => {
+  const db = freshDb();
+  FR_ROW(db, 'de');
+  const { body } = await getAdmins(db);
+  assert.equal(branchOf(body, 'de').status, 'not_deployed');
+  assert.match(String(branchOf(body, 'de').reason), /no service binding/);
+});
+
+test('D5041: a binding with no registry row is listed as not asked, and not as a deployment', async () => {
+  const db = freshDb();
+  const { body } = await getAdmins(db, SUPER, '', { BRANCH_IT: spyBranch([]) });
+  assert.equal(branchOf(body, 'it').status, 'not_asked');
+  assert.equal(branchOf(body, 'it').licence_uid ?? null, null);
+});
+
+test('D5041: idle rows are not failures in the coverage, and a search then counts only what it asked', async () => {
+  const db = freshDb();
+  FR_ROW(db, 'fr'); FR_ROW(db, 'de');
+  const idle = await getAdmins(db, SUPER, '', { BRANCH_FR: spyBranch([]) });
+  assert.deepEqual(idle.body.branches_coverage, {
+    total: 2, asked: 0, answered: 0, complete: false,
+    unreadable: [], not_deployed: ['de'], not_asked: ['fr'],
+  });
+  const searched = await getAdmins(db, SUPER, 'hana', { BRANCH_FR: spyBranch([]), BRANCH_IT: { async searchAccounts() { throw new Error('refused'); } } });
+  assert.deepEqual(searched.body.branches_coverage, {
+    total: 3, asked: 2, answered: 1, complete: false,
+    unreadable: ['it'], not_deployed: ['de'], not_asked: [],
+  });
+});
+
+test('D5041: one branch unreadable for the query while another answers keeps both states', async () => {
+  const db = freshDb();
+  FR_ROW(db, 'fr');
+  const { body } = await getAdmins(db, SUPER, 'hana', {
+    BRANCH_FR: spyBranch([], [{ id: 7, name: 'Hana', email: 'h@fr.example', role: 'founder', is_active: 1 }]),
+    BRANCH_DE: { async searchAccounts() { throw new Error('binding refused'); } },
+  });
+  assert.equal(branchOf(body, 'fr').status, 'ok');
+  assert.equal(branchOf(body, 'de').status, 'unreadable');
+  assert.equal(body.branches_coverage.answered, 1);
+});
+
+test('D5041: a registry that cannot be read is not "no branches"', async () => {
+  const db = freshDb();
+  db.exec('DROP TABLE licence_deployments');
+  db.exec('CREATE VIEW licence_deployments AS SELECT * FROM nonexistent_table_5041'); // a read that THROWS, not a missing table
+  const { status, body } = await getAdmins(db);
+  assert.equal(status, 200);
+  assert.equal(body.registry_available, false);
+  assert.match(String(body.registry_reason), /deployment registry/);
+  assert.equal(body.no_branches, false, 'a failed read was reported as none provisioned');
+  assert.equal(body.branches_coverage.complete, false, 'completeness was claimed over an unknown set');
+});
+
+test('D5041: a registry that cannot be read does not hide a bound branch', async () => {
+  const db = freshDb();
+  db.exec('DROP TABLE licence_deployments');
+  db.exec('CREATE VIEW licence_deployments AS SELECT * FROM nonexistent_table_5041');
+  const { body } = await getAdmins(db, SUPER, '', { BRANCH_FR: spyBranch([]) });
+  assert.equal(branchOf(body, 'fr').status, 'not_asked');
+  assert.equal(body.no_branches, false);
+});
+
+test('D5041: a missing registry table (migration 258 not applied) is an empty registry, not a failure', async () => {
+  const db = freshDb();
+  db.exec('DROP TABLE licence_deployments');
+  const { body } = await getAdmins(db);
+  assert.equal(body.registry_available, true);
+  assert.equal(body.no_branches, true);
+});
+
+test('D5041: no_branches is false when a binding exists even though the registry is empty', async () => {
+  const db = freshDb();
+  const { body } = await getAdmins(db, SUPER, '', { BRANCH_FR: spyBranch([]) });
+  assert.equal(body.registry_available, true);
+  assert.equal(body.no_branches, false);
+});
+
+test('D5041: complete is true only when something that could fail was asked and nothing did', async () => {
+  // Idle, one bound branch and nothing else: no branch failed, but none was asked either.
+  const idle = freshDb();
+  FR_ROW(idle, 'fr');
+  const idleBody = (await getAdmins(idle, SUPER, '', { BRANCH_FR: spyBranch([]) })).body;
+  assert.equal(idleBody.branches_coverage.complete, false, 'an unasked branch was counted as covered');
+  // Searched, the one branch answered: complete.
+  const done = (await getAdmins(idle, SUPER, 'hana', { BRANCH_FR: spyBranch([]) })).body;
+  assert.equal(done.branches_coverage.complete, true);
+  // Searched, one answered and one registry row has no binding: nothing failed, but not every branch was reachable.
+  const gap = freshDb();
+  FR_ROW(gap, 'fr'); FR_ROW(gap, 'de');
+  const gapBody = (await getAdmins(gap, SUPER, 'hana', { BRANCH_FR: spyBranch([]) })).body;
+  assert.deepEqual(gapBody.branches_coverage.unreadable, []);
+  assert.equal(gapBody.branches_coverage.complete, false, 'a branch with no binding was counted as covered');
 });
