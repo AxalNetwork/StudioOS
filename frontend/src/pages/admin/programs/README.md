@@ -108,6 +108,8 @@ The pieces they draw with:
 - `useProgramReads.js` — the reads, each made alone. The catalogue reads
   `adminProgramsApi.catalogue` (`GET /api/admin/programs`, D954) and Lab
   applications' `counts.pending` (`GET /api/admin/spinout-applications`, D960).
+- `useProgramsTitle.js` — the browser tab title for a Programs page and its
+  scope (D4807), set directly so an admin page fires no public pageview.
 - `catalogueModel.js` — pure. D961's period, the four tiles, the three
   charts' series, rows and tables, the cards from the registry, Lab
   applications and the studio chip, each from one block of part 1's read.
