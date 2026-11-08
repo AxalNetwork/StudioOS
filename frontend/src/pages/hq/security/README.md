@@ -1,5 +1,4 @@
 # pages/hq/security — Security v2 (D4800, D4801; #4800 to #4803)
-# pages/hq/security — Security v2 (D4800, #4800 to #4803)
 
 The pieces of HQ › Security v2 at `/admin/security`, from the landed canvas
 (`design/incoming/Security v2 Page.dc.html` and `Security v2 · Boards.dc.html`,
@@ -24,9 +23,6 @@ here; until then its entry in that map holds today's zones for its area.
 | `SourceAvailability.jsx` | "n of n sources read" from the ledger's `sources[]`, with a failed source named and Retry beside the count, and the store names and implementation notes behind Source details. |
 
 Tested by `frontend/test/hq_security_v2_d4800.test.mjs` and `frontend/test/hq_security_access_d4801.test.mjs`; the zones that stay
-| `SourceAvailability.jsx` | "n of n sources read" from the ledger's `sources[]`, with a failed source named and Retry beside the count, and the store names and implementation notes behind Source details. |
-
-Tested by `frontend/test/hq_security_v2_d4800.test.mjs`; the zones that stay
 in `../SecurityPage.jsx` keep their own tests (`hq_security*.test.mjs`,
 `hq_governance_h7.test.mjs`).
 
@@ -38,7 +34,4 @@ in `../SecurityPage.jsx` keep their own tests (`hq_security*.test.mjs`,
 - **Every destructive act is an `ActionDialog`.** Scope (exact reach, whether you are affected, its own reason) → Review → Result, and Result only from the server's answer. Use `accessModel.js`'s `RESULTS` words; never a page-level reason field, never `window.confirm`.
 - **No figure the Worker does not return.** Where the canvas needs one that no read has, draw Not instrumented or Unavailable and say so in the decision file.
 - **No request from these files.** The reads stay in `../SecurityPage.jsx`, so moving between workspaces never re-reads; the writes leave by its `runSessionAct`, passed down as `onAct`.
-- **A workspace is a registry entry.** Add or rename a workspace in `securityTabs.js` only; replace its body in `SecurityConsole`'s `workspaces` map (Access is #4801's). Never add a second switch.
-- **No figure the Worker does not return.** Where the canvas needs one that no read has, draw Not instrumented or Unavailable and say so in the decision file.
-- **No request from these files.** The reads stay in `../SecurityPage.jsx`, so moving between workspaces never re-reads.
 - Light and dark: every colour class carries its `dark:` pair.
