@@ -3,7 +3,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, createJWT } from '../auth';
+import { requireAdmin, selectJwt } from '../auth';
 import { Jobs, type JobType } from '../models/jobs';
 import { cfQueueEnabled, enqueueJob } from '../services/queue';
 import { processQueueBatch } from '../services/queueWorker';
@@ -417,16 +417,17 @@ infra.get('/ws-check', async (c) => {
   await requireAdmin(c);
   const checks: Record<string, { ok: boolean; detail: string }> = {};
 
-  // Mint a short-lived synthetic admin token so the probe can hit the
-  // auth-protected upgrade routes. The token is never returned to the caller.
-  // We use the real authenticated admin user so the downstream auth layer
-  // (authenticateForUpgrade) finds a valid user row and passes the token.
+  // The probe presents the caller's OWN session token to the auth-protected
+  // upgrade routes; it is never returned. D4669 — it used to mint a fresh
+  // admin token with no session row: a token outside every session list that
+  // no per-session revoke could reach.
   let probeToken = '';
   try {
-    const admin = await requireAdmin(c);
-    probeToken = await createJWT(c.env, admin.id, admin.email, 'admin');
+    await requireAdmin(c);
+    probeToken = (await selectJwt(c))?.token ?? '';
+    if (!probeToken) checks.token = { ok: false, detail: 'No session token on this request to probe with.' };
   } catch (e: any) {
-    checks.token = { ok: false, detail: `JWT mint failed: ${e?.message || e}` };
+    checks.token = { ok: false, detail: `Session token unavailable: ${e?.message || e}` };
   }
 
   // 1. PipelineRoom DO internal upgrade probe (no user auth needed — DO

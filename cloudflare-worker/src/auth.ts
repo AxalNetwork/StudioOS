@@ -138,6 +138,9 @@ export async function createJWT(
   // Only the impersonation paths pass this. Everything else keeps the
   // ordinary session length, so the ~460 existing call sites are untouched.
   expiresIn: string = `${JWT_EXPIRY_HOURS}h`,
+  // D4669 — the support session this token belongs to. Only the two
+  // support-session mints pass it (routes/admin.ts, rpc/branchOps.ts).
+  supportSessionId?: number,
 ) {
   const payload: Record<string, unknown> = {
     user_id: userId,
@@ -149,6 +152,7 @@ export async function createJWT(
   // sessions can be revoked from /settings without nuking every device.
   // Optional for back-compat with existing in-flight tokens.
   if (jti) payload.jti = jti;
+  if (supportSessionId) payload.sid = supportSessionId;
 
   return new SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALGORITHM })
@@ -467,49 +471,14 @@ async function resolveCurrentUser(c: Context<{ Bindings: Env }>): Promise<User |
     // that applied the first version of 199 still carries `users.is_super_admin`
     // saying every admin is elevated, and SELECT * would hand that back.
     await hydrateSuperAdmin(c.env, u);
-    // Epic 3 — global sign-out: reject tokens issued before users.jwt_min_iat.
-    // Normalize ms→s for any legacy ms-based iat values.
-    const minIat = u.jwt_min_iat ?? 0;
-    let tokenIat = payload.iat;
-    if (typeof tokenIat === 'number' && tokenIat > 1e12) {
-      tokenIat = Math.floor(tokenIat / 1000);
-    }
-    if (minIat > 0 && typeof tokenIat === 'number' && tokenIat < minIat) {
-      return null;
-    }
-    // Per-session revocation. Tokens without jti skip (back-compat).
-    const tokenJti = payload.jti;
-    // Task IB — session-scoped step-up deadline. Captured here so the
-    // auto-relock below can prefer it over the prod-broken users column.
-    let sessionStepUpDue: string | null = null;
-    if (tokenJti) {
-      try {
-        let sess: { revoked_at: string | null; step_up_due_at?: string | null } | null = null;
-        try {
-          sess = await c.env.DB.prepare(
-            'SELECT revoked_at, step_up_due_at FROM user_sessions WHERE jti = ? AND user_id = ?'
-          ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null; step_up_due_at: string | null }>();
-        } catch {
-          // step_up_due_at column not migrated yet — fall back to the base check.
-          sess = await c.env.DB.prepare(
-            'SELECT revoked_at FROM user_sessions WHERE jti = ? AND user_id = ?'
-          ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null }>();
-        }
-        if (!sess || sess.revoked_at) return null;
-        sessionStepUpDue = (sess as any).step_up_due_at ?? null;
-        try {
-          // T22.6 — Coalesce last_seen_at writes. Only update if the row's
-          // existing value is >5 min old. Prevents a write per request on a
-          // hot session (which serialises through D1 and inflates write QPS).
-          await c.env.DB.prepare(
-            "UPDATE user_sessions SET last_seen_at = datetime('now') " +
-              "WHERE jti = ? AND (last_seen_at IS NULL OR last_seen_at < datetime('now','-5 minutes'))"
-          ).bind(tokenJti).run();
-        } catch {}
-      } catch {
-        // user_sessions not migrated yet; rely on iat alone.
-      }
-    }
+    // D4669 — the token's standing: the account's sign-out floor, its own
+    // session row, and (for a support session) the support-session record and
+    // the operator who opened it. One function, shared with the realtime
+    // upgrade, so no door checks less than this one. An unreadable store is a
+    // refusal, never a pass.
+    const standing = await sessionStanding(c.env, payload, u);
+    if (!standing.ok) return null;
+    const sessionStepUpDue: string | null = standing.stepUpDue;
     // Task #50 / Task IB — lower-assurance step-up deadline. When a session
     // was minted via the email-magic recovery layer OR the BLOCK-AUTH-01
     // magic-link sign-in ('email_only'), the user has 7 days to re-enrol a
@@ -575,6 +544,134 @@ async function resolveCurrentUser(c: Context<{ Bindings: Env }>): Promise<User |
   } catch {
     return null;
   }
+}
+
+/**
+ * D4669 — WHETHER A SIGNED TOKEN STILL STANDS, beyond its signature and expiry.
+ *
+ * Every door that accepts a session token asks this: `getCurrentUser` for
+ * HTTP, and the realtime upgrade, which decodes its own token. Before D4669
+ * the upgrade checked neither the floor nor the session row, and the HTTP
+ * path treated an unreadable session store as "no row to check".
+ *
+ *   1. The account's floor (`users.jwt_min_iat`): sign-out-everywhere and HQ's
+ *      "Sign out account" raise it, and every older token is refused.
+ *   2. A support-session token carries `sid`, its `impersonation_sessions`
+ *      row, and that row must be open, for this account, opened by this
+ *      operator (`impersonated_by`; 0 for a branch's HQ support session). HQ's operator must
+ *      still be an active administrator whose own sign-out floor is not above
+ *      the token, so signing the operator out ends the support sessions they
+ *      hold. Ending the record ends the token on its next request.
+ *   3. A token with a `jti` must match a `user_sessions` row that is not
+ *      revoked.
+ *
+ * Any store that cannot be read is a refusal (`*_unavailable`). A token
+ * without its binding (`jti`, or `sid` for an HQ support session) is a shape
+ * no mint path issues any more — `session_containment_d4669.test.ts` holds
+ * every `createJWT` call site to that — and one still in flight from before
+ * is held to the floor and its own expiry alone.
+ *
+ * `support_session_unbound` covers a `sid` that names no row, or a row for
+ * another account or another operator.
+ */
+export type SessionStanding =
+  | { ok: true; stepUpDue: string | null }
+  | {
+    ok: false;
+    reason:
+      | 'below_floor'
+      | 'session_unknown'
+      | 'session_revoked'
+      | 'session_store_unavailable'
+      | 'support_session_unbound'
+      | 'support_session_ended'
+      | 'support_session_unavailable'
+      | 'support_operator_signed_out';
+  };
+
+function iatSeconds(iat: unknown): number | null {
+  if (typeof iat !== 'number' || !Number.isFinite(iat)) return null;
+  return iat > 1e12 ? Math.floor(iat / 1000) : iat;
+}
+
+export async function sessionStanding(
+  env: Env,
+  payload: JWTPayload,
+  user: { id: number; jwt_min_iat?: number | null },
+): Promise<SessionStanding> {
+  const iat = iatSeconds(payload.iat);
+  const floor = Number(user.jwt_min_iat ?? 0);
+  if (floor > 0 && iat !== null && iat < floor) return { ok: false, reason: 'below_floor' };
+
+  const operator = payload.impersonated_by ? Number(payload.impersonated_by) : 0;
+  if (payload.sid !== undefined && payload.sid !== null) {
+    const sid = Number(payload.sid);
+    if (!Number.isInteger(sid) || sid <= 0) return { ok: false, reason: 'support_session_unbound' };
+    type SupportRecord = {
+      admin_user_id: number; target_user_id: number; ended_at: string | null;
+      admin_active: number | null; admin_role: string | null; admin_min_iat: number | null;
+    };
+    let rec: SupportRecord | null;
+    try {
+      rec = await env.DB.prepare(
+        `SELECT i.admin_user_id, i.target_user_id, i.ended_at,
+                a.is_active AS admin_active, a.role AS admin_role, a.jwt_min_iat AS admin_min_iat
+           FROM impersonation_sessions i
+           LEFT JOIN users a ON a.id = i.admin_user_id
+          WHERE i.id = ?`,
+      ).bind(sid).first<SupportRecord>();
+    } catch (e) {
+      console.warn('[auth] support-session record unreadable', (e as Error).message);
+      return { ok: false, reason: 'support_session_unavailable' };
+    }
+    if (!rec) return { ok: false, reason: 'support_session_unbound' };
+    if (Number(rec.target_user_id) !== Number(user.id) || Number(rec.admin_user_id) !== operator) {
+      return { ok: false, reason: 'support_session_unbound' };
+    }
+    if (rec.ended_at) return { ok: false, reason: 'support_session_ended' };
+    if (operator) {
+      if (!Number(rec.admin_active) || String(rec.admin_role ?? '').toLowerCase() !== 'admin') {
+        return { ok: false, reason: 'support_operator_signed_out' };
+      }
+      const opFloor = Number(rec.admin_min_iat ?? 0);
+      if (opFloor > 0 && iat !== null && iat < opFloor) {
+        return { ok: false, reason: 'support_operator_signed_out' };
+      }
+    }
+  }
+
+  const jti = payload.jti;
+  if (!jti) return { ok: true, stepUpDue: null };
+  let sess: { revoked_at: string | null; step_up_due_at?: string | null } | null;
+  try {
+    try {
+      sess = await env.DB.prepare(
+        'SELECT revoked_at, step_up_due_at FROM user_sessions WHERE jti = ? AND user_id = ?',
+      ).bind(jti, payload.user_id).first<{ revoked_at: string | null; step_up_due_at: string | null }>();
+    } catch (e) {
+      // Only a database that has not added the step-up column falls back to
+      // the base check; any other failure is the store being unreadable.
+      if (!/no such column/i.test(String((e as Error)?.message ?? ''))) throw e;
+      sess = await env.DB.prepare(
+        'SELECT revoked_at FROM user_sessions WHERE jti = ? AND user_id = ?',
+      ).bind(jti, payload.user_id).first<{ revoked_at: string | null }>();
+    }
+  } catch (e) {
+    console.warn('[auth] session store unreadable', (e as Error)?.message);
+    return { ok: false, reason: 'session_store_unavailable' };
+  }
+  if (!sess) return { ok: false, reason: 'session_unknown' };
+  if (sess.revoked_at) return { ok: false, reason: 'session_revoked' };
+  try {
+    // T22.6 — Coalesce last_seen_at writes. Only update if the row's
+    // existing value is >5 min old. Prevents a write per request on a
+    // hot session (which serialises through D1 and inflates write QPS).
+    await env.DB.prepare(
+      "UPDATE user_sessions SET last_seen_at = datetime('now') " +
+        "WHERE jti = ? AND (last_seen_at IS NULL OR last_seen_at < datetime('now','-5 minutes'))"
+    ).bind(jti).run();
+  } catch {}
+  return { ok: true, stepUpDue: sess.step_up_due_at ?? null };
 }
 
 export async function requireAuth(c: Context<{ Bindings: Env }>): Promise<User> {
