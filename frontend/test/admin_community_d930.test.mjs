@@ -234,6 +234,12 @@ test('#4717 the page fails when its one read fails; an empty studio is the read\
   zeros.blocks.events.by_status.counts = { draft: 0, pending_review: 0, published: 0, rejected: 0, cancelled: 0, other: 0 };
   zeros.blocks.jobs.by_status = { draft: 0, pending_review: 0, published: 0, closed: 0, rejected: 0, other: 0 };
   zeros.blocks.circles = { ...zeros.blocks.circles, total: 0, published: 0, featured: 0, by_type: {}, members_entered: { value: 0, typed: true } };
+  // D4820: the roster and wellbeing are sources too, and must be read as empty (admin_community_v2_4820 covers each).
+  zeros.blocks.network = { available: true, archived: 0, by_kind_state: {} };
+  zeros.blocks.wellbeing = {
+    experts: { available: true, verified: 0, unverified: 0, hidden: 0, inactive: 0 },
+    bookings: { available: true, window: 0, previous: 0, weekly: [] },
+  };
   assert.equal(isEmptyCommunity({ overview: ok(zeros) }), true);
   const oneDraft = structuredClone(zeros);
   oneDraft.blocks.events.by_status.counts.draft = 1;
@@ -312,16 +318,19 @@ async function mount(url, fail) {
 test('mounted: each block is drawn from its own read, and no roster name reaches the page', async () => {
   const m = await mount(COMMUNITY_PATH);
   try {
-    assert.match(m.of('community-tile-waiting'), /7.*4 events · 3 jobs.*Open Approvals/s);
-    assert.match(m.of('community-tile-circles'), /3 of 4/);
-    assert.match(m.of('community-tile-roster'), /3.*active on the roster/s);
+    // D4820: Waiting on you no longer carries its own Approvals link (Needs your attention's Review all does);
+    // published circles and the roster left the KPI row for the Network card.
+    assert.match(m.of('community-tile-waiting'), /7.*4 events · 3 jobs/s);
+    assert.match(m.of('community-figure-circles'), /3 of 4/);
+    assert.match(m.of('community-figure-roster'), /3.*active on the roster/s);
     // This fixture carries no weekly registrations, so that figure says it could not be read.
     assert.match(m.of('community-tile-registrations'), /Unreadable/);
     assert.match(m.of('community-card-jobs'), /Backend Engineer.*14 applications/s);
     assert.match(m.of('community-circle-counts'), /3 published · 1 draft · 2 featured/);
     assert.match(m.of('community-members-entered'), /212.*As entered/s);
     assert.match(m.of('community-needs'), /Founding Engineer/);
-    assert.match(m.of('community-unrecorded-active-members'), /Not recorded/);
+    // D4820: the figures no store records sit behind one Additional insights row, collapsed.
+    assert.match(m.of('community-additional-insights'), /Additional insights · 2 unavailable/);
     assert.doesNotMatch(m.text(), /Secret Roster Name|Another Hidden Person|Hidden Co/, 'a roster name reached the page');
     assert.ok(!m.has('admin-page-moved'));
     // Every read the page made, by path. The wellbeing reads are not among them.
@@ -338,7 +347,7 @@ test('mounted CM10a: the job board failing costs only its blocks, and says it is
   try {
     // #4717: the server's own sentence for the block it could not read.
     assert.match(m.of('community-card-jobs'), /could not be read on this database\. That is not the same as none\./);
-    assert.match(m.of('community-tile-circles'), /3 of 4/, 'another block stopped answering');
+    assert.match(m.of('community-figure-circles'), /3 of 4/, 'another block stopped answering');
     assert.match(m.of('community-card-needs'), /job board could not be read, so only events are listed/);
     assert.ok(!m.has('community-unreadable'));
   } finally { await m.unmount(); }
@@ -384,8 +393,9 @@ test('D938: the page draws the shared AdminPageHeader with its title, line and m
   assert.match(page, /import \{[^}]*\bAdminPageHeader\b[^}]*\} from '\.\.\/\.\.\/\.\.\/ui'/);
   assert.match(page, /<AdminPageHeader\s+title="Community"\s+line=\{PAGE_LINE\}\s+notice=\{\{ text: moved \? MOVED_NOTICE : null, onDismiss: dismissMoved \}\}/);
   assert.doesNotMatch(page, /<h1/);
-  assert.match(page, /<Link to="\/admin\/wellbeing"/);
-  assert.doesNotMatch(page, /\?tab=wellbeing/);
+  // D4820: the wellbeing doors are in the page's parts (Wellbeing's Manage link, Manage Community's row).
+  assert.match(communityPageSource(), /<Link to="\/admin\/wellbeing"/);
+  assert.doesNotMatch(communityPageSource(), /\?tab=wellbeing/);
 });
 
 test('the routes, the row and the reads the page must never make', () => {
