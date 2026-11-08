@@ -199,12 +199,16 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
       )}
       {current && current.parts.length > 1 && (
         <nav className="mx-4 mt-4 flex flex-wrap gap-2 sm:mx-6" aria-label={current.label} data-testid={`fund-admin-${current.key}-parts`}>
-          {current.parts.map((b) => (
-            <Link key={b.key} to={`/admin/fund-admin/${b.path}${keep}`} aria-current={b.key === view ? 'page' : undefined} data-testid={`fund-admin-part-${b.key}`}
-              className={`inline-flex min-h-[44px] items-center rounded-axal-pill border px-3.5 text-[13px] font-bold sm:min-h-[34px] ${b.key === view
+          {current.parts.map((b) => {
+            const props = { 'aria-current': b.key === view ? 'page' : undefined, 'data-testid': `fund-admin-part-${b.key}`,
+              className: `inline-flex min-h-[44px] items-center rounded-axal-pill border px-3.5 text-[13px] font-bold sm:min-h-[34px] ${b.key === view
                 ? 'border-axal-violet bg-axal-violet/10 text-axal-violet-deep dark:text-violet-300'
-                : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`}>{b.label}</Link>
-          ))}
+                : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}` };
+            // Literal heads, so the route guard's walk reads Banking's two-segment doors (D1157).
+            return b.path.startsWith('banking/')
+              ? <Link key={b.key} to={`/admin/fund-admin/banking/${b.key}${keep}`} {...props}>{b.label}</Link>
+              : <Link key={b.key} to={`/admin/fund-admin/${b.path}${keep}`} {...props}>{b.label}</Link>;
+          })}
         </nav>
       )}
       <div data-testid={`fund-admin-panel-${view}`}>
