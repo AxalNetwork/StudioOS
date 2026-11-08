@@ -10,6 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { buildOverview } from '../src/pages/hq/security/overviewModel.js';
 import { renderedText } from './_renderedText.mjs';
 import {
   AiSafety, BackupDr, SessionsPanel, backupSentence, drillSentence, identityLine, impersonationNote,
@@ -98,4 +99,58 @@ test('the Sessions list shows a network bucket and marks a support-held session'
   assert.match(out, /network 203\.0\.113\.0\/24/);
   assert.match(out, /no network recorded/);
   assert.match(out, /held by HQ support operator/);
+});
+
+// ── D4691 on the Security v2 Overview (D4800's model): the same rules hold there ──
+
+
+const OV_BASE = () => ({
+  mfa: { admins_total: 2, admins_with_mfa: 2 },
+  impersonations: { available: true, active: 0, recent: [] },
+  sessions: { available: true, active: 1, token_hours: 24 },
+  dsr: { clock_days: 30, rows: [] },
+  sanctions: { available: true, runs_total: 1, unreviewed_hits: 0 },
+  backup_dr: {
+    backup: { available: true, state: 'fresh', fresh: true, kind: 'd1', at: '2026-11-07T02:00:00Z' },
+    drill: { available: true, state: 'last_run_passed', fresh: true, at: '2026-11-01T03:00:00Z', backup_key: 'd1/x.sql' },
+  },
+});
+const overviewOf = (ov) => buildOverview({
+  overview: { state: 'ready', value: ov, at: '2026-11-07T14:30:00.000Z' },
+  feed: { state: 'ready', value: { sources: [], rows: [] }, at: '2026-11-07T14:30:00.000Z' },
+});
+const recovery = (m) => m.areas.find((a) => a.id === 'recovery');
+
+test('Overview: an unreadable deletion-request read is a could-not-check, never "0 near deadline"', () => {
+  const ok = overviewOf(OV_BASE());
+  assert.ok(ok.clear.some((c) => c.id === 'dsr'), 'a readable empty list is a measured zero');
+  const ov = OV_BASE();
+  ov.dsr = { available: false, reason: 'dsr store down' };
+  const m = overviewOf(ov);
+  assert.ok(!m.clear.some((c) => c.id === 'dsr'), 'an unreadable list is not a measured zero');
+  const f = m.findings.find((x) => x.id === 'dsr-unreadable');
+  assert.ok(f, 'the unreadable read is its own finding');
+  assert.equal(f.state, 'unavailable');
+  assert.equal(f.detail, 'dsr store down');
+});
+
+test('Overview: a stale drill pass or a stale heartbeat is never verified recovery', () => {
+  assert.equal(recovery(overviewOf(OV_BASE())).state, 'verified');
+  const staleDrill = OV_BASE();
+  staleDrill.backup_dr.drill = { ...staleDrill.backup_dr.drill, fresh: false, stale_after_days: 32 };
+  const m = overviewOf(staleDrill);
+  assert.equal(recovery(m).state, 'stale');
+  assert.match(recovery(m).fact, /passed, out of date/);
+  const f = m.findings.find((x) => x.id === 'drill-stale');
+  assert.ok(f && f.state === 'stale', 'a stale pass is a finding');
+  assert.match(f.detail, /more than 32 days ago/);
+  const staleBackup = OV_BASE();
+  staleBackup.backup_dr.backup = { ...staleBackup.backup_dr.backup, fresh: false, state: 'stale' };
+  const b = recovery(overviewOf(staleBackup));
+  assert.equal(b.state, 'stale');
+  assert.match(b.fact, /^Backup stale/);
+  const invalid = OV_BASE();
+  invalid.backup_dr.backup = { available: false, state: 'invalid', reason: 'schema 9' };
+  assert.match(recovery(overviewOf(invalid)).fact, /^Backup heartbeat invalid/);
+  assert.notEqual(recovery(overviewOf(invalid)).state, 'verified');
 });

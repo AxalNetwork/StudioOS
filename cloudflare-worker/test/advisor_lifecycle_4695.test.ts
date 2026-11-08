@@ -481,3 +481,30 @@ test('the rules service: wall clock, week bounds, blackouts, notice, buffer and 
   assert.equal(canonicalInstant('2037-06-02T10:00:00+02:00'), '2037-06-02T08:00:00.000Z');
   assert.equal(canonicalInstant('soon'), null);
 });
+
+// D4692 ─────────────────────────────────────────────────────────────────────
+test('D4692: the slot list says what the booking would say — notice, blackout, buffer and the paid cap — and still lists the slot', async () => {
+  // Mutations checked: notice not applied; buffer not applied; the paid cap flag dropped; a held slot's own span counted against itself.
+  const f = fixture();
+  f.rules({ notice: 24, buffer: 30, cap: 1, tz: 'UTC' });
+  const soon = f.slot(NOW() + 2 * HOUR);
+  const far = f.slot(NOW() + 4 * DAY);
+  const held = f.slot(NOW() + 6 * DAY);
+  const next = f.slot(NOW() + 6 * DAY + 1.2 * HOUR);
+  assert.equal((await book(f, held, { session_type_id: 2 })).status, 200);
+  const list = await f.gus('GET', '/adv-1/slots');
+  const by = (id: number) => list.body.items.find((s: any) => s.id === id);
+  assert.equal(by(soon).unavailable_code, 'min_notice');
+  assert.equal(by(far).unavailable_code, null);
+  assert.equal(by(held).unavailable_code, null, 'a slot is not too close to itself');
+  assert.equal(by(next).unavailable_code, 'buffer', 'the free session next door keeps the buffer');
+  assert.equal(by(far).paid_cap_reached, false);
+  // The list agrees with the booking.
+  assert.deepEqual([(await book(f, soon)).status, (await book(f, soon)).body.code], [409, 'min_notice']);
+  assert.equal((await book(f, next, { session_type_id: 2 })).body.code, 'buffer');
+  // One paid session in the week fills a cap of 1; the list says so for every slot in that week.
+  assert.equal((await book(f, far)).status, 200);
+  const after = await f.gus('GET', '/adv-1/slots');
+  assert.equal(after.body.items.find((s: any) => s.id === far).paid_cap_reached, true);
+  assert.equal((await book(f, far, {}, 'gus')).status, 409);
+});
