@@ -344,12 +344,18 @@ test('a failed ledger read is unreadable, not an empty ledger', () => {
   assert.match(code, /setData\(UNAVAILABLE\)/, 'a failed licences read must not become { items: [] }');
   assert.match(code, /<Unreadable what="The licence ledger"/);
   // #4700: zero rows on the server's own count, with no search or kind narrowing it.
-  assert.match(code, /!filtered && total === 0 \?/, 'the empty state is gated on a successful read with zero rows');
+  // D4819 moved the test into the ledger model; with a filter, only the summary's
+  // count of every licence can say the ledger is empty.
+  assert.match(code, /const empty = ledgerIsEmpty\(\{ total, filtered, summaryTotal: summaryOk \? Number\(summaryOk\.counts\?\.total\) : null \}\);/,
+    'the empty state is gated on a successful read');
+  const model = codeOnly(read('frontend/src/pages/admin/licenceLedgerModel.js'));
+  assert.match(model, /if \(!filtered\) return total === 0;\n\s+return summaryTotal === 0;/, 'with zero rows');
 });
 
 test('the empty ledger explains itself', () => {
   assert.match(licencePageSource(), /No licences have been issued/i);
-  assert.match(licencePageSource(), /inventing one would misrepresent/i,
+  // D4819: the canvas's sentence (board L00), behind Why is this empty?
+  assert.match(licencePageSource(), /StudioOS does not seed fictional subsidiaries or licence agreements\./,
     'and says why it is not pre-filled');
 });
 

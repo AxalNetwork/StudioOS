@@ -110,6 +110,7 @@ function freshDb() {
       notes TEXT, status TEXT NOT NULL DEFAULT 'submitted', decided_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      company_id INTEGER,
       UNIQUE (need_id, partner_id)
     );
     CREATE TABLE engagements (
@@ -121,10 +122,14 @@ function freshDb() {
       delivered_at TEXT, delivery_notes TEXT, cancelled_at TEXT, cancel_reason TEXT,
       invoice_id TEXT, invoiced_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      -- #4693 (D4693): the pipeline reads scope by company; the column it reads.
+      company_id INTEGER
     );
   `);
   db.exec(migration('208_partner_delivery_stores'));
+  // D4682: the delivery writes bump `revision`, so this harness has the same columns the routes update.
+  db.exec(migration('202611072115_delivery_revisions'));
   // APPLIED, NOT MIRRORED. The two capacity stores are read by `/capacity` and
   // written by its two `PUT`s, so the harness runs their migration files for
   // the same reason it runs 208's: a hand-copied DDL that drifts from the file

@@ -698,6 +698,55 @@ advisors.get('/me/slots', async (c) => {
 // ---------------------------------------------------------------------------
 // Slots — owned by the advisor (`/me/slots`) or read for any advisor
 // ---------------------------------------------------------------------------
+/**
+ * D4692: THE LIST AGREES WITH THE BOOKING. `POST /slots/:id/book` refuses a slot inside the advisor's minimum notice,
+ * inside a blackout, too close to a session they already hold, and (for a paid session) in a week at its paid cap
+ * (D4695). The list used to offer all of them and let the founder find out at the click. This answers the same
+ * `ruleRefusal` for every slot in one pass, reading the rules once and the advisor's held sessions once.
+ *
+ *   unavailable_code   null, or 'min_notice' | 'blackout' | 'buffer' — what the booking would say for ANY session type
+ *   paid_cap_reached   true when a paid session cannot be booked in that slot's week (a free or included one can)
+ *
+ * The slot is still listed (a founder can see why a time is gone); it is not hidden. The booking stays the decision.
+ */
+async function slotVerdicts(env: Env, advisorId: number, slots: SlotRow[]): Promise<Map<number, { unavailable_code: string | null; paid_cap_reached: boolean }>> {
+  const out = new Map<number, { unavailable_code: string | null; paid_cap_reached: boolean }>();
+  if (!slots.length) return out;
+  const rules = rulesFromRow(await env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+    .bind(advisorId).first<AvailabilityRow>());
+  const starts = slots.map((s) => Date.parse(s.starts_at)).filter(Number.isFinite);
+  const lo = new Date(Math.min(...starts) - 8 * 86_400_000).toISOString();
+  const hi = new Date(Math.max(...starts) + 8 * 86_400_000).toISOString();
+  const booked = (rules.buffer_minutes ?? 0) > 0 ? ((await env.DB.prepare(
+    `SELECT s.id, s.starts_at, s.ends_at FROM advisor_office_hour_slots s
+      WHERE s.advisor_id = ? AND s.is_cancelled = 0 AND s.starts_at >= ? AND s.starts_at < ?
+        AND EXISTS (SELECT 1 FROM advisor_bookings b WHERE b.slot_id = s.id AND b.status IN ('pending','confirmed','completed'))`
+  ).bind(advisorId, lo, hi).all<{ id: number; starts_at: string; ends_at: string }>()).results ?? []) : [];
+  const paidStarts = rules.weekly_paid_cap != null ? ((await env.DB.prepare(
+    `SELECT ps.starts_at FROM advisor_bookings pb
+       JOIN advisor_office_hour_slots ps ON ps.id = pb.slot_id
+       JOIN advisor_session_types pt ON pt.id = pb.session_type_id
+      WHERE pb.advisor_id = ? AND pb.status IN ('pending','confirmed','completed')
+        AND pt.price_cents > 0 AND pt.is_free_intro = 0 AND COALESCE(pt.is_included, 0) = 0
+        AND ps.starts_at >= ? AND ps.starts_at < ?`
+  ).bind(advisorId, lo, hi).all<{ starts_at: string }>()).results ?? []).map((r) => Date.parse(r.starts_at)) : [];
+  const now = Date.now();
+  for (const s of slots) {
+    const start = Date.parse(s.starts_at);
+    const week = Number.isFinite(start) ? weekBounds(start, rules.timezone) : null;
+    const used = week ? paidStarts.filter((t) => t >= week.from && t < week.until).length : 0;
+    const refused = ruleRefusal({
+      slot: s, rules, now, paid: false, paidThisWeek: null,
+      booked: booked.filter((o) => o.id !== s.id),
+    });
+    out.set(s.id, {
+      unavailable_code: refused && refused.code !== 'slot_blocked' ? refused.code : null,
+      paid_cap_reached: rules.weekly_paid_cap != null && used >= rules.weekly_paid_cap,
+    });
+  }
+  return out;
+}
+
 advisors.get('/:uid/slots', async (c) => {
   try {
     await requireAuth(c);
@@ -712,9 +761,11 @@ advisors.get('/:uid/slots', async (c) => {
     const rows = upcoming
       ? await c.env.DB.prepare(sql).bind(m.id, nowIso()).all<SlotRow>()
       : await c.env.DB.prepare(sql).bind(m.id).all<SlotRow>();
+    const slots = (rows.results || []) as SlotRow[];
+    const verdicts = await slotVerdicts(c.env, m.id, slots);
     const items: any[] = [];
-    for (const s of (rows.results || []) as SlotRow[]) {
-      items.push(slotDto(s, await takenForSlot(c.env, s.id)));
+    for (const s of slots) {
+      items.push({ ...slotDto(s, await takenForSlot(c.env, s.id)), ...verdicts.get(s.id) });
     }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }

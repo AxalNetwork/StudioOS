@@ -136,7 +136,7 @@ test('the MRR note is a shape breakdown, because a seat is not a retainer', () =
   // the amount printed above it.
   assert.ok(/shape_counts: byShape,/.test(worker), 'the read stopped returning shape_counts');
   const byShape = between(worker, 'const byShape: Record<string, number>', 'return c.json({');
-  assert.ok(/if \(!x\.retainer\.active\) continue;[\s\S]*?byShape\[shape\] \+= 1/.test(byShape),
+  assert.ok(/if \(!x\.retainer\.active\) \{ endedCount \+= 1; continue; \}[\s\S]*?byShape\[shape\] \+= 1/.test(byShape),
     'the shape counts are no longer taken over the live book');
 });
 
@@ -144,16 +144,17 @@ test('the counts and their own chips narrow the same live book', () => {
   // WORKER: `live` is the base for both consumption counts.
   const readRoute = between(worker, "partnerPipeline.get('/retainers'", 'mrr_basis:');
   // #4701: the counts are taken in the whole-book walk.
-  // #4690: an ended retainer leaves them first, by the shared active predicate.
+  // D4693: an ended retainer leaves them first, by the shared active predicate.
   assert.ok(/scanAll\(/.test(readRoute), 'the counts stopped walking the whole book');
-  assert.ok(/if \(!x\.retainer\.active\) continue;[\s\S]*?under \+= 1[\s\S]*?over \+= 1/.test(readRoute),
+  assert.ok(/if \(!x\.retainer\.active\) \{ endedCount \+= 1; continue; \}[\s\S]*?under \+= 1[\s\S]*?over \+= 1/.test(readRoute),
     'the worker stopped excluding ended retainers from its counts');
   assert.ok(/x\.utilisation_pct != null && x\.utilisation_pct < 60/.test(readRoute) && /x\.utilisation_pct != null && x\.utilisation_pct > 100/.test(readRoute),
     'a consumption count lost its threshold');
 
   // ZONE: the same list, so the tile and the chip beside it cannot disagree.
   const liveDef = between(zone, 'const live = useMemo(', '  );');
-  assert.ok(/items\.filter\(\(r\) => r\.retainer && !r\.retainer\.ended_at\)/.test(liveDef),
+  // D4693: the zone narrows by the Worker's own `retainer.active` (falling back to `ended_at` for an older answer).
+  assert.ok(/items\.filter\(\(r\) => r\.retainer && \(r\.retainer\.active \?\? !r\.retainer\.ended_at\)\)/.test(liveDef),
     'the zone’s live book stopped excluding ended retainers');
   for (const name of ['renewingSoon', 'overScope', 'underConsuming']) {
     const def = between(zone, `const ${name} = useMemo(`, '  );');
@@ -291,14 +292,12 @@ test('utilisation is the artboard’s bar, capped, and quarterly is divided by t
   // QUARTERLY IS NOT MONTHLY. Dividing is the difference between MRR and a
   // figure three times too big for every quarterly line — and the row and the
   // total have to divide the same way or the column will not add up.
-  // #4690: the division lives in the ONE shared helper, and Pipeline calls it.
-  // #4701's whole-book total uses that same monthly figure, so the page and the
-  // total divide a quarterly amount the same way.
-  const helpers = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/_partner_workspace_helpers.ts'), 'utf8');
-  assert.ok(/Math\.round\(Number\(retainer\.amount_cents\) \/ months\)/.test(helpers) && /quarterly: 3,/.test(helpers),
-    'the shared helper stopped converting a quarterly amount to a monthly one');
-  assert.ok(/currentMonthlyCents\(r, now\)/.test(worker) && !/\/ 3\b/.test(between(worker, "partnerPipeline.get('/retainers'", 'mrr_basis:')),
-    'the worker stopped calling the shared retainer rule, or divides by three itself');
+  // D4693: the division the Pipeline prints lives in `monthlyCents`. The route calls it
+  // for the row, and the whole-book total (#4701) adds that same monthly figure.
+  assert.ok(/Math\.round\(cents \/ 3\)/.test(raw('cloudflare-worker/src/services/partnerPipelineRules.ts')) && /monthlyCents\(/.test(worker),
+    'the worker stopped converting a quarterly amount to a monthly one');
+  assert.ok(/monthly_cents = monthly/.test(worker) && !/\/ 3\b/.test(between(worker, "partnerPipeline.get('/retainers'", 'mrr_basis:')),
+    'the retainers route divides by three itself instead of calling the shared rule');
   assert.ok(/Math\.round\(Number\(r\.retainer\.amount_cents\) \/ 3\)/.test(inst),
     'the ledger row stopped converting a quarterly amount to a monthly one');
   assert.ok(flat(zone).includes('Quarterly amounts are divided by three'),
