@@ -67,7 +67,7 @@ export default function EmailDraftIntent({ person, refs = [], project = null, on
 
   const footer = draft
     ? <span className="flex flex-wrap items-center gap-2">
-        <button type="button" className={PRIMARY} disabled={busy} onClick={() => onAccept?.({ ...draft, intent })} data-testid="email-intent-accept">Accept</button>
+        <button type="button" className={PRIMARY} disabled={busy} onClick={() => onAccept?.({ ...draft, intent: draft.intent ?? null })} data-testid="email-intent-accept">Accept</button>
         <button type="button" className={BTN} disabled={busy} onClick={onClose} data-testid="email-intent-discard">Discard</button>
         <span className={`text-[12px] ${MUTED}`}>Accept places it in the Body. Nothing is sent until you press Send.</span>
       </span>
@@ -81,15 +81,15 @@ export default function EmailDraftIntent({ person, refs = [], project = null, on
       {!draft ? (
         <div className="flex flex-col gap-3">
           <section className="flex flex-col gap-1.5"><span className={EYEBROW}>What is it for</span>
-            <Chips label="What is it for" testId="email-intent-intents" value={intent} onChange={setIntent} options={intents.map((i) => ({ value: i.key, label: i.label }))} /></section>
+            <Chips label="What is it for" testId="email-intent-intents" value={intent} onChange={setIntent} disabled={busy} options={intents.map((i) => ({ value: i.key, label: i.label }))} /></section>
           <section className="flex flex-col gap-1.5"><span className={EYEBROW}>Tone</span>
-            <Chips label="Tone" value={tone} onChange={setTone} options={TONES.map((t) => ({ value: t, label: cap(t) }))} /></section>
+            <Chips label="Tone" value={tone} onChange={setTone} disabled={busy} options={TONES.map((t) => ({ value: t, label: cap(t) }))} /></section>
           <section className="flex flex-col gap-1.5"><span className={EYEBROW}>Length</span>
-            <Chips label="Length" value={length} onChange={setLength} options={LENGTHS.map((l) => ({ value: l, label: cap(l) }))} /></section>
+            <Chips label="Length" value={length} onChange={setLength} disabled={busy} options={LENGTHS.map((l) => ({ value: l, label: cap(l) }))} /></section>
           <section className="flex flex-col gap-1.5"><span className={EYEBROW}>Insert a live update</span>
             <span className="flex flex-wrap gap-1.5" data-testid="email-intent-blocks">{BLOCKS.map((b) => {
               const on = blocks.includes(b.value);
-              return <button key={b.value} type="button" aria-pressed={on} className={BTN}
+              return <button key={b.value} type="button" aria-pressed={on} className={BTN} disabled={busy}
                 onClick={() => setBlocks((x) => (on ? x.filter((v) => v !== b.value) : [...x, b.value]))}>{on ? '✓' : '+'} {b.label}</button>;
             })}</span></section>
         </div>
