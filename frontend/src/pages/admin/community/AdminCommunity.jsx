@@ -4,9 +4,10 @@ import CirclesLightbox from './CirclesLightbox';
 import EventsLightbox from './EventsLightbox';
 import JobsLightbox from './JobsLightbox';
 import { AdminPageHeader, RailFrame, WorkerRail } from '../../../ui';
-import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
+import { BELOW_MD_QUERY, usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
 import { INSIGHTS_EMPTY_LEAD, KPI_KEYS, MANAGE_LINE, MANAGE_TITLE, MOVED_KEY, MOVED_NOTICE, PAGE_LINE, PAGE_UNREADABLE, PERIODS, SCOPE_LABEL, SCOPE_TITLE, asOfLabel, buildActivity, buildCircles, buildConsoles, buildEventsFunnel, buildJobs, buildNeeds, buildNextUp, buildTiles, buildWellbeing, buildWho, clockOf, isEmptyCommunity, pageFailed, searchWithWeeks, weeksFrom } from './communityModel';
 import { openFrom, searchWith } from './lightboxModel';
+import { PhoneDashboard } from './page/PhoneDashboard';
 import { RecentCard } from './page/RecentCard';
 import { ActivityCard, AttentionCard, EventsCard, JobsCard, NetworkCard, WellbeingCard, WhoCard } from './page/cards';
 import { CARD, DANGER, H2, LINK, ManageRow, SUB, Tile } from './page/parts';
@@ -40,6 +41,11 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
  * genuinely empty Community (`isEmptyCommunity`, never one it could not read)
  * shows Build your community instead of the analytics.
  *
+ * D4820 part 2: below 768px the overview is CM09's phone hierarchy
+ * (`PhoneDashboard`): 2 × 2 KPIs, the queue at three rows, the next event, an
+ * activity summary with View chart, More analytics as disclosure rows, four
+ * recent rows, then Manage Community and Additional insights. 44px targets.
+ *
  * D934 (#2718): the four lightboxes, CM3–CM6. `?open=events|jobs|circles|
  * activity` opens one, so a link can; Esc or Close takes it off the address,
  * and focus goes back to the opener. Below 1024px a lightbox is the page.
@@ -60,6 +66,8 @@ export default function AdminCommunity() {
   // `as_of`, so Refresh moves days open, waits and Overdue with the rows.
   const now = useMemo(() => clockOf(reads, asOf), [reads, asOf]);
   const phone = usePhoneWidth();
+  // D4820 part 2 (CM09): below 768px the overview has its own hierarchy; a tablet keeps the two-column grid.
+  const small = usePhoneWidth(BELOW_MD_QUERY);
   const periodRefs = useRef({});
   const box = openFrom(loc.search);
   const Box = box ? BOXES[box] : null;
@@ -125,7 +133,7 @@ export default function AdminCommunity() {
         <div className="flex flex-col gap-[7px]" data-testid="community-toolbar">
           <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
             <span title={SCOPE_TITLE} className="cursor-help rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="community-scope-chip">{SCOPE_LABEL}</span>
-            <div role="radiogroup" aria-label="Period" className="flex gap-[3px] rounded-[9px] bg-axal-ground p-[3px] dark:bg-gray-800" data-testid="community-period"
+            <div role="radiogroup" aria-label="Period" className="grid w-full grid-cols-3 gap-[3px] md:flex md:w-auto rounded-[9px] bg-axal-ground p-[3px] dark:bg-gray-800" data-testid="community-period"
               onKeyDown={(e) => {
                 // #4717 package 6: the radio group's keys (WAI-ARIA): arrows move and wrap, Home and End go to
                 // the ends, and focus moves WITH the choice, so the next arrow starts from where it is.
@@ -141,12 +149,12 @@ export default function AdminCommunity() {
                 <button key={p.weeks} type="button" role="radio" aria-checked={p.weeks === weeks} tabIndex={p.weeks === weeks ? 0 : -1}
                   ref={(el) => { periodRefs.current[p.weeks] = el; }}
                   onClick={() => setWeeks(p.weeks)} data-testid={`community-period-${p.weeks}`}
-                  className={`min-h-[32px] whitespace-nowrap rounded-[7px] px-2.5 py-1.5 text-[12px] font-bold ${p.weeks === weeks ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>{p.label}</button>
+                  className={`min-h-[32px] max-md:min-h-[44px] whitespace-nowrap rounded-[7px] px-2.5 py-1.5 text-[12px] font-bold ${p.weeks === weeks ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>{p.label}</button>
               ))}
             </div>
             <span className="ml-auto flex items-center gap-2.5">
               <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="community-asof">{asOf ? `Updated ${asOfLabel(asOf)}` : 'Reading…'}</span>
-              <button type="button" aria-label="Refresh" onClick={reload} data-testid="community-refresh" className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>
+              <button type="button" aria-label="Refresh" onClick={reload} data-testid="community-refresh" className="grid h-9 w-9 max-md:h-11 max-md:w-11 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>
             </span>
           </div>
           <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="community-period-line">{`Period figures cover the last ${weeks} weeks, Monday weeks in UTC, this week so far. Deltas compare with the ${weeks} weeks before.`}</p>
@@ -167,7 +175,11 @@ export default function AdminCommunity() {
           </>
         )}
 
-        {!failed && !empty && (
+        {!failed && !empty && small && (
+          <PhoneDashboard reads={reads} fig={fig} needs={needs} next={next} activity={activity} ev={ev} who={who} jobs={jobs} circ={circ} wb={wb} weeks={weeks} tick={tick} onRetry={reload} onOpen={openBox} />
+        )}
+
+        {!failed && !empty && !small && (
           <>
             <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="community-tiles">
               {KPI_KEYS.map((k) => <Tile key={k} t={fig[k]} onRetry={reload} />)}
@@ -185,8 +197,8 @@ export default function AdminCommunity() {
           </>
         )}
 
-        {/* CM01 puts Additional insights above Manage Community; CM04a, the empty Community, below it. */}
-        {!failed && !empty ? <AdditionalInsights /> : null}
+        {/* CM01 puts Additional insights above Manage Community; CM04a, the empty Community, and CM09, the phone, below it. */}
+        {!failed && !empty && !small ? <AdditionalInsights /> : null}
         {/* D4820 CM01: Manage Community, six destination rows, each a literal Link (the shell's reachability guards read this file). */}
         <section aria-labelledby="community-h-manage" className={`${CARD} flex flex-col`}>
           <span className="flex flex-wrap items-baseline justify-between gap-2 px-4 pb-1 pt-3.5">
@@ -216,6 +228,7 @@ export default function AdminCommunity() {
           </ul>
         </section>
         {!failed && empty ? <AdditionalInsights lead={INSIGHTS_EMPTY_LEAD} /> : null}
+        {!failed && !empty && small ? <AdditionalInsights /> : null}
       </div>
       )}
       {Box && !phone ? <Box onClose={closeBox} now={now} /> : null}

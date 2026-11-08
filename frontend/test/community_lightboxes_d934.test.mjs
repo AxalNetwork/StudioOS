@@ -387,7 +387,10 @@ test('CM4 Job postings: every page read, search, each filter and sort, paging, t
     assert.match(v.rows('jobs')[1], /^Head of Growth.*On-site.*Lead.*11/s);
     // D1121: a role opens its own posting on the job board, not the board's list.
     assert.ok(v.hrefs('community-box-jobs').some((h) => /^\/admin\/jobs\?posting=\d+$/.test(h)), 'a role does not open its own posting');
-    assert.ok(!v.hrefs('community-box-jobs').includes('/admin/jobs'), 'a role opens the list, not its posting');
+    assert.ok(!v.hrefs('community-box-jobs-rows').includes('/admin/jobs'), 'a role opens the list, not its posting');
+    // D4820 part 2 (CM05): the console is one Manage link beside Close, never a row's link.
+    assert.deepEqual(v.hrefs('community-box-jobs-manage'), ['/admin/jobs']);
+    assert.match(v.textOf('community-box-jobs-manage'), /^Manage jobs →$/);
     // D1121: Posted and Days open are drawn; this fixture's postings were approved before 609, so they read Not recorded.
     assert.match(v.rows('jobs')[0], /Published.*Senior.*Not recorded.*Not recorded.*14/s, 'Posted and Days open, not recorded before 609');
     assert.match(v.text(), /only a published posting has days open/);
@@ -471,7 +474,8 @@ test('CM5 Circles: As entered on Members and Activity, search, each filter and s
     assert.match(v.rows('circles')[0], /^Climate Founders.*Founder.*Public.*Yes.*No.*64.*Active/s, 'by name first');
     // D1121: a circle opens its own editor, not the list.
     assert.ok(v.hrefs('community-box-circles').some((h) => /^\/admin\/circles\?circle=\d+$/.test(h)), 'a circle does not open itself');
-    assert.ok(!v.hrefs('community-box-circles').includes('/admin/circles'), 'a circle opens the list, not itself');
+    assert.ok(!v.hrefs('community-box-circles-rows').includes('/admin/circles'), 'a circle opens the list, not itself');
+    assert.deepEqual(v.hrefs('community-box-circles-manage'), ['/admin/circles']);
     await v.click('community-box-circles-next');
     assert.equal(range(v, 'circles'), '26–27 of 27');
     await v.type('community-box-circles-search', 'lisbon');
