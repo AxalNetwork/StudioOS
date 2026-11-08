@@ -862,6 +862,38 @@ async function aeSql(
   }
 }
 
+/** D4854: the window the telemetry probe looks back over for the last received event. */
+export const TELEMETRY_PROBE_HOURS = 24;
+
+export type TelemetryProbe =
+  | { readable: false; answered: false }
+  | { readable: true; answered: false }
+  | { readable: true; answered: true; last_event_at: string | null; events_in_window: number | null; window_hours: number };
+
+/**
+ * D4854 (#4854) — whether Analytics Engine can be read here right now, and the last HTTP row it holds.
+ *
+ * One small query through `aeSql`, so the credentials and the "null is a failure" rule stay in one place. `readable:
+ * false` is the secrets not being set (or a branch, which never reads, D230); `answered: false` is a configured read
+ * that failed. Neither is "no traffic". A count this reader cannot parse is null, never zero.
+ */
+export async function probeTelemetry(env: Env, now: Date = new Date()): Promise<TelemetryProbe> {
+  if (!aeReadable(env)) return { readable: false, answered: false };
+  const from = new Date(now.getTime() - TELEMETRY_PROBE_HOURS * 3_600_000).toISOString().replace('T', ' ').slice(0, 19);
+  const data = await aeSql(env, `
+    SELECT max(timestamp) AS last_at, count() AS n
+    FROM ${aeDataset(env)}
+    WHERE timestamp >= toDateTime('${from}')
+      AND ${HTTP_ROWS_ONLY}
+  `.trim());
+  if (data === null) return { readable: true, answered: false };
+  const row = data[0] ?? {};
+  const n = Number(row.n);
+  const count = Number.isSafeInteger(n) && n >= 0 ? n : null;
+  const last = typeof row.last_at === 'string' && row.last_at && count !== 0 ? row.last_at : null;
+  return { readable: true, answered: true, last_event_at: last, events_in_window: count, window_hours: TELEMETRY_PROBE_HOURS };
+}
+
 async function loadTechnicalFromAnalyticsEngine(
   env: Env,
   range: DateRange,

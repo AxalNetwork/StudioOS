@@ -385,7 +385,7 @@ test('the wiring: both founder addresses, the advisor address, Deal flow’s wei
   const app = read('frontend/src/App.jsx');
   assert.ok(app.includes(`<Route path="/raise/scorecard/trajectory" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage tab="trajectory" />)} />`));
   assert.ok(app.includes(`<Route path="/practice/scorecards/:projectId" element={guard(['admin', 'advisor'], <AdvisorScorecardPage />)} />`));
-  assert.match(read('frontend/src/pages/investor/dealflow/DealFlow.jsx'), /\{scope !== 'new' && <WeightingControl \/>\}/);
+  assert.match(read('frontend/src/pages/investor/dealflow/DealFlow.jsx'), /\{scope !== 'new' && <WeightingControl onSaved=\{onWeightsSaved\} \/>\}/);
   assert.match(read('frontend/src/lib/api/ventureScores.js'), /trajectory: \(projectId\) => request\(`\/venture-scores\/\$\{enc\(projectId\)\}\/trajectory`\)/);
   assert.match(read('cloudflare-worker/src/services/ventureScoring/access.ts'), /link: `\/practice\/scorecards\/\$\{projectId\}`/, 'the advisor’s notice opens SC21');
   assert.match(read('documentation/architecture/decisions/D1258.md'), /## D1258/);

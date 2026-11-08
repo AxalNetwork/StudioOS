@@ -16,6 +16,7 @@
  *     --test cloudflare-worker/test/deck_fake_ai_d1511.test.ts
  */
 import test, { after } from 'node:test';
+import { quoting } from './_quoted_run.ts';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
@@ -74,13 +75,14 @@ async function fixture(ai: any) {
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
-async function call(f: F, who: number, method: string, path: string, json?: unknown, claims: Record<string, unknown> = {}) {
+async function rawCall(f: F, who: number, method: string, path: string, json?: unknown, claims: Record<string, unknown> = {}) {
   const jwt = await new SignJWT({ ...claims, user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await f.app.request(path, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, ...(json === undefined ? {} : { body: JSON.stringify(json) }) }, f.env);
   const text = await res.text();
   let body: any; try { body = JSON.parse(text); } catch { body = text; }
   return { status: res.status, body };
 }
+const call = quoting(rawCall);
 /** Recorded words for every card the run's message names: a headline and one sentence, no figure. */
 function recordedWords(_model: string, _input: unknown, prompt: string) {
   // D1506 (#3757): the build message frames its cards as record_text (BEGIN_RECORD_TEXT_UNTRUSTED_<nonce> … END_…).

@@ -85,7 +85,7 @@ async function oneClick(w: W, brief?: { audience: string; length: string }) {
   }
   const quote = await w.call('POST', '/api/decks/new/quote', { project_id: ONE_CLICK.projectId, step: 'build', ...b });
   assert.equal(quote.status, 200, JSON.stringify(quote.body));
-  const built = await w.call('POST', '/api/decks/generate', { project_id: ONE_CLICK.projectId, ...b });
+  const built = await w.call('POST', '/api/decks/generate', { project_id: ONE_CLICK.projectId, ...b, quote_uid: quote.body.quote_uid });
   return { brief: b!, quote, built };
 }
 
@@ -175,7 +175,7 @@ test('a timeout: the primary that never answers is cut at the router\'s 8 s and 
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const flush = async () => { for (let i = 0; i < 10; i += 1) await new Promise((r) => setImmediate(r)); };
     let settled = false;
-    const pending = w.call('POST', '/api/decks/generate', { project_id: ONE_CLICK.projectId, ...brief }).finally(() => { settled = true; });
+    const pending = w.call('POST', '/api/decks/generate', { project_id: ONE_CLICK.projectId, ...brief, quote_uid: quote.body.quote_uid }).finally(() => { settled = true; });
     let waited = 0;
     for (let i = 0; i < 3_000 && !settled; i += 1) { await flush(); if (!settled) { t.mock.timers.tick(100); waited += 100; } }
     assert.ok(settled, `the build answered within ${waited} ms of mocked time`);
