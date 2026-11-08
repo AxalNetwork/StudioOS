@@ -254,4 +254,20 @@ advisor CTA and stored search-result URLs after redirect retirement (#4415).
 - every completion rule run on the real schema.
 
 `_lab_evidence.ts` is its helper, and the helper other Lab tests use: it applies the enrollment migration and writes the invented saved work that proves a milestone.
+
+`lab_lifecycle_4658.test.ts` (D4658) runs the Lab's lifecycle services and routes on the migrated template. It covers:
+- a stale week never written over a higher one;
+- a graduate never reopened by a start, a reinstatement or the activation;
+- the cycle activation interrupted at its batch, then resumed until it converges, completing only when every applicant is done and duplicating nothing on a rerun;
+- approval against withdrawal in both orders, including the race where the approval lands between the withdrawal's read and its write;
+- notification retry: failed and cut-off sends, the conditional re-claim, and abandonment.
+
+`lab_graduation_venture_4659.test.ts` (D4659) runs the Lab's routes and services on the migrated template. It covers:
+- the graduation view pinned to the catalog;
+- incorporation recorded before weeks 1–3, which is not graduation, and the credential issued once the rule is met;
+- several projects needing the founder's choice, and an older project never proving a step;
+- binding the only project, rename, deletion, and a live venture never switched;
+- the public lists naming the venture;
+- the migration's credential, single-project and needs-choice paths;
+- a held credential grandfathered until it is revoked.
 D4856 (#4856): `catalog_modes_4856.test.ts` holds Platform's catalogue summary to `getCatalog`'s mode rule (current, other and unknown rows), and `storage_populations_4856.test.ts` holds the storage read's members, staff and unattributed populations to their sum.

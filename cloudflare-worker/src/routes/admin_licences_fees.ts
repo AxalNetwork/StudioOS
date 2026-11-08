@@ -77,8 +77,10 @@ r.post('/:uid/fee-invoices', async (c) => {
 });
 
 // PATCH /api/admin/licences/:uid/fee-invoices/:invoiceUid
-//   { paid_cents, paid_note? } — the running total received; or
-//   { status: 'void', void_note } — void an invoice with nothing paid on it.
+//   { paid_cents, paid_note?, expected_revision } — the running total received; or
+//   { status: 'void', void_note, expected_revision } — void an invoice with nothing paid on it.
+// Either names the invoice revision the caller read (D4694); a write from an
+// older one changes no row and answers 409 `invoice_changed`, with no audit row.
 r.patch('/:uid/fee-invoices/:invoiceUid', async (c) => {
   try {
     const admin = await requireSuperAdminWriteBar(c);
@@ -96,7 +98,7 @@ r.patch('/:uid/fee-invoices/:invoiceUid', async (c) => {
       ...(parsed.kind === 'void' ? { note: parsed.void_note } : {}),
     });
     return c.json({ invoice: hqInvoiceView(after, licence.uid) });
-  } catch (e) { return mapError(c, e); }
+  } catch (e) { return (await feeRefusal(c, e)) ?? mapError(c, e); }
 });
 
 // GET /api/admin/licences/:uid/fee-invoices/:invoiceUid/pdf — the invoice as issued.

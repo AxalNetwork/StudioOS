@@ -110,7 +110,8 @@ test('the strip is the artboard’s four tiles, counted over the whole log', () 
   // COUNTED OVER `items`, NEVER OVER THE CHIP-NARROWED LIST.
   const counts = between(zone, 'const unopened = items.filter(', 'const oldestUnopened =');
   assert.ok(!/\bvisible\b|\bordered\b/.test(counts), 'a tile count is reading the chip-narrowed list');
-  assert.match(counts, /const unopened = items\.filter\(\(r\) => r\.sent_at && !r\.opened_at\);/,
+  // #4690: `is_unopened` is true only where opens can be observed.
+  assert.match(counts, /const unopened = items\.filter\(\(r\) => r\.is_unopened === true\);/,
     'the Never opened tile no longer counts sent-and-unopened rows');
   assert.match(counts, /const signedOff = items\.filter\(\(r\) => r\.signed_off_at\);/,
     'the Signed off tile no longer counts signed-off rows');
@@ -242,7 +243,7 @@ test('the AI band is the artboard’s, and its count is this firm’s', () => {
   // sends each." — two is its own sample.
   assert.match(PD2, /aiFoot:'Two notes; a human sends each\.'/, 'the canvas’s foot has moved');
   assert.ok(!band.includes('Two notes'), 'the band is printing the artboard’s own sample count');
-  assert.match(band, /foot=\{`\$\{unopened\.length\} note\$\{unopened\.length === 1 \? '' : 's'\}; a human sends each\.`\}/,
+  assert.match(band, /`\$\{unopened\.length\} note\$\{unopened\.length === 1 \? '' : 's'\}; a human sends each\.`/,
     'the band’s count is no longer this firm’s unopened deliverables');
 });
 

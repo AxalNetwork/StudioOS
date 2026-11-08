@@ -6,6 +6,7 @@ import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { researchMarketsApi } from '../../lib/api/researchMarkets';
 import { researchSectorsApi } from '../../lib/api/researchSectors';
 import { sizeOf, backingOf } from './fundDirectoryRead';
+import { useResearchLinks } from './researchLinks.js';
 
 const DIMENSIONS = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'];
 const READS = { demand: 'Demand for the work', supply: 'What is being built', capital: 'Capital activity', talent: 'Talent activity', research: 'Research activity', sentiment: 'Public discussion' };
@@ -50,7 +51,8 @@ function Builds({ signals }) {
   </section>;
 }
 
-export function SectorProfileView({ loading = false, error = false, data = null, highlightedMarket = '', onRetry = () => {} }) {
+// D4612: `links` says which profiles this reader may open; one it may not is named, not linked.
+export function SectorProfileView({ loading = false, error = false, data = null, highlightedMarket = '', onRetry = () => {}, links = { companies: true, funds: true } }) {
   if (loading) return <Card><p role="status">Loading sector data…</p></Card>;
   if (error) return <Card variant="dashed"><p role="alert">Unreadable · This sector could not be read. Try again.</p><button type="button" onClick={onRetry} className="mt-3 min-h-11 underline">Retry</button></Card>;
   if (!data) return <Card variant="dashed"><p>Sector or market not found.</p><Link to="/research/markets" className="mt-3 inline-block underline">Back to markets</Link></Card>;
@@ -117,7 +119,7 @@ export function SectorProfileView({ loading = false, error = false, data = null,
         </li>)}</ul></figure></Card>
         <Card className="min-w-0 lg:col-span-2"><div className="overflow-x-auto"><table className="w-full min-w-[500px] text-left text-sm"><caption className="mb-3 text-left text-xs text-axal-muted">Showing {companies.length} of {data.company_count} directory companies. Each row names its as-of date.</caption>
           <thead><tr>{['Company', 'Country', 'Founded', 'Employees', 'As of'].map((h) => <th key={h} scope="col" className="p-2 text-xs text-axal-muted">{h}</th>)}</tr></thead><tbody>{companies.map((c) => <tr key={c.uid} className="border-t border-axal-hairline dark:border-gray-700">
-            <td className="p-2"><Link to={`/research/companies/company/${encodeURIComponent(c.uid)}`} className="font-semibold underline">{c.name}</Link><p className="text-xs text-axal-muted">{fact(c.sector)}</p></td>
+            <td className="p-2">{links.companies ? <Link to={`/research/companies/company/${encodeURIComponent(c.uid)}`} className="font-semibold underline">{c.name}</Link> : <span className="font-semibold">{c.name}</span>}<p className="text-xs text-axal-muted">{fact(c.sector)}</p></td>
             <td className="p-2">{fact(c.country)}</td><td className="p-2">{fact(c.founded_year)}</td><td className="p-2">{fact(c.employee_count)}</td><td className="p-2">{fact(c.as_of)}</td>
           </tr>)}</tbody></table></div></Card></div>}
     </section>
@@ -126,7 +128,7 @@ export function SectorProfileView({ loading = false, error = false, data = null,
       {!funds.length ? <Card variant="dashed">No funds map to this sector.</Card> : <Card><div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><caption className="mb-3 text-left text-xs text-axal-muted">Showing {funds.length} of {data.fund_count} funds.</caption>
         <thead><tr>{['Fund', 'HQ', 'Size', 'Vintage', 'EIF / EIFO', 'As of'].map((h) => <th key={h} scope="col" className="p-2 text-xs text-axal-muted">{h}</th>)}</tr></thead><tbody>{funds.map((f) => {
           const size = sizeOf(f); const backing = backingOf(f);
-          return <tr key={f.uid} className="border-t border-axal-hairline dark:border-gray-700"><td className="p-2"><Link to={`/research/funds/catalog/${encodeURIComponent(f.uid)}`} className="font-semibold underline">{f.name}</Link><p className="text-xs text-axal-muted">{fact(f.sector_focus)}</p></td>
+          return <tr key={f.uid} className="border-t border-axal-hairline dark:border-gray-700"><td className="p-2">{links.funds ? <Link to={`/research/funds/catalog/${encodeURIComponent(f.uid)}`} className="font-semibold underline">{f.name}</Link> : <span className="font-semibold">{f.name}</span>}<p className="text-xs text-axal-muted">{fact(f.sector_focus)}</p></td>
             <td className="p-2">{fact(f.hq)}</td><td className="p-2">{size.text || `Not recorded · ${size.reason}`}</td><td className="p-2">{fact(f.fund_year)}</td><td className="p-2">{backing.kind === 'named' ? backing.named.join(' / ') : backing.kind === 'neither' ? 'Neither recorded' : 'LPs not recorded'}</td><td className="p-2">{fact(f.as_of)}</td></tr>;
         })}</tbody></table></div></Card>}
     </section>
@@ -136,6 +138,7 @@ export function SectorProfileView({ loading = false, error = false, data = null,
 
 export default function SectorProfile({ slug, role, LegacyPage }) {
   const location = useLocation();
+  const links = useResearchLinks(role);
   const [result, setResult] = useState({ slug, loading: true });
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -150,7 +153,7 @@ export default function SectorProfile({ slug, role, LegacyPage }) {
   // #1077: the legacy page draws the market the resolver already read.
   if (state.kind === 'legacy') return <LegacyPage role={role} market={state.market} />;
   return <WorkspaceShell role={role} title={state.data?.name || 'Sector'} activeSlug="markets">
-    <SectorProfileView loading={state.loading} error={state.error} data={state.data}
+    <SectorProfileView links={links} loading={state.loading} error={state.error} data={state.data}
       highlightedMarket={new URLSearchParams(location.search).get('market') || ''} onRetry={() => setRetry((n) => n + 1)} />
   </WorkspaceShell>;
 }

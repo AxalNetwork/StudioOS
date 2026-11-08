@@ -84,14 +84,23 @@ export async function recordLabMilestone(env: Env, userId: number, rawKey: strin
       { locked: true, max_week: gate.max_week });
   }
 
+  // D4659: project work counts only from the enrollment's venture. With
+  // several projects and none chosen yet, no project counts (person-level
+  // steps still do) and the founder is asked to choose.
   let evidence: Evidence | null;
+  let venture: import('./labVenture').Venture;
   try {
-    evidence = await evidenceFor({ env, userId, enrollmentProjectId: enrollment.project_id }, key);
+    const { resolveVenture, evidenceProjectId } = await import('./labVenture');
+    venture = await resolveVenture(env, userId);
+    evidence = await evidenceFor({ env, userId, enrollmentProjectId: evidenceProjectId(venture) }, key);
   } catch {
     console.warn('[lab-progress] evidence unreadable', { key });
     return fail(503, 'lab_evidence_unavailable', 'The work behind this step could not be read just now. Try again in a moment.', { retryable: true });
   }
   if (!evidence) {
+    if (venture.status === 'needs_choice' || venture.status === 'deleted') {
+      return fail(409, 'lab_venture_choice_needed', 'Choose which of your projects is your Lab venture, then this step can be recorded.', { milestone_key: key });
+    }
     return fail(409, 'milestone_evidence_missing', 'This step is recorded once its work is saved.', { milestone_key: key });
   }
 
@@ -117,16 +126,31 @@ export async function recordLabMilestone(env: Env, userId: number, rawKey: strin
   let milestoneCredit: unknown = null;
   let graduationCredit: unknown = null;
   if (inserted) {
-    const { creditLabMilestone, creditLabGraduation } = await import('./labMilestoneCredits');
+    const { creditLabMilestone } = await import('./labMilestoneCredits');
     milestoneCredit = await creditLabMilestone(env, userId, key);
-    if (key === 'incorporation_completed') {
-      try {
-        const { issueOnGraduation } = await import('./certificateIssuance');
-        if ((await issueOnGraduation(env, userId)) === 'issued') graduationCredit = await creditLabGraduation(env, userId);
-      } catch { /* issuance is best-effort; the certificate backfill picks it up */ }
-    }
+    // D4659: the credential and its bonus follow the one graduation rule
+    // (every required step of weeks 1-4), whichever step completed it.
+    graduationCredit = await issueIfGraduated(env, userId);
   }
   return { ok: true, inserted, evidence, state, milestone_credit: milestoneCredit, graduation_credit: graduationCredit };
+}
+
+/**
+ * Issue the credential, and pay its bonus, when the founder meets the
+ * graduation rule (view spinout_lab_graduates, by_rule) and holds none yet.
+ * Idempotent and best-effort: the certificate backfill and the reconciler
+ * catch up anything missed. Returns the bonus outcome, or null.
+ */
+export async function issueIfGraduated(env: Env, userId: number): Promise<unknown> {
+  try {
+    const g = await env.DB.prepare('SELECT 1 AS x FROM spinout_lab_graduates WHERE user_id = ? AND by_rule = 1')
+      .bind(userId).first();
+    if (!g) return null;
+    const { issueOnGraduation } = await import('./certificateIssuance');
+    if ((await issueOnGraduation(env, userId)) !== 'issued') return null;
+    const { creditLabGraduation } = await import('./labMilestoneCredits');
+    return await creditLabGraduation(env, userId);
+  } catch { console.warn('[lab-progress] graduation issue skipped'); return null; }
 }
 
 export type ReconcileResult = {
@@ -159,7 +183,8 @@ export async function reconcileLabProgress(env: Env, userId: number, nowMs = Dat
     const gate = await getCohortGate(env, userId, nowMs);
     if (gate?.frozen) return { ...out, status: 'skipped' };
     const maxWeek = gate ? gate.max_week : 4;
-    const ctx = { env, userId, enrollmentProjectId: elig.enrollment.project_id };
+    const { resolveVenture, evidenceProjectId } = await import('./labVenture');
+    const ctx = { env, userId, enrollmentProjectId: evidenceProjectId(await resolveVenture(env, userId)) };
     for (const key of ORDERED_KEYS) {
       if (recorded.has(key) || (weekForKey(key) ?? 9) > maxWeek) continue;
       // One cheap check first; the full recorder re-checks everything.
@@ -189,6 +214,8 @@ export async function reconcileLabProgress(env: Env, userId: number, nowMs = Dat
         else if (c.status === 'skipped' && c.reason === 'error') out.errors += 1;
       }
     }
+    // D4659: a credential an interrupted request did not issue.
+    await issueIfGraduated(env, userId);
     await env.DB.prepare(`UPDATE spinout_lab_enrollments SET reconciled_at = datetime('now') WHERE id = ?`)
       .bind(elig.enrollment.id).run();
     return out;

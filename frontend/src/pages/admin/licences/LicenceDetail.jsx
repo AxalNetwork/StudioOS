@@ -23,6 +23,7 @@ import { SeatEditor, TermsEditor } from './CommercialTerms';
 import { ContractStep } from './ContractStep';
 import { DeployStep } from './DeployStep';
 import { NoticesEditor } from './NoticesEditor';
+import { LicenceSyncStrip } from './LicenceSyncStrip';
 import { TerritoryEditor } from './TerritoryEditor';
 import OutcomeNotice from '../../../components/OutcomeNotice';
 import { describeOutcome, outcomeFromError, outcomeOfError } from '../../../lib/mutationOutcome';
@@ -141,6 +142,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           releasing them is a termination, not a lapse.
         </div>
       )}
+
+      <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} />
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
         <Field label="Territory" value={d.territories.length ? d.territories.join(' · ') : null} />

@@ -375,7 +375,10 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     '/expertise': {
       workspace: 'Expertise',
       stance: 'Manual profile record',
-      note: 'Profile, services and proof read and write the stored practice record. No positioning line, price, claim or attestation is drafted here — every word on your storefront is one you typed.',
+      // D4711: this said nothing is drafted here, beside a Services form that
+      // offers Ask on a new service's Title and What it covers (D1329). The
+      // rail says what Ask does there, and what it never touches.
+      note: 'Profile, services and proof read and write the stored practice record. On a new service, Ask can draft its title and what it covers, only when you ask, and nothing is saved until you add it. No positioning line, price, claim or attestation is drafted.',
       unavailable: [
         ['Attestation', 'Confirmation is asked of a named person and recorded from their own answer, never assumed. An unconfirmed claim stays visibly weaker than a confirmed one, and nothing here can move a claim between those two states on your behalf.'],
         ['Money movement', 'A service price is your record of what you charge. Axal issues no invoice, runs no checkout, and settles nothing.'],

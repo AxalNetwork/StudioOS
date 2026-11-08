@@ -167,17 +167,24 @@ function freshDb() {
 /** A booking owned by Fran, priced and `billed` unless overridden. */
 function seedBooking(
   db: InstanceType<typeof DatabaseSync>,
-  over: { amount?: number | null; state?: string; owner?: number; uid?: string } = {},
+  over: {
+    amount?: number | null; state?: string; owner?: number; uid?: string;
+    /** The stored fee snapshot (#4679). Default: 15% of the amount, as priced. */
+    bps?: number | null; cut?: number | null;
+  } = {},
 ) {
   const uid = over.uid ?? 'bk-pay-1';
+  const amount = over.amount === undefined ? PRICE : over.amount;
+  const bps = over.bps === undefined ? (amount == null ? null : 1500) : over.bps;
+  const cut = over.cut === undefined
+    ? (amount == null || bps == null ? null : cutCents(amount, bps)) : over.cut;
   db.prepare(
     `INSERT INTO advisor_bookings
-       (uid, slot_id, advisor_id, founder_user_id, topic, status, amount_cents, billing_state)
-     VALUES (?, ?, 1, ?, 'Pricing strategy', 'completed', ?, ?)`,
+       (uid, slot_id, advisor_id, founder_user_id, topic, status, amount_cents, billing_state,
+        take_rate_bps, platform_cut_cents)
+     VALUES (?, ?, 1, ?, 'Pricing strategy', 'completed', ?, ?, ?, ?)`,
   ).run(
-    uid, SLOT_ID, over.owner ?? FOUNDER_USER,
-    over.amount === undefined ? PRICE : over.amount,
-    over.state ?? 'billed',
+    uid, SLOT_ID, over.owner ?? FOUNDER_USER, amount, over.state ?? 'billed', bps, cut,
   );
   return db.prepare('SELECT * FROM advisor_bookings WHERE uid = ?').get(uid) as any;
 }

@@ -12,6 +12,7 @@ import { Eyebrow, Instrument, MeteredNote } from '../../workspaces/canvasKit';
 import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
 import { railPressHeaders } from '../../lib/railPage.js';
+import { RETRIEVAL_UNAVAILABLE, isAnswerable } from './askOutcome.js';
 
 /**
  * Research · Ask — answers drawn only from your own library, or no answer.
@@ -84,11 +85,11 @@ const ASK_STRIP = {
   advisor: [
     { label: 'Indexed documents', value: (x) => x.indexed, note: (x) => `of ${x.docs} in your library` },
     { label: 'Answered', value: (x) => `${x.totals.answered} of ${x.totals.asked}`, note: () => 'each with its citations' },
-    { label: 'No source', value: (x) => x.totals.no_source, note: () => 'returned empty, charged nothing' },
+    { label: 'No source', value: (x) => x.totals.no_source, note: (x) => (x.totals.retrieval_unavailable ? `returned empty, charged nothing · ${x.totals.retrieval_unavailable} could not search` : 'returned empty, charged nothing') },
     { label: 'Session spend', value: (x) => formatCost(x.totals.cost_usd), note: () => 'shown before each question, not only after' },
   ],
   founder: [
-    { label: 'Questions asked', value: (x) => x.totals.asked, note: (x) => `${x.totals.no_source} came back with no source` },
+    { label: 'Questions asked', value: (x) => x.totals.asked, note: (x) => `${x.totals.no_source} came back with no source${x.totals.retrieval_unavailable ? `, ${x.totals.retrieval_unavailable} could not search` : ''}` },
     { label: 'Answers kept', value: (x) => x.totals.saved, note: () => 'kept from the ops row, one at a time' },
     {
       label: 'First-pass cost',
@@ -248,7 +249,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
 
   const libRows = items.map((d) => ({
     key: d.uid,
-    rowClass: d.index_state === 'indexed' ? '' : 'bg-amber-50/40 dark:bg-amber-950/20',
+    rowClass: isAnswerable(d.index_state) ? '' : 'bg-amber-50/40 dark:bg-amber-950/20',
     cells: [
       { text: d.title || '', nr: !d.title },
       { text: d.kind || '', nr: !d.kind },
@@ -258,14 +259,18 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
       { text: String(d.created_at || '').slice(0, 10), nr: !d.created_at },
       d.index_state === 'indexed'
         ? { pill: 'Indexed', pillTone: 'ok' }
-        : { pill: d.index_state || 'Not indexed', pillTone: 'warn' },
+        : d.index_state === 'partial'
+          ? { pill: 'Partly indexed', pillTone: 'warn' }
+          : { pill: d.index_state || 'Not indexed', pillTone: 'warn' },
       // The question this zone exists to answer, per row. `index_state`, not
       // `chunk_count`: a document that indexed once and later failed a re-index
       // keeps its old count, and the failure path updates the state and leaves
       // the number alone.
       d.index_state === 'indexed'
         ? { text: 'Answerable in Ask' }
-        : { text: 'Not answerable until indexed' },
+        : d.index_state === 'partial'
+          ? { text: d.index_note || 'Answerable in Ask from the passages that were indexed' }
+          : { text: 'Not answerable until indexed' },
     ],
   }));
 
@@ -401,7 +406,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
               </div>
 
               <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">
-                {t.reason === 'answered' ? t.answer : (
+                {t.reason === 'answered' ? t.answer : t.reason === 'retrieval_unavailable' ? RETRIEVAL_UNAVAILABLE : (
                   t.reason === 'model_unavailable'
                     ? 'No answer written. Your library does have relevant passages — they are listed below — but the model that turns them into an answer did not respond. Adding documents will not help.'
                     : 'No answer given. Nothing in your library was close enough to answer this, so nothing was retrieved to reason over.'
@@ -416,6 +421,13 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                   </Pill>
                 ))}
                 {t.reason === 'no_source' ? <Unrecorded>No retrievable source</Unrecorded> : null}
+                {t.reason === 'retrieval_unavailable' ? (
+                  <button type="button" data-testid={`button-ask-retry-${t.uid}`} disabled={busy}
+                    onClick={() => setQuestion(t.question)}
+                    className="whitespace-nowrap rounded-[6px] border border-gray-200 px-2 py-0.5 text-[10px] font-bold text-gray-700 hover:border-gray-300 disabled:opacity-60 dark:border-gray-700 dark:text-gray-300">
+                    Ask again
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => toggleSaved(t)}
