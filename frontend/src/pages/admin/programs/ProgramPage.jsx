@@ -38,11 +38,11 @@ import { AI_NATIVE_FOOT, INVESTOR_BANNER, NOT_RUNNING_YET, isReady, routeFor } f
 // D962 (#2795): How it runs reads part 1's playbook store, and Activity part 1's activity read.
 function Perks({ tab, superAdmin }) {
   const reads = usePerksReads(tab);
-  const detail = useProgramDetail('perks', tab === 'how');
+  const detail = useProgramDetail('perks');
   const n = totalOf(reads.inReview);
   const queue = n !== null ? { text: n.toLocaleString('en-US'), amber: n > 0, title: 'Listings in review' } : null;
   return (
-    <ProgramFrame program="perks" superAdmin={superAdmin} tabs={<PerksTabs queue={queue} />}>
+    <ProgramFrame detail={detail} program="perks" superAdmin={superAdmin} tabs={<PerksTabs queue={queue} />}>
       {tab === 'overview' ? <PerksOverview reads={reads} superAdmin={superAdmin} /> : null}
       {tab === 'how' ? <PlaybookEditor program="perks" superAdmin={superAdmin} detail={detail} testId="programs-perks-how" /> : null}
       {tab === 'queue' ? <PerksQueue reads={reads} /> : null}
@@ -53,13 +53,14 @@ function Perks({ tab, superAdmin }) {
 
 function Learning({ tab, superAdmin }) {
   const [programUid, setProgramUid] = useState(null);
-  const reads = useLearningReads(tab, programUid);
-  const detail = useProgramDetail('learning', tab === 'how');
+  const [learnerOffset, setLearnerOffset] = useState(0);
+  const reads = useLearningReads(tab, programUid, learnerOffset);
+  const detail = useProgramDetail('learning');
   return (
-    <ProgramFrame program="learning" superAdmin={superAdmin} tabs={<LearningTabs />}>
+    <ProgramFrame detail={detail} program="learning" superAdmin={superAdmin} tabs={<LearningTabs />}>
       {tab === 'overview' ? <LearningOverview reads={reads} superAdmin={superAdmin} /> : null}
       {tab === 'how' ? <PlaybookEditor program="learning" superAdmin={superAdmin} detail={detail} testId="programs-learning-how" /> : null}
-      {tab === 'people' ? <LearningPeople reads={reads} programUid={programUid} onPick={setProgramUid} /> : null}
+      {tab === 'people' ? <LearningPeople reads={reads} programUid={programUid} onPick={(uid) => { setProgramUid(uid); setLearnerOffset(0); }} offset={learnerOffset} onPage={setLearnerOffset} /> : null}
       {tab === 'activity' ? <ActivityTab program="learning" testId="programs-learning-activity" /> : null}
     </ProgramFrame>
   );
@@ -84,7 +85,7 @@ function ReferralPartners({ tab, superAdmin }) {
   const d = desk.dialog;
   const changed = () => desk.reload();
   return (
-    <ProgramFrame program="referral-partners" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<PartnersTabs queue={queue} />}
+    <ProgramFrame detail={detail} program="referral-partners" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<PartnersTabs queue={queue} />}
       actions={<InvitePartner className={`${actionPrimary} w-full sm:w-auto`} />}>
       {tab === 'overview' ? <PartnersOverview superAdmin={superAdmin} tick={desk.tick} open={open} /> : null}
       {tab === 'how' ? <PlaybookEditor program="referral-partners" superAdmin={superAdmin} detail={detail} testId="programs-partners-how" /> : null}
@@ -109,7 +110,7 @@ function InvestorCohorts({ tab, superAdmin }) {
   const open = { reload: desk.reload, dialog: desk.setDialog, banner: BANNER };
   const d = desk.dialog;
   return (
-    <ProgramFrame program="investor-cohorts" superAdmin={superAdmin} status={status} tabs={<InvestorTabs />}
+    <ProgramFrame detail={detail} program="investor-cohorts" superAdmin={superAdmin} status={status} tabs={<InvestorTabs />}
       actions={<button type="button" onClick={() => desk.setDialog({ kind: 'give' })} className={`${actionPrimary} w-full sm:w-auto`} data-testid="programs-investor-give">Give access</button>}>
       {tab === 'overview' ? (
         <InvestorOverview reads={reads} running={status === 'Live'} tick={desk.tick} open={open}
@@ -128,13 +129,13 @@ function InvestorCohorts({ tab, superAdmin }) {
  * the work waits; the tab strip carries the count waiting on HQ.
  */
 function Influencers({ tab, superAdmin }) {
-  const detail = useProgramDetail(INFLUENCER_KEY, tab === 'how');
+  const detail = useProgramDetail(INFLUENCER_KEY);
   const [counts, setCounts] = useState(null);
   const t = tab === 'overview' ? INFLUENCER_LANDING : tab;
   const waiting = counts ? Number(counts.applied || 0) : null;
   const queue = waiting !== null ? { text: waiting.toLocaleString('en-US'), amber: waiting > 0, title: 'Applications waiting on HQ' } : null;
   return (
-    <ProgramFrame program={INFLUENCER_KEY} superAdmin={superAdmin} status={registryStatus(detail)} tabs={<InfluencerTabs queue={queue} />}>
+    <ProgramFrame detail={detail} program={INFLUENCER_KEY} superAdmin={superAdmin} status={registryStatus(detail)} tabs={<InfluencerTabs queue={queue} />}>
       {t === 'how' ? <PlaybookEditor program={INFLUENCER_KEY} superAdmin={superAdmin} detail={detail} testId="programs-influencer-how" /> : null}
       {t === 'applications' ? <ApplicationsTab onCount={setCounts} /> : null}
       {t === 'influencers' ? <InfluencersTab /> : null}
@@ -160,7 +161,7 @@ const AI_TILES = ['Founders', 'Cohorts', 'Applications', 'Studios offered'].map(
 function AiNativeVenture({ superAdmin }) {
   const detail = useProgramDetail('ai-native-venture');
   return (
-    <ProgramFrame program="ai-native-venture" superAdmin={superAdmin} status={registryStatus(detail)}>
+    <ProgramFrame detail={detail} program="ai-native-venture" superAdmin={superAdmin} status={registryStatus(detail)}>
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4" data-testid="programs-ai-native-tiles">
         {AI_TILES.map((t) => <Tile key={t.key} t={t} />)}
       </div>
