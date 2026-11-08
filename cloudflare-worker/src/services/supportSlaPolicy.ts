@@ -201,3 +201,135 @@ export async function readOpenTicketTaxonomy(
     };
   }
 }
+
+// ─── The policy's version, and its copy on every branch (D5032, #5032) ────
+
+/**
+ * The version of the tier rows on THIS database (`support_sla_policy_state`,
+ * the 202611082049 migration). On HQ it advances with every save that changes
+ * a tier; on a branch it is the HQ version the last applied copy carried.
+ * `version` null: the store answered and holds no row, so these hours carry no
+ * number — never read as version 0 or as current.
+ */
+export type SlaPolicyVersionRead =
+  | { available: true; version: number | null; source: 'hq' | 'pushed' | null; applied_at: string | null }
+  | { available: false; reason: string };
+
+export const SLA_POLICY_VERSION_UNREADABLE =
+  'The SLA policy version could not be read on this database (support_sla_policy_state), so which version of the hours it holds is unknown.';
+
+export async function readSlaPolicyVersion(env: { DB: import('../types').Env['DB'] }): Promise<SlaPolicyVersionRead> {
+  try {
+    const row = await env.DB.prepare(
+      'SELECT version, source, applied_at FROM support_sla_policy_state WHERE id = 1',
+    ).first<{ version: number; source: string; applied_at: string }>();
+    if (!row) return { available: true, version: null, source: null, applied_at: null };
+    const v = Number(row.version);
+    return {
+      available: true,
+      version: Number.isInteger(v) && v >= 1 ? v : null,
+      source: row.source === 'hq' || row.source === 'pushed' ? row.source : null,
+      applied_at: row.applied_at ?? null,
+    };
+  } catch {
+    return { available: false, reason: SLA_POLICY_VERSION_UNREADABLE };
+  }
+}
+
+/**
+ * HQ's save advances the version in the SAME batch as the tier rows, so a
+ * version never names hours it does not hold. The first save numbers the
+ * policy 1.
+ */
+export function advanceSlaPolicyStatement(env: { DB: import('../types').Env['DB'] }) {
+  return env.DB.prepare(
+    `INSERT INTO support_sla_policy_state (id, version, source, applied_at) VALUES (1, 1, 'hq', datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET version = support_sla_policy_state.version + 1, source = 'hq', applied_at = datetime('now')`,
+  );
+}
+
+/** What the licence copy carries: the version and all three tiers. */
+export type SlaPolicyCopy = { version: number; tiers: Array<{ id: SupportSlaTier; hours: number; description: string }> };
+
+/**
+ * HQ's policy as the licence push sends it. A policy that was never saved
+ * since versions began is numbered 1 here, the first time it is distributed:
+ * the hours are HQ's live ones either way, and a branch needs a number to
+ * order copies by. Throws when the tiers or the version store cannot be read,
+ * so the push reports the section as unreadable rather than sending a guess.
+ */
+export async function slaPolicyForCopy(env: { DB: import('../types').Env['DB'] }): Promise<SlaPolicyCopy> {
+  // Raw reads, so a database without the store throws "no such table" and the
+  // push omits the section (nothing recorded), while any other failure makes
+  // the push partial — the licence copy's #4686 rule.
+  const res = await env.DB.prepare('SELECT tier, hours, description FROM hq_support_sla_tiers ORDER BY tier')
+    .all<{ tier: string; hours: number; description: string }>();
+  const by = new Map((res.results || []).map((r) => [String(r.tier), r]));
+  if (!SLA_TIERS.every((t) => by.has(t))) throw new Error('The SLA tier store is missing a tier.');
+  const read = () => env.DB.prepare('SELECT version FROM support_sla_policy_state WHERE id = 1').first<{ version: number }>();
+  let row = await read();
+  if (!row) {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO support_sla_policy_state (id, version, source, applied_at) VALUES (1, 1, 'hq', datetime('now'))`,
+    ).run();
+    row = await read();
+  }
+  const version = Number(row?.version);
+  if (!Number.isInteger(version) || version < 1) throw new Error('The SLA policy version could not be allocated.');
+  return {
+    version,
+    tiers: SLA_TIERS.map((t) => ({ id: t, hours: Number(by.get(t)!.hours), description: String(by.get(t)!.description) })),
+  };
+}
+
+/** Parse the copy a branch receives. The same bounds and order HQ's save enforces. */
+export function parseSlaPolicyCopy(raw: unknown): { ok: true; value: SlaPolicyCopy } | { ok: false; error: string } {
+  let src: any = raw;
+  if (typeof raw === 'string') {
+    try { src = JSON.parse(raw); } catch { return { ok: false, error: 'support_sla_json is not JSON' }; }
+  }
+  if (!src || typeof src !== 'object') return { ok: false, error: 'support_sla_json must be an object' };
+  const version = Number(src.version);
+  if (!Number.isInteger(version) || version < 1) return { ok: false, error: 'support_sla_json.version must be a positive integer' };
+  const byId = new Map((Array.isArray(src.tiers) ? src.tiers : []).map((t: any) => [String(t?.id), t]));
+  const parsed = parseSlaTiers({ tiers: Object.fromEntries(SLA_TIERS.map((t) => [t, byId.get(t)])) });
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  return { ok: true, value: { version, tiers: SLA_TIERS.map((t) => ({ id: t, ...parsed.value[t] })) } };
+}
+
+/**
+ * A branch writes HQ's tiers and the version they came with, in one batch.
+ * A copy older than the version the branch holds changes nothing (`stale`),
+ * the same rule the licence copy follows for its revision. Throws when the
+ * write fails, so `applyLicenceCopy` reports the section as not written.
+ */
+export async function applySlaPolicyCopy(
+  env: { DB: import('../types').Env['DB'] }, copy: SlaPolicyCopy,
+): Promise<{ applied: boolean; version: number; stale: boolean }> {
+  const held = await readSlaPolicyVersion(env);
+  if (!held.available) throw new Error(held.reason);
+  if (held.version !== null && held.version > copy.version) {
+    return { applied: false, version: held.version, stale: true };
+  }
+  // Each statement re-checks the version inside the batch (one transaction),
+  // so two copies racing cannot leave older hours under a newer number.
+  await env.DB.batch([
+    ...copy.tiers.map((t) => env.DB.prepare(
+      `INSERT INTO hq_support_sla_tiers (tier, hours, description, updated_at, updated_by)
+       SELECT ?, ?, ?, datetime('now'), NULL
+        WHERE NOT EXISTS (SELECT 1 FROM support_sla_policy_state WHERE id = 1 AND version > ?)
+       ON CONFLICT(tier) DO UPDATE SET hours = excluded.hours, description = excluded.description,
+                                       updated_at = excluded.updated_at, updated_by = NULL`,
+    ).bind(t.id, t.hours, t.description, copy.version)),
+    env.DB.prepare(
+      `INSERT INTO support_sla_policy_state (id, version, source, applied_at) VALUES (1, ?, 'pushed', datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET version = excluded.version, source = 'pushed', applied_at = excluded.applied_at
+        WHERE excluded.version >= support_sla_policy_state.version`,
+    ).bind(copy.version),
+  ]);
+  const after = await readSlaPolicyVersion(env);
+  if (after.available && after.version !== null && after.version > copy.version) {
+    return { applied: false, version: after.version, stale: true };
+  }
+  return { applied: true, version: copy.version, stale: false };
+}
