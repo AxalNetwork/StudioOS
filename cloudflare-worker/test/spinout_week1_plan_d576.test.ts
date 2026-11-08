@@ -49,6 +49,8 @@ function freshDb({ migrate = true } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of TABLES) db.exec(ddl(t));
   db.exec(M315); db.exec(M316);
+  // Migration 602's interview outcome, which the withdrawal's interview cancel reads.
+  db.exec('ALTER TABLE spinout_application_interviews ADD COLUMN outcome TEXT');
   if (migrate) db.exec(M396);
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   u.run(ADMIN_ID, 'admin', 'Admin One', 'admin@example.test');
