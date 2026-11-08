@@ -3589,6 +3589,10 @@ export const api = {
   // the GitHub mirror strip, in one read. Each part answers for itself: an
   // unreadable escalation board costs its own queue, never the tickets beside it.
   hqSupport: () => request('/admin/hq-support'),
+  // D5031 (#5031) — the HQ-local half alone (escalations, HQ's ticket queues,
+  // the mirror strip, the SLA policy): it never waits on a branch, so the page
+  // draws HQ's desk while the branch hosts are still answering `hqSupport`.
+  hqSupportLocal: () => request('/admin/hq-support/local'),
   hqSupportSetSlaTiers: (tiers) => request('/admin/hq-support/sla-tiers', { method: 'PUT', body: JSON.stringify({ tiers }) }),
   // Canvas H7's privileged-action feed, unioned across the four stores that
   // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
