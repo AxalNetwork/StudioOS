@@ -40,6 +40,7 @@ function fixture() {
   db.exec(migration('459_cycle_activity_convention.sql'));
   // D690 (#1692): Validate's record stores, and what the interview record reads.
   db.exec(migration('460_validate_record_stores.sql'));
+  db.exec(migration('755_posthog_metrics.sql')); // D4585: Add evidence offers valued PostHog metrics
   db.exec(migration('439_validate_proposals_structuring.sql'));
   db.exec(migration('446_interview_structure_receipts.sql'));
   // D757 (#1925): "What it fed" reads a proposal's interview (246's
