@@ -29,6 +29,11 @@
  */
 import type { Env } from '../types';
 import { IMPERSONATION_CEILING_MINUTES, JWT_EXPIRY_HOURS } from '../auth';
+import {
+  USER_SESSION_LIFETIME_BINDS, SUPPORT_SESSION_LIMIT_BINDS, BRANCH_SUPPORT_FACTOR, userSessionStatus,
+  type UserSessionStatus,
+} from './sessionStatus';
+import { networkOfAddress, supportIdentity, userIdentity, type Identity } from './securityIdentity';
 
 /**
  * "ACTIVE" MEANS A TOKEN THAT COULD STILL OPEN A DOOR — the list and every
@@ -48,6 +53,12 @@ import { IMPERSONATION_CEILING_MINUTES, JWT_EXPIRY_HOURS } from '../auth';
  *
  * Before this the bound was `revoked_at` plus a 30-day `last_seen_at`
  * window, which listed tokens dead for weeks.
+ *
+ * D4691 — the definitions now live in `services/sessionStatus.ts`, which every
+ * count and list on HQ · Security shares. Two corrections came with the move:
+ * a branch support token (`factor = 'hq_support'`) lives its own thirty
+ * minutes, not the ordinary lifetime, and `created_at` is compared through
+ * `datetime()` so a stamp in another format is not compared as text.
  */
 export const SESSION_TOKEN_HOURS = JWT_EXPIRY_HOURS;
 /** One page. The count beside it says how many rows the window holds. */
@@ -62,11 +73,21 @@ export type SessionListRow = {
   name: string | null;
   role: string | null;
   user_agent: string | null;
-  ip: string | null;
+  /**
+   * D4691 — the network bucket (/24 or /48), never the address: the privacy
+   * rule the security_events ledger follows, applied to HQ's cross-account
+   * list. The account holder's own device list (routes/settings.ts) is not
+   * this list and is unchanged.
+   */
+  network: string;
   factor: string | null;
   created_at: string | null;
   last_seen_at: string | null;
   is_current: boolean;
+  /** D4691 — who holds the session: the account itself, or HQ support on its behalf. */
+  holder: Identity;
+  /** D4691 — always 'active' for a listed row; computed by the shared predicate as a cross-check. */
+  status: UserSessionStatus;
 };
 
 export type ImpersonationListRow = {
@@ -98,30 +119,39 @@ export async function listActiveSessions(
   limit: number = SESSION_LIST_LIMIT,
 ): Promise<{ rows: SessionListRow[]; total: number }> {
   const res = await env.DB.prepare(
-    `SELECT s.id, s.user_id, s.jti, s.user_agent, s.ip, s.factor, s.created_at, s.last_seen_at,
-            u.email, u.name, u.role
+    `SELECT s.id, s.user_id, s.jti, s.user_agent, s.ip, s.factor, s.created_at, s.last_seen_at, s.revoked_at,
+            u.email, u.name, u.role, u.jwt_min_iat
        FROM user_sessions s
        LEFT JOIN users u ON u.id = s.user_id
       WHERE s.revoked_at IS NULL
-        AND s.created_at >= datetime('now', ?)
+        AND datetime(s.created_at) >= datetime('now', CASE WHEN s.factor = 'hq_support' THEN ? ELSE ? END)
         AND CAST(strftime('%s', s.created_at) AS INTEGER) >= COALESCE(u.jwt_min_iat, 0)
       ORDER BY s.last_seen_at DESC, s.id DESC
       LIMIT ?`,
-  ).bind(`-${SESSION_TOKEN_HOURS} hours`, limit).all<Record<string, unknown>>();
+  ).bind(...USER_SESSION_LIFETIME_BINDS, limit).all<Record<string, unknown>>();
   const total = await countActiveSessions(env);
-  const rows = (res.results || []).map((r) => ({
-    id: Number(r.id),
-    user_id: Number(r.user_id),
-    email: (r.email as string) ?? null,
-    name: (r.name as string) ?? null,
-    role: (r.role as string) ?? null,
-    user_agent: (r.user_agent as string) ?? null,
-    ip: (r.ip as string) ?? null,
-    factor: (r.factor as string) ?? null,
-    created_at: (r.created_at as string) ?? null,
-    last_seen_at: (r.last_seen_at as string) ?? null,
-    is_current: !!currentJti && r.jti === currentJti,
-  }));
+  const now = Date.now();
+  const rows = (res.results || []).map((r) => {
+    const factor = (r.factor as string) ?? null;
+    const holder = factor === BRANCH_SUPPORT_FACTOR
+      ? supportIdentity({ id: 0 }, { id: r.user_id, name: r.name, email: r.email })
+      : userIdentity(r.user_id, r.name, r.email);
+    return {
+      id: Number(r.id),
+      user_id: Number(r.user_id),
+      email: (r.email as string) ?? null,
+      name: (r.name as string) ?? null,
+      role: (r.role as string) ?? null,
+      user_agent: (r.user_agent as string) ?? null,
+      network: networkOfAddress(r.ip),
+      factor,
+      created_at: (r.created_at as string) ?? null,
+      last_seen_at: (r.last_seen_at as string) ?? null,
+      is_current: !!currentJti && r.jti === currentJti,
+      holder,
+      status: userSessionStatus(r, now),
+    };
+  });
   return { rows, total };
 }
 
@@ -137,16 +167,18 @@ export async function countActiveSessions(env: Env): Promise<number> {
        FROM user_sessions s
        LEFT JOIN users u ON u.id = s.user_id
       WHERE s.revoked_at IS NULL
-        AND s.created_at >= datetime('now', ?)
+        AND datetime(s.created_at) >= datetime('now', CASE WHEN s.factor = 'hq_support' THEN ? ELSE ? END)
         AND CAST(strftime('%s', s.created_at) AS INTEGER) >= COALESCE(u.jwt_min_iat, 0)`,
-  ).bind(`-${SESSION_TOKEN_HOURS} hours`).first<{ n: number }>();
+  ).bind(...USER_SESSION_LIFETIME_BINDS).first<{ n: number }>();
   if (!row) throw new Error('user_sessions count returned no row');
   return Number(row.n);
 }
 
 /**
  * Support sessions whose record is open and whose token could still be valid:
- * `ended_at` is NULL and the session is inside the extension ceiling. An open
+ * `ended_at` is NULL and the session is inside the most its tokens can last
+ * (`supportSessionStatus` 'live': the extension ceiling at HQ, the single-mint
+ * lifetime for a branch session). An open
  * row older than the ceiling is a record nobody closed, not a session anybody
  * holds — no token for it can outlive `started_at + ceiling` (D248) — so it is
  * not offered as something to end, and ending it would stamp a false time.
@@ -161,10 +193,31 @@ export async function listLiveImpersonations(env: Env): Promise<ImpersonationLis
        FROM impersonation_sessions i
        LEFT JOIN users a ON a.id = i.admin_user_id
        LEFT JOIN users t ON t.id = i.target_user_id
-      WHERE i.ended_at IS NULL AND i.started_at >= datetime('now', ?)
+      WHERE i.ended_at IS NULL
+        AND datetime(i.started_at) >= datetime('now', CASE WHEN i.admin_user_id = 0 THEN ? ELSE ? END)
       ORDER BY i.started_at DESC, i.id DESC`,
-  ).bind(`-${IMPERSONATION_CEILING_MINUTES} minutes`).all<ImpersonationListRow>();
+  ).bind(...SUPPORT_SESSION_LIMIT_BINDS).all<ImpersonationListRow>();
   return res.results || [];
+}
+
+/**
+ * D4691 — the support-session counts the overview draws, by the same
+ * predicate as `listLiveImpersonations`: `live` is exactly that list's length,
+ * `not_closed` is an open record past its limit (or with no readable start),
+ * and `open` is both. THROWS when the table cannot be read.
+ */
+export async function countSupportSessions(env: Env): Promise<{ open: number; live: number; not_closed: number }> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS open,
+            COALESCE(SUM(CASE WHEN datetime(started_at) >= datetime('now', CASE WHEN admin_user_id = 0 THEN ? ELSE ? END)
+                              THEN 1 ELSE 0 END), 0) AS live
+       FROM impersonation_sessions
+      WHERE ended_at IS NULL`,
+  ).bind(...SUPPORT_SESSION_LIMIT_BINDS).first<{ open: number; live: number }>();
+  if (!row) throw new Error('impersonation_sessions count returned no row');
+  const open = Number(row.open) || 0;
+  const live = Number(row.live) || 0;
+  return { open, live, not_closed: open - live };
 }
 
 export type RevokeOutcome =

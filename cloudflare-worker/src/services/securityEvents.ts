@@ -107,15 +107,29 @@ export const SECURITY_EVENTS_NOT_COUNTED: ReadonlyArray<{ what: string; reason: 
  * in a UNIQUE tuple deduplicates nothing.
  */
 export function ipPrefix(ip: string | null | undefined): string {
-  const raw = String(ip || '').trim();
+  const raw = String(ip || '').trim().toLowerCase();
   if (!raw) return 'unknown';
   if (raw.includes(':')) {
-    const parts = raw.split(':').slice(0, 3).join(':');
-    return parts ? `${parts}::/48` : 'unknown';
+    // D4691 — the address is EXPANDED before it is cut, so a compressed form
+    // ('2001:db8::1', '::1') buckets the same as its long form instead of
+    // producing a malformed bucket, and an IPv4-mapped address buckets as the
+    // IPv4 address it is.
+    const addr = raw.replace(/%.*$/, '');
+    const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(addr);
+    if (mapped) return ipPrefix(mapped[1]);
+    const halves = addr.split('::');
+    if (halves.length > 2) return 'unknown';
+    const head = halves[0] ? halves[0].split(':') : [];
+    const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+    const missing = 8 - head.length - tail.length;
+    if (halves.length === 1 ? missing !== 0 : missing < 1) return 'unknown';
+    const groups = [...head, ...Array(Math.max(0, missing)).fill('0'), ...tail];
+    if (!groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return 'unknown';
+    return `${groups.slice(0, 3).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/48`;
   }
   const octets = raw.split('.');
-  if (octets.length !== 4) return 'unknown';
-  return `${octets.slice(0, 3).join('.')}.0/24`;
+  if (octets.length !== 4 || !octets.every((o) => /^\d{1,3}$/.test(o) && Number(o) <= 255)) return 'unknown';
+  return `${octets.slice(0, 3).map((o) => String(Number(o))).join('.')}.0/24`;
 }
 
 export interface SecurityEventInput {
@@ -129,6 +143,12 @@ export interface SecurityEventInput {
   email?: string | null;
   /** Bucketed before it is stored; the address itself never reaches the row. */
   ip?: string | null;
+  /**
+   * D4691 — set when the caller was a support operator inside a support
+   * session on `userId`'s account: the operator's HQ id, or 0 for a branch
+   * support session. Absent when the caller acted as themselves.
+   */
+  supportUserId?: number | null;
 }
 
 export type SecurityEventResult =
@@ -139,6 +159,20 @@ export type SecurityEventResult =
 const INSERT_SQL = `INSERT OR IGNORE INTO security_events
   (kind, factor, outcome, detail, user_id, subject_key, ip_prefix, branch_code, minute, occurred_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M', 'now'), datetime('now'))`;
+
+/**
+ * D4691 — the same row for a support session's caller. Its `subject_key` is
+ * the operator's, not the account holder's, so the minute's dedupe never folds
+ * an operator's event into the holder's own (or the reverse).
+ */
+const INSERT_SUPPORT_SQL = `INSERT OR IGNORE INTO security_events
+  (kind, factor, outcome, detail, user_id, subject_key, ip_prefix, branch_code, minute, occurred_at, support_user_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M', 'now'), datetime('now'), ?)`;
+
+/** A support operator id as stored: a non-negative whole number, or null. */
+export function supportUserIdOf(v: unknown): number | null {
+  return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
+}
 
 /**
  * Record one refusal or step-up. Never throws; a failure is a return value.
@@ -160,20 +194,22 @@ export async function recordSecurityEvent(env: Env, ev: SecurityEventInput): Pro
     }
     const factor = String(ev.factor || '').trim();
     if (!factor) return { recorded: false, deduped: false, reason: 'factor is required' };
-    const subjectKey = ev.email ? await hashEmail(ev.email) : '';
+    const support = supportUserIdOf(ev.supportUserId);
+    const subjectKey = support !== null ? `support:${support}` : (ev.email ? await hashEmail(ev.email) : '');
     const branch = branchOf(env) || 'hq';
-    const res = await env.DB.prepare(INSERT_SQL)
-      .bind(
-        ev.kind,
-        factor,
-        ev.outcome,
-        ev.detail ? String(ev.detail).slice(0, 80) : null,
-        typeof ev.userId === 'number' && Number.isFinite(ev.userId) ? ev.userId : null,
-        subjectKey,
-        ipPrefix(ev.ip),
-        branch,
-      )
-      .run();
+    const binds: unknown[] = [
+      ev.kind,
+      factor,
+      ev.outcome,
+      ev.detail ? String(ev.detail).slice(0, 80) : null,
+      typeof ev.userId === 'number' && Number.isFinite(ev.userId) ? ev.userId : null,
+      subjectKey,
+      ipPrefix(ev.ip),
+      branch,
+    ];
+    const res = support === null
+      ? await env.DB.prepare(INSERT_SQL).bind(...binds).run()
+      : await env.DB.prepare(INSERT_SUPPORT_SQL).bind(...binds, support).run();
     const changes = Number(res?.meta?.changes ?? 0);
     if (changes === 0) return { recorded: false, deduped: true };
     return { recorded: true, deduped: false };

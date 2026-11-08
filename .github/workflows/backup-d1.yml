@@ -192,6 +192,7 @@ jobs:
         run: |
           cat > heartbeat-d1.json <<EOF
           {
+            "schema_version": 1,
             "at": "$(date -u +%FT%TZ)",
             "source": "gha",
             "kind": "d1",

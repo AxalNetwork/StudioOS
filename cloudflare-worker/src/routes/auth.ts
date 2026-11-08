@@ -3,7 +3,7 @@ import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES } from '../auth';
+import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES, supportOperatorOf } from '../auth';
 import { branchOf } from '../util/branch';
 import { sendVerificationEmail } from '../services/email';
 import { send as sendEmail } from '../services/email/send';
@@ -1523,8 +1523,10 @@ auth.post('/step-up', safe('step-up', 'Could not verify your code. Please try ag
   // D200 — a step-up is the one event this ledger records in BOTH outcomes:
   // the stamp below overwrites a single column and would otherwise leave no
   // trail of a fresh authenticator check having been asked for, or refused.
+  // D4691 — a support session's step-up is the operator's, and says so.
+  const supportUserId = await supportOperatorOf(c, Number(user.id));
   const stepUp = (outcome: 'ok' | 'refused', detail?: string) =>
-    recordSecurityEvent(c.env, { kind: 'step_up', factor: 'totp', outcome, detail, userId: user.id, email: user.email, ip: c.req.header('cf-connecting-ip') });
+    recordSecurityEvent(c.env, { kind: 'step_up', factor: 'totp', outcome, detail, userId: user.id, email: user.email, ip: c.req.header('cf-connecting-ip'), supportUserId });
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
   const code = String(parsed.body?.totp_code || '').trim();

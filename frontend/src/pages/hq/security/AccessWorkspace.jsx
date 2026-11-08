@@ -46,11 +46,18 @@ function Time({ value, empty = 'Not stamped' }) {
   return <time dateTime={isoOf(value)} className="font-mono text-[11.5px]">{text}</time>;
 }
 
+/** D4691 — the bucket, never the address. `unknown` is a stored value that is not a bucket. */
+function networkLine(row) {
+  const n = row?.network;
+  return n && n !== 'unknown' ? `network ${n}` : 'no network recorded';
+}
+
 function SessionDetails({ row, s, tokenHours, zone }) {
   const local = (v) => (zone && zone !== 'UTC' ? formatInZone(v, zone) : null);
+  const bucket = row.network && row.network !== 'unknown' ? row.network : null;
   const items = [
     ['Session ID', <span key="i" className="font-mono">{row.id}</span>],
-    ['IP address', row.ip ? <span key="ip" className="font-mono">{row.ip}</span> : 'None stored on this session'],
+    ['Network', bucket ? <span key="net" className="font-mono">{bucket}</span> : 'no network recorded'],
     ['Started', <span key="st"><Time value={row.created_at} />{local(row.created_at) && <small className="block text-axal-faint dark:text-gray-400">Your time: {local(row.created_at)}</small>}</span>],
     ['Last active', <span key="la"><Time value={row.last_seen_at} />{local(row.last_seen_at) && <small className="block text-axal-faint dark:text-gray-400">Your time: {local(row.last_seen_at)}</small>}</span>],
     ['Expires', s.expires
@@ -58,7 +65,7 @@ function SessionDetails({ row, s, tokenHours, zone }) {
       : 'Unknown — no start time is stamped'],
     ['Sign-in factor', row.factor || 'Not stamped'],
     ['User agent', row.user_agent ? <span key="ua" className="break-all font-mono text-[11px]">{row.user_agent}</span> : 'None stored on this session'],
-    ['Location', <NI key="l">only the IP address is stored.</NI>],
+    ['Location', <NI key="l">only the network bucket is stored.</NI>],
     ['Device name', <NI key="d">only the raw user agent is stored.</NI>],
     ['Revoked by', <NI key="r">a session does not record who revoked it; the admin audit log does, in Events.</NI>],
   ];
@@ -136,7 +143,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
 
   const q = filter.trim().toLowerCase();
   const shown = q
-    ? described.filter(({ row, s }) => [s.name, row.email, s.role, s.device, row.ip].some((v) => String(v || '').toLowerCase().includes(q)))
+    ? described.filter(({ row, s }) => [s.name, row.email, s.role, s.device, row.network].some((v) => String(v || '').toLowerCase().includes(q)))
     : described;
   const selectable = ({ s }) => s.status === 'active';
   const full = selected.length >= SESSION_BULK_LIMIT;
@@ -274,6 +281,10 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
                         </td>
                         <td className={CELL}>
                           <span className={s.uaMissing || (!s.browser && !s.os) ? 'text-axal-faint dark:text-gray-400' : ''}>{s.device}</span>
+                          <span className="block text-[11px] text-axal-faint dark:text-gray-400">{networkLine(row)}</span>
+                          {row.holder?.kind === 'support' && row.holder.label && (
+                            <span className="block text-[11px] font-semibold text-red-700 dark:text-red-300">held by {row.holder.label}</span>
+                          )}
                         </td>
                         <td className={CELL}><span className="mr-1 text-axal-faint md:hidden dark:text-gray-400">Started</span><Time value={row.created_at} /></td>
                         <td className={CELL}>
@@ -338,7 +349,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
           <h2 id="access-sessions-h" className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-white">Active sessions</h2>
           {loaded && rows.length > 0 && (
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-              <label className="sr-only" htmlFor="access-filter">Filter sessions by account, browser or IP address</label>
+              <label className="sr-only" htmlFor="access-filter">Filter sessions by account, browser or network</label>
               <input
                 id="access-filter"
                 value={filter}
