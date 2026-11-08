@@ -24,7 +24,7 @@
 import type { Env } from '../../types';
 import { run as aiRun, type RunOptions, type RunResult } from '../aiRouter';
 import { OUTPUT_KINDS, type OutputKind, type Tag } from './skills';
-import { NUMBERS_MAX, checkNumberAssertion, missingDataMiss, numberMiss, statements, type NumberAssertion } from './skillAssertions';
+import { NUMBERS_MAX, assertionsMiss, checkAssertions, checkNumberAssertion, missingDataMiss, numberMiss, statements, type NumberAssertion, type SliceTwo } from './skillAssertions';
 
 export const PASS_BAR = { pass: 9, of: 10 };
 export const CASES_MAX = 20;
@@ -43,9 +43,11 @@ export async function draftHash(p: DraftParts): Promise<string> {
 
 /**
  * `numbers` (#4531) is optional: a case without it is judged exactly as before
- * apart from the field-specific missing-data rule (`skillAssertions.ts`).
+ * apart from the field-specific missing-data rule (`skillAssertions.ts`). So
+ * are `output_schema`, `structure`, `evidence`, `refusal` and `claims` (#4531
+ * slice 2, judge version 3): a case without them is judged as under version 2.
  */
-export type CaseExpect = { output: OutputKind; must_include: string[]; must_say_not_recorded: string[]; must_not_include: string[]; numbers?: NumberAssertion[] };
+export type CaseExpect = { output: OutputKind; must_include: string[]; must_say_not_recorded: string[]; must_not_include: string[]; numbers?: NumberAssertion[] } & SliceTwo;
 export type CaseInput = { records: Record<string, unknown> };
 export type CaseCheck = { ok: true; name: string; input: CaseInput; expect: CaseExpect } | { ok: false; code: 'case_invalid' | 'case_has_email'; message: string };
 
@@ -77,19 +79,25 @@ export function checkCase(raw: unknown): CaseCheck {
     }
     numbers = list as NumberAssertion[];
   }
-  if (!must.length && !nr.length && !not.length && !numbers?.length) return bad('Give the case at least one phrase it must or must not contain.');
+  // #4531 slice 2: each assertion is checked against its schema (and evidence against these records).
+  const more = checkAssertions(e, records);
+  if (!more.ok) return bad(more.message);
+  if (!must.length && !nr.length && !not.length && !numbers?.length && !Object.keys(more.value).length) {
+    return bad('Give the case at least one phrase it must or must not contain, or another assertion.');
+  }
   return {
     ok: true, name, input: { records },
-    expect: { output: e.output, must_include: must, must_say_not_recorded: nr, must_not_include: not, ...(numbers ? { numbers } : {}) },
+    expect: { output: e.output, must_include: must, must_say_not_recorded: nr, must_not_include: not, ...(numbers ? { numbers } : {}), ...more.value },
   };
 }
 
 /**
  * Whether an output meets a case's expectation; `detail` says the first miss.
  * The draft and the published evaluation both judge through here. The
- * missing-data and number rules are `skillAssertions.ts`'s (judge version 2).
+ * missing-data, number and slice-2 rules are `skillAssertions.ts`'s (judge
+ * version 3); `input` is the case's, which its evidence citations must name.
  */
-export function judge(expect: CaseExpect, output: string): { result: 'pass' | 'fail'; detail: string | null } {
+export function judge(expect: CaseExpect, output: string, input: CaseInput | null = null): { result: 'pass' | 'fail'; detail: string | null } {
   const text = output.toLowerCase();
   const parts = statements(output);
   for (const w of expect.must_include) if (!text.includes(w.toLowerCase())) return { result: 'fail', detail: `It left out "${w}".` };
@@ -102,6 +110,8 @@ export function judge(expect: CaseExpect, output: string): { result: 'pass' | 'f
     if (miss) return { result: 'fail', detail: miss };
   }
   for (const w of expect.must_not_include) if (text.includes(w.toLowerCase())) return { result: 'fail', detail: `It said "${w}", which it must not.` };
+  const miss = assertionsMiss(expect, output, parts, input?.records ?? null);
+  if (miss) return { result: 'fail', detail: miss };
   return { result: 'pass', detail: null };
 }
 
@@ -126,7 +136,7 @@ export async function runCase(env: Env, p: DraftParts, input: CaseInput, expect:
     return { result: 'not_run', detail: 'The run failed before the model answered.', usage_log_id: null };
   }
   if (!r.ok || typeof r.output !== 'string') return { result: 'not_run', detail: r.refusal ? `The run was refused: ${r.refusal}.` : 'The model gave no answer.', usage_log_id: r.usageLogId ?? null };
-  return { ...judge(expect, r.output), usage_log_id: r.usageLogId ?? null };
+  return { ...judge(expect, r.output, input), usage_log_id: r.usageLogId ?? null };
 }
 
 /**

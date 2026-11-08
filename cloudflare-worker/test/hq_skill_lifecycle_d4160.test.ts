@@ -421,3 +421,59 @@ test('#4531: the draft evaluation judges missing data per field, so an unrelated
   const good = await run('Cash is 400000. Runway: Not recorded.');
   assert.deepEqual([good.pass, good.total, good.meets_bar], [1, 1, true]);
 });
+
+test('#4531 slice 2: the draft evaluation judges structure, evidence, refusal and claims; a failed assertion counts against the 9-of-10 bar', async () => {
+  const w = world();
+  const uid = await newSkill(w);
+  await approve(w, uid);
+  // The model says what the case's record tells it to, newlines and all.
+  EVAL_DEPS.run = async (_env: any, opts: any) => {
+    const records = JSON.parse(opts.messages[0].content.slice(opts.messages[0].content.indexOf('\n') + 1));
+    return { ok: true, output: records['stripe.read'].say, usageLogId: null } as any;
+  };
+  const GOOD = '## Highlights\nMRR is 41,200 [stripe.read.mrr_usd]. Growth is steady.\n## Asks\nPlease provide the monthly burn.';
+  const kase = (i: number, say: string) => ({
+    name: `Structured ${i}`, input: { records: { 'stripe.read': { mrr_usd: 41200, say } } },
+    expect: {
+      output: 'draft', must_include: ['41,200'], must_say_not_recorded: [], must_not_include: [],
+      structure: { sections: ['Highlights', 'Asks'], ordered: true }, evidence: { cite: ['stripe.read.mrr_usd'] },
+      refusal: { mode: 'ask_for_input', subject: 'burn' }, claims: { required: [{ subject: 'growth', object: 'steady' }], forbidden: [{ subject: 'growth', object: 'guaranteed' }] },
+    },
+  });
+  const run = async (says: string[]) => {
+    const put = await call(w, SUPER, 'PUT', `${HQ}/${uid}/cases`, { reason: 'The structured golden cases.', cases: says.map((s, i) => kase(i, s)) });
+    assert.equal(put.status, 200, put.text);
+    return (await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] })).body.evals;
+  };
+  // Each output keeps every phrase and breaks exactly one new assertion.
+  const broken = [
+    [GOOD.replace('## Asks', 'Asks and next steps'), 'It has no "Asks" section.'],
+    [GOOD.replace(' [stripe.read.mrr_usd]', ' [stripe.read.arr_usd]'), "It cited [stripe.read.arr_usd], which the case's records do not hold."],
+    [GOOD.replace('Please provide the monthly burn.', 'Burn is fine.'), 'It did not ask for burn.'],
+    [GOOD.replace('Growth is steady.', 'Growth is guaranteed to be steady.'), 'It stated the forbidden claim "growth … guaranteed".'],
+  ] as const;
+  const eight = await run([...Array(8).fill(GOOD), broken[0][0], broken[1][0]]);
+  // Mutation checked: `judge()` without `assertionsMiss` → 10 of 10 pass and this fails;
+  // `runCase` judging without the case's input → the citations cannot resolve, 0 of 10 pass and this fails.
+  assert.deepEqual([eight.pass, eight.total, eight.meets_bar], [8, 10, false]);
+  assert.deepEqual(eight.cases.map((c: any) => c.results[0].detail).filter(Boolean), [broken[0][1], broken[1][1]]);
+  const refused = await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`);
+  assert.deepEqual([refused.status, refused.body.error, refused.body.pass, refused.body.total], [409, 'golden_cases_failing', 8, 10], 'an assertion miss is a fail like any other');
+  const nine = await run([...Array(9).fill(GOOD), broken[2][0]]);
+  assert.deepEqual([nine.pass, nine.total, nine.meets_bar], [9, 10, true]);
+  assert.equal(nine.cases[9].results[0].detail, broken[2][1]);
+  const last = await run([...Array(9).fill(GOOD), broken[3][0]]);
+  assert.equal(last.cases[9].results[0].detail, broken[3][1]);
+  // An assertion written to the store without `checkCase` fails the case; it never passes it.
+  w.db.prepare("UPDATE agent_skill_cases SET expect_json = json_set(expect_json, '$.structure', json('{\"sections\":\"Highlights\"}')) WHERE removed_at IS NULL").run();
+  const tampered = (await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] })).body.evals;
+  assert.deepEqual([tampered.pass, tampered.total, tampered.meets_bar], [0, 10, false]);
+  assert.match(tampered.cases[0].results[0].detail, /^The case's assertion is malformed: Give structure as/);
+  assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).body.error, 'golden_cases_failing');
+  // A malformed assertion sent through the API is refused before anything is stored.
+  const bad = kase(0, GOOD);
+  (bad.expect as any).evidence = { cite: ['stripe.read.burn_usd'] };
+  const put = await call(w, SUPER, 'PUT', `${HQ}/${uid}/cases`, { reason: 'A case citing a made-up record.', cases: [bad] });
+  assert.deepEqual([put.status, put.body.error], [400, 'case_invalid']);
+  assert.match(put.text, /citation of stripe\.read\.burn_usd, which its records do not hold/);
+});
