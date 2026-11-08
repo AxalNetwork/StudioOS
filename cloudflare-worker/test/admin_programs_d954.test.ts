@@ -61,6 +61,9 @@ BUILT.exec(M560); // whole, as the deploy applies it: a failure here fails the f
 // D955 (#2788): 561 adds programs.licence_uid, which every registry read now selects; the deploy applies it after 560.
 BUILT.exec(readFileSync(resolve(MIGRATIONS, '561_program_proposals.sql'), 'utf8'));
 BUILT.exec(readFileSync(resolve(MIGRATIONS, '202611072010_program_approved_specs.sql'), 'utf8')); // D4808
+// D4807: People taking part reads the episode views, which sit over 565's mentor events and 560's enrolment events.
+BUILT.exec(readFileSync(resolve(MIGRATIONS, '565_advisor_cohort_assignment_events.sql'), 'utf8'));
+BUILT.exec(readFileSync(resolve(MIGRATIONS, '202611072215_programs_participation_episodes_4807.sql'), 'utf8'));
 
 /** A copy of BUILT, its schema and every row it holds (560's seed and 381's rules included). */
 function fresh(): DatabaseSync {
@@ -85,6 +88,20 @@ function fresh(): DatabaseSync {
   }
   db.exec(`INSERT INTO super_admins (user_id) VALUES (${SUPER});`);
   return db;
+}
+
+/**
+ * D4807: the assign and end routes write a 565 event beside each assignment row. A fixture that inserts rows
+ * directly gives each one the same events, so People taking part (which reads the episodes) sees them.
+ */
+function recordAssignmentEvents(db: DatabaseSync) {
+  db.exec(`INSERT INTO advisor_cohort_assignment_events (assignment_id, advisor_user_id, cohort_cycle_id, kind, admin_user_id, note, created_at)
+      SELECT a.id, a.advisor_user_id, a.cohort_cycle_id, 'assigned', NULL, NULL, a.assigned_at FROM advisor_cohort_assignments a
+       WHERE NOT EXISTS (SELECT 1 FROM advisor_cohort_assignment_events e WHERE e.assignment_id = a.id AND e.kind = 'assigned');
+    INSERT INTO advisor_cohort_assignment_events (assignment_id, advisor_user_id, cohort_cycle_id, kind, admin_user_id, note, created_at)
+      SELECT a.id, a.advisor_user_id, a.cohort_cycle_id, 'ended', NULL, NULL, a.unassigned_at FROM advisor_cohort_assignments a
+       WHERE a.unassigned_at IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM advisor_cohort_assignment_events e WHERE e.assignment_id = a.id AND e.kind = 'ended');`);
 }
 
 /** Every Programs response this file reads, so the last test covers them all. */
@@ -129,6 +146,7 @@ function catalogueFixture(db: DatabaseSync) {
     ('as-1', ${ADV1}, 1, '2026-10-05 10:00:00', NULL, 1),
     ('as-2', ${FORMER}, 2, '2026-09-20 10:00:00', NULL, 1),
     ('as-3', ${ADV1}, 4, '2026-08-20 10:00:00', '2026-09-30 10:00:00', 0);`);
+  recordAssignmentEvents(db);
   // Queues: two cohort applications (2 h and 80 h), two open referrals (30 h, 1 h waiting on the member),
   // one closed referral, one perk in review (edited 50 h ago), one pending host (10 h).
   db.prepare(`INSERT INTO cohort_applicants (application_id, user_id, cohort_cycle_id, status, created_at) VALUES (1, ?, 1, 'pending', ?), (2, ?, 1, 'pending', ?), (3, ?, 1, 'accepted', ?)`)
@@ -378,6 +396,7 @@ test('the catalogue leaves a deactivated Advisor out (D960): no mentor, no cohor
   // A third Advisor holds the running cycle B, which only FORMER held, on a deactivated account.
   db.exec(`INSERT INTO users (id, uid, email, name, role, is_active) VALUES (9, 'u-9', 'person9@example.test', 'Ola Off', 'advisor', 0);
     INSERT INTO advisor_cohort_assignments (uid, advisor_user_id, cohort_cycle_id, assigned_at, unassigned_at, is_active) VALUES ('as-9', 9, 2, '2026-10-02 10:00:00', NULL, 1);`);
+  recordAssignmentEvents(db);
   const mentor = rowOf(await programCatalogue(envOf(db), { id: SUPER, superAdmin: true }, 4, NOW), 'mentor-cohorts');
   assert.deepEqual(mentor.figures.mentors, { available: true, count: 1 }, 'ADV1 only: the deactivated Advisor is not an active mentor');
   assert.deepEqual(mentor.figures.coverage, { available: true, cohorts: 2, covered: 1, uncovered: 1 }, 'B stays uncovered');

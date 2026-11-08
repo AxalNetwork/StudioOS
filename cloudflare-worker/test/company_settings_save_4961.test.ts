@@ -31,7 +31,7 @@ const ROLE: Record<number, string> = { [ADA]: 'founder', [BEN]: 'founder', [EVE]
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
-  for (const m of ['597_company_archive_and_events.sql', '685_company_legal_record_and_slugs.sql', '757_company_default_currency.sql', '202611031619_company_logo_change_event.sql']) db.exec(mig(m));
+  for (const m of ['597_company_archive_and_events.sql', '685_company_legal_record_and_slugs.sql', '757_company_default_currency.sql', '202611031619_company_logo_change_event.sql', '202611072255_company_profile_version.sql']) db.exec(mig(m));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   for (const [id, n] of [[ADA, 'Ada'], [BEN, 'Ben'], [EVE, 'Eve']] as const) u.run(id, ROLE[id], `${n} Made-up`, `${n.toLowerCase()}@example.test`);
   db.prepare("INSERT INTO company_profiles (id, uid, company_name, description, created_at, updated_at) VALUES (?, 'co-north', 'Northwind', 'Before', '2026-01-01', '2026-01-01')").run(NORTH);
@@ -92,7 +92,7 @@ test('the fields and a new logo commit together, with their events, and the answ
   assert.equal(row(db).company_name, 'Northwind Labs');
   assert.ok(storedLogoOf('co-north', row(db).logo_url), 'the logo is the stored one');
   assert.equal(objects.store.size, 1);
-  assert.deepEqual(events(db), ['rename', 'logo_change'], 'one batch wrote both events');
+  assert.deepEqual(events(db), ['profile_update', 'rename', 'logo_change'], 'one batch wrote the field audit, the rename and the logo');
   assert.equal(r.body.description, 'After');
   assert.equal(r.body.logo_url, row(db).logo_url, 'the answer carries the committed logo');
   assert.equal(r.body.viewer.can_edit, true);
@@ -150,9 +150,9 @@ test('a retry of the same save is idempotent: the same values, and still one sto
   const db = fixture(); const objects = r2(); const env = envOf(db, objects);
   const send = () => call(env, ADA, settings({ fields: { description: 'Same', website: 'northwind.example' }, logo: png() }));
   assert.equal((await send()).status, 200);
-  const once = { ...row(db), logo_url: undefined, updated_at: undefined };
+  const once = { ...row(db), logo_url: undefined, updated_at: undefined, profile_version: undefined };
   assert.equal((await send()).status, 200);
-  assert.deepEqual({ ...row(db), logo_url: undefined, updated_at: undefined }, once, 'the fields are the same values');
+  assert.deepEqual({ ...row(db), logo_url: undefined, updated_at: undefined, profile_version: undefined }, once, 'the fields are the same values');
   assert.equal(objects.store.size, 1, 'the retry replaced the logo, it did not add a second');
 });
 

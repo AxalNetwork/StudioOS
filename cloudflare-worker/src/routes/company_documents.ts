@@ -35,7 +35,7 @@ import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
-import { companyWriteDenial, isSupportSession, viewerIsMember, type WriteDenial } from '../services/companyAccess';
+import { archivedRefusal, companyWriteDenial, isArchived, isSupportSession, viewerIsMember, type WriteDenial } from '../services/companyAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -197,7 +197,7 @@ r.post('/company/:uid/documents', async (c) => {
         ? refuse(c, 403, { code: 'not_editor', message: 'Only an owner, admin or founder of this company can upload its documents.' })
         : refuse(c, 403, { code: access.denial.code, message: access.denial.message });
     }
-    if (access.company.archived_at) return refuse(c, 409, { code: 'archived', message: 'This company is archived. Restore it before you add documents.' });
+    if (isArchived(access.company)) return archivedRefusal(c);
 
     const fileRequired = () => refuse(c, 400, { code: 'file_required', message: 'Choose a file to upload.' });
     if (!(c.req.header('content-type') || '').toLowerCase().includes('multipart/form-data')) return fileRequired();

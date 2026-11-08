@@ -4220,6 +4220,10 @@ export const api = {
   fileAdvisorReview: (bookingId, data) =>
     request(`/advisors/bookings/${bookingId}/review`, { method: 'POST', body: JSON.stringify(data) }),
   listBookingReviews: (bookingId) => request(`/advisors/bookings/${bookingId}/reviews`),
+  // #4702 (D4702): review coverage over EVERY completed session in one read:
+  // { held, reviewed, awaiting, ratings: { count, sum }, items: [{ booking_id,
+  // reviews, advisor_filed }], items_complete }. A failed read is unknown, never "no review".
+  getMyAdvisorReviewCoverage: () => request('/advisors/me/review-coverage'),
 
   // ---------- The advisor's own stores (migrations 203-206) ----------
   // Every one of these is scoped server-side on the signed-in user; none takes

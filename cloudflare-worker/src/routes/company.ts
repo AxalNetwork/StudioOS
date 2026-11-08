@@ -20,7 +20,9 @@ import { hashInviteToken } from '../services/projectAccess';
 import { refuse } from '../util/refusal';
 // D1592 (#3860): the two company gates live in one place; company_documents.ts imports them too.
 import { GENERAL_FIELDS, validateCompanyFields } from '../services/companyProfileFields';
-import { canEdit, companyWriteDenial, denialBody, isSupportSession, viewerCapability, viewerIsMember } from '../services/companyAccess';
+import {
+  archivedRefusal, canEdit, capabilityFromLink, companyWriteDenial, denialBody, isArchived, isSupportSession, viewerIsMember,
+} from '../services/companyAccess';
 import {
   validatePerson, validateCoverage, validatePlan, personDto,
 } from '../services/companyTeam';
@@ -29,6 +31,7 @@ import { seatEndedStatements } from '../services/compliance/companyTasks';
 import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { legalPatch, MESSAGES as LEGAL_MESSAGES } from './company_legal';
 import { currencyCode, CURRENCY_INVALID_MESSAGE } from '../services/currencies';
+import { VOCAB_MESSAGES, checkRegionCodes, regionsOf } from '../services/companyProfileVocab';
 import {
   MAX_LOGO_BYTES, LOGO_CONTENT_TYPE, LOGO_MESSAGES, checkLogo, logoHeaders, logoKeyFor, logoUrlFor, newLogoToken, storedLogoOf,
 } from '../services/companyLogo';
@@ -47,6 +50,10 @@ type Company = {
   archived_at?: string | null;
   /** #3932 (migration 757): an ISO 4217 code; null is not recorded, never USD. */
   default_currency?: string | null;
+  /** #4963 (migration 202611072255): the General profile's revision, the compare-and-swap token. */
+  profile_version?: number;
+  /** #4964 (migration 202611072325): the regions as canonical codes, a JSON array; null derives them from the text. */
+  region_codes?: string | null;
   created_at: string; updated_at: string;
 };
 type Link = {
@@ -81,18 +88,33 @@ async function detailDto(env: Env, c: Company, viewer: User, support = false): P
   out.archived_at = c.archived_at ?? null;
   // #3932: null is "Not recorded"; no currency is assumed.
   out.default_currency = c.default_currency ?? null;
-  const isMember = await viewerIsMember(env, c.id, viewer);
+  // #4963: the token a General edit sends back as `expected_version`.
+  out.profile_version = Number.isSafeInteger(c.profile_version) ? c.profile_version : 1;
+  // #4964: regions as codes for matching; `source` says stored or derived from the legacy text, `unmapped` what no
+  // code covers, so a legacy entry is shown to the editor rather than dropped.
+  const regions = regionsOf(c);
+  out.region_codes = regions.codes;
+  out.regions = { source: regions.source, unmapped: regions.unmapped };
+  // #4964: ONE bounded read for the roster, joined to the accounts it names, in place of a user lookup per member.
+  // Membership and the edit rule are decided from the same rows (`linkCanEdit` is `canEdit`'s rule on a link in
+  // hand), so a company with fifty members costs one query here, not fifty-three.
+  const roster = await env.DB.prepare(
+    `SELECT l.*, u.id AS member_id, u.name AS member_name, u.email AS member_email
+       FROM user_company_links l JOIN users u ON u.id = l.user_id
+      WHERE l.company_id = ?
+      ORDER BY l.id ASC`
+  ).bind(c.id).all<Link & { member_id: number; member_name: string; member_email: string }>();
+  const rows = roster.results || [];
+  const own = rows.find((r) => Number(r.user_id) === Number(viewer.id)) ?? null;
+  const isMember = isAdmin(viewer) || !!own;
   // D431 — economics are the member's and the editors'. `canEdit` is the rule
   // that already decides who may WRITE carry; the same rule decides who may
   // read it, so a reader who could not change a figure is never shown it.
-  const editor = await canEdit(env, c, viewer);
-  const links = await env.DB.prepare('SELECT * FROM user_company_links WHERE company_id = ?')
-    .bind(c.id).all<Link>();
+  // #4964: given the viewer's link from the roster above, it makes no query of its own.
+  const editor = await canEdit(env, c, viewer, { link: own });
   const members: any[] = [];
-  for (const lnk of links.results || []) {
-    const u = await env.DB.prepare('SELECT id, name, email FROM users WHERE id = ?')
-      .bind(lnk.user_id).first<{ id: number; name: string; email: string }>();
-    if (!u) continue;
+  for (const lnk of rows) {
+    const u = { id: lnk.member_id, name: lnk.member_name, email: lnk.member_email };
     members.push({
       user_id: u.id, name: u.name,
       // #3841: a member's email goes to that member only (the canvas: "Never show another member's email").
@@ -119,8 +141,10 @@ async function detailDto(env: Env, c: Company, viewer: User, support = false): P
   out.members = members;
   out.member_count = members.length;
   out.viewer_is_member = isMember;
-  // D4960: what the server will accept from this viewer, so the page draws that and not a guess from a cached role.
-  out.viewer = await viewerCapability(env, c, viewer, support);
+  // #4964: the seat rule, from this roster, so the header, the form and the preview read one answer.
+  out.viewer_can_edit = editor;
+  // D4960: what a write will accept. Computed from the same roster, so this read stays one joined query.
+  out.viewer = capabilityFromLink(viewer, support, own);
   return out;
 }
 
@@ -135,8 +159,11 @@ async function getCompanyOr404(env: Env, uid: string): Promise<Company | null> {
  */
 async function writeGate(c: any, company: Company, user: User, notEditor: () => Response): Promise<Response | null> {
   const denial = await companyWriteDenial(c.env, company, user, await isSupportSession(c));
-  if (!denial) return null;
-  return denial.reason === 'not_an_editor' ? notEditor() : c.json(denialBody(denial), 403);
+  if (denial) return denial.reason === 'not_an_editor' ? notEditor() : c.json(denialBody(denial), 403);
+  // #4963: an editor of an archived company is refused with the one archived sentence. A non-editor already
+  // returned above, so a stranger is never told the company is archived.
+  if (isArchived(company)) return archivedRefusal(c);
+  return null;
 }
 
 async function getLink(env: Env, companyId: number, userId: number): Promise<Link | null> {
@@ -344,25 +371,78 @@ r.post('/company/create', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// General settings: one plan, two doors (D4962, D4961)
+// General settings: one plan, two doors (D4962, D4961, D4963)
 //
 // `PATCH /company/:uid` (the fields) and `POST /company/:uid/settings` (the
 // fields and a pending logo together, below) check and build the same update
 // with `planGeneralUpdate`, so the contract cannot differ between them.
+//
+// #4963: every write is compare-and-swap on `profile_version`. `expected_version`
+// (optional) refuses a stale editor with 409 `version_conflict` and the current
+// company. A field the client sends unchanged is not re-checked and not rewritten,
+// so a value stored before the contract survives a save that leaves it alone (#4964).
 // ---------------------------------------------------------------------------
 
-type GeneralPlan = { values: Record<string, any>; events: any[] };
+type GeneralPlan = { values: Record<string, any>; current: number };
+
+export const VERSION_CONFLICT_MESSAGE = 'Someone else saved changes to this company after you opened it, so yours were not saved. The current values are shown; review them and save again.';
+
+/** 409 with the current company, for an editor to reconcile against. */
+async function versionConflict(c: any, companyId: number, user: User) {
+  const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(companyId).first() as Company | null;
+  const company = fresh ? await detailDto(c.env, fresh, user, await isSupportSession(c)) : null;
+  return refuse(c, 409, {
+    code: 'version_conflict', message: VERSION_CONFLICT_MESSAGE,
+    extra: { code: 'version_conflict', current_version: company?.profile_version ?? null, company },
+  });
+}
+
+/** `expected_version` from a body or form: a positive whole number, absent (undefined), or invalid (NaN). */
+export function expectedVersionOf(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const n = typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : raw;
+  return typeof n === 'number' && Number.isSafeInteger(n) && n >= 1 ? n : NaN;
+}
+
+const sameValue = (a: unknown, b: unknown) => (a ?? null) === (b ?? null)
+  || (a != null && b != null && String(a) === String(b));
 
 /**
- * The checked values to store and the membership events that go with them, or the refusal to return.
+ * The checked values to store, or the refusal to return.
  * D4962: the General fields are checked against one contract (`services/companyProfileFields.ts`) before
- * any write: an unknown field, a link in place of an upload, an unsupported stage, a negative head count
- * and an over-long string are refused, and URLs and regions are stored canonical.
+ * any write. #4964: `region_codes` is checked beside that list, and a value equal to what is stored is left
+ * out so a legacy row is not rewritten by a save that did not change it.
  */
 async function planGeneralUpdate(c: any, company: Company, user: User, input: unknown): Promise<Response | GeneralPlan> {
-  const checked = validateCompanyFields(input);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return c.json({ code: 'body_invalid', field: '', detail: 'Send the fields as a JSON object.' }, 400);
+  }
+  const raw: Record<string, any> = { ...(input as Record<string, any>) };
+  const expected = expectedVersionOf(raw.expected_version);
+  if (Number.isNaN(expected)) return refuse(c, 400, { code: 'invalid_expected_version', message: 'expected_version must be the profile_version you loaded.' });
+  const current = Number.isSafeInteger(company.profile_version) ? company.profile_version! : 1;
+  if (expected !== undefined && expected !== current) return versionConflict(c, company.id, user);
+  delete raw.expected_version;
+
+  let regionCodes: string | null | undefined;
+  if ('region_codes' in raw) {
+    const region = checkRegionCodes(raw.region_codes);
+    if (!region.ok) return refuse(c, 422, { code: 'region_codes_invalid', message: VOCAB_MESSAGES.region_codes_invalid });
+    if (!sameValue(region.value, company.region_codes ?? null)) regionCodes = region.value;
+    delete raw.region_codes;
+  }
+  for (const f of GENERAL_FIELDS) {
+    if (!(f in raw)) continue;
+    if (f === 'company_name') {
+      if (typeof raw.company_name === 'string' && raw.company_name.trim() === company.company_name) delete raw.company_name;
+      continue;
+    }
+    if (sameValue(raw[f], (company as any)[f])) delete raw[f];
+  }
+
+  const checked = validateCompanyFields(raw);
   if (!checked.ok) return c.json({ code: checked.code, field: checked.field, detail: checked.detail }, 400);
-  const body: Record<string, any> = { ...(input as Record<string, any>), ...checked.values };
+  const body: Record<string, any> = { ...raw, ...checked.values };
   if (body.company_name !== undefined) {
     const name = typeof body.company_name === 'string' ? body.company_name.trim() : '';
     if (!name || name.length > 200) return c.json({ code: 'invalid_company_name', detail: 'Enter a company name between 1 and 200 characters.' }, 400);
@@ -379,31 +459,44 @@ async function planGeneralUpdate(c: any, company: Company, user: User, input: un
     if (!code) return c.json({ code: 'currency_invalid', detail: CURRENCY_INVALID_MESSAGE }, 422);
     body.default_currency = code;
   }
-  // `logo_url` is not in this list: the logo changes only through its own routes (POST and DELETE
-  // /company/:uid/logo) or the settings save below, never as a field.
   const values: Record<string, any> = {};
   for (const f of GENERAL_FIELDS) if (body[f] !== undefined) values[f] = body[f];
-  // D1137: a rename is a membership event, recorded with the update.
-  const renamed = values.company_name !== undefined && values.company_name !== company.company_name;
-  // #3932: a currency change is a company event too, in the same batch.
-  const currencyChanged = values.default_currency !== undefined && values.default_currency !== (company.default_currency ?? null);
-  return {
-    values,
-    events: [
-      ...(renamed ? [membershipEvent(c.env, { kind: 'rename', companyId: company.id, actorUserId: user.id, before: { company_name: company.company_name }, after: { company_name: values.company_name } })] : []),
-      ...(currencyChanged ? [membershipEvent(c.env, { kind: 'currency_change', companyId: company.id, actorUserId: user.id, before: { default_currency: company.default_currency ?? null }, after: { default_currency: values.default_currency } })] : []),
-    ],
-  };
+  if (regionCodes !== undefined) values.region_codes = regionCodes;
+  // #4964, the lazy migration: a row that has never stored codes stores the ones its text derives on its first
+  // committed General save. Never on a save that changes nothing.
+  if (Object.keys(values).length && company.region_codes == null && values.region_codes === undefined) {
+    const text = values.international_presence !== undefined ? values.international_presence : company.international_presence;
+    const derived = regionsOf({ region_codes: null, international_presence: text }).codes;
+    if (derived.length) values.region_codes = JSON.stringify(derived);
+  }
+  return { values, current };
 }
 
-/** The one UPDATE for a plan's values (and, from the settings save, the server-built `logo_url`). */
-function generalUpdate(env: Env, company: Company, values: Record<string, any>) {
+/** The one UPDATE for a plan's values (and, from the settings save, the server-built logo). Conditioned on the version this request read. */
+function generalUpdate(env: Env, company: Company, values: Record<string, any>, current: number, stamp: string) {
   const sets: string[] = []; const params: any[] = [];
-  for (const f of [...GENERAL_FIELDS, 'logo_url'] as const) {
+  for (const f of [...GENERAL_FIELDS, 'logo_url', 'region_codes'] as const) {
     if (values[f] !== undefined) { sets.push(`${f} = ?`); params.push(values[f]); }
   }
-  sets.push('updated_at = ?'); params.push(nowIso()); params.push(company.id);
-  return env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ?`).bind(...params);
+  sets.push('updated_at = ?', 'profile_version = profile_version + 1');
+  params.push(stamp, company.id, current);
+  return env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ? AND profile_version = ?`).bind(...params);
+}
+
+/** The update plus the events conditioned on THIS update having matched (the new version and this stamp). */
+function generalCommit(env: Env, company: Company, user: User, values: Record<string, any>, current: number) {
+  const stamp = nowIso();
+  const next = current + 1;
+  const when = { companyId: company.id, actorUserId: user.id, onlyIfProfile: { version: next, updatedAt: stamp } };
+  const fields = Object.keys(values).filter((f) => f !== 'logo_url');
+  const events = [
+    ...(fields.length ? [membershipEvent(env, { kind: 'profile_update', ...when, before: { profile_version: current }, after: { profile_version: next, fields } })] : []),
+    ...(values.company_name !== undefined && values.company_name !== company.company_name
+      ? [membershipEvent(env, { kind: 'rename', ...when, before: { company_name: company.company_name }, after: { company_name: values.company_name } })] : []),
+    ...(values.default_currency !== undefined && values.default_currency !== (company.default_currency ?? null)
+      ? [membershipEvent(env, { kind: 'currency_change', ...when, before: { default_currency: company.default_currency ?? null }, after: { default_currency: values.default_currency } })] : []),
+  ];
+  return { stamp, when, update: generalUpdate(env, company, values, current, stamp), events };
 }
 
 // /company/:uid (PATCH update / GET detail-or-summary)
@@ -418,7 +511,9 @@ r.patch('/company/:uid', async (c) => {
     const plan = await planGeneralUpdate(c, company, user, body);
     if (plan instanceof Response) return plan;
     if (Object.keys(plan.values).length) {
-      await c.env.DB.batch([generalUpdate(c.env, company, plan.values), ...plan.events]);
+      const commit = generalCommit(c.env, company, user, plan.values, plan.current);
+      const results = await c.env.DB.batch([commit.update, ...commit.events]);
+      if (!(Number((results[0] as any)?.meta?.changes) > 0)) return versionConflict(c, company.id, user);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
     return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
@@ -507,14 +602,22 @@ r.get('/companies', async (c) => {
 const logoStore = (env: Env) => env.COMPANY_LOGOS ?? null;
 const storageUnconfigured = (c: any) => refuse(c, 503, { code: 'storage_unconfigured', message: 'Logo storage is not configured on this deployment.' });
 
-/** The company and the edit gate exactly as PATCH /company/:uid applies it; a Response when refused. */
-async function logoEditGate(c: any): Promise<{ user: User; company: Company } | Response> {
+/**
+ * The company and the edit gate exactly as PATCH /company/:uid applies it; a Response when refused.
+ * #4963: an archived company refuses; `?expected_version=` is checked as PATCH checks it, and `current` is the
+ * version the logo write is conditioned on (a logo is part of the General profile and bumps its revision).
+ */
+async function logoEditGate(c: any): Promise<{ user: User; company: Company; current: number } | Response> {
   const user = await requireAuth(c);
   const company = await getCompanyOr404(c.env, c.req.param('uid'));
   if (!company) return c.json({ detail: 'Company not found' }, 404);
   const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to edit this company' }, 403));
   if (denied) return denied;
-  return { user, company };
+  const current = Number.isSafeInteger(company.profile_version) ? company.profile_version! : 1;
+  const expected = expectedVersionOf(c.req.query('expected_version'));
+  if (Number.isNaN(expected)) return refuse(c, 400, { code: 'invalid_expected_version', message: 'expected_version must be the profile_version you loaded.' });
+  if (expected !== undefined && expected !== current) return versionConflict(c, company.id, user);
+  return { user, company, current };
 }
 
 /** What kind of logo a row holds, for the event: never the URL itself. */
@@ -530,7 +633,7 @@ r.post('/company/:uid/logo', async (c) => {
   try {
     const gate = await logoEditGate(c);
     if (gate instanceof Response) return gate;
-    const { user, company } = gate;
+    const { user, company, current } = gate;
     const store = logoStore(c.env);
     if (!store) return storageUnconfigured(c);
 
@@ -559,15 +662,22 @@ r.post('/company/:uid/logo', async (c) => {
       return refuse(c, 502, { code: 'storage_failed', message: 'The logo could not be stored. Try again.', raw: e });
     }
     const previous = storedLogoOf(company.uid, company.logo_url);
+    let results: D1Result[];
+    const stamp = nowIso();
     try {
-      await c.env.DB.batch([
-        c.env.DB.prepare('UPDATE company_profiles SET logo_url = ?, updated_at = ? WHERE id = ?')
-          .bind(logoUrlFor(company.uid, token, check.kind), nowIso(), company.id),
-        membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: 'stored' } }),
+      results = await c.env.DB.batch([
+        c.env.DB.prepare('UPDATE company_profiles SET logo_url = ?, updated_at = ?, profile_version = profile_version + 1 WHERE id = ? AND profile_version = ?')
+          .bind(logoUrlFor(company.uid, token, check.kind), stamp, company.id, current),
+        membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, onlyIfProfile: { version: current + 1, updatedAt: stamp }, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: 'stored' } }),
       ]);
     } catch (e) {
       await dropStoredLogo(store, key);
       throw e;
+    }
+    // #4963: another General write landed first; the stored object is dropped and the editor is told.
+    if (!(Number((results[0] as any)?.meta?.changes) > 0)) {
+      await dropStoredLogo(store, key);
+      return versionConflict(c, company.id, user);
     }
     if (previous && previous.key !== key) await dropStoredLogo(store, previous.key);
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
@@ -579,15 +689,18 @@ r.delete('/company/:uid/logo', async (c) => {
   try {
     const gate = await logoEditGate(c);
     if (gate instanceof Response) return gate;
-    const { user, company } = gate;
+    const { user, company, current } = gate;
     const previous = storedLogoOf(company.uid, company.logo_url);
     const store = logoStore(c.env);
     if (previous && !store) return storageUnconfigured(c);
     if (company.logo_url != null) {
-      await c.env.DB.batch([
-        c.env.DB.prepare('UPDATE company_profiles SET logo_url = NULL, updated_at = ? WHERE id = ?').bind(nowIso(), company.id),
-        membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }),
+      const stamp = nowIso();
+      const results = await c.env.DB.batch([
+        c.env.DB.prepare('UPDATE company_profiles SET logo_url = NULL, updated_at = ?, profile_version = profile_version + 1 WHERE id = ? AND profile_version = ?').bind(stamp, company.id, current),
+        membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, onlyIfProfile: { version: current + 1, updatedAt: stamp }, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }),
       ]);
+      // #4963: another General write landed first; nothing was removed (the object stays with the row that names it).
+      if (!(Number((results[0] as any)?.meta?.changes) > 0)) return versionConflict(c, company.id, user);
     }
     if (previous && store) await dropStoredLogo(store, previous.key);
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
@@ -677,20 +790,23 @@ r.post('/company/:uid/settings', async (c) => {
       }
     }
     const values = { ...plan.values };
-    const events = [...plan.events];
-    if (upload) {
-      values.logo_url = logoUrlFor(company.uid, upload.token, upload.kind);
-      events.push(membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: 'stored' } }));
-    } else if (action === 'remove' && company.logo_url != null) {
-      values.logo_url = null;
-      events.push(membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }));
-    }
+    if (upload) values.logo_url = logoUrlFor(company.uid, upload.token, upload.kind);
+    else if (action === 'remove' && company.logo_url != null) values.logo_url = null;
     if (Object.keys(values).length) {
+      const commit = generalCommit(c.env, company, user, values, plan.current);
+      const events = [...commit.events];
+      if (upload) events.push(membershipEvent(c.env, { kind: 'logo_change', ...commit.when, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: 'stored' } }));
+      else if (action === 'remove' && company.logo_url != null) events.push(membershipEvent(c.env, { kind: 'logo_change', ...commit.when, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }));
+      let results;
       try {
-        await c.env.DB.batch([generalUpdate(c.env, company, values), ...events]);
+        results = await c.env.DB.batch([commit.update, ...events]);
       } catch (e) {
         if (upload && store) await dropStoredLogo(store, upload.key);
         throw e;
+      }
+      if (!(Number((results[0] as any)?.meta?.changes) > 0)) {
+        if (upload && store) await dropStoredLogo(store, upload.key);
+        return versionConflict(c, company.id, user);
       }
     }
     // 3. Committed. The previous object is an orphan now; failing to delete it never makes the save fail.
@@ -834,6 +950,8 @@ r.post('/company/:uid/leave', async (c) => {
     if (!company) return c.json({ detail: 'Company not found' }, 404);
     const link = await getLink(c.env, company.id, user.id);
     if (!link) return c.json({ detail: 'Company not found' }, 404);
+    // #4963: an archived company is read-only, leaving included; restore it first.
+    if (isArchived(company)) return archivedRefusal(c);
     // One statement makes the last-admin check hold even for simultaneous leaves.
     // D1614 (#3976): the member's open compliance tasks are flagged in the same batch, only if the seat went.
     const [result] = await c.env.DB.batch([c.env.DB.prepare(
@@ -1247,7 +1365,7 @@ async function teamCompanyOr404(c: any): Promise<{ user: User; company: Company;
   return { user, company, editor: await canEdit(c.env, company, user) };
 }
 
-// D4960: the team record's writes use the same gate as the rest of settings; its reads keep `editor` (salary is an editor's to read).
+// D4960: the team record's writes use the same gate as the rest of settings (including #4963's archived refusal); its reads keep `editor`.
 async function teamWriteGate(c: any, ctx: { user: User; company: Company }): Promise<Response | null> {
   return writeGate(c, ctx.company, ctx.user, () => refuse(c, 403, {
     code: 'not_an_editor',

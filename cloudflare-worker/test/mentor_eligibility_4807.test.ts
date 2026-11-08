@@ -98,6 +98,7 @@ test('every reader asks the one rule: no route or service tests the primary role
     const text = src(f);
     assert.ok(text.includes(ELIGIBLE_PLACEHOLDER), `${f} uses the shared rule`);
     assert.ok(text.includes('withMentorEligible'), `${f} swaps it through withMentorEligible`);
-    assert.equal(/role\s*=\s*'advisor'/i.test(text), false, `${f} has no primary-role-only test`);
+    // A bare `role` (or `u.role`) column only: `reviewer_role = 'advisor'` (who filed a review, #4702) is not eligibility.
+    assert.equal(/(?<!\w)role\s*=\s*'advisor'/i.test(text), false, `${f} has no primary-role-only test`);
   }
 });

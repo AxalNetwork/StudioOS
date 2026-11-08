@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, NavLink, useParams } from 'react-router-dom';
+import { Link, Navigate, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { teamsApi } from '../../../lib/api/teams';
 import { companyActionsApi } from '../../../lib/api/companyActions.js';
@@ -58,7 +58,15 @@ function useBlock(load, tick) {
  * Team opens the company's Team page (D1497); the other three are this page.
  */
 export function SettingsHead({ uid, name, tab }) {
-  const tabCls = ({ isActive }) => `whitespace-nowrap border-b-2 px-1 pb-2 text-[13.5px] font-semibold ${isActive ? 'border-axal-violet text-axal-ink dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`;
+  // #4964: these are links between pages, so they are a labelled navigation whose current page is
+  // `aria-current="page"`, not an ARIA tablist (which promises arrow-key tabs and panels it never had).
+  const linkCls = (on) => `whitespace-nowrap border-b-2 px-1 pb-2 text-[13.5px] font-semibold ${on ? 'border-axal-violet text-axal-ink dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`;
+  const items = [
+    ['team', 'Team', companyTeamPath(uid)],
+    ['general', 'General', companySettingsPathFor(uid)],
+    ['legal', 'Legal', companyLegalPath(uid)],
+    ['projects', 'Projects', companyProjectsPath(uid)],
+  ];
   return (
     <header className="flex flex-col gap-3" data-testid="company-settings-head">
       <span className="flex flex-wrap items-center gap-3">
@@ -68,11 +76,14 @@ export function SettingsHead({ uid, name, tab }) {
           <h1 className={`m-0 text-[24px] font-extrabold tracking-[-.02em] ${INK}`}>{name || 'Company settings'}</h1>
         </span>
       </span>
-      <nav role="tablist" aria-label="Company settings" className="flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" data-testid="company-settings-tabs">
-        <NavLink end to={companyTeamPath(uid)} role="tab" aria-selected={tab === 'team'} className={tabCls}>Team</NavLink>
-        <NavLink end to={companySettingsPathFor(uid)} role="tab" aria-selected={tab === 'general'} className={tabCls}>General</NavLink>
-        <NavLink end to={companyLegalPath(uid)} role="tab" aria-selected={tab === 'legal'} className={tabCls}>Legal</NavLink>
-        <NavLink to={companyProjectsPath(uid)} role="tab" aria-selected={tab === 'projects'} className={() => tabCls({ isActive: tab === 'projects' })}>Projects</NavLink>
+      <nav aria-label="Company settings" data-testid="company-settings-tabs">
+        <ul className="m-0 flex list-none gap-5 overflow-x-auto border-b border-axal-hairline p-0 dark:border-gray-700">
+          {items.map(([key, label, to]) => (
+            <li key={key}>
+              <Link to={to} aria-current={tab === key ? 'page' : undefined} className={`inline-block ${linkCls(tab === key)}`} data-testid={`company-settings-link-${key}`}>{label}</Link>
+            </li>
+          ))}
+        </ul>
       </nav>
     </header>
   );
@@ -165,17 +176,30 @@ function ProjectSettingsCard({ uid, companyName, child, onMoved }) {
   );
 }
 
+/**
+ * #4964: the address names the record. No id redirects (explicitly, replacing the history entry) to the first
+ * project's own address; an id the company does not hold is `notFound`, never another project's settings under it.
+ */
+export function chooseProject(children, projectId) {
+  const asked = projectId == null || projectId === '' ? null : String(projectId);
+  if (asked == null) return { asked, chosen: null, redirectTo: children.length ? children[0].id : null, notFound: false };
+  const chosen = children.find((c) => c.id === asked) || null;
+  return { asked, chosen, redirectTo: null, notFound: !chosen };
+}
+
 function ProjectsTab({ uid, name, projectId }) {
   const [tick, setTick] = useState(0);
   const reread = useCallback(() => setTick((n) => n + 1), []);
   const load = useCallback(() => portfolio.settingsScope({ company: uid }), [uid]);
   const scope = useBlock(load, tick);
   const [notice, setNotice] = useState('');
+  const navigate = useNavigate();
   if (scope.status === 'loading' && !scope.value) return <PCard title="Projects"><Reading /></PCard>;
   const tab = scope.status === 'ready' ? (scope.value.tabs || []).find((t) => t.key === 'projects') : null;
   if (!tab || tab.available === false) return <PCard title="Projects" testId="company-projects-tab"><Failed what="The company’s projects" onRetry={reread} testId="company-projects-tab-unread" /></PCard>;
   const children = (tab.children || []).map((c) => ({ id: String(c.key).replace(/^projects:/, ''), name: c.label, path: String(c.path || '').replace(/\/settings\/general$/, '') || null }));
-  const chosen = children.find((c) => c.id === String(projectId)) || children[0] || null;
+  const { asked, chosen, redirectTo } = chooseProject(children, projectId);
+  if (redirectTo) return <Navigate replace to={companyProjectsPath(uid, redirectTo)} />;
   return (
     <div className="flex flex-col gap-3" data-testid="company-projects-tab">
       {notice ? <p role="status" className={`m-0 rounded-axal-md bg-axal-ground px-3 py-2 text-[12.5px] ${INK} dark:bg-gray-800`}>{notice}</p> : null}
@@ -190,7 +214,12 @@ function ProjectsTab({ uid, name, projectId }) {
               </NavLink>
             ))}
           </nav>
-          {chosen ? <ProjectSettingsCard key={chosen.id} uid={uid} companyName={name} child={chosen} onMoved={(m) => { setNotice(m); reread(); }} /> : null}
+          {chosen ? <ProjectSettingsCard key={chosen.id} uid={uid} companyName={name} child={chosen} onMoved={(m) => { setNotice(m); reread(); navigate(companyProjectsPath(uid), { replace: true }); }} />
+            : asked != null ? (
+              <PCard title="Project not found" testId="company-project-not-found">
+                <p className={`m-0 ${MUTED}`}>{name || 'This company'} has no project at this address. It may have moved out of the company or been removed. Choose a project from the list.</p>
+              </PCard>
+            ) : null}
         </div>
       )}
     </div>

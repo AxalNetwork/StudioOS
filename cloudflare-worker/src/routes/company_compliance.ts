@@ -22,6 +22,7 @@ import type { Context } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
+import { archivedRefusal, isArchived, viewerIsMember } from '../services/companyAccess';
 import { mapError } from './_t13t14t15_helpers';
 import { agentEngineEnabled } from './agent_engine';
 import { WorkRefusal } from '../services/agents/workBoard';
@@ -46,6 +47,22 @@ function answer(c: C, e: unknown) {
 }
 
 const handle = (fn: (c: C) => Promise<Response>) => async (c: C) => { try { return await fn(c); } catch (e) { return answer(c, e); } };
+
+// #4963: an archived company is read-only. Every compliance write refuses with the shared archived refusal; a reader
+// who is not a member falls through to the handler's own not-found, so the state of a company they cannot see is
+// never confirmed. Reads answer as before.
+const archivedGuard = async (c: C, next: () => Promise<void>) => {
+  if (c.req.method === 'GET' || c.req.method === 'HEAD') return next();
+  try {
+    const user = await requireAuth(c);
+    const row = await c.env.DB.prepare('SELECT id, archived_at FROM company_profiles WHERE uid = ?')
+      .bind(c.req.param('uid') ?? '').first<{ id: number; archived_at: string | null }>();
+    if (row && isArchived(row) && (await viewerIsMember(c.env, row.id, user))) return archivedRefusal(c);
+  } catch (e) { return answer(c, e); }
+  return next();
+};
+router.use('/:uid/compliance', archivedGuard);
+router.use('/:uid/compliance/*', archivedGuard);
 
 router.get('/:uid/compliance', handle(async (c) => {
   const user = await requireAuth(c);

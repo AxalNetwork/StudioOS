@@ -22,10 +22,15 @@
  *   - everyone else needs an Owner, Admin or Founder seat or primary admin.
  * `viewerCapability` is the same rule as a read, returned with the company so
  * the page draws what the server will accept and nothing else.
+ *
+ * D4963 — an archived company is read-only until it is restored. `archivedRefusal`
+ * is the one 409 every company write shares. D4964 — `canEdit` can take the
+ * viewer's link when the caller already read the roster, and makes no query.
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { isAdmin } from '../routes/_t13t14t15_helpers';
+import { refusalBody } from '../util/refusal';
 import { selectJwt } from '../auth';
 
 export async function viewerIsMember(env: Env, companyId: number, viewer: User): Promise<boolean> {
@@ -36,8 +41,15 @@ export async function viewerIsMember(env: Env, companyId: number, viewer: User):
   return !!link;
 }
 
-export async function canEdit(env: Env, company: { id: number }, user: User): Promise<boolean> {
+type EditLink = { role_in_company: string; is_primary_admin?: number | boolean | null };
+
+/**
+ * #4964: `opts.link` is the viewer's link when the caller already read the roster (`detailDto`): `null` means no link,
+ * and no query is made. Omitted, the link is read here as before. A platform admin still reads as an editor (D431).
+ */
+export async function canEdit(env: Env, company: { id: number }, user: User, opts: { link?: EditLink | null } = {}): Promise<boolean> {
   if (isAdmin(user)) return true;
+  if (opts.link !== undefined) return linkCanEdit(opts.link);
   return canEditAsMember(env, company, user);
 }
 
@@ -50,8 +62,46 @@ export async function canEditAsMember(env: Env, company: { id: number }, user: U
   const link = await env.DB.prepare(
     'SELECT role_in_company, is_primary_admin FROM user_company_links WHERE company_id = ? AND user_id = ?'
   ).bind(company.id, user.id).first<{ role_in_company: string; is_primary_admin: number }>();
+  return linkCanEdit(link);
+}
+
+/**
+ * #4964: the edit rule on a link already in hand, so a reader that loaded the roster (`detailDto`) decides
+ * membership and editing from the same rows instead of two more queries. `canEditAsMember` is this on its own read.
+ */
+export function linkCanEdit(link: EditLink | null | undefined): boolean {
   if (!link) return false;
   return !!link.is_primary_admin || ['Owner', 'Admin', 'Founder'].includes(link.role_in_company);
+}
+
+/**
+ * D4963 (#4963) — ONE LIFECYCLE RULE: AN ARCHIVED COMPANY IS READ-ONLY UNTIL IT IS RESTORED.
+ *
+ * Every write to something the company owns refuses while `archived_at` is set, with the same status, code and
+ * sentence. The one write an archived company takes is `POST /company/:uid/restore`. Reads still answer.
+ *
+ * 409 (not 410): the company exists and the request is valid; the state it is in conflicts with the change.
+ * `error` and `code` both carry `archived`, because older routes answered `{ code }` and newer ones `{ error }`.
+ */
+export const ARCHIVED_CODE = 'archived';
+export const ARCHIVED_MESSAGE = 'This company is archived. Restore it before you change it.';
+
+export const isArchived = (company: { archived_at?: string | null } | null | undefined): boolean =>
+  !!company && company.archived_at != null && company.archived_at !== '';
+
+/** The one refusal for a write to an archived company. */
+export function archivedRefusal(c: { json: (body: unknown, status: any) => Response }): Response {
+  return c.json(
+    refusalBody({ code: ARCHIVED_CODE, message: ARCHIVED_MESSAGE, extra: { code: ARCHIVED_CODE } }),
+    409,
+  );
+}
+
+/** The archived state of a company by id, for routes that hold only the id. Null when there is no such company. */
+export async function archivedById(env: Env, companyId: number): Promise<boolean | null> {
+  const row = await env.DB.prepare('SELECT archived_at FROM company_profiles WHERE id = ?')
+    .bind(companyId).first<{ archived_at: string | null }>();
+  return row ? isArchived(row) : null;
 }
 
 export type WriteDenialReason = 'support_session' | 'hq_access' | 'not_an_editor';
@@ -86,6 +136,18 @@ export type ViewerCapability = { member: boolean; can_edit: boolean; read_only: 
 export async function viewerCapability(env: Env, company: { id: number }, user: User, support: boolean): Promise<ViewerCapability> {
   const denial = await companyWriteDenial(env, company, user, support);
   return { member: await hasSeat(env, company, user), can_edit: denial == null, read_only: denial != null, read_only_reason: denial?.reason ?? null };
+}
+
+/**
+ * #4964: the same answer as `viewerCapability`, from a roster the caller already loaded, so the company detail
+ * makes no further query. `own` is the viewer's link, or null.
+ */
+export function capabilityFromLink(user: User, support: boolean, own: EditLink | null): ViewerCapability {
+  const member = !!own;
+  if (support) return { member, can_edit: false, read_only: true, read_only_reason: 'support_session' };
+  if (linkCanEdit(own)) return { member: true, can_edit: true, read_only: false, read_only_reason: null };
+  if (isAdmin(user) && !own) return { member: false, can_edit: false, read_only: true, read_only_reason: 'hq_access' };
+  return { member, can_edit: false, read_only: true, read_only_reason: 'not_an_editor' };
 }
 
 /** The 403 for a denial that is not the route's own "not an editor" answer. */

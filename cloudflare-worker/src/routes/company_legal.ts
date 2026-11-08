@@ -42,6 +42,7 @@ import { encryptColumn, decryptColumn } from '../services/columnCipher';
 import { logAdminAction } from '../services/adminAudit';
 import { companyWriteDenial, isSupportSession, type WriteDenial } from '../services/companyAccess';
 import { checkSlug, slugHolder, retireSlug, companyPath } from '../services/slugs';
+import { archivedRefusal } from '../services/companyAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -93,7 +94,8 @@ async function accessOf(env: Env, uid: string, user: User, support = false): Pro
 
 const notFound = (c: any) => refuse(c, 404, { code: 'not_found', message: 'Company not found.' });
 const notEditor = (c: any) => refuse(c, 403, { code: 'not_editor', message: 'Only an owner, admin or founder of this company can change this.' });
-const archived = (c: any) => refuse(c, 409, { code: 'archived', message: 'This company is archived. Restore it before you change it.' });
+// #4963: the one archived refusal every company write shares (services/companyAccess.ts).
+const archived = (c: any) => archivedRefusal(c);
 
 /** For a write: the access, or the refusal to return. */
 async function editorOf(c: any, uid: string, user: User): Promise<Access | Response> {

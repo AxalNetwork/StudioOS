@@ -284,21 +284,25 @@ async function influencerFigures(env: Env) {
 export const PEOPLE_COVERS: readonly ProgramKey[] = ['mentor-cohorts', 'learning', 'refer-and-earn', 'perks'];
 
 /**
- * Distinct accounts that took part in `[from, to)`: a mentor assignment active
- * at any point in it, an enrolment in a published Learning program active at
+ * Distinct accounts that took part in `[from, to)`: a mentor episode open at
+ * any point in it, a Learning enrolment episode in a published program open at
  * any point in it, a Refer & Earn submission made in it, or a perk claimed in
  * it. One UNION, so a person in two programs is one person.
+ *
+ * D4807: the first two read the episode views over the event tables (migration
+ * 202611072215), which no later assign, end, enrol or removal rewrites, so a
+ * reassignment or re-enrolment after the period closed does not change its count.
  */
-async function peopleIn(env: Env, from: string, to: string): Promise<number> {
+export async function peopleIn(env: Env, from: string, to: string): Promise<number> {
   const r = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM (
-       SELECT a.advisor_user_id AS who FROM advisor_cohort_assignments a
-        WHERE datetime(a.assigned_at) < datetime(?)
-          AND (a.is_active = 1 OR datetime(a.unassigned_at) >= datetime(?))
+       SELECT a.advisor_user_id AS who FROM advisor_cohort_episodes a
+        WHERE a.started_at < datetime(?)
+          AND (a.ended_at IS NULL OR a.ended_at >= datetime(?))
        UNION
-       SELECT e.user_id FROM learning_enrollments e JOIN learning_programs p ON p.id = e.program_id
-        WHERE p.status = 'published' AND datetime(e.enrolled_at) < datetime(?)
-          AND (e.status = 'active' OR datetime(e.updated_at) >= datetime(?))
+       SELECT e.user_id FROM learning_enrolment_episodes e JOIN learning_programs p ON p.id = e.program_id
+        WHERE p.status = 'published' AND e.started_at < datetime(?)
+          AND (e.ended_at IS NULL OR e.ended_at >= datetime(?))
        UNION
        SELECT s.referrer_user_id FROM referral_submissions s
         WHERE datetime(s.created_at) >= datetime(?) AND datetime(s.created_at) < datetime(?)
