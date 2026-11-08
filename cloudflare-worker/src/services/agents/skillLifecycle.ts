@@ -24,6 +24,7 @@
 import type { Env } from '../../types';
 import { run as aiRun, type RunOptions, type RunResult } from '../aiRouter';
 import { OUTPUT_KINDS, type OutputKind, type Tag } from './skills';
+import { NUMBERS_MAX, checkNumberAssertion, missingDataMiss, numberMiss, statements, type NumberAssertion } from './skillAssertions';
 
 export const PASS_BAR = { pass: 9, of: 10 };
 export const CASES_MAX = 20;
@@ -40,7 +41,11 @@ export async function draftHash(p: DraftParts): Promise<string> {
 
 // ── Golden cases ────────────────────────────────────────────────────────────
 
-export type CaseExpect = { output: OutputKind; must_include: string[]; must_say_not_recorded: string[]; must_not_include: string[] };
+/**
+ * `numbers` (#4531) is optional: a case without it is judged exactly as before
+ * apart from the field-specific missing-data rule (`skillAssertions.ts`).
+ */
+export type CaseExpect = { output: OutputKind; must_include: string[]; must_say_not_recorded: string[]; must_not_include: string[]; numbers?: NumberAssertion[] };
 export type CaseInput = { records: Record<string, unknown> };
 export type CaseCheck = { ok: true; name: string; input: CaseInput; expect: CaseExpect } | { ok: false; code: 'case_invalid' | 'case_has_email'; message: string };
 
@@ -64,16 +69,37 @@ export function checkCase(raw: unknown): CaseCheck {
   if (!e || !(OUTPUT_KINDS as readonly string[]).includes(e.output)) return bad('Say what the case expects: a draft, a record change or a brief.');
   const must = words(e.must_include), nr = words(e.must_say_not_recorded), not = words(e.must_not_include);
   if (!must || !nr || !not) return bad('Each expectation is a list of up to 20 short phrases.');
-  if (!must.length && !nr.length && !not.length) return bad('Give the case at least one phrase it must or must not contain.');
-  return { ok: true, name, input: { records }, expect: { output: e.output, must_include: must, must_say_not_recorded: nr, must_not_include: not } };
+  let numbers: NumberAssertion[] | null = null;
+  if (e.numbers != null) {
+    const list = Array.isArray(e.numbers) && e.numbers.length <= NUMBERS_MAX ? e.numbers.map(checkNumberAssertion) : null;
+    if (!list || list.some((n: NumberAssertion | null) => n == null)) {
+      return bad(`Each number the case expects names its metric, value, unit (use "" for none) and tolerance; at most ${NUMBERS_MAX}.`);
+    }
+    numbers = list as NumberAssertion[];
+  }
+  if (!must.length && !nr.length && !not.length && !numbers?.length) return bad('Give the case at least one phrase it must or must not contain.');
+  return {
+    ok: true, name, input: { records },
+    expect: { output: e.output, must_include: must, must_say_not_recorded: nr, must_not_include: not, ...(numbers ? { numbers } : {}) },
+  };
 }
 
-/** Whether an output meets a case's expectation; `detail` says the first miss. */
+/**
+ * Whether an output meets a case's expectation; `detail` says the first miss.
+ * The draft and the published evaluation both judge through here. The
+ * missing-data and number rules are `skillAssertions.ts`'s (judge version 2).
+ */
 export function judge(expect: CaseExpect, output: string): { result: 'pass' | 'fail'; detail: string | null } {
   const text = output.toLowerCase();
+  const parts = statements(output);
   for (const w of expect.must_include) if (!text.includes(w.toLowerCase())) return { result: 'fail', detail: `It left out "${w}".` };
   for (const w of expect.must_say_not_recorded) {
-    if (!text.includes(w.toLowerCase()) || !text.includes('not recorded')) return { result: 'fail', detail: `It did not say ${w} is not recorded.` };
+    const miss = missingDataMiss(w, parts);
+    if (miss) return { result: 'fail', detail: miss };
+  }
+  for (const n of expect.numbers ?? []) {
+    const miss = numberMiss(n, parts);
+    if (miss) return { result: 'fail', detail: miss };
   }
   for (const w of expect.must_not_include) if (text.includes(w.toLowerCase())) return { result: 'fail', detail: `It said "${w}", which it must not.` };
   return { result: 'pass', detail: null };

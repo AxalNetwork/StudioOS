@@ -37,7 +37,7 @@ import {
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import { ensureNetworkStatesSchema } from '../services/networkStatesSchema';
 import {
-  PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate, totalLines,
+  PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate,
 } from '../services/advisorMoney';
 import {
   PayoutAccountNotReady, SettlementDisabled,
@@ -144,6 +144,9 @@ type BookingRow = {
   amount_cents: number | null; billing_state: string;
   created_at: string; updated_at: string;
   session_type_id?: number | null; booking_link_id?: number | null;
+  // #4702: the advisor's answer, kept apart from what happened to the session.
+  advisor_decision?: 'accepted' | 'declined' | null; advisor_decided_at?: string | null;
+  cancelled_by?: 'advisor' | 'client' | 'admin' | 'system' | null;
 };
 
 /**
@@ -179,6 +182,26 @@ function advisorDto(m: AdvisorRow): any {
     created_at: m.created_at, updated_at: m.updated_at,
     ...advisorProfileDto(m),
   };
+}
+/**
+ * #4715 — an advisor as the directory and the match list show them to another
+ * member. The account's email is the advisor's own; the public profile
+ * (`GET /:uid`) never carried it either. `id` and `user_id` stay: the pages key
+ * advisors by `id`, and the trust badge and booking button read `user_id`.
+ */
+function directoryAdvisorDto(m: AdvisorRow): any {
+  const { email: _email, ...listed } = advisorDto(m);
+  return listed;
+}
+/**
+ * #4715 — a slot as anyone but its advisor sees it. The meeting link and the
+ * advisor's slot notes are for the advisor and for a founder whose booking on
+ * the slot was confirmed; to everyone else a slot says only whether it has a
+ * link (`has_meeting_link`), which is all the booking page shows.
+ */
+function publicSlotDto(s: SlotRow, taken = 0): any {
+  const { meeting_url: _url, notes: _notes, ...shown } = slotDto(s, taken);
+  return { ...shown, has_meeting_link: !!s.meeting_url };
 }
 function slotDto(s: SlotRow, taken = 0): any {
   return {
@@ -309,7 +332,7 @@ advisors.get('/', async (c) => {
            AND (nms.paused_at IS NOT NULL OR nms.directory_hidden_at IS NOT NULL))
        ORDER BY display_name ASC`
     ).all<AdvisorRow>();
-    let items = (rows.results || []).map(advisorDto);
+    let items = (rows.results || []).map(directoryAdvisorDto);
     if (q) items = items.filter((m: any) =>
       (m.display_name || '').toLowerCase().includes(q) ||
       (m.bio || '').toLowerCase().includes(q));
@@ -542,7 +565,7 @@ advisors.get('/match', async (c) => {
       );
 
       return {
-        advisor: advisorDto(m),
+        advisor: directoryAdvisorDto(m),
         match_score: total,
         breakdown: { domain_overlap: domainScore, values_alignment: valScore, skill_complementarity: compScore },
         reasons: [
@@ -691,7 +714,7 @@ advisors.get('/me/slots', async (c) => {
     for (const s of (rows.results || []) as SlotRow[]) {
       items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id)));
     }
-    return c.json({ items, window: { from, until, days } });
+    return c.json({ items, window: { from, until, days }, truncated: (rows.results || []).length >= 500 });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -749,7 +772,7 @@ async function slotVerdicts(env: Env, advisorId: number, slots: SlotRow[]): Prom
 
 advisors.get('/:uid/slots', async (c) => {
   try {
-    await requireAuth(c);
+    const viewer = await requireAuth(c);
     const m = await loadAdvisorByUid(c.env, c.req.param('uid'));
     if (!m) return c.json({ detail: 'Advisor not found' }, 404);
     const upcoming = (c.req.query('upcoming_only') || 'true').toLowerCase() === 'true';
@@ -763,9 +786,23 @@ advisors.get('/:uid/slots', async (c) => {
       : await c.env.DB.prepare(sql).bind(m.id).all<SlotRow>();
     const slots = (rows.results || []) as SlotRow[];
     const verdicts = await slotVerdicts(c.env, m.id, slots);
+    // #4715: the advisor (and an admin) see their own slots whole; a founder
+    // sees the link and notes only on a slot they hold a confirmed booking on.
+    // The booking verdicts ride on either shape: they name no link and no note.
+    const whole = viewer.id === m.user_id || isAdmin(viewer);
+    const held = new Set<number>();
+    if (!whole) {
+      const mine = await c.env.DB.prepare(
+        `SELECT slot_id FROM advisor_bookings
+          WHERE advisor_id = ? AND founder_user_id = ? AND status IN ('confirmed', 'completed')`,
+      ).bind(m.id, viewer.id).all<{ slot_id: number }>();
+      for (const r of mine.results || []) held.add(Number(r.slot_id));
+    }
     const items: any[] = [];
     for (const s of slots) {
-      items.push({ ...slotDto(s, await takenForSlot(c.env, s.id)), ...verdicts.get(s.id) });
+      const taken = await takenForSlot(c.env, s.id);
+      const shown = whole || held.has(Number(s.id)) ? slotDto(s, taken) : publicSlotDto(s, taken);
+      items.push({ ...shown, ...verdicts.get(s.id) });
     }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
@@ -818,7 +855,7 @@ advisors.delete('/me/slots/:id', async (c) => {
     // bulk path used to change the status and leave every external copy in
     // the attendees' calendars.
     const cancelled = await c.env.DB.prepare(
-      `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = COALESCE(cancel_reason, 'slot_cancelled'), updated_at = ?
+      `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = COALESCE(cancel_reason, 'slot_cancelled'), cancelled_by = 'system', updated_at = ?
        WHERE slot_id = ? AND status IN ('pending','confirmed') RETURNING id`
     ).bind(nowIso(), id).all<{ id: number }>();
     const ids = (cancelled.results || []).map((r) => Number(r.id));
@@ -1078,7 +1115,9 @@ advisors.post('/slots/:id/book', async (c) => {
             status: 'pending',
             ics_status: 'TENTATIVE' as const,
             location_kind: 'video',
-            location_uri: slot.meeting_url || null,
+            // #4715: the meeting link goes out with the confirmation
+            // (deferCalendarConfirm), not with the request.
+            location_uri: null,
             organizer_email: advisorMeta?.email || null,
             attendees: [
               { email: advisorMeta?.email || null, name: advisorMeta?.display_name || null, role: 'advisor' },
@@ -1128,7 +1167,14 @@ advisors.get('/me/bookings', async (c) => {
     const rows = status
       ? await c.env.DB.prepare(sql).bind(m.id, status).all<BookingRow>()
       : await c.env.DB.prepare(sql).bind(m.id).all<BookingRow>();
+    // #4702: the list is the 200 newest; `total` is how many there are, so a
+    // page can say "200 of 340" instead of presenting the window as the whole.
+    const all = status
+      ? await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_bookings WHERE advisor_id = ? AND status = ?').bind(m.id, status).first<{ n: number }>()
+      : await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_bookings WHERE advisor_id = ?').bind(m.id).first<{ n: number }>();
     return c.json({
+      total: Number(all?.n ?? (rows.results || []).length),
+      limit: 200,
       items: (rows.results || []).map((r: any) => bookingDto(r, {
         ...advisorMoney(r),
         founder_name: r.founder_name ?? null,
@@ -1138,6 +1184,11 @@ advisors.get('/me/bookings', async (c) => {
         client_email: r.founder_email ?? null,
         slot_starts_at: r.slot_starts_at ?? null,
         slot_ends_at: r.slot_ends_at ?? null,
+        // #4702 (D4702): the advisor's own answer, and who cancelled. Null is "not
+        // on record", never a guess; the acceptance rate counts only answers.
+        advisor_decision: r.advisor_decision ?? null,
+        advisor_decided_at: r.advisor_decided_at ?? null,
+        cancelled_by: r.cancelled_by ?? null,
       })),
     });
   } catch (e) { return mapError(c, e); }
@@ -1237,6 +1288,8 @@ function deferCalendarConfirm(c: Context<{ Bindings: Env }>, id: number) {
 async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   allowed: string[]; nextStatus: string; whoCan: 'advisor' | 'founder' | 'either';
   reason?: string | null;
+  /** #4702: the answer this transition records, if it is one. */
+  decision?: 'accepted' | 'declined';
 }) {
   const user = await requireAuth(c);
   const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?').bind(id).first<BookingRow>();
@@ -1256,9 +1309,24 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   // D4703 (#4703): the status read above is the status this write expects.
   // Two presses at once (a cancel and a confirm, or two cancels) used to both
   // pass the check and both write; now the second changes nothing and says so.
+  //
+  // #4702 (D4702): the ANSWER is recorded apart from the status. Confirming is an
+  // accept. A cancel by the advisor of a request still waiting is a decline. A
+  // cancel by anyone of a session already accepted leaves the accept as it was,
+  // and a client withdrawing a request before any answer records no answer, so
+  // neither the client's cancellation nor an admin's changes the advisor's rate.
+  const at = nowIso();
+  const cancelledBy = opts.nextStatus === 'cancelled'
+    ? (isAdvisor && !adm ? 'advisor' : isOwner && !adm ? 'client' : 'admin') : null;
+  const decision = opts.decision
+    ?? (opts.nextStatus === 'cancelled' && b.status === 'pending' && cancelledBy === 'advisor' ? 'declined' : null);
   const wrote = await c.env.DB.prepare(
-    'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ? AND status = ?'
-  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id, b.status).run();
+    `UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason),
+            advisor_decision = COALESCE(?, advisor_decision),
+            advisor_decided_at = CASE WHEN ? IS NOT NULL THEN ? ELSE advisor_decided_at END,
+            cancelled_by = COALESCE(?, cancelled_by), updated_at = ?
+      WHERE id = ? AND status = ?`
+  ).bind(opts.nextStatus, opts.reason ?? null, decision, decision, at, cancelledBy, at, id, b.status).run();
   if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
     return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
   }
@@ -1274,7 +1342,7 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
 }
 
 advisors.post('/bookings/:id/confirm', (c) => transition(c, Number(c.req.param('id')),
-  { allowed: ['pending'], nextStatus: 'confirmed', whoCan: 'advisor' }));
+  { allowed: ['pending'], nextStatus: 'confirmed', whoCan: 'advisor', decision: 'accepted' }));
 advisors.post('/bookings/:id/cancel', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   return transition(c, Number(c.req.param('id')),
@@ -1286,6 +1354,52 @@ advisors.post('/bookings/:id/no-show', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   return transition(c, Number(c.req.param('id')),
     { allowed: ['pending', 'confirmed'], nextStatus: 'no_show', whoCan: 'advisor', reason: body.reason || null });
+});
+
+/**
+ * #4702 (D4702): the advisor's review coverage over EVERY completed session, in
+ * one read.
+ *
+ * The Delivery page read each held session's reviews one request at a time,
+ * stopped at the first 20, and stored a failed read as "no reviews", so a page
+ * with 30 held sessions reported "No review" for the last ten without having
+ * asked, and for any session whose read failed. The counts here are database
+ * aggregates over the whole population; `items` lists the 1,000 newest sessions
+ * with their review count so a row can say reviewed, not reviewed, or (when this
+ * route itself could not be read) nothing at all: the page treats a failed read
+ * as unknown.
+ */
+advisors.get('/me/review-coverage', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const t = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS held,
+              COALESCE(SUM(CASE WHEN x.n > 0 THEN 1 ELSE 0 END), 0) AS reviewed,
+              COALESCE(SUM(x.n), 0) AS reviews,
+              COALESCE(SUM(x.rating_sum), 0) AS rating_sum
+         FROM advisor_bookings b
+         LEFT JOIN (SELECT booking_id, COUNT(*) AS n, SUM(rating) AS rating_sum FROM advisor_reviews GROUP BY booking_id) x ON x.booking_id = b.id
+        WHERE b.advisor_id = ? AND b.status = 'completed'`
+    ).bind(m.id).first<{ held: number; reviewed: number; reviews: number; rating_sum: number }>();
+    const rows = (await c.env.DB.prepare(
+      `SELECT b.id AS booking_id, COALESCE(x.n, 0) AS reviews, COALESCE(x.advisor_filed, 0) AS advisor_filed, x.avg_rating AS avg_rating
+         FROM advisor_bookings b
+         LEFT JOIN (SELECT booking_id, COUNT(*) AS n, AVG(rating) AS avg_rating,
+                           MAX(CASE WHEN reviewer_role = 'advisor' THEN 1 ELSE 0 END) AS advisor_filed
+                      FROM advisor_reviews GROUP BY booking_id) x ON x.booking_id = b.id
+        WHERE b.advisor_id = ? AND b.status = 'completed'
+        ORDER BY b.id DESC LIMIT 1001`
+    ).bind(m.id).all<any>()).results || [];
+    const held = Number(t?.held ?? 0);
+    const reviewed = Number(t?.reviewed ?? 0);
+    return c.json({
+      held, reviewed, awaiting: held - reviewed,
+      ratings: { count: Number(t?.reviews ?? 0), sum: Number(t?.rating_sum ?? 0) },
+      items: rows.slice(0, 1000).map((r: any) => ({ booking_id: Number(r.booking_id), reviews: Number(r.reviews), advisor_filed: Number(r.advisor_filed) === 1, rating: r.avg_rating == null ? null : Number(r.avg_rating) })),
+      items_complete: rows.length <= 1000,
+    });
+  } catch (e) { return mapError(c, e); }
 });
 
 // ---------------------------------------------------------------------------
@@ -2127,7 +2241,14 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
 
     // COMPARE-AND-SWAP on the state this request read: an edit that lands
     // between the read and the write is a 409, not a silent overwrite.
-    const res = await c.env.DB.prepare(
+    //
+    // #4713 (D4713): a change of an amount already priced is written to
+    // `advisor_booking_price_events` with who did it (and the admin behind an
+    // impersonation) and the amount, rate and cut before and after. It runs in
+    // the same batch, after the guarded update, and inserts only if that update
+    // changed the row, so a refused or raced write leaves no event.
+    const audited = (pricing || repricing) && stored != null && amount_cents !== stored;
+    const update = c.env.DB.prepare(
       `UPDATE advisor_bookings
           SET amount_cents = ?, billing_state = ?,
               platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
@@ -2135,7 +2256,22 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
     ).bind(
       amount_cents, billing_state, cut, bps, nowIso(),
       row.id, row.billing_state, stored,
-    ).run();
+    );
+    const writes = [update];
+    if (audited) {
+      writes.push(c.env.DB.prepare(
+        `INSERT INTO advisor_booking_price_events
+           (booking_id, actor_user_id, impersonated_by, from_amount_cents, to_amount_cents, from_take_rate_bps, to_take_rate_bps, from_cut_cents, to_cut_cents)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE changes() = 1`
+      ).bind(
+        row.id, Number(user.id), (user as any).impersonated_by ? Number((user as any).impersonated_by) : null,
+        stored, amount_cents,
+        row.take_rate_bps == null ? null : Number(row.take_rate_bps), bps,
+        row.platform_cut_cents == null ? null : Number(row.platform_cut_cents), cut,
+      ));
+    }
+    const [res] = await c.env.DB.batch(writes);
     if (Number((res as any)?.meta?.changes ?? 0) !== 1) {
       return c.json({
         detail: 'This session changed while you were editing it. Reload and try again.',
@@ -2416,6 +2552,133 @@ advisors.get('/me/earnings', async (c) => {
 // says 'none' no surface may render any of this as a receipt. D75.
 // ---------------------------------------------------------------------------
 
+/** The client rows a ledger lists one by one; the rest are summed into `clients_other`. */
+const LEDGER_CLIENT_CAP = 500;
+
+/**
+ * #4702 (D4702): the one definition of an advisor's money over a window, shared
+ * by `GET /me/ledger` and `GET /me/tax-summary` so the table, the export and the
+ * annual summary cannot disagree.
+ *
+ *   · the population is every booking created in the half-open window
+ *     `[from, until)` (absent bounds = unbounded), counted in the database; there
+ *     is no row cap on the totals;
+ *   · a line's cut is the cut it was STAMPED with when it was priced; only a line
+ *     priced before 241 (no stored cut) is derived, at its stored rate or the
+ *     fallback, rounded down, the same rule `cutCents` uses;
+ *   · an unpriced booking has no gross and no cut and is counted apart.
+ *
+ * `clients` is the top `LEDGER_CLIENT_CAP` by gross; `other` sums everyone past
+ * it, so the listed rows plus `other` always reconcile to the totals.
+ */
+export type LedgerLine = { sessions: number; gross_cents: number; cut_cents: number; unpriced: number };
+export async function ledgerAggregate(env: Env, advisorId: number, from: string | null, until: string | null, fallbackBps: number) {
+  const t = await env.DB.prepare(
+    `SELECT COUNT(*) AS sessions,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
+            COALESCE(SUM(b.amount_cents), 0) AS gross,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
+                              WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
+                              ELSE CAST((b.amount_cents * COALESCE(b.take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut,
+            COUNT(DISTINCT b.founder_user_id) AS clients,
+            COUNT(DISTINCT CASE WHEN b.amount_cents IS NOT NULL THEN b.founder_user_id END)
+              + COALESCE(MAX(CASE WHEN b.amount_cents IS NOT NULL AND b.founder_user_id IS NULL THEN 1 ELSE 0 END), 0) AS priced_clients
+       FROM advisor_bookings b
+      WHERE b.advisor_id = ?
+        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+        AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+        AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')`
+  ).bind(fallbackBps, advisorId, from, from, until, until).first<{ sessions: number; unpriced: number; gross: number; cut: number; clients: number; priced_clients: number }>();
+  const rows = (await env.DB.prepare(
+    `SELECT b.founder_user_id AS client_user_id, MAX(u.name) AS client_name,
+            COUNT(*) AS sessions,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
+            COALESCE(SUM(b.amount_cents), 0) AS gross,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
+                              WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
+                              ELSE CAST((b.amount_cents * COALESCE(b.take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut
+       FROM advisor_bookings b
+       LEFT JOIN users u ON u.id = b.founder_user_id
+      WHERE b.advisor_id = ?
+        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+        AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+        AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
+      GROUP BY b.founder_user_id
+      ORDER BY gross DESC, sessions DESC, b.founder_user_id
+      LIMIT ?`
+  ).bind(fallbackBps, advisorId, from, from, until, until, LEDGER_CLIENT_CAP + 1).all<any>()).results || [];
+  // #4679: what happened to the money, one database total per billing state over
+  // the same population as `t`, so the states add up to the totals.
+  const st = (await env.DB.prepare(
+    `SELECT CASE WHEN b.amount_cents IS NULL THEN 'unpriced'
+                 WHEN b.billing_state = 'collected' THEN 'collected'
+                 WHEN b.billing_state = 'written_off' THEN 'written_off'
+                 ELSE 'billed' END AS state,
+            COUNT(*) AS sessions,
+            COALESCE(SUM(b.amount_cents), 0) AS gross,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
+                              WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
+                              ELSE CAST((b.amount_cents * COALESCE(b.take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut
+       FROM advisor_bookings b
+      WHERE b.advisor_id = ?
+        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+        AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+        AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
+      GROUP BY state`
+  ).bind(fallbackBps, advisorId, from, from, until, until).all<{ state: string; sessions: number; gross: number; cut: number }>()).results || [];
+  const stateOf = (k: string) => {
+    const r = st.find((x) => x.state === k);
+    const g = Number(r?.gross ?? 0); const cu = Number(r?.cut ?? 0);
+    return { sessions: Number(r?.sessions ?? 0), gross_cents: g, cut_cents: cu, net_cents: g - cu };
+  };
+  // A cancelled or missed session that was never collected owes nothing: it is
+  // in no total above and is counted here on its own.
+  const v = await env.DB.prepare(
+    `SELECT COUNT(*) AS n
+       FROM advisor_bookings b
+      WHERE b.advisor_id = ?
+        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+        AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+        AND b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected'`
+  ).bind(advisorId, from, from, until, until).first<{ n: number }>();
+  const sessions = Number(t?.sessions ?? 0);
+  const gross = Number(t?.gross ?? 0);
+  const cut = Number(t?.cut ?? 0);
+  const unpriced = Number(t?.unpriced ?? 0);
+  // A "client" row counts the NULL-user group too, and `COUNT(DISTINCT)` does not
+  // count NULL, so the total is the larger of it and the rows actually returned.
+  const listedRows = rows.slice(0, LEDGER_CLIENT_CAP);
+  const clientsTotal = Math.max(Number(t?.clients ?? 0) + (rows.some((r: any) => r.client_user_id == null) ? 1 : 0), rows.length);
+  const clients = listedRows.map((r: any) => ({
+    client_user_id: r.client_user_id == null ? null : Number(r.client_user_id),
+    client_name: r.client_name ?? null,
+    sessions: Number(r.sessions), gross_cents: Number(r.gross), cut_cents: Number(r.cut), unpriced: Number(r.unpriced),
+  }));
+  const listed = clients.reduce((a, r) => ({
+    sessions: a.sessions + r.sessions, gross_cents: a.gross_cents + r.gross_cents,
+    cut_cents: a.cut_cents + r.cut_cents, unpriced: a.unpriced + r.unpriced,
+  }), { sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0 } as LedgerLine);
+  const overflow = rows.length > LEDGER_CLIENT_CAP;
+  return {
+    totals: { sessions, unpriced, priced: sessions - unpriced, gross_cents: gross, cut_cents: cut, net_cents: gross - cut },
+    pricedClients: Number(t?.priced_clients ?? 0),
+    states: {
+      billed: stateOf('billed'), collected: stateOf('collected'), written_off: stateOf('written_off'),
+      unpriced: Number(st.find((x) => x.state === 'unpriced')?.sessions ?? 0),
+    },
+    voidSessions: Number(v?.n ?? 0),
+    clients,
+    clientsTotal,
+    // Everyone past the cap, as one line; null when every client is listed.
+    other: overflow ? {
+      clients: Math.max(0, clientsTotal - clients.length),
+      sessions: sessions - listed.sessions, gross_cents: gross - listed.gross_cents,
+      cut_cents: cut - listed.cut_cents, net_cents: (gross - listed.gross_cents) - (cut - listed.cut_cents),
+      unpriced_sessions: unpriced - listed.unpriced,
+    } : null,
+  };
+}
+
 /** One row of D4's "By client · Q3" table, reconciling by construction. */
 function clientLineDto(r: {
   client_name: string | null; client_user_id: number | null;
@@ -2457,7 +2720,7 @@ function clientLineDto(r: {
  * total — D4's own note says *"The cut is charged per line, not netted at the
  * bottom"*, and the two arithmetics differ by up to a cent per line. A table
  * whose rows do not add up to its total is the most corrosive thing a ledger
- * can do, so `totalLines` is the only thing that adds here.
+ * can do, so `ledgerAggregate` is the only thing that adds here (#4702).
  *
  * PERIOD IS A HALF-OPEN INTERVAL on `created_at`. Absent means everything,
  * which is what "All time" asks for; the three other views pass explicit
@@ -2469,53 +2732,23 @@ advisors.get('/me/ledger', async (c) => {
     const m = await requireMyAdvisor(c, user);
     const from = trimOrNull(c.req.query('from'), 32);
     const until = trimOrNull(c.req.query('until'), 32);
-
-    // ONE QUERY TEXT, EVERY BOUND ALWAYS BOUND. The obvious shape here is to
-    // push clauses into an array and `join(' AND ')` them into the template —
-    // and `scripts/check-sql-prepare.mjs` refuses it, correctly: a `${…}`
-    // inside `DB.prepare` lands in the query TEXT, and a guard that has to
-    // decide case by case whether the fragments were literals is a guard that
-    // will eventually decide wrong. `? IS NULL OR` makes an absent bound a
-    // no-op with no interpolation at all.
-    const rows = await c.env.DB.prepare(
-      `SELECT b.founder_user_id AS client_user_id, u.name AS client_name,
-              b.amount_cents AS amount_cents, b.platform_cut_cents AS platform_cut_cents,
-              b.take_rate_bps AS take_rate_bps, b.billing_state AS billing_state,
-              b.status AS status, b.id AS booking_id
-         FROM advisor_bookings b
-         LEFT JOIN users u ON u.id = b.founder_user_id
-        WHERE b.advisor_id = ?
-          AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
-          AND (? IS NULL OR datetime(b.created_at) < datetime(?))
-        ORDER BY b.created_at DESC
-        LIMIT 2000`
-    ).bind(m.id, from, from, until, until).all<{
-      client_user_id: number | null; client_name: string | null;
-      amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null;
-      billing_state: string | null; status: string | null; booking_id: number;
-    }>();
-
     const rate = await takeRate(c.env);
-    // #4679 — A CANCELLED OR MISSED SESSION THAT WAS NEVER COLLECTED OWES
-    // NOTHING, whatever price was typed on it. It leaves every money total and
-    // is counted on its own. One that WAS collected stays, because the money is
-    // real, and `refunds_owed` says it is owed back.
-    const all = rows.results || [];
-    const voided = (l: { status: string | null; billing_state: string | null }) =>
-      (l.status === 'cancelled' || l.status === 'no_show') && l.billing_state !== 'collected';
-    const lines = all.filter((l) => !voided(l));
-    const voidSessions = all.length - lines.length;
 
-    // Grouped in the worker rather than by SQL, because the cut of a line
-    // recorded before 241 has to be DERIVED from its stored rate (or the
-    // current one) rather than summed from a NULL column — and a SQL SUM over
-    // NULLs would silently report those lines as free.
+    // #4702 (D4702): THE POPULATION IS ALL OF IT. The ledger read the 2,000
+    // newest bookings and summed those, so the 2,001st session silently
+    // dropped out of every total while the page still said "all time". The
+    // totals, the clients and the annual summary now come from ONE aggregate
+    // in the database over every booking in the window (`ledgerAggregate`), and
+    // the response says how complete each part is (`completeness`).
+    const agg = await ledgerAggregate(c.env, m.id, from, until, rate.bps);
+
     // THE RETAINER COLUMN COMES FROM THE ENGAGEMENT, NOT THE BOOKING — 238's
     // header is explicit that it "cannot come from `advisor_bookings.
-    // amount_cents` … the cycle amount has to live here or nowhere". Read as
-    // its own query rather than joined onto the booking rows, because a
-    // client with a retainer and no sessions in this window still belongs in
-    // the table, and an INNER-shaped join would drop exactly that row.
+    // amount_cents` … the cycle amount has to live here or nowhere". It is the
+    // CONTRACT's value per cycle, not revenue earned in the window (sessions
+    // priced in the window are the gross); and only an engagement in effect at
+    // some point in the window counts, so a Q3 table does not show a retainer
+    // that ended in Q1.
     //
     // Tolerated, not required: an advisor whose engagement table cannot be
     // read still gets their session ledger, with the retainer column reading
@@ -2524,13 +2757,21 @@ advisors.get('/me/ledger', async (c) => {
       founder_user_id: number | null; client_name: string | null;
       shape: string; amount_cents: number | null;
     }> = [];
+    let engagementsComplete = true;
+    let engagementsRead = true;
     try {
       const er = await c.env.DB.prepare(
         `SELECT founder_user_id, client_name, shape, amount_cents
-           FROM advisor_engagements WHERE advisor_id = ? AND lane != 'drafting' LIMIT 500`
-      ).bind(m.id).all<any>();
-      engagements = er.results || [];
-    } catch { engagements = []; }
+           FROM advisor_engagements
+          WHERE advisor_id = ? AND lane IN ('signed', 'renewal_due', 'ended')
+            AND (? IS NULL OR started_at IS NULL OR datetime(started_at) < datetime(?))
+            AND (? IS NULL OR (lane != 'ended' AND ended_at IS NULL) OR (ended_at IS NOT NULL AND datetime(ended_at) >= datetime(?)))
+          ORDER BY id LIMIT 501`
+      ).bind(m.id, until, until, from, from).all<any>();
+      const rows = er.results || [];
+      engagementsComplete = rows.length <= 500;
+      engagements = rows.slice(0, 500);
+    } catch { engagements = []; engagementsRead = false; }
 
     const byClient = new Map<string, {
       client_name: string | null; client_user_id: number | null;
@@ -2542,20 +2783,12 @@ advisors.get('/me/ledger', async (c) => {
       sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0,
       retainer_cents: null as number | null, engagement_shape: null as string | null,
     });
-    for (const line of lines) {
-      const key = line.client_user_id == null ? 'none' : String(line.client_user_id);
-      if (!byClient.has(key)) {
-        byClient.set(key, blank(line.client_name ?? null, line.client_user_id ?? null));
-      }
-      const g = byClient.get(key)!;
-      g.sessions += 1;
-      if (line.amount_cents == null) { g.unpriced += 1; continue; }
-      const bps = line.take_rate_bps != null ? Number(line.take_rate_bps) : rate.bps;
-      const cut = line.platform_cut_cents != null
-        ? Number(line.platform_cut_cents)
-        : (cutCents(line.amount_cents, bps) ?? 0);
-      g.gross_cents += Number(line.amount_cents);
-      g.cut_cents += cut;
+    for (const r of agg.clients) {
+      const key = r.client_user_id == null ? 'none' : String(r.client_user_id);
+      byClient.set(key, {
+        ...blank(r.client_name ?? null, r.client_user_id ?? null),
+        sessions: r.sessions, gross_cents: r.gross_cents, cut_cents: r.cut_cents, unpriced: r.unpriced,
+      });
     }
 
     // Fold the engagements in, creating a row for a client who has a contract
@@ -2584,42 +2817,27 @@ advisors.get('/me/ledger', async (c) => {
       }
     }
 
-    const totals = totalLines(
-      lines.map((l) => ({ amount_cents: l.amount_cents, take_rate_bps: l.take_rate_bps })),
-      rate.bps,
-    );
-    // #4679 — WHAT HAPPENED TO THE MONEY, one total per state, each summed from
-    // the same stored per-line snapshot as `totals`. `totals` is what was
-    // PRICED; only `collected` is money the advisor was paid, so only that is
-    // ever labelled "received". A line is in exactly one of unpriced, billed,
-    // collected or written_off.
-    const stateOf = (l: { amount_cents: number | null; billing_state: string | null }) =>
-      l.amount_cents == null ? 'unpriced'
-        : l.billing_state === 'collected' ? 'collected'
-          : l.billing_state === 'written_off' ? 'written_off' : 'billed';
-    const bucket = (state: string) => totalLines(
-      lines.filter((l) => stateOf(l) === state)
-        .map((l) => ({ amount_cents: l.amount_cents, take_rate_bps: l.take_rate_bps })),
-      rate.bps,
-    );
-    const stateTotals = (state: string) => {
-      const t = bucket(state);
-      return {
-        sessions: t.priced, gross_cents: t.gross_cents,
-        cut_cents: t.cut_cents, net_cents: t.net_cents,
-      };
-    };
+    // #4679 merged with #4702: WHAT HAPPENED TO THE MONEY, one total per state,
+    // read from the same aggregate as `totals` (`ledgerAggregate` sums each state
+    // in the database over every booking in the window, with no row cap). Only
+    // `collected` is money the advisor was paid, so only that is ever labelled
+    // "received". A line is in exactly one of unpriced, billed, collected or
+    // written_off; a voided session (cancelled or missed, never collected) is in
+    // none and is counted on its own.
     // Refund rows are read on their own and tolerated: a collected charge on a
-    // cancelled or missed session is owed back (open) or was refunded
-    // (resolved by an operator). Nothing here moves money.
+    // cancelled or missed session is owed back (open) or was refunded (resolved
+    // by an operator). Nothing here moves money. One refund row per booking, as
+    // before; the window is the booking's, as for every other figure here.
     const refundByBooking = new Map<number, { cents: number; resolved: boolean }>();
     try {
       const rr = await c.env.DB.prepare(
         `SELECT r.booking_id AS booking_id, r.amount_cents AS amount_cents, r.resolved_at AS resolved_at
            FROM advisory_refunds_due r
            JOIN advisor_bookings b ON b.id = r.booking_id
-          WHERE b.advisor_id = ?`
-      ).bind(m.id).all<{ booking_id: number; amount_cents: number | null; resolved_at: string | null }>();
+          WHERE b.advisor_id = ?
+            AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+            AND (? IS NULL OR datetime(b.created_at) < datetime(?))`
+      ).bind(m.id, from, from, until, until).all<{ booking_id: number; amount_cents: number | null; resolved_at: string | null }>();
       for (const r of rr.results || []) {
         if (r.amount_cents != null) {
           refundByBooking.set(Number(r.booking_id), {
@@ -2628,9 +2846,7 @@ advisors.get('/me/ledger', async (c) => {
         }
       }
     } catch { /* table absent or unreadable: no refund figure, never a guess */ }
-    const refundsFor = (resolved: boolean) => all
-      .map((l) => refundByBooking.get(Number(l.booking_id)))
-      .filter((r): r is { cents: number; resolved: boolean } => !!r && r.resolved === resolved);
+    const refundsFor = (resolved: boolean) => [...refundByBooking.values()].filter((r) => r.resolved === resolved);
     // PAID OUT is the provider paying the advisor, which is a separate event
     // from collecting. Read from the payout ledger in the same window; null
     // (never 0) when it could not be read.
@@ -2646,10 +2862,10 @@ advisors.get('/me/ledger', async (c) => {
       paidOutCents = Number(po?.cents ?? 0);
     } catch { paidOutCents = null; }
     const states = {
-      billed: stateTotals('billed'),
-      collected: stateTotals('collected'),
-      written_off: stateTotals('written_off'),
-      unpriced: { sessions: bucket('unpriced').unpriced },
+      billed: agg.states.billed,
+      collected: agg.states.collected,
+      written_off: agg.states.written_off,
+      unpriced: { sessions: agg.states.unpriced },
       refunds_owed: {
         sessions: refundsFor(false).length,
         amount_cents: refundsFor(false).reduce((n, r) => n + r.cents, 0),
@@ -2659,23 +2875,27 @@ advisors.get('/me/ledger', async (c) => {
         amount_cents: refundsFor(true).reduce((n, r) => n + r.cents, 0),
       },
       paid_out_cents: paidOutCents,
-      void_sessions: voidSessions,
+      void_sessions: agg.voidSessions,
     };
     const clients = [...byClient.values()]
       .sort((a, b) => b.gross_cents - a.gross_cents)
       .map(clientLineDto);
     const top = clients[0];
+    const totals = agg.totals;
 
     return c.json({
       currency: 'USD',
       from: from ?? null,
       until: until ?? null,
       clients,
+      // Clients past the cap are not listed one by one, but they are not lost:
+      // this row is their sum, so `clients` + `clients_other` = `totals`.
+      clients_other: agg.other,
       totals: {
         gross_cents: totals.gross_cents,
         cut_cents: totals.cut_cents,
         net_cents: totals.net_cents,
-        sessions: lines.length,
+        sessions: totals.sessions,
         priced_sessions: totals.priced,
         // Surfaced, never subtracted from view: a total that quietly skipped
         // the sessions nobody priced would be a smaller number presented as a
@@ -2683,6 +2903,15 @@ advisors.get('/me/ledger', async (c) => {
         unpriced_sessions: totals.unpriced,
         // The money actually received: collected lines only, net of the cut.
         received_cents: states.collected.net_cents,
+      },
+      // #4702: what the figures cover, said in the payload so no surface has to
+      // guess. Totals always cover every booking in the window; the client list
+      // is capped and says so.
+      completeness: {
+        basis: 'Every booking created in the window, summed in the database. No row cap applies to the totals.',
+        sessions: totals.sessions,
+        clients: { listed: agg.clients.length, total: agg.clientsTotal, complete: agg.clientsTotal <= agg.clients.length },
+        engagements: { read: engagementsRead, complete: engagementsComplete },
       },
       states,
       // NULL WHEN THERE IS NOTHING TO CONCENTRATE. A share of zero gross is
@@ -2945,27 +3174,22 @@ advisors.get('/me/tax-summary', async (c) => {
     const year = Number.isInteger(raw) && raw >= 2000 && raw <= 2999
       ? raw
       : Number(nowIso().slice(0, 4));
-    const rows = await c.env.DB.prepare(
-      `SELECT amount_cents, platform_cut_cents, take_rate_bps, founder_user_id
-         FROM advisor_bookings
-        WHERE advisor_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)
-          AND NOT (status IN ('cancelled', 'no_show') AND billing_state != 'collected')`
-    ).bind(m.id, `${year}-01-01T00:00:00.000Z`, `${year + 1}-01-01T00:00:00.000Z`)
-      .all<{ amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null; founder_user_id: number | null }>();
-    const lines = rows.results || [];
     const rate = await takeRate(c.env);
-    const totals = totalLines(lines, rate.bps);
-    const clients = new Set(lines.filter((l) => l.amount_cents != null).map((l) => l.founder_user_id));
+    // #4702: the same aggregate the ledger uses, over the same population, so the
+    // annual summary equals the ledger for the same window.
+    const agg = await ledgerAggregate(c.env, m.id, `${year}-01-01T00:00:00.000Z`, `${year + 1}-01-01T00:00:00.000Z`, rate.bps);
+    const totals = agg.totals;
     return c.json({
       year,
       currency: 'USD',
       gross_cents: totals.gross_cents,
       platform_cut_cents: totals.cut_cents,
       net_cents: totals.net_cents,
-      sessions: lines.length,
+      sessions: totals.sessions,
       priced_sessions: totals.priced,
       unpriced_sessions: totals.unpriced,
-      clients: clients.size,
+      clients: agg.pricedClients,
+      completeness: { basis: 'Every booking created in the year, summed in the database. No row cap applies.', sessions: totals.sessions },
       basis: 'Calendar year in UTC, by the date each session was booked.',
       document: {
         is_tax_form: false,
@@ -4510,6 +4734,11 @@ export function deliverableState(versions: Pick<VersionRow, 'sent_at' | 'opened_
   return 'not_started';
 }
 
+/** An absolute https web address: the one shape a version's content link may take. */
+function isHttpsLink(raw: string): boolean {
+  try { const u = new URL(raw); return u.protocol === 'https:' && !u.username && !u.password && !!u.hostname; } catch { return false; }
+}
+
 function versionDto(r: VersionRow): any {
   return {
     uid: r.uid, version: Number(r.version), label: r.label, summary: r.summary,
@@ -4767,6 +4996,17 @@ advisors.post('/me/deliverables/:id/versions', async (c) => {
     const m = await requireMyAdvisor(c, user);
     const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
     const body = await c.req.json().catch(() => ({} as any));
+    // #4712 (D4712): A REVISION IS NEVER EMPTY. A new version carries a change
+    // note (what is different from the last one) and the content, a web link;
+    // "Add a version" used to POST `{}` and record a v3 that said nothing and
+    // pointed nowhere. Older versions stay as recorded: there is no route that
+    // edits one.
+    const note = trimOrNull(body.summary, 2000);
+    const link = trimOrNull(body.link_url, 2000);
+    if (!note) return c.json({ detail: 'Say what changed in this version.', code: 'empty_version' }, 422);
+    if (!link || !isHttpsLink(link)) {
+      return c.json({ detail: 'Add the content as a web link that starts with https://', code: 'empty_version' }, 422);
+    }
     const top = await c.env.DB.prepare(
       'SELECT MAX(version) AS v FROM advisor_deliverable_versions WHERE deliverable_id = ?'
     ).bind(row.id).first<{ v: number | null }>();
@@ -4816,6 +5056,13 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
       return c.json({
         detail: 'Link this work product to an engagement whose client has an Axal account before sending — nothing an unlinked client is sent can ever be recorded as opened',
       }, 409);
+    }
+
+    // #4712: nothing is sent that has nothing in it. A version with no link has
+    // no content for the client to open (an empty v1 from a title-only work
+    // product, or an empty revision recorded before this rule).
+    if (!v.link_url || !isHttpsLink(v.link_url)) {
+      return c.json({ detail: 'This version has no content to send. Add a version with a link, then send that one.', code: 'empty_version' }, 422);
     }
 
     const now = nowIso();
@@ -5036,6 +5283,10 @@ function availabilityDto(r: AvailabilityRow | null): any {
     // Lets the page tell "no rules configured" from "rules configured to
     // nothing", which read identically in the four fields above.
     configured: Boolean(r),
+    // #4713 (D4713): the version of this rule set. A replacement that names the
+    // revision it was edited from is refused when the rules have changed since
+    // (another tab, another device). `''` is "no rules yet".
+    revision: r?.updated_at ?? '',
   };
 }
 
@@ -5119,6 +5370,40 @@ advisors.put('/me/availability', async (c) => {
     const buffer = parseOptionalCount(body.buffer_minutes, 'buffer_minutes', 24 * 60);
     const notice = parseOptionalCount(body.min_notice_hours, 'min_notice_hours', 24 * 365);
     const blackouts = parseBlackouts(body.blackouts);
+    // #4713 (D4713): optional compare-and-set. A caller that sends the
+    // `revision` it read replaces only that version of the rules: if another
+    // tab changed them since, the write is refused (409 `rules_changed`) with
+    // the current rules, and nothing is overwritten. Omitting it keeps the
+    // unconditional replace the route always had.
+    const expected = body.expected_revision !== undefined && body.expected_revision !== null ? String(body.expected_revision) : null;
+    const rulesChanged = async () => {
+      const row = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json({
+        detail: 'Your availability rules changed somewhere else since you opened them. Nothing was saved; reload to see the current rules.',
+        code: 'rules_changed', current: availabilityDto(row),
+      }, 409);
+    };
+    if (expected !== null) {
+      // The compare and the write are ONE statement, so two tabs saving from
+      // the same revision cannot both win: the loser's UPDATE matches no row.
+      const at = nowIso();
+      const res = expected === ''
+        ? await c.env.DB.prepare(
+          `INSERT INTO advisor_availability_rules
+             (advisor_id, weekly_paid_cap, buffer_minutes, min_notice_hours, blackouts_json, timezone, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(advisor_id) DO NOTHING`
+        ).bind(m.id, cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, at).run()
+        : await c.env.DB.prepare(
+          `UPDATE advisor_availability_rules
+              SET weekly_paid_cap = ?, buffer_minutes = ?, min_notice_hours = ?, blackouts_json = ?, timezone = ?, updated_at = ?
+            WHERE advisor_id = ? AND updated_at = ?`
+        ).bind(cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, m.id, expected).run();
+      if (!Number((res as any).meta?.changes ?? 0)) return rulesChanged();
+      const done = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json(availabilityDto(done));
+    }
     const now = nowIso();
     await c.env.DB.prepare(
       `INSERT INTO advisor_availability_rules

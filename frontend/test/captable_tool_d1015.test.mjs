@@ -1,6 +1,7 @@
 // D1015 (#2432) — the Cap table tool inside the Raise module page: its tab
 // words, the blocks four existing reads carry, On record against Modelled, and
 // the wiring. Fixtures are worked out by hand from the Worker's shapes.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';

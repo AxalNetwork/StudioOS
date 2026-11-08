@@ -11,7 +11,7 @@ import {
 import { useRead } from './useProgramReads';
 import {
   ACTION_WORD, CREDITS_DONE, CREDITS_FOOT, CREDITS_HELD_WAITS, LISTING_DONE, LISTING_STATUSES, PAGE_SIZE, PERK_WEEKS_LINE,
-  countLine, listingActions, listingBody, listingDialog, listingWord, perkClaimsFrom, refusalSentence, shortDay, totalOf,
+  countLine, isFeatureAction, listingActions, listingBody, listingDialog, listingWord, perkClaimsFrom, refusalSentence, shortDay, totalOf,
 } from './programPagesModel';
 import {
   HQ_READS_MONEY, NOTHING_WAITING, NOT_READ_YET, NOT_RECORDED, OVERDUE_HOURS, PERKS_EMPTY, ageText, hoursSince, isReady,
@@ -154,7 +154,8 @@ function ListingDialog({ action, row, onClose, onDone }) {
     setBusy(true);
     setRefusal('');
     try {
-      await api.perkReview(row.uid, listingBody(action, row, { note, editorial, featured }));
+      const body = listingBody(action, row, { note, editorial, featured });
+      await (isFeatureAction(action) ? api.perkFeature(row.uid, body) : api.perkReview(row.uid, body));
       setDone(LISTING_DONE[action]);
       onDone?.();
     } catch (e) {

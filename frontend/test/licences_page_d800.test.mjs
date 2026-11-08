@@ -121,8 +121,8 @@ test('Summary: the four cards read the ledger, and what it lacks reads "Not reco
   assert.equal(feeCard(LICENCE, NOW).amount, '€90,000');
   assert.equal(feeCard(LICENCE, NOW).next, 'next invoice 1 Mar 2027');
   assert.equal(feeCard({ ...LICENCE, annual_fee_cents: null }, NOW).amount, NOT_RECORDED);
-  assert.deepEqual(shareCard(LICENCE), { share: '20%', detail: 'AI token split 30%' });
-  assert.equal(shareCard(LICENCE, { royalty_platform_licence_bps: null }).detail, 'AI token split 30% · royalty on licences sold Not recorded');
+  assert.deepEqual(shareCard(LICENCE), { share: '20%', detail: 'your AI token share 30%' });
+  assert.equal(shareCard(LICENCE, { royalty_platform_licence_bps: null }).detail, 'your AI token share 30% · royalty on licences sold Not recorded');
   const out = text(h(SummaryCards, { licence: LICENCE, terms: null, requests: null, now: NOW }));
   for (const s of ['Year 2 of 3', '€90,000', '20%', 'Renews 1 Mar 2028, in 498 days', 'Renewal: Not recorded']) assert.ok(out.includes(s), s);
 });

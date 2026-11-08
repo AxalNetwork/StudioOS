@@ -196,7 +196,8 @@ test('D431: reading your own carry is not writing it — the write stays the edi
 test('D431: the gate is the write gate, applied once per payload, and omits rather than nulls', () => {
   const dto = ROUTE_SRC.slice(ROUTE_SRC.indexOf('async function detailDto('), ROUTE_SRC.indexOf('async function getCompanyOr404('));
   assert.ok(dto.length > 200, 'detailDto could not be sliced');
-  assert.match(dto, /const editor = await canEdit\(env, c, viewer\);/, 'the read gate is not canEdit — the write gate');
+  // #4964: canEdit is handed the viewer's link from the roster detailDto already read; it is still canEdit.
+  assert.match(dto, /const editor = await canEdit\(env, c, viewer(, \{ link: own \})?\);/, 'the read gate is not canEdit — the write gate');
   assert.match(dto, /\.\.\.\(editor \|\| lnk\.user_id === viewer\.id\s*\? \{ carry_bps: \(lnk as any\)\.carry_bps \?\? null \}\s*: \{\}\)/,
     'carry_bps is not spread in conditionally — a refused reader must get no field, not null');
   assert.doesNotMatch(dto, /^\s*carry_bps:/m, 'carry_bps is still an unconditional member field');

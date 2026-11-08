@@ -297,7 +297,7 @@ test('P3: the key checkout is served, the mirror counts, and the webhook\'s day'
   assert.match(t, /Mirror mode Live/);
   assert.match(t, /Other mode 5 test-mode products, not counted/);
   assert.match(t, /Unknown mode 1 product with no recognised mode, not counted/);
-  assert.match(t, /Sync Not recorded/);
+  assert.match(t, /Last manual sync Not recorded/);
   assert.match(t, /HTTP 200 in 41ms · 2026-01-05 12:00/);
   assert.match(t, /3 in 24h · 1 not 2xx/);
   assert.match(t, /Nothing schedules a sync/);

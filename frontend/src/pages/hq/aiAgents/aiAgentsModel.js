@@ -2,7 +2,7 @@
  * D4137 (#4137) — HQ › AI agents, the words and rules the page draws by.
  *
  * Pure, for the Node test. The page (`HqAiAgentsPage.jsx`) reads the admin
- * routes under `/api/admin/ai-agents` (H1–H5: the roster, the From Axal skills,
+ * routes under `/api/admin/ai-agents` (H1–H5: the roster, the From Axal VC skills,
  * company skills, the policy, runs, spend and the audit) and draws a board with
  * the build task that switches it on only while that task has not landed. All
  * five have (`BUILD[key].live`); the words here stay as they are. The lifecycle
@@ -23,9 +23,11 @@ export const TABS = [
 ];
 
 /** The second row under Skills library and under Operations. */
+export const FROM_AXAL_VC = 'From Axal VC';
+
 export const SUBTABS = {
   skills: [
-    { key: 'axal', label: 'From Axal', to: `${BASE}/skills` },
+    { key: 'axal', label: FROM_AXAL_VC, to: `${BASE}/skills` },
     { key: 'companies', label: 'Company skills', to: `${BASE}/skills/companies` },
   ],
   operations: [
@@ -66,7 +68,7 @@ export function viewFor(pathname = '') {
  */
 export const BUILD = {
   H1: { issue: 4158, live: true, what: 'The roster admin API', boards: 'SA1, SA2' },
-  H2: { issue: 4160, live: true, what: 'Review, golden cases and retire for From Axal skills', boards: 'SA3 actions, SA4' },
+  H2: { issue: 4160, live: true, what: `Review, golden cases and retire for ${FROM_AXAL_VC} skills`, boards: 'SA3 actions, SA4' },
   H3: { issue: 4161, live: true, what: 'Company skills moderation', boards: 'SA5' },
   H4: { issue: 4162, live: true, what: 'Platform AI policy and the kill switch', boards: 'SA6' },
   H5: { issue: 4163, live: true, what: 'Runs, spend and the admin audit', boards: 'SA0 tiles, SA7, SA8' },
@@ -167,7 +169,7 @@ export function overviewTiles({ hqSkills = null } = {}) {
   const published = Array.isArray(hqSkills) ? hqSkills.filter((s) => s.status === 'published').length : null;
   return [
     { key: 'agents', label: 'Agents active', value: NOT_RECORDED, note: notYet('H5') },
-    { key: 'skills', label: 'Skills published', value: shown(published), note: published == null ? 'Could not be read.' : 'From Axal. Company skills are on their own tab.' },
+    { key: 'skills', label: 'Skills published', value: shown(published), note: published == null ? 'Could not be read.' : `${FROM_AXAL_VC}. Company skills are on their own tab.` },
     { key: 'runs', label: 'Runs this week', value: NOT_RECORDED, note: notYet('H5') },
     { key: 'spend', label: 'AI spend this month', value: NOT_RECORDED, note: notYet('H5') },
     { key: 'accepted', label: 'Proposals accepted', value: NOT_RECORDED, note: notYet('H5') },

@@ -736,6 +736,10 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
   const featureUnlocked = (key) => {
     if (previewAllUnlocked) return true;
     if (graduated) return Boolean(TOOL_INFO[key]?.keptAfterGraduation);
+    // #4661: leaving the programme clears `spinout_lab_active`, and every tool route is
+    // behind it, so each destination refuses an exited founder. A card that stayed
+    // enabled would open a page that bounces them; it is closed here, to agree.
+    if (exited) return false;
     return unlockedFeatures.has(key) || Boolean(TOOL_INFO[key]?.ungated) ||
       // Tools with no standalone backend flag (e.g. MI — Investor Signals) unlock
       // by program week instead of an `unlocked_features` entry.
@@ -1275,7 +1279,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false,
                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
                             }`}
                           >
-                            {unlocked ? (w.num <= currentWeek || graduated ? 'Active' : `Unlocked · Wk ${w.num}`) : graduated ? 'Closed at graduation' : `Unlocks Wk ${w.num}`}
+                            {unlocked ? (w.num <= currentWeek || graduated ? 'Active' : `Unlocked · Wk ${w.num}`) : graduated ? 'Closed at graduation' : exited ? 'Closed after leaving' : `Unlocks Wk ${w.num}`}
                           </span>
                           {clickable && (
                             <button

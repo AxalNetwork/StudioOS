@@ -426,7 +426,7 @@ test('the topology states the metadata the router sends, and only for the calls 
 
 // ── 6 · Analytics Engine ────────────────────────────────────────────────────
 
-test('four functions read the shared dataset, each behind the credential check the page reports', () => {
+test('five functions read the shared dataset, each behind the credential check the page reports', () => {
   const reports = FILES.find((f) => f.file === 'services/analyticsReports.ts')!.src;
   const sites = callSites('aeSql');
   assert.deepEqual([...new Set(sites.map((s) => s.file))], ['services/analyticsReports.ts'], 'aeSql is read outside analyticsReports.ts');
@@ -436,14 +436,14 @@ test('four functions read the shared dataset, each behind the credential check t
     const fns = [...before.matchAll(/(?:export\s+)?async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/g)];
     return fns[fns.length - 1][1];
   });
-  // D210 added the fourth, H15's weekly accounts read, and the page lists it.
+  // D210 added H15's weekly accounts read; D4854 added Platform health's telemetry probe. The page lists both.
   assert.deepEqual(enclosing, [
-    'loadTechnicalFromAnalyticsEngine', 'loadTrafficByBranch', 'loadBranchActionMirror', 'loadActiveAccountsByBranchWeek',
+    'probeTelemetry', 'loadTechnicalFromAnalyticsEngine', 'loadTrafficByBranch', 'loadBranchActionMirror', 'loadActiveAccountsByBranchWeek',
   ]);
   assert.equal(enclosing.length, AE_READERS.length, 'one reader line per function that reads the dataset');
   assert.match(fnBody(reports, 'async function aeSql('), /^\s*if \(!aeReadable\(env\)\) return null;/,
     'aeSql asks aeReadable first, so "readable here" and "can read" are one fact');
-  assert.doesNotMatch(reportsCode, /export\s+(?:async\s+)?function\s+aeSql\b/, 'aeSql is private; the four loaders are its only callers');
+  assert.doesNotMatch(reportsCode, /export\s+(?:async\s+)?function\s+aeSql\b/, 'aeSql is private; the five loaders are its only callers');
   assert.equal(NOT_FROM_ANALYTICS.length, 3);
 });
 

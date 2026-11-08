@@ -24,11 +24,10 @@
  * a partner's Firm Settings (D395) stay here, with a link to them; with no
  * company at all, `CompanySettingsPage` says how to create or join one.
  */
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useActiveCompany } from '../../../contexts/ActiveCompanyContext';
 import { useCompanyReadState } from '../../../ui/CompanySwitcher';
-import { teamsApi } from '../../../lib/api/teams';
 import { scopeFor, usePublishScope } from '../../../lib/settingsScope.js';
 import { useAuth } from '../../../hooks/useAuthSync';
 import CompanySettingsPage, { FirmProfileMount } from '../../CompanySettingsPage';
@@ -36,25 +35,7 @@ import { companySettingsPathFor } from './companiesModel';
 import { SettingsHead } from './CompanySettingsTabs.jsx';
 import CompanyGeneralForm from './CompanyGeneralForm.jsx';
 import { NotYours } from './portfolioUi.jsx';
-import * as portfolio from './portfolioAdapter.js';
-
-/** The company's name for the head, from its own read (any company the member belongs to); `notFound` when it is not theirs to open. */
-function useCompanyRead(uid) {
-  const [read, setRead] = useState({ name: '', notFound: false });
-  useEffect(() => {
-    setRead({ name: '', notFound: false });
-    if (!uid) return undefined;
-    let alive = true;
-    // #4736: through() tells a company that is not the member's to open (404) from a transient failure.
-    portfolio.through(() => teamsApi.getCompany(uid)).then((r) => {
-      if (!alive) return;
-      if (r.available) setRead({ name: String(r.value?.company_name || '').trim(), notFound: false });
-      else if (r.notFound) setRead({ name: '', notFound: true });
-    });
-    return () => { alive = false; };
-  }, [uid]);
-  return read;
-}
+import { useCompanyDetail } from './useCompanyDetail.js';
 
 export default function CompanySettingsAt() {
   const { uid } = useParams();
@@ -62,7 +43,10 @@ export default function CompanySettingsAt() {
   const { company } = useActiveCompany();
   const { loading } = useCompanyReadState();
   const { user } = useAuth();
-  const { name: read, notFound } = useCompanyRead(uid);
+  // #4964: the page's one company read; the form below subscribes to the same one, and a save updates the head too.
+  const detail = useCompanyDetail(uid);
+  const notFound = detail.status === 'notFound';
+  const read = detail.status === 'ready' ? String(detail.row?.company_name || '').trim() : '';
   const name = read || (company?.uid === uid ? String(company?.company_name || '').trim() : '');
   usePublishScope(uid && name ? scopeFor({ company: { uid, name } }) : null);
   if (loading) return null;
