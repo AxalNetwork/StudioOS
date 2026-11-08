@@ -18,6 +18,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import DeliverablesByClient, { AttachForm, DeliverableEditor } from './DeliverablesByClient';
+import { partialLine, readEveryPage } from './everyPage';
 
 /**
  * The chip keys a `?view=` may open the page on. D571: the Ops canvas's
@@ -89,7 +90,7 @@ export default function DeliveryZone() {
 
   const loadHeld = useCallback(async () => {
     setHeld((c) => ({ ...c, loading: true }));
-    const res = await api.listMyAdvisorBookings('completed').catch(() => null);
+    const res = await readEveryPage((page) => api.listMyAdvisorBookings('completed', page)).catch(() => null);
     if (res === null) {
       setHeld({
         loading: false, unavailable: true, sessions: [], heldTotal: null, reviews: {},
@@ -121,16 +122,20 @@ export default function DeliveryZone() {
   // failed read says so beside the picker rather than offering only "No
   // engagement", which reads as "you have none".
   const [engagementsRead, setEngagementsRead] = useState(true);
+  const [partial, setPartial] = useState(null);
   const loadEngagements = useCallback(async () => {
     try {
-      const engs = await api.listMyAdvisorEngagements();
+      const engs = await readEveryPage((page) => api.listMyAdvisorEngagements(page));
       setEngagements(engs?.items || []); setEngagementsRead(true);
     } catch { setEngagements([]); setEngagementsRead(false); }
   }, []);
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const data = await api.listMyAdvisorDeliverables();
+      // #4714 (D4714): every page; `totals` are the whole set's.
+      const read = await readEveryPage((page) => api.listMyAdvisorDeliverables(page));
+      const data = { items: read.items, totals: read.first?.totals || null };
+      setPartial(partialLine(read));
       // THE PRIMARY LIST RENDERS AS SOON AS IT ARRIVES. Engagements, held
       // sessions and review coverage are secondary and must not hold this list
       // on a skeleton (#4702). Engagements only feed the create form.
@@ -343,6 +348,7 @@ export default function DeliveryZone() {
       {adding && <Card padding="md" className="mt-3" data-testid="work-product-create-empty">{createForm}</Card>}
       </>}
     >
+      {partial && <p className="mb-2 text-[11px] text-axal-faint" data-testid="delivery-partial">{partial}</p>}
       <ZoneToolbar
         className="mb-3"
         role="advisor"

@@ -49,6 +49,7 @@ function world() {
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: assign reads the moderation table
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql'));
+  db.exec(sql('migrations/202611081919_skill_release_evidence.sql')); // D4533: release evidence
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', null);
@@ -92,10 +93,13 @@ const draft = (over: Record<string, unknown> = {}) => ({
   steps: ['Read the recorded metrics', 'Write the highlights'], tools: ['stripe.read'], output_kind: 'draft', roles: ['cfo'],
   tags: [{ slug: 'investor_reporting', level: 'proficient' }], ...over,
 });
-async function newSkill(w: W, over: Record<string, unknown> = {}) {
+async function newSkill(w: W, over: Record<string, unknown> = {}, models: string[] | null = [anyModel(w)]) {
   const r = await call(w, SUPER, 'POST', '/api/teams/skills', draft(over));
   assert.equal(r.status, 201, r.text);
-  return r.body.skill.uid as string;
+  const uid = r.body.skill.uid as string;
+  // D4533: an HQ draft passes on its required models; these suites declare the one model they run on.
+  if (models && over.scope !== 'company') assert.equal((await call(w, SUPER, 'PUT', `${HQ}/${uid}/models`, { models, reason: 'The models this skill must pass on.' })).status, 200);
+  return uid;
 }
 /** A case whose made-up record carries what the stubbed model will say. */
 const goldenCase = (i: number, says: string) => ({
@@ -111,6 +115,7 @@ function stubRun(calls: any[] = []) {
   };
   return calls;
 }
+const offered = (w: W): string[] => agentModels(w.env, { id: SUPER, role: 'admin', is_super_admin: 1, subscription_tier: 'growth', subscription_status: 'active' } as any).filter((m) => !m.plan_locked).map((m) => m.id);
 const anyModel = (w: W) => agentModels(w.env, { id: SUPER, role: 'admin', is_super_admin: 1, subscription_tier: 'growth', subscription_status: 'active' } as any).filter((m) => !m.plan_locked)[0]?.id;
 async function approve(w: W, uid: string) {
   assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/review`, { reviewer_uid: 'u-super2' })).status, 201);
@@ -126,23 +131,31 @@ const audits = (w: W) => {
 
 test('HQ library reads 180 skills in a fixed number of queries and keeps the detail evaluation summary', async () => {
   const w = world();
-  const uid = await newSkill(w);
+  const [m1, m2] = offered(w);
+  const uid = await newSkill(w, {}, [m1, m2]);
   await setCases(w, uid, ['first', 'second']);
+  const { id } = w.db.prepare('SELECT id FROM agent_skills WHERE uid = ?').get(uid) as { id: number };
+  const [live, removed] = w.db.prepare('SELECT id, uid FROM agent_skill_cases WHERE skill_id = ? ORDER BY id').all(id) as { id: number; uid: string }[];
+  const before = (await call(w, SUPER, 'GET', `${HQ}/${uid}`)).body.freshness.evidence.evidence_hash;
+  // D4533: the second case is removed, so the suite and the evidence are new.
+  assert.equal((await call(w, SUPER, 'PUT', `${HQ}/${uid}/cases`, { reason: 'The golden cases for this skill.', cases: [{ ...goldenCase(0, 'first'), uid: live.uid }] })).status, 200);
   assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/review`, { reviewer_uid: 'u-super2' })).status, 201);
   const detail = await call(w, SUPER, 'GET', `${HQ}/${uid}`);
   assert.equal(detail.status, 200, detail.text);
   const hash = detail.body.skill.draft_hash;
-  const { id } = w.db.prepare('SELECT id FROM agent_skills WHERE uid = ?').get(uid) as { id: number };
-  const [live, removed] = w.db.prepare('SELECT id FROM agent_skill_cases WHERE skill_id = ? ORDER BY id').all(id) as { id: number }[];
-  const record = w.db.prepare(`INSERT INTO agent_skill_eval_results (case_id, skill_id, draft_hash, model_id, result, run_by, run_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`);
-  record.run(live.id, id, hash, 'model-one', 'fail', SUPER, '2026-11-04 09:00:00');
-  record.run(live.id, id, hash, 'model-one', 'pass', SUPER, '2026-11-04 10:00:00');
-  record.run(removed.id, id, hash, 'model-two', 'pass', SUPER, '2026-11-04 11:00:00');
-  record.run(live.id, id, '0'.repeat(64), 'stale-model', 'pass', SUPER, '2026-11-04 12:00:00');
-  w.db.prepare('UPDATE agent_skill_cases SET removed_at = CURRENT_TIMESTAMP WHERE id = ?').run(removed.id);
+  const evidence = detail.body.freshness.evidence.evidence_hash;
+  assert.notEqual(evidence, before);
+  const record = w.db.prepare(`INSERT INTO agent_skill_eval_results (case_id, skill_id, draft_hash, model_id, result, run_by, run_at, evidence_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  record.run(live.id, id, hash, m1, 'fail', SUPER, '2026-11-04 09:00:00', evidence);
+  record.run(live.id, id, hash, m1, 'pass', SUPER, '2026-11-04 10:00:00', evidence);
+  record.run(removed.id, id, hash, m2, 'pass', SUPER, '2026-11-04 11:00:00', before);
+  record.run(live.id, id, hash, 'stale-model', 'pass', SUPER, '2026-11-04 12:00:00', evidence);
+  record.run(live.id, id, hash, m2, 'pass', SUPER, '2026-11-04 13:00:00', null);
   const updated = await call(w, SUPER, 'GET', `${HQ}/${uid}`);
   assert.equal(updated.status, 200, updated.text);
+  // The matrix is the live case on each REQUIRED model: m2 has no result under this evidence, so it is not evaluated.
+  assert.deepEqual(updated.body.evals.cases[0].results.map((r: any) => [r.model, r.result]), [[m1, 'pass'], [m2, 'not_evaluated']].sort());
 
   const db = w.env.DB;
   let reads = 0;
@@ -165,9 +178,10 @@ test('HQ library reads 180 skills in a fixed number of queries and keeps the det
   const row = large.body.skills.find((skill: { uid: string }) => skill.uid === uid);
   assert.equal(row.status, 'in_review');
   assert.equal(row.status, updated.body.skill.status);
-  assert.deepEqual(row.golden, { pass: 1, total: 2, meets_bar: false });
+  assert.deepEqual(row.golden, { pass: 1, total: 2, not_evaluated: 1, meets_bar: false });
+  assert.deepEqual([updated.body.evals.pass, updated.body.evals.total, updated.body.evals.not_evaluated, updated.body.evals.meets_bar], [1, 2, 1, false]);
   assert.equal(row.last_eval, updated.body.evals.last_run);
-  assert.equal(row.last_eval, '2026-11-04 11:00:00');
+  assert.equal(row.last_eval, '2026-11-04 10:00:00', 'only a result that counts is the last eval');
 
   const second = await call(w, SUPER, 'GET', `${HQ}?page=2`);
   assert.equal(second.status, 200, second.text);
@@ -271,6 +285,7 @@ test('D4160: the golden-case bar is 9 of 10 runs, per case and model, through ru
   assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).body.error, 'golden_cases_failing', 'no case is below the bar');
   // 8 of 10 pass: below the bar.
   await setCases(w, uid, [...Array(8).fill('MRR 41,200'), 'MRR unknown', 'MRR 41,200, guaranteed']);
+  await approve(w, uid); // D4533: new cases are new evidence, reviewed again
   const run1 = await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] });
   assert.equal(run1.status, 200, run1.text);
   assert.deepEqual([run1.body.evals.pass, run1.body.evals.total, run1.body.evals.meets_bar], [8, 10, false]);
@@ -283,6 +298,7 @@ test('D4160: the golden-case bar is 9 of 10 runs, per case and model, through ru
   assert.deepEqual([refused.status, refused.body.error, refused.body.pass, refused.body.total], [409, 'golden_cases_failing', 8, 10]);
   // 9 of 10: at the bar.
   await setCases(w, uid, [...Array(9).fill('MRR 41,200'), 'MRR unknown']);
+  await approve(w, uid);
   await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] });
   assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).status, 200);
   assert.equal(meetsBar(9, 10), true);
@@ -362,8 +378,8 @@ test('D4160: a reason is required, every change is audited with it, and no email
   await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] });
   await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`);
   const actions = audits(w).map((a) => a.action);
-  assert.deepEqual(actions, ['agent_skill_cases_set', 'agent_skill_review_requested', 'agent_skill_review_approved', 'agent_skill_evals_run', 'agent_skill_published']);
-  const cases = audits(w)[0].details;
+  assert.deepEqual(actions, ['agent_skill_models_set', 'agent_skill_cases_set', 'agent_skill_review_requested', 'agent_skill_review_approved', 'agent_skill_evals_run', 'agent_skill_published']);
+  const cases = audits(w)[1].details;
   assert.equal(cases.reason, 'The golden cases for this skill.');
   assert.deepEqual([cases.before, cases.after], [{ cases: 0 }, { cases: 1 }]);
   const pub = audits(w).at(-1)!.details;
@@ -443,6 +459,7 @@ test('#4531 slice 2: the draft evaluation judges structure, evidence, refusal an
   const run = async (says: string[]) => {
     const put = await call(w, SUPER, 'PUT', `${HQ}/${uid}/cases`, { reason: 'The structured golden cases.', cases: says.map((s, i) => kase(i, s)) });
     assert.equal(put.status, 200, put.text);
+    await approve(w, uid); // D4533: new cases are new evidence, reviewed again
     return (await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] })).body.evals;
   };
   // Each output keeps every phrase and breaks exactly one new assertion.
@@ -465,6 +482,8 @@ test('#4531 slice 2: the draft evaluation judges structure, evidence, refusal an
   const last = await run([...Array(9).fill(GOOD), broken[3][0]]);
   assert.equal(last.cases[9].results[0].detail, broken[3][1]);
   // An assertion written to the store without `checkCase` fails the case; it never passes it.
+  // D4533's trigger keeps case rows immutable, so the corrupted store is simulated without it.
+  w.db.exec('DROP TRIGGER trg_agent_skill_cases_immutable');
   w.db.prepare("UPDATE agent_skill_cases SET expect_json = json_set(expect_json, '$.structure', json('{\"sections\":\"Highlights\"}')) WHERE removed_at IS NULL").run();
   const tampered = (await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] })).body.evals;
   assert.deepEqual([tampered.pass, tampered.total, tampered.meets_bar], [0, 10, false]);

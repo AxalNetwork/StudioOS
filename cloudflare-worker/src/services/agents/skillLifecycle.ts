@@ -8,12 +8,24 @@
  * order. An approval and an eval result count only for the hash they were
  * given on, so an edit after either needs them again.
  *
- * THE PUBLISH GATE (`publishRefusal`), for an HQ skill only, in order:
- *   needs_approval         409: no approval on the current draft by a second Super Admin
+ * THE RELEASE EVIDENCE (D4533, `evidenceOf`). What a draft is qualified on is
+ * four parts: its definition (`draftHash`), its case suite (the live cases'
+ * immutable identities, `suiteRevision`), the evaluator version (`JUDGE_VERSION`,
+ * #4531's) and the REQUIRED model set (declared on the draft, else the default
+ * set; never read from the results). `evidence_hash` names all four. A review
+ * and an eval result count only for the evidence hash they were given on, so a
+ * change to any part needs a new review and new results.
+ *
+ * THE PUBLISH GATE (`publishRefusalOf` over `releaseDecision`), for an HQ skill
+ * only, in order:
+ *   needs_approval         409: no approval by a second Super Admin on the current evidence
+ *   evaluation_incomplete  409: a live case has no result on a required model under the
+ *                          current evidence: it reads `not_evaluated`, is never left
+ *                          out of the matrix and never counts as a pass
  *   golden_cases_failing   409: below the bar, 9 of 10 (`PASS_BAR`), over every live
- *                          case on every model it was run on for this draft; a
- *                          case with no result on a model counts as not run, and
- *                          a skill with no case or no result is below the bar
+ *                          case on every required model; a skill with no case is below it
+ * Each refusal carries the decision as `freshness`, the same object GET /:uid
+ * answers, so the HQ screen and the gate never disagree.
  * `routes/team_skills.ts`'s publish and the bulk publish both call it.
  *
  * A golden case's inputs are made-up records keyed by the read they stand in
@@ -24,7 +36,9 @@
 import type { Env } from '../../types';
 import { run as aiRun, type RunOptions, type RunResult } from '../aiRouter';
 import { OUTPUT_KINDS, type OutputKind, type Tag } from './skills';
-import { NUMBERS_MAX, assertionsMiss, checkAssertions, checkNumberAssertion, missingDataMiss, numberMiss, statements, type NumberAssertion, type SliceTwo } from './skillAssertions';
+import { JUDGE_VERSION, NUMBERS_MAX, assertionsMiss, checkAssertions, checkNumberAssertion, missingDataMiss, numberMiss, statements, type NumberAssertion, type SliceTwo } from './skillAssertions';
+import { agentModels } from './modelOffers';
+import type { User } from '../../types';
 
 export const PASS_BAR = { pass: 9, of: 10 };
 export const CASES_MAX = 20;
@@ -139,31 +153,145 @@ export async function runCase(env: Env, p: DraftParts, input: CaseInput, expect:
   return { ...judge(expect, r.output, input), usage_log_id: r.usageLogId ?? null };
 }
 
+// ── Release evidence (D4533) ────────────────────────────────────────────────
+
+/** The most models one evaluation runs on, and the size of the default required set. */
+export const MODELS_MAX = 5;
+
 /**
- * The latest result per live case and model for one draft, and the bar. A
- * model counts when any case was run on it for this draft; a case with no
- * result on such a model is `not_run`.
+ * The evaluator version the evidence is bound to: #4531's `JUDGE_VERSION`,
+ * read through the import, behind a seam the tests move to show a new
+ * evaluator makes earlier evidence stale.
  */
-export async function evalSummary(env: Env, skillId: number, hash: string) {
-  const cases = ((await env.DB.prepare('SELECT id, uid, name FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
-    .bind(skillId).all<{ id: number; uid: string; name: string }>()).results ?? []);
-  const latest = ((await env.DB.prepare(
-    `SELECT r.case_id, r.model_id, r.result, r.detail, r.run_at FROM agent_skill_eval_results r
-      WHERE r.skill_id = ? AND r.draft_hash = ?
-        AND r.id = (SELECT MAX(x.id) FROM agent_skill_eval_results x WHERE x.case_id = r.case_id AND x.model_id = r.model_id AND x.draft_hash = r.draft_hash)`,
-  ).bind(skillId, hash).all<{ case_id: number; model_id: string; result: 'pass' | 'fail' | 'not_run'; detail: string | null; run_at: string }>()).results ?? []);
-  const models = [...new Set(latest.map((l) => l.model_id))].sort();
-  const rows = cases.map((c) => ({
+export const EVALUATOR: { version: number } = { version: JUDGE_VERSION };
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export type EvidencePart = 'definition' | 'cases' | 'evaluator' | 'models';
+export type SuiteCase = { uid: string; name: string; sha256: string };
+export type RequiredModels = { required: string[]; source: 'declared' | 'default' };
+export type Evidence = {
+  definition_hash: string;
+  suite: { revision: string; cases: SuiteCase[] };
+  evaluator_version: number;
+  models: RequiredModels;
+  evidence_hash: string;
+};
+export type CaseRow = { id: number; uid: string; name: string; input_json: string; expect_json: string };
+
+// The models agents may run on as HQ sees them: a Super Admin's plan never locks one.
+const HQ_VIEW = { role: 'admin' } as User;
+
+/** The default required set: the first models agents may run on, as Re-run evals without a choice runs them. */
+export function defaultModels(env: Env): string[] {
+  return agentModels(env, HQ_VIEW).filter((m) => !m.plan_locked).map((m) => m.id).slice(0, MODELS_MAX);
+}
+
+/** The draft's required model set: the declared one, else the default. Sorted, so its order is never a change. */
+export function requiredModels(env: Env, declaredJson: string | null | undefined): RequiredModels {
+  let declared: unknown = null;
+  try { declared = declaredJson ? JSON.parse(declaredJson) : null; } catch { declared = null; }
+  if (Array.isArray(declared) && declared.length && declared.every((m) => typeof m === 'string' && m)) {
+    return { required: [...new Set(declared as string[])].sort(), source: 'declared' };
+  }
+  return { required: [...new Set(defaultModels(env))].sort(), source: 'default' };
+}
+
+/** A skill's live cases, oldest first. */
+export async function liveCases(env: Env, skillId: number): Promise<CaseRow[]> {
+  return (await env.DB.prepare('SELECT id, uid, name, input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
+    .bind(skillId).all<CaseRow>()).results ?? [];
+}
+
+/**
+ * The suite revision: SHA-256 of the live cases' uids, oldest first. A case is
+ * never edited in place (a changed case is a new row with a new uid, and the
+ * row itself is immutable in D1), so its uid names its text, and an added,
+ * removed or changed case is a new revision.
+ */
+export const suiteRevision = (uids: readonly string[]): Promise<string> => sha256Hex(JSON.stringify(uids));
+
+/** The evidence hash: the definition, the suite revision, the evaluator version and the required models. */
+export const evidenceHashOf = (definitionHash: string, revision: string, models: RequiredModels): Promise<string> =>
+  sha256Hex(JSON.stringify([definitionHash, revision, EVALUATOR.version, models.required]));
+
+export async function evidenceFrom(p: DraftParts, rows: readonly Pick<CaseRow, 'uid' | 'name' | 'input_json' | 'expect_json'>[], models: RequiredModels): Promise<Evidence> {
+  const definition_hash = await draftHash(p);
+  // Each case's text is fingerprinted for the record; the revision is its uids.
+  const cases = await Promise.all(rows.map(async (k) => ({ uid: k.uid, name: k.name, sha256: await sha256Hex(JSON.stringify([k.name, k.input_json, k.expect_json])) })));
+  const revision = await suiteRevision(rows.map((k) => k.uid));
+  return { definition_hash, suite: { revision, cases }, evaluator_version: EVALUATOR.version, models, evidence_hash: await evidenceHashOf(definition_hash, revision, models) };
+}
+
+/** The current draft's evidence, read now. */
+export async function evidenceOf(env: Env, s: { id: number; required_models_json?: string | null }, p: DraftParts): Promise<Evidence> {
+  return evidenceFrom(p, await liveCases(env, s.id), requiredModels(env, s.required_models_json));
+}
+
+export const parseEvidence = (json: string | null | undefined): Evidence | null => {
+  try { const v = json ? JSON.parse(json) : null; return v && typeof v.evidence_hash === 'string' ? v as Evidence : null; } catch { return null; }
+};
+
+/**
+ * Which parts of `now` differ from what a review was asked on. `definition` is
+ * always known (every review row has its draft hash); the other three are null
+ * on a review from before D4533, which recorded nothing else.
+ */
+export function evidenceChanges(definitionHash: string, was: Evidence | null, now: Evidence): Record<EvidencePart, boolean | null> {
+  return {
+    definition: definitionHash !== now.definition_hash,
+    cases: was ? was.suite.revision !== now.suite.revision : null,
+    evaluator: was ? was.evaluator_version !== now.evaluator_version : null,
+    models: was ? JSON.stringify(was.models.required) !== JSON.stringify(now.models.required) : null,
+  };
+}
+
+type LatestResult = { id: number; case_uid: string; model_id: string; result: 'pass' | 'fail' | 'not_run'; detail: string | null; run_at: string };
+
+/** The latest result per case and model under one evidence hash. */
+async function latestResults(env: Env, skillId: number, evidenceHash: string): Promise<LatestResult[]> {
+  return (await env.DB.prepare(
+    `SELECT r.id, k.uid AS case_uid, r.model_id, r.result, r.detail, r.run_at FROM agent_skill_eval_results r JOIN agent_skill_cases k ON k.id = r.case_id
+      WHERE r.skill_id = ? AND r.evidence_hash = ?
+        AND r.id = (SELECT MAX(x.id) FROM agent_skill_eval_results x WHERE x.case_id = r.case_id AND x.model_id = r.model_id AND x.evidence_hash = r.evidence_hash)`,
+  ).bind(skillId, evidenceHash).all<LatestResult>()).results ?? [];
+}
+
+export type CellResult = 'pass' | 'fail' | 'not_run' | 'not_evaluated';
+
+function summarise(e: Evidence, latest: readonly LatestResult[]) {
+  const models = e.models.required;
+  const rows = e.suite.cases.map((c) => ({
     uid: c.uid, name: c.name,
     results: models.map((m) => {
-      const hit = latest.find((l) => l.case_id === c.id && l.model_id === m);
-      return { model: m, result: hit?.result ?? 'not_run', detail: hit?.detail ?? null, run_at: hit?.run_at ?? null };
+      const hit = latest.find((l) => l.case_uid === c.uid && l.model_id === m);
+      // A required model with no result is NOT EVALUATED: listed, and never a pass.
+      return { model: m, result: (hit?.result ?? 'not_evaluated') as CellResult, detail: hit?.detail ?? null, run_at: hit?.run_at ?? null, result_id: hit?.id ?? null };
     }),
   }));
-  const total = cases.length * models.length;
-  const pass = rows.reduce((n, c) => n + c.results.filter((x) => x.result === 'pass').length, 0);
-  const lastRun = latest.reduce<string | null>((a, l) => (!a || l.run_at > a ? l.run_at : a), null);
-  return { cases: rows, models, pass, total, meets_bar: meetsBar(pass, total), last_run: lastRun };
+  const total = rows.length * models.length;
+  const count = (r: CellResult) => rows.reduce((n, c) => n + c.results.filter((x) => x.result === r).length, 0);
+  const pass = count('pass');
+  const notEvaluated = count('not_evaluated');
+  const counted = latest.filter((l) => e.suite.cases.some((c) => c.uid === l.case_uid) && models.includes(l.model_id));
+  const lastRun = counted.reduce<string | null>((a, l) => (!a || l.run_at > a ? l.run_at : a), null);
+  return { rows, models, pass, total, not_evaluated: notEvaluated, meets_bar: notEvaluated === 0 && meetsBar(pass, total), last_run: lastRun };
+}
+
+/**
+ * Every live case on every required model under the current evidence, and the
+ * bar. The matrix comes from the evidence, never from the results: a cell with
+ * no result reads `not_evaluated`.
+ */
+export async function evalSummary(env: Env, skillId: number, e: Evidence) {
+  const s = summarise(e, await latestResults(env, skillId, e.evidence_hash));
+  return {
+    cases: s.rows.map((c) => ({ uid: c.uid, name: c.name, results: c.results.map(({ result_id: _id, ...r }) => r) })),
+    models: s.models, pass: s.pass, total: s.total, not_evaluated: s.not_evaluated, meets_bar: s.meets_bar, last_run: s.last_run,
+  };
 }
 
 /** 9 of 10: pass × 10 ≥ total × 9, and at least one result. */
@@ -176,38 +304,107 @@ export function meetsBar(pass: number, total: number): boolean {
 export type ReviewRow = {
   id: number; skill_id: number; draft_hash: string; requested_by: number; reviewer_id: number;
   status: 'requested' | 'approved' | 'changes_requested' | 'withdrawn'; comment: string | null; requested_at: string; decided_at: string | null;
+  /** D4533: the evidence the review was asked on; null on a review from before it. */
+  evidence_hash: string | null; evidence_json: string | null;
 };
 
 export async function openReview(env: Env, skillId: number): Promise<ReviewRow | null> {
   return env.DB.prepare("SELECT * FROM agent_skill_reviews WHERE skill_id = ? AND status = 'requested'").bind(skillId).first<ReviewRow>();
 }
 
-export async function approvalFor(env: Env, skillId: number, hash: string): Promise<ReviewRow | null> {
-  return env.DB.prepare("SELECT * FROM agent_skill_reviews WHERE skill_id = ? AND draft_hash = ? AND status = 'approved' ORDER BY id DESC LIMIT 1")
-    .bind(skillId, hash).first<ReviewRow>();
+/** The approval on exactly this evidence, if any. A review from before D4533 (no evidence) never matches. */
+export async function approvalFor(env: Env, skillId: number, evidenceHash: string): Promise<ReviewRow | null> {
+  return env.DB.prepare("SELECT * FROM agent_skill_reviews WHERE skill_id = ? AND evidence_hash = ? AND status = 'approved' ORDER BY id DESC LIMIT 1")
+    .bind(skillId, evidenceHash).first<ReviewRow>();
 }
 
-/** The four states: a draft with an open review on its current text is `in_review`. */
-export function lifecycleStatus(status: 'draft' | 'published' | 'retired', open: Pick<ReviewRow, 'draft_hash'> | null, hash: string): 'draft' | 'in_review' | 'published' | 'retired' {
+/** The four states: a draft with an open review on its current evidence is `in_review`. */
+export function lifecycleStatus(status: 'draft' | 'published' | 'retired', open: Pick<ReviewRow, 'evidence_hash'> | null, evidenceHash: string): 'draft' | 'in_review' | 'published' | 'retired' {
   if (status === 'retired') return 'retired';
-  if (open && open.draft_hash === hash) return 'in_review';
+  if (open && open.evidence_hash === evidenceHash) return 'in_review';
   return status;
 }
 
-export type PublishRefusal = { status: 409; code: 'needs_approval' | 'golden_cases_failing'; message: string; extra?: Record<string, unknown> };
+export type Blocking = 'needs_approval' | 'evaluation_incomplete' | 'golden_cases_failing';
+
+/**
+ * THE FRESHNESS DECISION (D4533): whether this draft's evidence is complete and
+ * current, computed once on the server. The publish gate refuses on it and GET
+ * /:uid answers it, so #4537's screen reads the same object. No timestamps: the
+ * same evidence gives the same decision.
+ */
+export type ReleaseDecision = {
+  ready: boolean;
+  blocking: Blocking[];
+  evidence: Evidence;
+  /** `changes`: what differs from the latest approval of this skill; null when it never had one. */
+  review: { approved: boolean; changes: Record<EvidencePart, boolean | null> | null };
+  evaluation: { pass: number; total: number; not_evaluated: number; meets_bar: boolean; pass_bar: typeof PASS_BAR };
+};
+
+/** The decision and what the manifest is made from: the approval and the results it counted. */
+export async function releaseEvidence(env: Env, s: { id: number; required_models_json?: string | null }, p: DraftParts) {
+  const evidence = await evidenceOf(env, s, p);
+  const approval = await approvalFor(env, s.id, evidence.evidence_hash);
+  const last = approval ?? await env.DB.prepare("SELECT * FROM agent_skill_reviews WHERE skill_id = ? AND status = 'approved' ORDER BY id DESC LIMIT 1").bind(s.id).first<ReviewRow>();
+  const sum = summarise(evidence, await latestResults(env, s.id, evidence.evidence_hash));
+  const blocking: Blocking[] = [];
+  if (!approval) blocking.push('needs_approval');
+  if (sum.not_evaluated > 0) blocking.push('evaluation_incomplete');
+  if (!meetsBar(sum.pass, sum.total)) blocking.push('golden_cases_failing');
+  const decision: ReleaseDecision = {
+    ready: blocking.length === 0, blocking, evidence,
+    review: { approved: !!approval, changes: last ? evidenceChanges(last.draft_hash, parseEvidence(last.evidence_json), evidence) : null },
+    evaluation: { pass: sum.pass, total: sum.total, not_evaluated: sum.not_evaluated, meets_bar: sum.meets_bar, pass_bar: PASS_BAR },
+  };
+  return { decision, approval, cells: sum.rows };
+}
+
+export async function releaseDecision(env: Env, s: { id: number; required_models_json?: string | null }, p: DraftParts): Promise<ReleaseDecision> {
+  return (await releaseEvidence(env, s, p)).decision;
+}
+
+export type PublishRefusal = { status: 409; code: Blocking; message: string; extra?: Record<string, unknown> };
+
+/** Why a decision does not let the draft be published; null when it does. The first blocking reason answers. */
+export function publishRefusalOf(d: ReleaseDecision): PublishRefusal | null {
+  const freshness = d;
+  const e = d.evaluation;
+  switch (d.blocking[0]) {
+    case undefined: return null;
+    case 'needs_approval':
+      return { status: 409, code: 'needs_approval', message: 'A second Super Admin approves this draft, its golden cases, the evaluator and the required models before it is published. Request a review.', extra: { freshness } };
+    case 'evaluation_incomplete':
+      // A case with no result on a required model is never a pass, and never left out.
+      return { status: 409, code: 'evaluation_incomplete', message: `${e.not_evaluated} of ${e.total} required golden-case runs have no result for this draft, its cases, the evaluator and the required models. Run the evals on every required model.`,
+        extra: { not_evaluated: e.not_evaluated, total: e.total, freshness } };
+    default:
+      return { status: 409, code: 'golden_cases_failing', message: `This draft passes ${e.pass} of ${e.total} golden-case runs; publishing needs ${PASS_BAR.pass} of every ${PASS_BAR.of}. Re-run the evals or fix the skill.`,
+        extra: { pass: e.pass, total: e.total, freshness } };
+  }
+}
 
 /** Why an HQ skill's current draft may not be published; null when it may. */
-export async function publishRefusal(env: Env, skillId: number, p: DraftParts): Promise<PublishRefusal | null> {
-  const hash = await draftHash(p);
-  if (!(await approvalFor(env, skillId, hash))) {
-    return { status: 409, code: 'needs_approval', message: 'A second Super Admin approves this draft before it is published. Request a review.' };
-  }
-  const s = await evalSummary(env, skillId, hash);
-  if (!s.meets_bar) {
-    return { status: 409, code: 'golden_cases_failing', message: `This draft passes ${s.pass} of ${s.total} golden-case runs; publishing needs ${PASS_BAR.pass} of every ${PASS_BAR.of}. Re-run the evals or fix the skill.`,
-      extra: { pass: s.pass, total: s.total } };
-  }
-  return null;
+export async function publishRefusal(env: Env, s: { id: number; required_models_json?: string | null }, p: DraftParts): Promise<PublishRefusal | null> {
+  return publishRefusalOf(await releaseDecision(env, s, p));
+}
+
+/**
+ * The release-evidence manifest an HQ version is published with (manifest 1):
+ * the definition hash, the exact cases and suite revision, the evaluator
+ * version, the required models, every case × model result it counted (by row
+ * id) and the approval. Written in the same INSERT as the version row.
+ */
+export function manifestOf(r: Awaited<ReturnType<typeof releaseEvidence>>, version: number) {
+  const { decision: d, approval, cells } = r;
+  return {
+    manifest: 1, version,
+    definition_hash: d.evidence.definition_hash, evidence_hash: d.evidence.evidence_hash,
+    suite: d.evidence.suite, evaluator_version: d.evidence.evaluator_version, models: d.evidence.models,
+    results: cells.flatMap((c) => c.results.map((x) => ({ case_uid: c.uid, model: x.model, result: x.result, result_id: x.result_id }))),
+    bar: { pass: d.evaluation.pass, total: d.evaluation.total, pass_bar: PASS_BAR },
+    review: approval ? { review_id: approval.id, requested_by: approval.requested_by, reviewer_id: approval.reviewer_id, decided_at: approval.decided_at } : null,
+  };
 }
 
 // ── Diff ────────────────────────────────────────────────────────────────────
@@ -238,6 +435,29 @@ export function diffParts(a: DraftParts, b: DraftParts) {
     .filter((f) => JSON.stringify(a[f]) !== JSON.stringify(b[f]))
     .map((f) => ({ field: f, from: a[f], to: b[f] }));
   return { frontmatter, steps: diffSteps(a.steps, b.steps) };
+}
+
+/**
+ * D4533: the case suite, evaluator and required models from `a` to `b`, beside
+ * `diffParts`. A side with no manifest (a version published before D4533)
+ * recorded none of them, so its parts read null, never "unchanged".
+ */
+export function diffEvidence(a: Evidence | null, b: Evidence | null) {
+  const caseRef = (k: SuiteCase) => ({ uid: k.uid, name: k.name });
+  const less = <T>(x: readonly T[], y: readonly T[], key: (t: T) => string) => x.filter((t) => !y.some((u) => key(u) === key(t)));
+  return {
+    recorded: { from: !!a, to: !!b },
+    cases: a && b ? {
+      from: a.suite.revision, to: b.suite.revision,
+      added: less(b.suite.cases, a.suite.cases, (k) => k.uid).map(caseRef),
+      removed: less(a.suite.cases, b.suite.cases, (k) => k.uid).map(caseRef),
+    } : null,
+    models: a && b ? {
+      from: a.models.required, to: b.models.required,
+      added: less(b.models.required, a.models.required, String), removed: less(a.models.required, b.models.required, String),
+    } : null,
+    evaluator: { from: a?.evaluator_version ?? null, to: b?.evaluator_version ?? null },
+  };
 }
 
 /** Live agents pinned to a skill. */

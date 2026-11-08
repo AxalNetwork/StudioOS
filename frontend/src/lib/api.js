@@ -4221,8 +4221,9 @@ export const api = {
     method: 'PUT', body: JSON.stringify({ body }),
   }),
   deleteAdvisorClientNote: (clientId) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
-  listMyAdvisorBookings: (status) =>
-    request(`/advisors/me/bookings${status ? `?status=${status}` : ''}`),
+  // #4714: `page` ({ limit, offset }) reads one page; `page.next_offset` names the next.
+  listMyAdvisorBookings: (status, page) =>
+    request(`/advisors/me/bookings${expertisePage(page, { status })}`),
   listMyMenteeBookings: (status) =>
     request(`/advisors/bookings/me${status ? `?status=${status}` : ''}`),
   confirmAdvisorBooking: (id) => request(`/advisors/bookings/${id}/confirm`, { method: 'POST' }),
@@ -4321,7 +4322,7 @@ export const api = {
   // renewal rate, so a merge-PATCH over them would let a caller assert a
   // renewal with no cycle behind it. `updateMyAdvisorEngagement` carries the
   // descriptive columns; the two POSTs carry a lane move and a decision. D71.
-  listMyAdvisorEngagements: () => request('/advisors/me/engagements'),
+  listMyAdvisorEngagements: (page) => request(`/advisors/me/engagements${expertisePage(page)}`),
   createMyAdvisorEngagement: (data) =>
     request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorEngagement: (id, data) =>
@@ -4343,7 +4344,7 @@ export const api = {
   // THERE IS NO METHOD HERE THAT MARKS SOMETHING OPENED, and that is the point
   // rather than an omission. `opened_at` is the client's to set; the founder
   // side writes it through `/advisor-grants`. D72.
-  listMyAdvisorDeliverables: () => request('/advisors/me/deliverables'),
+  listMyAdvisorDeliverables: (page) => request(`/advisors/me/deliverables${expertisePage(page)}`),
   createMyAdvisorDeliverable: (data) =>
     request('/advisors/me/deliverables', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorDeliverable: (id, data) =>

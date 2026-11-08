@@ -22,6 +22,7 @@ and is not kept in sync.
 | `migrations/202611071531_licence_revisions.sql` | D4694 (#4694): a `revision` on `licence_terms` and `licence_fee_invoices` and a `terms_revision` on `territory_licences`, so a write from a stale snapshot is refused (409) instead of replacing a newer value. Additive, default 0. |
 | `migrations/202611071547_advisor_engagement_events.sql` | D4695 (#4695): `advisor_engagement_events`, an engagement's append-only renewal history (`signed`, `renewed`, `ended`), with unique indexes that make a repeated decision on one term a no-op. New table, re-runnable. |
 | `migrations/202611072219_security_events_support_actor.sql` | D4691 (#4691): nullable `security_events.support_user_id`, the operator behind a gate refusal or step-up made inside a support session (0 for a branch session). Additive, nothing backfilled. |
+| `migrations/202611081919_skill_release_evidence.sql` | D4533 (#4533): the release evidence of Axal's skills: a draft's declared required models, the evidence hash a review and an eval result were given on, and an HQ version's manifest in its own row. Triggers keep versions, cases, results and decided reviews as written. Additive, nothing backfilled. |
 
 ## Adding a change
 
