@@ -164,6 +164,7 @@ const AdminCommunity = lazy(() => import('./pages/admin/community/AdminCommunity
 const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
+const LicenceDeepLink = lazy(() => import('./pages/admin/licences/LicenceDeepLink'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
 const ProgramGrantsHistory = lazy(() => import('./pages/admin/grants/ProgramGrantsHistory'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
@@ -1223,7 +1224,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
       {hqStrip === 'Licences' && (
         <HqSubNavStrip label="Licences">
           <StripLink to="/admin/licences">Ledger</StripLink>
-          <StripLink to="/admin/licences/programs">Program grants</StripLink>
+          <StripLink to="/admin/licences/programs">Program access by licence</StripLink>
         </HqSubNavStrip>
       )}
       {hqStrip === 'Content' && (
@@ -2931,12 +2932,16 @@ function AppInner() {
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
-      {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
+      {/* D981 (#2376) — Program access by licence (D4819's name for Program grants): which programs each licensed studio may run. */}
       <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/history" element={guard(['admin'], hqOnly(<ProgramGrantsHistory />))} />
       <Route path="/admin/licences/programs/requests" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/defaults" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/studio/:uid" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      {/* D4819 (#4819): a licence's deep link, opened in today's detail view. The static
+          /programs paths above outrank these, so Program access keeps its addresses. */}
+      <Route path="/admin/licences/:uid" element={guard(['admin'], hqOnly(<LicenceDeepLink />))} />
+      <Route path="/admin/licences/:uid/:section" element={guard(['admin'], hqOnly(<LicenceDeepLink />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
