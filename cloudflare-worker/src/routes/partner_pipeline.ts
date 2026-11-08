@@ -1323,7 +1323,7 @@ partnerPipeline.get('/retainers', async (c) => {
       // money at risk" and "we cannot price the risk" are different answers.
       at_risk_mrr_cents: atRiskPriced ? atRiskCents : null,
       mrr_basis: counted
-        ? `${counted} active retainer${counted === 1 ? '' : 's'} with a recorded amount; normalised to a month (quarterly divided by three)${endedCount ? `; ${endedCount} ended not counted` : ''}.`
+        ? `${counted} active retainer${counted === 1 ? '' : 's'} with a recorded amount; quarterly amounts divided by three${endedCount ? `; ${endedCount} ended not counted` : ''}.`
         : null,
       mrr_note: counted
         ? (unpriced ? `${unpriced} retainer${unpriced === 1 ? ' has' : 's have'} no amount recorded and ${unpriced === 1 ? 'is' : 'are'} not in this total.` : null)
