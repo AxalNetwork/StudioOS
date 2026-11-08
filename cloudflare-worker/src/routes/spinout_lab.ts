@@ -176,14 +176,20 @@ export async function startLab(sql: Sql, userId: number): Promise<StartResult> {
     return { ok: false, status: 409, error: 'This account has already been through the Lab' };
   }
   // Idempotent: COALESCE preserves an existing started_at and a non-zero
-  // week so re-calling start() doesn't reset progress.
-  await sql`
+  // week so re-calling start() doesn't reset progress. D4658: the write
+  // itself refuses a graduate, so an exit that lands between the probe above
+  // and this statement cannot be reopened by a start that read before it.
+  const started: Array<{ id: number }> = await sql`
     UPDATE users
     SET spinout_lab_active = 1,
         spinout_lab_week = COALESCE(NULLIF(spinout_lab_week, 0), 1),
         spinout_lab_started_at = COALESCE(spinout_lab_started_at, datetime('now'))
-    WHERE id = ${userId}
+    WHERE id = ${userId} AND COALESCE(is_incorporated, 0) = 0
+    RETURNING id
   `;
+  if (started.length === 0) {
+    return { ok: false, status: 409, error: 'This account has already been through the Lab' };
+  }
   return { ok: true, state: await getLabState(sql, userId) };
 }
 
@@ -229,15 +235,18 @@ export async function recordMilestone(
   while (newWeek < 4 && weekMet(newWeek, completed)) {
     newWeek += 1;
   }
+  // D4658: the week only moves forward, and only while the Lab is on. Two
+  // requests that each computed a week from their own read cannot write the
+  // lower one over the higher, and a sprint that closed meanwhile stays closed.
   if (newWeek !== Number(u.spinout_lab_week)) {
-    await sql`UPDATE users SET spinout_lab_week = ${newWeek} WHERE id = ${userId}`;
+    await sql`UPDATE users SET spinout_lab_week = MAX(COALESCE(spinout_lab_week, 1), ${newWeek}) WHERE id = ${userId} AND spinout_lab_active = 1`;
   }
   if (newWeek === 4 && weekMet(4, completed)) {
     // Single statement so a partial failure can't half-incorporate the user.
     // SQLite/D1 statement execution is atomic; either both columns flip or
     // neither does. Mirrors the explicit /exit route's effect.
     await sql`
-      UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ${userId}
+      UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ${userId} AND spinout_lab_active = 1
     `;
   }
 
@@ -441,8 +450,24 @@ spinoutLab.get('/state', async (c) => {
     console.warn('[spinout-lab] week 1 plan unreadable', (e as Error).message);
     week1PlanUnreadable = true;
   }
+  // D4659: the enrolled venture and the one graduation rule, from the server,
+  // so the workspace, the certificate and the public list agree. A read that
+  // fails is said, never drawn as "no venture" or "not graduated".
+  let venture: unknown = null;
+  let ventureUnreadable = false;
+  let graduated: boolean | null = null;
+  try {
+    const { resolveVenture } = await import('../services/labVenture');
+    venture = await resolveVenture(c.env, user.id);
+    const g = await c.env.DB.prepare('SELECT 1 AS x FROM spinout_lab_graduates WHERE user_id = ?').bind(user.id).first();
+    graduated = !!g;
+  } catch {
+    console.warn('[spinout-lab] venture unreadable');
+    ventureUnreadable = true;
+  }
   const payload: Record<string, unknown> = {
     ...state, admitted, cohort, application, applicant,
+    venture, venture_unreadable: ventureUnreadable, graduated,
     week1_plan: week1Plan,
     week1_plan_unreadable: week1PlanUnreadable,
     milestone_credits: milestoneCredits,
@@ -725,32 +750,41 @@ spinoutLab.post('/apply/withdraw', async (c) => {
     return refusal(c, 409, 'not_withdrawable',
       'This application has already been decided, so there is nothing to withdraw. Contact the programme team if you need to step back.');
   }
-  let upd: { meta?: { changes?: number } };
+  // D4658: one decision wins. The withdrawal, the pool row and the interview
+  // are one batch (one D1 transaction), and the application is withdrawn only
+  // while no admin decision has landed on its pool row — the approval checks
+  // the same thing from its side (labDecisions.decideApplicant). The answers
+  // are deleted, and the interview cancelled, only by the withdrawal that won.
+  let changed = 0;
   try {
-    upd = await c.env.DB.prepare(
-      `UPDATE spinout_applications
-          SET status = 'withdrawn', withdrawn_at = datetime('now'), answers_json = NULL, idea = ''
-        WHERE id = ? AND user_id = ? AND status = 'pending'`,
-    ).bind(app.id, user.id).run();
+    const [upd] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE spinout_applications
+            SET status = 'withdrawn', withdrawn_at = datetime('now'), answers_json = NULL, idea = ''
+          WHERE id = ? AND user_id = ? AND status = 'pending'
+            AND NOT EXISTS (SELECT 1 FROM cohort_applicants ca
+                             WHERE ca.application_id = spinout_applications.id
+                               AND ca.status IN ('approved', 'activated', 'rejected'))`,
+      ).bind(app.id, user.id),
+      c.env.DB.prepare(
+        `UPDATE cohort_applicants SET status = 'withdrawn', decided_at = datetime('now'), decided_by = ?
+          WHERE application_id = ? AND status IN ('pending', 'waitlisted')
+            AND (SELECT status FROM spinout_applications WHERE id = ?) = 'withdrawn'`,
+      ).bind(`user:${user.id}`, app.id, app.id),
+      c.env.DB.prepare(
+        `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
+          WHERE application_id = ? AND status = 'scheduled' AND outcome IS NULL
+            AND (SELECT status FROM spinout_applications WHERE id = ?) = 'withdrawn'`,
+      ).bind(app.id, app.id),
+    ]);
+    changed = Number(upd?.meta?.changes ?? 0);
   } catch (err) {
-    console.error('[spinout-lab/apply/withdraw] update failed', err);
+    console.error('[spinout-lab/apply/withdraw] update failed', (err as Error)?.message);
     return refusal(c, 503, 'withdraw_unavailable', 'Your application could not be withdrawn just now. Try again in a moment.');
   }
-  if ((upd.meta?.changes ?? 0) === 0) {
+  if (changed === 0) {
     return refusal(c, 409, 'not_withdrawable', 'This application changed while you were withdrawing it. Refresh and check its status.');
   }
-  try {
-    await c.env.DB.prepare(
-      `UPDATE cohort_applicants SET status = 'withdrawn', decided_at = datetime('now'), decided_by = ?
-        WHERE application_id = ? AND status IN ('pending', 'waitlisted')`,
-    ).bind(`user:${user.id}`, app.id).run();
-  } catch { /* pool not migrated */ }
-  try {
-    await c.env.DB.prepare(
-      `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
-        WHERE application_id = ? AND status = 'scheduled' AND outcome IS NULL`,
-    ).bind(app.id).run();
-  } catch { /* interviews not migrated */ }
   return c.json({ ok: true, applicant: await loadApplicantBlock(c.env, user.id) });
 });
 
@@ -854,6 +888,22 @@ spinoutLab.post('/milestone', async (c) => {
   return c.json({ ...(r.state as Record<string, unknown>), milestone_credit: r.milestone_credit, graduation_credit: r.graduation_credit });
 });
 
+// POST /venture { project_id } — D4659: name which of your own projects is the
+// Lab venture, when you own several and none is recorded, or the recorded one
+// was deleted. A recorded, live venture is never switched here.
+spinoutLab.post('/venture', async (c) => {
+  const user = await requireAuth(c);
+  const body = (await c.req.json().catch(() => ({}))) as { project_id?: unknown };
+  const { chooseVenture } = await import('../services/labVenture');
+  try {
+    const r = await chooseVenture(c.env, user.id, Number(body.project_id), `user:${user.id}`);
+    if (!r.ok) return c.json({ error: r.error, code: r.code }, r.status);
+    return c.json({ ok: true, venture: r.venture });
+  } catch {
+    return c.json({ error: 'Your venture could not be saved just now. Try again in a moment.', code: 'venture_unavailable', retryable: true }, 503);
+  }
+});
+
 spinoutLab.post('/exit', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
@@ -888,14 +938,14 @@ spinoutLab.get('/graduates', async (c) => {
   let rows: GraduateRow[] = [];
   try {
     const res = await c.env.DB.prepare(
-      `SELECT m.user_id, m.completed_at, usf.spinout_lab_cohort AS cohort,
+      `SELECT m.user_id, m.graduated_at AS completed_at, usf.spinout_lab_cohort AS cohort,
               p.uid, p.name, p.sector, p.stage, p.status, p.total_funding, p.last_funding_round
-       FROM spinout_lab_milestones m
+       FROM spinout_lab_graduates m
        JOIN users u ON u.id = m.user_id
        LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
-       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
-       WHERE m.milestone_key = 'incorporation_completed'
-       ORDER BY m.completed_at DESC, p.id ASC`,
+       LEFT JOIN spinout_lab_enrollments le ON le.id = (SELECT MAX(x.id) FROM spinout_lab_enrollments x WHERE x.user_id = m.user_id)
+       LEFT JOIN projects p ON p.id = le.project_id AND p.deleted_at IS NULL
+       ORDER BY m.graduated_at DESC, p.id ASC`,
     ).all<GraduateRow>();
     rows = res.results ?? [];
   } catch {
@@ -996,10 +1046,9 @@ spinoutLab.get('/stats', async (c) => {
   try {
     const res = await c.env.DB.prepare(
       `SELECT m.user_id, p.total_funding
-       FROM spinout_lab_milestones m
-       LEFT JOIN projects p ON p.founder_id = (SELECT founder_id FROM users WHERE id = m.user_id)
-         AND p.deleted_at IS NULL
-       WHERE m.milestone_key = 'incorporation_completed'
+       FROM spinout_lab_graduates m
+       LEFT JOIN spinout_lab_enrollments le ON le.id = (SELECT MAX(x.id) FROM spinout_lab_enrollments x WHERE x.user_id = m.user_id)
+       LEFT JOIN projects p ON p.id = le.project_id AND p.deleted_at IS NULL
        ORDER BY m.user_id ASC, p.id ASC`,
     ).all<{ user_id: number; total_funding: number | null }>();
     const rows = res.results ?? [];
@@ -1131,15 +1180,15 @@ spinoutLab.get('/cohort', async (c) => {
   let gradRows: CohortGradRow[] = [];
   try {
     const res = await c.env.DB.prepare(
-      `SELECT m.user_id, m.completed_at, u.spinout_lab_started_at AS started_at,
+      `SELECT m.user_id, m.graduated_at AS completed_at, u.spinout_lab_started_at AS started_at,
               usf.spinout_lab_cohort AS cohort, p.name, p.sector
-       FROM spinout_lab_milestones m
+       FROM spinout_lab_graduates m
        JOIN users u ON u.id = m.user_id
        LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
-       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
-       WHERE m.milestone_key = 'incorporation_completed'
-         AND datetime(m.completed_at) >= datetime('now', '-45 days')
-       ORDER BY m.completed_at DESC, p.id ASC`,
+       LEFT JOIN spinout_lab_enrollments le ON le.id = (SELECT MAX(x.id) FROM spinout_lab_enrollments x WHERE x.user_id = m.user_id)
+       LEFT JOIN projects p ON p.id = le.project_id AND p.deleted_at IS NULL
+       WHERE datetime(m.graduated_at) >= datetime('now', '-45 days')
+       ORDER BY m.graduated_at DESC, p.id ASC`,
     ).all<CohortGradRow>();
     gradRows = res.results ?? [];
   } catch {
@@ -1224,7 +1273,8 @@ spinoutLab.get('/shipped', async (c) => {
        FROM spinout_lab_milestones m
        JOIN users u ON u.id = m.user_id
        LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
-       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
+       LEFT JOIN spinout_lab_enrollments le ON le.id = (SELECT MAX(x.id) FROM spinout_lab_enrollments x WHERE x.user_id = m.user_id)
+       LEFT JOIN projects p ON p.id = le.project_id AND p.deleted_at IS NULL
        WHERE u.spinout_lab_active = 1
        ORDER BY m.user_id ASC, m.completed_at ASC, p.id ASC
        LIMIT 2000`,
@@ -1312,17 +1362,17 @@ spinoutLab.get('/fund-metrics', async (c) => {
     // be multiplied by the fan-out. `ORDER BY p.id` keeps the first project
     // per user deterministic, matching GET /stats.
     const res = await c.env.DB.prepare(
-      `SELECT m.user_id, m.completed_at, u.spinout_lab_started_at AS started_at,
+      `SELECT m.user_id, m.graduated_at AS completed_at, u.spinout_lab_started_at AS started_at,
               p.total_funding, p.revenue, p.mrr, p.paying_customers,
               p.paid_pilot_status,
               (SELECT COUNT(*) FROM discovery_interviews di
                 WHERE di.project_id = p.id) AS interview_count,
               (SELECT COUNT(*) FROM portfolio_positions pp
                 WHERE pp.project_id = p.id) AS backed
-       FROM spinout_lab_milestones m
+       FROM spinout_lab_graduates m
        JOIN users u ON u.id = m.user_id
-       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
-       WHERE m.milestone_key = 'incorporation_completed'
+       LEFT JOIN spinout_lab_enrollments le ON le.id = (SELECT MAX(x.id) FROM spinout_lab_enrollments x WHERE x.user_id = m.user_id)
+       LEFT JOIN projects p ON p.id = le.project_id AND p.deleted_at IS NULL
        ORDER BY m.user_id ASC, p.id ASC`,
     ).all<import('../services/spinoutFundMetrics').GraduateTimingRow>();
 

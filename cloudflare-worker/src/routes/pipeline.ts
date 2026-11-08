@@ -13,6 +13,7 @@ import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { railFor, refuseRun } from '../util/railContext';
 import { CLEF, confidenceLine, decide } from '../services/ai/decide';
+import { FORMULA_KEY, formulaVersionOf, scaleOf, scoreTraction, validateKeyMetrics } from '../services/tractionScore';
 
 const pipeline = new Hono<{ Bindings: Env }>();
 
@@ -158,23 +159,7 @@ export async function openGateReview(env: Env, dealId: number, aiRec: string, ai
   return await env.DB.prepare(`SELECT * FROM decision_gates WHERE deal_id = ? ORDER BY id DESC LIMIT 1`).bind(dealId).first();
 }
 
-// Validate metrics: allowlist keys + numeric values + size cap
-const METRIC_KEYS = new Set(['users', 'mau', 'dau', 'revenue', 'mrr', 'arr', 'engagement', 'retention', 'growth', 'growth_rate', 'churn', 'cac', 'ltv', 'nps', 'conversion']);
-function validateKeyMetrics(km: any): { ok: true; clean: Record<string, number> } | { ok: false; error: string } {
-  if (!km || typeof km !== 'object' || Array.isArray(km)) return { ok: false, error: 'key_metrics must be an object' };
-  const keys = Object.keys(km);
-  if (keys.length === 0) return { ok: false, error: 'key_metrics cannot be empty' };
-  if (keys.length > 20) return { ok: false, error: 'Too many metrics (max 20)' };
-  const clean: Record<string, number> = {};
-  for (const k of keys) {
-    if (!METRIC_KEYS.has(k)) return { ok: false, error: `Unknown metric '${k}'. Allowed: ${[...METRIC_KEYS].join(', ')}` };
-    const v = Number(km[k]);
-    if (!Number.isFinite(v)) return { ok: false, error: `Metric '${k}' must be a finite number` };
-    if (Math.abs(v) > 1e12) return { ok: false, error: `Metric '${k}' out of range` };
-    clean[k] = v;
-  }
-  return { ok: true, clean };
-}
+// Metric validation and the traction score live in services/tractionScore.ts (D4693).
 
 // ============================================================
 // PIPELINE LIST + CREATE
@@ -450,21 +435,20 @@ pipeline.post('/metrics/snapshot', async (c) => {
   const v = validateKeyMetrics(data?.key_metrics);
   if (!v.ok) return c.json({ error: v.error }, 400);
   const km = v.clean;
-  const users = Number(km.users || km.mau || 0);
-  const revenue = Number(km.revenue || km.mrr || 0);
-  const engagement = Number(km.engagement || km.retention || 0);
-  const growth = Number(km.growth || km.growth_rate || 0);
-  // Normalize to 0-100 with diminishing returns
-  const usersScore = Math.min(40, Math.log10(users + 1) * 10);
-  const revenueScore = Math.min(40, Math.log10(revenue + 1) * 8);
-  const engagementScore = Math.min(15, engagement * 0.15);
-  const growthScore = Math.min(15, growth * 0.5);
-  const tractionScore = Math.round(usersScore + revenueScore + engagementScore + growthScore);
+  // D4693: a score out of 100 whose parts add up to 100, a part nobody recorded left out rather than scored as zero,
+  // and the formula recorded beside the metrics so this score keeps its meaning if the formula changes again. Screens
+  // do not print the underscore key.
+  const scored = scoreTraction(km);
+  const stored = { ...km, [FORMULA_KEY]: scored.formula_version };
 
   const r: any = await c.env.DB.prepare(`INSERT INTO metrics_snapshots (deal_id, key_metrics, traction_score, created_by) VALUES (?, ?, ?, ?) RETURNING *`)
-    .bind(dealId, JSON.stringify(km), tractionScore, user.id).first();
-  await logAction(c.env, 'metrics_snapshot', user.id, { deal_id: dealId, score: tractionScore });
-  return c.json({ ...r, key_metrics: km, traction_score: tractionScore }, 201);
+    .bind(dealId, JSON.stringify(stored), scored.score, user.id).first();
+  await logAction(c.env, 'metrics_snapshot', user.id, { deal_id: dealId, score: scored.score, formula_version: scored.formula_version });
+  return c.json({
+    ...r, key_metrics: km, traction_score: scored.score,
+    formula_version: scored.formula_version, score_max: scored.max, components: scored.components,
+    components_missing: scored.missing, score_basis: scored.basis,
+  }, 201);
 });
 
 // ============================================================
@@ -494,6 +478,10 @@ pipeline.post('/decision-gate/review', async (c) => {
     return c.json({ traction_score: null, recommendation: null, ai_recommendation: null, status: 'not_recorded', reason: 'No traction metrics snapshot recorded' });
   }
   const traction = Number(latestMetric.traction_score);
+  // D4693: the formula this snapshot was scored with. A snapshot from before versions is formula 1 (a 0-110 scale); its
+  // score keeps that meaning and the review says so, rather than reading it as "/100".
+  const formulaVersion = formulaVersionOf(km);
+  const scoreMax = scaleOf(formulaVersion);
 
   // Rule-based recommendation as fallback / safety floor
   let ruleRec: 'continue' | 'iterate' | 'spinout_ready';
@@ -503,7 +491,7 @@ pipeline.post('/decision-gate/review', async (c) => {
 
   // #3938 (§4.2 fix 13, IN2): Clef decides, with a probability for every option; gpt-oss-120b
   // (`rail_reason`) only explains the decision Clef made. Both are the member's press (D765).
-  const facts = `Project: ${project.name}\nSector: ${project.sector || 'n/a'}\nStage: ${project.stage}\nTraction Score: ${traction}/100\nLatest Metrics: ${JSON.stringify(km)}\nProblem: ${(project.problem_statement || '').slice(0, 500)}\nSolution: ${(project.solution || '').slice(0, 500)}`;
+  const facts = `Project: ${project.name}\nSector: ${project.sector || 'n/a'}\nStage: ${project.stage}\nTraction Score: ${traction}/${scoreMax} (formula v${formulaVersion})\nLatest Metrics: ${JSON.stringify(Object.fromEntries(Object.entries(km).filter(([k]) => !k.startsWith('_'))))}\nProblem: ${(project.problem_statement || '').slice(0, 500)}\nSolution: ${(project.solution || '').slice(0, 500)}`;
   const rail = railFor(c, { page: 'pipeline', option: 'review:decision-gate' }, `deal:${dealId}`);
   const decided = await decide(c.env, { userId: user.id, surface: AI_SURFACE.pipeline, rail }, {
     model: CLEF, key: 'gate',
@@ -515,7 +503,7 @@ pipeline.post('/decision-gate/review', async (c) => {
 
   let aiRec = ruleRec;
   let aiConfidence: number | null = null;
-  let aiExp = `Rule-based: traction score ${traction}/100 → ${ruleRec.replace('_', ' ')}.`;
+  let aiExp = `Rule-based: traction score ${traction}/${scoreMax} (formula v${formulaVersion}) → ${ruleRec.replace('_', ' ')}.`;
   if (choice) {
     aiRec = choice.choice as typeof ruleRec;
     aiConfidence = choice.confidence;
@@ -552,7 +540,7 @@ pipeline.post('/decision-gate/review', async (c) => {
 
   await logAction(c.env, 'ai_call', user.id, { kind: 'decision_gate_review', deal_id: dealId });
   await logAction(c.env, 'decision_gate_review', user.id, { deal_id: dealId, gate_id: gate.id, recommendation: aiRec });
-  return c.json({ ...gate, model: choice && decided.ok ? decided.model : 'rule-based', traction_score: traction });
+  return c.json({ ...gate, model: choice && decided.ok ? decided.model : 'rule-based', traction_score: traction, formula_version: formulaVersion, score_max: scoreMax });
 });
 
 pipeline.patch('/decision-gate/decide', async (c) => {

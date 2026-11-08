@@ -133,6 +133,15 @@ export function weekMet(week: number, completed: Set<string>): boolean {
   return true;
 }
 
+/**
+ * D4659 — the one graduation rule: every week's requirements are met. The
+ * database's view `spinout_lab_graduates` (migration 202611071800) is the same
+ * rule in SQL; the tests pin its key lists to `MILESTONES`.
+ */
+export function isLabGraduate(completed: Set<string>): boolean {
+  return MILESTONES.every((w) => weekMet(w.week, completed));
+}
+
 /** Cumulative unlocked features through `currentWeek` (inclusive). */
 export function unlockedFeaturesThrough(currentWeek: number): string[] {
   const out: string[] = [];

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, Pill, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
@@ -7,6 +7,7 @@ import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Field, StatedLimit } from '../advisor/expertise/kit';
 import { NO_STORE, gapCount, missingChecklist, nothingToDraft, updatedAgo } from './fundDossierRead';
 import FundReportsPanel from './FundReportsPanel';
+import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
 
 /**
  * `/research/funds/:uid` — one fund the founder has researched.
@@ -206,11 +207,28 @@ export default function FundDossier({ role = 'founder' }) {
   const [hiText, setHiText] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // D4607: the fund this page loaded, by its route identity. A read or a
+  // write that answers after the route has moved to another fund is dropped,
+  // and writes go to the loaded fund only while the route still names it.
+  const routeKey = recordKey(uid);
+  const [loadedKey, setLoadedKey] = useState(null);
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
+  const writeFor = useRef(0);
+  useEffect(() => { writeFor.current += 1; setBusy(false); setNotice(null); }, [uid]);
+  useEffect(() => () => { gate.current.invalidate(); writeFor.current += 1; }, []);
+
   const load = useCallback(async () => {
+    const fresh = gate.current.begin();
+    const key = recordKey(uid);
     setLoading(true);
     setError(null);
+    setFund(null);
+    setLoadedKey(null);
     try {
       const row = await api.research.fundGet(uid);
+      if (!fresh()) return;
+      setLoadedKey(key);
       setFund(row);
       setNote(row.note || '');
       setThesis(row.thesis || '');
@@ -221,23 +239,29 @@ export default function FundDossier({ role = 'founder' }) {
       setEditingThesis(!row.thesis);
       setEditingSource(!row.source_url);
     } catch (e) {
+      if (!fresh()) return;
       setFund(null);
       setError(e?.status === 404
         ? 'This fund is not on your list.'
         : (e?.message || 'The fund did not load.'));
     } finally {
-      setLoading(false);
+      if (fresh()) setLoading(false);
     }
   }, [uid]);
+  const current = sameRecord(loadedKey, routeKey);
 
   useEffect(() => { load(); }, [load]);
 
   const apply = async (patch) => {
+    if (!current) return null;
+    const target = JSON.parse(loadedKey)[0];
+    const mine = ++writeFor.current;
     setNotice(null);
     setBusy(true);
     try {
-      await api.research.fundUpdate(uid, patch);
-      const row = await api.research.fundGet(uid);
+      await api.research.fundUpdate(target, patch);
+      const row = await api.research.fundGet(target);
+      if (writeFor.current !== mine) return null;
       setFund(row);
       setNote(row.note || '');
       setThesis(row.thesis || '');
@@ -248,10 +272,10 @@ export default function FundDossier({ role = 'founder' }) {
       setNotice({ ok: true, text: 'Saved.' });
       return row;
     } catch (e) {
-      setNotice({ ok: false, text: e?.message || 'That did not save.' });
+      if (writeFor.current === mine) setNotice({ ok: false, text: e?.message || 'That did not save.' });
       return null;
     } finally {
-      setBusy(false);
+      if (writeFor.current === mine) setBusy(false);
     }
   };
 
@@ -312,7 +336,7 @@ export default function FundDossier({ role = 'founder' }) {
           </Card>
         )}
 
-        {fund && (
+        {fund && current && (
           <>
             {notice && (
               <p className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
