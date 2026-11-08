@@ -69,6 +69,8 @@ export default function EngagementsZone() {
   const [decision, setDecision] = useState({ decision: 'renewed', note: '', term_ends_at: '' });
   const [adding, setAdding] = useState(false);
   const [candidates, setCandidates] = useState([]);
+  // #4714 (D4714): whether the bookings the candidates come from were read.
+  const [candidatesRead, setCandidatesRead] = useState(true);
   const [draft, setDraft] = useState({
     client_name: '', shape: 'retainer', scope_label: '', scope_includes: '',
     scope_excludes: '', amount: '', term_ends_at: '',
@@ -83,6 +85,7 @@ export default function EngagementsZone() {
       // — and an advisor whose bookings will not load still has a contract
       // board, so this never takes the page down with it.
       const held = await api.listMyAdvisorBookings().catch(() => null);
+      setCandidatesRead(held != null);
       const seen = new Map();
       for (const b of held?.items || []) {
         if (b.client_user_id && !seen.has(b.client_user_id)) {
@@ -341,7 +344,7 @@ export default function EngagementsZone() {
                        cards and no sentence reads as a rendering failure. */
                     ? <p className="py-2 text-[10.5px] leading-relaxed text-axal-faint">Nothing here.</p>
                     : cards.map((e) => <BoardCard key={e.id} e={e} busy={busy === e.id}
-                      onAdvance={advance} candidates={candidates} onLink={linkClient} />)}
+                      onAdvance={advance} candidates={candidates} candidatesRead={candidatesRead} onLink={linkClient} />)}
                 </div>
               </div>
             );
@@ -519,7 +522,7 @@ export default function EngagementsZone() {
  * rather than a disabled one: there is no move to make, and a greyed button
  * implies there is.
  */
-function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
+function BoardCard({ e, busy, onAdvance, candidates, candidatesRead = true, onLink }) {
   const due = e.lane === 'renewal_due';
   const moves = laneMoves(e.lane);
   // The linked account may not be among the candidates any more — a booking can
@@ -564,7 +567,9 @@ function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
         <p className="mt-1 text-[9.5px] leading-relaxed text-axal-faint">
           {e.founder_user_id
             ? 'Linked. Work products can be sent to them, and they can record having opened one. Changing the account never moves work already sent: it stays with the person it went to.'
-            : options.length === 0
+            : !candidatesRead
+              ? 'Your bookings could not be read, so the accounts you could link are not listed. Reload to try again.'
+              : options.length === 0
               ? 'Nobody has booked you yet, so there is no account to link. The contract works either way.'
               : 'Only a linked client can be sent a work product, or record that they opened one.'}
         </p>

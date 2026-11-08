@@ -727,13 +727,42 @@ advisors.get('/:uid', async (c) => {
  */
 function ownSlotDto(s: SlotRow & {
   recording_state?: string; payment_state?: string; blocked_reason?: string | null;
-}, taken = 0): any {
+}, taken = 0, pricing: BookedPricing = null): any {
   return {
     ...slotDto(s, taken),
     recording_state: s.recording_state ?? 'none',
     payment_state: s.payment_state ?? 'not_applicable',
     blocked_reason: s.blocked_reason ?? null,
+    booked_pricing: pricing,
   };
+}
+
+/**
+ * #4714 (D4714): what the active bookings on a slot were priced at, from
+ * `advisor_bookings.amount_cents` (migration 205): a positive amount is
+ * priced, an explicit 0 is free, NULL is unpriced. A slot whose bookings
+ * disagree is 'mixed'; a slot nobody holds is null. The grid's "paid / free"
+ * tile reads this, so an hour with no recorded price is never counted free.
+ */
+type BookedPricing = 'priced' | 'free' | 'unpriced' | 'mixed' | null;
+async function bookedPricingBySlot(env: Env, advisorId: number, slotIds: number[]): Promise<Map<number, BookedPricing>> {
+  const out = new Map<number, BookedPricing>();
+  if (!slotIds.length) return out;
+  const rows = await env.DB.prepare(
+    `SELECT slot_id,
+            SUM(CASE WHEN amount_cents > 0 THEN 1 ELSE 0 END) AS priced,
+            SUM(CASE WHEN amount_cents = 0 THEN 1 ELSE 0 END) AS free,
+            SUM(CASE WHEN amount_cents IS NULL THEN 1 ELSE 0 END) AS unpriced
+       FROM advisor_bookings
+      WHERE advisor_id = ? AND status IN ('pending','confirmed','completed')
+        AND slot_id IN (SELECT value FROM json_each(?))
+      GROUP BY slot_id`,
+  ).bind(advisorId, JSON.stringify(slotIds)).all<{ slot_id: number; priced: number; free: number; unpriced: number }>();
+  for (const r of rows.results || []) {
+    const kinds = [r.priced > 0 && 'priced', r.free > 0 && 'free', r.unpriced > 0 && 'unpriced'].filter(Boolean) as BookedPricing[];
+    out.set(Number(r.slot_id), kinds.length === 1 ? kinds[0] : kinds.length ? 'mixed' : null);
+  }
+  return out;
 }
 
 advisors.get('/me/slots', async (c) => {
@@ -751,11 +780,13 @@ advisors.get('/me/slots', async (c) => {
         WHERE advisor_id = ? AND starts_at >= ? AND starts_at < ?
         ORDER BY starts_at ASC LIMIT 500`
     ).bind(m.id, from, until).all<SlotRow>();
+    const slots = (rows.results || []) as SlotRow[];
+    const pricing = await bookedPricingBySlot(c.env, m.id, slots.map((s) => Number(s.id)));
     const items: any[] = [];
-    for (const s of (rows.results || []) as SlotRow[]) {
-      items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id)));
+    for (const s of slots) {
+      items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id), pricing.get(Number(s.id)) ?? null));
     }
-    return c.json({ items, window: { from, until, days }, truncated: (rows.results || []).length >= 500 });
+    return c.json({ items, window: { from, until, days }, truncated: slots.length >= 500 });
   } catch (e) { return mapError(c, e); }
 });
 

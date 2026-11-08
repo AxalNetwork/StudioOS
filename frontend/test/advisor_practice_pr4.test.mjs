@@ -153,7 +153,7 @@ test('slotCounts reproduces the canvas’s own arithmetic over the canvas’s ow
   const c = slotCounts(CANVAS_SLOTS);
   assert.deepEqual(c, {
     booked: 7, open: 5, held: 1, blocked: 1, cancelled: 0,
-    paid: 7, free: 0, total: 14,
+    paid: 7, free: 0, unpriced: 0, total: 14,
   });
   // The canvas computes these in its own script; assert its rendered prose
   // carries the same numbers, so the translation above cannot drift from the
@@ -164,12 +164,13 @@ test('slotCounts reproduces the canvas’s own arithmetic over the canvas’s ow
   // AND THE SUM CLOSES. Every slot is in exactly one bucket; a precedence
   // change that double-counted would still produce plausible tiles.
   assert.equal(c.booked + c.open + c.held + c.blocked + c.cancelled, c.total);
-  assert.equal(c.paid + c.free, c.booked);
+  assert.equal(c.paid + c.free + c.unpriced, c.booked);
 });
 
 test('slotCounts is not fooled by an absent or zero price', () => {
   // `paid` means "a price was taken", and null is not zero — migration 205's
-  // distinction, which the tile note inherits.
+  // distinction. #4714 (D4714): an hour with no recorded price is UNPRICED,
+  // never a free intro; only an explicit 0 is free.
   const c = slotCounts([
     { taken: 1, amount_cents: 30000 },
     { taken: 1, amount_cents: null },
@@ -178,12 +179,25 @@ test('slotCounts is not fooled by an absent or zero price', () => {
   ]);
   assert.equal(c.booked, 4);
   assert.equal(c.paid, 1, 'only the one with a real amount is paid');
-  assert.equal(c.free, 3, 'null, zero and absent are all "not a paid hour"');
+  assert.equal(c.free, 1, 'only the explicit zero is free');
+  assert.equal(c.unpriced, 2, 'null and absent are unknown, not free');
+});
+
+test('slotCounts reads the worker\'s booked_pricing over a bare amount (#4714)', () => {
+  const c = slotCounts([
+    { taken: 1, booked_pricing: 'priced' },
+    { taken: 1, booked_pricing: 'free' },
+    { taken: 1, booked_pricing: 'unpriced' },
+    { taken: 2, booked_pricing: 'mixed' },
+    { taken: 1, booked_pricing: null },
+  ]);
+  assert.deepEqual([c.paid, c.free, c.unpriced], [1, 1, 3], 'mixed and unread pricing are not free');
+  assert.equal(bookedNote(c), '1 paid, 1 free intro · 3 with no price recorded');
 });
 
 test('slotCounts survives what the API can actually hand it', () => {
   assert.deepEqual(slotCounts(null),
-    { booked: 0, open: 0, held: 0, blocked: 0, cancelled: 0, paid: 0, free: 0, total: 0 });
+    { booked: 0, open: 0, held: 0, blocked: 0, cancelled: 0, paid: 0, free: 0, unpriced: 0, total: 0 });
   assert.equal(slotCounts(undefined).total, 0);
   assert.equal(slotCounts({}).total, 0, 'an object is not a list');
 });

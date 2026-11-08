@@ -76,3 +76,54 @@ export function acceptanceRate(counts) {
   const decided = Number(counts?.accepted ?? 0) + Number(counts?.declined ?? 0);
   return decided > 0 ? Math.round((Number(counts.accepted) / decided) * 100) : null;
 }
+
+/**
+ * #4714 (D4714): WHEN A ROW IS DATED BY ITS DECISION, AND WHEN IT IS NOT.
+ * `advisor_decided_at` (D4702) is written when the advisor accepts or
+ * declines; `updated_at` moves on every later edit, billing included. A row
+ * shows "Decided" only from the first, and "Last changed" from the second.
+ *
+ * @param {{advisor_decided_at?: string|null, updated_at?: string|null}} raw
+ * @returns {{kind: 'decided'|'changed', at: string}|null}
+ */
+export function decisionMoment(raw) {
+  if (raw?.advisor_decided_at) return { kind: 'decided', at: String(raw.advisor_decided_at) };
+  if (raw?.updated_at) return { kind: 'changed', at: String(raw.updated_at) };
+  return null;
+}
+
+/**
+ * The median time from request to the advisor's answer, over the rows whose
+ * answer time is recorded. Rows answered before `advisor_decided_at` existed
+ * carry none, so the result says how many answers it covers out of how many
+ * were given; with none recorded the median is null, not zero.
+ *
+ * @param {Array<{created_at?: string|null, advisor_decision?: string|null, advisor_decided_at?: string|null}>} raws
+ * @returns {{ms: number|null, counted: number, answered: number}}
+ */
+export function medianDecision(raws) {
+  const spans = [];
+  let answered = 0;
+  for (const r of raws || []) {
+    if (r?.advisor_decision !== 'accepted' && r?.advisor_decision !== 'declined') continue;
+    answered += 1;
+    const from = Date.parse(String(r.created_at || ''));
+    const to = Date.parse(String(r.advisor_decided_at || ''));
+    if (Number.isFinite(from) && Number.isFinite(to) && to >= from) spans.push(to - from);
+  }
+  if (!spans.length) return { ms: null, counted: 0, answered };
+  spans.sort((a, b) => a - b);
+  const mid = Math.floor(spans.length / 2);
+  const ms = spans.length % 2 ? spans[mid] : Math.round((spans[mid - 1] + spans[mid]) / 2);
+  return { ms, counted: spans.length, answered };
+}
+
+/** A span as the tile says it: minutes under an hour, hours under two days, else days. */
+export function spanText(ms) {
+  if (ms == null || !Number.isFinite(ms)) return null;
+  const min = ms / 60000;
+  if (min < 60) return `${Math.max(1, Math.round(min))} min`;
+  const h = min / 60;
+  if (h < 48) return `${Math.round(h)} h`;
+  return `${Math.round(h / 24)} d`;
+}
