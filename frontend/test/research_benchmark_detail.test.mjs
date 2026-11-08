@@ -70,7 +70,8 @@ test('the draft restates the fields and says so on a thin base', () => {
   assert.equal(thin, 'Ours reads 1.4x against a peer of 1.2x from Four funds, n=4, as of 2026 Q2. At that sample the gap is not a market rate: one member moves the median.');
   const noOurs = readingDraft({ is_comparison: true, our_value: null, peer_value: '1.2x', peer_source: 'S', peer_sample_size: 50 });
   assert.match(noOurs, /^Ours is not recorded against a peer of 1\.2x from S, n=50\./);
-  assert.match(page, /benchmarkUpdate\(uid, \{ reading: preview\.trim\(\) \}\)/, 'Accept does not write the reading');
+  // D4607: writes go to the loaded benchmark (`target`), not to whatever the route says by then.
+  assert.match(page, /benchmarkUpdate\(target, \{ reading: preview\.trim\(\) \}\)/, 'Accept does not write the reading');
 });
 
 test('the editor sends a blank as null and a blank sample as null, never 0', () => {
