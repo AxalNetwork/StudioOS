@@ -5,7 +5,7 @@ import { programsApi } from '../../../lib/api/programs';
 import {
   BlockFailed, Card, ChartCard, DIALOG_BODY, DialogButtons, EYE, INPUT, LINK, Pill, Skeleton, SUB, TD, TH, Tile,
 } from './parts';
-import { useLearnersFor } from './useProgramReads';
+import { LEARNERS_PAGE } from './useProgramReads';
 import {
   FINISHED_LINE, LEARNER_FOOT, completionRows, enrolledLine, enrolmentsFrom, finishedTotal, learnerRows, refusalSentence,
   shortDay,
@@ -37,8 +37,8 @@ const nf = (n) => Number(n).toLocaleString('en-US');
 export function LearningOverview({ reads, superAdmin }) {
   const f = learningFigures(reads.learning);
   const published = f.state === 'ready' ? f.rows.filter((p) => p?.status === 'published') : [];
-  const learnerReads = useLearnersFor(published.map((p) => p.uid), reads.tick, f.state === 'ready');
-  const completion = completionRows(published, learnerReads);
+  // D4810: one completion read for every published program, never one per program.
+  const completion = completionRows(published, reads.completion);
   const finished = f.state === 'ready' ? finishedTotal(completion) : { state: f.state };
   const weekly = enrolmentsFrom(reads.weekly);
   const scope = superAdmin ? null : ASSIGNED_TO_YOU;
@@ -61,7 +61,10 @@ export function LearningOverview({ reads, superAdmin }) {
     : {
       state: 'ready', chart: bars.length ? { type: 'hbar', rows: bars, axis: '% finished', max: 100 } : null,
       alt: bars.length ? `Learners finished per program: ${bars.map((b) => b.text).join(', ')}.` : 'No program is published.',
-      notes: completion.filter((r) => r.state === 'unreadable').map((r) => `${r.name}: its learners could not be read.`),
+      notes: [
+        ...completion.filter((r) => r.state === 'unreadable').map((r) => `${r.name}: its learners could not be read.`),
+        ...(completion.some((r) => r.state === 'left_out') ? [`Only the first ${Number.isFinite(Number(reads.completion?.data?.max)) ? nf(reads.completion.data.max) : ''} published programs by name are counted; the rest are left out, so no Finished total is drawn.`.replace('first  ', 'first ')] : []),
+      ],
       window: 'Every learner enrolled now. Done is OD9’s rule: a course or item completed, an exercise accepted, an exam passed.',
     };
   return (
@@ -163,7 +166,7 @@ function LearnerDialog({ programUid, learner, onClose }) {
 }
 
 /** People: one program, picked from the list; a learner opens their record. */
-export function LearningPeople({ reads, programUid, onPick }) {
+export function LearningPeople({ reads, programUid, onPick, offset = 0, onPage }) {
   const phone = usePhoneWidth();
   const [open, setOpen] = useState(null);
   const f = learningFigures(reads.learning);
@@ -189,7 +192,9 @@ export function LearningPeople({ reads, programUid, onPick }) {
           {l.state === 'unreadable' ? <BlockFailed what="This program’s learners" onRetry={reads.reload} testId="programs-learning-learners-unreadable" /> : null}
           {l.state === 'refused' ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="programs-learning-learners-refused">{l.text}</p> : null}
           {l.state === 'ready' && !l.learners.length ? <p className={`m-0 ${SUB}`}>No one is enrolled in this program now.</p> : null}
-          {l.state === 'ready' && l.learners.length ? <p className="m-0 font-mono text-[12px] font-semibold text-axal-muted dark:text-gray-400" data-testid="programs-learning-learners-count">{`${nf(l.learners.length)} enrolled now`}</p> : null}
+          {l.state === 'ready' && l.learners.length ? <p className="m-0 font-mono text-[12px] font-semibold text-axal-muted dark:text-gray-400" data-testid="programs-learning-learners-count">{l.total !== null && l.total > l.learners.length
+            ? `${nf(offset + 1)}–${nf(offset + l.learners.length)} of ${nf(l.total)} enrolled now`
+            : `${nf(l.total ?? l.learners.length)} enrolled now`}</p> : null}
           {l.state === 'ready' && l.learners.length && phone ? (
             <PhoneRows groups={[{ label: null, rows: l.learners.map((x) => ({ key: x.uid, title: x.name || 'Name not recorded', description: `Enrolled ${day(x.enrolled_at)}`, onClick: () => setOpen(x), testid: `programs-learning-learner-${x.uid}` })) }]} />
           ) : null}
@@ -204,6 +209,12 @@ export function LearningPeople({ reads, programUid, onPick }) {
                 </li>
               ))}
             </ul>
+          ) : null}
+          {l.state === 'ready' && l.total !== null && l.total > LEARNERS_PAGE ? (
+            <span className="flex gap-2" data-testid="programs-learning-learners-pages">
+              <button type="button" className="text-[12.5px] font-bold text-axal-violet disabled:opacity-40 dark:text-violet-300" disabled={offset === 0} onClick={() => onPage?.(Math.max(0, offset - LEARNERS_PAGE))} data-testid="programs-learning-learners-prev">Previous</button>
+              <button type="button" className="text-[12.5px] font-bold text-axal-violet disabled:opacity-40 dark:text-violet-300" disabled={offset + LEARNERS_PAGE >= l.total} onClick={() => onPage?.(offset + LEARNERS_PAGE)} data-testid="programs-learning-learners-next">Next</button>
+            </span>
           ) : null}
         </div>
       ) : null}

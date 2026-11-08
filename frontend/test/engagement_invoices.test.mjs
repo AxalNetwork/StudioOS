@@ -151,7 +151,11 @@ test('one invoice per engagement, enforced by an index', () => {
     /CREATE UNIQUE INDEX IF NOT EXISTS idx_engagement_invoice_once\s+ON engagement_invoices\(engagement_id\)/,
     'a retried request must not mint a second number for the same work',
   );
-  assert.match(read(SVC), /if \(existing\) return \{ invoice: existing, created: false \}/,
+  // D4682: the read-then-insert became one batch whose insert is guarded by
+  // NOT EXISTS, and the service answers with the invoice that exists.
+  assert.match(read(SVC), /WHERE NOT EXISTS \(SELECT 1 FROM engagement_invoices WHERE engagement_id = \?\)/,
+    'the insert must not run when the engagement already has an invoice');
+  assert.match(read(SVC), /created: !!invoice && invoice\.uid === uid/,
     'and the service must return the first one rather than erroring');
 });
 
