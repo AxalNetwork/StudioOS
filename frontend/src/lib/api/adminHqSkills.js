@@ -26,18 +26,7 @@ const BASE = '/admin/ai-agents/skills';
 const send = (path, method, body) => request(`${BASE}${path}`, { method, body: JSON.stringify(body ?? {}) });
 
 export const adminHqSkillsApi = {
-  listAll: async () => {
-    const skills = [];
-    let page = 1;
-    while (page != null) {
-      const result = await request(`${BASE}?page=${page}`);
-      if (!Array.isArray(result?.skills)) throw new Error('Invalid skills response');
-      skills.push(...result.skills);
-      page = result.next_page;
-    }
-    return { skills };
-  },
-  list: () => request(BASE),
+  list: (options) => request(BASE, options),
   get: (uid) => request(`${BASE}/${enc(uid)}`),
   diff: (uid, { from, to } = {}) => {
     const q = new URLSearchParams(Object.entries({ from, to }).filter(([, v]) => v)).toString();

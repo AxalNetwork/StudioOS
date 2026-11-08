@@ -67,7 +67,7 @@ import { agentModels, planOk } from './modelOffers';
 import { allowlistRefusal } from './allowlists';
 import type { Env, User } from '../../types';
 import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
-import { agentAreas } from './adminReads';
+import { agentArea } from './adminReads';
 import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOptions, type TaskClass } from '../aiRouter';
 import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
 import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
@@ -97,6 +97,8 @@ export type AgentRunInput = {
   runUid?: string | null;
   /** D1612 part D (#3954): the uid of one of the agent's skills; its PINNED version guides the run. */
   skill?: string | null;
+  /** D4534: the version the caller saved (a scheduled session); a different pin is refused `skill_version_changed`. */
+  skillVersion?: number | null;
 };
 
 export type AgentRefusal = { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
@@ -302,7 +304,7 @@ async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'r
   if (!policy) return no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
   if (policy.paused.on) return no(403, 'platform_paused', PLATFORM_PAUSED_MESSAGE);
   if (c.opts.model) {
-    const area = (await agentAreas(env)).get(a.id) ?? null;
+    const area = await agentArea(env, a.id);
     const m = modelUnder(policy, String(c.opts.model), area);
     if (!m) return no(403, 'model_locked', 'This agent\'s model is switched off on the platform, and so is its area\'s default. Pick another model for it.');
     const scope = await scopeOfAgent(env, a);
@@ -344,7 +346,7 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   const shaped = cleanReads(input.toolReads, grantsOf(a.tool_grants_json));
   if (!shaped.ok) return refused(env, a, shaped, input.module, input.option);
   // D1612 part D (#3954): a named skill runs at the agent's pinned version; its tools are checked again now.
-  const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool)) : null;
+  const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool), input.skillVersion ?? null) : null;
   if (skill && !skill.ok) return refused(env, a, skill, input.module, input.option);
   if (skill) c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${skillPrompt(skill.version)}`;
   const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);

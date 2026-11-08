@@ -34,6 +34,7 @@ also exercises a `project_id` deep link.
 | `dataroom_deck_source_d1602.test.mjs` | D1602: owner controls, capability hiding, quote confirmation, failed saves, withdrawal and the deck-source client seam. |
 | `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
 | `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
+| `learning_studio_stream_copy_integration_4742.test.mjs` | #4742: Copy to Stream wired into the Studio (button, banner, refusal in the route's own words, never `e.message`), a verified `stream_uid` drawing "Stream · Ready", and MemberProgram's Join reading only the route's structured refusal. |
 
 ## Conventions
 
@@ -150,8 +151,10 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `grow_campaigns_d4447.test.mjs` | D4447 (#4447): eight Grow campaign requests, encoded identifiers and project-bound write bodies. |
 | `distribution_campaigns_4487.test.mjs` | Campaign cards, full-page plan steps, status actions, honest figures, confirmations and partial-save retries (D4487). |
 | `distribution_shell_4484.test.mjs` | D4484: static Distribution routes, retained records/Overview, module primary, tabs, honest Ask states and proposal callbacks. |
+| `distribution_results_4491.test.mjs` | D4491: Results' named Not recorded reasons, cost-per-lead rounding, the MRR note and link, the read-error card with no raw error, the window check and the CycleRoute line. |
 | `learning_home_actions_4481.test.mjs` | D4481: desktop/phone Register and refusals, rapid double-click guards, Join and enrolled progress, Browse courses, phone primary and unknown seats through existing clients. |
 | `distribution_inbox_4494.test.mjs` | D4494: real Inbox/composer behavior, actual count/empty states, client requests, source alignment, and stale selection/search guards. |
+| `distribution_newsletter_4495.test.mjs` | D4495: the not-connected copy, the disabled Connect with its visible reason, Not recorded results, and no request at all (never `/api/newsletter`). |
 | `_redirectLinks_2319.mjs` | D2319 (#4415): syntax-aware navigation-target audit across frontend and Worker source, without treating API paths or comparisons as links. |
 
 `team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
@@ -159,8 +162,14 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
 | `distribution_integration_4488.test.mjs` | Mounted campaign Ask acceptance, manual Save and canonical creative retries (D4488). |
 | `distribution_states_4496.test.mjs` | D4496 cross-tab triggers, fixed error copy, manual/AI separation and responsive Overview. |
+| `dashboard_lazy_panels_d4574.test.mjs` | D4574 (#4574 H6): the Studio radar and Product testing panels mount through their lazy boundaries, the imports stay dynamic, and `/studio` keeps its route and mounts. |
+| `cycle_route_lazy_steps_d4574.test.mjs` | D4574 (#4574 H5): `lazyStep` draws its skeleton then the step, a failed chunk reaches the error boundary as a chunk error, every lazy step is a dynamic import of a module that still exports it, and the cycle routes and render sites are unchanged. |
+| `_cycleSteps.mjs` | D4574 (#4574 H5): loads every module CycleRoute names through `lazyStep` (read from its source) before a suite mounts CycleRoute, so a fixed-tick settle sees the step as the browser does once its chunk has arrived. |
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
 
 - `distribution_overview_4485.test.mjs` — Distribution DS1 read/client, null-safe figures and real-date week columns, rendered independent failures, retries and existing contact-create actions (D4485).
+
+- `network_relationships_fixes_4740.test.mjs` — #4740 (S1 audit): the RI3/RI4/RI6 "Ask Eadwyn to draft…" buttons quote before they run and open in the composer or the reason field, a refusal reads the mapped copy, IntroCompose's unreadable mailboxes get their own alert, `?intro=<uid>` highlights its row or says it left the desk, the D4464 summary reads "Not recorded" (never 0) and Unreadable, and a failed `RecordEmailSheet` shares read is Unreadable for a member.
 `distribution_ads_4490.test.mjs` checks the Ads banner, gaps without bars, budget sliders, unavailable platforms and Later copy.
+`platform_populations_4856.test.mjs` checks HQ › Platform › Storage's populations: the split in the total's note, the members tile's own denominator, and no zero when the plans cannot be read (D4856).

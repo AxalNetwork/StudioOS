@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
+import { railProposalsApi } from '../../../lib/api/railProposals.js';
+import { BLOCK_QUERY_KEYS, BLOCK_WHOLE_DAYS, parseBlockQuery } from '../../../ui/sessionsBlockHandoff.js';
 import { buildIcs, downloadIcs } from '../../../lib/ics';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
@@ -19,6 +21,7 @@ import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import useScrollToHash from '../../../hooks/useScrollToHash';
 import SessionTypesPanel from './SessionTypesPanel';
 import BookingLinksPanel from './BookingLinksPanel';
+import { PublishAvailabilityCard, SessionLifecyclePanel } from './SessionActions';
 
 /**
  * Practice · Sessions — canvas PR4, `/practice/sessions`, tagged **FEED**.
@@ -106,10 +109,11 @@ const EMPTY_RULES = Object.freeze({
   blackouts: [],
   timezone: null,
   configured: false,
+  revision: '',
 });
 
 /** D1424 / D1596: the Block form's shape, closed. Never null (a ZoneBody child reads it on first render). */
-const CLOSED_BLOCK = Object.freeze({ open: false, from: '', until: '', reason: '', error: '' });
+const CLOSED_BLOCK = Object.freeze({ open: false, from: '', until: '', reason: '', error: '', proposal: '' });
 
 export default function SessionsZone() {
   const [view, setView] = useState('two_weeks');
@@ -119,7 +123,10 @@ export default function SessionsZone() {
   // unreadable rule set and an unset one both arrive as nulls, and they are
   // different absences. The card names which one it is, and the editor is
   // withheld for the first (see RulesBody).
-  const [rulesRead, setRulesRead] = useState(true);
+  // #4713 (D4713): 'loading' until the first read settles, then 'read' or
+  // 'unreadable'. The editor exists ONLY for 'read': before that the form would
+  // hold the empty defaults, and the route replaces the whole rule set.
+  const [rulesRead, setRulesRead] = useState('loading');
   const [types, setTypes] = useState([]);
   const [links, setLinks] = useState([]);
   // D571 — the same distinction for the two lists the cards now edit. A failed
@@ -132,6 +139,7 @@ export default function SessionsZone() {
   const [editing, setEditing] = useState(null);
   const [blocking, setBlocking] = useState(false);
   const [blockNote, setBlockNote] = useState(null);
+  const [publishOpen, setPublishOpen] = useState(false);
 
   const loadSlots = useCallback(async (forView) => {
     setSlots((c) => ({ ...c, loading: true, error: '' }));
@@ -164,7 +172,7 @@ export default function SessionsZone() {
       api.listMyAdvisorBookingLinks().catch(() => null),
     ]);
     setRules(r || EMPTY_RULES);
-    setRulesRead(r != null);
+    setRulesRead(r != null ? 'read' : 'unreadable');
     setTypes(Array.isArray(t?.items) ? t.items : []);
     setTypesRead(Array.isArray(t?.items));
     setLinks(Array.isArray(l?.items) ? l.items : []);
@@ -208,10 +216,26 @@ export default function SessionsZone() {
 
   // D1424 (#3700) and D1596 (#3869): "Block a date range" opens this page's
   // own Block form instead of three `window.prompt`s. It is where a Block
-  // card accepted in the Ask panel will put its dates (#3706); nothing is
-  // blocked until the advisor presses Block. The reason stays the advisor's
-  // own words and is never filled.
+  // card accepted in the Ask panel puts its dates (#4737, D1596 §4): the panel
+  // sends the advisor here with the card's uid and dates in the address, this
+  // page fills the form from them and takes them out of the address, and the
+  // proposal is decided (`railProposalsApi.decide`) only after `POST
+  // /api/advisors/me/slots/block` succeeds. Cancelling leaves the card
+  // waiting in Ask. Nothing is blocked until the advisor presses Block. The
+  // reason stays the advisor's own words and is never filled.
   const [blockForm, setBlockForm] = useState(() => ({ ...CLOSED_BLOCK }));
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const handoff = parseBlockQuery(searchParams);
+    if (!handoff) return;
+    setBlockNote(null);
+    setBlockForm({ ...CLOSED_BLOCK, open: true, from: handoff.from, until: handoff.until, proposal: handoff.uid });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      BLOCK_QUERY_KEYS.forEach((k) => next.delete(k));
+      return next;
+    }, { replace: true });
+  }, [searchParams, setSearchParams]);
   const blockFromRef = useRef(null);
   const blockRange = useCallback(() => {
     setBlockNote(null);
@@ -221,7 +245,7 @@ export default function SessionsZone() {
 
   const submitBlock = useCallback(async (event) => {
     event?.preventDefault?.();
-    const { from, until, reason } = blockForm;
+    const { from, until, reason, proposal } = blockForm;
     if (!from || !until) { setBlockForm((f) => ({ ...f, error: 'Choose the first day and the day after the last.' })); return; }
     if (until <= from) { setBlockForm((f) => ({ ...f, error: 'The end comes after the start.' })); return; }
     setBlocking(true); setBlockNote(null);
@@ -232,13 +256,19 @@ export default function SessionsZone() {
       // THE SKIPPED COUNT IS REPORTED, NEVER SWALLOWED. A booked hour cannot be
       // blocked — someone holds it — and an advisor who asked for a fortnight
       // and got eleven days needs to know which request was not honoured.
-      setBlockNote({
-        ok: true,
-        text: res.skipped_booked
-          ? `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}. ${res.skipped_booked} `
-            + `already booked and left alone — cancel those from Engagements if you mean to.`
-          : `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}.`,
-      });
+      const done = res.skipped_booked
+        ? `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}. ${res.skipped_booked} `
+          + `already booked and left alone — cancel those under Run your sessions if you mean to.`
+        : `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}.`;
+      // D1596 §4 step 3: the card is decided only now that Block has written. A
+      // decide that fails leaves the block in place, says so, and leaves the
+      // card waiting in Ask; it never shows the Worker's message.
+      let note = { ok: true, text: done };
+      if (proposal) {
+        try { await railProposalsApi.decide(proposal, 'accept'); }
+        catch { note = { ok: false, text: `${done} Its Ask proposal could not be marked accepted, so it is still waiting in Ask.` }; }
+      }
+      setBlockNote(note);
       setBlockForm({ ...CLOSED_BLOCK });
       loadSlots(view);
     } catch (e) {
@@ -291,6 +321,9 @@ export default function SessionsZone() {
       {blockForm.open && (
         <Card padding="lg">
           <form onSubmit={submitBlock} className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="advisor-block-form">
+            {blockForm.proposal ? (
+              <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted sm:col-span-3" data-testid="advisor-block-from-ask">{BLOCK_WHOLE_DAYS}</p>
+            ) : null}
             <Field label="From">
               <input ref={blockFromRef} type="date" className={inputClass} value={blockForm.from} data-testid="advisor-block-from"
                 onChange={(e) => setBlockForm({ ...blockForm, from: e.target.value, error: '' })} />
@@ -326,18 +359,23 @@ export default function SessionsZone() {
             answered, and rendering it as a number would put words in the
             advisor's mouth (D56/D68). */}
         <Stat label="Weekly cap"
-          value={capValue ?? <Unrecorded>{rulesRead ? 'Not set' : 'Not recorded'}</Unrecorded>}
-          note={rulesRead
-            ? (capValue ? 'paid sessions, self-set' : 'no cap on paid sessions')
-            : 'your rules could not be read'} />
+          value={rulesRead === 'loading' ? <Unrecorded>Reading…</Unrecorded>
+            : (capValue ?? <Unrecorded>{rulesRead === 'read' ? 'Not set' : 'Not recorded'}</Unrecorded>)}
+          note={rulesRead === 'loading' ? 'reading your rules'
+            : rulesRead === 'read'
+              ? (capValue ? 'paid sessions, self-set' : 'no cap on paid sessions')
+              : 'your rules could not be read'} />
       </div>
+
+      <PublishAvailabilityCard open={publishOpen} onToggle={() => setPublishOpen((v) => !v)}
+        onPublished={() => loadSlots(view)} />
 
       <ZoneBody loading={slots.loading} error={slots.error} onRetry={() => loadSlots(view)}
         isEmpty={!slots.loading && !slots.error && days.length === 0}
         empty={<NothingYet
           title="No slots in this window"
-          body="This grid shows the hours you have published. Availability is created under Opportunities; the rules below decide how many hours exist to begin with."
-          action={<Link to="/practice/opportunities" className="text-emerald-700 underline">Publish availability →</Link>}
+          body="This grid shows the hours you have published. Publish availability above; the rules below decide how many hours exist to begin with."
+          action={<button type="button" className={`${buttonClass} min-h-[44px] sm:min-h-0`} onClick={() => setPublishOpen(true)}>Publish availability</button>}
         />}>
         <Card padding="md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -374,6 +412,8 @@ export default function SessionsZone() {
           migration 240's stores; each body is now the canvas's editor, so the
           two addresses and this page answer from one place. The session types
           table needs the width, so it is no longer one of three columns. */}
+      <SessionLifecyclePanel bookings={bookings.items} loading={bookings.loading} onChanged={loadBookings} />
+
       <Card padding="md" id="session-types" className="scroll-mt-24">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-[13px] font-extrabold tracking-tight">Session types</h3>
@@ -420,8 +460,8 @@ export default function SessionsZone() {
           isEmpty={billable.length === 0}
           empty={<NothingYet
             title="No sessions to price yet"
-            body="Sessions appear here once a booking is confirmed. The lifecycle — complete, no-show, cancel — is run from Engagements. This records only what each session was worth."
-            action={<Link to="/practice/engagements" className="text-emerald-700 underline">Run the lifecycle →</Link>}
+            body="Sessions appear here once a booking is confirmed. The lifecycle — held, no-show, cancel — is run in Run your sessions above. This records only what each session was worth."
+            action={<Link to="/practice/opportunities" className="text-emerald-700 underline">Accept a request →</Link>}
           />}>
           <div className="mt-3 space-y-3">
             {billable.map((b) => (
@@ -458,8 +498,8 @@ export default function SessionsZone() {
             <p className="text-[11px] leading-relaxed text-axal-faint">
               Only confirmed and completed sessions are listed. A request you have not answered yet
               has no agreed session to price, and a cancelled or no-show session has no amount to
-              record. The full booking history, including all three, is under{' '}
-              <Link to="/practice/engagements" className="text-emerald-700 underline">Engagements</Link>.
+              record. The full booking history, including all three, is in{' '}
+              <a href="#session-lifecycle" className="text-emerald-700 underline">Run your sessions</a>.
             </p>
           </div>
         </ZoneBody>
@@ -520,7 +560,9 @@ function SlotCard({ slot }) {
   );
 }
 
-function RulesBody({ rules, read, onSaved }) {
+function RulesBody({ rules, read: readState, onSaved }) {
+  const loadingRules = readState === 'loading';
+  const read = readState === 'read';
   const [open, setOpen] = useState(false);
   const [cap, setCap] = useState('');
   const [buffer, setBuffer] = useState('');
@@ -549,10 +591,14 @@ function RulesBody({ rules, read, onSaved }) {
         min_notice_hours: notice === '' ? null : Number(notice),
         blackouts: rules?.blackouts || [],
         timezone: rules?.timezone || null,
+        // The revision these rules were read at: if another tab changed them
+        // since, the worker refuses (409 rules_changed) instead of overwriting.
+        expected_revision: rules?.revision ?? '',
       });
       setOpen(false);
       onSaved();
     } catch (err) {
+      if (err?.status === 409 || err?.code === 'rules_changed' || /changed somewhere else/.test(String(err?.message))) onSaved();
       setNote({ ok: false, text: err?.message || 'Those rules were not saved.' });
     } finally { setBusy(false); }
   };
@@ -571,12 +617,12 @@ function RulesBody({ rules, read, onSaved }) {
           <div key={k} className="flex items-baseline justify-between gap-3">
             <dt className="text-[11.5px] text-axal-faint">{k}</dt>
             <dd className="text-[12px] font-bold tabular-nums">
-              {v ?? <Unrecorded>{read ? 'Not set' : 'Not recorded'}</Unrecorded>}
+              {loadingRules ? <Unrecorded>Reading…</Unrecorded> : (v ?? <Unrecorded>{read ? 'Not set' : 'Not recorded'}</Unrecorded>)}
             </dd>
           </div>
         ))}
       </dl>
-      {read ? (
+      {loadingRules ? null : read ? (
         <button type="button" className={`${ghostButtonClass} mt-3`} onClick={() => setOpen((v) => !v)}>
           {open ? 'Close' : 'Change the rules'}
         </button>

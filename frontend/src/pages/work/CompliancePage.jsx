@@ -8,7 +8,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, MUTED, HonestBlock } from '../team
 import { workAdapter } from './workAdapter.js';
 import {
   COMPLIANCE_PURPOSE, COMPLIANCE_TYPES, CREATE_WORK_LINE, NO_PROJECTS_LINE, agenda, complianceCan, complianceTiles, filterOptions, filterTasks,
-  firstMonth, gutter, linkedWork, monthGrid, refusalLine, taskFlags, timelineLine,
+  firstMonth, gutter, linkedWork, monthGrid, refusalLine, refusedOf, taskFlags, timelineLine,
 } from './workModel.js';
 import './work.css';
 
@@ -38,8 +38,10 @@ export default function CompliancePage() {
     try {
       const r = await workAdapter.complianceTasks(uid);
       setState(r.available ? { status: 'ready', ...r.data } : { status: 'off', reason: r.reason });
-    } catch {
-      setState({ status: 'error' });
+    } catch (e) {
+      // #4735: a 403 not_member will always be refused: the Worker's sentence, no Try again. Anything else is a real failure.
+      const sentence = refusedOf(e);
+      setState(sentence ? { status: 'refused', sentence } : { status: 'error' });
     }
   }, [uid]);
   useEffect(() => { load(); }, [load]);
@@ -90,6 +92,7 @@ export default function CompliancePage() {
       ) : null}
       {state.status === 'loading' ? <p className={MUTED} role="status">Reading…</p> : null}
       {state.status === 'off' ? <HonestBlock testId="compliance-off">{state.reason}</HonestBlock> : null}
+      {state.status === 'refused' ? <HonestBlock role="alert" testId="compliance-refused">{state.sentence}</HonestBlock> : null}
       {state.status === 'error' ? (
         <HonestBlock role="alert" testId="compliance-unreadable" action={<button type="button" className={BTN_SECONDARY} onClick={load}>Try again</button>}>
           <b>Compliance could not be read.</b> That is not the same as having nothing due.

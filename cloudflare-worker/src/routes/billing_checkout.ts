@@ -42,7 +42,8 @@ import { paidInvestorTier } from '../services/investorTiers';
 import { getCatalog } from '../services/catalog';
 import { keyReadiness, planReadiness, CHECKOUT_NOT_READY_MESSAGE } from '../services/stripeReadiness';
 import { isTokenPackPrice } from '../services/aiCredits';
-import { validatePromoForProduct, computeDiscount, normalizeCode, type PromoRow } from '../services/promos';
+import { computeDiscount, normalizeCode, type PromoRow } from '../services/promos';
+import { canRedeemPromo, commitPromoReservation, releasePromoReservation, reservePromo } from '../services/promoRedemption';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { refuse } from '../util/refusal';
 import { moneyKindForCatalogPrice } from '../services/moneyRails';
@@ -256,8 +257,9 @@ checkout.post('/checkout/quote', async (c) => {
   let discount: { amount: number; code: string } | null = null;
   let discountReason: string | null = null;
   if (promoCode) {
-    const v = await validatePromoForProduct(c.env, promoCode, product.id, unit, price.currency);
-    if (v.ok && v.promo) { promo = v.promo; discount = { amount: computeDiscount(v.promo, unit).discountCents, code: v.promo.code }; }
+    // D4855: the quote asks the rule checkout asks, for this member and interval, ceiling included.
+    const v = await canRedeemPromo(c.env, { code: promoCode, productId: product.id, amountCents: unit, currency: price.currency, buyer: { userId: user.id, interval } });
+    if (v.ok) { promo = v.promo; discount = { amount: computeDiscount(v.promo, unit).discountCents, code: v.promo.code }; }
     else discountReason = String(v.reason || 'not_found');
   }
   // D4293: no code typed, and the member came through an influencer with an
@@ -362,10 +364,12 @@ checkout.post('/checkout/start', async (c) => {
     attribution = null;
   }
   const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
+  const startKey = (promoFragment: string) => `checkout:${user.id}:${price.id}:${promoFragment}:${pm ? 'saved' : 'new'}:${nonce}`;
   let promo: PromoRow | undefined;
   if (promoCode) {
-    const v = await validatePromoForProduct(c.env, promoCode, product.id, Number(price.unit_amount), price.currency);
-    if (!v.ok || !v.promo) return refuse(c, 400, { code: 'promo_invalid', message: 'That code does not apply to this plan.', audience: 'member', extra: { reason: v.reason ?? 'not_found' } });
+    // D4855: the member and interval the quote used, so the start decides what the quote showed.
+    const v = await canRedeemPromo(c.env, { code: promoCode, productId: product.id, amountCents: Number(price.unit_amount), currency: price.currency, buyer: { userId: user.id, interval }, reference: startKey(promoPart(promoCode)) });
+    if (!v.ok) return refuse(c, 400, { code: 'promo_invalid', message: v.message, audience: 'member', extra: { reason: v.reason, ...(v.remaining_cents !== undefined ? { remaining_cents: v.remaining_cents, currency: v.currency } : {}) } });
     promo = v.promo;
   }
   // D4293: the same offer the quote showed, read again now (its budget may have moved).
@@ -390,12 +394,29 @@ checkout.post('/checkout/start', async (c) => {
   if (pm) params.default_payment_method = pm;
   if (promo) { params['discounts[0][promotion_code]'] = promo.id; params['metadata[promo_code_id]'] = promo.id; }
   if (auto) params['metadata[influencer_offer_uid]'] = auto.offer.uid;
+  const idempotencyKey = startKey(promoPart(promoCode || (auto ? auto.promo.code : '')));
+  // D4855: the first invoice's discount leaves the licence's ceiling in one
+  // conditional write, before Stripe is asked, and goes back if Stripe makes no
+  // subscription. A typed code that no longer fits is refused; an automatic
+  // offer that no longer fits is simply not applied (an offer never blocks a sale).
+  let reservationRef: string | null = null;
+  if (promo) {
+    const taken = await reservePromo(c.env, { code: promo.code, productId: product.id, amountCents: Number(price.unit_amount), currency: price.currency, buyer: { userId: user.id, interval }, reference: idempotencyKey });
+    if (taken.ok) {
+      reservationRef = taken.reservation?.ref ?? null;
+      if (reservationRef) params['metadata[promo_reservation_ref]'] = reservationRef;
+    } else if (promoCode) {
+      return refuse(c, 400, { code: 'promo_invalid', message: taken.message, audience: 'member', extra: { reason: taken.reason, ...(taken.remaining_cents !== undefined ? { remaining_cents: taken.remaining_cents, currency: taken.currency } : {}) } });
+    } else {
+      for (const k of ['discounts[0][promotion_code]', 'metadata[promo_code_id]', 'metadata[influencer_offer_uid]']) delete params[k];
+      promo = undefined;
+    }
+  }
   let sub: StripeSubLite;
   try {
-    sub = await stripeCall<StripeSubLite>(c.env, '/subscriptions', params, {
-      idempotencyKey: `checkout:${user.id}:${price.id}:${promoPart(promoCode || (auto ? auto.promo.code : ''))}:${pm ? 'saved' : 'new'}:${nonce}`, moneyKind,
-    });
+    sub = await stripeCall<StripeSubLite>(c.env, '/subscriptions', params, { idempotencyKey, moneyKind });
   } catch (e) {
+    await releasePromoReservation(c.env, reservationRef);
     return refuse(c, 502, { code: 'start_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
   await logCheckout(c.env, user.id, 'checkout_started', sub.id, { plan_key: entry.key, interval, price_id: price.id, mode: 'new', before_plan_key: before, saved_card: !!pm });
@@ -403,7 +424,10 @@ checkout.post('/checkout/start', async (c) => {
   const secret = sub.latest_invoice?.payment_intent?.client_secret;
   if (!secret) {
     // A zero-due first invoice (a 100% code) has no payment to confirm: the plan is on.
-    if (ON_STATUSES.has(sub.status)) return c.json({ mode: 'new', free: true, ref: sub.id, status: sub.status });
+    if (ON_STATUSES.has(sub.status)) {
+      await commitPromoReservation(c.env, reservationRef);
+      return c.json({ mode: 'new', free: true, ref: sub.id, status: sub.status });
+    }
     return refuse(c, 502, { code: 'start_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', audience: 'member' });
   }
   return c.json({ mode: 'new', client_secret: secret, ref: sub.id, status: sub.status, saved_card: !!pm });

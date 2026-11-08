@@ -19,13 +19,20 @@ export type ImapCreds = {
 export type McpCreds = { kind: 'mcp'; connection_uid: string; user_id: number };
 export type Creds = OAuthCreds | ImapCreds | McpCreds;
 
-export type Outgoing = { from: string; fromName: string | null; to: string; subject: string; body: string };
+/** D4493: one file at most, today only a sequence step's voice note the founder recorded. */
+export type Attachment = { filename: string; mime: string; bytes: Uint8Array };
+export type Outgoing = { from: string; fromName: string | null; to: string; subject: string; body: string; attachments?: Attachment[] };
 export type SendResult = { messageId: string | null; creds?: Creds };
 export type ThreadMessage = { id?: string; from: string | null; subject: string | null; received_at: string | null; preview: string | null };
 /** D4494: a thread read can rotate the mailbox's access just as a send can. */
 export type ThreadRead = { messages: ThreadMessage[]; creds?: Creds };
 
-export type AdapterCode = 'expired' | 'auth_failed' | 'refused' | 'unreachable' | 'unconfigured';
+/**
+ * `uncertain` (D4665): the provider may or may not have the message. It is raised only from the point
+ * where the message has left (an SMTP payload written, a send request issued) and the answer was lost.
+ * `consent`: the provider refused for want of a permission the member did not grant.
+ */
+export type AdapterCode = 'expired' | 'auth_failed' | 'refused' | 'unreachable' | 'unconfigured' | 'uncertain' | 'consent';
 
 export class AdapterError extends Error {
   readonly code: AdapterCode;

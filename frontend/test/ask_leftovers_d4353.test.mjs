@@ -77,12 +77,16 @@ test('the profile header\'s Ask counts D1442\'s proposals on the rail\'s page; a
   const path = '/deals/closing';
   const page = pageFor(path, 'investor').key;
   const calls = [];
-  let answer = async () => ({ proposals: [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }] });
+  // #4737: only rows the panel lists (a run chip's option) are counted, so the open rows are Block cards.
+  const block = (uid) => ({ uid, rail_option: 'sessions:block' });
+  let answer = async () => ({ proposals: [block('a'), block('b'), block('c')] });
   const restore = stub(railProposalsApi, { list: async (q) => { calls.push(q); return answer(q); } });
   const view = () => h(MemoryRouter, { initialEntries: [path] }, h(Rail, { page }), h(ProfileHeaderAsk, { role: 'investor' }));
   try {
     for (const [label, next, want] of [
-      ['three open', async () => ({ proposals: [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }] }), 'Ask Eadwyn, 3 waiting'],
+      ['three open', async () => ({ proposals: [block('a'), block('b'), block('c')] }), 'Ask Eadwyn, 3 waiting'],
+      ['three open, two of them form rows the panel does not list', async () => ({ proposals: [block('a'), { uid: 'b', rail_option: 'form:mvp_features' }, { uid: 'c', rail_option: 'form:icp' }] }), 'Ask Eadwyn, 1 waiting'],
+      ['only form rows open', async () => ({ proposals: [{ uid: 'b', rail_option: 'form:mvp_features' }] }), 'Ask Eadwyn'],
       ['a failed read', async () => { throw new Error('503'); }, 'Ask Eadwyn'],
       ['none open', async () => ({ proposals: [] }), 'Ask Eadwyn'],
     ]) {

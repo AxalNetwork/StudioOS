@@ -123,7 +123,8 @@ export function PaymentDetailsCard({ role, overview, openPortal, navigate = goTo
   const [outcome, setOutcome] = useState(null);
   const source = billingSourceFor(role);
   const portal = openPortal || (() => billingApi[source.portal]());
-  const card = overview.status === 'ready' ? paymentCard(overview.data) : null;
+  const paymentMethodsUnreadable = overview.status === 'ready' && overview.data?.degraded?.includes('payment_methods');
+  const card = overview.status === 'ready' && !paymentMethodsUnreadable ? paymentCard(overview.data) : null;
   const hasCustomer = overview.status === 'ready' && overview.data?.has_customer === true;
   const manage = async () => {
     setBusy(true); setOutcome(null);
@@ -145,6 +146,7 @@ export function PaymentDetailsCard({ role, overview, openPortal, navigate = goTo
         </div>
         {overview.status === 'loading' ? <LoadingRows lines={1} />
           : overview.status !== 'ready' ? <Unreadable what="Billing" claim="Billing could not be read from Stripe." onRetry={overview.reload} />
+            : paymentMethodsUnreadable ? <Unreadable what="Your saved cards" claim="This is not a claim that no card is saved." onRetry={overview.reload} />
             : card ? (
               <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="value-payment-card">
                 {card.brand} <span className={MONO}>•••• {card.last4}</span>

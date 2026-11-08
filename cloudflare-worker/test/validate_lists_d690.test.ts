@@ -136,7 +136,7 @@ const LISTS: Record<string, { title: string; cols: string[]; filters: Array<[str
     sorts: ['newest'],
   },
   experiments: {
-    title: 'Hypotheses', cols: ['Hypothesis', 'Status', 'Evidence', 'Sprint', 'Owner', 'Source'],
+    title: 'Hypotheses', cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
     filters: [['status', 'Status', ['untested', 'testing', 'supported', 'refuted', 'inconclusive', 'not_recorded', 'retired']],
       ['sprint', 'Sprint', ['Sprint 2', 'Sprint 3']], ['strength', 'Strength', ['anecdote', 'pattern', 'measured', 'not_recorded']],
       ['moved', 'Recently moved', ['recent']], ['history', 'History', ['last_week', 'this_month']]],
@@ -378,11 +378,13 @@ test('D690 decision 16: experiments\' stats count the whole venture, with more t
   for (const q of ['', '&page=2', '&filter=status:untested']) {
     const r = await mod(db, 'experiments', q);
     // D704 decision 7: the read records each live claim, so the venture's history starts with its first read.
-    const { history_since: since, ...stats } = r.body.parts.stats;
+    const { history_since: since, history_coverage: coverage, history_filter_available: filterAvailable, ...stats } = r.body.parts.stats;
     assert.deepEqual(stats, {
-      hypotheses: 27, supported: 3, refuted: 0, awaiting: 20, withheld: 4, fit_not_recorded: 2, bar: 5,
+      hypotheses: 27, supported: 3, refuted: 0, awaiting: 20, withheld: 4, fit_not_recorded: 2, bar: 5, status_basis: 'interviews',
     }, q || 'page 1');
     assert.match(String(since), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/, 'the first read wrote the first observations');
+    assert.equal(coverage.status, 'complete');
+    assert.equal(filterAvailable, null);
     assert.equal(r.body.parts.fit_gap.length, 24, 'every open claim, not the page');
   }
 });

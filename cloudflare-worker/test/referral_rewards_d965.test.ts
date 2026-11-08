@@ -88,7 +88,7 @@ test('migration 566 seeds O-CRD A at US$1 a credit, and the credit rules read th
   } finally { h.db.close(); }
 });
 
-test('a move into a paying status grants once, before the move; a retry pays nothing more', async () => {
+test('a move into a paying status grants once, with the move; a retry pays nothing more', async () => {
   const h = await harness();
   try {
     h.referral('s1', 'in_conversation');
@@ -111,7 +111,7 @@ test('a move into a paying status grants once, before the move; a retry pays not
     assert.equal(formed.body.reward.credits, 400);
     assert.deepEqual(h.ledger().map((l: any) => l.rule_key), ['referral:startup_accepted', 'referral:startup_formed']);
 
-    // A retry after a move that failed: the grant landed, the move did not.
+    // A retry after a move that failed. D4804: the reward commits with the move, so a failed move leaves no reward behind.
     h.referral('s2', 'in_conversation');
     const hooks = (h.env.DB as any);
     const batch = hooks.batch;
@@ -119,6 +119,7 @@ test('a move into a paying status grants once, before the move; a retry pays not
     const failed = await quiet(() => h.move('s2', 'converted'));
     assert.ok(failed.status >= 400, 'the failed move is refused');
     assert.equal(h.statusOf('s2'), 'in_conversation');
+    assert.equal(h.ledger().filter((l: any) => l.source_ref === 'referral:s2:referral:startup_accepted').length, 0, 'no credits for a move that did not happen');
     hooks.batch = batch;
     const retry = await quiet(() => h.move('s2', 'converted'));
     assert.equal(retry.status, 200);

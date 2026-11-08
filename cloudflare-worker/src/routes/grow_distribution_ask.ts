@@ -1,4 +1,4 @@
-/** D4488 (#4488): quoted Distribution drafts and venture-scoped proposal decisions; never sends. */
+/** D4488 (#4488): quoted Distribution drafts and venture-scoped proposal decisions; never sends. D4493: a `sequence` run takes the moved 'draft:grow/customers' rail row's models. */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -7,7 +7,7 @@ import { quoteRun, run, type RunOptions } from '../services/aiRouter';
 import { aiPaused, AI_PAUSED_MESSAGE } from '../services/aiBudget';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { isSupportSession } from '../integrations/providers/mercury';
-import { DistributionRefused, distributionRequest, distributionAccess, distributionContext, distributionOutput, storeDistributionDrafts, distributionProposals, decideDistribution, DISTRIBUTION_PAGE, DISTRIBUTION_OPTION, DISTRIBUTION_SYSTEM, DISTRIBUTION_MAX_TOKENS } from '../services/distributionDrafts';
+import { DistributionRefused, distributionRequest, distributionAccess, distributionContext, distributionOutput, storeDistributionDrafts, distributionProposals, decideDistribution, DISTRIBUTION_PAGE, DISTRIBUTION_OPTION, DISTRIBUTION_SYSTEM, DISTRIBUTION_MAX_TOKENS, SEQUENCE_OPTION } from '../services/distributionDrafts';
 
 const router = new Hono<{ Bindings: Env }>();
 const body = async (c: any): Promise<Record<string, any>> => { const b = await c.req.json().catch(() => null); return b && typeof b === 'object' && !Array.isArray(b) ? b : {}; };
@@ -35,7 +35,7 @@ async function prepared(c: any, user: User, b: Record<string, unknown>) {
   await distributionAccess(c.env,user,input.project,input.campaign_uid);
   if (await aiPaused(c.env,user.id)) throw new DistributionRefused(403,'ai_paused',AI_PAUSED_MESSAGE);
   const context = await distributionContext(c.env,input,user);
-  const options: RunOptions = { userId:user.id,task:'distribution_draft',systemPrompt:DISTRIBUTION_SYSTEM,messages:[{role:'user',content:JSON.stringify({ records:context.material,targets:context.targets })}],maxTokens:DISTRIBUTION_MAX_TOKENS,surface:AI_SURFACE.growDistribution,rail:{page:DISTRIBUTION_PAGE,option:DISTRIBUTION_OPTION,record:`distribution:${input.project}`} };
+  const options: RunOptions = { userId:user.id,task:'distribution_draft',systemPrompt:DISTRIBUTION_SYSTEM,messages:[{role:'user',content:JSON.stringify({ records:context.material,targets:context.targets })}],maxTokens:DISTRIBUTION_MAX_TOKENS,surface:AI_SURFACE.growDistribution,rail:{page:DISTRIBUTION_PAGE,option:input.kinds.some(k=>k.kind==='sequence')?SEQUENCE_OPTION:DISTRIBUTION_OPTION,record:`distribution:${input.project}`} };
   return { input,context,options };
 }
 router.post('/quote',handle(async(c,user)=>{

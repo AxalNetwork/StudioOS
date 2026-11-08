@@ -17,6 +17,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
+import { grantWriteBar } from './_write_bar_session.mjs';
 import { Hono } from 'hono';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -276,7 +277,9 @@ function app() {
   return a;
 }
 async function patch(f: any, body: unknown, user = 1) {
-  const jwt = await new SignJWT({ user_id: user }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
+  // D4703: the pack edit takes the write bar, as the other HQ pack writes in this file already do (line 74).
+  const jti = grantWriteBar(f.db, user);
+  const jwt = await new SignJWT({ user_id: user, jti }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
   const r = await app().request('/api/admin/catalog/token-packs/pack25', { method: 'PATCH', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify(body) }, f.env);
   return { status: r.status, body: await r.json() as any };
 }

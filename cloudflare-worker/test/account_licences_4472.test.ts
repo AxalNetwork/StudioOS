@@ -149,7 +149,8 @@ test('account/me contracts preserve primary, expose ordered held grants and cont
     await grantLicence(f.DB,change('partner'));
     const r=await f.call('/api/account/licences'); assert.equal(r.status,200);
     assert.equal(r.body.primary,'founder'); assert.deepEqual(r.body.held.map((x:any)=>x.licence),['founder','partner']);
-    assert.deepEqual(r.body.held[0],{licence:'founder',label:'Founder',granted_at:null,source:'primary',is_primary:true});
+    assert.deepEqual(r.body.held[0],{licence:'founder',label:'Founder',granted_at:null,source:'primary',is_primary:true,plan:{key:'founder:free',name:'Free'}}); // D4729: the plan it stands on
+    assert.deepEqual(r.body.held[1].plan,{key:'partner:free',name:'Partner Basic'});
     assert.equal(r.body.held[1].label,'Operating Partner'); assert.equal(r.body.held[1].source,'admin'); assert.ok(r.body.held[1].granted_at);
     assert.deepEqual(r.body.addable,[{licence:'investor',label:'Investor',how:'contact'},{licence:'advisor',label:'Advisor',how:'contact'}]);
     const me=await f.call('/api/auth/me'); assert.equal(me.status,200); assert.equal(me.body.role,'founder'); assert.deepEqual(me.body.licences,['founder','partner']);
@@ -267,7 +268,9 @@ test('secondary investor diligence and fund reads stay scoped; revoked Advisor a
     await grantLicence(f.DB,change('advisor'));
     const profile=await f.call('/api/advisors/me'); assert.equal(profile.status,200); assert.ok(profile.body);
     await revokeLicence(f.DB,change('advisor'));
-    assert.equal((await f.call('/api/advisors/me')).body,null);
+    // D4670 (#4670): a revoked Advisor is refused, never told "no profile"; the row is retained.
+    const revoked=await f.call('/api/advisors/me');
+    assert.deepEqual([revoked.status,revoked.body?.error],[403,'advisor_licence_required']);
     assert.equal(count(f.db,'advisors'),1);
   } finally { f.db.close(); }
 });

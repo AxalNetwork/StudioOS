@@ -2,7 +2,7 @@
  * D1419 (#3698) — the module half of every Studio home, below its fixed
  * blocks (Eadwyn's chat, the founder strip, the profile card): the notices,
  * "Your modules", the grid or SM8d's empty box, and in Customise the edit
- * bar, the module map, the locked sheet and the reset confirm.
+ * bar, the Artifact map, the locked sheet and the reset confirm.
  *
  * The home owns the reads and hands in one spec per module (`tiles/*`); this
  * file owns the layout. `extra` are tiles drawn after the placed ones that
@@ -12,7 +12,7 @@
 import { Plus } from 'lucide-react';
 import ModuleMapLightbox from './ModuleMapLightbox';
 import StudioModuleGrid from './StudioModuleGrid';
-import { ModuleLockedSheet, ResetDialog, SavedLine, StudioEditBar, StudioLayoutNotice, StudioNoProfile } from './StudioParts';
+import { LeaveDialog, ModuleLockedSheet, ResetDialog, SavedLine, StudioEditBar, StudioLayoutNotice, StudioNoProfile } from './StudioParts';
 import { placedLine } from './studioLayoutModel';
 import { fallbackTitle } from './studioFallback';
 import './studioModules.css';
@@ -79,6 +79,7 @@ export default function StudioModules({ studio, tiles, extra = [], withheld = fa
       {studio.editing && <ModuleMapLightbox studio={studio} />}
       <ModuleLockedSheet studio={studio} />
       <ResetDialog studio={studio} />
+      <LeaveDialog studio={studio} />
     </section>
   );
 }

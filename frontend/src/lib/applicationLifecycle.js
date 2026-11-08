@@ -253,6 +253,43 @@ export function applicantFromLegacy(application) {
   };
 }
 
+/**
+ * #4661: what a failed `POST /apply` says about whether the application was
+ * recorded.
+ *   'refused'  - a definite 4xx (not a timeout or a rate limit): nothing was recorded.
+ *   'recorded' - 409: the Worker already holds an application in review or an admission.
+ *   'unknown'  - no status, a timeout or a 5xx: the POST may or may not have committed.
+ */
+export function submitFailureKind(err) {
+  const status = Number(err?.status);
+  if (status === 409) return 'recorded';
+  if (Number.isInteger(status) && status >= 400 && status < 500 && status !== 408 && status !== 429) return 'refused';
+  return 'unknown';
+}
+
+const PENDING_BLANK = Object.freeze({
+  application_id: null, status: 'pending', submitted_at: null, decided_at: null, withdrawn_at: null,
+  answers: null, answers_recorded: true, pool: null, note: null, interview: null, reapply: null,
+});
+
+/**
+ * #4661: the applicant a successful `POST /apply` commits, taken from its own
+ * answer. The page adopts this at once, so a later status read that fails can
+ * never undo what the member just did. A response with no `application` still
+ * means the POST succeeded, so it is a pending application, never "none".
+ */
+export function committedApplicant(response) {
+  return applicantFromLegacy(response?.application) ?? { ...PENDING_BLANK };
+}
+
+/** #4661: whether a status read shows an application the member made after `priorId` (the one they held before submitting). */
+export function recordedSince(applicant, priorId) {
+  if (!applicant) return false;
+  const phase = phaseOf(applicant);
+  if (phase === 'none' || phase === 'withdrawn' || phase === 'declined') return false;
+  return priorId == null || applicant.application_id == null || applicant.application_id !== priorId;
+}
+
 const icsStamp = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 const icsText = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/[,;]/g, (m) => `\\${m}`);
 

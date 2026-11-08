@@ -19,6 +19,8 @@ and is not kept in sync.
 | `migrations/202611041613_grow_campaigns.sql` | D4447 (#4447): campaign plans, channel budgets and same-venture item links; Part A of #3722. |
 | `migrations/202611041438_team_allowlists.sql` | D4422 (#4422): per-company and standalone-project model/tool lists, with actor/time; company projects inherit their parent policy. |
 | `migrations/202611042009_distribution_inbox_reads.sql` | D4494: per-member, per-message Inbox receipts. |
+| `migrations/202611071531_licence_revisions.sql` | D4694 (#4694): a `revision` on `licence_terms` and `licence_fee_invoices` and a `terms_revision` on `territory_licences`, so a write from a stale snapshot is refused (409) instead of replacing a newer value. Additive, default 0. |
+| `migrations/202611071547_advisor_engagement_events.sql` | D4695 (#4695): `advisor_engagement_events`, an engagement's append-only renewal history (`signed`, `renewed`, `ended`), with unique indexes that make a repeated decision on one term a no-op. New table, re-runnable. |
 
 ## Adding a change
 
@@ -61,3 +63,4 @@ legacy sizes NULL and adds no users column. The operator backfill measures R2
 HEAD metadata after deployment; the migration never reads or deletes objects.
 
 | `migrations/202611041900_grow_campaign_details.sql` | D4483 (#4483): nullable audience/channel budget details and plain creative text; ALTERs apply once through the ledger. |
+| `migrations/202611072340_platform_capacity_history.sql` | D4559 (#4559) part 2: daily deployment-metric snapshots (NULL when unreadable, never 0) and capacity alert episodes with one open row per metric. No tenant data. |

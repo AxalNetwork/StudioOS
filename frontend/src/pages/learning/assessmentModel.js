@@ -173,7 +173,13 @@ export function revealedAnswers(exam, result) {
     const label = (list) => (Array.isArray(list) ? list.map((n) => rows[n]?.label).filter(Boolean) : []);
     const chosen = Array.isArray(answers[q.uid]) ? answers[q.uid] : [];
     const right = Array.isArray(correct[q.uid]) ? correct[q.uid] : [];
-    return { uid: q.uid, n: i + 1, prompt: q.prompt, chosen: label(chosen), correct: label(right), right: right.length > 0 && sameSet(chosen, right) };
+    // D4650 (#4650, part 3): the explanation travels with the revealed answer, never without it.
+    const teaching = result.explanations && typeof result.explanations === 'object' ? result.explanations[q.uid] : null;
+    return {
+      uid: q.uid, n: i + 1, prompt: q.prompt, chosen: label(chosen), correct: label(right), right: right.length > 0 && sameSet(chosen, right),
+      explanation: typeof teaching?.explanation === 'string' && teaching.explanation ? teaching.explanation : null,
+      revision: Array.isArray(teaching?.revision) ? teaching.revision.filter((l) => l && typeof l.title === 'string' && typeof l.url === 'string') : [],
+    };
   });
 }
 
@@ -307,6 +313,27 @@ export function withoutOption(form, index) {
  * or the kind change. Blank options are dropped and the correct indexes moved
  * with the options they point at.
  */
+/** D4650 (#4650, part 3): a question's explanation and revision links, as the studio edits them. */
+export function explanationForm(q) {
+  return {
+    explanation: q?.explanation ?? '',
+    revision: Array.isArray(q?.revision) ? q.revision.map((l) => ({ title: l.title ?? '', url: l.url ?? '' })) : [],
+  };
+}
+
+/** The body `PUT /questions/:uid/explanation` takes: blank link rows dropped, blank text cleared. */
+export function explanationBody(form) {
+  return {
+    explanation: clean(form.explanation) || null,
+    revision: (form.revision || [])
+      .filter((l) => clean(l.title) || clean(l.url))
+      .map((l) => ({ title: clean(l.title), url: clean(l.url) })),
+  };
+}
+
+/** A revision link inside Learning opens in the app; any other opens in a new tab. */
+export const isLearningPath = (url) => typeof url === 'string' && url.startsWith('/learning/');
+
 export function questionBody(form) {
   const kept = [];
   const moved = new Map();

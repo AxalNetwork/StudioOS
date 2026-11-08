@@ -5,6 +5,7 @@ import { NewHypothesisDialog, LinkPainDialog } from '../../workspaces/founder/Va
 import { RECENTLY_MOVED_DAYS, daysBefore, historyReaches, startOfMonth } from '../../lib/verdictHistory';
 import { placementText } from '../founder/InterviewReview';
 import { NO_SUGGESTIONS, acceptAllBatches, heardLine, suggestionLine, suggestionsView } from './validatePhone';
+import { affectsLine, draftFrom, editableKind, payloadFrom, visibleFields } from './suggestionForms';
 
 /**
  * D697 (#1659) — Validate's three bottom sections: what the Interviews, Pain
@@ -242,9 +243,21 @@ export function PainThemesSection({ parts, onExport, onAssign, newThemeHref = nu
  * the first time this board is opened…") is not drawn: opening this page does
  * not start the history until #1666 writes it from the module read.
  */
-export function historyNotes(filter, since, now = new Date()) {
+export function historyNotes(filter, since, now = new Date(), availability = null) {
   const notes = [];
   const f = filter || {};
+  const selected = f.moved === 'recent' || f.history === 'last_week' || f.history === 'this_month';
+  if (selected && availability?.filterAvailable === false) {
+    const coverage = availability?.coverage;
+    if (coverage?.status === 'partial' && coverage?.since) {
+      return [`History is continuous only from ${day(coverage.since)}. This earlier view is unavailable rather than showing an incomplete result.`];
+    }
+    return ['History could not be read. This view is unavailable rather than showing an empty result.'];
+  }
+  // An exact as-of boundary can be available even when the general history
+  // slice is partial. The Worker is authoritative about that bounded read.
+  if (f.history === 'last_week' && availability?.filterAvailable === true
+    && availability?.coverage?.status === 'partial') return notes;
   if (f.moved === 'recent' && !historyReaches(since, daysBefore(now, RECENTLY_MOVED_DAYS))) {
     notes.push(since
       ? `Lane history starts ${day(since)}, so moves before that are not on record.`
@@ -298,7 +311,9 @@ export function HypothesesSection({ parts, projectId, query, openDialog, onLoadL
   const [linkError, setLinkError] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
   const filter = query?.filter || {};
-  const notes = historyNotes(filter, stats.history_since);
+  const notes = historyNotes(filter, stats.history_since, new Date(), {
+    coverage: stats.history_coverage, filterAvailable: stats.history_filter_available,
+  });
 
   // Link to a pain's lists are read when its dialog opens; a failed read says
   // so here and opens nothing.
@@ -358,34 +373,101 @@ export function suggestionText(s) {
   return suggestionLine(s) ?? placementText(s);
 }
 
-/** One suggestion: what it says, the quote, where it was heard, and Accept, Edit and Discard. */
+const FIELD = 'w-full rounded-md border border-axal-hairline bg-white px-2 py-1.5 text-[12.5px] text-axal-ink aria-[invalid=true]:border-red-600 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:aria-[invalid=true]:border-red-400';
+
+/** One labelled control of a suggestion's form (D4590): text, long text, a choice, an amount or a currency. */
+function SuggestionField({ id, field, value, error, disabled, onChange }) {
+  const describedBy = [field.hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ') || undefined;
+  const common = {
+    id, value, disabled, onChange: (e) => onChange(e.target.value),
+    'aria-invalid': error ? 'true' : undefined, 'aria-describedby': describedBy, 'aria-required': field.required ? 'true' : undefined,
+    'data-testid': `validate-suggestion-input-${field.key}`, className: FIELD,
+  };
+  let control;
+  if (field.type === 'select') {
+    control = (
+      <select {...common}>
+        {!field.options.some(([v]) => v === '') && <option value="">{field.required ? 'Choose…' : 'Not recorded'}</option>}
+        {field.options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+        {/* A stored value the list does not have is drawn as itself, never as another choice. */}
+        {value && !field.options.some(([v]) => v === value) && <option value={value}>{`${value} (not a listed value)`}</option>}
+      </select>
+    );
+  } else if (field.type === 'long') {
+    control = <textarea {...common} rows={3} maxLength={field.max * 2} />;
+  } else {
+    control = (
+      <input {...common} type="text"
+        inputMode={field.type === 'amount' ? 'decimal' : undefined}
+        maxLength={field.type === 'currency' ? 3 : field.max ? field.max * 2 : undefined}
+        autoCapitalize={field.type === 'currency' ? 'characters' : undefined} />
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1" data-testid="validate-suggestion-field" data-key={field.key}>
+      <label htmlFor={id} className="text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+        {field.label}{field.required ? '' : <span className="font-normal text-axal-faint dark:text-gray-500"> (optional)</span>}
+      </label>
+      {control}
+      {field.hint && <span id={`${id}-hint`} className={NOTE}>{field.hint}</span>}
+      {field.max && field.type !== 'select' && !field.hint && <span className={NOTE}>At most {field.max} characters.</span>}
+      {error && <p id={`${id}-error`} className={ERROR} data-testid={`validate-suggestion-error-${field.key}`}>{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * One suggestion: what it says, the quote, where it was heard, and Accept,
+ * Edit and Discard. D4590 (#4590): Edit opens labelled fields for the kind
+ * (`suggestionForms.js`), never the raw payload; the suggestion as heard stays
+ * above them. A draft that fails the rules sends nothing; a refused accept
+ * keeps the draft, and the suggestion stays pending.
+ */
 function SuggestionRow({ s, busy, error, onAccept, onDiscard }) {
+  const editable = editableKind(s.kind);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(() => JSON.stringify(s.payload || {}, null, 2));
-  const [bad, setBad] = useState(false);
+  const [draft, setDraft] = useState(() => draftFrom(s.kind, s.payload));
+  const [fieldErrors, setFieldErrors] = useState({});
   const accept = () => {
     if (!editing) return onAccept(s.id);
-    let payload;
-    try { payload = JSON.parse(draft); } catch { setBad(true); return undefined; }
-    setBad(false);
+    const { payload, errors } = payloadFrom(s.kind, draft, s.payload);
+    setFieldErrors(errors);
+    if (!payload) return undefined;
     return onAccept(s.id, payload);
   };
+  const cancel = () => { setEditing(false); setDraft(draftFrom(s.kind, s.payload)); setFieldErrors({}); };
+  const set = (key, value) => {
+    setDraft((d) => ({ ...d, [key]: value }));
+    setFieldErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
+  };
   const heard = heardLine(s);
+  const errorCount = Object.values(fieldErrors).filter(Boolean).length;
+  const formId = `suggestion-${s.id}`;
   return (
-    <li className="flex flex-col gap-1.5 border-t border-axal-hairline py-2.5 first:border-t-0 dark:border-gray-800" data-testid="validate-suggestion" data-id={s.id}>
-      <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{suggestionText(s)}</span>
+    <li className="flex flex-col gap-1.5 border-t border-axal-hairline py-2.5 first:border-t-0 dark:border-gray-800" data-testid="validate-suggestion" data-id={s.id} aria-busy={busy ? 'true' : undefined}>
+      {editing && <span className="text-[11px] font-bold uppercase tracking-wide text-axal-faint dark:text-gray-500">As suggested</span>}
+      <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="validate-suggestion-text">{suggestionText(s)}</span>
       {s.quote && <blockquote className="m-0 border-l-2 border-violet-300 pl-2 text-[12px] italic text-axal-muted dark:border-violet-700 dark:text-gray-300">{s.quote}</blockquote>}
       {s.href ? <Link to={s.href} className={LINK} data-testid="validate-suggestion-heard">{heard}</Link>
         : <span className="text-[11px] text-axal-faint dark:text-gray-500" data-testid="validate-suggestion-heard">{heard}</span>}
       {editing && (
-        <textarea aria-label="Edit before accepting" rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} data-testid="validate-suggestion-draft"
-          className="w-full rounded-md border border-axal-hairline bg-white p-2 font-mono text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" />
+        <fieldset className="m-0 flex flex-col gap-2 rounded-lg border border-axal-hairline p-2.5 dark:border-gray-800" data-testid="validate-suggestion-form" disabled={busy}>
+          <legend className="px-1 text-[11px] font-bold uppercase tracking-wide text-axal-faint dark:text-gray-500">Your version</legend>
+          {visibleFields(s.kind, draft).map((f) => (
+            <SuggestionField key={f.key} id={`${formId}-${f.key}`} field={f} value={draft[f.key] ?? ''} error={fieldErrors[f.key]} disabled={busy}
+              onChange={(v) => set(f.key, v)} />
+          ))}
+          <p className={NOTE} data-testid="validate-suggestion-affects">{affectsLine(s, draft)}.</p>
+        </fieldset>
       )}
-      {bad && <p role="alert" className={ERROR}>The edit is not valid JSON. Nothing was accepted.</p>}
-      {error && <p role="alert" className={ERROR}>{error} It is still suggested.</p>}
+      {!editable && <p className={NOTE} data-testid="validate-suggestion-not-editable">This kind of suggestion cannot be edited here. Accept it as suggested, or discard it.</p>}
+      {errorCount > 0 && <p role="alert" className={ERROR} data-testid="validate-suggestion-invalid">{errorCount === 1 ? 'One field needs a change' : `${errorCount} fields need a change`}. Nothing was accepted.</p>}
+      {error && <p role="alert" className={ERROR}>{error} It is still suggested{editing ? ', and your edits are kept' : ''}.</p>}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={BUTTON} disabled={busy} onClick={accept} data-testid="validate-suggestion-accept">{editing ? 'Save and accept' : 'Accept'}</button>
-        <button type="button" className={BUTTON} disabled={busy} onClick={() => { setEditing((x) => !x); setBad(false); }} data-testid="validate-suggestion-edit">{editing ? 'Cancel edit' : 'Edit'}</button>
+        <button type="button" className={BUTTON} disabled={busy} onClick={accept} data-testid="validate-suggestion-accept">{busy ? 'Saving…' : editing ? 'Save and accept' : 'Accept'}</button>
+        {editable && (
+          <button type="button" className={BUTTON} disabled={busy} onClick={editing ? cancel : () => setEditing(true)} data-testid="validate-suggestion-edit">{editing ? 'Cancel edit' : 'Edit'}</button>
+        )}
         <button type="button" className={BUTTON} disabled={busy} onClick={() => onDiscard(s.id)} data-testid="validate-suggestion-discard">Discard</button>
       </div>
     </li>

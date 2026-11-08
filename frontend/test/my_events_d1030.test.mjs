@@ -128,6 +128,8 @@ function stub(source) {
     .replace(/import \{ eventsPublic \} from [^;]+;/, `const eventsPublic = globalThis.${key}.publicApi;`)
     .replace(/import \{ useAuth \} from [^;]+;/, `const useAuth = () => ({ user: globalThis.${key}.user });`)
     .replace(/import \{ useToast \} from [^;]+;/, `const useToast = () => globalThis.${key}.toast;`)
+    // #4738: the recommendation reads are their own tests'; here they answer "not available", so the Suggested card is what the page draws.
+    .replace(/import \* as recommendations from [^;]+;/, "const recommendations = new Proxy({}, { get: () => async () => ({ available: false, reason: 'Recommendations aren’t available right now.' }) });")
     .replace(/import PageExplainer[^;]+;/, 'const PageExplainer = () => null;')
     .replace(/import EventQRCode[^;]+;/, 'const EventQRCode = ({ value }) => <canvas data-ticket-code={value} />;')
     .replace(/import \{ usePhoneWidth \} from [^;]+;/, 'const usePhoneWidth = () => false;');

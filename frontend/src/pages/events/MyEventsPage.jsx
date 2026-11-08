@@ -71,7 +71,7 @@ function useRecommended() {
   useEffect(() => {
     let alive = true;
     setState({ status: 'loading', data: null });
-    Promise.resolve().then(() => recommendations.recommended({ limit: 8 }))
+    Promise.resolve().then(() => recommendations.recommended(8))
       .then(data => { if (alive) setState({ status: 'ready', data }); })
       .catch(() => { if (alive) setState({ status: 'error', data: null }); });
     return () => { alive = false; };
@@ -83,7 +83,8 @@ function useRecommended() {
 const RECOMMEND_ACT = {
   feedback: (id, body) => recommendations.feedback(id, body),
   explainQuote: (id) => recommendations.explainQuote(id),
-  explain: (id) => recommendations.explain(id),
+  explain: (id, quoteUid) => recommendations.explain(id, quoteUid),
+  prefs: () => recommendations.prefs(),
   savePrefs: (p) => recommendations.savePrefs(p),
 };
 

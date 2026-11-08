@@ -413,20 +413,26 @@ export function frameUrl(posterUrl, pct, durationSeconds) {
   return u.toString();
 }
 
-// ── The content table's Video column and Copy to Stream (lr16) ────────────
+// ── The content table's Video column and Copy to Stream (lr16, #4179/L4) ──
 //
-// `GET /api/admin/learning/items` sends `video_source` and `video_url`, and
-// not yet `stream_uid`: L4 (#4179) adds the per-item copy state to this read.
-// So "Stream · Ready" is drawn only when the row carries `stream_uid`, and
-// "None" is claimed only when it carries `stream_uid: null`; a video with
-// neither a file nor a link, on a read without the field, is "Not recorded".
+// `GET /api/admin/learning/items` sends `video_source`, `video_url` and, since
+// #4742, `stream_uid` for every item (null when none): "Stream · Ready" is
+// drawn only when the row carries a truthy `stream_uid`, and "None" is claimed
+// only when it carries `stream_uid: null`; a video with neither a file nor a
+// link, on a read without the field (an older cached read, or a test fixture
+// that leaves it off), is "Not recorded" rather than a claim nobody can make.
 //
-// THE COPY STATE IS A GUESS PENDING L4. Its field name and shape are this
-// page's, not the route's: `stream_copy` on the row, absent while L4 is not
-// built (nothing is drawn), null for an uploaded file not yet copied (Copy to
-// Stream), or { state: 'copying' | 'verified' | 'failed', error_message }.
-// No client method exists for the copy, so "Copy to Stream" and "Try again"
-// draw only when the page passes a handler, and today none does.
+// THE COPY STATE, `stream_copy` on the row (#4179, `copyStates` in
+// `services/learningStream.ts`): absent for anything that is not an uploaded
+// file (a reading, a link, or a video already on Stream — the route only adds
+// it to an `r2` item), else `{ state: 'none' | 'copying' | 'verified' |
+// 'failed', stream_uid?, error_code?, error_message? }`. `migrateVideoToStream`
+// (`lib/api/adminLearning.js`) is the client method for
+// `POST /admin/learning/stream/migrations`, and `LearningStudio.jsx` wires it
+// as `onCopyToStream`, so "Copy to Stream" and "Try again" draw on every row
+// this read carries the field for. `streamCopyOf` below reads `state: 'none'`
+// (the route's own shape) and a bare `null` (a fixture or an optimistic local
+// update before the first re-read) the same way: "Copy to Stream".
 
 export const STREAM_COPY_FIELD = 'stream_copy';
 
@@ -439,12 +445,18 @@ export function videoColumn(row) {
   return row.stream_uid === null ? ['None', 'neutral'] : null;
 }
 
-/** The row's copy state: undefined when the read does not carry the field, else 'copy' | 'copying' | 'verified' | 'failed' | null. */
+/**
+ * The row's copy state: undefined when the read does not carry the field,
+ * else 'copy' | 'copying' | 'verified' | 'failed' | null. The route sends
+ * `{ state: 'none' }` for an uploaded file not yet copied (`admin_learning.ts`'s
+ * `GET /items`); a bare `null` reads the same way, for a fixture or an
+ * optimistic local update made before the next re-read.
+ */
 export function streamCopyOf(row) {
   if (!row || !Object.hasOwn(row, STREAM_COPY_FIELD)) return undefined;
   if (row.kind !== 'video' || row.video_source !== 'r2' || row.stream_uid) return null;
   const c = row[STREAM_COPY_FIELD];
-  if (c === null) return 'copy';
+  if (c === null || c?.state === 'none') return 'copy';
   return ['copying', 'verified', 'failed'].includes(c?.state) ? c.state : null;
 }
 

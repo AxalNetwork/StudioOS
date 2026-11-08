@@ -39,6 +39,16 @@ function slotDto(s: SlotRow, taken = 0): any {
     is_cancelled: !!s.is_cancelled, created_at: s.created_at,
   };
 }
+/**
+ * #4715 — a slot as anyone but its partner sees it. The meeting link and the
+ * partner's slot notes are for the partner and for a founder whose booking on
+ * the slot was confirmed; to everyone else a slot says only whether it has a
+ * link (`has_meeting_link`). The booking page reads neither field.
+ */
+function publicSlotDto(s: SlotRow, taken = 0): any {
+  const { meeting_url: _url, notes: _notes, ...shown } = slotDto(s, taken);
+  return { ...shown, has_meeting_link: !!s.meeting_url };
+}
 // The booking row itself carries no times: `starts_at` / `ends_at` /
 // `meeting_url` live on `partner_office_hour_slots`. List endpoints LEFT JOIN
 // the slot and pass those three through so the founder-facing page can render
@@ -118,7 +128,7 @@ r.get('/me/slots', async (c) => {
 
 r.get('/partners/:uid/slots', async (c) => {
   try {
-    await requireAuth(c);
+    const viewer = await requireAuth(c);
     const partner = await partnerByUid(c.env, c.req.param('uid'));
     if (!partner) return c.json({ detail: 'Partner not found' }, 404);
     const upcoming = (c.req.query('upcoming_only') || 'true').toLowerCase() === 'true';
@@ -128,9 +138,21 @@ r.get('/partners/:uid/slots', async (c) => {
     const rows = upcoming
       ? await c.env.DB.prepare(sql).bind(partner.id, nowIso()).all<SlotRow>()
       : await c.env.DB.prepare(sql).bind(partner.id).all<SlotRow>();
+    // #4715: the partner (and an admin) see their own slots whole; a founder
+    // sees the link and notes only on a slot they hold a confirmed booking on.
+    const whole = Number(viewer.partner_id) === Number(partner.id) || isAdmin(viewer);
+    const held = new Set<number>();
+    if (!whole) {
+      const mine = await c.env.DB.prepare(
+        `SELECT slot_id FROM partner_bookings
+          WHERE partner_id = ? AND founder_user_id = ? AND status IN ('confirmed', 'completed')`,
+      ).bind(partner.id, viewer.id).all<{ slot_id: number }>();
+      for (const b of mine.results || []) held.add(Number(b.slot_id));
+    }
     const items: any[] = [];
     for (const s of (rows.results || []) as SlotRow[]) {
-      items.push(slotDto(s, await takenForSlot(c.env, s.id)));
+      const taken = await takenForSlot(c.env, s.id);
+      items.push(whole || held.has(Number(s.id)) ? slotDto(s, taken) : publicSlotDto(s, taken));
     }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
@@ -144,11 +166,15 @@ r.delete('/me/slots/:id', async (c) => {
     const slot = await c.env.DB.prepare('SELECT * FROM partner_office_hour_slots WHERE id = ?').bind(id).first<SlotRow>();
     if (!slot || slot.partner_id !== partner.id) return c.json({ detail: 'Slot not found' }, 404);
     await c.env.DB.prepare('UPDATE partner_office_hour_slots SET is_cancelled = 1 WHERE id = ?').bind(id).run();
-    await c.env.DB.prepare(
+    // D4703 (#4703): the same cleanup a single cancel does, for every booking
+    // this statement cancelled (as the advisor slot delete, part 1).
+    const cancelled = await c.env.DB.prepare(
       `UPDATE partner_bookings SET status='cancelled', cancel_reason=COALESCE(cancel_reason,'slot_cancelled'), updated_at=?
-       WHERE slot_id = ? AND status IN ('pending','confirmed')`
-    ).bind(nowIso(), id).run();
-    return c.json({ ok: true });
+       WHERE slot_id = ? AND status IN ('pending','confirmed') RETURNING id`
+    ).bind(nowIso(), id).all<{ id: number }>();
+    const ids = (cancelled.results || []).map((r) => Number(r.id));
+    if (ids.length) deferCalendarCancel(c, ids);
+    return c.json({ ok: true, bookings_cancelled: ids.length });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -217,7 +243,9 @@ r.post('/slots/:id/book', async (c) => {
             title: `Partner office hours${partnerRow?.company ? ' — ' + partnerRow.company : ''}`,
             start_at: slotStart,
             end_at: slotEnd,
-            status: 'confirmed',
+            // D4703: still pending, so tentative until the partner confirms.
+            status: 'pending',
+            ics_status: 'TENTATIVE' as const,
             location_kind: 'video',
             location_uri: meetingUrl,
             organizer_email: partnerRow?.email || partnerOwnerEmail,
@@ -291,6 +319,51 @@ r.get('/bookings/me', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/** D4703: one cancel's calendar cleanup, for one booking or a slot's worth, deferred. */
+function deferCalendarCancel(c: Context<{ Bindings: Env }>, ids: number[]) {
+  const p = (async () => {
+    const { onAxalSessionCancelled } = await import('../services/calendar/sync');
+    for (const bookingId of ids) {
+      try { await onAxalSessionCancelled(c.env, 'partner_office_hour', bookingId); }
+      catch (e) { console.warn('[partner_oh] calendar cancel hook failed', e); }
+    }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
+/** D4703: a confirmed booking's copy is pushed again, now firm. */
+function deferCalendarConfirm(c: Context<{ Bindings: Env }>, id: number) {
+  const p = (async () => {
+    try {
+      const row = await c.env.DB.prepare(
+        `SELECT b.id, b.uid, b.topic, b.notes, s.starts_at, s.ends_at, s.meeting_url, p.email AS partner_email, p.company,
+                (SELECT email FROM users WHERE partner_id = b.partner_id LIMIT 1) AS owner_email,
+                u.email AS founder_email, u.name AS founder_name
+           FROM partner_bookings b
+           JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           JOIN partners p ON p.id = b.partner_id
+           LEFT JOIN users u ON u.id = b.founder_user_id
+          WHERE b.id = ? AND b.status = 'confirmed'`
+      ).bind(id).first<any>();
+      if (!row) return;
+      const host = row.partner_email || row.owner_email || null;
+      const { onAxalSessionUpdated } = await import('../services/calendar/sync');
+      await onAxalSessionUpdated(c.env, {
+        id: `partner_office_hour:${row.id}`, kind: 'partner_office_hour', source_id: row.id, source_uid: row.uid,
+        title: `Partner office hours${row.company ? ' — ' + row.company : ''}`,
+        start_at: row.starts_at, end_at: row.ends_at, status: 'confirmed', ics_status: 'CONFIRMED',
+        location_kind: 'video', location_uri: row.meeting_url || null, organizer_email: host,
+        attendees: [
+          { email: host, name: row.company || null, role: 'partner' },
+          { email: row.founder_email || null, name: row.founder_name || null, role: 'founder' },
+        ],
+        notes: (row.topic || '') + (row.notes ? `\n\n${row.notes}` : ''),
+      } as any);
+    } catch (e) { console.warn('[partner_oh] calendar confirm hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
 async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   allowed: string[]; nextStatus: string; whoCan: 'partner' | 'founder' | 'either';
   reason?: string | null;
@@ -309,19 +382,16 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   if (!opts.allowed.includes(b.status)) {
     return c.json({ detail: `Cannot transition from ${b.status}` }, 409);
   }
-  await c.env.DB.prepare(
-    'UPDATE partner_bookings SET status=?, cancel_reason=COALESCE(?, cancel_reason), updated_at=? WHERE id = ?'
-  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id).run();
-  // Task #52 — remove from external calendars on cancel/no-show (deferred).
-  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') {
-    const p = (async () => {
-      try {
-        const { onAxalSessionCancelled } = await import('../services/calendar/sync');
-        await onAxalSessionCancelled(c.env, 'partner_office_hour', id);
-      } catch (e) { console.warn('[partner_oh] calendar cancel hook failed', e); }
-    })();
-    if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+  // D4703 (#4703): written only from the status read above; a racing press changes nothing.
+  const wrote = await c.env.DB.prepare(
+    'UPDATE partner_bookings SET status=?, cancel_reason=COALESCE(?, cancel_reason), updated_at=? WHERE id = ? AND status = ?'
+  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id, b.status).run();
+  if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
+    return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
   }
+  // Task #52 — remove from external calendars on cancel/no-show (deferred).
+  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') deferCalendarCancel(c, [id]);
+  if (opts.nextStatus === 'confirmed') deferCalendarConfirm(c, id);
   const fresh = await c.env.DB.prepare('SELECT * FROM partner_bookings WHERE id = ?').bind(id).first<BookingRow>();
   return c.json(bookingDto(fresh!));
 }

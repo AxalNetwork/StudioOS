@@ -104,7 +104,8 @@ const CLASSIFIED: [RegExp, string][] = [
   [/^\.\/codemode(?:\/|$)/, 'Code Mode: not in v1'],
   [/^\.\/(?:webfetch|websearch)(?:\/|$)/, 'read-only tools: not wired in v1; a result would be data, never instructions'],
   [/^\.\/(?:harness|models)(?:\/|$)|^\.\/ai-(?:chat-agent|chat-v5-migration|react|types)$|^\.\/chat(?:\/|$)|^\.\/chat-sdk$|^\.\/observability\/ai$/, 'model harness and chat agent: rule 1'],
-  [/^\.\/mcp(?:\/|$)|^\.\/agent-tools$|^\.\/skills(?:\/|$)|^\.\/experimental\/webmcp$/, 'tools and tool servers: not in v1'],
+  [/^\.\/skills$/, 'D4555 (#4555): the skill parser and manifest source, imported only by services/agents/skillsSdk.ts over the D1-authorized run manifest'],
+  [/^\.\/mcp(?:\/|$)|^\.\/agent-tools$|^\.\/skills\/tools(?:\/|$)|^\.\/experimental\/webmcp$/, 'tools and tool servers: not in v1'],
   [/^\.\/experimental\/channels(?:\/|$)|^\.\/voice(?:\/|$)/, 'channels and voice: not in v1'],
   [/^\.\/(?:types|client|routing|streams|context|sessions|tasks|lifecycle|observability|react|websockets|state|schedule|queue|schedules|schedules\/parser|workflows|tsconfig|vite)$/, 'the framework\'s own parts and client: not imported'],
 ];

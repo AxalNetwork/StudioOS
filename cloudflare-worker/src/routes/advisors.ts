@@ -1,3 +1,4 @@
+import { withMentorEligible } from '../services/mentorEligibility';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
 /**
  * T13 — Advisors + office-hour slots + bookings + reviews.
@@ -19,6 +20,10 @@ import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 /** The request's execution context, or none where the runtime gives none (a test's request). */
 const execCtx = (c: any) => { try { return c.executionCtx; } catch { return undefined; } };
 import { logAdminAction } from '../services/adminAudit';
+import {
+  CODE_MAX_ATTEMPTS, CODE_TTL_MS, CODES_PER_HOUR, attestationMailer, claimJson, claimSha256, codeHash,
+  consentState, emailOf, maskEmail, newCode, sha256Hex,
+} from '../services/advisorProofAttestation';
 import { ensureTier, type TierUser } from '../middleware/requireTier';
 import {
   isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull,
@@ -36,7 +41,7 @@ import {
 } from '../services/advisorMoney';
 import {
   PayoutAccountNotReady, SettlementDisabled,
-  chargeSession, connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount,
+  chargeSession, FeeSnapshotMissing, connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount,
 } from '../services/advisorConnect';
 // The platform customer the destination charge is made against. Reused rather
 // than re-derived: `routes/wellbeing.ts` charges its own bookings through this
@@ -50,6 +55,13 @@ import {
   type GuidanceRow, type CalendarItem,
 } from './_advisor_cohort_helpers';
 import { advisorVisibility } from '../services/advisorVisibility';
+import { canonicalInstant, isBlocked, isPaidType, ruleRefusal, rulesFromRow, weekBounds } from '../services/advisorBookingRules';
+import { pageFacts, pageWindow } from '../services/listPage';
+
+/** #4689: the most rows one page of each Expertise list returns (the caps they had). */
+const SERVICES_PAGE = 200;
+const PROOF_PAGE = 200;
+const THINKING_PAGE = 100;
 
 const advisors = new Hono<{ Bindings: Env }>();
 
@@ -119,6 +131,8 @@ type SlotRow = {
   starts_at: string; ends_at: string; capacity: number;
   meeting_url: string | null; notes: string | null;
   is_cancelled: number; created_at: string;
+  /** Migration 240: set when the advisor withdrew the hour. A blocked slot is not cancelled and is not bookable (D4695). */
+  blocked_reason?: string | null;
 };
 type BookingRow = {
   id: number; uid: string; slot_id: number; advisor_id: number;
@@ -165,6 +179,26 @@ function advisorDto(m: AdvisorRow): any {
     created_at: m.created_at, updated_at: m.updated_at,
     ...advisorProfileDto(m),
   };
+}
+/**
+ * #4715 — an advisor as the directory and the match list show them to another
+ * member. The account's email is the advisor's own; the public profile
+ * (`GET /:uid`) never carried it either. `id` and `user_id` stay: the pages key
+ * advisors by `id`, and the trust badge and booking button read `user_id`.
+ */
+function directoryAdvisorDto(m: AdvisorRow): any {
+  const { email: _email, ...listed } = advisorDto(m);
+  return listed;
+}
+/**
+ * #4715 — a slot as anyone but its advisor sees it. The meeting link and the
+ * advisor's slot notes are for the advisor and for a founder whose booking on
+ * the slot was confirmed; to everyone else a slot says only whether it has a
+ * link (`has_meeting_link`), which is all the booking page shows.
+ */
+function publicSlotDto(s: SlotRow, taken = 0): any {
+  const { meeting_url: _url, notes: _notes, ...shown } = slotDto(s, taken);
+  return { ...shown, has_meeting_link: !!s.meeting_url };
 }
 function slotDto(s: SlotRow, taken = 0): any {
   return {
@@ -295,7 +329,7 @@ advisors.get('/', async (c) => {
            AND (nms.paused_at IS NOT NULL OR nms.directory_hidden_at IS NOT NULL))
        ORDER BY display_name ASC`
     ).all<AdvisorRow>();
-    let items = (rows.results || []).map(advisorDto);
+    let items = (rows.results || []).map(directoryAdvisorDto);
     if (q) items = items.filter((m: any) =>
       (m.display_name || '').toLowerCase().includes(q) ||
       (m.bio || '').toLowerCase().includes(q));
@@ -316,6 +350,9 @@ advisors.get('/', async (c) => {
 advisors.get('/me', async (c) => {
   try {
     const user = await requireAuth(c);
+    // D4670: someone who holds no Advisor licence is refused, so "you may not"
+    // never reads as "you have no profile yet" (null, below).
+    if (!mayHoldAdvisorProfile(user)) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     // The 202 columns are read straight out of the row below; heal a database
     // that was baselined after those ALTERs landed. See advisorStoresSchema.ts.
     await ensureAdvisorStoresSchema(c.env);
@@ -366,9 +403,19 @@ function mergeProfileFields(existing: AdvisorRow | null, body: any) {
   };
 }
 
+/**
+ * D4670 (#4670): only an Advisor (a primary or an additional licence, D4472)
+ * or an admin may create or change an advisor profile. Before, a founder's
+ * POST created an active profile, because `myAdvisor` answered null for them
+ * and null read as "make one".
+ */
+const mayHoldAdvisorProfile = (user: User) => holdsLicence(user, 'advisor') || isAdmin(user);
+const ADVISOR_LICENCE_REQUIRED = { code: 'advisor_licence_required', message: 'An advisor profile needs the Advisor licence.' } as const;
+
 advisors.post('/me', async (c) => {
   try {
     const user = await requireAuth(c);
+    if (!mayHoldAdvisorProfile(user)) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     await ensureAdvisorStoresSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const existing = await myAdvisor(c.env, user);
@@ -515,7 +562,7 @@ advisors.get('/match', async (c) => {
       );
 
       return {
-        advisor: advisorDto(m),
+        advisor: directoryAdvisorDto(m),
         match_score: total,
         breakdown: { domain_overlap: domainScore, values_alignment: valScore, skill_complementarity: compScore },
         reasons: [
@@ -621,24 +668,138 @@ advisors.get('/:uid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D4687 (#4687): the owner's calendar is registered BEFORE `GET /:uid/slots`.
+// Hono matches in registration order, so after it `GET /me/slots` was taken
+// by `/:uid/slots` with uid='me' and answered 404 'Advisor not found'.
+/**
+ * THE OWNER'S VIEW OF A SLOT, and it exists because `GET /:uid/slots` must not
+ * grow these three columns. That route is readable by ANY authenticated user —
+ * it is how a founder browses an advisor's calendar — and `recording_state`,
+ * `payment_state` and `blocked_reason` are the advisor's own operational
+ * facts. A client who could see `held_unpaid` would learn that this advisor's
+ * payout account is unverified, and one who could read `blocked_reason` would
+ * read a private note about why an hour is not for sale. So `slotDto` stays
+ * lean and this one carries the operational half.
+ */
+function ownSlotDto(s: SlotRow & {
+  recording_state?: string; payment_state?: string; blocked_reason?: string | null;
+}, taken = 0): any {
+  return {
+    ...slotDto(s, taken),
+    recording_state: s.recording_state ?? 'none',
+    payment_state: s.payment_state ?? 'not_applicable',
+    blocked_reason: s.blocked_reason ?? null,
+  };
+}
+
+advisors.get('/me/slots', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    // The grid is two weeks forward by default, and the artboard's other three
+    // views (Month, Past sessions, Unpaid held) are narrowings of a window
+    // rather than different queries — so the window is the only parameter.
+    const days = Math.min(370, Math.max(1, Number(c.req.query('days') || 14)));
+    const from = c.req.query('from') || nowIso();
+    const until = new Date(new Date(from).getTime() + days * 86_400_000).toISOString();
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM advisor_office_hour_slots
+        WHERE advisor_id = ? AND starts_at >= ? AND starts_at < ?
+        ORDER BY starts_at ASC LIMIT 500`
+    ).bind(m.id, from, until).all<SlotRow>();
+    const items: any[] = [];
+    for (const s of (rows.results || []) as SlotRow[]) {
+      items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id)));
+    }
+    return c.json({ items, window: { from, until, days } });
+  } catch (e) { return mapError(c, e); }
+});
+
 // ---------------------------------------------------------------------------
 // Slots — owned by the advisor (`/me/slots`) or read for any advisor
 // ---------------------------------------------------------------------------
+/**
+ * D4692: THE LIST AGREES WITH THE BOOKING. `POST /slots/:id/book` refuses a slot inside the advisor's minimum notice,
+ * inside a blackout, too close to a session they already hold, and (for a paid session) in a week at its paid cap
+ * (D4695). The list used to offer all of them and let the founder find out at the click. This answers the same
+ * `ruleRefusal` for every slot in one pass, reading the rules once and the advisor's held sessions once.
+ *
+ *   unavailable_code   null, or 'min_notice' | 'blackout' | 'buffer' — what the booking would say for ANY session type
+ *   paid_cap_reached   true when a paid session cannot be booked in that slot's week (a free or included one can)
+ *
+ * The slot is still listed (a founder can see why a time is gone); it is not hidden. The booking stays the decision.
+ */
+async function slotVerdicts(env: Env, advisorId: number, slots: SlotRow[]): Promise<Map<number, { unavailable_code: string | null; paid_cap_reached: boolean }>> {
+  const out = new Map<number, { unavailable_code: string | null; paid_cap_reached: boolean }>();
+  if (!slots.length) return out;
+  const rules = rulesFromRow(await env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+    .bind(advisorId).first<AvailabilityRow>());
+  const starts = slots.map((s) => Date.parse(s.starts_at)).filter(Number.isFinite);
+  const lo = new Date(Math.min(...starts) - 8 * 86_400_000).toISOString();
+  const hi = new Date(Math.max(...starts) + 8 * 86_400_000).toISOString();
+  const booked = (rules.buffer_minutes ?? 0) > 0 ? ((await env.DB.prepare(
+    `SELECT s.id, s.starts_at, s.ends_at FROM advisor_office_hour_slots s
+      WHERE s.advisor_id = ? AND s.is_cancelled = 0 AND s.starts_at >= ? AND s.starts_at < ?
+        AND EXISTS (SELECT 1 FROM advisor_bookings b WHERE b.slot_id = s.id AND b.status IN ('pending','confirmed','completed'))`
+  ).bind(advisorId, lo, hi).all<{ id: number; starts_at: string; ends_at: string }>()).results ?? []) : [];
+  const paidStarts = rules.weekly_paid_cap != null ? ((await env.DB.prepare(
+    `SELECT ps.starts_at FROM advisor_bookings pb
+       JOIN advisor_office_hour_slots ps ON ps.id = pb.slot_id
+       JOIN advisor_session_types pt ON pt.id = pb.session_type_id
+      WHERE pb.advisor_id = ? AND pb.status IN ('pending','confirmed','completed')
+        AND pt.price_cents > 0 AND pt.is_free_intro = 0 AND COALESCE(pt.is_included, 0) = 0
+        AND ps.starts_at >= ? AND ps.starts_at < ?`
+  ).bind(advisorId, lo, hi).all<{ starts_at: string }>()).results ?? []).map((r) => Date.parse(r.starts_at)) : [];
+  const now = Date.now();
+  for (const s of slots) {
+    const start = Date.parse(s.starts_at);
+    const week = Number.isFinite(start) ? weekBounds(start, rules.timezone) : null;
+    const used = week ? paidStarts.filter((t) => t >= week.from && t < week.until).length : 0;
+    const refused = ruleRefusal({
+      slot: s, rules, now, paid: false, paidThisWeek: null,
+      booked: booked.filter((o) => o.id !== s.id),
+    });
+    out.set(s.id, {
+      unavailable_code: refused && refused.code !== 'slot_blocked' ? refused.code : null,
+      paid_cap_reached: rules.weekly_paid_cap != null && used >= rules.weekly_paid_cap,
+    });
+  }
+  return out;
+}
+
 advisors.get('/:uid/slots', async (c) => {
   try {
-    await requireAuth(c);
+    const viewer = await requireAuth(c);
     const m = await loadAdvisorByUid(c.env, c.req.param('uid'));
     if (!m) return c.json({ detail: 'Advisor not found' }, 404);
     const upcoming = (c.req.query('upcoming_only') || 'true').toLowerCase() === 'true';
     const sql = upcoming
-      ? 'SELECT * FROM advisor_office_hour_slots WHERE advisor_id = ? AND is_cancelled = 0 AND ends_at >= ? ORDER BY starts_at ASC'
-      : 'SELECT * FROM advisor_office_hour_slots WHERE advisor_id = ? ORDER BY starts_at DESC LIMIT 200';
+      ? `SELECT * FROM advisor_office_hour_slots WHERE advisor_id = ? AND is_cancelled = 0
+          AND (blocked_reason IS NULL OR TRIM(blocked_reason) = '') AND ends_at >= ? ORDER BY starts_at ASC`
+      : `SELECT * FROM advisor_office_hour_slots WHERE advisor_id = ?
+          AND (blocked_reason IS NULL OR TRIM(blocked_reason) = '') ORDER BY starts_at DESC LIMIT 200`;
     const rows = upcoming
       ? await c.env.DB.prepare(sql).bind(m.id, nowIso()).all<SlotRow>()
       : await c.env.DB.prepare(sql).bind(m.id).all<SlotRow>();
+    const slots = (rows.results || []) as SlotRow[];
+    const verdicts = await slotVerdicts(c.env, m.id, slots);
+    // #4715: the advisor (and an admin) see their own slots whole; a founder
+    // sees the link and notes only on a slot they hold a confirmed booking on.
+    // The booking verdicts ride on either shape: they name no link and no note.
+    const whole = viewer.id === m.user_id || isAdmin(viewer);
+    const held = new Set<number>();
+    if (!whole) {
+      const mine = await c.env.DB.prepare(
+        `SELECT slot_id FROM advisor_bookings
+          WHERE advisor_id = ? AND founder_user_id = ? AND status IN ('confirmed', 'completed')`,
+      ).bind(m.id, viewer.id).all<{ slot_id: number }>();
+      for (const r of mine.results || []) held.add(Number(r.slot_id));
+    }
     const items: any[] = [];
-    for (const s of (rows.results || []) as SlotRow[]) {
-      items.push(slotDto(s, await takenForSlot(c.env, s.id)));
+    for (const s of slots) {
+      const taken = await takenForSlot(c.env, s.id);
+      const shown = whole || held.has(Number(s.id)) ? slotDto(s, taken) : publicSlotDto(s, taken);
+      items.push({ ...shown, ...verdicts.get(s.id) });
     }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
@@ -650,9 +811,14 @@ advisors.post('/me/slots', async (c) => {
     const m = await myAdvisor(c.env, user);
     if (!m) return c.json({ detail: 'Set up your advisor profile first' }, 400);
     const body = await c.req.json().catch(() => ({} as any));
-    const starts = String(body.starts_at || '').trim();
-    const ends = String(body.ends_at || '').trim();
-    if (!starts || !ends) return c.json({ detail: 'starts_at and ends_at required' }, 400);
+    if (!String(body.starts_at || '').trim() || !String(body.ends_at || '').trim()) {
+      return c.json({ detail: 'starts_at and ends_at required' }, 400);
+    }
+    // D4695: a slot's times are stored as the UTC instants they name, so the week, notice and buffer rules compare
+    // like with like. A string that is not a date used to be stored and then never match anything.
+    const starts = canonicalInstant(body.starts_at);
+    const ends = canonicalInstant(body.ends_at);
+    if (!starts || !ends) return c.json({ detail: 'starts_at and ends_at must be dates' }, 400);
     if (new Date(ends).getTime() <= new Date(starts).getTime()) {
       return c.json({ detail: 'ends_at must be after starts_at' }, 400);
     }
@@ -680,12 +846,18 @@ advisors.delete('/me/slots/:id', async (c) => {
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(id).first<SlotRow>();
     if (!slot || slot.advisor_id !== m.id) return c.json({ detail: 'Slot not found' }, 404);
     await c.env.DB.prepare('UPDATE advisor_office_hour_slots SET is_cancelled = 1 WHERE id = ?').bind(id).run();
-    // Cancel any open bookings on this slot.
-    await c.env.DB.prepare(
+    // Cancel any open bookings on this slot. D4703 (#4703): RETURNING names
+    // exactly the bookings this statement cancelled, and each gets the same
+    // calendar cleanup a one-at-a-time cancel does (`transition` below). The
+    // bulk path used to change the status and leave every external copy in
+    // the attendees' calendars.
+    const cancelled = await c.env.DB.prepare(
       `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = COALESCE(cancel_reason, 'slot_cancelled'), updated_at = ?
-       WHERE slot_id = ? AND status IN ('pending','confirmed')`
-    ).bind(nowIso(), id).run();
-    return c.json({ ok: true });
+       WHERE slot_id = ? AND status IN ('pending','confirmed') RETURNING id`
+    ).bind(nowIso(), id).all<{ id: number }>();
+    const ids = (cancelled.results || []).map((r) => Number(r.id));
+    if (ids.length) deferCalendarCancel(c, ids);
+    return c.json({ ok: true, bookings_cancelled: ids.length });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -759,6 +931,8 @@ advisors.post('/slots/:id/book', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();
     if (!slot || slot.is_cancelled) return c.json({ detail: 'Slot not available' }, 404);
+    // D4695: a slot the advisor blocked is not open, whichever door the request came through. The reason is theirs and is not repeated here.
+    if (isBlocked(slot)) return c.json({ detail: 'This slot is not available', code: 'slot_blocked' }, 409);
     // D976: an advisor an admin paused takes no new bookings; bookings already made stay.
     if (await advisorPaused(c.env, slot.advisor_id)) {
       return c.json({ detail: 'This advisor is not taking new bookings', code: 'advisor_paused' }, 409);
@@ -798,39 +972,99 @@ advisors.post('/slots/:id/book', async (c) => {
     if (new Date(slot.starts_at).getTime() < Date.now()) {
       return c.json({ detail: 'Slot is in the past' }, 400);
     }
+    // D4695: a client who already holds this slot is told so, whatever its capacity (a full slot of one used to read
+    // "Slot full" to the person sitting in it).
+    const held = await c.env.DB.prepare('SELECT status FROM advisor_bookings WHERE slot_id = ? AND founder_user_id = ?')
+      .bind(slotId, user.id).first<{ status: string }>();
+    if (held && held.status !== 'cancelled') return c.json({ detail: 'Already booked this slot' }, 409);
     const taken = await takenForSlot(c.env, slotId);
     if (taken >= slot.capacity) return c.json({ detail: 'Slot full' }, 409);
-    const uid = newUid();
+
+    // D4695 — THE ADVISOR'S RULES, then the reservation. The rules are read here so the refusal can say which one
+    // failed; the INSERT below repeats the ones that can change between this read and the write.
+    const rules = rulesFromRow(await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+      .bind(slot.advisor_id).first<AvailabilityRow>());
+    const paid = isPaidType(type);
+    const slotStart = Date.parse(slot.starts_at);
+    const week = weekBounds(slotStart, rules.timezone);
+    const weekFrom = new Date(week.from).toISOString();
+    const weekUntil = new Date(week.until).toISOString();
+    const capped = paid && rules.weekly_paid_cap != null;
+    const paidThisWeek = capped ? Number((await c.env.DB.prepare(
+      `SELECT COUNT(*) AS c FROM advisor_bookings pb
+         JOIN advisor_office_hour_slots ps ON ps.id = pb.slot_id
+         JOIN advisor_session_types pt ON pt.id = pb.session_type_id
+        WHERE pb.advisor_id = ? AND pb.status IN ('pending','confirmed','completed')
+          AND pt.price_cents > 0 AND pt.is_free_intro = 0 AND COALESCE(pt.is_included, 0) = 0
+          AND ps.starts_at >= ? AND ps.starts_at < ?`
+    ).bind(slot.advisor_id, weekFrom, weekUntil).first<{ c: number }>())?.c ?? 0) : null;
+    const nearFrom = new Date(slotStart - 2 * 86_400_000).toISOString();
+    const nearUntil = new Date(Date.parse(slot.ends_at) + 2 * 86_400_000).toISOString();
+    const booked = (rules.buffer_minutes ?? 0) > 0 ? ((await c.env.DB.prepare(
+      `SELECT s.starts_at, s.ends_at FROM advisor_office_hour_slots s
+        WHERE s.advisor_id = ? AND s.id != ? AND s.is_cancelled = 0 AND s.starts_at >= ? AND s.starts_at < ?
+          AND EXISTS (SELECT 1 FROM advisor_bookings b WHERE b.slot_id = s.id AND b.status IN ('pending','confirmed','completed'))`
+    ).bind(slot.advisor_id, slotId, nearFrom, nearUntil).all<{ starts_at: string; ends_at: string }>()).results ?? []) : [];
+    const refused = ruleRefusal({ slot, rules, now: Date.now(), paid, paidThisWeek, booked });
+    if (refused) return c.json({ detail: refused.detail, code: refused.code }, refused.status);
+
+    // THE RESERVATION IS ONE STATEMENT. Whether the slot is still open, whether a seat is left, the weekly paid cap,
+    // the session type, the link and the once-per-client rule are all decided inside the INSERT, so a block, a cancel
+    // or a competing booking that lands after the reads above cannot be raced past. A client whose earlier booking
+    // of this slot was cancelled takes that row over (the table is UNIQUE on slot and client), which also means a
+    // client that lost a capacity contention is not left holding a cancelled row that blocks every later attempt.
     try {
       const r = await c.env.DB.prepare(
         `INSERT INTO advisor_bookings
           (uid, slot_id, advisor_id, founder_user_id, topic, notes, status, session_type_id, booking_link_id, created_at, updated_at)
          SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?
-          WHERE (? IS NULL OR EXISTS (SELECT 1 FROM advisor_session_types
-            WHERE id = ? AND advisor_id = ? AND is_active = 1
-              AND (is_included = 1 OR is_free_intro = 1 OR price_cents IS NOT NULL)))
+          WHERE EXISTS (SELECT 1 FROM advisor_office_hour_slots s
+                         WHERE s.id = ? AND s.is_cancelled = 0 AND (s.blocked_reason IS NULL OR TRIM(s.blocked_reason) = ''))
+            AND (SELECT COUNT(*) FROM advisor_bookings x
+                  WHERE x.slot_id = ? AND x.status IN ('pending','confirmed','completed'))
+                < (SELECT capacity FROM advisor_office_hour_slots WHERE id = ?)
+            AND (? IS NULL OR EXISTS (SELECT 1 FROM advisor_session_types
+              WHERE id = ? AND advisor_id = ? AND is_active = 1
+                AND (is_included = 1 OR is_free_intro = 1 OR price_cents IS NOT NULL)))
             AND (? IS NULL OR EXISTS (SELECT 1 FROM advisor_booking_links WHERE id = ? AND is_active = 1))
             AND (? = 0 OR NOT EXISTS (SELECT 1 FROM advisor_bookings
-              WHERE session_type_id = ? AND founder_user_id = ? AND status != 'cancelled'))`
-      ).bind(uid, slotId, slot.advisor_id, user.id,
+              WHERE session_type_id = ? AND founder_user_id = ? AND status != 'cancelled'))
+            AND (? = 0 OR (SELECT COUNT(*) FROM advisor_bookings pb
+                  JOIN advisor_office_hour_slots ps ON ps.id = pb.slot_id
+                  JOIN advisor_session_types pt ON pt.id = pb.session_type_id
+                 WHERE pb.advisor_id = ? AND pb.status IN ('pending','confirmed','completed')
+                   AND pt.price_cents > 0 AND pt.is_free_intro = 0 AND COALESCE(pt.is_included, 0) = 0
+                   AND ps.starts_at >= ? AND ps.starts_at < ?) < ?)
+         ON CONFLICT (slot_id, founder_user_id) DO UPDATE SET
+           status = 'pending', cancel_reason = NULL, topic = excluded.topic, notes = excluded.notes,
+           session_type_id = excluded.session_type_id, booking_link_id = excluded.booking_link_id,
+           amount_cents = NULL, billing_state = 'unpriced', created_at = excluded.created_at, updated_at = excluded.updated_at
+           WHERE advisor_bookings.status = 'cancelled'`
+      ).bind(newUid(), slotId, slot.advisor_id, user.id,
              (body.topic || '').toString().slice(0, 200),
              (body.notes || '').toString().slice(0, 2000),
              type?.id ?? null, context?.link.id ?? null, nowIso(), nowIso(),
+             slotId,
+             slotId, slotId,
              type?.id ?? null, type?.id ?? null, slot.advisor_id,
              context?.link.id ?? null, context?.link.id ?? null,
-             type?.once_per_client ?? 0, type?.id ?? null, user.id).run();
-      if (!(r as any).meta?.changes) return c.json({ detail: 'The session type or booking link is no longer available' }, 409);
-      // Re-check capacity after insert (D1 has no SELECT-FOR-UPDATE).
-      const after = await takenForSlot(c.env, slotId);
-      if (after > slot.capacity) {
-        await c.env.DB.prepare(
-          `UPDATE advisor_bookings SET status = 'cancelled', cancel_reason = 'capacity_race', updated_at = ?
-           WHERE id = ?`
-        ).bind(nowIso(), (r as any).meta?.last_row_id).run();
-        return c.json({ detail: 'Slot full (race)' }, 409);
+             type?.once_per_client ?? 0, type?.id ?? null, user.id,
+             capped ? 1 : 0, slot.advisor_id, weekFrom, weekUntil, rules.weekly_paid_cap ?? 0).run();
+      if (!(r as any).meta?.changes) {
+        // Nothing was written. Say which reason held, from the state as it is now.
+        const mine = await c.env.DB.prepare('SELECT status FROM advisor_bookings WHERE slot_id = ? AND founder_user_id = ?')
+          .bind(slotId, user.id).first<{ status: string }>();
+        if (mine && mine.status !== 'cancelled') return c.json({ detail: 'Already booked this slot' }, 409);
+        const now = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();
+        if (!now || now.is_cancelled) return c.json({ detail: 'Slot not available' }, 404);
+        if (isBlocked(now)) return c.json({ detail: 'This slot is not available', code: 'slot_blocked' }, 409);
+        if ((await takenForSlot(c.env, slotId)) >= now.capacity) return c.json({ detail: 'Slot full' }, 409);
+        if (capped) return c.json({ detail: 'This advisor has no paid sessions left that week', code: 'weekly_cap' }, 409);
+        return c.json({ detail: 'The session type or booking link is no longer available' }, 409);
       }
-      const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
-        .bind((r as any).meta?.last_row_id).first<BookingRow>();
+      const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE slot_id = ? AND founder_user_id = ?')
+        .bind(slotId, user.id).first<BookingRow>();
+      const uid = b!.uid;
       // Task #1 (Slack, 2026-05-10) — notify the advisor that a founder
       // has booked one of their slots. Best-effort; never blocks the booking.
       try {
@@ -857,7 +1091,7 @@ advisors.post('/slots/:id/book', async (c) => {
       // ALL prep (dynamic import + user/advisor lookups + event assembly)
       // happens inside the waitUntil closure so the HTTP response
       // returns immediately — no DB hop on the booking critical path.
-      const rowId = Number((r as any).meta?.last_row_id);
+      const rowId = Number(b!.id);
       const syncPromise = (async () => {
         try {
           const founderRow = await c.env.DB.prepare('SELECT email, name FROM users WHERE id = ?')
@@ -872,7 +1106,11 @@ advisors.post('/slots/:id/book', async (c) => {
             title: `Advisor session — ${advisorMeta?.display_name || ''}`.trim(),
             start_at: slot.starts_at,
             end_at: slot.ends_at,
-            status: 'confirmed',
+            // D4703 (#4703): the booking is still pending, so the external copy
+            // is tentative until the advisor confirms (`/bookings/:id/confirm`
+            // pushes it again as confirmed). It used to go out as a firm event.
+            status: 'pending',
+            ics_status: 'TENTATIVE' as const,
             location_kind: 'video',
             location_uri: slot.meeting_url || null,
             organizer_email: advisorMeta?.email || null,
@@ -983,6 +1221,53 @@ advisors.get('/bookings/me', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D4703 (#4703): the calendar cleanup a cancel owes, for one booking or many,
+ * deferred so the response returns at once. The slot delete and a single
+ * cancel both come here, so the two cannot drift apart again.
+ */
+function deferCalendarCancel(c: Context<{ Bindings: Env }>, ids: number[]) {
+  const p = (async () => {
+    const { onAxalSessionCancelled } = await import('../services/calendar/sync');
+    for (const bookingId of ids) {
+      try { await onAxalSessionCancelled(c.env, 'advisor_booking', bookingId); }
+      catch (e) { console.warn('[advisors] calendar cancel hook failed', e); }
+    }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
+/** D4703: push a confirmed booking's copy again, now firm (`ics_status: CONFIRMED`). */
+function deferCalendarConfirm(c: Context<{ Bindings: Env }>, id: number) {
+  const p = (async () => {
+    try {
+      const row = await c.env.DB.prepare(
+        `SELECT b.id, b.uid, b.topic, b.notes, s.starts_at, s.ends_at, s.meeting_url,
+                a.email AS advisor_email, a.display_name, u.email AS founder_email, u.name AS founder_name
+           FROM advisor_bookings b
+           JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+           JOIN advisors a ON a.id = b.advisor_id
+           LEFT JOIN users u ON u.id = b.founder_user_id
+          WHERE b.id = ? AND b.status = 'confirmed'`
+      ).bind(id).first<any>();
+      if (!row) return;
+      const { onAxalSessionUpdated } = await import('../services/calendar/sync');
+      await onAxalSessionUpdated(c.env, {
+        id: `advisor_booking:${row.id}`, kind: 'advisor_booking', source_id: row.id, source_uid: row.uid,
+        title: `Advisor session — ${row.display_name || ''}`.trim(),
+        start_at: row.starts_at, end_at: row.ends_at, status: 'confirmed', ics_status: 'CONFIRMED',
+        location_kind: 'video', location_uri: row.meeting_url || null, organizer_email: row.advisor_email || null,
+        attendees: [
+          { email: row.advisor_email || null, name: row.display_name || null, role: 'advisor' },
+          { email: row.founder_email || null, name: row.founder_name || null, role: 'mentee' },
+        ],
+        notes: (row.topic || '') + (row.notes ? `\n\n${row.notes}` : ''),
+      } as any);
+    } catch (e) { console.warn('[advisors] calendar confirm hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
 async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   allowed: string[]; nextStatus: string; whoCan: 'advisor' | 'founder' | 'either';
   reason?: string | null;
@@ -1002,21 +1287,21 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   if (!opts.allowed.includes(b.status)) {
     return c.json({ detail: `Cannot transition from ${b.status}` }, 409);
   }
-  await c.env.DB.prepare(
-    'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ?'
-  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id).run();
+  // D4703 (#4703): the status read above is the status this write expects.
+  // Two presses at once (a cancel and a confirm, or two cancels) used to both
+  // pass the check and both write; now the second changes nothing and says so.
+  const wrote = await c.env.DB.prepare(
+    'UPDATE advisor_bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), updated_at = ? WHERE id = ? AND status = ?'
+  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id, b.status).run();
+  if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
+    return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
+  }
   // Task #52 — remove from external calendars on cancel/no-show.
   // Defer the dynamic import + provider DELETE work via waitUntil so
   // the cancel response returns immediately.
-  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') {
-    const p = (async () => {
-      try {
-        const { onAxalSessionCancelled } = await import('../services/calendar/sync');
-        await onAxalSessionCancelled(c.env, 'advisor_booking', id);
-      } catch (e) { console.warn('[advisors] calendar cancel hook failed', e); }
-    })();
-    if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
-  }
+  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') deferCalendarCancel(c, [id]);
+  // D4703: a confirmed booking's external copy stops being tentative.
+  if (opts.nextStatus === 'confirmed') deferCalendarConfirm(c, id);
   const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
     .bind(id).first<BookingRow>();
   return c.json(bookingDto(fresh!));
@@ -1246,14 +1531,38 @@ function parsePriceCents(v: unknown): number | null {
   return n;
 }
 
+/**
+ * D4681 (#4681): a currency is three letters (ISO 4217's shape), or the write
+ * is refused. It used to be cut to eight characters and upper-cased, so a
+ * typo was stored and shown beside the price as if it were a currency.
+ */
+function parseCurrency(v: unknown, fallback: string): string {
+  if (v == null || v === '') return fallback;
+  const code = String(v).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) throw new Error('currency must be a three-letter code, such as USD');
+  return code;
+}
+
 advisors.get('/me/services', async (c) => {
   try {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
+    // #4689: a page of the list, ordered to a unique column, and the counts of
+    // the whole list beside it (services/listPage.ts).
+    const w = pageWindow(c.req.query(), SERVICES_PAGE);
     const rows = await c.env.DB.prepare(
       `SELECT * FROM advisor_services WHERE advisor_id = ?
-        ORDER BY is_active DESC, created_at DESC LIMIT 200`
-    ).bind(m.id).all<ServiceRow>();
+        ORDER BY is_active DESC, created_at DESC, id DESC LIMIT ? OFFSET ?`
+    ).bind(m.id, w.limit, w.offset).all<ServiceRow>();
+    const whole = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END), 0) AS live,
+              COALESCE(SUM(CASE WHEN price_cents IS NOT NULL THEN 1 ELSE 0 END), 0) AS priced
+         FROM advisor_services WHERE advisor_id = ?`
+    ).bind(m.id).first<{ total: number; live: number; priced: number }>();
+    const items = rows.results || [];
+    const total = Number(whole?.total) || 0;
+    const live = Number(whole?.live) || 0;
+    const priced = Number(whole?.priced) || 0;
 
     // `units_sold` STAYS NULL, and that is the honest answer rather than a
     // missing feature. Nothing links a booking to a service: `advisor_bookings`
@@ -1262,7 +1571,11 @@ advisors.get('/me/services', async (c) => {
     // like a fact and is a guess — the exact thing CLAUDE.md's absent-is-not-
     // empty rule forbids. The Services zone renders "Not recorded" until a
     // booking can name the service it delivered.
-    return c.json({ items: (rows.results || []).map((r) => serviceDto(r, null)) });
+    return c.json({
+      items: items.map((r) => serviceDto(r, null)),
+      page: pageFacts(w, total, items.length),
+      counts: { total, live, draft: total - live, priced, unpriced: total - priced },
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1287,7 +1600,7 @@ advisors.post('/me/services', async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(uid, m.id, title, kind,
            trimOrNull(body.duration_note, 200), price_cents,
-           String(body.currency || 'USD').trim().slice(0, 8).toUpperCase(),
+           parseCurrency(body.currency, 'USD'),
            trimOrNull(body.scope, 2000),
            body.is_active === false ? 0 : 1, now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_services WHERE id = ?')
@@ -1310,18 +1623,23 @@ advisors.patch('/me/services/:id', async (c) => {
     if (!SERVICE_KINDS.includes(kind)) {
       return c.json({ detail: 'kind must be one of: fixed, package, retainer' }, 400);
     }
-    // Merge, not replace: the Services zone edits one field at a time.
+    // D4681: a title sent blank is refused rather than quietly kept, so an edit
+    // that clears it says so instead of reporting a save that changed nothing.
+    if (body.title != null && !String(body.title).trim()) {
+      return c.json({ detail: 'A service needs a title' }, 400);
+    }
+    // Merge, not replace: an unmentioned field keeps its value.
     const price_cents = 'price_cents' in body ? parsePriceCents(body.price_cents) : row.price_cents;
     await c.env.DB.prepare(
       `UPDATE advisor_services SET title = ?, kind = ?, duration_note = ?,
          price_cents = ?, currency = ?, scope = ?, is_active = ?, updated_at = ?
        WHERE id = ?`
     ).bind(
-      body.title == null ? row.title : String(body.title).trim().slice(0, 200) || row.title,
+      body.title == null ? row.title : String(body.title).trim().slice(0, 200),
       kind,
       'duration_note' in body ? trimOrNull(body.duration_note, 200) : row.duration_note,
       price_cents,
-      body.currency == null ? row.currency : String(body.currency).trim().slice(0, 8).toUpperCase(),
+      parseCurrency(body.currency, row.currency),
       'scope' in body ? trimOrNull(body.scope, 2000) : row.scope,
       body.is_active == null ? row.is_active : (body.is_active ? 1 : 0),
       nowIso(), row.id,
@@ -1359,39 +1677,44 @@ type ConsentRow = {
   request_token: string | null; consent_given: number; consent_given_at: string | null;
   consent_text: string | null; consent_captured_by: number | null;
   statement: string | null; withdrawn_at: string | null;
+  claim_sha256: string | null; claim_json: string | null;
   created_at: string; updated_at: string;
 };
 
 const PROOF_KINDS = ['engagement', 'outcome', 'role', 'credential'];
 
 /**
- * The consent as the ADVISOR may see it. `request_token` is never included:
- * it is the attester's credential for answering, and an advisor who could read
- * it could answer on the attester's behalf — which would make every
- * attestation in the table self-issued and worth nothing.
+ * The consent as the ADVISOR may see it (D4670). `invite_token` is the link the
+ * advisor hands over, readable again so a refresh never loses it: since D4670
+ * the link only shows the claim, and answering needs a code mailed to the
+ * named address, so holding it is not being able to answer.
  */
-function consentDto(r: ConsentRow): any {
+function consentDto(r: ConsentRow, currentClaimSha: string): any {
+  const state = consentState(r, currentClaimSha);
   return {
     id: r.id, uid: r.uid, proof_item_id: r.proof_item_id,
     attester_name: r.attester_name, attester_email: r.attester_email,
     attester_role: r.attester_role, relationship: r.relationship,
     requested_at: r.requested_at,
-    consent_given: !!r.consent_given,
+    state,
+    consent_given: state === 'confirmed',
     consent_given_at: r.consent_given_at,
     statement: r.statement,
     withdrawn_at: r.withdrawn_at,
+    invite_token: state === 'pending' ? r.request_token : null,
     created_at: r.created_at,
   };
 }
 
 /**
  * Attested is DERIVED from the consent rows, never stored on the item — see
- * migration 204's header. `withdrawn_at` disqualifies a row even when
- * `consent_given` was never cleared, so a withdrawal cannot be undone by
- * forgetting to update one of two columns.
+ * migration 204's header. Since D4670 a row counts only while it is confirmed
+ * about the claim as it now reads (`consentState`): a withdrawal, a claim that
+ * changed, or a confirmation recorded before D4670 does not.
  */
-function proofDto(r: ProofRow, consents: ConsentRow[]): any {
-  const live = consents.filter((x) => x.consent_given === 1 && !x.withdrawn_at);
+function proofDto(r: ProofRow, consents: ConsentRow[], currentClaimSha: string): any {
+  const views = consents.map((x) => consentDto(x, currentClaimSha));
+  const live = views.filter((x) => x.state === 'confirmed');
   return {
     id: r.id, uid: r.uid, advisor_id: r.advisor_id,
     kind: r.kind, title: r.title, detail: r.detail,
@@ -1402,24 +1725,37 @@ function proofDto(r: ProofRow, consents: ConsentRow[]): any {
     // point of the zone: the advisor's own word and someone else's word are
     // different evidence and must never render identically.
     status: live.length > 0 ? 'attested' : 'self_stated',
-    consents: consents.map(consentDto),
+    consents: views,
     created_at: r.created_at, updated_at: r.updated_at,
   };
 }
 
-async function loadProofConsents(env: Env, itemIds: number[]): Promise<Map<number, ConsentRow[]>> {
+/**
+ * The consents behind a page of proof items, in ONE read (#4697). It was one
+ * statement per item, so a 200-row page cost 201 round trips. The ids travel
+ * as one bound JSON array (`json_each(?)`): no interpolated IN list, which
+ * `check-sql-prepare` rightly refuses. The join re-checks the owner, so a
+ * caller can only ever read consents on its own advisor's items. Rows are
+ * grouped here, in each item's own order (oldest first).
+ */
+async function loadProofConsents(env: Env, advisorId: number, itemIds: number[]): Promise<Map<number, ConsentRow[]>> {
   const out = new Map<number, ConsentRow[]>();
   if (!itemIds.length) return out;
-  // No interpolated IN list: `check-sql-prepare` treats a `${}` inside
-  // DB.prepare as an injection site, and D1 has no array binding. One
-  // statement per item is a handful of round trips over a table that holds a
-  // few rows per advisor.
-  for (const id of itemIds) {
-    const rows = await env.DB.prepare(
-      'SELECT * FROM advisor_proof_consents WHERE proof_item_id = ? ORDER BY created_at ASC'
-    ).bind(id).all<ConsentRow>();
-    out.set(id, rows.results || []);
-  }
+  for (const id of itemIds) out.set(id, []);
+  const rows = await env.DB.prepare(
+    `SELECT c.* FROM advisor_proof_consents c
+       JOIN advisor_proof_items p ON p.id = c.proof_item_id
+      WHERE p.advisor_id = ? AND c.proof_item_id IN (SELECT value FROM json_each(?))
+      ORDER BY c.proof_item_id, c.created_at ASC, c.id ASC`
+  ).bind(advisorId, JSON.stringify(itemIds)).all<ConsentRow>();
+  for (const r of rows.results || []) out.get(Number(r.proof_item_id))?.push(r);
+  return out;
+}
+
+async function proofWithConsents(env: Env, advisorId: number, items: ProofRow[]): Promise<any[]> {
+  const consents = await loadProofConsents(env, advisorId, items.map((r) => r.id));
+  const out = [];
+  for (const r of items) out.push(proofDto(r, consents.get(r.id) || [], await claimSha256(r)));
   return out;
 }
 
@@ -1427,12 +1763,43 @@ advisors.get('/me/proof', async (c) => {
   try {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
+    // #4689: a page of the list and, over the whole list, how many claims are
+    // confirmed. "Confirmed" is the rule `proofDto` applies: a consent given
+    // and not withdrawn.
+    const w = pageWindow(c.req.query(), PROOF_PAGE);
     const rows = await c.env.DB.prepare(
-      'SELECT * FROM advisor_proof_items WHERE advisor_id = ? ORDER BY created_at DESC LIMIT 200'
-    ).bind(m.id).all<ProofRow>();
+      'SELECT * FROM advisor_proof_items WHERE advisor_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?'
+    ).bind(m.id, w.limit, w.offset).all<ProofRow>();
+    const whole = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN EXISTS (
+                SELECT 1 FROM advisor_proof_consents x
+                 WHERE x.proof_item_id = p.id AND x.consent_given = 1
+                   AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
+                   -- D4670: confirmed about the claim as it now reads (consentState).
+                   AND x.claim_json IS NOT NULL
+                   AND json_extract(x.claim_json, '$.kind') IS p.kind
+                   AND json_extract(x.claim_json, '$.title') IS p.title
+                   AND json_extract(x.claim_json, '$.organization') IS p.organization
+                   AND json_extract(x.claim_json, '$.period_note') IS p.period_note
+                   AND json_extract(x.claim_json, '$.detail') IS p.detail
+              ) THEN 1 ELSE 0 END), 0) AS attested,
+              COALESCE(SUM(CASE WHEN EXISTS (
+                SELECT 1 FROM advisor_proof_consents x
+                 WHERE x.proof_item_id = p.id AND COALESCE(x.consent_given, 0) <> 1
+                   AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
+              ) THEN 1 ELSE 0 END), 0) AS awaiting
+         FROM advisor_proof_items p WHERE p.advisor_id = ?`
+    ).bind(m.id).first<{ total: number; attested: number; awaiting: number }>();
     const items = rows.results || [];
-    const consents = await loadProofConsents(c.env, items.map((r) => r.id));
-    return c.json({ items: items.map((r) => proofDto(r, consents.get(r.id) || [])) });
+    const total = Number(whole?.total) || 0;
+    const attested = Number(whole?.attested) || 0;
+    return c.json({
+      items: await proofWithConsents(c.env, m.id, items),
+      page: pageFacts(w, total, items.length),
+      // `awaiting`: a claim with an ask no one has answered or withdrawn.
+      counts: { total, attested, self_stated: total - attested, awaiting: Number(whole?.awaiting) || 0 },
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1459,7 +1826,7 @@ advisors.post('/me/proof', async (c) => {
            body.is_public ? 1 : 0, now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_items WHERE id = ?')
       .bind((r as any).meta?.last_row_id).first<ProofRow>();
-    return c.json(proofDto(fresh!, []));
+    return c.json(proofDto(fresh!, [], await claimSha256(fresh!)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1473,22 +1840,39 @@ advisors.delete('/me/proof/:id', async (c) => {
     // The consents go with the item they attest to. A consent row whose subject
     // no longer exists attests to nothing, and leaving it would leave a
     // stranger's name and email in the database with no claim attached to it.
-    await c.env.DB.prepare('DELETE FROM advisor_proof_consents WHERE proof_item_id = ?')
-      .bind(row.id).run();
-    await c.env.DB.prepare('DELETE FROM advisor_proof_items WHERE id = ?').bind(row.id).run();
-    return c.json({ ok: true, id: row.id });
+    //
+    // D4681 (#4681): ONE BATCH, so both go or neither does. These were two
+    // awaited statements, and a failure between them left the claim standing
+    // with every consent behind it gone: an attested item turned self-stated
+    // with nothing to say why. D1 runs a batch as one transaction. The item's
+    // DELETE re-checks the owner, and the consent DELETE names only that item.
+    const consents = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_proof_consents WHERE proof_item_id = ?')
+      .bind(row.id).first<{ n: number }>();
+    // D4670: the consents' one-time codes go first (they reference the rows);
+    // the answer history stays, and holds no name or address.
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM advisor_proof_consent_codes WHERE consent_id IN (SELECT id FROM advisor_proof_consents WHERE proof_item_id = ?)').bind(row.id),
+      c.env.DB.prepare('DELETE FROM advisor_proof_consents WHERE proof_item_id = ?').bind(row.id),
+      c.env.DB.prepare('DELETE FROM advisor_proof_items WHERE id = ? AND advisor_id = ?').bind(row.id, m.id),
+    ]);
+    return c.json({ ok: true, id: row.id, consents_removed: Number(consents?.n ?? 0) });
   } catch (e) { return mapError(c, e); }
 });
 
+async function proofEvent(env: Env, consentId: number, kind: string, claimSha: string | null, at: string) {
+  await env.DB.prepare(
+    'INSERT INTO advisor_proof_consent_events (consent_id, kind, claim_sha256, created_at) VALUES (?, ?, ?, ?)'
+  ).bind(consentId, kind, claimSha, at).run();
+}
+
 /**
- * Ask a named person to confirm a claim.
+ * Ask a named person to confirm a claim (D4670).
  *
- * This RECORDS the request; it does not send it. Who delivers the ask — mail,
- * a link the advisor copies, something else — is a separate decision, and a
- * route that quietly sent mail to an address a user typed would be making it.
- * The token is returned to the ADVISOR once here so a link can be handed over
- * by whatever channel they already have with the person; it is never included
- * in any subsequent read.
+ * This RECORDS the request and pins the claim as it now reads; it sends
+ * nothing. The advisor hands over the link by whatever channel they already
+ * have with the person, and may read it back from the list. The person's
+ * email is required, because answering needs a code mailed there on their own
+ * request, and it cannot be the advisor's own address.
  */
 advisors.post('/me/proof/:id/consent-request', async (c) => {
   try {
@@ -1499,66 +1883,179 @@ advisors.post('/me/proof/:id/consent-request', async (c) => {
     if (!item || item.advisor_id !== m.id) return c.json({ detail: 'Proof item not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     const attester_name = String(body.attester_name || '').trim().slice(0, 200);
-    if (!attester_name) return c.json({ detail: 'Name the person being asked to confirm' }, 400);
+    if (!attester_name) return refuse(c, 400, { code: 'attester_name_required', message: 'Name the person being asked to confirm.' });
+    const attester_email = emailOf(body.attester_email);
+    if (!attester_email) return refuse(c, 400, { code: 'attester_email_required', message: 'Give the email address of the person being asked; their code is sent there.' });
+    const own = [user.email, m.email].map(emailOf).filter(Boolean);
+    if (own.includes(attester_email)) {
+      return refuse(c, 422, { code: 'attester_is_requester', message: 'Someone else confirms your claim: that address is your own.' });
+    }
     const token = newUid();
     const now = nowIso();
+    const pinned = claimJson(item);
+    const sha = await sha256Hex(pinned);
     const r = await c.env.DB.prepare(
       `INSERT INTO advisor_proof_consents
          (uid, proof_item_id, attester_name, attester_email, attester_role,
           relationship, requested_at, requested_by, request_token,
-          consent_given, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
-    ).bind(newUid(), item.id, attester_name,
-           trimOrNull(body.attester_email, 300), trimOrNull(body.attester_role, 200),
-           trimOrNull(body.relationship, 200), now, user.id, token, now, now).run();
-    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE id = ?')
-      .bind((r as any).meta?.last_row_id).first<ConsentRow>();
-    return c.json({ ...consentDto(fresh!), request_token: token, delivered: false });
+          consent_given, claim_sha256, claim_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`
+    ).bind(newUid(), item.id, attester_name, attester_email,
+           trimOrNull(body.attester_role, 200), trimOrNull(body.relationship, 200),
+           now, user.id, token, sha, pinned, now, now).run();
+    const id = Number((r as any).meta?.last_row_id);
+    await proofEvent(c.env, id, 'asked', sha, now);
+    const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE id = ?').bind(id).first<ConsentRow>();
+    return c.json({ ...consentDto(fresh!, sha), delivered: false });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The consent a link names, its claim, and whether the claim still reads as pinned. */
+async function consentByToken(env: Env, token: string) {
+  if (!token || token.length > 100) return null;
+  const row = await env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE request_token = ?').bind(token).first<ConsentRow>();
+  if (!row) return null;
+  const item = await env.DB.prepare('SELECT * FROM advisor_proof_items WHERE id = ?').bind(row.proof_item_id).first<ProofRow>();
+  if (!item) return null;
+  const advisor = await env.DB.prepare('SELECT id, user_id, display_name, email FROM advisors WHERE id = ?').bind(item.advisor_id).first<{ id: number; user_id: number | null; display_name: string; email: string | null }>();
+  const currentSha = await claimSha256(item);
+  return { row, item, advisor, currentSha };
+}
+
+const NO_REQUEST = { code: 'consent_not_found', message: 'This request does not exist, or the claim it was about was removed.' } as const;
+
+/**
+ * The attester's view (D4670): the claim exactly as they are asked to confirm
+ * it, who asked, and the history of their answers. No account, and no code:
+ * reading is what the link is for. A link answers nothing about any other
+ * claim, and never the attester's address in full.
+ */
+// Three segments, first one literal: `/:uid/book` two segments up cannot
+// shadow these, and neither can any future single-segment route.
+advisors.get('/proof-consents/:token/claim', async (c) => {
+  try {
+    const found = await consentByToken(c.env, String(c.req.param('token') || ''));
+    if (!found) return refuse(c, 404, NO_REQUEST);
+    const { row, item, advisor, currentSha } = found;
+    const pinned = row.claim_json ? JSON.parse(row.claim_json) : JSON.parse(claimJson(item));
+    const events = (await c.env.DB.prepare(
+      'SELECT kind, created_at FROM advisor_proof_consent_events WHERE consent_id = ? ORDER BY id ASC'
+    ).bind(row.id).all<{ kind: string; created_at: string }>()).results || [];
+    c.header('Cache-Control', 'private, no-store');
+    return c.json({
+      advisor_name: advisor?.display_name || null,
+      attester_name: row.attester_name,
+      email_hint: maskEmail(row.attester_email),
+      claim: pinned,
+      claim_sha256: row.claim_sha256 || currentSha,
+      // The advisor changed the claim after asking: what was asked about is no longer what it says.
+      claim_changed: !!row.claim_sha256 && row.claim_sha256 !== currentSha,
+      state: consentState(row, currentSha),
+      statement: row.statement,
+      history: events,
+    });
   } catch (e) { return mapError(c, e); }
 });
 
 /**
- * The attester answers. Token-authenticated, and NOT advisor-scoped — the whole
- * value of an attestation is that the subject cannot record it for themselves.
+ * Mail the attester a one-time code (D4670), on their own request, to the
+ * address the advisor named. Five an hour per request; the code lasts 15
+ * minutes. The address is never echoed in full and never logged.
+ */
+advisors.post('/proof-consents/:token/code', async (c) => {
+  try {
+    const found = await consentByToken(c.env, String(c.req.param('token') || ''));
+    if (!found) return refuse(c, 404, NO_REQUEST);
+    const { row, advisor } = found;
+    const to = emailOf(row.attester_email);
+    if (!to) return refuse(c, 409, { code: 'attester_email_missing', message: 'This request names no email address, so no code can be sent. Ask the advisor to send a new request.' });
+    const now = Date.now();
+    const recent = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM advisor_proof_consent_codes WHERE consent_id = ? AND datetime(created_at) > datetime(?)'
+    ).bind(row.id, new Date(now - 3600_000).toISOString()).first<{ n: number }>();
+    if (Number(recent?.n || 0) >= CODES_PER_HOUR) {
+      return refuse(c, 429, { code: 'code_rate_limited', message: 'Several codes were sent in the last hour. Use the latest one, or try again later.' });
+    }
+    const code = newCode();
+    await c.env.DB.prepare(
+      'INSERT INTO advisor_proof_consent_codes (consent_id, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, ?)'
+    ).bind(row.id, await codeHash(row.id, code), new Date(now + CODE_TTL_MS).toISOString(), new Date(now).toISOString()).run();
+    const sent = await attestationMailer.send(c.env, to, advisor?.display_name || 'An advisor', code);
+    if (!sent) return refuse(c, 503, { code: 'code_unsent', message: 'The code could not be emailed just now. Try again in a few minutes.' });
+    return c.json({ sent: true, email_hint: maskEmail(to), expires_in_seconds: CODE_TTL_MS / 1000 });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The attester answers (D4670). The link names the request; the code proves
+ * the person answering reads the address the advisor named. `claim_sha256`
+ * is the claim the attester was shown: an answer about another reading of it
+ * is refused. The advisor themselves is refused even with a code.
  *
  * `requireAuth` is deliberately absent: an attester is usually not a user of
  * this product, and requiring an account would mean the only confirmable claims
  * are the ones a colleague already inside Axal can vouch for.
  */
-// Three segments, first one literal: `/:uid/book` two segments up cannot
-// shadow it, and neither can any future single-segment route.
 advisors.post('/proof-consents/:token/respond', async (c) => {
   try {
-    const token = String(c.req.param('token') || '');
-    const row = await c.env.DB.prepare(
-      'SELECT * FROM advisor_proof_consents WHERE request_token = ?'
-    ).bind(token).first<ConsentRow>();
-    if (!row) return c.json({ detail: 'Consent request not found' }, 404);
+    const found = await consentByToken(c.env, String(c.req.param('token') || ''));
+    if (!found) return refuse(c, 404, NO_REQUEST);
+    const { row, item, advisor, currentSha } = found;
     const body = await c.req.json().catch(() => ({} as any));
-    const now = nowIso();
+    // A signed-in caller who is the advisor is refused outright: the subject of a claim never answers it.
+    const caller = await getCurrentUser(c).catch(() => null);
+    if (caller && advisor?.user_id != null && Number(caller.id) === Number(advisor.user_id)) {
+      return refuse(c, 403, { code: 'requester_cannot_attest', message: 'You cannot answer a request about your own claim.' });
+    }
+    const code = typeof body.code === 'string' ? body.code.trim() : '';
+    if (!/^\d{6}$/.test(code)) return refuse(c, 400, { code: 'code_required', message: 'Enter the six-digit code emailed to you.' });
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const latest = await c.env.DB.prepare(
+      'SELECT id, code_hash, expires_at, attempts, used_at FROM advisor_proof_consent_codes WHERE consent_id = ? ORDER BY id DESC LIMIT 1'
+    ).bind(row.id).first<{ id: number; code_hash: string; expires_at: string; attempts: number; used_at: string | null }>();
+    if (!latest || latest.used_at || Date.parse(latest.expires_at) <= nowMs || Number(latest.attempts) >= CODE_MAX_ATTEMPTS) {
+      return refuse(c, 401, { code: 'code_expired', message: 'That code has expired or was already used. Ask for a new one.' });
+    }
+    if (latest.code_hash !== await codeHash(row.id, code)) {
+      await c.env.DB.prepare('UPDATE advisor_proof_consent_codes SET attempts = attempts + 1 WHERE id = ?').bind(latest.id).run();
+      return refuse(c, 401, { code: 'code_wrong', message: 'That code is not right. Check the latest email and try again.' });
+    }
+    // The code is spent before anything is written, so it answers once.
+    const spent = await c.env.DB.prepare('UPDATE advisor_proof_consent_codes SET used_at = ? WHERE id = ? AND used_at IS NULL').bind(now, latest.id).run();
+    if (!Number((spent as any)?.meta?.changes ?? 1)) return refuse(c, 401, { code: 'code_expired', message: 'That code has expired or was already used. Ask for a new one.' });
+
     if (body.consent_given === false) {
       // Declining and withdrawing are the same shape: the row stays, and says
-      // so. Deleting it would erase the fact that the ask was ever made.
+      // so, and the history keeps which it was.
+      const wasGiven = Number(row.consent_given) === 1 && !row.withdrawn_at;
       await c.env.DB.prepare(
         `UPDATE advisor_proof_consents
             SET consent_given = 0, withdrawn_at = ?, updated_at = ? WHERE id = ?`
       ).bind(now, now, row.id).run();
+      await proofEvent(c.env, row.id, wasGiven || row.consent_given_at ? 'withdrawn' : 'declined', row.claim_sha256, now);
     } else {
       const consent_text = String(body.consent_text || '').trim();
-      if (!consent_text) {
-        return c.json({ detail: 'consent_text must record what was agreed to' }, 400);
+      if (!consent_text) return refuse(c, 400, { code: 'consent_text_required', message: 'The confirmation must record what was agreed to.' });
+      const asked = row.claim_sha256 || currentSha;
+      if (asked !== currentSha || (typeof body.claim_sha256 === 'string' && body.claim_sha256 !== currentSha)) {
+        return refuse(c, 409, { code: 'claim_changed', message: 'The claim has changed since you were asked. Nothing was recorded; the advisor needs to ask again.' });
       }
+      const again = !!row.consent_given_at;
       await c.env.DB.prepare(
         `UPDATE advisor_proof_consents
             SET consent_given = 1, consent_given_at = ?, consent_text = ?,
-                statement = ?, withdrawn_at = NULL, updated_at = ?
+                statement = ?, withdrawn_at = NULL, claim_sha256 = ?, claim_json = ?, updated_at = ?
           WHERE id = ?`
       ).bind(now, consent_text.slice(0, 2000), trimOrNull(body.statement, 2000),
-             now, row.id).run();
+             currentSha, row.claim_json || claimJson(item), now, row.id).run();
+      await proofEvent(c.env, row.id, again ? 'reconfirmed' : 'confirmed', currentSha, now);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE id = ?')
       .bind(row.id).first<ConsentRow>();
-    return c.json(consentDto(fresh!));
+    // The attester's own answer, never the advisor's link.
+    const { invite_token: _hidden, attester_email: _addr, ...answer } = consentDto(fresh!, currentSha);
+    return c.json(answer);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1589,13 +2086,13 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
     const row = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
       .bind(Number(c.req.param('id'))).first<BookingRow & {
         amount_cents: number | null; billing_state: string;
+        platform_cut_cents: number | null; take_rate_bps: number | null;
       }>();
     if (!row || row.advisor_id !== m.id) return c.json({ detail: 'Booking not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
 
-    const amount_cents = 'amount_cents' in body
-      ? parsePriceCents(body.amount_cents)
-      : (row.amount_cents ?? null);
+    const stored = row.amount_cents == null ? null : Number(row.amount_cents);
+    const amount_cents = 'amount_cents' in body ? parsePriceCents(body.amount_cents) : stored;
 
     let billing_state = body.billing_state == null
       ? row.billing_state
@@ -1615,29 +2112,92 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
       billing_state = 'billed';
     }
 
-    // 241 — THE CUT IS STAMPED HERE, SERVER-SIDE, AND THE RATE WITH IT.
+    // #4679 — THE PRICE, THE RATE AND THE CUT ARE A SNAPSHOT, AND A STATUS
+    // UPDATE DOES NOT TOUCH THEM.
     //
-    // Two reasons it is a stored column rather than something the page
-    // multiplies. The client never computes money: a rounding choice made in a
-    // component is a rounding choice nobody can audit. And the RATE is stored
-    // beside the amount because an operator may change it — a line divided at
-    // 15% must still read 15% after the setting moves to 12%, or a quarter an
-    // advisor already reconciled restates itself.
+    // This route used to re-stamp `platform_cut_cents` and `take_rate_bps` from
+    // today's setting on every call, so marking a line 15%-priced as collected
+    // after the operator moved the rate to 12% rewrote history. Now the
+    // snapshot is written in exactly two cases, both a price decision:
+    //   * the line had no price and now has one (first pricing), and
+    //   * the advisor said `reprice: true` (explicit repricing).
+    // Anything else keeps the stored amount, rate and cut as they are.
+    const pricing = amount_cents !== stored;
+    const repricing = body.reprice === true;
+    if (body.reprice != null && typeof body.reprice !== 'boolean') {
+      return c.json({ detail: 'reprice must be true or false' }, 400);
+    }
+    if ((pricing && stored != null) && !repricing) {
+      return c.json({
+        detail: 'This session already has a price. Send reprice: true to change it on purpose.',
+        code: 'reprice_required',
+      }, 409);
+    }
+    if (repricing && !('amount_cents' in body)) {
+      return c.json({ detail: 'reprice needs the new amount_cents' }, 400);
+    }
+    if ((pricing || repricing) && stored != null
+      && (row.billing_state === 'collected' || row.billing_state === 'written_off')) {
+      // Money was taken, or the line was closed: a price change would restate
+      // a settled figure. Refused rather than allowed with a flag.
+      return c.json({
+        detail: 'This session is already settled, so its price cannot be changed.',
+        code: 'settled_price',
+      }, 409);
+    }
+
+    let cut: number | null;
+    let bps: number | null;
+    if (amount_cents == null) {
+      cut = null; bps = null;
+    } else if (pricing || repricing) {
+      const rate = await takeRate(c.env);
+      cut = cutCents(amount_cents, rate.bps);
+      bps = rate.bps;
+    } else {
+      cut = row.platform_cut_cents == null ? null : Number(row.platform_cut_cents);
+      bps = row.take_rate_bps == null ? null : Number(row.take_rate_bps);
+    }
+
+    // COMPARE-AND-SWAP on the state this request read: an edit that lands
+    // between the read and the write is a 409, not a silent overwrite.
     //
-    // Clearing the price clears both. A line with no amount has no cut, and
-    // leaving a stale cut behind would be a figure with nothing under it.
-    const rate = await takeRate(c.env);
-    const cut = cutCents(amount_cents, rate.bps);
-    await c.env.DB.prepare(
+    // #4713 (D4713): a change of an amount already priced is written to
+    // `advisor_booking_price_events` with who did it (and the admin behind an
+    // impersonation) and the amount, rate and cut before and after. It runs in
+    // the same batch, after the guarded update, and inserts only if that update
+    // changed the row, so a refused or raced write leaves no event.
+    const audited = (pricing || repricing) && stored != null && amount_cents !== stored;
+    const update = c.env.DB.prepare(
       `UPDATE advisor_bookings
           SET amount_cents = ?, billing_state = ?,
               platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
-        WHERE id = ?`
+        WHERE id = ? AND billing_state = ? AND amount_cents IS ?`
     ).bind(
-      amount_cents, billing_state,
-      cut, amount_cents == null ? null : rate.bps,
-      nowIso(), row.id,
-    ).run();
+      amount_cents, billing_state, cut, bps, nowIso(),
+      row.id, row.billing_state, stored,
+    );
+    const writes = [update];
+    if (audited) {
+      writes.push(c.env.DB.prepare(
+        `INSERT INTO advisor_booking_price_events
+           (booking_id, actor_user_id, impersonated_by, from_amount_cents, to_amount_cents, from_take_rate_bps, to_take_rate_bps, from_cut_cents, to_cut_cents)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE changes() = 1`
+      ).bind(
+        row.id, Number(user.id), (user as any).impersonated_by ? Number((user as any).impersonated_by) : null,
+        stored, amount_cents,
+        row.take_rate_bps == null ? null : Number(row.take_rate_bps), bps,
+        row.platform_cut_cents == null ? null : Number(row.platform_cut_cents), cut,
+      ));
+    }
+    const [res] = await c.env.DB.batch(writes);
+    if (Number((res as any)?.meta?.changes ?? 0) !== 1) {
+      return c.json({
+        detail: 'This session changed while you were editing it. Reload and try again.',
+        code: 'booking_changed',
+      }, 409);
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
       .bind(row.id).first<BookingRow & { amount_cents: number | null; billing_state: string }>();
     return c.json(bookingDto(fresh!, advisorMoney(fresh!)));
@@ -1679,6 +2239,13 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
  * any kind. The `catch` below still maps `SettlementDisabled`, because a guard
  * a caller can reorder is not a guard.
  */
+/**
+ * D4703 (#4703): the booking statuses a founder may pay. The cancellation-fee
+ * policy is that there is none: `cancelled` and `no_show` are not payable.
+ * A fee would be a new policy, and it would be added here by name.
+ */
+export const BOOKING_PAYABLE_STATUSES: readonly string[] = Object.freeze(['pending', 'confirmed', 'completed']);
+
 advisors.post('/bookings/:id/pay', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -1689,6 +2256,19 @@ advisors.post('/bookings/:id/pay', async (c) => {
     // other people's sessions. The two answers are deliberately identical.
     if (!row || row.founder_user_id !== user.id) {
       return c.json({ detail: 'Booking not found' }, 404);
+    }
+
+    // D4703 (#4703): A CANCELLED SESSION IS NOT PAYABLE. There is no
+    // cancellation-fee policy, so a booking that was cancelled or missed owes
+    // nothing, whatever price was recorded on it before. Checked before
+    // anything else so the answer is the same whether charging is on or off.
+    if (!BOOKING_PAYABLE_STATUSES.includes(row.status)) {
+      return c.json({
+        detail: row.status === 'cancelled'
+          ? 'This session was cancelled, so there is nothing to pay. No cancellation fee applies.'
+          : 'This session did not take place, so there is nothing to pay.',
+        status: row.status,
+      }, 409);
     }
 
     const mode = settlementMode(c.env);
@@ -1749,6 +2329,16 @@ advisors.post('/bookings/:id/pay', async (c) => {
       }, 409);
     }
 
+    // #4679 — refused BEFORE a Stripe customer is created: a line with no
+    // stored fee cannot be charged, and finding that out after a side effect
+    // is the ordering mistake the guards above exist to avoid.
+    if ((row as any).take_rate_bps == null || (row as any).platform_cut_cents == null) {
+      return c.json({
+        detail: 'This session has no recorded fee, so it cannot be charged yet. Your advisor needs to confirm its price.',
+        code: 'fee_snapshot_missing',
+      }, 409);
+    }
+
     const customerId = await ensurePaymentsCustomer(c.env, user as TierUser);
     const intent = await chargeSession(c.env, {
       account,
@@ -1760,6 +2350,11 @@ advisors.post('/bookings/:id/pay', async (c) => {
       // the cut against this figure; charging anything else would divide a
       // number the ledger does not hold.
       amountCents: gross,
+      // #4679 — THE FEE IS THE LINE'S OWN SNAPSHOT, not today's setting.
+      feeSnapshot: {
+        bps: (row as any).take_rate_bps == null ? null : Number((row as any).take_rate_bps),
+        cutCents: (row as any).platform_cut_cents == null ? null : Number((row as any).platform_cut_cents),
+      },
       description: row.topic ? `Advisory session · ${row.topic}` : 'Advisory session',
       customerId,
     });
@@ -1798,6 +2393,12 @@ advisors.post('/bookings/:id/pay', async (c) => {
         settlement: e.mode,
       }, 503);
     }
+    if (e instanceof FeeSnapshotMissing) {
+      return c.json({
+        detail: 'This session has no recorded fee, so it cannot be charged yet. Your advisor needs to confirm its price.',
+        code: 'fee_snapshot_missing',
+      }, 409);
+    }
     if (e instanceof PayoutAccountNotReady) {
       return c.json({
         detail: 'This advisor cannot take payment yet.',
@@ -1827,6 +2428,7 @@ advisors.get('/me/earnings', async (c) => {
               SUM(COALESCE(amount_cents, 0)) AS total_cents
          FROM advisor_bookings
         WHERE advisor_id = ?
+          AND NOT (status IN ('cancelled', 'no_show') AND billing_state != 'collected')
         GROUP BY billing_state`
     ).bind(m.id).all<{ billing_state: string; bookings: number; total_cents: number }>();
     const by = new Map((rows.results || []).map((r) => [r.billing_state, r]));
@@ -1934,7 +2536,8 @@ advisors.get('/me/ledger', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT b.founder_user_id AS client_user_id, u.name AS client_name,
               b.amount_cents AS amount_cents, b.platform_cut_cents AS platform_cut_cents,
-              b.take_rate_bps AS take_rate_bps
+              b.take_rate_bps AS take_rate_bps, b.billing_state AS billing_state,
+              b.status AS status, b.id AS booking_id
          FROM advisor_bookings b
          LEFT JOIN users u ON u.id = b.founder_user_id
         WHERE b.advisor_id = ?
@@ -1945,10 +2548,19 @@ advisors.get('/me/ledger', async (c) => {
     ).bind(m.id, from, from, until, until).all<{
       client_user_id: number | null; client_name: string | null;
       amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null;
+      billing_state: string | null; status: string | null; booking_id: number;
     }>();
 
     const rate = await takeRate(c.env);
-    const lines = rows.results || [];
+    // #4679 — A CANCELLED OR MISSED SESSION THAT WAS NEVER COLLECTED OWES
+    // NOTHING, whatever price was typed on it. It leaves every money total and
+    // is counted on its own. One that WAS collected stays, because the money is
+    // real, and `refunds_owed` says it is owed back.
+    const all = rows.results || [];
+    const voided = (l: { status: string | null; billing_state: string | null }) =>
+      (l.status === 'cancelled' || l.status === 'no_show') && l.billing_state !== 'collected';
+    const lines = all.filter((l) => !voided(l));
+    const voidSessions = all.length - lines.length;
 
     // Grouped in the worker rather than by SQL, because the cut of a line
     // recorded before 241 has to be DERIVED from its stored rate (or the
@@ -2032,6 +2644,79 @@ advisors.get('/me/ledger', async (c) => {
       lines.map((l) => ({ amount_cents: l.amount_cents, take_rate_bps: l.take_rate_bps })),
       rate.bps,
     );
+    // #4679 — WHAT HAPPENED TO THE MONEY, one total per state, each summed from
+    // the same stored per-line snapshot as `totals`. `totals` is what was
+    // PRICED; only `collected` is money the advisor was paid, so only that is
+    // ever labelled "received". A line is in exactly one of unpriced, billed,
+    // collected or written_off.
+    const stateOf = (l: { amount_cents: number | null; billing_state: string | null }) =>
+      l.amount_cents == null ? 'unpriced'
+        : l.billing_state === 'collected' ? 'collected'
+          : l.billing_state === 'written_off' ? 'written_off' : 'billed';
+    const bucket = (state: string) => totalLines(
+      lines.filter((l) => stateOf(l) === state)
+        .map((l) => ({ amount_cents: l.amount_cents, take_rate_bps: l.take_rate_bps })),
+      rate.bps,
+    );
+    const stateTotals = (state: string) => {
+      const t = bucket(state);
+      return {
+        sessions: t.priced, gross_cents: t.gross_cents,
+        cut_cents: t.cut_cents, net_cents: t.net_cents,
+      };
+    };
+    // Refund rows are read on their own and tolerated: a collected charge on a
+    // cancelled or missed session is owed back (open) or was refunded
+    // (resolved by an operator). Nothing here moves money.
+    const refundByBooking = new Map<number, { cents: number; resolved: boolean }>();
+    try {
+      const rr = await c.env.DB.prepare(
+        `SELECT r.booking_id AS booking_id, r.amount_cents AS amount_cents, r.resolved_at AS resolved_at
+           FROM advisory_refunds_due r
+           JOIN advisor_bookings b ON b.id = r.booking_id
+          WHERE b.advisor_id = ?`
+      ).bind(m.id).all<{ booking_id: number; amount_cents: number | null; resolved_at: string | null }>();
+      for (const r of rr.results || []) {
+        if (r.amount_cents != null) {
+          refundByBooking.set(Number(r.booking_id), {
+            cents: Number(r.amount_cents), resolved: r.resolved_at != null,
+          });
+        }
+      }
+    } catch { /* table absent or unreadable: no refund figure, never a guess */ }
+    const refundsFor = (resolved: boolean) => all
+      .map((l) => refundByBooking.get(Number(l.booking_id)))
+      .filter((r): r is { cents: number; resolved: boolean } => !!r && r.resolved === resolved);
+    // PAID OUT is the provider paying the advisor, which is a separate event
+    // from collecting. Read from the payout ledger in the same window; null
+    // (never 0) when it could not be read.
+    let paidOutCents: number | null = null;
+    try {
+      const po = await c.env.DB.prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS cents
+           FROM advisor_payouts
+          WHERE advisor_id = ? AND state = 'paid'
+            AND (? IS NULL OR datetime(COALESCE(paid_at, scheduled_for, created_at)) >= datetime(?))
+            AND (? IS NULL OR datetime(COALESCE(paid_at, scheduled_for, created_at)) < datetime(?))`
+      ).bind(m.id, from, from, until, until).first<{ cents: number }>();
+      paidOutCents = Number(po?.cents ?? 0);
+    } catch { paidOutCents = null; }
+    const states = {
+      billed: stateTotals('billed'),
+      collected: stateTotals('collected'),
+      written_off: stateTotals('written_off'),
+      unpriced: { sessions: bucket('unpriced').unpriced },
+      refunds_owed: {
+        sessions: refundsFor(false).length,
+        amount_cents: refundsFor(false).reduce((n, r) => n + r.cents, 0),
+      },
+      refunded: {
+        sessions: refundsFor(true).length,
+        amount_cents: refundsFor(true).reduce((n, r) => n + r.cents, 0),
+      },
+      paid_out_cents: paidOutCents,
+      void_sessions: voidSessions,
+    };
     const clients = [...byClient.values()]
       .sort((a, b) => b.gross_cents - a.gross_cents)
       .map(clientLineDto);
@@ -2052,7 +2737,10 @@ advisors.get('/me/ledger', async (c) => {
         // the sessions nobody priced would be a smaller number presented as a
         // complete one.
         unpriced_sessions: totals.unpriced,
+        // The money actually received: collected lines only, net of the cut.
+        received_cents: states.collected.net_cents,
       },
+      states,
       // NULL WHEN THERE IS NOTHING TO CONCENTRATE. A share of zero gross is
       // not 0% — it is a question with no answer, and 0% reads as "well
       // spread", which is the opposite of what an empty quarter means.
@@ -2114,6 +2802,16 @@ advisors.put('/me/period-notes/:key', async (c) => {
     const key = String(c.req.param('key') || '');
     if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
     const body = await c.req.json().catch(() => ({} as any));
+    // #4679 — A NOTE IS FILED AGAINST THE PERIOD IT WAS WRITTEN FOR. The page
+    // names that period in the body; if it is not the period in the URL (a
+    // slow response from an earlier quarter saved after the reader moved on),
+    // nothing is written. Absent is allowed so older clients keep working.
+    if (body.period_key != null && String(body.period_key) !== key) {
+      return c.json({
+        detail: `This note was written for ${String(body.period_key).slice(0, 16)}, not ${key}. Nothing was saved.`,
+        code: 'period_mismatch',
+      }, 409);
+    }
     const text = trimOrNull(body.body, 8000);
     if (!text) return c.json({ detail: 'A note needs some text. Use DELETE to remove one.' }, 400);
     const source = ['advisor', 'ai', 'edited'].includes(String(body.source))
@@ -2306,7 +3004,8 @@ advisors.get('/me/tax-summary', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT amount_cents, platform_cut_cents, take_rate_bps, founder_user_id
          FROM advisor_bookings
-        WHERE advisor_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`
+        WHERE advisor_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)
+          AND NOT (status IN ('cancelled', 'no_show') AND billing_state != 'collected')`
     ).bind(m.id, `${year}-01-01T00:00:00.000Z`, `${year + 1}-01-01T00:00:00.000Z`)
       .all<{ amount_cents: number | null; platform_cut_cents: number | null; take_rate_bps: number | null; founder_user_id: number | null }>();
     const lines = rows.results || [];
@@ -2956,29 +3655,43 @@ advisors.get('/me/thinking', async (c) => {
     if (!holdsLicence(user, 'advisor')) {
       return c.json({ detail: 'Only an advisor has a thinking shelf' }, 403);
     }
+    // #4689: a page of the shelf, ordered to a unique column. The counts are
+    // read over the whole shelf by their own query, so a writer with 101
+    // pieces is not told about their first 100.
+    const w = pageWindow(c.req.query(), THINKING_PAGE);
     const rows = await c.env.DB.prepare(
-      `SELECT id, slug, title, subtitle, status, published_at, word_count,
+      `SELECT id, slug, title, subtitle, status, published_at, publish_at, word_count,
               read_minutes, views, sector, created_at, updated_at
          FROM articles
         WHERE author_user_id = ?
-        ORDER BY COALESCE(published_at, created_at) DESC
-        LIMIT 100`
-    ).bind(user.id).all<{
+        ORDER BY COALESCE(published_at, created_at) DESC, id DESC
+        LIMIT ? OFFSET ?`
+    ).bind(user.id, w.limit, w.offset).all<{
       id: number; slug: string; title: string; subtitle: string | null;
-      status: string; published_at: string | null; word_count: number;
+      status: string; published_at: string | null; publish_at: string | null; word_count: number;
       read_minutes: number; views: number; sector: string | null;
     }>();
     const items = rows.results || [];
-    const published = items.filter((a) => a.status === 'published');
-    const reach = published.map((a) => Number(a.views || 0));
+    const whole = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END), 0) AS published,
+              MAX(CASE WHEN status = 'published' THEN COALESCE(views, 0) END) AS best_reach,
+              SUM(CASE WHEN status = 'published' THEN COALESCE(views, 0) END) AS total_reach
+         FROM articles WHERE author_user_id = ?`
+    ).bind(user.id).first<{ total: number; published: number; best_reach: number | null; total_reach: number | null }>();
+    const total = Number(whole?.total) || 0;
+    const published = Number(whole?.published) || 0;
     return c.json({
       items,
+      page: pageFacts(w, total, items.length),
       counts: {
-        published: published.length,
-        drafts: items.filter((a) => a.status !== 'published').length,
-        // Real reach, from a counter the product actually increments.
-        best_reach: reach.length ? Math.max(...reach) : null,
-        total_reach: reach.length ? reach.reduce((s, n) => s + n, 0) : null,
+        published,
+        drafts: total - published,
+        // Opens here on Axal, from a counter incremented on every published
+        // read (`routes/articles.ts`): times opened, not people. Null when
+        // nothing is published, since there is no piece to have been opened.
+        best_reach: published > 0 ? Number(whole?.best_reach) || 0 : null,
+        total_reach: published > 0 ? Number(whole?.total_reach) || 0 : null,
         // "Where it ran" — the one claim on the old card that WAS true.
         // Nothing records an external publication or a talk, so no number.
         talk_reach: null,
@@ -3010,14 +3723,14 @@ advisors.get('/admin/cohort-assignments/assignable', async (c) => {
   try {
     await requireAdmin(c);
     await ensureAdvisorStoresSchema(c.env);
-    const rows = await c.env.DB.prepare(
+    // D4807: the one mentor-eligibility rule (services/mentorEligibility.ts), shared with the catalogue's counts.
+    const rows = await c.env.DB.prepare(await withMentorEligible(c.env,
       `SELECT u.id AS id, u.name AS name, u.email AS email, a.id AS advisor_profile_id
          FROM users u
          LEFT JOIN advisors a ON a.user_id = u.id
-        WHERE u.is_active = 1 AND (LOWER(u.role) = 'advisor' OR EXISTS (
-          SELECT 1 FROM account_licences l WHERE l.user_id = u.id AND l.licence = 'advisor' AND l.revoked_at IS NULL))
+        WHERE {ELIGIBLE}
         ORDER BY u.name ASC
-        LIMIT 500`
+        LIMIT 500`)
     ).all<{ id: number; name: string | null; email: string | null; advisor_profile_id: number | null }>();
     return c.json({
       items: (rows.results || []).map((r) => ({
@@ -3056,15 +3769,15 @@ async function hiddenFounderCounts(env: Env): Promise<{ byRow: Map<number, numbe
                        WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)
         GROUP BY a.id`
     ).all<{ id: number; n: number }>();
-    const total = await env.DB.prepare(
+    const total = await env.DB.prepare(await withMentorEligible(env,
       `SELECT COUNT(DISTINCT o.founder_user_id) AS n
          FROM advisor_cohort_assignments a
          JOIN users u ON u.id = a.advisor_user_id
          JOIN cohort_advisor_optouts o
            ON o.advisor_user_id = a.advisor_user_id AND o.withdrawn_at IS NULL
-        WHERE a.is_active = 1 AND LOWER(u.role) = 'advisor' AND u.is_active = 1
+        WHERE a.is_active = 1 AND {ELIGIBLE}
           AND EXISTS (SELECT 1 FROM company_week_status w
-                       WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)`
+                       WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)`)
     ).first<{ n: number }>();
     return {
       byRow: new Map((rows.results || []).map((r) => [Number(r.id), Number(r.n) || 0])),
@@ -3107,7 +3820,7 @@ advisors.get('/admin/cohort-assignments', async (c) => {
   try {
     await requireAdmin(c);
     await ensureAdvisorStoresSchema(c.env);
-    const rows = await c.env.DB.prepare(
+    const rows = await c.env.DB.prepare(await withMentorEligible(c.env,
       // `advisor_role` is the target's CURRENT role, not the one they had when
       // the row was written. That is what turns this list from a log into
       // something that can answer "who has access who should not": a still
@@ -3119,16 +3832,18 @@ advisors.get('/admin/cohort-assignments', async (c) => {
               a.cohort_cycle_id AS cohort_cycle_id, a.assigned_at AS assigned_at,
               a.unassigned_at AS unassigned_at, a.is_active AS is_active,
               a.note AS note, u.name AS advisor_name, u.email AS advisor_email,
-              u.role AS advisor_role, u.is_active AS advisor_is_active
+              u.role AS advisor_role, u.is_active AS advisor_is_active,
+              -- D4807: eligibility is the one rule, not the role string: an additional Advisor licence counts, a revoked one does not.
+              COALESCE({ELIGIBLE}, 0) AS advisor_eligible
          FROM advisor_cohort_assignments a
          LEFT JOIN users u ON u.id = a.advisor_user_id
         ORDER BY a.assigned_at DESC
-        LIMIT 500`
+        LIMIT 500`)
     ).all<{
       id: number; uid: string; advisor_user_id: number; cohort_cycle_id: number;
       assigned_at: string; unassigned_at: string | null; is_active: number;
       note: string | null; advisor_name: string | null; advisor_email: string | null;
-      advisor_role: string | null; advisor_is_active: number | null;
+      advisor_role: string | null; advisor_is_active: number | null; advisor_eligible: number;
     }>();
     const hidden = await hiddenFounderCounts(c.env);
     const founders = await activatedFounderCounts(c.env);
@@ -3138,6 +3853,8 @@ advisors.get('/admin/cohort-assignments', async (c) => {
         is_active: !!r.is_active,
         // A deleted user has no account to be active: null, not false.
         advisor_is_active: r.advisor_is_active == null ? null : Number(r.advisor_is_active) === 1,
+        // D4807: the one mentor-eligibility rule, so the page's role-change warning agrees with the counts.
+        advisor_eligible: Number(r.advisor_eligible) === 1,
         founders_hidden: hidden ? hidden.byRow.get(Number(r.id)) ?? 0 : null,
         founders_in_cohort: founders ? founders.get(Number(r.cohort_cycle_id)) ?? 0 : null,
       })),
@@ -3363,6 +4080,22 @@ export const ENGAGEMENT_LANES = ['drafting', 'proposed', 'signed', 'renewal_due'
 export const ENGAGEMENT_SHAPES = ['retainer', 'sprint', 'equity', 'per_call'];
 /** The two lanes that mean "under contract" — what the Active tile counts. */
 const SIGNED_LANES = new Set(['signed', 'renewal_due']);
+
+/**
+ * D4695: WHERE A LANE MAY GO THROUGH `/advance`, enforced here and not by the board.
+ *   · an unsigned engagement moves between drafting and proposed, is signed, or is abandoned;
+ *   · a signed one only flips between signed and renewal_due (a lane correction);
+ *   · a signed one NEVER returns to drafting or proposed (that left an 'active' outcome on an unsigned row, which
+ *     could then be ended without a decision), and it ends only through `/renewal`;
+ *   · ended is terminal.
+ */
+export const ENGAGEMENT_GRAPH: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  drafting: ['proposed', 'signed', 'ended'],
+  proposed: ['drafting', 'signed', 'ended'],
+  signed: ['renewal_due'],
+  renewal_due: ['signed'],
+  ended: [],
+});
 
 type EngagementRow = {
   id: number; uid: string; advisor_id: number;
@@ -3604,6 +4337,13 @@ advisors.post('/me/engagements/:id/advance', async (c) => {
     if (!ENGAGEMENT_LANES.includes(lane)) {
       return c.json({ detail: `lane must be one of: ${ENGAGEMENT_LANES.join(', ')}` }, 400);
     }
+    // D4695: a stale view is refused. `expected_lane` is the lane the caller read; when it is sent and the row has
+    // moved, nothing is written. Without it the write is still conditional on the lane read in this request.
+    if (body.expected_lane !== undefined && String(body.expected_lane) !== row.lane) {
+      return c.json({ detail: 'this engagement moved since you opened it — reload it', code: 'lane_changed', current_lane: row.lane }, 409);
+    }
+    // The same command twice is one change: a retry after a timeout finds the lane already there.
+    if (row.lane === lane) return c.json(engagementDto(row));
     // Ended is terminal, the same rule `portfolio_support.ts` applies to a
     // delivered promise: re-opening one would let a recorded outcome be
     // quietly un-recorded, and the renewal rate is exactly what that would
@@ -3616,31 +4356,50 @@ advisors.post('/me/engagements/:id/advance', async (c) => {
         detail: 'a signed engagement ends through a renewal decision — POST /me/engagements/:id/renewal with decision "ended"',
       }, 409);
     }
+    if (!(ENGAGEMENT_GRAPH[row.lane] ?? []).includes(lane)) {
+      return c.json({
+        detail: `a ${row.lane.replace('_', ' ')} engagement cannot move to ${lane.replace('_', ' ')}`,
+        code: 'lane_not_allowed', allowed: ENGAGEMENT_GRAPH[row.lane] ?? [],
+      }, 409);
+    }
 
     const now = nowIso();
     const day = now.slice(0, 10);
     const signing = SIGNED_LANES.has(lane) && !SIGNED_LANES.has(row.lane);
-    await c.env.DB.prepare(
-      `UPDATE advisor_engagements
-          SET lane = ?, proposed_at = ?, started_at = ?, ended_at = ?,
-              cycles = ?, outcome = ?, updated_at = ?
-        WHERE id = ?`
-    ).bind(
-      lane,
-      lane === 'proposed' ? (engagementDate(body.proposed_at) || day) : row.proposed_at,
-      signing ? (row.started_at || engagementDate(body.started_at) || day) : row.started_at,
-      // Only an UNSIGNED row can reach 'ended' here — the signed case was
-      // refused above — so this stamps an abandoned draft and nothing else.
-      lane === 'ended' ? (row.ended_at || day) : row.ended_at,
-      // The first term begins at signing. `max` rather than `+ 1` so a lane
-      // correction (renewal_due → signed and back) cannot inflate the count.
-      signing ? Math.max(Number(row.cycles || 0), 1) : row.cycles,
-      // Signing is what gives a row an outcome to have. Ending an unsigned one
-      // leaves it NULL, which is what keeps an abandoned draft out of the
-      // renewal rate's denominator.
-      signing ? (row.outcome || 'active') : row.outcome,
-      now, row.id,
-    ).run();
+    // THE UPDATE NAMES THE LANE IT READ, and its row count is read. A signing also appends its event in the same
+    // batch, guarded by the state the UPDATE leaves, so the history and the lane cannot disagree.
+    const [wrote] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE advisor_engagements
+            SET lane = ?, proposed_at = ?, started_at = ?, ended_at = ?,
+                cycles = ?, outcome = ?, updated_at = ?
+          WHERE id = ? AND lane = ?`
+      ).bind(
+        lane,
+        lane === 'proposed' ? (engagementDate(body.proposed_at) || day) : row.proposed_at,
+        signing ? (row.started_at || engagementDate(body.started_at) || day) : row.started_at,
+        // Only an UNSIGNED row can reach 'ended' here, so this stamps an abandoned draft and nothing else.
+        lane === 'ended' ? (row.ended_at || day) : row.ended_at,
+        // The first term begins at signing. `max` rather than `+ 1` so a lane
+        // correction (renewal_due → signed and back) cannot inflate the count.
+        signing ? Math.max(Number(row.cycles || 0), 1) : row.cycles,
+        // Signing is what gives a row an outcome to have. Ending an unsigned one leaves it NULL, which keeps an
+        // abandoned draft out of the renewal rate's denominator. A row that somehow holds an outcome is not left
+        // 'active' by ending: it reads 'ended'.
+        signing ? (row.outcome || 'active') : (lane === 'ended' && row.outcome ? 'ended' : row.outcome),
+        now, row.id, row.lane,
+      ),
+      c.env.DB.prepare(
+        `INSERT INTO advisor_engagement_events
+           (uid, engagement_id, kind, from_lane, to_lane, cycles_before, cycles_after, created_at)
+         SELECT ?, id, 'signed', ?, lane, 0, cycles, ? FROM advisor_engagements
+          WHERE id = ? AND ? = 1 AND lane = ? AND updated_at = ?
+         ON CONFLICT DO NOTHING`
+      ).bind(newUid(), row.lane, now, row.id, signing ? 1 : 0, lane, now),
+    ]);
+    if (Number((wrote as any)?.meta?.changes ?? 0) !== 1) {
+      return c.json({ detail: 'this engagement changed while you were looking at it — reload it', code: 'lane_changed' }, 409);
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
       .bind(row.id).first<EngagementRow>();
     return c.json(engagementDto(fresh!));
@@ -3665,6 +4424,31 @@ advisors.post('/me/engagements/:id/renewal', async (c) => {
     if (decision !== 'renewed' && decision !== 'ended') {
       return c.json({ detail: 'decision must be "renewed" or "ended"' }, 400);
     }
+    // D4695: A DECISION IS ABOUT ONE TERM. `expected_cycles` is the cycle count the caller read, i.e. the term being
+    // decided. It is required, because without it a retry after a timeout and a second renewal look the same.
+    const expected = body.expected_cycles;
+    if (typeof expected !== 'number' || !Number.isSafeInteger(expected) || expected < 1) {
+      return c.json({ detail: 'expected_cycles is required: the number of cycles you read, a whole number from 1', code: 'expected_cycles_required' }, 400);
+    }
+    // A term already decided: the same decision again is a replay and returns the engagement as it stands; a different
+    // decision is a conflict. Neither writes.
+    const decidedOf = async () => c.env.DB.prepare(
+      `SELECT kind FROM advisor_engagement_events WHERE engagement_id = ? AND cycles_before = ? AND kind IN ('renewed', 'ended')`
+    ).bind(row.id, expected).first<{ kind: string }>();
+    const replayOrConflict = async () => {
+      const prior = await decidedOf();
+      if (!prior) return null;
+      if (prior.kind === decision) {
+        const cur = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?').bind(row.id).first<EngagementRow>();
+        return c.json({ ...engagementDto(cur!), replayed: true });
+      }
+      return c.json({
+        detail: prior.kind === 'ended' ? 'this engagement has already ended' : 'this term was already renewed',
+        code: 'term_decided', decided: prior.kind,
+      }, 409);
+    };
+    const prior = await replayOrConflict();
+    if (prior) return prior;
     if (!SIGNED_LANES.has(row.lane)) {
       return c.json({
         detail: row.lane === 'ended'
@@ -3672,31 +4456,66 @@ advisors.post('/me/engagements/:id/renewal', async (c) => {
           : 'only a signed engagement has a renewal to decide',
       }, 409);
     }
+    if (Number(row.cycles || 0) !== expected) {
+      return c.json({ detail: 'this engagement moved on since you opened it — reload it', code: 'cycles_changed', current_cycles: Number(row.cycles || 0) }, 409);
+    }
 
     const now = nowIso();
     const day = now.slice(0, 10);
     const renewed = decision === 'renewed';
-    await c.env.DB.prepare(
-      `UPDATE advisor_engagements
-          SET lane = ?, cycles = ?, outcome = ?, renewal_note = ?,
-              term_ends_at = ?, ended_at = ?, updated_at = ?
-        WHERE id = ?`
-    ).bind(
-      renewed ? 'signed' : 'ended',
-      // A renewal starts a term, so it adds one. Ending does not: the term
-      // that just ran was already counted when it began.
-      renewed ? Number(row.cycles || 0) + 1 : row.cycles,
-      decision,
-      // One note column, because the artboard draws one — migration 238's
-      // header records why there is no separate end_reason beside it.
-      'note' in body ? trimOrNull(body.note, 2000) : row.renewal_note,
-      renewed ? engagementDate(body.term_ends_at) : row.term_ends_at,
-      renewed ? row.ended_at : (row.ended_at || day),
-      now, row.id,
-    ).run();
+    const cyclesAfter = renewed ? expected + 1 : expected;
+    const note = 'note' in body ? trimOrNull(body.note, 2000) : row.renewal_note;
+    // THE UPDATE NAMES THE TERM AND THE LANES IT MAY ACT ON, and the event is written in the same batch, guarded by
+    // the state the UPDATE leaves. The event's unique index is the second line: a concurrent duplicate meets it.
+    const [wrote] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE advisor_engagements
+            SET lane = ?, cycles = ?, outcome = ?, renewal_note = ?,
+                term_ends_at = ?, ended_at = ?, updated_at = ?
+          WHERE id = ? AND cycles = ? AND lane IN ('signed', 'renewal_due')`
+      ).bind(
+        renewed ? 'signed' : 'ended',
+        // A renewal starts a term, so it adds one. Ending does not: the term that just ran was already counted.
+        cyclesAfter,
+        decision,
+        // One note column, because the artboard draws one — migration 238's header records why there is no separate
+        // end_reason beside it.
+        note,
+        renewed ? engagementDate(body.term_ends_at) : row.term_ends_at,
+        renewed ? row.ended_at : (row.ended_at || day),
+        now, row.id, expected,
+      ),
+      c.env.DB.prepare(
+        `INSERT INTO advisor_engagement_events
+           (uid, engagement_id, kind, from_lane, to_lane, cycles_before, cycles_after, note, created_at)
+         SELECT ?, id, ?, ?, lane, ?, cycles, ?, ? FROM advisor_engagements
+          WHERE id = ? AND cycles = ? AND outcome = ? AND updated_at = ?
+         ON CONFLICT DO NOTHING`
+      ).bind(newUid(), decision, row.lane, expected, note, now, row.id, cyclesAfter, decision, now),
+    ]);
+    if (Number((wrote as any)?.meta?.changes ?? 0) !== 1) {
+      // Someone decided this term between the read and the write. The same decision is a replay.
+      return (await replayOrConflict())
+        ?? c.json({ detail: 'this engagement changed while you were looking at it — reload it', code: 'cycles_changed' }, 409);
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_engagements WHERE id = ?')
       .bind(row.id).first<EngagementRow>();
     return c.json(engagementDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /me/engagements/:id/events — D4695: the renewal history, oldest first. Engagements decided before the events
+// existed have none; that is "not recorded", not "no decisions".
+advisors.get('/me/engagements/:id/events', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const row = await requireOwnEngagement(c, m.id, Number(c.req.param('id')));
+    const rows = await c.env.DB.prepare(
+      `SELECT uid, kind, from_lane, to_lane, cycles_before, cycles_after, note, created_at
+         FROM advisor_engagement_events WHERE engagement_id = ? ORDER BY id ASC LIMIT 200`
+    ).bind(row.id).all();
+    return c.json({ items: rows.results || [] });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -3735,6 +4554,8 @@ type VersionRow = {
   id: number; uid: string; deliverable_id: number; version: number;
   label: string | null; summary: string | null; link_url: string | null;
   sent_at: string | null; opened_at: string | null; signed_off_at: string | null;
+  // #4684: who it was sent to and who recorded each receipt, each written once.
+  recipient_user_id?: number | null; opened_by_user_id?: number | null; signed_off_by_user_id?: number | null;
   created_at: string; updated_at: string;
 };
 
@@ -3752,6 +4573,18 @@ function versionDto(r: VersionRow): any {
     // All three are null until they happen. Never coalesced to a date.
     sent_at: r.sent_at, opened_at: r.opened_at, signed_off_at: r.signed_off_at,
     created_at: r.created_at, updated_at: r.updated_at,
+  };
+}
+
+/**
+ * #4684: the advisor's view of a version adds who it was sent to. The client's
+ * own read keeps `versionDto`: it never needs another account's name.
+ */
+function sentVersionDto(r: VersionRow & { recipient_name?: string | null }): any {
+  return {
+    ...versionDto(r),
+    recipient_user_id: r.recipient_user_id ?? null,
+    recipient_name: r.recipient_user_id == null ? null : (r.recipient_name ?? null),
   };
 }
 
@@ -3810,12 +4643,16 @@ advisors.get('/me/deliverables', async (c) => {
       ).bind(m.id).all<DeliverableRow & {
         client_user_id: number | null; client_user_name: string | null; client_user_email: string | null;
       }>(),
+      // #4684: each sent version names the account it went to, which may not be
+      // the engagement's client today: a relink moves nothing already sent.
       c.env.DB.prepare(
-        `SELECT v.* FROM advisor_deliverable_versions v
+        `SELECT v.*, r.name AS recipient_name, r.email AS recipient_email
+           FROM advisor_deliverable_versions v
            JOIN advisor_deliverables d ON d.id = v.deliverable_id
+           LEFT JOIN users r ON r.id = v.recipient_user_id
           WHERE d.advisor_id = ?
           ORDER BY v.deliverable_id, v.version DESC`
-      ).bind(m.id).all<VersionRow>(),
+      ).bind(m.id).all<VersionRow & { recipient_name?: string | null; recipient_email?: string | null }>(),
     ]);
 
     const byDeliverable = new Map<number, VersionRow[]>();
@@ -3840,8 +4677,11 @@ advisors.get('/me/deliverables', async (c) => {
         client_user_email: d.client_user_email ?? null,
         state: deliverableState(vs),
         version_count: vs.length,
-        latest_version: latest ? versionDto(latest) : null,
-        versions: vs.map(versionDto),
+        latest_version: latest ? sentVersionDto(latest) : null,
+        versions: vs.map(sentVersionDto),
+        // The address a nudge about unread work reaches: the latest sent
+        // version's recipient, not whoever the engagement names now.
+        recipient_email: (vs.find((v) => v.sent_at) as any)?.recipient_email ?? null,
         created_at: d.created_at, updated_at: d.updated_at,
       };
     });
@@ -3880,7 +4720,7 @@ advisors.get('/me/deliverables', async (c) => {
         oldest_never_opened: neverOpened[0] || null,
         // How many rows a nudge could actually reach. The zone reports the gap
         // rather than skipping rows quietly.
-        addressable: unopened.filter((i) => i.client_user_email).length,
+        addressable: unopened.filter((i) => i.recipient_email).length,
       },
     });
   } catch (e) { return mapError(c, e); }
@@ -4035,9 +4875,17 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
     }
 
     const now = nowIso();
-    await c.env.DB.prepare(
-      'UPDATE advisor_deliverable_versions SET sent_at = ?, updated_at = ? WHERE id = ?'
-    ).bind(now, now, v.id).run();
+    // #4684: THE RECIPIENT IS FIXED HERE, in the same UPDATE as `sent_at`. The
+    // client routes authorise against it, never against the engagement's current
+    // client, so a later relink can neither take this version from the person it
+    // went to nor hand it to someone else. `sent_at IS NULL` in the WHERE makes
+    // two concurrent sends one send.
+    await ensureAdvisorStoresSchema(c.env);
+    const sent: any = await c.env.DB.prepare(
+      `UPDATE advisor_deliverable_versions SET sent_at = ?, recipient_user_id = ?, updated_at = ?
+        WHERE id = ? AND sent_at IS NULL`
+    ).bind(now, client.id, now, v.id).run();
+    if (!sent.meta?.changes) return c.json({ detail: 'That version has already been sent' }, 409);
     await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
       .bind(now, row.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
@@ -4079,14 +4927,16 @@ advisors.get('/received/deliverables', async (c) => {
     const user = await requireAuth(c);
     await ensureAdvisorStoresSchema(c.env);
     const rows = await c.env.DB.prepare(
+      // #4684: BY RECIPIENT, NOT BY THE ENGAGEMENT'S CURRENT CLIENT. A version
+      // belongs to the account it was sent to, so relinking the engagement (or
+      // the work product) moves nothing that was already sent.
       `SELECT d.id, d.uid, d.title, d.client_name, d.created_at, d.updated_at,
               a.display_name AS advisor_name, a.uid AS advisor_uid
          FROM advisor_deliverables d
-         JOIN advisor_engagements e ON e.id = d.engagement_id
          JOIN advisors a ON a.id = d.advisor_id
-        WHERE e.founder_user_id = ?
-          AND EXISTS (SELECT 1 FROM advisor_deliverable_versions v
-                       WHERE v.deliverable_id = d.id AND v.sent_at IS NOT NULL)
+        WHERE EXISTS (SELECT 1 FROM advisor_deliverable_versions v
+                       WHERE v.deliverable_id = d.id AND v.sent_at IS NOT NULL
+                         AND v.recipient_user_id = ?)
         ORDER BY d.updated_at DESC LIMIT 200`
     ).bind(user.id).all<any>();
 
@@ -4094,9 +4944,9 @@ advisors.get('/received/deliverables', async (c) => {
     for (const d of rows.results || []) {
       const vs = await c.env.DB.prepare(
         `SELECT * FROM advisor_deliverable_versions
-          WHERE deliverable_id = ? AND sent_at IS NOT NULL
+          WHERE deliverable_id = ? AND sent_at IS NOT NULL AND recipient_user_id = ?
           ORDER BY version DESC`
-      ).bind(d.id).all<VersionRow>();
+      ).bind(d.id, user.id).all<VersionRow>();
       const versions = (vs.results || []).map(versionDto);
       items.push({
         uid: d.uid, title: d.title,
@@ -4148,16 +4998,17 @@ advisors.post('/received/deliverables/:uid/open', async (c) => {
     await ensureAdvisorStoresSchema(c.env);
     const v = await c.env.DB.prepare(
       `SELECT v.* FROM advisor_deliverable_versions v
-         JOIN advisor_deliverables d ON d.id = v.deliverable_id
-         JOIN advisor_engagements e ON e.id = d.engagement_id
-        WHERE v.uid = ? AND e.founder_user_id = ? AND v.sent_at IS NOT NULL`
+        WHERE v.uid = ? AND v.recipient_user_id = ? AND v.sent_at IS NOT NULL`
     ).bind(c.req.param('uid'), user.id).first<VersionRow>();
     if (!v) return c.json({ detail: 'Work product not found' }, 404);
 
     const now = nowIso();
+    // #4684: the receipt records who made it, and only the recipient can: the
+    // WHERE repeats the recipient so no other account's open can land here.
     await c.env.DB.prepare(
-      'UPDATE advisor_deliverable_versions SET opened_at = ?, updated_at = ? WHERE id = ? AND opened_at IS NULL'
-    ).bind(now, now, v.id).run();
+      `UPDATE advisor_deliverable_versions SET opened_at = ?, opened_by_user_id = ?, updated_at = ?
+        WHERE id = ? AND opened_at IS NULL AND recipient_user_id = ?`
+    ).bind(now, user.id, now, v.id, user.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
       .bind(v.id).first<VersionRow>();
     return c.json(versionDto(fresh!));
@@ -4168,18 +5019,20 @@ advisors.post('/received/deliverables/:uid/open', async (c) => {
 advisors.post('/received/deliverables/:uid/accept', async (c) => {
   try {
     const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
     const v = await c.env.DB.prepare(
       `SELECT v.* FROM advisor_deliverable_versions v
-         JOIN advisor_deliverables d ON d.id = v.deliverable_id
-         JOIN advisor_engagements e ON e.id = d.engagement_id
-        WHERE v.uid = ? AND e.founder_user_id = ? AND v.sent_at IS NOT NULL`
+        WHERE v.uid = ? AND v.recipient_user_id = ? AND v.sent_at IS NOT NULL`
     ).bind(c.req.param('uid'), user.id).first<VersionRow>();
     if (!v) return c.json({ detail: 'Work product not found' }, 404);
     const now = nowIso();
     const accepted: any = await c.env.DB.prepare(
-      `UPDATE advisor_deliverable_versions SET signed_off_at = ?, opened_at = COALESCE(opened_at, ?), updated_at = ?
-        WHERE id = ? AND signed_off_at IS NULL`
-    ).bind(now, now, now, v.id).run();
+      `UPDATE advisor_deliverable_versions
+          SET signed_off_at = ?, signed_off_by_user_id = ?,
+              opened_by_user_id = CASE WHEN opened_at IS NULL THEN ? ELSE opened_by_user_id END,
+              opened_at = COALESCE(opened_at, ?), updated_at = ?
+        WHERE id = ? AND signed_off_at IS NULL AND recipient_user_id = ?`
+    ).bind(now, user.id, user.id, now, now, v.id, user.id).run();
     if (accepted.meta?.changes) {
       await logAdminAction(c.env, user.id, user.email, 'advisor_deliverable_accepted', { version_id: v.id });
     }
@@ -4239,6 +5092,10 @@ function availabilityDto(r: AvailabilityRow | null): any {
     // Lets the page tell "no rules configured" from "rules configured to
     // nothing", which read identically in the four fields above.
     configured: Boolean(r),
+    // #4713 (D4713): the version of this rule set. A replacement that names the
+    // revision it was edited from is refused when the rules have changed since
+    // (another tab, another device). `''` is "no rules yet".
+    revision: r?.updated_at ?? '',
   };
 }
 
@@ -4322,6 +5179,40 @@ advisors.put('/me/availability', async (c) => {
     const buffer = parseOptionalCount(body.buffer_minutes, 'buffer_minutes', 24 * 60);
     const notice = parseOptionalCount(body.min_notice_hours, 'min_notice_hours', 24 * 365);
     const blackouts = parseBlackouts(body.blackouts);
+    // #4713 (D4713): optional compare-and-set. A caller that sends the
+    // `revision` it read replaces only that version of the rules: if another
+    // tab changed them since, the write is refused (409 `rules_changed`) with
+    // the current rules, and nothing is overwritten. Omitting it keeps the
+    // unconditional replace the route always had.
+    const expected = body.expected_revision !== undefined && body.expected_revision !== null ? String(body.expected_revision) : null;
+    const rulesChanged = async () => {
+      const row = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json({
+        detail: 'Your availability rules changed somewhere else since you opened them. Nothing was saved; reload to see the current rules.',
+        code: 'rules_changed', current: availabilityDto(row),
+      }, 409);
+    };
+    if (expected !== null) {
+      // The compare and the write are ONE statement, so two tabs saving from
+      // the same revision cannot both win: the loser's UPDATE matches no row.
+      const at = nowIso();
+      const res = expected === ''
+        ? await c.env.DB.prepare(
+          `INSERT INTO advisor_availability_rules
+             (advisor_id, weekly_paid_cap, buffer_minutes, min_notice_hours, blackouts_json, timezone, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(advisor_id) DO NOTHING`
+        ).bind(m.id, cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, at).run()
+        : await c.env.DB.prepare(
+          `UPDATE advisor_availability_rules
+              SET weekly_paid_cap = ?, buffer_minutes = ?, min_notice_hours = ?, blackouts_json = ?, timezone = ?, updated_at = ?
+            WHERE advisor_id = ? AND updated_at = ?`
+        ).bind(cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, m.id, expected).run();
+      if (!Number((res as any).meta?.changes ?? 0)) return rulesChanged();
+      const done = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json(availabilityDto(done));
+    }
     const now = nowIso();
     await c.env.DB.prepare(
       `INSERT INTO advisor_availability_rules
@@ -4453,50 +5344,6 @@ advisors.patch('/me/session-types/:id', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-/**
- * THE OWNER'S VIEW OF A SLOT, and it exists because `GET /:uid/slots` must not
- * grow these three columns. That route is readable by ANY authenticated user —
- * it is how a founder browses an advisor's calendar — and `recording_state`,
- * `payment_state` and `blocked_reason` are the advisor's own operational
- * facts. A client who could see `held_unpaid` would learn that this advisor's
- * payout account is unverified, and one who could read `blocked_reason` would
- * read a private note about why an hour is not for sale. So `slotDto` stays
- * lean and this one carries the operational half.
- */
-function ownSlotDto(s: SlotRow & {
-  recording_state?: string; payment_state?: string; blocked_reason?: string | null;
-}, taken = 0): any {
-  return {
-    ...slotDto(s, taken),
-    recording_state: s.recording_state ?? 'none',
-    payment_state: s.payment_state ?? 'not_applicable',
-    blocked_reason: s.blocked_reason ?? null,
-  };
-}
-
-advisors.get('/me/slots', async (c) => {
-  try {
-    const user = await requireAuth(c);
-    const m = await requireMyAdvisor(c, user);
-    // The grid is two weeks forward by default, and the artboard's other three
-    // views (Month, Past sessions, Unpaid held) are narrowings of a window
-    // rather than different queries — so the window is the only parameter.
-    const days = Math.min(370, Math.max(1, Number(c.req.query('days') || 14)));
-    const from = c.req.query('from') || nowIso();
-    const until = new Date(new Date(from).getTime() + days * 86_400_000).toISOString();
-    const rows = await c.env.DB.prepare(
-      `SELECT * FROM advisor_office_hour_slots
-        WHERE advisor_id = ? AND starts_at >= ? AND starts_at < ?
-        ORDER BY starts_at ASC LIMIT 500`
-    ).bind(m.id, from, until).all<SlotRow>();
-    const items: any[] = [];
-    for (const s of (rows.results || []) as SlotRow[]) {
-      items.push(ownSlotDto(s as any, await takenForSlot(c.env, s.id)));
-    }
-    return c.json({ items, window: { from, until, days } });
-  } catch (e) { return mapError(c, e); }
-});
-
 // The artboard's "Block a date range" op. A blocked slot is NOT a cancelled
 // one: cancelling undoes a booking and tells whoever held it, while blocking
 // withdraws an hour that was never taken. Conflating them would send a
@@ -4525,11 +5372,14 @@ advisors.post('/me/slots/block', async (c) => {
     let blocked = 0;
     let skippedBooked = 0;
     for (const id of ids) {
-      if ((await takenForSlot(c.env, id)) > 0) { skippedBooked++; continue; }
-      await c.env.DB.prepare(
-        'UPDATE advisor_office_hour_slots SET blocked_reason = ? WHERE id = ? AND advisor_id = ?'
-      ).bind(reason || 'Blocked', id, m.id).run();
-      blocked++;
+      // D4695: the check and the write are one statement. A booking that lands between a count and an UPDATE used to
+      // be blocked out from under its holder; now the UPDATE changes nothing if a seat is held at that moment.
+      const wrote = await c.env.DB.prepare(
+        `UPDATE advisor_office_hour_slots SET blocked_reason = ?
+          WHERE id = ? AND advisor_id = ?
+            AND NOT EXISTS (SELECT 1 FROM advisor_bookings b WHERE b.slot_id = ? AND b.status IN ('pending','confirmed','completed'))`
+      ).bind(reason || 'Blocked', id, m.id, id).run();
+      if (Number((wrote as any)?.meta?.changes ?? 0) === 1) blocked++; else skippedBooked++;
     }
     return c.json({ blocked, skipped_booked: skippedBooked, examined: ids.length });
   } catch (e) { return mapError(c, e); }
@@ -4557,7 +5407,7 @@ advisors.get('/me/visibility', async (c) => {
     const user = await requireAuth(c);
     if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
     const m = await requireMyAdvisor(c, user);
-    return c.json(await advisorVisibility(c.env, { advisorId: m.id, userId: user.id }, c.req.query('days')));
+    return c.json(await advisorVisibility(c.env, { advisorId: m.id, userId: user.id }, c.req.query('days'), Date.now(), { limit: c.req.query('limit'), offset: c.req.query('offset') }));
   } catch (e) { return mapError(c, e); }
 });
 

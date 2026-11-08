@@ -17,7 +17,9 @@
  *            summary: the prompt is never a step's output, so the Workflow's
  *            stored state never holds it. `run` builds it again.
  *   run      #3727's `agentRun` with `taskId`, the run uid (`agent:<uid>`,
- *            `agent:<uid>:run`) and the hold `agent.<role_key>`. A retried
+ *            `agent:<uid>:run`) and the hold `agent.<role_key>`; a session's
+ *            task also names its saved skill and version (D4534,
+ *            `sessionSkill`), refused `skill_unavailable` when unreadable. A retried
  *            run step is answered by E2's idempotency: the same proposal, or
  *            `step_lost` with nothing more charged. `spend_limit`, `ai_paused`
  *            and `agent_cap_reached` pause the agent; `gateway_limit` sets the
@@ -44,7 +46,7 @@ import { readOne, READERS, type ReadContext } from '../services/agents/reads';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
 import { canRead, effectiveBook, scopeOfAgent, type AgentRow } from '../services/agents/teams';
 import { handoffBlockFor, handsOffTo, parseHandoff, proposeHandoff } from '../services/agents/handoffs';
-import { sessionBlock } from '../services/agents/sessions';
+import { sessionBlock, sessionSkill } from '../services/agents/sessions';
 import {
   dailyLimitReached, markRun, moveTask, pauseAgent, runByUid, runsToday, scopeOfRow, scopeSettings, tellTeam,
   type PauseReason, type RunRow, type RunStep,
@@ -247,7 +249,13 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
     if (b.pause) await pauseAgent(d.env, l.agent.id, b.pause, d.now());
     return end(d, l, 'run', b.status, b.refusal, b.summary);
   }
-  const r = await d.agentRun(d.env, { agent: l.agent, module: l.task.module!, option: l.task.option!, prompt: b.prompt, taskId: l.task.id, runUid: uid });
+  // D4534: a session's run names its saved skill and version, so it passes the same skill gates a manual run does.
+  const sk = await sessionSkill(d.env, l.task);
+  if (sk.kind === 'refused') return end(d, l, 'run', 'refused', sk.code, sk.message);
+  const r = await d.agentRun(d.env, {
+    agent: l.agent, module: l.task.module!, option: l.task.option!, prompt: b.prompt, taskId: l.task.id, runUid: uid,
+    ...(sk.kind === 'skill' ? { skill: sk.uid, skillVersion: sk.version } : {}),
+  });
   if (r.ok) {
     await markRun(d.env, uid, 'run', { status: 'done', summary: r.replayed ? 'Ran before; the same proposal stands.' : 'Wrote a proposal.' },
       { usageLogId: r.usageLogId, proposalUid: r.proposal.uid });

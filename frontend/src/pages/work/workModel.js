@@ -371,11 +371,40 @@ export function workloadSessions(data) {
     .filter((r) => r.items.length);
 }
 
+/**
+ * A 403 `not_member` from the Work or Compliance read: the viewer is not on the team, so the read will
+ * always be refused. Returns the Worker's own sentence, never `e.message`; null for any other failure,
+ * which is a real error with Try again (#4735).
+ */
+export function refusedOf(e) {
+  const code = e?.code || e?.data?.code || e?.data?.error || null;
+  if (e?.status !== 403 || code !== 'not_member') return null;
+  const sentence = e?.data?.message || e?.data?.detail;
+  return typeof sentence === 'string' && sentence.trim() ? sentence.trim() : NOT_ON_THE_TEAM;
+}
+export const NOT_ON_THE_TEAM = 'Only the team can read this.';
+
+/** The weekly capacity a person's row carries: the recorded points, or null when none is recorded (never 0). */
+export const capacityPoints = (r) => (r?.capacity?.available && Number.isFinite(Number(r.capacity.value)) ? Number(r.capacity.value) : null);
+
+/**
+ * WK7's weekly-capacity box: what the person typed, as the body the Worker wants. A blank clears the capacity
+ * (`null`); a number is 0 to 1,000 points. Never 0 for "unknown": 0 is only what someone typed.
+ */
+export function capacityBody(text) {
+  const t = String(text ?? '').trim();
+  if (t === '') return { body: { weekly_capacity_points: null } };
+  const n = Number(t);
+  if (!/^\d+(\.\d+)?$/.test(t) || !Number.isFinite(n) || n < 0 || n > 1000) return { error: 'A weekly capacity is 0 to 1,000 points. Leave it blank to clear it.' };
+  return { body: { weekly_capacity_points: n } };
+}
+
 /** WK7: the rows, people first then agents, each with its weekly cells; amber only when over a recorded capacity. */
 export function workloadRows(data) {
   const row = (r, kind) => ({
     key: `${kind}:${(r.person || r.agent)?.uid}`, kind, who: r.person || r.agent,
     capacity: kind === 'person' ? (r.capacity?.available ? `${r.capacity.value} pts a week` : NOT_RECORDED) : null,
+    capacityPoints: kind === 'person' ? capacityPoints(r) : null,
     cells: (r.weeks || []).map((w) => ({
       week: w.week_start, items: w.items || [],
       load: `${w.estimate_points ?? 0} pts${w.unestimated ? ` · ${w.unestimated} not estimated` : ''}`,

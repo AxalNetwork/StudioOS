@@ -26,7 +26,7 @@
  */
 import { learningApi } from '../../lib/api/learning.js';
 import { adminLearningApi } from '../../lib/api/adminLearning.js';
-import { examBody, exerciseBody, questionBody } from './assessmentModel';
+import { examBody, exerciseBody, explanationBody, questionBody } from './assessmentModel';
 
 const shapeError = (what) => new Error(`${what} came back in a shape this page cannot read.`);
 
@@ -175,6 +175,11 @@ export async function addExamQuestion(examUid, form) {
 /** Edit a question, restated whole. Resolves to the exam's tree. */
 export async function updateExamQuestion(uid, form) {
   return rowOf(await adminLearningApi.updateQuestion(uid, questionBody(form)), 'exam', 'The exam');
+}
+
+/** D4650 (#4650, part 3): a question's explanation and revision links. Resolves to the exam's tree. */
+export async function explainExamQuestion(uid, form) {
+  return rowOf(await adminLearningApi.explainQuestion(uid, explanationBody(form)), 'exam', 'The exam');
 }
 
 export async function deleteExamQuestion(uid) {

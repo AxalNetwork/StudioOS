@@ -31,7 +31,10 @@ import {
   type PainGroupModel, type PainGroupsView, type PainSeverityLevel,
 } from './painGroups';
 import { evidenceFor, verdictFor, laneFor, VALIDATION_BAR } from '../routes/_founder_validate_helpers';
-import { loadVerdictHistory, recordVerdictChanges, observationAt, changedWithin, parseObserved, RECENTLY_MOVED_DAYS } from './verdictHistory';
+import {
+  changedWithin, historyChangesAvailable, loadVerdictHistory, observationAt,
+  parseObserved, recordVerdictChanges, RECENTLY_MOVED_DAYS,
+} from './verdictHistory';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
 import { verdictCard, decisionRecords, DECISION_COLUMNS, DECISION_FILTERS, DECISION_SORTS } from './verdict';
@@ -895,7 +898,9 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
 }
 
 export async function experimentsCard(ctx: Ctx): Promise<Card> {
-  return safeCard(meta('experiments', 'Last 8 weeks', 'Hypotheses by status; evidence added per week.', 'Hypotheses and their evidence'), async (): Promise<CardBody> => {
+  // D4585: the status and the weekly bars both count pain-theme links (the interview population the status uses); the
+  // caption says so, since a claim's record also lists evidence linked directly.
+  return safeCard(meta('experiments', 'Last 8 weeks', 'Hypotheses by status; interview-theme links added per week.', 'Hypotheses and their evidence'), async (): Promise<CardBody> => {
     const [{ hyps, links }, interviews, model] = await Promise.all([loadHypotheses(ctx), loadInterviews(ctx), loadPainGroupModel(ctx.env, ctx.projectId, { strict: true })]);
     const lab = interviewClaimsOf(interviews);
     if (hyps.length === 0 && lab.total === 0) {
@@ -1067,7 +1072,8 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'newest', label: 'Newest' }],
   },
   experiments: {
-    cols: ['Hypothesis', 'Status', 'Evidence', 'Sprint', 'Owner', 'Source'],
+    // D4585: the status counts interviews only (the approved policy), so the column says so.
+    cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
     filters: [
       { key: 'status', label: 'Status', options: [
         opt('untested', 'Untested'), opt('testing', 'Testing'), opt('supported', 'Supported'), opt('refuted', 'Refuted'),
@@ -1445,31 +1451,39 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   await recordVerdictChanges(ctx.env, ctx.projectId, openClaims.map((c) => ({
     hypothesis_id: c.id, verdict: c.verdict, lane: c.lane,
   }))).catch(() => 0);
-  const history = await loadVerdictHistory(ctx.env, ctx.projectId);
+  const now = new Date();
+  const movedSince = new Date(now.getTime() - RECENTLY_MOVED_DAYS * 86_400_000);
+  const lastWeek = new Date(now.getTime() - 7 * 86_400_000);
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const history = await loadVerdictHistory(ctx.env, ctx.projectId, {
+    claimIds: openClaims.map((c) => c.id), boundaries: [lastWeek],
+  });
 
   // FVW's views over the verdict history (decision 16), before paging.
-  const now = new Date();
   const historyOf = (id: number) => history.byClaim.get(id) || [];
-  const movedSince = new Date(now.getTime() - RECENTLY_MOVED_DAYS * 86_400_000);
+  const movedAvailable = historyChangesAvailable(history.coverage, movedSince);
+  const monthAvailable = historyChangesAvailable(history.coverage, monthStart);
+  const lastWeekAvailable = history.coverage.boundaries.some((value) => {
+    const at = parseObserved(value);
+    return at != null && Math.abs(at.getTime() - lastWeek.getTime()) < 1000;
+  });
   const f = rq.filter;
   type Row = { c: Claim; status: ClaimStatus; moved: 'recent' | null };
-  let rows: Row[] = claims.map((c) => ({ c, status: c.status, moved: changedWithin(historyOf(c.id), movedSince, 'lane') ? 'recent' : null }));
+  let rows: Row[] = claims.map((c) => ({ c, status: c.status, moved: movedAvailable && changedWithin(historyOf(c.id), movedSince, 'lane') ? 'recent' : null }));
   // The views read unretired claims only.
   if (retired && (f.moved || f.history)) rows = [];
-  if (f.moved === 'recent') rows = rows.filter((r) => r.moved === 'recent');
+  if (f.moved === 'recent') rows = movedAvailable ? rows.filter((r) => r.moved === 'recent') : [];
   if (f.history === 'last_week') {
     // Each claim's status in force seven days ago; a claim with no observation
     // that old is left out, never shown at today's status.
-    const at = new Date(now.getTime() - 7 * 86_400_000);
-    rows = rows.flatMap((r) => {
-      const o = observationAt(historyOf(r.c.id), at);
+    rows = lastWeekAvailable ? rows.flatMap((r) => {
+      const o = observationAt(historyOf(r.c.id), lastWeek);
       if (!o) return [];
       const marked = parseObserved(r.c.inconclusive_at);
-      return [{ ...r, status: statusOf(o.verdict, o.lane, marked != null && marked.getTime() <= at.getTime()) }];
-    });
+      return [{ ...r, status: statusOf(o.verdict, o.lane, marked != null && marked.getTime() <= lastWeek.getTime()) }];
+    }) : [];
   } else if (f.history === 'this_month') {
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    rows = rows.filter((r) => changedWithin(historyOf(r.c.id), monthStart, 'verdict'));
+    rows = monthAvailable ? rows.filter((r) => changedWithin(historyOf(r.c.id), monthStart, 'verdict')) : [];
   }
   rows = rows.filter((r) => has(rq.q, r.c.code, r.c.claim));
   if (f.status && !retired) rows = rows.filter((r) => r.status === f.status);
@@ -1488,6 +1502,11 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     ...paged(LISTS.experiments.cols, rows.map(({ c, status, moved }) => ({
       id: c.id, hypothesis: `${c.code} · ${c.claim}`, status,
       evidence: c.evidence, strength: c.strength, sprint: c.sprint, owner: c.owner,
+      // D4585 (#4585): `evidence` is the interviews the claim's status is computed from (its pain links). The claim's
+      // other linked evidence (direct interviews, demand signals, metrics, experiments) is counted apart, by kind, so a
+      // claim with a pre-sale and no interview reads "0 interviews, 1 other", never as having no evidence.
+      interview_support: c.evidence,
+      linked_evidence: linkedCounts(evidenceBy.get(c.id) || []),
       provenance: provenanceOf(c.id),
       moved,
       ...(retired ? { retired: true } : {}),
@@ -1513,9 +1532,15 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
           withheld: count('not_recorded'),
           fit_not_recorded: interviews.filter((i) => i.icp_fit == null).length,
           bar: VALIDATION_BAR,
+          // D4585: what `supported`, `refuted` and each row's `evidence` count. Other linked evidence is `linked_evidence`.
+          status_basis: 'interviews',
           // When the record starts, or null with none: a window opening before
           // it is not an answer, and the page says where the record starts.
           history_since: history.since,
+          history_coverage: history.coverage,
+          history_filter_available: f.moved === 'recent' ? movedAvailable
+            : f.history === 'last_week' ? lastWeekAvailable
+              : f.history === 'this_month' ? monthAvailable : null,
         },
         // Per open claim, how far its ICP support is from the bar.
         fit_gap: openClaims.filter((c) => c.status !== 'supported' && c.status !== 'refuted').map((c) => ({
@@ -1525,6 +1550,13 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     }),
     fills_recorded: fillsRecorded,
   };
+}
+
+/** D4585: a claim's evidence links by kind; these are outside the interview-only status calculation. */
+export function linkedCounts(links: Array<{ kind: string }>) {
+  const n = { interview: 0, signal: 0, metric: 0, experiment: 0 };
+  for (const l of links) if (l.kind in n) n[l.kind as keyof typeof n] += 1;
+  return n;
 }
 
 export const RECORDS_FOR: Record<ModuleSlug, (ctx: Ctx, rq: RecordQuery) => Promise<Records>> = {

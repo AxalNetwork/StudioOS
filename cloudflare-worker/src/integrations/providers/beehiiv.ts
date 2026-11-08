@@ -1,0 +1,69 @@
+/**
+ * D2407 (#2407 part 1) — a founder's own Beehiiv newsletter, through
+ * Beehiiv's hosted MCP server (`MCP_PROVIDERS.beehiiv`).
+ *
+ * A member connects only by "Sign in with Beehiiv": the generic MCP sign-in
+ * (`routes/connector_mcp_oauth.ts`, D1080) serves the record and writes the
+ * `oauth_mcp` row. `connect` takes no key (decision A1: no API key fallback),
+ * so a paste is refused and nothing reaches Beehiiv or is stored. Every read
+ * goes through `services/beehiiv/reads.ts`.
+ *
+ *   connect        403 support_session_refused for a support session; 410
+ *                  sign_in_only otherwise: there is no key to paste
+ *   disconnect     the grant revoked at Beehiiv, best effort, then the stored
+ *                  tokens deleted (`revokeMcpConnection`), then every
+ *                  `beehiiv_publication_links` row of this connection
+ *                  removed; the generic route deletes the row after. Landed
+ *                  figures and the ledger stay, so a reconnect never brings a
+ *                  deleted figure back. A support session may disconnect.
+ *   revokeGranted  a grant the route refused, revoked at Beehiiv, best effort
+ *   ready          D751: whether a sign-in can register (`mcpReadiness`)
+ */
+import type { Context } from 'hono';
+import type { Env, User } from '../../types';
+import { ConnectRefusal, registerProvider, type ConnectInput, type ConnectResult, type IntegrationRow } from '../registry';
+import { MCP_PROVIDERS } from '../mcpProviders';
+import {
+  MCP_AUTH_TYPE, discoverMcp, resolveMcpClient, revokeMcpConnection, revokeMcpTokens, type McpCredentials,
+} from '../mcpClient';
+import { mcpPreregisteredFor, mcpReadiness } from '../mcpSignIn';
+import { selectJwt } from '../../auth';
+
+type C = Context<{ Bindings: Env }>;
+
+const BEEHIIV = MCP_PROVIDERS.beehiiv;
+
+/** A support session acting as the member (`impersonated_by`, as Mercury's reads it). */
+const isSupportSession = async (c: C) => !!(await selectJwt(c))?.payload.impersonated_by;
+
+export const SIGN_IN_ONLY = 'Connect Beehiiv with Sign in with Beehiiv. Axal VC never asks for a Beehiiv API key.';
+
+async function connect(c: C, _user: User, _input: ConnectInput): Promise<ConnectResult> {
+  if (await isSupportSession(c)) {
+    throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot connect a member\'s Beehiiv.');
+  }
+  throw new ConnectRefusal(410, 'sign_in_only', SIGN_IN_ONLY);
+}
+
+async function disconnect(c: C, _user: User, row: IntegrationRow): Promise<void> {
+  if (row.provider_key !== BEEHIIV.key) return;
+  if (row.auth_type === MCP_AUTH_TYPE) {
+    await revokeMcpConnection(c.env, BEEHIIV, row, { preregistered: mcpPreregisteredFor(c.env, BEEHIIV) });
+  }
+  await c.env.DB.prepare('DELETE FROM beehiiv_publication_links WHERE integration_id = ?').bind(row.id).run();
+}
+
+/** A grant refused after it was issued: its tokens revoked at Beehiiv, best effort. */
+async function revokeGranted(env: Env, result: ConnectResult): Promise<void> {
+  const creds = result.credentials as Partial<McpCredentials>;
+  if (typeof creds?.access_token !== 'string' || typeof creds.client_key !== 'string') return;
+  try {
+    const server = await discoverMcp(BEEHIIV, { resource: typeof creds.resource === 'string' ? creds.resource : undefined });
+    const client = await resolveMcpClient(env, BEEHIIV, server, creds.client_key, { preregistered: mcpPreregisteredFor(env, BEEHIIV) });
+    if (client) await revokeMcpTokens(server, client, { access_token: creds.access_token, refresh_token: creds.refresh_token });
+  } catch { /* best effort: the refusal stands either way */ }
+}
+
+const ready = (env: Env) => mcpReadiness(env, BEEHIIV, mcpPreregisteredFor(env, BEEHIIV));
+
+registerProvider({ key: 'beehiiv', connect, disconnect, revokeGranted, ready });

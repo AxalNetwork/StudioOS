@@ -84,17 +84,93 @@ export type VerdictState = {
 };
 
 /** One recorded observation. */
-export type VerdictObservation = VerdictState & { observed_at: string };
+export type VerdictObservation = VerdictState & { id: number; observed_at: string };
+
+export type VerdictHistoryCoverage = {
+  status: 'complete' | 'partial' | 'unavailable';
+  /** Oldest instant in the newest contiguous slice returned to the caller. */
+  since: string | null;
+  /** Oldest observation recorded for the project, even when the middle is omitted. */
+  recorded_since: string | null;
+  through: string | null;
+  limit: number;
+  boundaries: string[];
+};
+
+export type VerdictHistoryOptions = {
+  /** Current claims whose latest and requested boundary states must be retained. */
+  claimIds?: number[];
+  /** Exact as-of instants the caller needs, bounded below. */
+  boundaries?: Date[];
+};
+
+const HISTORY_LIMIT = 2000;
+const BOUNDARY_LIMIT = 4;
+const CLAIM_LIMIT = 2000;
+
+const unavailableCoverage = (): VerdictHistoryCoverage => ({
+  status: 'unavailable', since: null, recorded_since: null, through: null,
+  limit: HISTORY_LIMIT, boundaries: [],
+});
+
+const sqlInstant = (d: Date): string => d.toISOString().replace('T', ' ').slice(0, 19);
+
+type StoredObservation = VerdictObservation;
+
+/** One state per requested claim at or before a temporal boundary. */
+async function boundaryRows(env: Env, projectId: number, claimIds: number[], at: string): Promise<StoredObservation[]> {
+  if (!claimIds.length) return [];
+  const res = await env.DB.prepare(
+    `WITH wanted(id) AS (
+       SELECT CAST(value AS INTEGER) FROM json_each(?)
+     ), ranked AS (
+       SELECT h.id, h.hypothesis_id, h.verdict, h.lane, h.observed_at,
+              ROW_NUMBER() OVER (PARTITION BY h.hypothesis_id ORDER BY h.observed_at DESC, h.id DESC) AS rn
+         FROM hypothesis_verdict_history h
+         JOIN wanted w ON w.id = h.hypothesis_id
+        WHERE h.project_id = ? AND h.observed_at <= ?
+     )
+     SELECT id, hypothesis_id, verdict, lane, observed_at
+       FROM ranked WHERE rn = 1 ORDER BY observed_at, id
+      LIMIT 2000`,
+  ).bind(JSON.stringify(claimIds), projectId, at).all<StoredObservation>();
+  return res.results || [];
+}
+
+/** One state per requested claim immediately before a retained `(time, id)`. */
+async function predecessorRows(
+  env: Env, projectId: number, claimIds: number[], observedAt: string, rowId: number,
+): Promise<StoredObservation[]> {
+  if (!claimIds.length) return [];
+  const res = await env.DB.prepare(
+    `WITH wanted(id) AS (
+       SELECT CAST(value AS INTEGER) FROM json_each(?)
+     ), ranked AS (
+       SELECT h.id, h.hypothesis_id, h.verdict, h.lane, h.observed_at,
+              ROW_NUMBER() OVER (PARTITION BY h.hypothesis_id ORDER BY h.observed_at DESC, h.id DESC) AS rn
+         FROM hypothesis_verdict_history h
+         JOIN wanted w ON w.id = h.hypothesis_id
+        WHERE h.project_id = ?
+          AND (h.observed_at < ? OR (h.observed_at = ? AND h.id < ?))
+     )
+     SELECT id, hypothesis_id, verdict, lane, observed_at
+       FROM ranked WHERE rn = 1 ORDER BY observed_at, id
+      LIMIT 2000`,
+  ).bind(JSON.stringify(claimIds), projectId, observedAt, observedAt, rowId).all<StoredObservation>();
+  return res.results || [];
+}
 
 /**
- * How many observations a single board read will carry back per project.
+ * How many contiguous recent observations a single board read carries back.
  *
  * A Worker materialises the whole response in memory, and a board is read on
  * every visit to two zones. Written as a literal inside the statement rather
  * than interpolated: `scripts/check-sql-prepare.mjs` refuses any `${…}` in a
  * `DB.prepare` template, and it is right to — a constant reads the same as a
  * variable at the point the query text is built. Changes are rare per claim, so
- * 2000 is several years of a busy board and still bounded.
+ * 2000 is several years of a busy board and still bounded. D4629 may add one
+ * predecessor/latest/boundary state per requested claim; those inputs and
+ * every materialised query are capped separately above.
  */
 
 /**
@@ -160,31 +236,91 @@ export async function recordVerdictChanges(
 export async function loadVerdictHistory(
   env: Env,
   projectId: number,
-): Promise<{ byClaim: Map<number, VerdictObservation[]>; since: string | null }> {
+  options: VerdictHistoryOptions = {},
+): Promise<{ byClaim: Map<number, VerdictObservation[]>; since: string | null; coverage: VerdictHistoryCoverage }> {
   const byClaim = new Map<number, VerdictObservation[]>();
-  if (!(await ensureVerdictHistorySchema(env))) return { byClaim, since: null };
+  if (!(await ensureVerdictHistorySchema(env))) return { byClaim, since: null, coverage: unavailableCoverage() };
 
-  const res = await env.DB.prepare(
-    `SELECT hypothesis_id, verdict, lane, observed_at
-       FROM hypothesis_verdict_history
-      WHERE project_id = ?
-      ORDER BY id
-      LIMIT 2000`,
-  ).bind(projectId).all<VerdictObservation>().catch(() => ({ results: [] as VerdictObservation[] }));
+  const ids = [...new Set((options.claimIds || []).filter((id) => Number.isSafeInteger(id) && id > 0))];
+  const wanted = ids.slice(0, CLAIM_LIMIT);
+  const boundaries = [...new Set((options.boundaries || [])
+    .filter((d) => d instanceof Date && !Number.isNaN(d.getTime()))
+    .map(sqlInstant))].slice(0, BOUNDARY_LIMIT);
 
-  let since: string | null = null;
-  for (const r of res.results || []) {
-    const id = Number(r.hypothesis_id);
-    if (!byClaim.has(id)) byClaim.set(id, []);
-    byClaim.get(id)!.push({
-      hypothesis_id: id,
-      verdict: r.verdict ?? null,
-      lane: String(r.lane),
-      observed_at: String(r.observed_at),
-    });
-    if (since === null || String(r.observed_at) < since) since = String(r.observed_at);
+  try {
+    // D4629: newest temporal slice, with one look-ahead row solely to report
+    // truncation. The outer order restores the oldest-first contract consumed
+    // by observationAt/changedWithin. `id` breaks same-second ties.
+    const recent = await env.DB.prepare(
+      `SELECT id, hypothesis_id, verdict, lane, observed_at FROM (
+         SELECT id, hypothesis_id, verdict, lane, observed_at
+           FROM hypothesis_verdict_history
+          WHERE project_id = ?
+          ORDER BY observed_at DESC, id DESC
+          LIMIT 2001
+       ) ORDER BY observed_at, id`,
+    ).bind(projectId).all<StoredObservation>();
+    const fetched = recent.results || [];
+    const truncated = fetched.length > HISTORY_LIMIT;
+    const slice = truncated ? fetched.slice(fetched.length - HISTORY_LIMIT) : fetched;
+    const firstRecorded = await env.DB.prepare(
+      `SELECT observed_at FROM hypothesis_verdict_history
+        WHERE project_id = ? ORDER BY observed_at, id LIMIT 1`,
+    ).bind(projectId).first<{ observed_at: string }>();
+
+    const merged = new Map<number, StoredObservation>();
+    for (const row of slice) merged.set(Number(row.id), row);
+
+    // Keep the state immediately before the retained slice. Without it, a
+    // change on the first retained row looks like a claim's first observation.
+    if (truncated && wanted.length && slice.length) {
+      const oldest = slice[0];
+      const prior = await predecessorRows(env, projectId, wanted, String(oldest.observed_at), Number(oldest.id));
+      for (const row of prior) merged.set(Number(row.id), row);
+    }
+
+    // A quiet claim can fall outside a busy project's newest slice. Retain its
+    // latest state, and the exact state at each requested as-of boundary.
+    for (const at of ['9999-12-31 23:59:59', ...boundaries]) {
+      for (const row of await boundaryRows(env, projectId, wanted, at)) merged.set(Number(row.id), row);
+    }
+
+    const ordered = [...merged.values()].sort((a, b) =>
+      String(a.observed_at).localeCompare(String(b.observed_at)) || Number(a.id) - Number(b.id));
+    for (const r of ordered) {
+      const claimId = Number(r.hypothesis_id);
+      if (!byClaim.has(claimId)) byClaim.set(claimId, []);
+      byClaim.get(claimId)!.push({
+        id: Number(r.id), hypothesis_id: claimId, verdict: r.verdict ?? null,
+        lane: String(r.lane), observed_at: String(r.observed_at),
+      });
+    }
+
+    const since = slice.length ? String(slice[0].observed_at) : null;
+    const coverage: VerdictHistoryCoverage = {
+      status: truncated || ids.length > CLAIM_LIMIT || (options.boundaries || []).length > BOUNDARY_LIMIT ? 'partial' : 'complete',
+      since,
+      recorded_since: firstRecorded?.observed_at ? String(firstRecorded.observed_at) : null,
+      through: slice.length ? String(slice[slice.length - 1].observed_at) : null,
+      limit: HISTORY_LIMIT,
+      boundaries,
+    };
+    return { byClaim, since, coverage };
+  } catch (e) {
+    console.error('[verdictHistory] loadVerdictHistory:', (e as Error).message);
+    return { byClaim, since: null, coverage: unavailableCoverage() };
   }
-  return { byClaim, since };
+}
+
+/** Whether every transition since `at` is present in the contiguous slice. */
+export function historyChangesAvailable(coverage: VerdictHistoryCoverage, at: Date): boolean {
+  if (coverage.status === 'unavailable') return false;
+  // A complete recorded history may itself have begun inside the requested
+  // window; its first row is not counted as a change, and every later pair is
+  // still available. Only a truncated middle creates an unknown transition.
+  if (coverage.status === 'complete') return coverage.since != null;
+  const start = parseObserved(coverage.since);
+  return !!(start && start.getTime() <= at.getTime());
 }
 
 // ---------------------------------------------------------------------------

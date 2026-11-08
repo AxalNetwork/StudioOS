@@ -759,6 +759,8 @@ p.fwr-founder-record {
  */
 .fwr-ask-entry { margin-top: 10px; display: flex; }
 .fwr-ask-entry:empty { display: none; }
+/* #4737: Ask at the top of the phone sheet and a founder's Eadwyn panel, where the column's own entry is hidden. */
+.fwr-sheet-ask { display: flex; margin: 0 0 12px; }
 
 /* Distribution keeps its shared frame aligned with its page background. */
 .distribution-frame > .fwr-frame-main{background:#f4f3f7}.dark .distribution-frame > .fwr-frame-main{background:#0b1220}

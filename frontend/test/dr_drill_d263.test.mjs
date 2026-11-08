@@ -24,6 +24,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdtempSync, chmodSync, existsSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { planRestore, splitStatements, chunkText, DEFER_FK, D1_STATEMENT_LIMIT } from '../../scripts/dr-drill-split.mjs';
+import { describe } from '../../scripts/d1-backup-manifest.mjs';
+import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -107,6 +109,12 @@ if (a[0] === 'r2' && a[2] === 'get' && a[3].endsWith('/heartbeat-d1.json')) {
   process.stdout.write(JSON.stringify({ at: '2026-09-30T02:10:00Z', source: 'gha', kind: 'd1', key: ${JSON.stringify(KEY)}, size_bytes: 4096 }));
   process.exit(0);
 }
+if (a[0] === 'r2' && a[2] === 'get' && a[3].endsWith('.manifest.json')) {
+  // D4558: the backup's manifest, kept beside it.
+  if (e.NO_MANIFEST) { console.error('✘ [ERROR] The specified key does not exist.'); process.exit(1); }
+  fs.writeFileSync(fileArg(), e.MANIFEST_JSON || '{}');
+  process.exit(0);
+}
 if (a[0] === 'r2' && a[2] === 'get') { fs.writeFileSync(fileArg(), e.BACKUP_SQL || 'CREATE TABLE users(id);'); process.exit(0); }
 if (a[0] === 'r2' && a[2] === 'put') {
   if (e.FAIL_MARKER) { console.error('✘ [ERROR] put refused'); process.exit(1); }
@@ -131,6 +139,14 @@ if (a[0] === 'd1' && a[1] === 'execute' && has('--file')) {
 }
 if (a[0] === 'd1' && a[1] === 'execute' && has('--command')) {
   const sql = a[a.indexOf('--command') + 1];
+  if (/ AS t, COUNT\\(\\*\\) AS n FROM /.test(sql)) {
+    // D4558: the per-table counts, as the manifest says, unless a test changes one.
+    const m = JSON.parse(e.MANIFEST_JSON || '{"tables":[]}');
+    const asked = [...sql.matchAll(/SELECT '((?:[^']|'')*)' AS t/g)].map((x) => x[1].replace(/''/g, "'"));
+    const off = e.COUNT_OFF || '';
+    console.log(JSON.stringify([{ results: asked.map((t) => ({ t, n: (m.tables.find((x) => x.name === t)?.rows ?? 0) + (t === off ? 1 : 0) })) }]));
+    process.exit(0);
+  }
   if (/COUNT/.test(sql)) { console.log(JSON.stringify([{ results: [{ users: e.ZERO_USERS ? 0 : 3, projects: 2 }] }])); process.exit(0); }
   const names = ['users', 'projects', 'deals', 'score_snapshots', 'activity_logs', 'documents'];
   console.log(JSON.stringify([{ results: names.map((name) => ({ name })) }]));
@@ -143,7 +159,19 @@ process.exit(64);
   chmodSync(join(dir, 'wrangler'), 0o755);
 }
 
+/** D4558: the manifest backup-d1.yml would write for `sql`, exported `ageHours` ago. */
+function manifestFor(sql, { key = KEY, ageHours = 2, migration = null } = {}) {
+  // An export the splitter cannot read still gets a manifest here, so a test can reach the split step.
+  const d = describe(sql).error ? { statements: 0, tables: [], migrations: { ledger: 'schema_migrations', count: 0, last: null } } : describe(sql);
+  return JSON.stringify({
+    version: 1, key, database: 'studioos-db', exported_at: new Date(Date.now() - ageHours * 3_600_000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    time_travel_bookmark: null, size_bytes: Buffer.byteLength(sql), sha256: createHash('sha256').update(sql).digest('hex'),
+    statements: d.statements, tables: d.tables, migrations: { ...d.migrations, last: migration ?? d.migrations.last },
+  });
+}
+
 function drill(env = {}) {
+  env = { MANIFEST_JSON: manifestFor(env.BACKUP_SQL || 'CREATE TABLE users(id);'), ...env };
   const dir = mkdtempSync(join(tmpdir(), 'd263-'));
   fakeWrangler(dir);
   writeFileSync(join(dir, 'calls.log'), '');
@@ -343,4 +371,158 @@ test('D523 drill: an export that cannot be split fails the restore before any im
   assert.equal(r.imports.length, 0);
   assert.match(r.out, /FATAL: could not split the backup into import chunks/);
   assert.ok(!r.out.includes(SENTINEL));
+});
+
+// ------------------------------------------------- FK cycle (run 41307767798) ----
+
+/**
+ * Production's shape on 2026-11-01: legal_documents.fund_id → vc_funds and
+ * vc_funds.lpa_doc_id → legal_documents, one row each, pointing at each other,
+ * in wrangler's `INSERT INTO "t" ("c",...) VALUES(...)` form. A child of the
+ * cycle (fund_lps) comes first in the export, and an unrelated table sits
+ * between. The child of a cycle member exported before it.
+ */
+function cycleSql() {
+  return [
+    'PRAGMA defer_foreign_keys=TRUE;',
+    'CREATE TABLE fund_lps (id INTEGER PRIMARY KEY, fund_id INTEGER NOT NULL REFERENCES vc_funds(id), name TEXT);',
+    `INSERT INTO "fund_lps" ("id","fund_id","name") VALUES(1,7,'${SENTINEL}');`,
+    'CREATE TABLE legal_documents (id TEXT PRIMARY KEY, fund_id INTEGER REFERENCES vc_funds(id), title TEXT NOT NULL);',
+    `INSERT INTO "legal_documents" ("id","fund_id","title") VALUES('doc-1',7,'LPA, signed; v2');`,
+    `INSERT INTO "legal_documents" ("id","fund_id","title") VALUES('doc-2',NULL,'draft');`,
+    'CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT);',
+    `INSERT INTO "notes" ("id","body") VALUES(1,'n');`,
+    "CREATE TABLE vc_funds (id INTEGER PRIMARY KEY, name TEXT NOT NULL, lpa_doc_id TEXT REFERENCES legal_documents(id), CONSTRAINT ck CHECK (name <> 'not null'));",
+    `INSERT INTO "vc_funds" ("id","name","lpa_doc_id") VALUES(7,'Fund I','doc-1');`,
+  ].join('\n') + '\n';
+}
+
+/** Run each statement on its own with foreign keys ON and no deferral at all. */
+function importStatements(chunks) {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON;');
+  for (const c of chunks) for (const s of c.statements) db.exec(s);
+  return db;
+}
+
+test('FK cycle: two tables pointing at each other restore one statement at a time, with no deferral', () => {
+  const sql = cycleSql();
+  const { chunks, counts, error } = planRestore(sql, { chunkBytes: 1024 });
+  assert.equal(error, null);
+  assert.deepEqual(
+    [counts.cyclic_tables, counts.cycle_edges_broken, counts.cycle_rows_updated, counts.cycle_rows_unparsed],
+    [0, 1, 1, 0],
+  );
+  const data = chunks.filter((c) => c.phase === 'data').flatMap((c) => c.statements);
+  const tableOf = (s) => /^(?:INSERT INTO|UPDATE) "(\w+)"/.exec(s)[1];
+  // Parent inserted with the back-edge NULL, then the child, then the UPDATE.
+  assert.equal(data.findIndex((s) => s.startsWith('INSERT INTO "legal_documents"')), 0);
+  assert.equal(data[0], `INSERT INTO "legal_documents" ("id","fund_id","title") VALUES('doc-1',NULL,'LPA, signed; v2');`);
+  assert.ok(data.indexOf(data.find((s) => s.startsWith('INSERT INTO "vc_funds"'))) > 0);
+  assert.equal(data.at(-1), `UPDATE "legal_documents" SET "fund_id"=7 WHERE "id"='doc-1';`);
+  // Members of the cycle and the tables under them are parents-first too.
+  const order = [...new Set(data.map(tableOf))];
+  assert.ok(order.indexOf('vc_funds') < order.indexOf('fund_lps'), order.join(','));
+  // The proof: no statement relies on a deferral, and the rows are the export's.
+  const restored = importStatements(chunks);
+  assert.deepEqual(snapshot(restored), snapshot(importFiles([sql], { fk: false })));
+  assert.deepEqual(restored.prepare('PRAGMA foreign_key_check').all(), []);
+  importFiles(chunks.map(chunkText));
+});
+
+test('FK cycle: the old export-order fallback fails the same import, which is the run 41307767798 failure', () => {
+  const naive = splitStatements(cycleSql()).statements.filter((s) => !s.startsWith('PRAGMA'));
+  const schema = naive.filter((s) => s.startsWith('CREATE'));
+  const rows = naive.filter((s) => s.startsWith('INSERT'));
+  assert.throws(() => importStatements([{ statements: [...schema, ...rows] }]), /FOREIGN KEY/);
+});
+
+test('FK cycle: a cycle with no nullable back-edge keeps the fallback and is counted, never rewritten', () => {
+  const sql = [
+    'CREATE TABLE a (id INTEGER PRIMARY KEY, b_id INTEGER NOT NULL REFERENCES b(id));',
+    'INSERT INTO "a" ("id","b_id") VALUES(1,1);',
+    'CREATE TABLE b (id INTEGER PRIMARY KEY, a_id INTEGER NOT NULL REFERENCES a(id));',
+    'INSERT INTO "b" ("id","a_id") VALUES(1,1);',
+  ].join('\n');
+  const { chunks, counts } = planRestore(sql);
+  assert.deepEqual([counts.cyclic_tables, counts.cycle_edges_broken], [2, 0]);
+  assert.ok(!chunks.flatMap((c) => c.statements).some((s) => s.startsWith('UPDATE')));
+});
+
+test('FK cycle: the split summary prints counts only, never a value or a table name', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cycle-'));
+  writeFileSync(join(dir, 'in.sql'), cycleSql());
+  const r = spawnSync(process.execPath, [resolve(process.cwd(), 'scripts/dr-drill-split.mjs'), join(dir, 'in.sql'), join(dir, 'out')], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /cycle_edges_broken=1 cycle_rows_updated=1/);
+  for (const no of [SENTINEL, 'doc-1', 'legal_documents', 'vc_funds']) assert.ok(!(r.stdout + r.stderr).includes(no), no);
+});
+
+// --------------------------------------------------------------- D4558 ----
+
+const BACKUP_WF = readFileSync(resolve(process.cwd(), '.github/workflows/backup-d1.yml'), 'utf8');
+const SQL_OK = 'CREATE TABLE users(id INTEGER PRIMARY KEY);\nINSERT INTO users VALUES(1);\nINSERT INTO users VALUES(2);\n';
+const created = (r) => r.calls.some((c) => c[0] === 'd1' && c[1] === 'create');
+
+test('D4558 drill: a passing run records the recovery point, its age, the sha256, the migration and the table count', () => {
+  const r = drill({ BACKUP_SQL: SQL_OK, MANIFEST_JSON: manifestFor(SQL_OK, { ageHours: 3, migration: '001_progress_tables.sql' }) });
+  assert.equal(r.status, 0, r.out);
+  const m = JSON.parse(manifestFor(SQL_OK));
+  assert.equal(r.marker.sha256, m.sha256);
+  assert.equal(r.marker.migration, '001_progress_tables.sql');
+  assert.equal(r.marker.tables, 1);
+  assert.match(r.marker.recovery_point, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  assert.ok(r.marker.recovery_point_age_s >= 3 * 3600 - 60 && r.marker.recovery_point_age_s <= 3 * 3600 + 120, String(r.marker.recovery_point_age_s));
+  assert.equal(r.marker.reason, null);
+  assert.match(r.out, /row counts match in all 1 tables/);
+  assert.ok(r.calls.some((c) => c[0] === 'r2' && c[2] === 'get' && c[3] === `studioos-backups/${KEY.replace(/\.sql$/, '.manifest.json')}` && c.includes('--remote')));
+});
+
+test('D4558 drill: a backup its manifest does not vouch for is never restored, and says why', () => {
+  const cases = [
+    ['manifest_missing', { NO_MANIFEST: '1' }],
+    ['sha256_mismatch', { MANIFEST_JSON: manifestFor(SQL_OK.replace('(2)', '(3)')) }],
+    ['size_mismatch', { BACKUP_SQL: SQL_OK.slice(0, -20), MANIFEST_JSON: manifestFor(SQL_OK) }],
+    ['stale', { MANIFEST_JSON: manifestFor(SQL_OK, { ageHours: 48 }) }],
+    ['migration_unknown', { MANIFEST_JSON: manifestFor(SQL_OK, { migration: '999_from_a_newer_checkout.sql' }) }],
+    ['key_mismatch', { MANIFEST_JSON: manifestFor(SQL_OK, { key: 'd1/studioos-db/backup-2026-09-29.sql' }) }],
+    ['manifest_invalid', { MANIFEST_JSON: '{"version":1}' }],
+  ];
+  for (const [reason, env] of cases) {
+    const r = drill({ BACKUP_SQL: SQL_OK, ...env });
+    assert.equal(r.status, 2, `${reason}: ${r.out}`);
+    assert.deepEqual([r.marker?.outcome, r.marker?.step, r.marker?.reason], ['failed', 'verify', reason], reason);
+    assert.ok(!created(r), `${reason}: a database was created for a backup that failed verification`);
+    assert.equal(r.imports.length, 0, reason);
+  }
+  assert.match(drill({ BACKUP_SQL: SQL_OK, MANIFEST_JSON: manifestFor(SQL_OK, { ageHours: 48 }) }).out, /PAGE: rpo_breach/);
+});
+
+test('D4558 drill: restored row counts that differ from the manifest fail the smoke step, naming the table only', () => {
+  const r = drill({ BACKUP_SQL: SQL_OK, COUNT_OFF: 'users' });
+  assert.equal(r.status, 3, r.out);
+  assert.deepEqual([r.marker?.step, r.marker?.reason], ['smoke', 'row_counts_differ']);
+  assert.match(r.out, /row counts differ in 1 of 1 tables: users/);
+});
+
+test('D4558 drill: a failed chunk names the tables it writes and their parents, never a row', () => {
+  const sql = `CREATE TABLE users(id INTEGER PRIMARY KEY);\nCREATE TABLE notes(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id));\nINSERT INTO users VALUES(1);\nINSERT INTO notes VALUES(1, 1);\nINSERT INTO notes VALUES(2, '${SENTINEL}');\n`;
+  const r = drill({ BACKUP_SQL: sql, FAIL_CHUNK: '2' });
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.marker.reason, /^chunk_2_of_\d+$/);
+  assert.match(r.out, /chunk 2 tables: [a-z, ]+; their parents: /);
+  assert.ok(!r.out.includes(SENTINEL));
+});
+
+test('D4558 workflow: the backup is read back before its manifest and heartbeat are written; a failed backup pages', () => {
+  const at = (s) => BACKUP_WF.indexOf(s);
+  assert.ok(at('scripts/d1-backup-manifest.mjs "${ARGS[@]}"') > at('wrangler d1 export'), 'the manifest is built from the export');
+  assert.ok(at('--file readback.sql') > at('--content-type \'application/sql\''), 'the upload is read back');
+  assert.ok(at('${BACKUP_KEY%.sql}.manifest.json" \\') > at('sha256sum readback.sql'), 'the manifest is written after the check');
+  assert.ok(at('heartbeat-d1.json \\') > at('${BACKUP_KEY%.sql}.manifest.json" \\'), 'the heartbeat is written last');
+  assert.match(BACKUP_WF, /if \[\[ "\$\{WANT\}" != "\$\{GOT\}" \]\]; then[\s\S]*?exit 1/);
+  assert.match(BACKUP_WF, /^\s+PAGER_CONFIGURED: \$\{\{ secrets\.PAGER_WEBHOOK_URL != '' \}\}$/m);
+  const notify = BACKUP_WF.slice(BACKUP_WF.indexOf('- name: Notify on failure'));
+  assert.doesNotMatch(notify.split('\n')[1], /env\.PAGER_WEBHOOK_URL/, 'the pager step tests a variable its own if: cannot see');
+  assert.match(BACKUP_WF, /time-travel info "\$\{TARGET_DB\}" --json/);
 });

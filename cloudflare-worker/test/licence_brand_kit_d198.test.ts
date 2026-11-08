@@ -135,6 +135,7 @@ function freshDb({ withKits = true } = {}) {
       viewed_user_id INTEGER, filters_json TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
       legal_entity_name TEXT, brand_name TEXT, registered_address TEXT,
       signatory_name TEXT, signatory_title TEXT, status TEXT NOT NULL DEFAULT 'draft',
@@ -161,7 +162,8 @@ function freshDb({ withKits = true } = {}) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER, event TEXT,
       detail_json TEXT, note TEXT, actor_user_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+    ,
+      before_json TEXT, after_json TEXT, outcome TEXT);
   `);
   // withKits: false is the database that has NOT applied 281. Every reader has
   // to render that as unreadable rather than as "this licence has no kit".

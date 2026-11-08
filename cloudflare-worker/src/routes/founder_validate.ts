@@ -39,7 +39,7 @@ import {
 } from './_founder_validate_exports';
 import { ensureDiscoveryEvidenceColumns, ensureDiscoveryRecordingColumns } from '../services/discoveryInterviewSchema';
 import {
-  recordVerdictChanges, loadVerdictHistory, type VerdictObservation,
+  recordVerdictChanges, loadVerdictHistory,
 } from '../services/verdictHistory';
 import {
   canReadBoard, canReadDecision, canWrite,
@@ -126,6 +126,25 @@ type InterviewRow = {
  * pains differently from the pain map next door and give two pages two
  * different answers about the same interviews.
  */
+/**
+ * D4585 (#4585): a required evidence read that failed. It is never turned into an empty collection: the board and
+ * the exports refuse with `evidence_unreadable` and say which source, so a failure cannot read as "no claims" or "no
+ * interviews", and so the verdict history is never written from an incomplete read. A genuinely empty venture reads
+ * successfully and exports successfully.
+ */
+export class EvidenceUnreadable extends Error {
+  readonly source: 'claims' | 'pain links' | 'interviews';
+  constructor(source: 'claims' | 'pain links' | 'interviews') { super(`${source} unreadable`); this.source = source; }
+}
+async function required<T>(source: EvidenceUnreadable['source'], read: Promise<T>): Promise<T> {
+  try { return await read; } catch (e) {
+    console.error(`[founder_validate] ${source} unreadable:`, (e as Error)?.message);
+    throw new EvidenceUnreadable(source);
+  }
+}
+const evidenceUnreadable = (e: EvidenceUnreadable, what: string) =>
+  json({ error: 'evidence_unreadable', source: e.source, detail: `The ${e.source} could not be read, so ${what}. Nothing was changed. Try again.` }, 503);
+
 async function loadEvidenceBase(env: Env, projectId: number) {
   const model = await loadPainGroupModel(env, projectId);
   // The SELECT below names migration 211's columns. On an environment where
@@ -133,11 +152,11 @@ async function loadEvidenceBase(env: Env, projectId: number) {
   // interviews" and the board would read as empty rather than broken — so the
   // columns are ensured first, the same way the interview CRUD ensures them.
   await ensureDiscoveryEvidenceColumns(env);
-  const res = await env.DB.prepare(
+  const res = await required('interviews', env.DB.prepare(
     `SELECT id, interviewee_name, interviewee_role, interviewee_company,
             icp_fit, quote_consent, pains_json
        FROM discovery_interviews WHERE project_id = ? ORDER BY id`,
-  ).bind(projectId).all<InterviewRow>().catch(() => ({ results: [] as InterviewRow[] }));
+  ).bind(projectId).all<InterviewRow>());
 
   const interviews = (res.results || []).map((r) => {
     let pains: unknown[] = [];
@@ -174,17 +193,20 @@ export { claimFills };
  * places gives that away again.
  */
 async function buildBoard(env: Env, projectId: number) {
-  const hyps = await env.DB.prepare(
+  // D4585: the claims, their pain links and the interviews are all required. A failed read throws before any verdict
+  // is derived, so `recordVerdictChanges` below never sees an incomplete board: no false transition is written, and a
+  // later healthy read has nothing to "recover" from.
+  const hyps = await required('claims', env.DB.prepare(
     `SELECT id, code, claim, sort_order, retired_at, sprint
        FROM hypotheses WHERE project_id = ? ORDER BY sort_order, id`,
-  ).bind(projectId).all<any>().catch(() => ({ results: [] as any[] }));
+  ).bind(projectId).all<any>());
 
-  const linkRes = await env.DB.prepare(
+  const linkRes = await required('pain links', env.DB.prepare(
     `SELECT l.id, l.hypothesis_id, l.pain_group_id, l.direction
        FROM hypothesis_pain_links l
        JOIN hypotheses h ON h.id = l.hypothesis_id
       WHERE h.project_id = ?`,
-  ).bind(projectId).all<any>().catch(() => ({ results: [] as any[] }));
+  ).bind(projectId).all<any>());
 
   const { interviews, model } = await loadEvidenceBase(env, projectId);
   const linksBy = new Map<number, any[]>();
@@ -222,13 +244,20 @@ async function buildBoard(env: Env, projectId: number) {
   // see. Writes only on a change, so this is one SELECT in the steady state.
   //
   // Never allowed to cost the board: a history that cannot be written or read
-  // leaves `history: []` and `verdict_history_since: null`, and the chips refuse
-  // rather than drawing an empty answer.
+  // leaves `history: []`, a null start and unavailable coverage, and the chips
+  // refuse rather than drawing an empty answer.
   await recordVerdictChanges(env, projectId, items.map((h: any) => ({
     hypothesis_id: Number(h.id), verdict: h.verdict ?? null, lane: String(h.lane),
   }))).catch(() => 0);
-  const history = await loadVerdictHistory(env, projectId)
-    .catch(() => ({ byClaim: new Map<number, VerdictObservation[]>(), since: null as string | null }));
+  const now = new Date();
+  const history = await loadVerdictHistory(env, projectId, {
+    claimIds: items.map((h: any) => Number(h.id)),
+    boundaries: [
+      new Date(now.getTime() - 7 * 86_400_000),
+      new Date(now.getTime() - 14 * 86_400_000),
+      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+    ],
+  });
   for (const h of items as any[]) {
     h.history = (history.byClaim.get(Number(h.id)) || []).map((o) => ({
       verdict: o.verdict, lane: o.lane, observed_at: o.observed_at,
@@ -259,6 +288,7 @@ async function buildBoard(env: Env, projectId: number) {
     // than as "nothing changed". `/build/this-week` returns `history_since` for
     // exactly this reason and this is the same seam.
     verdict_history_since: history.since,
+    verdict_history_coverage: history.coverage,
     // False when `fill_provenance` could not be read: every `filled` is then
     // unknown, not "typed by hand", and the page says which.
     fills_recorded: fillsRecorded,
@@ -275,7 +305,11 @@ async function buildBoard(env: Env, projectId: number) {
 founderValidate.get('/board/:projectId', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
   if (s instanceof Response) return s;
-  const board = await buildBoard(c.env, s.project.id);
+  let board: Awaited<ReturnType<typeof buildBoard>>;
+  try { board = await buildBoard(c.env, s.project.id); } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'the board is not shown');
+    throw e;
+  }
   return json({ project: { id: s.project.id, name: s.project.name }, ...board });
 });
 
@@ -418,13 +452,20 @@ founderValidate.get('/interviews/:projectId/export.csv', async (c) => {
   // does it: on an environment where the migration has not run, "no such
   // column" would otherwise read as "no interviews".
   await ensureDiscoveryEvidenceColumns(c.env);
-  const res = await c.env.DB.prepare(
-    `SELECT id, interviewee_name, interviewee_role, interviewee_company,
-            interview_date, icp_fit, quote_consent, featured,
-            validation_rating, validation_comment, notes, pains_json
-       FROM discovery_interviews WHERE project_id = ?
-      ORDER BY interview_date DESC, id DESC LIMIT 5000`,
-  ).bind(s.project.id).all<ExportInterviewRow>().catch(() => ({ results: [] as ExportInterviewRow[] }));
+  // D4585: a failed read refuses the export; an empty CSV would say the venture has no interviews.
+  let res: { results?: ExportInterviewRow[] };
+  try {
+    res = await required('interviews', c.env.DB.prepare(
+      `SELECT id, interviewee_name, interviewee_role, interviewee_company,
+              interview_date, icp_fit, quote_consent, featured,
+              validation_rating, validation_comment, notes, pains_json
+         FROM discovery_interviews WHERE project_id = ?
+        ORDER BY interview_date DESC, id DESC LIMIT 5000`,
+    ).bind(s.project.id).all<ExportInterviewRow>());
+  } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'nothing was exported');
+    throw e;
+  }
 
   const rows = res.results || [];
   return csvResponse(
@@ -455,7 +496,11 @@ founderValidate.get('/summary/:projectId/export.csv', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canReadDecision);
   if (s instanceof Response) return s;
 
-  const board = await buildBoard(c.env, s.project.id);
+  let board: Awaited<ReturnType<typeof buildBoard>>;
+  try { board = await buildBoard(c.env, s.project.id); } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'nothing was exported');
+    throw e;
+  }
   // The venture's current given decision, through the one reader (D693). A
   // read that fails refuses the export: a summary with no decision in it
   // would say the founder has not decided.

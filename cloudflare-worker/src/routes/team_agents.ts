@@ -58,7 +58,7 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
-import { ATTACH_STATUS, checkSkillList, linkStatement } from '../services/agents/skillLinks';
+import { ATTACH_STATUS, checkSkillList, linkStatement, logSkillsChanged } from '../services/agents/skillLinks';
 import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
 import type { IntegrationRow } from '../integrations/registry';
 import { isAdmin, mapError, newUid } from './_t13t14t15_helpers';
@@ -125,6 +125,21 @@ async function personOf(env: Env, userId: number | null): Promise<{ uid: string;
   return u ? { uid: u.uid, name: u.name } : null;
 }
 
+/**
+ * #4733: what the role reads, in words, from its effective rule book's `works_in` (the modules it works in). `null` when the
+ * book cannot be read, so the Team settings card shows "Not recorded" rather than a guess.
+ */
+export async function readsLineOf(env: Env, a: AgentRow): Promise<string | null> {
+  try {
+    const scope = await scopeOfAgent(env, a);
+    if (!scope) return null;
+    const { rules } = await effectiveBook(env, scope, a.role_key);
+    if (!Array.isArray(rules?.works_in)) return null;
+    if (!rules.works_in.length) return 'Works in no module';
+    return `Works in ${rules.works_in.map((k) => moduleOf(k)?.label ?? k).join(', ')}`;
+  } catch { return null; }
+}
+
 async function agentDto(env: Env, a: AgentRow) {
   const project = a.scope_kind === 'project'
     ? await env.DB.prepare('SELECT id, name FROM projects WHERE id = ?').bind(a.project_id).first<{ id: number; name: string }>()
@@ -154,6 +169,7 @@ async function agentDto(env: Env, a: AgentRow) {
     last_activity_at: await lastActivity(env, a.id),
     scope_kind: a.scope_kind,
     project: project ? { id: project.id, name: project.name } : null,
+    reads_line: await readsLineOf(env, a),
   };
 }
 
@@ -577,7 +593,10 @@ router.delete('/agents/:uid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-router.get('/:scope/:id/agents', async (c) => {
+router.get('/:scope/:id/agents', async (c, next) => {
+  // #4733: `/skills/<uid>/agents` also matches this pattern. A scope that is not a team belongs to the router mounted after this one.
+  const scopeKind = c.req.param('scope');
+  if (scopeKind !== 'company' && scopeKind !== 'project') return next();
   try {
     const user = await requireAuth(c);
     const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
@@ -752,7 +771,11 @@ router.post('/:scope/:id/agents', async (c) => {
     }
     const a = await c.env.DB.prepare('SELECT * FROM team_agents WHERE uid = ?').bind(uid).first<AgentRow>();
     await logEvent(c.env, a!.id, user.id, 'added', { role_key: role.key, persona_key: persona.key, model_id: b.model_id, monthly_cap_microusd: b.monthly_cap_microusd });
-    if (skillsChecked.wanted.length) await c.env.DB.batch(skillsChecked.wanted.map((w) => linkStatement(c.env, a!.id, w.s.id, w.version, user.id)));
+    if (skillsChecked.wanted.length) {
+      await c.env.DB.batch(skillsChecked.wanted.map((w) => linkStatement(c.env, a!.id, w.s.id, w.version, user.id)));
+      // D4534: the skills an agent was added with.
+      await logSkillsChanged(c.env, a!.id, user.id, { added: skillsChecked.wanted.map((w) => ({ uid: w.s.uid, version: w.version })), repinned: [], removed: [] });
+    }
     return c.json({ agent: await agentDto(c.env, a!) }, 201);
   } catch (e) { return mapError(c, e); }
 });

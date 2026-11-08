@@ -64,7 +64,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
-import { modelProviderRows } from '../services/aiProviders';
+import { gatewayProviderRows, modelProviderRows } from '../services/aiProviders';
 import {
   MANAGED_PROVIDERS,
   PROVIDER_ENV_VARS,
@@ -380,6 +380,8 @@ r.get('/', async (c) => {
     channels: channelRows(c.env),
     // D851 · D848: the model providers (pattern C), read only: the switch and whether the key is set.
     model_providers: modelProviderRows(c.env),
+    // D4556: third-party models through AI Gateway, read only: the switch, which config is missing (names), ZDR and workloads.
+    gateway_providers: gatewayProviderRows(c.env),
     db_readable: status.db_readable,
     ...(status.db_readable ? {} : {
       unreadable_reason:

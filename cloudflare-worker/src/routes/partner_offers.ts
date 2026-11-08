@@ -48,6 +48,7 @@ import {
 import {
   mergePatch, parseCents, requireOwnEngagement, requirePartnerRole,
 } from './_partner_workspace_helpers';
+import { WON_MEASURE_BASIS } from '../services/serviceMeasures';
 
 const partnerOffers = new Hono<{ Bindings: Env }>();
 
@@ -97,10 +98,16 @@ partnerOffers.get('/visibility', async (c) => {
     const surfaces = await c.env.DB.prepare(
       `SELECT s.id, s.uid, s.name, s.kind, s.is_active, s.created_at,
               COUNT(es.id) AS engagement_count,
-              SUM(COALESCE(e.price, 0)) AS won_value
+              COALESCE(SUM(CASE WHEN e.status <> 'cancelled' THEN 1 ELSE 0 END), 0) AS won_count,
+              COALESCE(SUM(CASE WHEN e.status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled_count,
+              COALESCE(SUM(CASE WHEN e.status <> 'cancelled' THEN COALESCE(e.price, 0) ELSE 0 END), 0) AS won_value,
+              COALESCE(SUM(CASE WHEN e.status <> 'cancelled' AND e.delivered_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS delivered_count,
+              COALESCE(SUM(CASE WHEN e.status <> 'cancelled' AND inv.id IS NOT NULL AND inv.status <> 'void' THEN 1 ELSE 0 END), 0) AS invoiced_count,
+              COALESCE(SUM(CASE WHEN e.status <> 'cancelled' AND inv.status = 'paid' THEN 1 ELSE 0 END), 0) AS paid_count
          FROM partner_surfaces s
          LEFT JOIN engagement_sources es ON es.surface_id = s.id
          LEFT JOIN engagements e ON e.id = es.engagement_id AND e.partner_id = s.partner_id
+         LEFT JOIN engagement_invoices inv ON inv.engagement_id = e.id
         WHERE s.partner_id = ?
         GROUP BY s.id
         ORDER BY COUNT(es.id) DESC, s.name`,
@@ -125,8 +132,17 @@ partnerOffers.get('/visibility', async (c) => {
         kind: r.kind,
         is_active: !!r.is_active,
         engagement_count: Number(r.engagement_count || 0),
+        // WON IS ACCEPTED WORK THAT WAS NOT CANCELLED (#4696). It summed every
+        // attributed engagement's price, cancelled included, under a heading
+        // that says Won. The amount is the accepted quote's price copied onto
+        // the engagement, so it does not move when a catalogue entry is repriced.
+        won_count: Number(r.won_count || 0),
+        cancelled_count: Number(r.cancelled_count || 0),
         // Dollars, not cents: `engagements.price` is a grandfathered REAL.
         won_value: Number(r.won_value || 0),
+        delivered_count: Number(r.delivered_count || 0),
+        invoiced_count: Number(r.invoiced_count || 0),
+        paid_count: Number(r.paid_count || 0),
         // The zone's whole argument is that this column cannot be filled, so
         // the reason travels with the absence rather than being page copy that
         // could drift away from the data.
@@ -134,6 +150,10 @@ partnerOffers.get('/visibility', async (c) => {
         views_note: 'No impression is recorded anywhere in the product, so a view count would be invented rather than measured.',
       })),
       engagement_total: total,
+      // Each column's basis travels with the figures, so a page cannot relabel
+      // a count it did not compute (#4696).
+      measures_basis: WON_MEASURE_BASIS,
+      won_note: 'Won counts accepted work that was not cancelled, at the price accepted. Cancelled engagements are counted under Engagements and under Cancelled, never under Won.',
       unattributed_count: unattributed,
       // Said as a count with a sentence rather than folded into a percentage.
       // A conversion rate over a denominator that is missing a quarter of its
@@ -283,7 +303,7 @@ partnerOffers.get('/attribution', async (c) => {
               s.id AS surface_id, s.name AS surface_name
          FROM engagements e
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
          LEFT JOIN engagement_sources es ON es.engagement_id = e.id
          LEFT JOIN partner_surfaces s ON s.id = es.surface_id
         WHERE e.partner_id = ?
@@ -387,7 +407,7 @@ partnerOffers.get('/proof', async (c) => {
          FROM partner_proof_items p
          LEFT JOIN engagements e ON e.id = p.engagement_id
          LEFT JOIN founder_needs n ON n.id = e.need_id
-         LEFT JOIN users f ON f.id = e.founder_id
+         LEFT JOIN founders f ON f.id = e.founder_id
         WHERE p.partner_id = ?
         ORDER BY p.created_at DESC
         LIMIT 200`,
@@ -667,6 +687,25 @@ function fitDto(r: any) {
   };
 }
 
+/**
+ * How Pipeline uses the rules — the one definition the response and the zone
+ * copy are written from. `enforcement` was `'none'` here while `scoreLead`
+ * read the same rows to score and to exclude, so the response contradicted the
+ * page beside it (#4696). Active rules only; an inactive rule is read by nothing.
+ */
+export const FIT_RULE_USE = {
+  enforcement: 'score_and_rank',
+  used_for: [
+    'A budget floor, a best-fit profile and its signal (best fit or weak intent) become receipts on a lead’s score in Pipeline · Leads.',
+    'A declined sector or an absent capability that a lead mentions marks the lead excluded: it carries your sentence and no score, and it is left out of the ranking.',
+  ],
+  not_used_for: [
+    'No lead is rejected, declined or hidden: an excluded lead is still listed, and a pass is your click and your sentence.',
+    'A qualified signal is a note you keep; scoring reads best fit and weak intent only.',
+  ],
+  note: 'Pipeline reads your active rules to score leads and to leave a lead that matches a declined sector or an absent capability out of its ranking. Nothing is auto-declined: an excluded lead stays on Leads, and passing on it is still your click.',
+} as const;
+
 partnerOffers.get('/fit-rules', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
@@ -682,10 +721,17 @@ partnerOffers.get('/fit-rules', async (c) => {
       // to replace, so the count of them is returned rather than left for the
       // reader to notice row by row.
       unstated_count: active.filter((x: any) => !x.statement).length,
-      // Nothing runs these. Said in the response so the page cannot imply
-      // otherwise while the response says nothing either way.
-      enforcement: 'none',
-      enforcement_note: 'These rules are a record a person reads before passing on a lead. Nothing scores, filters or auto-declines against them.',
+      // WHAT READS THESE, said in the response so the page cannot imply
+      // otherwise (#4696). Pipeline · Leads reads the active rules to score a
+      // lead and to leave an excluded one out of the AI ranking
+      // (`scoreLead` and `POST /leads/rank` in routes/partner_pipeline.ts).
+      // Neither declines, rejects or hides anything: an excluded lead is still
+      // listed, and passing on a lead is the firm's own click.
+      enforcement: FIT_RULE_USE.enforcement,
+      auto_decline: false,
+      used_for: FIT_RULE_USE.used_for,
+      not_used_for: FIT_RULE_USE.not_used_for,
+      enforcement_note: FIT_RULE_USE.note,
     });
   } catch (e) { return mapError(c, e); }
 });

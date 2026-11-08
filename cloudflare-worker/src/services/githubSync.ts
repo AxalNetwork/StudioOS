@@ -352,7 +352,7 @@ export function githubMirrorTarget(env: Env): { token_set: boolean; repo: string
 
 export interface GhResult { ok: boolean; status: number; data: any; error?: string }
 
-async function ghFetch(env: Env, path: string, init: RequestInit = {}): Promise<GhResult> {
+async function ghFetch(env: Env, path: string, init: RequestInit = {}, opts: { retry?: boolean } = {}): Promise<GhResult> {
   if (!githubConfigured(env)) return { ok: false, status: 0, data: null, error: 'github_not_configured' };
   const url = `https://api.github.com/repos/${env.GITHUB_REPO_OWNER}/${env.GITHUB_REPO_NAME}${path}`;
   const headers = {
@@ -363,13 +363,14 @@ async function ghFetch(env: Env, path: string, init: RequestInit = {}): Promise<
     'User-Agent': 'StudioOS-Worker',
     ...(init.headers || {}),
   };
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const tries = opts.retry === false ? 1 : 2;
+  for (let attempt = 0; attempt < tries; attempt++) {
     try {
       const resp = await fetch(url, { ...init, headers });
       const retryable = resp.status >= 500
         || (resp.status === 403 && (resp.headers.get('retry-after') || resp.headers.get('x-ratelimit-remaining') === '0'))
         || resp.status === 429;
-      if (retryable && attempt === 0) {
+      if (retryable && attempt + 1 < tries) {
         await new Promise((r) => setTimeout(r, 750));
         continue;
       }
@@ -380,7 +381,7 @@ async function ghFetch(env: Env, path: string, init: RequestInit = {}): Promise<
       }
       return { ok: true, status: resp.status, data };
     } catch (e) {
-      if (attempt === 0) { await new Promise((r) => setTimeout(r, 750)); continue; }
+      if (attempt + 1 < tries) { await new Promise((r) => setTimeout(r, 750)); continue; }
       return { ok: false, status: 0, data: null, error: `network: ${(e as Error).message}` };
     }
   }
@@ -403,6 +404,11 @@ async function ghFetch(env: Env, path: string, init: RequestInit = {}): Promise<
  * "the request was accepted", never "the branch was provisioned" — which is
  * exactly why `licence_deployments.status` starts at `requested` and moves
  * only when the run itself says so.
+ *
+ * NEVER RETRIED HERE (D4706). A dispatch that timed out or answered 5xx may
+ * still have queued a run, so sending it again is how one click becomes two
+ * runs. It is sent once; an answer that never arrived (`status: 0`) or a 5xx
+ * is an UNKNOWN outcome, which the caller settles by reading GitHub's runs.
  */
 export async function dispatchWorkflow(
   env: Env,
@@ -413,7 +419,31 @@ export async function dispatchWorkflow(
   return ghFetch(env, `/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`, {
     method: 'POST',
     body: JSON.stringify({ ref, inputs }),
-  });
+  }, { retry: false });
+}
+
+/**
+ * D4706 — the runs a `workflow_dispatch` produced, oldest first.
+ *
+ * A dispatch returns no run id, so the only way from "GitHub accepted it" to
+ * "this is the run" is to list the workflow's dispatched runs created since
+ * and match them. `createdSince` is an ISO time; GitHub's `created` filter
+ * takes `>=` with it. Read-only: needs only `actions: read`.
+ */
+export async function listDispatchedRuns(env: Env, workflowFile: string, createdSince: string): Promise<GhResult> {
+  const q = new URLSearchParams({ event: 'workflow_dispatch', created: `>=${createdSince}`, per_page: '20' });
+  const res = await ghFetch(env, `/actions/workflows/${encodeURIComponent(workflowFile)}/runs?${q}`);
+  if (!res.ok) return res;
+  const runs = Array.isArray(res.data?.workflow_runs) ? res.data.workflow_runs : [];
+  runs.sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
+  return { ...res, data: runs };
+}
+
+/** D4706 — one run's jobs: their names say which branch code the run is for. */
+export async function listRunJobs(env: Env, runId: string | number): Promise<GhResult> {
+  const res = await ghFetch(env, `/actions/runs/${encodeURIComponent(String(runId))}/jobs?per_page=10`);
+  if (!res.ok) return res;
+  return { ...res, data: Array.isArray(res.data?.jobs) ? res.data.jobs : [] };
 }
 
 export async function createIssue(env: Env, args: { title: string; body: string; labels: string[] }): Promise<GhResult> {

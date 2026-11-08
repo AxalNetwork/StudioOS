@@ -1,4 +1,5 @@
 // D4486: the real Distribution route mounts Channels; Overview hides only its moved records on desktop and phone.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

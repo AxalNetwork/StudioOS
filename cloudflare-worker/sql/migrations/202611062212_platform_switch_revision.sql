@@ -1,0 +1,11 @@
+-- D4703 (#4703): an operator switch carries a revision, so a release names the
+-- activation it means to end.
+--
+-- Release used to clear whatever throw was current. An old tab that still
+-- showed "Release" (A threw, B released, C threw again) released C's newer
+-- activation. Every throw now raises `revision` by one, and a release is
+-- refused unless it names the current revision.
+--
+-- Existing rows start at 0. The first throw after this migration makes them 1,
+-- and a row that is thrown today is released by naming 0.
+ALTER TABLE platform_switches ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;

@@ -17,6 +17,7 @@ import { mount as admin_deck_generationMount } from './admin_deck_generation';
 import { mount as admin_deck_gridMount } from './admin_deck_grid';
 import { mount as admin_deck_imagesMount } from './admin_deck_images';
 import { mount as admin_deck_stage_normsMount } from './admin_deck_stage_norms';
+import { mount as admin_governanceMount } from './admin_governance';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as admin_influencersMount } from './admin_influencers';
 import { mount as admin_persona_segment_scopesMount } from './admin_persona_segment_scopes';
@@ -49,6 +50,8 @@ import { mount as grow_channelsMount } from './grow_channels';
 import { mount as grow_distribution_askMount } from './grow_distribution_ask';
 import { mount as grow_inboxMount } from './grow_inbox';
 import { mount as grow_prospectsMount } from './grow_prospects';
+import { mount as grow_resultsMount } from './grow_results';
+import { mount as grow_sequencesMount } from './grow_sequences';
 import { mount as influencerMount } from './influencer';
 import { mount as influencer_analyticsMount } from './influencer_analytics';
 import { mount as influencer_offersMount } from './influencer_offers';
@@ -73,6 +76,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_deck_grid', mount: admin_deck_gridMount },
   { file: 'admin_deck_images', mount: admin_deck_imagesMount },
   { file: 'admin_deck_stage_norms', mount: admin_deck_stage_normsMount },
+  { file: 'admin_governance', mount: admin_governanceMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'admin_influencers', mount: admin_influencersMount },
   { file: 'admin_persona_segment_scopes', mount: admin_persona_segment_scopesMount },
@@ -105,6 +109,8 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'grow_distribution_ask', mount: grow_distribution_askMount },
   { file: 'grow_inbox', mount: grow_inboxMount },
   { file: 'grow_prospects', mount: grow_prospectsMount },
+  { file: 'grow_results', mount: grow_resultsMount },
+  { file: 'grow_sequences', mount: grow_sequencesMount },
   { file: 'influencer', mount: influencerMount },
   { file: 'influencer_analytics', mount: influencer_analyticsMount },
   { file: 'influencer_offers', mount: influencer_offersMount },

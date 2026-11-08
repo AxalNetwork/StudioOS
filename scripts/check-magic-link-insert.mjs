@@ -85,6 +85,7 @@
  *      as D78.
  */
 import { pathToFileURL } from 'node:url';
+import { probeOutcome } from './lib/probeOutcome.mjs';
 
 const HOST = (process.env.MAGIC_PROBE_HOST || 'https://axal.vc').replace(/\/+$/, '');
 const START_BUDGET_MS = Number(process.env.MAGIC_START_BUDGET_MS || 5000);
@@ -302,6 +303,14 @@ export function verdicts({ startMs, startStatus, refusal, rowFound, rowMs, sendR
 }
 
 /**
+ * #4571 R2-09: this run's outcome. It asks for a link and reads D1; it never
+ * follows the link, so its best outcome is ACCEPTED_NOT_VERIFIED.
+ */
+export function insertOutcome({ startStatus, refusal, result }) {
+  return probeOutcome({ startStatus, refusal, rows: result?.rows, endToEnd: false });
+}
+
+/**
  * Read a Cloudflare API envelope, distinguishing "cannot" from "did not".
  *
  * A 401/403 means the token lacks D1 access — the probe never ran its later
@@ -445,8 +454,10 @@ async function sendLogRow(accountId, uuid, address, sinceId) {
  * there. The arrival caveat is printed only when the run actually reached the
  * mail — after a refusal it would be answering a question nobody got to ask.
  */
-function report({ rows, ok }) {
+function report({ rows, ok }, { startStatus, refusal }) {
   const refused = rows.some((r) => r.skipped);
+  // #4571 R2-09: the one outcome this run is filed under. This probe never says VERIFIED_END_TO_END.
+  console.log(`  outcome: ${insertOutcome({ startStatus, refusal, result: { rows } })}`);
   for (const r of rows) {
     console.log(`  ${r.skipped ? '–' : r.ok ? '✓' : '✗'} ${r.key}: ${r.detail}`);
   }
@@ -509,6 +520,7 @@ async function main() {
     if (res.status === 429) {
       console.error('check-magic-link-insert: rate-limited (429). magic-start allows 3 per 900s per address.');
       console.error('  This probe and the mailbox probe share that address — widen the schedules, never the limit.');
+      console.log(`  outcome: ${probeOutcome({ startStatus: 429, refusal: null, rows: [], endToEnd: false })}`);
       process.exit(1);
     }
     if (res.status !== 202) {
@@ -536,7 +548,7 @@ async function main() {
       startMs, startStatus, refusal,
       rowFound: false, rowMs: NaN, sendRow: null, sendMs: NaN,
       startBudgetMs: START_BUDGET_MS, sendBudgetMs: SEND_BUDGET_MS,
-    }));
+    }), { startStatus, refusal });
     process.exit(1);
   }
 
@@ -578,7 +590,7 @@ async function main() {
     startMs, startStatus, refusal, rowFound, rowMs, sendRow, sendMs,
     startBudgetMs: START_BUDGET_MS, sendBudgetMs: SEND_BUDGET_MS,
   });
-  report(result);
+  report(result, { startStatus, refusal });
   if (!result.ok) process.exit(1);
 }
 

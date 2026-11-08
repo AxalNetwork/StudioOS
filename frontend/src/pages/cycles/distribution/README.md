@@ -28,11 +28,12 @@ starting ads.
 | `WaitingForYou.jsx` | D4488: venture-scoped header count, loading/empty/error states and individual or safe bulk decisions. |
 | `distributionAskModel.js` | D4488: labels, actual listed counts, exact safe kinds and recorded hold/charge copy. |
 | `InboxTab.jsx` | D4494: scoped reply threads, personal unread read, Needs-you row and the composer; only final confirmation sends. |
+| `NewsletterTab.jsx` | D4495: the Newsletter tab's not-connected state only (Connect Beehiiv disabled, 'Not offered yet'; Opens, Clicks and Unsubscribes Not recorded); makes no request until the Beehiiv connector (#2407) exists. |
 | `inboxModel.js` | D4494: recorded reply labels, local proposal text, Calendar link and existing mail confirmation/send boundary. |
 | `inbox.css` | D4494: DS8 thread columns, phone stacking and directional message bubbles using shared tokens. |
 | `ChannelsTab.jsx` | D4486: venture channel readings, existing Add/Edit forms and Ask, read-only connection cards, settings confirmation and existing tool doors. |
 | `channelsModel.js` | D4486: columns, category choices, independent state pills, UTC activity labels, safe settings actions and missing readings. |
-| `AdsTab.jsx` | D4490: budget planner, spend gaps, platform availability and creative drafts; shell integration requested from #4484. |
+| `AdsTab.jsx` | D4490: budget planner, spend gaps, platform availability and creative drafts; mounted on the Ads tab by #4741, its own creatives Ask reusing #4488/#4512's quote/run/accept contract. |
 | `adsModel.js` | D4490: slider amounts, totals and monthly chart gaps. |
 | `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
 | `CampaignDraftAsk.jsx` | Assets Ask with explicit formats and ad placements (D4488). |
@@ -52,14 +53,26 @@ starting ads.
 | `distributionStates.css` | D4496: shared state theme, phone/tablet targets and responsive Overview treatment. |
 | `useDistributionLayout.js` | D4496: reactive phone/tablet layout using the shared media hook. |
 | `useDistributionAccess.js` | D4496: existing form-options writer permission, fail closed while unknown. |
+| `SequenceBuilder.jsx` | D4493: the sequence card under Prospects: steps, blocked steps with fixed reasons, the founder's own voice note, due drafts sent only by the composer's confirmed press, enrolment, the sequence Ask, the Needs-you row and the shared due read. |
+| `ConsentByStep.jsx` | D4493: MK7b's per-prospect, per-step recorded consent table and its caption. |
+| `sequenceModel.js` | D4493: pure pills, fixed blocked reasons, 'There is no SMS step.', AI voice Not offered, subtitles, due counts and the hold line. |
+| `sequences.css` | D4493: sequence layout on the shared Distribution tokens, phone stacking. |
+| `ResultsTab.jsx` | D4491: read-only funnels, Campaigns, Attribution and Spend per channel with source chips, the window, the MRR note, skeleton and read-error card. |
+| `resultsModel.js` | D4491: Not recorded reasons, money and cost-per-lead rounding, funnel widths and the window label. |
 
 CycleRoute still owns the module page. Overview retains its charts,
-outreach draft, This week calendar summary, update-ask replies, Mercury, Notion and tool
+This week calendar summary (with D4493's STEP items), update-ask replies, Mercury, Notion and tool
 doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
 mounted D4486 tab; its table replaces Overview’s legacy channel records.
 Calendar is the D4489 tab, using the same scoped read as This week.
-Prospects is the D4492 tab. Other tabs show Coming in this module soon until
-their tasks land.
+Prospects is the D4492 tab. Ads is the D4490 tab, mounted by #4741; its
+creatives Ask reuses #4488/#4512's quote/run/accept contract, scoped to the
+selected campaign (`target: 'campaign'`), so Accept writes the creative row
+itself — AdsTab only re-reads afterwards. Results is the D4491 tab: read
+only, it writes no MRR. Newsletter is the D4495 tab, in its not-connected
+state until the Beehiiv connector exists, and it makes no request. Every tab in
+`DISTRIBUTION_TABS` now has a screen; a tab added there without one shows Coming
+in this module soon until its task lands.
 Import `ProspectsTab` for the shell's Prospects slot, with its verified venture
 id and read/write state. The wizard may call `useProspectConsentSummary` once,
 draw `ConsentSummaryView` in Audience and `reachableLabel` in Schedule. A
