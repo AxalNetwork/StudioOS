@@ -186,3 +186,46 @@ export function citationOf(item) {
     reason: has(s?.reason) ? s.reason : null,
   };
 }
+
+/**
+ * D4612 — the directory's search, filters, sort and page live in the address,
+ * so a direct link, a reload, opening a profile and Back all land on the same
+ * list. Only values that differ from `EMPTY_QUERY` are written; other
+ * parameters (`view`) are kept as they are.
+ */
+const TEXT_KEYS = ['q', 'hq_country', 'focus', 'size_band', 'vintage', 'sort'];
+export function queryFromSearch(params) {
+  const get = (k) => (typeof params?.get === 'function' ? params.get(k) : null);
+  const out = { ...EMPTY_QUERY };
+  for (const k of TEXT_KEYS) {
+    const v = get(k);
+    if (v != null && v !== '') out[k] = String(v).slice(0, 200);
+  }
+  out.eif = get('eif') === '1';
+  out.eifo = get('eifo') === '1';
+  const limit = Number(get('limit'));
+  if (Number.isInteger(limit) && limit > 0 && limit <= 100) out.limit = limit;
+  const offset = Number(get('offset'));
+  if (Number.isInteger(offset) && offset > 0) out.offset = offset;
+  return out;
+}
+
+export function searchFromQuery(query, base) {
+  const next = new URLSearchParams(base ? String(base) : '');
+  for (const k of [...TEXT_KEYS, 'eif', 'eifo', 'limit', 'offset']) next.delete(k);
+  for (const k of TEXT_KEYS) {
+    const v = String(query[k] ?? '').trim();
+    if (v && v !== EMPTY_QUERY[k]) next.set(k, v);
+  }
+  if (query.eif) next.set('eif', '1');
+  if (query.eifo) next.set('eifo', '1');
+  if (query.limit !== EMPTY_QUERY.limit) next.set('limit', String(query.limit));
+  if (query.offset) next.set('offset', String(query.offset));
+  return next;
+}
+
+/** The directory, filtered as a company profile's short list was. */
+export function directoryHref(filter = {}) {
+  const params = searchFromQuery({ ...EMPTY_QUERY, ...filter }, 'view=directory');
+  return `/research/funds?${params.toString()}`;
+}
