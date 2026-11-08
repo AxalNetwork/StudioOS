@@ -38,7 +38,9 @@ test('Build\'s cycle pages take labRoles, as Validate\'s do', () => {
 test('a Lab founder whose account role is not founder lands on the overview, not the editor\'s redirect', () => {
   const landing = routes.match(/const founderBuildLanding = ([^;]+);/);
   assert.ok(landing);
-  const decide = new Function('effectiveRole', 'user', 'location', `return ${landing[1]};`);
+  // D4473: `holds(licence)` is the held set; a single-licence session holds exactly its own role.
+  const run = new Function('effectiveRole', 'user', 'location', 'holds', `return ${landing[1]};`);
+  const decide = (role, user, location) => run(role, user, location, (licence) => licence === role);
   const at = { search: '' };
   assert.equal(decide('exploring', { spinout_lab_active: 1 }, at), true, 'a Lab member opens the Build overview');
   assert.equal(decide('founder', { spinout_lab_active: 0 }, at), true, 'a founder still does');

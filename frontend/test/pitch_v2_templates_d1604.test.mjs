@@ -183,7 +183,7 @@ test('the route: lazy, behind the studio\'s boundary; the home\'s Browse templat
   assert.ok(at > 0);
   const route = app.slice(at, app.indexOf('/>)} />', at));
   assert.match(route, /labRoles\(\['admin', 'founder', 'advisor', 'partner', 'exploring'\]\)/);
-  assert.match(route, /effectiveRole === 'exploring'\) && user\?\.spinout_lab_active !== 1\s*\? <PitchBoundary role=\{effectiveRole\} \/>/);
+  assert.match(route, /effectiveRole === 'exploring'\) && !holds\('founder'\) && user\?\.spinout_lab_active !== 1\s*\? <PitchBoundary role=\{effectiveRole\} \/>/);
   const home = codeOnly(read(`${PITCH}/StudioHome.jsx`));
   assert.match(home, /\{ id: 'templates', label: 'Browse templates ›', line: 'Start from a template, by stage and audience', to: TEMPLATES_PATH \}/);
   // The store's apply runs no model, so the gallery presses no rail option; New deck's method start keeps it.

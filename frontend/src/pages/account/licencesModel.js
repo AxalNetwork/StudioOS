@@ -5,7 +5,9 @@
  * and `plan`, and `addable[]`, each `how: 'contact'` in this build. A value the Worker did not record is drawn as
  * "Not recorded", never as a guess, and a failed read is one fixed sentence, never the error text.
  */
-export const NOT_RECORDED = 'Not recorded';
+import { NOT_RECORDED } from '../../lib/absence.js';
+
+export { NOT_RECORDED };
 export const READ_FAILED = 'Your licences could not be read. Reload the page to try again.';
 export const CONTACT_TO_ADD = 'Contact Axal VC to add this licence';
 

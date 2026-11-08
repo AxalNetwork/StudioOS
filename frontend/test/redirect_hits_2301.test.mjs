@@ -142,7 +142,7 @@ test('D1160: a role\'s forward is counted by the forward itself, never by the ad
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
   for (const path of ['/funds', '/funds/performance']) {
     const line = app.split('\n').find((l) => l.includes(`<Route path="${path}" element=`));
-    assert.match(line, /effectiveRole === 'investor' \? [\s\S]+ : <FundOpsRedirect \/>\)\} \/>$/, path);
+    assert.match(line, /holds\('investor'\) \? [\s\S]+ : <FundOpsRedirect \/>\)\} \/>$/, path);
   }
   const { default: FundOpsRedirect } = await import('../src/pages/admin/fundAdmin/FundOpsRedirect.jsx');
   const { MemoryRouter, Routes, Route } = await import('react-router-dom');
@@ -167,7 +167,7 @@ test('D1243: /deals/pipeline and an investor\'s /pipeline land on Deal flow\'s t
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
   assert.equal(app.includes('<Route path="/deals/pipeline"'), false);
   const line = app.split('\n').find((l) => l.includes('<Route path="/pipeline" element='));
-  assert.match(line, /effectiveRole === 'partner' \? <PartnerBucketRoutes \/> : effectiveRole === 'investor' \? <DealsPipelineRedirect countAs="\/pipeline" \/> : investorWorkspace\('deals', <PipelineWorkspace \/>\)/,
+  assert.match(line, /holds\('partner'\) \? <PartnerBucketRoutes \/> : holds\('investor'\) \? <DealsPipelineRedirect countAs="\/pipeline" \/> : investorWorkspace\('deals', <PipelineWorkspace \/>\)/,
     'the partner keeps the bucket, the founder and an admin the board, and only an investor forwards');
   const { pipelineMovedHref } = await import('../src/pages/investor/dealflow/dealFlowModel.js');
   assert.equal(pipelineMovedHref(''), '/deals?view=table');

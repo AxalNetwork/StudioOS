@@ -30,7 +30,8 @@ export const LICENCE_ROWS = Object.freeze({
 /** The fixed bottom, for every member. */
 const FOOT = Object.freeze(['/trust/me', '/network', '/research']);
 /** Never in this sidebar, for any licence (rule 4). */
-const NEVER_TO = Object.freeze(['/portfolio', '/account/portfolio', '/account/companies']);
+// (The retired `/account/companies…` addresses are not a row in any block, so they cannot be taken; #4736.)
+const NEVER_TO = Object.freeze(['/portfolio', '/account/portfolio']);
 const NEVER_LABEL = Object.freeze(['Portfolio', 'Companies']);
 
 /** Whether a value is one of the four licences. */

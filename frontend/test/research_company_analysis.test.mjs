@@ -156,7 +156,7 @@ test('/build/competitors redirects with its ?id=, and stays only where nothing r
   assert.match(route, /replace/);
   // Partner and investor are not admitted by /research/companies, so a redirect
   // would lock them out of a page they can use today.
-  assert.match(route, /effectiveRole === 'partner' \|\| effectiveRole === 'investor'\s*\?\s*founderWorkspace\('research', <CompetitorAnalysisPage \/>\)/);
+  assert.match(route, /\(effectiveRole === 'partner' \|\| effectiveRole === 'investor'\) && !holds\('founder'\)\s*\?\s*founderWorkspace\('research', <CompetitorAnalysisPage \/>\)/);
 });
 
 test('no fixture from the canvas reaches the page', () => {

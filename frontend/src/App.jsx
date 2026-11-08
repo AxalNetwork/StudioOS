@@ -790,7 +790,7 @@ function getSidebarGroups(role, primaryPersonaId, user, hqView = true, heldLicen
   // passes the single previewed licence, or the impersonated member's set.
   const shell = shellRoleFor(role, user, hqView);
   const licenceGroup = isLicence(shell) ? buildLicenceSidebar(heldLicences || [role], { primaryRole: role }) : null;
-  const base = licenceGroup ? [licenceGroup] : (SIDEBAR_GROUPS[shell] || SIDEBAR_GROUPS.founder);
+  const base = licenceGroup ? [licenceGroup] : (SIDEBAR_GROUPS[shellRoleFor(role, user, hqView)] || SIDEBAR_GROUPS.founder);
   // D4289 P7 (#4296): "Influencer" for an admitted influencer (`/me`'s `influencer_active`), in whichever
   // shell they are in; beside `withDiligenceRow`, which ProtectedLayout applies to this list.
   const withRow = (list) => withInfluencerRow(list, shellRoleFor(role, user, hqView), influencerActiveOf(user));

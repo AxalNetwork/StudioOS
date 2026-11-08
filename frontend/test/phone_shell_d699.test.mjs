@@ -99,7 +99,7 @@ test('#2297: the More page is gone; More opens the drawer, and Email is an accou
   assert.ok(!existsSync(resolve('frontend/src/pages/MorePage.jsx')), 'MorePage.jsx is back');
   const app = read('frontend/src/App.jsx');
   assert.doesNotMatch(app, /path="\/more"/);
-  assert.match(app, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/);
+  assert.match(app, /<MobileTabBar role=\{shellRole\} held=\{isLicence\(shellRole\) \? heldLicences : null\} groups=\{isLicence\(shellRole\) \? sidebarGroups : null\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/);
   // The drawer is the sidebar, persona extras and all (getSidebarGroups), so More's rows are all in it.
   assert.match(app, /<SidebarNav groups=\{sidebarGroups\}/);
   const plan = mobilePlan('founder');
@@ -250,7 +250,7 @@ test('D699 the recorder sends a founder\'s visit, and never an operator\'s (test
   assert.deepEqual(await visitsSent({ role: 'founder', record: true }, { support: true }), [], 'an HQ support session');
   assert.deepEqual(await visitsSent({ role: 'investor', record: true }), [], 'not a founder');
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<CompanyVisits role=\{shellRole\} record=\{!isImpersonating && !\(isAdmin && activeRole !== 'admin'\)\} \/>/);
+  assert.match(app, /<MobileTabBar role=\{shellRole\} held=\{isLicence\(shellRole\) \? heldLicences : null\} groups=\{isLicence\(shellRole\) \? sidebarGroups : null\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<CompanyVisits role=\{shellRole\} record=\{!isImpersonating && !\(isAdmin && activeRole !== 'admin'\)\} \/>/);
 });
 
 const ada = { id: 7, name: 'Ada Quill', email: 'ada@example.test' };
