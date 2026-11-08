@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   WORKFLOW_CEILINGS, POLICY_VERSION, STARTUP_ASSESSMENT_SKILLS, STARTUP_ASSESSMENT_NOTICE,
-  assembleSections, attemptsOf, canonical, checkShape, fanOut, lateResult, planRun, readiness, resumeRefusal,
+  assembleSections, attemptsOf, canonical, checkShape, widestFanOut, lateResult, planRun, readiness, resumeRefusal,
   startupAssessment, topoOrder, validateWorkflow,
   type AgentFact, type NodeOutcome, type RunPlan, type SkillFact, type StartupNode, type ValidationContext, type WorkflowDefinition,
 } from '../src/services/agents/skillWorkflow.ts';
@@ -68,7 +68,7 @@ test('the Startup Assessment validates, in a deterministic order that puts produ
   assert.deepEqual(r.levels, [['market_research', 'financial_analysis', 'legal_compliance_review'], ['product_assessment']]);
   assert.equal(r.resolved.legal_compliance_review.skill.version, 1);
   assert.equal(r.resolved.legal_compliance_review.agent_uid, 'agent-legal_compliance_review');
-  assert.equal(fanOut(def().nodes), 3);
+  assert.equal(widestFanOut(def().nodes), 3);
 });
 
 test('topological order breaks ties by the definition order and reports every node a loop holds', () => {

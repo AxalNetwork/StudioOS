@@ -497,7 +497,7 @@ export function validateWorkflow(input: unknown, ctx: ValidationContext): Valida
   if (attempts > b.max_total_attempts) out.push({ code: 'budget_over_total', path: '$.budget.max_total_attempts', detail: { budget: 'attempts', worst_case: attempts, total: b.max_total_attempts } });
   if (worstCents > b.max_total_cost_cents) out.push({ code: 'budget_over_total', path: '$.budget.max_total_cost_cents', detail: { budget: 'cost_cents', worst_case: worstCents, total: b.max_total_cost_cents } });
   if (worstMs > b.max_run_ms) out.push({ code: 'budget_over_total', path: '$.budget.max_run_ms', detail: { budget: 'run_ms', worst_case: worstMs, total: b.max_run_ms } });
-  const fan = fanOut(def.nodes);
+  const fan = widestFanOut(def.nodes);
   if (fan > b.max_fan_out) out.push({ code: 'fan_out_exceeded', path: '$.budget.max_fan_out', detail: { fan_out: fan, budget: b.max_fan_out } });
 
   return out.length ? { ok: false, refusals: out } : { ok: true, definition: def, order, levels, resolved };
@@ -508,7 +508,7 @@ const failsOpen = (n: Pick<NodeDef, 'failure'>) => n.failure.on_failure === 'con
 /** Attempts a node may take: its own tries, and its fallback's at the same retry budget. */
 export const attemptsOf = (n: Pick<NodeDef, 'max_retries' | 'failure'>) => (1 + n.max_retries) * (n.failure.on_failure === 'fallback' ? 2 : 1);
 /** The most nodes that can start together off one point: the roots, or one node's direct dependents. */
-export function fanOut(nodes: ReadonlyArray<Pick<NodeDef, 'key' | 'depends_on'>>): number {
+export function widestFanOut(nodes: ReadonlyArray<Pick<NodeDef, 'key' | 'depends_on'>>): number {
   let most = nodes.filter((n) => !n.depends_on.length).length;
   for (const n of nodes) most = Math.max(most, nodes.filter((m) => m.depends_on.includes(n.key)).length);
   return most;
