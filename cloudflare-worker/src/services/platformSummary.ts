@@ -18,6 +18,8 @@
  * eleven, so `Promise.all` over them is bounded by construction.
  */
 import type { Env } from '../types';
+import { readMeta, laterOf, type OperationalReadMeta } from '../util/operationalRead';
+import { buildHealth, readCronStreaks, readTelemetryHealth, readWebhookHealth, type HealthInput } from './platformHealth';
 import { readWebhookDeliveries } from './stripeWebhookDeliveries';
 import { CRON_TRIGGERS, STALE_GRACE_MINUTES, latestRunPerTrigger, triggerState } from '../util/cronHistory';
 import { dlqDepth } from './deadLetters';
@@ -27,7 +29,7 @@ import { xClientConfigured } from './xClient';
 import { MANAGED_PROVIDERS, keyStateOf, readProviderKeyLastSet, readProviderKeyStatus } from './providerOauthKeys';
 import { githubMirrorTarget } from './githubSync';
 import { readRecentSyncAttempts, readTicketSync } from './supportQueues';
-import { getPublishableKey, maskPublishableKey, publishableKeyMode, readCatalogMirrorSummary } from './catalog';
+import { getPublishableKey, maskPublishableKey, publishableKeyMode, readCatalogMirrorSummary, CATALOG_SYNC_CAPABILITY } from './catalog';
 import { promoState, readProductIds } from './promos';
 
 export { STRIPE_WEBHOOK_PATH, WEBHOOK_WINDOW_HOURS } from './stripeWebhookDeliveries';
@@ -465,6 +467,10 @@ export type PlatformSummaryReaders = {
   github_sync: (env: Env) => Promise<unknown>;
   payments_catalog: (env: Env) => Promise<unknown>;
   promo_codes: (env: Env) => Promise<unknown>;
+  /** D4854: the signals health is judged from, beside the panels above. */
+  cron_streaks: (env: Env) => Promise<unknown>;
+  webhook_health: (env: Env) => Promise<unknown>;
+  telemetry: (env: Env) => Promise<unknown>;
 };
 
 export const PLATFORM_SUMMARY_READERS: PlatformSummaryReaders = {
@@ -479,6 +485,9 @@ export const PLATFORM_SUMMARY_READERS: PlatformSummaryReaders = {
   github_sync: readGithubSummary,
   payments_catalog: readPaymentsSummary,
   promo_codes: (env) => readPromoSummary(env),
+  cron_streaks: (env) => readCronStreaks(env),
+  webhook_health: readWebhookHealth,
+  telemetry: (env) => readTelemetryHealth(env),
 };
 
 /** Each block's answer when its reader fails or times out: its own shape, `available: false`, and why. */
@@ -505,7 +514,105 @@ function fallbacks(env: Env): Record<keyof PlatformSummaryReaders, (w: 'failed' 
       storefront_note: STOREFRONT_NOTE,
     }),
     promo_codes: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The promo code mirror')(w) }),
+    cron_streaks: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The recent runs of each scheduled job')(w) }),
+    webhook_health: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The webhook delivery streak')(w) }),
+    telemetry: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The telemetry probe')(w) }),
   };
+}
+
+// ── D4858: each panel's read, in one shape ─────────────────────────────────
+// The blocks keep their own fields (the page reads them); `reads` says, for each, the common part: ready, partial
+// or unavailable, when it was read, when its source last changed where the source keeps that, and where it came from.
+
+/** Where each panel's figures come from. */
+export const PLATFORM_READ_SOURCES: Record<keyof PlatformSummaryReaders, string> = {
+  integrations: 'integrations (D1)',
+  jobs: 'cron_run_history (D1), against the declared cron triggers',
+  dlq: 'the two dead-letter tables (D1)',
+  incidents: 'status_incidents (D1), the published status page',
+  telegram: 'telegram_channels and telegram_posts (D1); the bot token is a Worker secret',
+  x: 'x_accounts (D1); the client is a Worker secret',
+  switches: 'the platform switches store',
+  integration_keys: 'the managed key table (D1), Worker secrets and the key console audit',
+  github_sync: 'the Support ticket mirror attempts (D1)',
+  payments_catalog: CATALOG_SYNC_CAPABILITY.source + '; the Stripe webhook request log',
+  promo_codes: 'promo_codes (D1), the Stripe promotion code mirror',
+  cron_streaks: 'cron_run_history (D1), the latest runs of each declared trigger',
+  webhook_health: 'activity_logs (D1), the Stripe webhook\'s request log',
+  telemetry: 'Analytics Engine, through its SQL API',
+};
+
+type Block = Record<string, unknown> | null | undefined;
+const obj = (v: unknown): Block => (v && typeof v === 'object' ? (v as Record<string, unknown>) : null);
+const answered = (b: Block) => !!b && b.available !== false;
+const reasonOf = (b: Block) => (b && typeof b.reason === 'string' ? b.reason : null);
+const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+
+/** One panel's meta, from its block. Composite panels are partial when one of their parts could not be read. */
+export function blockReadMeta(key: keyof PlatformSummaryReaders, value: unknown, readAt: string): OperationalReadMeta {
+  const b = obj(value);
+  const source = PLATFORM_READ_SOURCES[key];
+  const base = { read_at: readAt, source };
+  switch (key) {
+    case 'github_sync': {
+      const parts = [obj(b?.window), obj(b?.recent)];
+      const up = parts.filter(answered);
+      const down = parts.find((p) => !answered(p));
+      return readMeta({ ...base, answered: up.length > 0, complete: up.length === parts.length, reason: reasonOf(down ?? null) });
+    }
+    case 'payments_catalog': {
+      const catalog = obj(b?.catalog);
+      const webhook = obj(b?.webhook);
+      const parts = [catalog, webhook];
+      const up = parts.filter(answered);
+      const down = parts.find((p) => !answered(p));
+      const catalogPartial = answered(catalog) && catalog?.complete === false;
+      return readMeta({
+        ...base,
+        answered: up.length > 0,
+        complete: up.length === parts.length && !catalogPartial,
+        reason: reasonOf(down ?? null)
+          ?? (catalogPartial ? 'Some catalogue rows have a price list that could not be read, so the price counts are not the whole catalogue.' : null),
+        source_updated_at: answered(catalog) ? str(catalog?.last_written_at) : null,
+      });
+    }
+    case 'integration_keys': {
+      const partial = answered(b) && (b?.db_readable === false || b?.last_set_available === false);
+      return readMeta({
+        ...base,
+        answered: answered(b),
+        complete: !partial,
+        reason: reasonOf(b) ?? (b?.db_readable === false ? str(b?.db_reason) : b?.last_set_available === false ? str(b?.last_set_reason) : null),
+      });
+    }
+    case 'jobs': {
+      const triggers = Array.isArray(b?.triggers) ? (b!.triggers as Record<string, unknown>[]) : [];
+      const latest = triggers.reduce<string | null>((acc, t) => laterOf(acc, str(t.last_finished_at) ?? str(t.last_started_at)), null);
+      return readMeta({ ...base, answered: answered(b), reason: reasonOf(b), source_updated_at: latest });
+    }
+    case 'telegram': {
+      const channels = Array.isArray(b?.channels) ? (b!.channels as Record<string, unknown>[]) : [];
+      const latest = channels.reduce<string | null>((acc, ch) => laterOf(acc, str(ch.last_sent_at)), null);
+      return readMeta({ ...base, answered: answered(b), reason: reasonOf(b), source_updated_at: latest });
+    }
+    case 'telemetry': {
+      const st = typeof b?.status === 'string' ? b.status : null;
+      return readMeta({
+        ...base,
+        answered: st === 'healthy' || st === 'stale',
+        complete: st !== 'stale',
+        reason: str(b?.reason),
+        source_updated_at: str(b?.last_event_at),
+      });
+    }
+    default:
+      return readMeta({
+        ...base,
+        answered: answered(b),
+        complete: typeof b?.complete === 'boolean' ? b.complete : undefined,
+        reason: reasonOf(b),
+      });
+  }
 }
 
 /**
@@ -517,6 +624,8 @@ export async function readPlatformSummary(env: Env, { readers = PLATFORM_SUMMARY
   const keys = Object.keys(readers) as (keyof PlatformSummaryReaders)[];
   const answers = await Promise.all(keys.map((k) => settle(() => readers[k](env), fb[k], deadlineMs)));
   const got = Object.fromEntries(keys.map((k, i) => [k, answers[i]])) as Record<keyof PlatformSummaryReaders, unknown>;
+  const readAt = new Date().toISOString();
+  const reads = Object.fromEntries(keys.map((k) => [k, blockReadMeta(k, got[k], readAt)])) as Record<keyof PlatformSummaryReaders, OperationalReadMeta>;
   return {
     integrations: got.integrations,
     jobs: got.jobs,
@@ -531,5 +640,18 @@ export async function readPlatformSummary(env: Env, { readers = PLATFORM_SUMMARY
     // sentence saying no operator store existed; the store exists, and the writable entry in `switches` says what it
     // holds. A refusal nothing reads would be a producer with no reader, so the pair is gone rather than flipped.
     switches: got.switches,
+    // D4858 — each panel's read state, source and times, in one shape, keyed as the readers are.
+    reads,
+    // D4854 — one health state and the incidents the platform detects, published incidents kept apart.
+    health: buildHealth({
+      jobs: got.jobs as HealthInput['jobs'],
+      cron: got.cron_streaks as HealthInput['cron'],
+      dlq: got.dlq as HealthInput['dlq'],
+      webhook: got.webhook_health as HealthInput['webhook'],
+      telemetry: got.telemetry as HealthInput['telemetry'],
+      published: got.incidents as HealthInput['published'],
+      stripe_configured: !!env.STRIPE_SECRET_KEY,
+      now: new Date(readAt),
+    }),
   };
 }
