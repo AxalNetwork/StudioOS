@@ -188,7 +188,14 @@ registerAcceptor({
     const direction = body.direction;
     if (direction !== 'supports' && direction !== 'contradicts') throw new AcceptRefused(400, 'direction_required', 'Say whether it supports or contradicts the hypothesis.');
     try {
-      const ex = await addExperiment(env, { projectId: ctx.projectId, userId: ctx.userId, hypothesisId, title: String(p.title || 'PostHog experiment'), method: 'PostHog experiment', target: typeof p.flag === 'string' ? `Flag ${p.flag}` : null });
+      // `sourceProposalId: row.id` (D4627, #4627): this PostHog proposal's
+      // own id, so a retry after `addEvidence` fails (or after the
+      // coordinator's final write fails) lands `addExperiment` on the SAME
+      // row instead of creating a second orphan experiment. `addEvidence`
+      // is already an upsert on (hypothesis_id, kind, ref_id), so calling it
+      // again with the same experiment id is itself a no-op repeat, not a
+      // second link.
+      const ex = await addExperiment(env, { projectId: ctx.projectId, userId: ctx.userId, hypothesisId, title: String(p.title || 'PostHog experiment'), method: 'PostHog experiment', target: typeof p.flag === 'string' ? `Flag ${p.flag}` : null, sourceProposalId: row.id });
       await addEvidence(env, { projectId: ctx.projectId, userId: ctx.userId, hypothesisId, kind: 'experiment', ref_id: String(ex.id), direction, strength: 'measured' });
       return { target_ref: `hypothesis_experiments:${ex.id}` };
     } catch (e) { return refuse(e); }

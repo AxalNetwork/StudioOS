@@ -66,6 +66,20 @@ type BookingWithSlotRow = BookingRow & {
 function bookingDto(b: BookingWithSlotRow): any {
   return { ...b, is_cancelled: undefined };
 }
+/**
+ * #4715 — a booking as its founder reads it. The meeting link is the
+ * partner's slot URL; the founder holds it once the partner has confirmed
+ * (or the session is done), the same rule as the slot read. Before that, and
+ * after a cancel or a no-show, the row says only whether a link exists.
+ */
+const LINK_HELD = new Set(['confirmed', 'completed']);
+function founderBookingDto(b: BookingWithSlotRow): any {
+  const dto = bookingDto(b);
+  const has = !!b.meeting_url;
+  if (LINK_HELD.has(String(b.status))) return { ...dto, has_meeting_link: has };
+  const { meeting_url: _url, ...rest } = dto;
+  return { ...rest, has_meeting_link: has };
+}
 
 async function takenForSlot(env: Env, slotId: number): Promise<number> {
   const row = await env.DB.prepare(
@@ -217,7 +231,6 @@ r.post('/slots/:id/book', async (c) => {
       const rowId = Number((ins as any).meta?.last_row_id);
       const slotStart = slot.starts_at;
       const slotEnd = slot.ends_at;
-      const meetingUrl = slot.meeting_url || null;
       const topic = (body.topic || '').toString().slice(0, 200);
       const notes = (body.notes || '').toString().slice(0, 2000);
       const syncP = (async () => {
@@ -247,7 +260,9 @@ r.post('/slots/:id/book', async (c) => {
             status: 'pending',
             ics_status: 'TENTATIVE' as const,
             location_kind: 'video',
-            location_uri: meetingUrl,
+            // #4715: the link goes out with the confirmation
+            // (deferCalendarConfirm), not with the request.
+            location_uri: null,
             organizer_email: partnerRow?.email || partnerOwnerEmail,
             attendees: [
               { email: partnerRow?.email || partnerOwnerEmail, name: partnerRow?.company || null, role: 'partner' },
@@ -315,7 +330,7 @@ r.get('/bookings/me', async (c) => {
     const rows = status
       ? await c.env.DB.prepare(sql).bind(user.id, status).all<BookingWithSlotRow>()
       : await c.env.DB.prepare(sql).bind(user.id).all<BookingWithSlotRow>();
-    return c.json({ items: (rows.results || []).map(bookingDto) });
+    return c.json({ items: (rows.results || []).map(founderBookingDto) });
   } catch (e) { return mapError(c, e); }
 });
 

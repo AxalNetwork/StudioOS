@@ -14,8 +14,8 @@ import OneClickBuild, { FreshnessLines, ProposalReview } from './OneClickBuild';
 import { CoverageMeter, SourcesStep, useDeckSources } from './SourcesBoards';
 import { EDIT_PATH, READ_ONLY, STUDIO_PATH, asList, isReadOnly, ventureQuery } from './pitchStudioModel';
 import {
-  MESSAGE_HINT, MESSAGE_LABEL, MESSAGE_MAX, NOT_ON_STUDIOOS, NO_ROUND, PROPOSED_BY_EADWYN, RELOAD_LATEST, ROUND_LINK, addRow, aiTokens,
-  buildSentence, chipsFor, editRow, estimateLine, fastBrief, moveRow, outlineSentence, refusalOf, removeRow, roundLine, rowWarning, startOptions, withBase,
+  MESSAGE_HINT, MESSAGE_LABEL, MESSAGE_MAX, NOT_ON_STUDIOOS, NO_ROUND, PRICE_RETRY, PROPOSED_BY_EADWYN, RELOAD_LATEST, ROUND_LINK, addRow, aiTokens,
+  buildSentence, canConfirm, chipsFor, editRow, estimateLine, fastBrief, moveRow, outlineSentence, priceNote, priceState, quoteUidOf, refusalOf, removeRow, roundLine, rowWarning, startOptions, withBase,
 } from './newDeckModel';
 import { ONE_CLICK_LINE, ONE_CLICK_TITLE, audienceLabel, buildingLine } from './oneClickModel';
 import { templateStartLine, templateSentence } from './templatesModel';
@@ -178,13 +178,13 @@ function Refusal({ refusal }) {
 }
 
 /** The dialog every run opens: what it does and holds, then Confirm or Cancel; a build shows its progress while it runs. */
-function Confirm({ title, sentence, action, hold = null, busy, progress = null, announce = null, onConfirm, onClose }) {
+function Confirm({ title, sentence, action, hold = null, ready = true, onReprice = null, busy, progress = null, announce = null, onConfirm, onClose }) {
   return (
     <Lightbox label={title} title={title} width={540} onClose={() => !busy && onClose()} testId="pitch-new-dialog"
       footer={busy && progress ? null : (
         <div className="flex justify-end gap-2">
           <button type="button" className={GHOST} onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="button" className={PRIMARY} onClick={onConfirm} disabled={busy} data-testid="pitch-new-confirm">{busy ? 'Working…' : action}</button>
+          <button type="button" className={PRIMARY} onClick={onConfirm} disabled={busy || !ready} data-testid="pitch-new-confirm">{busy ? 'Working…' : action}</button>
         </div>
       )}>
       {/* The build's live region, mounted empty with the dialog and filled when the build starts. */}
@@ -193,6 +193,7 @@ function Confirm({ title, sentence, action, hold = null, busy, progress = null, 
         <div className="flex flex-col gap-2">
           <p className={`m-0 ${MUTED}`}>{sentence}</p>
           {hold ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-new-dialog-hold">{hold}</span> : null}
+          {!ready && onReprice ? <button type="button" className={GHOST} onClick={onReprice} data-testid="pitch-new-reprice">{PRICE_RETRY}</button> : null}
         </div>
       )}
     </Lightbox>
@@ -268,7 +269,10 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
   const [outlineId, setOutlineId] = useState(outlineProposal?.id ?? null);
   // D897 §9 (#3659): the outline proposal as this page read it; Build sends it back.
   const [outlineHash, setOutlineHash] = useState(outlineProposal?.proposal_hash ?? null);
-  const [quote, setQuote] = useState({ outline: null, build: null });
+  // D4597 (#4597): each price is a state (loading, unavailable, free, metered, stale); a missing quote is never "free".
+  const [quote, setQuote] = useState({ outline: { status: 'loading' }, build: { status: 'loading' } });
+  const pOutline = priceState(quote.outline);
+  const pBuild = priceState(quote.build);
   const [dialog, setDialog] = useState(null);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
@@ -291,35 +295,51 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
   const body = (extra = {}) => ({ project_id: projectId, audience, length, round_ref: ctx?.round?.uid ?? null, ...extra });
 
   // A quote is a read: it answers what the next run would hold, and runs nothing.
+  // It prices exactly what the run will send (venture, step, audience, length, round, outline, exclusions), and the old
+  // quote is dropped the moment any of them changes: a quote for other inputs is never offered for these.
+  const roundRef = ctx?.round?.uid ?? null;
   const refreshQuote = useCallback(async (which, extra = {}) => {
     if (!audience || !length) return;
+    setQuote((old) => ({ ...old, [which]: { status: 'loading' } }));
     try {
-      const qt = await newDeckApi.quote({ project_id: projectId, step: which, audience, length, ...extra });
-      setQuote((old) => ({ ...old, [which]: qt }));
+      const qt = await newDeckApi.quote({ project_id: projectId, step: which, audience, length, round_ref: roundRef, ...extra });
+      setQuote((old) => ({ ...old, [which]: { status: 'ok', quote: qt } }));
     } catch (e) {
-      setQuote((old) => ({ ...old, [which]: null }));
+      setQuote((old) => ({ ...old, [which]: { status: 'failed', message: refusalOf(e)?.message || null } }));
       if (e?.code === 'figure_in_prompt') setRefusal(refusalOf(e));
     }
-  }, [projectId, audience, length]);
+  }, [projectId, audience, length, roundRef]);
 
   useEffect(() => { refreshQuote('outline'); }, [refreshQuote]);
   useEffect(() => {
+    // No outline, no build to price: the old quote is dropped, not kept for rows it never priced.
     if (rows.length) refreshQuote('build', { outline: rows, exclude });
+    else setQuote((old) => ({ ...old, build: { status: 'failed' } }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshQuote, rows, exclude.join(',')]);
 
   const run = async (fn, option = null) => {
     setBusy(true); setRefusal(null); setRunning(option); setStartedAt(option === 'build' ? Date.now() : null);
-    try { await fn(); setDialog(null); } catch (e) { setRefusal(refusalOf(e)); setDialog(null); reportError('pitch-new:write', e); } finally { setBusy(false); setRunning(null); setStartedAt(null); }
+    try { await fn(); setDialog(null); } catch (e) {
+      const why = refusalOf(e);
+      setRefusal(why); setDialog(null); reportError('pitch-new:write', e);
+      // A stale or missing quote: the price is read again and the dialog asks again; nothing is re-sent on its own.
+      if (why?.code === 'quote_stale' || why?.code === 'quote_required') {
+        setQuote((old) => ({ ...old, [option === 'outline' ? 'outline' : 'build']: { status: 'stale' } }));
+        if (option === 'outline') refreshQuote('outline'); else refreshQuote('build', { outline: rows, exclude });
+      }
+    } finally { setBusy(false); setRunning(null); setStartedAt(null); }
   };
 
   const proposeOutline = () => run(async () => {
-    const r = await newDeckApi.outline(body({ start: start.kind === 'version' ? { kind: 'version', deck_id: start.id } : { kind: 'blank' } }), railPressHeaders(RAIL.outline));
+    if (!canConfirm(pOutline)) return;
+    const r = await newDeckApi.outline(body({ start: start.kind === 'version' ? { kind: 'version', deck_id: start.id } : { kind: 'blank' }, ...(quoteUidOf(pOutline) ? { quote_uid: quoteUidOf(pOutline) } : {}) }), railPressHeaders(RAIL.outline));
     setOutlineId(r.proposal?.id ?? null); setOutlineHash(r.proposal_hash ?? null); setRows(r.outline.rows); setTouched(true); setProposedBy(r.outline.proposed_by); setReason(r.outline.reason || null);
   }, 'outline');
 
   const buildDeck = () => run(async () => {
-    const r = await newDeckApi.build(withBase(body({ proposal_id: outlineId ?? undefined, outline: rows, exclude }), outlineId != null ? outlineHash : null), railPressHeaders(RAIL.build));
+    if (!canConfirm(pBuild)) return;
+    const r = await newDeckApi.build(withBase(body({ proposal_id: outlineId ?? undefined, outline: rows, exclude, ...(quoteUidOf(pBuild) ? { quote_uid: quoteUidOf(pBuild) } : {}) }), outlineId != null ? outlineHash : null), railPressHeaders(RAIL.build));
     onLanded(r);
   }, 'build');
 
@@ -330,7 +350,7 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
 
   const options = markRecommended(startOptions(versions, methods.data?.methods || []), recommended.data);
   const standard = standardRows(ctx, length);
-  const estimate = estimateLine(quote.build, ctx.averages?.build);
+  const estimate = estimateLine(pBuild, ctx.averages?.build);
   const warning = rowWarning(rows);
   const stagePlan = availability('stagePlan');
   const reorder = availability('outlineReorder');
@@ -452,8 +472,8 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
               {reorder && reorder.available !== true ? <span className="font-mono text-[10px] text-axal-muted dark:text-gray-500">{LATER}</span> : null}
             </span>
             <button type="button" className={GHOST} disabled={!audience || !length} data-testid="pitch-new-regenerate"
-              onClick={() => setDialog({ title: 'Regenerate outline', action: quote.outline?.ai ? `Regenerate · ${aiTokens(quote.outline.hold_microusd)}` : 'Regenerate', sentence: outlineSentence(quote.outline, proposedBy === 'Eadwyn'), hold: quote.outline?.ai ? HOLD(aiTokens(quote.outline.hold_microusd)) : null, go: proposeOutline })}>
-              Regenerate outline{quote.outline?.ai ? ` · ${aiTokens(quote.outline.hold_microusd)}` : ''}
+              onClick={() => setDialog({ which: 'outline' })}>
+              Regenerate outline{pOutline.kind === 'metered' ? ` · ${aiTokens(pOutline.hold)}` : ''}
             </button>
           </span>
         </div>
@@ -491,17 +511,27 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
         <div className="flex flex-wrap items-center justify-end gap-3">
           {estimate ? <span className={MUTED} data-testid="pitch-new-estimate">{estimate}</span> : null}
           <button type="button" className={PRIMARY} disabled={!rows.length || Boolean(warning) || !audience || !length || templateStart} data-testid="pitch-new-build"
-            onClick={() => setDialog({ title: 'Build deck', action: 'Build deck', sentence: buildSentence(quote.build, rows.length), hold: quote.build?.ai ? HOLD(aiTokens(quote.build.hold_microusd)) : null, go: buildDeck, build: true })}>
+            onClick={() => setDialog({ which: 'build' })}>
             Build deck
           </button>
         </div>
       </section>
 
-      {dialog ? (
-        <Confirm {...dialog} busy={busy} onConfirm={dialog.go} onClose={() => setDialog(null)}
-          progress={dialog.build ? <BuildProgress cards={rows.length} titles={rows.map((r) => r.title)} startedAt={startedAt} /> : null}
-          announce={dialog.build ? buildingLine(rows.length) : null} />
-      ) : null}
+      {dialog ? (() => {
+        // The dialog reads the price as it is NOW, so a price that moved under it is never confirmed by an old sentence.
+        const isBuild = dialog.which === 'build';
+        const price = isBuild ? pBuild : pOutline;
+        const view = isBuild
+          ? { title: 'Build deck', action: 'Build deck', sentence: buildSentence(price, rows.length), go: buildDeck, build: true }
+          : { title: 'Regenerate outline', action: price.kind === 'metered' ? `Regenerate · ${aiTokens(price.hold)}` : 'Regenerate', sentence: outlineSentence(price, proposedBy === 'Eadwyn'), go: proposeOutline };
+        return (
+          <Confirm {...view} hold={price.kind === 'metered' ? HOLD(aiTokens(price.hold)) : null} ready={canConfirm(price)}
+            onReprice={priceNote(price) && price.kind !== 'loading' ? () => (isBuild ? refreshQuote('build', { outline: rows, exclude }) : refreshQuote('outline')) : null}
+            busy={busy} onConfirm={view.go} onClose={() => setDialog(null)}
+            progress={view.build ? <BuildProgress cards={rows.length} titles={rows.map((r) => r.title)} startedAt={startedAt} /> : null}
+            announce={view.build ? buildingLine(rows.length) : null} />
+        );
+      })() : null}
     </div>
   );
 }
