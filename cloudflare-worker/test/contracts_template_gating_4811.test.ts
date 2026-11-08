@@ -74,7 +74,7 @@ test('D4811 the predicate: restricted comes from COUNSEL_REVIEW_SLUGS, incomplet
   // Mutation checked: read only is_stub (not the trimmed body) → the blank row passes.
   assert.equal(templateUseRefusal({ slug: 'x', is_stub: 1, body_md: 'text' })?.code, 'template_has_no_body');
   assert.equal(templateUseRefusal({ slug: 'x', is_stub: 0, body_md: '  \n ' })?.code, 'template_has_no_body');
-  assert.match(templateUseRefusal({ slug: 'x', body_md: '' })!.message, new RegExp(INCOMPLETE_LINE.replace(/\./g, '\\.')));
+  assert.ok(templateUseRefusal({ slug: 'x', body_md: '' })!.message.includes(INCOMPLETE_LINE), 'the refusal carries the incomplete sentence');
   // Mutation checked: test incomplete before restricted → this is template_has_no_body.
   assert.equal(templateUseRefusal({ slug: RESTRICTED, is_stub: 1, body_md: '' })?.code, 'template_restricted', 'restricted wins');
   assert.equal(templateUseRefusal({ slug: 'x', is_stub: 0, body_md: 'text' }), null, 'a complete, reviewed template may be used');
