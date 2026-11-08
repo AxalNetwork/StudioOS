@@ -1228,8 +1228,7 @@ admin.get('/spinout-participants', async (c) => {
        LEFT JOIN projects p ON p.founder_id = u.founder_id
        WHERE usf.spinout_lab_admitted = 1
           OR u.spinout_lab_active = 1
-          OR u.id IN (SELECT user_id FROM spinout_lab_milestones
-                      WHERE milestone_key = 'incorporation_completed')
+          OR u.id IN (SELECT user_id FROM spinout_lab_graduates)
        ORDER BY u.spinout_lab_started_at ASC, u.id ASC, p.id ASC
        LIMIT ?`,
     ).bind(PARTICIPANT_ROWS).all();
