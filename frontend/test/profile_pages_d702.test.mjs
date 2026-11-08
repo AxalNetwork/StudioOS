@@ -129,7 +129,7 @@ test('9. the three /profile/* lines are founders only; /profile is You for a fou
 
 test('9. the desktop "Your profile" row is above Account, for founders only', () => {
   const menu = APP.slice(APP.indexOf('function UserDropdown('), APP.indexOf('function UserDropdown(') + 6000);
-  assert.match(menu, /\{user\?\.role === 'founder' && \(\s*<Link to="\/profile"[\s\S]{0,260}?role="menuitem">\s*Your profile\s*<\/Link>\s*\)\}\s*<Link to="\/account"/);
+  assert.match(menu, /\{held\.includes\('founder'\) && \(\s*<Link to="\/profile"[\s\S]{0,260}?role="menuitem">\s*Your profile\s*<\/Link>\s*\)\}\s*<Link to="\/account"/);
 });
 
 // --- 10. The pages at 1440 and 390 -------------------------------------------

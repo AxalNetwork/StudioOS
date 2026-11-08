@@ -117,7 +117,7 @@ write_marker() {
       --arg copy "${SOURCE}" \
       --argjson rpo_target_s "${RPO_TARGET_S}" \
       --argjson rto_target_s "${RTO_TARGET_S}" \
-      '{at: $at, outcome: $outcome, duration_s: $duration_s, source: $source, step: $step,
+      '{schema_version: 1, at: $at, outcome: $outcome, duration_s: $duration_s, source: $source, step: $step,
         exit_code: $exit_code,
         backup_key: (if $backup_key == "" then null else $backup_key end),
         run_id: (if $run_id == "" then null else $run_id end),

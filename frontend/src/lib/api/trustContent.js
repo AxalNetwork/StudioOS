@@ -20,7 +20,7 @@
 //   DELETE /api/admin/security/trust-center/subprocessors/:uid   (a draft goes; a listed one is marked for removal)
 //   POST   /api/admin/security/trust-center/subprocessors/:uid/keep
 //   POST   /api/admin/security/trust-center/reports        (the auditor's report PDF as the body) → { uid }
-//   POST   /api/admin/security/trust-center/publish        { note }  (10–1000 characters)
+//   POST   /api/admin/security/trust-center/publish        { note, pending_token, publish_key }  (note 10–1000 characters)
 // Help's Security category (`securityReportsApi`):
 //   POST  /api/help/security-reports   { affected, what_happened, how_to_reproduce? }
 //   GET   /api/help/security-reports/mine
@@ -48,7 +48,11 @@ export const trustCenterAdminApi = {
   removeSubprocessor: (uid) => request(`${TC}/subprocessors/${enc(uid)}`, { method: 'DELETE' }),
   keepSubprocessor: (uid) => request(`${TC}/subprocessors/${enc(uid)}/keep`, { method: 'POST' }),
   attachReport: (file) => request(`${TC}/reports`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' } }),
-  publish: (note) => request(`${TC}/publish`, { method: 'POST', body: JSON.stringify({ note }) }),
+  // D4675: the review token read with the drafts, and one key per Publish reused on its retries.
+  publish: (note, review) => request(`${TC}/publish`, {
+    method: 'POST',
+    body: JSON.stringify({ note, pending_token: review?.pending_token, publish_key: review?.publish_key }),
+  }),
 };
 
 export const securityReportsApi = {

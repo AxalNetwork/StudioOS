@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ShieldCheck, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { newOpKey } from '../../lib/opKey';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import SecurityTabs from './security/SecurityTabs.jsx';
@@ -106,9 +107,40 @@ const OUTCOME_INK = {
   refused: 'text-red-700 dark:text-red-300',
   'not closed': 'text-red-700 dark:text-red-300',
   live: 'text-amber-800 dark:text-amber-300',
+  unknown: 'text-amber-800 dark:text-amber-300',
   ok: 'text-axal-muted',
   ended: 'text-axal-muted',
 };
+
+/**
+ * D4691 — every actor on this page arrives in one shape (`actor_identity`,
+ * services/securityIdentity.ts) and is drawn with its kind, so a support
+ * operator never reads as the account holder, a refused attempt never reads
+ * as the account it named, and an act with no account reads as the platform
+ * rather than as a blank.
+ */
+export const IDENTITY_KIND_LABEL = {
+  user: 'account',
+  support: 'support',
+  system: 'system',
+  network: 'network',
+};
+export function identityLine(identity) {
+  if (!identity || typeof identity !== 'object') return null;
+  const kind = IDENTITY_KIND_LABEL[identity.kind] || 'unknown';
+  const behalf = identity.kind === 'support' && identity.on_behalf_of ? ` for ${identity.on_behalf_of.label}` : '';
+  return { kind, text: `${identity.label}${behalf}` };
+}
+function IdentityChip({ identity, fallback }) {
+  const line = identityLine(identity);
+  if (!line) return fallback ? <>{fallback}</> : <Unrecorded>unnamed</Unrecorded>;
+  return (
+    <span data-identity-kind={identity.kind}>
+      <span className="mr-1 rounded border border-axal-hairline px-1 text-[9px] font-bold uppercase tracking-[.05em] text-axal-faint">{line.kind}</span>
+      {line.text}
+    </span>
+  );
+}
 
 function Zone({ title, sub, children, tone = '' }) {
   return (
@@ -120,6 +152,18 @@ function Zone({ title, sub, children, tone = '' }) {
       {children}
     </Card>
   );
+}
+
+/**
+ * D4691 — the "Live support sessions" tile's note. `active` is the shared rule's
+ * `live`, the same rows the Sessions zone offers to End; an open record past
+ * its limit is counted apart, by name, never as live and never dropped.
+ */
+export function impersonationNote(imp) {
+  const nc = Number.isFinite(Number(imp?.not_closed)) ? Number(imp.not_closed) : 0;
+  return nc > 0
+    ? `token could still be valid · ${nc.toLocaleString()} open record${nc === 1 ? '' : 's'} past the limit, not live`
+    : 'token could still be valid';
 }
 
 /**
@@ -143,7 +187,19 @@ function Zone({ title, sub, children, tone = '' }) {
  * own `<Unreadable/>` above says which, and these tiles must not answer a
  * question they were not able to ask.
  */
-function AiSafety({ block }) {
+export function AiSafety({ block }) {
+  // D4691 — a rollup that could not be read is unreadable as a whole, and the
+  // token anomalies and the not-counted list (their own reads) still render.
+  if (block && block.available === false) {
+    return (
+      <div data-testid="hq-ai-safety">
+        <div data-testid="hq-ai-safety-unreadable">
+          <Unreadable what="The AI guardrail counters" claim="This is not a claim that nothing was blocked or flagged." />
+        </div>
+        <TokenAnomalies block={block.token_anomalies} />
+      </div>
+    );
+  }
   const v = block?.verdicts;
   const e = block?.enforcement;
   // `windowNote`, not `window`: a local of that name shadows the browser global
@@ -192,7 +248,15 @@ function AiSafety({ block }) {
         `safe` would be a verdict nothing reached; and the whole block is
         absent, not zeroed, when `advisor_turn_audit` could not be read.
       */}
-      {e?.available && (
+      {e?.available && e.breakdown_available === false && (
+        <div className="mt-3" data-testid="hq-ai-safety-rules-unreadable">
+          <div className="text-[11px] font-semibold text-axal-muted">What tripped the guard</div>
+          <p className="mt-1 text-[11px] text-axal-faint">
+            Unreadable — {e.breakdown_reason || 'the breakdown by rule could not be read.'} The totals above were read.
+          </p>
+        </div>
+      )}
+      {e?.available && e.breakdown_available !== false && (
         <div className="mt-3" data-testid="hq-ai-safety-rules">
           <div className="text-[11px] font-semibold text-axal-muted">What tripped the guard</div>
           {e.rules?.length ? (
@@ -366,6 +430,15 @@ export async function runSessionAct(client, kind, arg, reason) {
   throw new Error(`Unknown session act: ${kind}`);
 }
 
+/**
+ * D481's list, drawn by the Access workspace (D4801). A caller that still
+ * mounts SessionsPanel gets that workspace: the row shows the network bucket,
+ * never the address, and names a support-held session as held.
+ */
+export function SessionsPanel(props) {
+  return <AccessWorkspace unavailable={UNAVAILABLE} onRetry={() => {}} {...props} />;
+}
+
 // `unread` (D4801): an absent figure on the Access tiles is a store that could
 // not be read, so it draws the vocabulary's Unavailable, never "Not recorded"
 // and never 0. The other zones' tiles keep their words until their slice.
@@ -465,25 +538,57 @@ export function Sanctions({ block, unreadable }) {
  * own words: "stated in words rather than a green light."
  */
 export function drillSentence(drill) {
+  // D4691 — invalid is its own word: something was read, and it is not a
+  // drill marker this page can believe.
+  if (drill?.state === 'invalid') return `Invalid — ${drill.reason || 'the drill marker is not valid evidence.'}`;
   if (!drill || drill.state === 'unreadable' || drill.available === false) {
     return `Unreadable — ${drill?.reason || 'the drill marker could not be read.'}`;
   }
   if (drill.state === 'never_run') return `Never run — ${drill.reason}`;
   const when = day(drill.at) || 'an unstamped date';
+  // D4691 — a result older than its window is history, said so before the result.
+  const stale = drill.fresh === false
+    ? `Stale — older than ${drill.stale_after_days} days, so it does not vouch for recovery today. `
+    : '';
   if (drill.state === 'last_run_failed') {
     const exit = drill.exit_code === null || drill.exit_code === undefined ? 'no exit code recorded' : `exit ${drill.exit_code}`;
-    return `Last run failed on ${when}, at step ${drill.step || 'not recorded'} (${exit}).`;
+    return `${stale}Last run failed on ${when}, at step ${drill.step || 'not recorded'} (${exit}).`;
   }
   if (drill.state === 'last_run_passed') {
-    return `Last run passed on ${when}, restoring ${drill.backup_key || 'a backup it did not name'}.`;
+    const missed = [drill.rpo_met === false ? 'its recovery-point target' : null, drill.rto_met === false ? 'its recovery-time target' : null]
+      .filter(Boolean);
+    return `${stale}Last run passed on ${when}, restoring ${drill.backup_key || 'a backup it did not name'}.`
+      + (missed.length ? ` It missed ${missed.join(' and ')}.` : '');
   }
   return `Unreadable — the drill marker is in a state this page does not know (${String(drill.state)}).`;
 }
 
+/**
+ * D4691 — the export heartbeat in one sentence, by its own state. A heartbeat
+ * that is not valid evidence, or is older than its window, never reads as a
+ * recorded backup.
+ */
+export function backupSentence(b) {
+  if (!b) return 'Unreadable — the heartbeat could not be read.';
+  if (b.available === false) {
+    if (b.state === 'invalid') return `Invalid — ${b.reason}`;
+    if (b.state === 'never_written') return `Not recorded — ${b.reason}`;
+    return `Unreadable — ${b.reason || 'the heartbeat could not be read.'}`;
+  }
+  const what = `${b.kind === 'kv' ? 'KV' : 'D1'} export of ${day(b.recovery_point || b.at) || 'an unstamped time'}`;
+  if (b.fresh === false) {
+    return `Stale — the last ${what} is older than ${b.stale_after_hours} hours, so it is not a current backup.`;
+  }
+  return `Last ${what}${b.source ? ` · ${b.source}` : ''}${b.size_bytes !== null && b.size_bytes !== undefined ? ` · ${num(b.size_bytes)} bytes` : ''}.`;
+}
+
 function DrillState({ drill }) {
-  const failed = drill?.state === 'last_run_failed';
-  const passed = drill?.state === 'last_run_passed';
-  const tone = failed ? 'text-red-700 dark:text-red-300' : passed ? 'text-emerald-700 dark:text-emerald-300' : 'text-axal-muted';
+  // D4691 — a stale result is amber whatever it says: it is history, not a status.
+  const stale = drill?.fresh === false;
+  const failed = drill?.state === 'last_run_failed' || drill?.state === 'invalid';
+  const passed = drill?.state === 'last_run_passed' && !stale;
+  const tone = stale ? 'text-amber-800 dark:text-amber-300'
+    : failed ? 'text-red-700 dark:text-red-300' : passed ? 'text-emerald-700 dark:text-emerald-300' : 'text-axal-muted';
   return (
     <p className={`text-[12.5px] leading-relaxed ${tone}`} data-state={drill?.state || 'unreadable'}>
       {drillSentence(drill)}
@@ -508,15 +613,13 @@ export function BackupDr({ block, unreadable }) {
     <div className="space-y-2" data-testid="hq-backup-dr">
       <div>
         <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Nightly export</div>
-        {b?.available ? (
-          <p className="mt-0.5 text-[12px] text-axal-muted" data-testid="hq-backup-heartbeat">
-            Last {b.kind === 'd1' ? 'D1' : 'KV'} export <b className="font-mono">{day(b.at) || <Unrecorded>unstamped</Unrecorded>}</b>
-            {b.source ? ` · ${b.source}` : ''}
-            {b.size_bytes !== null && b.size_bytes !== undefined ? ` · ${num(b.size_bytes)} bytes` : ''}
+        {b?.available && b.fresh !== false ? (
+          <p className="mt-0.5 text-[12px] text-axal-muted" data-testid="hq-backup-heartbeat" data-state={b.state || 'fresh'}>
+            {backupSentence(b)}
           </p>
         ) : (
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-backup-unreadable">
-            <Unrecorded /> — {b?.reason || 'the heartbeat could not be read.'}
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-amber-800 dark:text-amber-300" data-testid={b?.available ? 'hq-backup-stale' : 'hq-backup-unreadable'} data-state={b?.state || 'unreadable'}>
+            {backupSentence(b)}
           </p>
         )}
       </div>
@@ -528,6 +631,14 @@ export function BackupDr({ block, unreadable }) {
       </div>
     </div>
   );
+}
+
+/** The write bar's refusal, in words the operator can act on (D4675 keeps it for the DSR close). */
+export function writeBarMessage(err) {
+  const msg = String(err?.message || err || 'Request failed');
+  return msg === 'TOTP required'
+    ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
+    : msg;
 }
 
 /**
@@ -548,23 +659,42 @@ export function BackupDr({ block, unreadable }) {
  * it deleted the account would be the `still_an_admin` mistake D134 named, in
  * the one place where the lie is also a compliance record.
  */
-function DsrClose({ row, onDone }) {
+export function DsrClose({ row, onDone }) {
   const [outcome, setOutcome] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // D4675 — ONE KEY PER CLOSE, resent on every retry of it, so a retry after a
+  // lost response or a step-up prompt is recorded once. A new outcome is a
+  // different close and gets a new key.
+  const [closeKey, setCloseKey] = useState(newOpKey);
+  // Set when the server recorded nothing because the request changed or was
+  // closed first: the row is out of date, and only a reload shows what is open.
+  const [outdated, setOutdated] = useState(false);
+  const choose = (next) => { setOutcome(next); setCloseKey(newOpKey()); setError(null); setOutdated(false); };
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api.hqCloseDsrRequest(row.id, outcome, reason.trim());
+      const res = await api.hqCloseDsrRequest(row.id, outcome, reason.trim(), {
+        requested_at: row.requested_at,
+        request_id: row.request_id ?? null,
+        close_key: closeKey,
+      });
+      // 202: sent, and not confirmed. The key is kept, so Try again is safe.
+      if (res?.code === 'outcome_unconfirmed') { setError(res.error); return; }
       onDone?.();
     } catch (err) {
-      const msg = String(err?.message || err || 'Request failed');
-      setError(msg === 'TOTP required'
-        ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
-        : msg);
+      if (err?.code === 'stale_request' || err?.code === 'no_open_request') {
+        setOutdated(true);
+        setError(writeBarMessage(err));
+      } else if (err?.code !== 'ledger_unavailable' && (!err?.status || err.status >= 500)) {
+        // No answer, or the server could not confirm: say unknown, not failed.
+        setError(`${writeBarMessage(err)} Whether it was recorded is not confirmed. Try again: the same close is recorded at most once.`);
+      } else {
+        setError(writeBarMessage(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -574,14 +704,14 @@ function DsrClose({ row, onDone }) {
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="hq-dsr-actions">
         <button
           type="button"
-          onClick={() => setOutcome('fulfilled')}
+          onClick={() => choose('fulfilled')}
           className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
         >
           Record as fulfilled
         </button>
         <button
           type="button"
-          onClick={() => setOutcome('denied')}
+          onClick={() => choose('denied')}
           className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
         >
           Record as denied
@@ -607,18 +737,28 @@ function DsrClose({ row, onDone }) {
           className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12px] font-normal text-axal-ink dark:bg-gray-900"
         />
       </label>
-      {error && <p role="alert" className="text-[11.5px] text-red-700 dark:text-red-300">{error}</p>}
+      {error && <p role="alert" className="text-[11.5px] text-red-700 dark:text-red-300" data-testid="hq-dsr-close-error">{error}</p>}
       <div className="flex items-center gap-1.5">
+        {outdated && (
+          <button
+            type="button"
+            onClick={() => onDone?.()}
+            className="rounded-md border border-axal-hairline bg-white px-2.5 py-1 text-[11px] font-bold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+            data-testid="hq-dsr-reload"
+          >
+            Reload requests
+          </button>
+        )}
         <button
           type="submit"
-          disabled={busy || reason.trim().length < 8}
+          disabled={busy || outdated || reason.trim().length < 8}
           className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-amber-700 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500 dark:bg-gray-900 dark:text-amber-300 dark:hover:bg-amber-950/30"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : null} Close as {outcome}
         </button>
         <button
           type="button"
-          onClick={() => { setOutcome(''); setError(null); }}
+          onClick={() => choose('')}
           className="rounded-md px-2 py-1 text-[11px] font-semibold text-axal-faint hover:text-axal-ink dark:hover:text-gray-100"
         >
           Cancel
@@ -721,8 +861,12 @@ export function SecurityConsole({
   const ready = data && data !== UNAVAILABLE;
   const imp = ready ? data.impersonations : null;
   const sessions = ready ? data.sessions : null;
-  const mfa = ready ? data.mfa : null;
-  const kyc = ready ? data.kyc || {} : {};
+  // D4691 — each of these is its own read: `available: false` is drawn as
+  // unreadable in its own tile, never as a zero or an empty list.
+  const mfa = ready && data.mfa?.available !== false ? data.mfa : null;
+  const kycReadable = ready && data.kyc_available !== false && data.kyc;
+  const kyc = kycReadable ? data.kyc : {};
+  const dsrReadable = ready && data.dsr?.available !== false;
   const dsr = ready ? data.dsr?.rows || [] : [];
   const dsrGroups = ready ? data.dsr?.by_branch || [] : [];
   const dsrBranches = ready ? data.dsr?.branches : null;
@@ -759,10 +903,7 @@ export function SecurityConsole({
     : (data.sanctions?.available
       ? `Read from sanctions_screenings — ${num(data.sanctions.runs_total)} run${data.sanctions.runs_total === 1 ? '' : 's'} recorded. Runs happen on request from the Trust Center; nothing schedules one.`
       : (data.sanctions?.reason || 'unreadable'));
-  const backupDetail = !ready ? 'unreadable'
-    : (data.backup_dr?.backup?.available
-      ? `Read from the export heartbeat — last ${day(data.backup_dr.backup.at) || 'unstamped'}.`
-      : (data.backup_dr?.backup?.reason || 'unreadable'));
+  const backupDetail = !ready ? 'unreadable' : backupSentence(data.backup_dr?.backup);
   const drillDetail = !ready ? 'unreadable' : drillSentence(data.backup_dr?.drill);
 
   const rail = (
@@ -773,9 +914,9 @@ export function SecurityConsole({
       note="The security ledger, the admin action log, sessions, KYC, deletion clocks, the sanctions runs and the backup heartbeat are read from their stores. The acts here revoke sessions, sign accounts out and close data-subject requests, and each is recorded with its reason."
       coverage={ready ? [
         se?.available ? `${num(se.today)} security event${se.today === 1 ? '' : 's'} recorded today` : 'Security events: unreadable',
-        `${num(data.audit?.total) ?? 'an unrecorded number of'} admin actions on record`,
+        data.audit?.available === false ? 'Admin actions: unreadable' : `${num(data.audit?.total) ?? 'an unrecorded number of'} admin actions on record`,
         imp?.available ? `${num(imp.active)} impersonation${imp.active === 1 ? '' : 's'} live` : 'Impersonations: unreadable',
-        `${num(dsr.length)} deletion request${dsr.length === 1 ? '' : 's'} open`,
+        dsrReadable ? `${num(dsr.length)} deletion request${dsr.length === 1 ? '' : 's'} open` : 'Deletion requests: unreadable',
       ] : []}
       coverageNote={ready ? undefined : (data === UNAVAILABLE ? 'The security overview could not be read.' : 'Loading…')}
       unavailable={[
@@ -927,7 +1068,7 @@ export function SecurityConsole({
                       <td className="py-1.5 pr-3 font-mono text-[10.5px] text-axal-faint">
                         {day(r.at) || <Unrecorded>no timestamp</Unrecorded>}
                       </td>
-                      <td className="py-1.5 pr-3 font-mono font-semibold">{r.actor || <Unrecorded>unnamed</Unrecorded>}</td>
+                      <td className="py-1.5 pr-3 font-mono font-semibold"><IdentityChip identity={r.actor_identity} fallback={r.actor} /></td>
                       <td className="py-1.5 pr-3 font-mono text-axal-muted">{r.tenant || <Unrecorded />}</td>
                       <td className={`py-1.5 pr-3 font-mono font-bold ${ACTION_INK[r.tone] || ACTION_INK.note}`}>
                         {r.action}
@@ -999,7 +1140,7 @@ export function SecurityConsole({
         <Zone title="Sessions and access" sub="each act recorded with its reason">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             <Stat unread label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `token under ${sessions.token_hours}h old, not revoked or signed out` : (sessions?.reason || 'unreadable')} />
-            <Stat unread label="Live support sessions" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'record open, not yet ended' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
+            <Stat unread label="Live support sessions" value={imp?.available ? num(imp.active) : null} note={imp?.available ? impersonationNote(imp) : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
             <Stat unread label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
             {/* D200 — this tile was `value={null}` under "no security_events".
                 It reads the ledger now: refused sign-ins in the last 24
@@ -1107,14 +1248,19 @@ export function SecurityConsole({
               ))}
             </div>
           )}
-          {ready && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
+          {ready && !dsrReadable && (
+            <div data-testid="hq-dsr-unreadable">
+              <Unreadable what="The open deletion requests" claim="This is not a claim that none are open." />
+            </div>
+          )}
+          {ready && dsrReadable && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
           {ready && dsr.length > 0 && (
             <ul className="space-y-1.5" data-testid="hq-dsr">
               {dsr.map((d) => (
                 <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
                   <div className="flex items-center justify-between gap-3">
                     <DsrSubject row={d} />
-                    <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
+                    <span title={d.deadline_at ? `The clock runs out ${String(d.deadline_at).slice(0, 16).replace('T', ' ')} UTC: ${data.dsr?.clock_days} × 24 hours from receipt.` : undefined} className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
                       {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
                     </span>
                   </div>
@@ -1164,10 +1310,15 @@ export function SecurityConsole({
           <Sanctions block={ready ? data.sanctions : null} unreadable={data === UNAVAILABLE} />
         </Zone>
         <Zone title="KYC" sub="the review queue">
+          {ready && !kycReadable && (
+            <div className="mb-2" data-testid="hq-kyc-unreadable">
+              <Unreadable what="The KYC queue" claim="This is not a claim that the queue is empty." />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
-            <Stat label="KYC pending" value={ready ? num(kyc.pending) ?? '0' : null} note="documents submitted, unverified" tone={kyc.pending ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-            <Stat label="KYC approved" value={ready ? num(kyc.approved) ?? '0' : null} note="active accounts" />
-            <Stat label="KYC rejected" value={ready ? num(kyc.rejected) ?? '0' : null} note="active accounts" />
+            <Stat label="KYC pending" value={kycReadable ? num(kyc.pending) ?? '0' : null} note="documents submitted, unverified" tone={kyc.pending ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+            <Stat label="KYC approved" value={kycReadable ? num(kyc.approved) ?? '0' : null} note="active accounts" />
+            <Stat label="KYC rejected" value={kycReadable ? num(kyc.rejected) ?? '0' : null} note="active accounts" />
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
             KYC status is one trust fact; sanctions screening is another and has its own card above, because the

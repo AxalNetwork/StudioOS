@@ -11,7 +11,6 @@ export const AXIS_12 = ['2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24', 
 export const unreadable = (what = 'It') => ({ available: false, unreadable: true, reason: `${what} could not be read on this database. That is not the same as none.` });
 export const pendingBlock = (reason) => ({ available: false, pending: true, reason });
 export const PART4_CLAIMS = 'Perk claims are read through part 4’s claims service, which is not on this Worker yet.';
-export const PART4_STRATEGIC = 'Strategic referral access is read through part 4’s queue service, which is not on this Worker yet.';
 export const HQ_READS = 'HQ reads these figures.';
 export const LAB_PEOPLE = 'The Lab is left out until a cohort\'s founders are defined.';
 
@@ -37,12 +36,14 @@ const ROWS = [
   ['product-testing', 'Product', 'Product testing', 'HQ and partners test their products with members.', 'The roles each program names', 'By application', 'live', 9],
 ];
 
+const WAITING_COVERS = ['cohort', 'referrals', 'perks', 'hosts', 'strategic'];
+
 export function catalogueBody(o = {}) {
   const superAdmin = Boolean(o.superAdmin);
   const waiting = {
     cohort: queue(2, [1, 1, 0], 30),
     referrals: queue(3, [1, 1, 1], 80, 'since submitted', { waiting_on_member: 1 }),
-    strategic: pendingBlock(PART4_STRATEGIC),
+    strategic: { available: true, count: 1 },
     perks: queue(1, [1, 0, 0], 5, 'since last edit'),
     hosts: queue(1, [1, 0, 0], 2),
     ...(o.waiting || {}),
@@ -58,7 +59,7 @@ export function catalogueBody(o = {}) {
     }),
     'refer-and-earn': () => ({
       figures: { open_referrals: waiting.referrals.available ? { available: true, count: 3, waiting_on_member: 1 } : waiting.referrals },
-      needs_you: { ...(waiting.referrals.available ? { available: true, count: 3 } : unreadable('Refer & Earn reviews')), strategic_requests: pendingBlock(PART4_STRATEGIC) },
+      needs_you: { ...(waiting.referrals.available ? { available: true, count: 3 } : unreadable('Refer & Earn reviews')), strategic_requests: waiting.strategic },
     }),
     perks: () => ({ figures: { live: o.live ?? { available: true, count: 5 }, claims: pendingBlock(PART4_CLAIMS) }, needs_you: waiting.perks.available ? { available: true, count: 1 } : unreadable('Perk listings in review') }),
     learning: () => ({ figures: { programs: o.learning ?? { available: true, published_programs: 2, active_enrolments: 7, join_methods: ['open', 'invite'], scope: superAdmin ? 'every' : 'assigned' } }, needs_you: null }),
@@ -91,9 +92,10 @@ export function catalogueBody(o = {}) {
     tiles: {
       running: o.running ?? { available: true, running: 6, by_status: { live: 6, partly_built: 1, not_built: 1, proposed: 1, paused: 0 }, total: 9 },
       people: o.people ?? { available: true, count: 312, previous: 289, covers: ['mentor-cohorts', 'learning', 'refer-and-earn', 'perks'], left_out: [{ program: 'spinout-lab', reason: LAB_PEOPLE }] },
-      waiting: o.waitingTile ?? (Object.entries(waiting).filter(([k]) => k !== 'strategic').some(([, v]) => !v.available)
-        ? { ...unreadable('The cohort queue'), covers: ['cohort', 'referrals', 'perks', 'hosts'], left_out: [{ queue: 'strategic', reason: PART4_STRATEGIC }] }
-        : { available: true, count: 7, oldest_hours: 80, covers: ['cohort', 'referrals', 'perks', 'hosts'], left_out: [{ queue: 'strategic', reason: PART4_STRATEGIC }] }),
+      // D4807: the headline sums every queue beside it, strategic access included, and leaves nothing out.
+      waiting: o.waitingTile ?? (Object.values(waiting).some((v) => !v.available)
+        ? { ...unreadable('The cohort queue'), covers: WAITING_COVERS, left_out: [] }
+        : { available: true, count: Object.values(waiting).reduce((t, v) => t + v.count, 0), oldest_hours: 80, covers: WAITING_COVERS, left_out: [] }),
       credits: superAdmin ? (o.creditsTile ?? { available: true, granted: 3050, spent: 2600, deducted: 10, refunded: 20, referral: { recorded: false, reason: 'Referral rewards are not paid in perk credits yet.' } }) : pendingBlock(HQ_READS),
     },
     waiting,

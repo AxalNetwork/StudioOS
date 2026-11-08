@@ -136,7 +136,7 @@ test('D4416: account Portfolio is absent from every sidebar shell; investor hold
 test('D4416: desktop and phone Account menus place Portfolio immediately above Billing', () => {
   const desktop = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
   const phone = readFileSync(new URL('../src/ui/phone/AccountSheet.jsx', import.meta.url), 'utf8');
-  assert.match(desktop, /<Link to="\/account\/portfolio" onClick=\{\(\) => setOpen\(false\)\}[\s\S]*?>\s*Portfolio\s*<\/Link>\s*<Link to="\/account\/billing"/);
+  assert.match(desktop, /<Link to="\/account\/portfolio" onClick=\{\(\) => setOpen\(false\)\}[\s\S]*?>\s*\{holdsInvestor \? 'Companies' : 'Portfolio'\}\s*<\/Link>\s*\{holdsInvestor && \([\s\S]*?to="\/portfolio"[\s\S]*?\)\}\s*\{!staffAccount && \([\s\S]*?to="\/account\/licences"[\s\S]*?\)\}\s*<Link to="\/account\/billing"/);
   assert.match(phone, /\['Portfolio', '\/account\/portfolio'\], \['Billing', '\/account\/billing'\]/);
 });
 

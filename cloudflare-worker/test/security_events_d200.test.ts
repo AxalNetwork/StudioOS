@@ -527,7 +527,10 @@ test('D263 drill: the marker is read from exactly drill-d1.json', async () => {
   assert.deepEqual(keys, ['drill-d1.json']);
 });
 
-test('D263 drill: no binding, a throw, bad JSON and an unknown outcome are all unreadable — never never_run', async () => {
+// D4691 split this one state in two: nothing read is `unreadable`, something
+// read that is not a drill marker is `invalid`. Both are `available: false`,
+// and neither is ever never_run.
+test('D263 drill: no binding and a throw are unreadable; bad JSON and an unknown outcome are invalid — never never_run', async () => {
   const unbound = await readRestoreDrill({} as any) as any;
   assert.deepEqual([unbound.available, unbound.state], [false, 'unreadable']);
   assert.match(unbound.reason, /BACKUPS/);
@@ -537,13 +540,13 @@ test('D263 drill: no binding, a throw, bad JSON and an unknown outcome are all u
   assert.match(threw.reason, /r2 down/);
 
   const bad = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': '{not json' }) } as any) as any;
-  assert.deepEqual([bad.available, bad.state], [false, 'unreadable']);
+  assert.deepEqual([bad.available, bad.state], [false, 'invalid']);
 
   const notObject = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': [1, 2] }) } as any) as any;
-  assert.deepEqual([notObject.available, notObject.state], [false, 'unreadable']);
+  assert.deepEqual([notObject.available, notObject.state], [false, 'invalid']);
 
   const odd = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': { ...MARKER_PASSED, outcome: 'green' } }) } as any) as any;
-  assert.deepEqual([odd.available, odd.state], [false, 'unreadable']);
+  assert.deepEqual([odd.available, odd.state], [false, 'invalid']);
   assert.match(odd.reason, /"green"/);
 });
 

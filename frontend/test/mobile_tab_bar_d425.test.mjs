@@ -165,7 +165,7 @@ test('More is a button that opens the drawer; the /more page and the sheet are g
   assert.doesNotMatch(read('frontend/src/components/mobileTabBar.css'), /\.mtb-sheet/);
   // App hands More the drawer's opener, and /more is no longer a route.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/);
+  assert.match(app, /<MobileTabBar role=\{shellRole\} held=\{isLicence\(shellRole\) \? heldLicences : null\} groups=\{isLicence\(shellRole\) \? sidebarGroups : null\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/);
   assert.doesNotMatch(app, /<Route path="\/more"/);
 });
 

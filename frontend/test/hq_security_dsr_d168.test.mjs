@@ -74,14 +74,15 @@ test('the zone offers the two outcomes HQ may record, and only those', () => {
     'closing does not refresh the list, so a closed request stays on screen until a reload');
 
   const ctl = closeControl();
-  assert.match(ctl, /setOutcome\('fulfilled'\)/, 'the fulfilled control is gone');
-  assert.match(ctl, /setOutcome\('denied'\)/, 'the denied control is gone');
+  // D4675: the buttons go through `choose`, which also makes the new close key.
+  assert.match(ctl, /(?:setOutcome|choose)\('fulfilled'\)/, 'the fulfilled control is gone');
+  assert.match(ctl, /(?:setOutcome|choose)\('denied'\)/, 'the denied control is gone');
 
   // A WITHDRAWAL IS THE SUBJECT'S OWN ACT. The server refuses it from HQ, so a
   // control here would offer a button the server declines — the
   // `still_an_admin` mistake D134 named — and, worse, it would be recording
   // that the subject changed their mind when they did not.
-  assert.doesNotMatch(ctl, /setOutcome\('withdrawn'\)/,
+  assert.doesNotMatch(ctl, /(?:setOutcome|choose)\('withdrawn'\)/,
     'HQ is offered a withdrawal, which records an act the subject did not perform');
 });
 
@@ -132,6 +133,6 @@ test('the SPA method and the worker route are the same endpoint', () => {
   assert.match(ROUTE, /r\.post\('\/dsr\/:userId\/close'/,
     'the worker route the api.js method calls is gone');
   // The page must go through the method rather than fetching directly.
-  assert.match(closeControl(), /api\.hqCloseDsrRequest\(row\.id, outcome, reason\.trim\(\)\)/,
+  assert.match(closeControl(), /api\.hqCloseDsrRequest\(row\.id, outcome, reason\.trim\(\), \{/,
     'the control no longer calls the api.js method');
 });

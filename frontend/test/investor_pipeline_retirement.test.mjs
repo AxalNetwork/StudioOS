@@ -71,10 +71,10 @@ test('TRAP 1 — /pipeline keeps its role fork; only an investor forwards (D1243
   const element = APP.slice(at, APP.indexOf('\n', at));
   assert.doesNotMatch(element, /<Navigate/, 'the /pipeline ROOT was turned into a redirect for every role');
   // The fork itself, which is the reason it may not redirect wholesale.
-  assert.match(element, /effectiveRole === 'partner' \? <PartnerBucketRoutes \/>/,
+  assert.match(element, /holds\('partner'\) \? <PartnerBucketRoutes \/>/,
     'the partner arm of /pipeline is gone');
   // D1243 (#3256): the investor's arm is a counted forward to Deal flow's table.
-  assert.match(element, /effectiveRole === 'investor' \? <DealsPipelineRedirect countAs="\/pipeline" \/>/,
+  assert.match(element, /holds\('investor'\) \? <DealsPipelineRedirect countAs="\/pipeline" \/>/,
     'the investor arm of /pipeline no longer forwards to Deal flow');
   assert.match(element, /: investorWorkspace\('deals', <PipelineWorkspace \/>\)/, 'the founder and admin arm of /pipeline is gone');
   assert.match(element, /'founder'/, 'founder lost /pipeline, and that access is deliberate');

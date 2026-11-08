@@ -230,8 +230,8 @@ test('an admin at /funds lands on Fund administration with the notice; /funds/pe
   } finally { await p.close(); }
   // An investor's /funds is unchanged: the landing for an investor, the forward for anyone else the guard admits.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/funds" element=\{guard\(\['admin', 'investor'\], effectiveRole === 'investor' \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsRedirect \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], effectiveRole === 'investor' \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/funds" element=\{guard\(\['admin', 'investor'\], holds\('investor'\) \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsRedirect \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], holds\('investor'\) \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>\)\} \/>/);
 });
 
 test('the refusals (FND20): a branch admin, a support session and a member, each in the canvas\'s words, with no read', async () => {

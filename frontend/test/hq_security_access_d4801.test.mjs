@@ -51,10 +51,10 @@ const LIST = () => ({
   total: 4,
   expiry_minutes: 30,
   rows: [
-    { id: 11, user_id: 901, email: 'super@axal.example', name: 'Sam Super', role: 'admin', user_agent: UA.chromeMac, ip: '203.0.113.1', factor: 'totp', created_at: '2026-11-07 08:02:00', last_seen_at: '2026-11-07 14:29:30', is_current: true },
-    { id: 12, user_id: 903, email: 'fran@example.com', name: 'Fran Target', role: 'founder', user_agent: UA.firefoxWin, ip: '203.0.113.71', factor: 'password', created_at: '2026-11-07 09:47:12', last_seen_at: '2026-11-07 13:58:04', is_current: false },
-    { id: 13, user_id: 904, email: 'olu@example.com', name: null, role: 'founder', user_agent: null, ip: null, factor: null, created_at: null, last_seen_at: '2026-11-07 08:10:00', is_current: false },
-    { id: 14, user_id: 903, email: 'fran@example.com', name: 'Fran Target', role: 'founder', user_agent: UA.safariIos, ip: '203.0.113.72', factor: 'password', created_at: '2026-11-07 07:00:00', last_seen_at: '2026-11-07 12:00:00', is_current: false },
+    { id: 11, user_id: 901, email: 'super@axal.example', name: 'Sam Super', role: 'admin', user_agent: UA.chromeMac, network: '203.0.113.0/24', ip: '203.0.113.1', factor: 'totp', created_at: '2026-11-07 08:02:00', last_seen_at: '2026-11-07 14:29:30', is_current: true },
+    { id: 12, user_id: 903, email: 'fran@example.com', name: 'Fran Target', role: 'founder', user_agent: UA.firefoxWin, network: '203.0.113.0/24', ip: '203.0.113.71', factor: 'password', created_at: '2026-11-07 09:47:12', last_seen_at: '2026-11-07 13:58:04', is_current: false },
+    { id: 13, user_id: 904, email: 'olu@example.com', name: null, role: 'founder', user_agent: null, network: 'unknown', ip: null, factor: null, created_at: null, last_seen_at: '2026-11-07 08:10:00', is_current: false },
+    { id: 14, user_id: 903, email: 'fran@example.com', name: 'Fran Target', role: 'founder', user_agent: UA.safariIos, network: '203.0.113.0/24', ip: '203.0.113.72', factor: 'password', created_at: '2026-11-07 07:00:00', last_seen_at: '2026-11-07 12:00:00', is_current: false },
   ],
   impersonations: {
     available: true,
@@ -161,8 +161,10 @@ test('the sessions table: its columns in order, human device first, precise time
   assert.match(fran, /32 min ago/);
   assert.match(fran, /Sun 8 Nov 2026, 09:47:12 UTC/, 'Expires is not created + 24 h');
   assert.match(between(html, 'data-testid="hq-session-12"', '</tr>'), /data-state="healthy"[\s\S]*?Active/);
-  // The raw user agent and the IP are not in the row: they wait under View details.
-  assert.doesNotMatch(fran, /Mozilla|Gecko|203\.0\.113/, 'the raw user agent or IP leaked into the row');
+  // The raw user agent and the address stay under View details. The row carries
+  // the network bucket (D4691), which is not the address.
+  assert.match(fran, /network 203\.0\.113\.0\/24/, 'the network bucket is not on the row');
+  assert.doesNotMatch(fran, /Mozilla|Gecko|203\.0\.113\.71/, 'the raw user agent or address leaked into the row');
 
   // A row with no name falls back to the address; no user agent and no start are said, not blank.
   const olu = renderedText(between(html, 'data-testid="hq-session-13"', '</tr>'));
@@ -200,7 +202,7 @@ test('an expired row reads Expired and offers no revoke', () => {
   assert.match(row, /type="checkbox"[^>]*disabled=""/, 'an expired session can be selected for a revoke');
 });
 
-test('View details holds the raw user agent, IP, session id, times in your zone, and what is Not instrumented', async () => {
+test('View details holds the raw user agent, the network bucket, session id, times in your zone, and what is Not instrumented', async () => {
   const restore = installDocument('', { focus: true });
   const m = await mount({ list: LIST() });
   try {
@@ -211,11 +213,12 @@ test('View details holds the raw user agent, IP, session id, times in your zone,
     const d = m.find((n) => m.props(n)?.['data-testid'] === 'hq-session-details-12');
     const t = m.text(d);
     assert.match(t, /Session ID12/);
-    assert.match(t, /203\.0\.113\.71/);
+    assert.match(t, /Network203\.0\.113\.0\/24/);
+    assert.doesNotMatch(t, /203\.0\.113\.71/, 'the details showed the address, not the bucket');
     assert.match(t, /User agentMozilla\/5\.0 \(Windows NT 10\.0; Win64; x64; rv:132\.0\) Gecko\/20100101 Firefox\/132\.0/);
     assert.match(t, /Started \+ 24 h, the token's lifetime\. Derived; nothing stores it\./);
     assert.match(t, /Sign-in factorpassword/);
-    assert.match(t, /LocationNot instrumented[\s\S]*only the IP address is stored/);
+    assert.match(t, /LocationNot instrumented[\s\S]*only the network bucket is stored/);
     assert.match(t, /Device nameNot instrumented[\s\S]*only the raw user agent is stored/);
     assert.match(t, /Revoked byNot instrumented[\s\S]*the admin audit log does/);
   } finally { await m.done(); restore(); }
