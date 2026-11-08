@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { bpsPercent as pct } from '../../../lib/bps';
+import { TOKEN_SPLIT_HQ_INPUT } from '../../../lib/tokenSplit';
 import { reportError } from '../../../lib/log';
 import { buildCoreSave, coreFormFrom, coreRevision, dirtyKeys, reconcileCoreForm } from '../../../lib/licenceCoreTermsForm';
 import { SEAT_TYPES, n0 } from './licenceShared';
@@ -137,7 +138,7 @@ export function TermsEditor({ licence, onSaved }) {
       </label>
       <label className="text-sm">
         <span className="text-[11px] uppercase tracking-wide text-gray-500">
-          Token split to HQ (basis points)
+          {TOKEN_SPLIT_HQ_INPUT}
         </span>
         <input type="number" min="0" max="10000" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
           value={f.token_split_bps} onChange={set('token_split_bps')} />

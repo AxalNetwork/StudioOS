@@ -142,7 +142,9 @@ test('the worker guards the new role endpoint exactly like the others', () => {
   assert.ok(i > 0, 'PATCH /company/:uid/members/:userId must exist');
   const body = w.slice(i, w.indexOf("r.delete('/company/:uid/members/:userId'", i));
 
-  assert.match(body, /canEdit\(/, 'the route must gate on canEdit');
+  // D4960: the one write gate (a seat, never HQ's reach, never a support session) replaces `canEdit` on writes.
+  assert.match(body, /writeGate\(/, 'the route must gate on the company write gate');
+  assert.doesNotMatch(body, /canEdit\(/, 'a write no longer gates on the admin-passing canEdit');
   assert.match(
     body, /Only the primary admin can grant primary admin status/,
     'granting primary-admin must require being one — same rule POST enforces',

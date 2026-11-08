@@ -38,6 +38,20 @@
  *   POST   /mercury/partner-proposals/:id/dismiss                          the founder only
  *   DELETE /mercury/facts/:id                      a writer on the founder's company; stays deleted
  *
+ * D2407 (#2407 parts 1–2): the founder's own Beehiiv. Distribution's and Revenue
+ * and traction's reads carry `parts.from_beehiiv` (`services/beehiiv/grow.ts`),
+ * for anyone who may read the module (decision D1); a failed read is
+ * `unreadable` and the module still loads. Durable company-building's Updates
+ * rows carry `newsletter`, null until #2407 part 3. Every route below refuses a
+ * support session; the logs carry counts only.
+ *   GET    /beehiiv/publications?project=          the caller's own Beehiiv publications and the venture's link
+ *   PUT    /beehiiv/publication                    { project, publication_id | null } link, change or unlink
+ *   POST   /beehiiv/sync                           { project } the member whose Beehiiv serves the venture
+ *   POST   /beehiiv/channel-proposal/accept        { project, growth_channel_uid?, utm_source? } the same member
+ *   POST   /beehiiv/channel-proposal/dismiss       { project } the same member
+ *   DELETE /beehiiv/facts/:id?project=             a writer; it stays deleted
+ *   DELETE /beehiiv/posts/:id?project=             a writer; it stays deleted
+ *
  * D1333 (#3481, part 2 of #2400): the overview read carries `publish` and each
  * module read `parts.publish` — whether Publish to… shows (`can_publish`: the
  * founder, not in a support session, with a place switched on), PUB8's empty
@@ -77,6 +91,13 @@ import { publishPart } from '../services/publishSources';
 import {
   GROW_FEED_SLUGS, GrowSyncRefused, acceptPartnerProposal, syncGrowFromMercury, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, isVentureFounder, type GrowFeedSlug,
 } from '../services/mercury/growFeeds';
+import { projectEnabled } from '../integrations/companyScope';
+import type { IntegrationRow } from '../integrations/registry';
+import { BeehiivReadError, beehiivId, beehiivReadsFor } from '../services/beehiiv/reads';
+import {
+  BEEHIIV_SLUGS, NEWSLETTER_NOT_LINKED, SENTENCES as BEEHIIV_SENTENCES, acceptChannelProposal, beehiivPart as beehiivModulePart, deleteBeehiivRow,
+  dismissChannelProposal, linkOf as beehiivLinkOf, linkPublication, syncBeehiiv, unlinkPublication, type BeehiivSlug,
+} from '../services/beehiiv/grow';
 import { workspaceContext, workspaceMember } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import {
@@ -295,7 +316,7 @@ export async function updateAskReplies(env: Env, projectId: number, kind: 'custo
   } catch { return []; }
 }
 
-async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|null; updates_reason: string|null}> {
+async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|null; updates_reason: string|null; newsletter_reason?: string}> {
   const { env, projectId } = x;
   try {
     const q = await env.DB.prepare(`SELECT id, uid, title, author_user_id, period, period_start, period_end, status,
@@ -327,7 +348,7 @@ async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|nul
         submitted_at: u.sent_at ? null : u.submitted_at,
         href: u.author_user_id === viewer.id || isAdmin(viewer) ? `/updates/${u.uid}` : null };
       if (!u.sent_at) return { ...base, href: null, label: "Submitted to the investors' inbox", sent_to: null,
-        delivered: null, opened: null, asks: null, replies: null, asks_to_ask_again: null };
+        delivered: null, opened: null, asks: null, replies: null, asks_to_ask_again: null, newsletter: null };
       const rs = byRecipients.get(u.id) || [];
       const as = byAsks.get(u.id) || [];
       const count = (audience: string) => Number(rs.find((r) => r.audience === audience)?.sent ?? 0);
@@ -335,8 +356,10 @@ async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|nul
         delivered: rs.reduce((n, r) => n + Number(r.delivered || 0), 0),
         opened: rs.reduce((n, r) => n + Number(r.opened || 0), 0), asks: as.length,
         replies: as.reduce((n, a) => n + Number(a.replies || 0), 0),
-        asks_to_ask_again: as.filter((a) => canAskAgain(u.sent_at, Number(a.replies || 0), a.asked_again_at, x.now)).length };
-    }), updates_reason: null };
+        asks_to_ask_again: as.filter((a) => canAskAgain(u.sent_at, Number(a.replies || 0), a.asked_again_at, x.now)).length,
+        // D2407: the update's Beehiiv post's figures, once #2407 part 3 links a sent update to it.
+        newsletter: null };
+    }), updates_reason: null, newsletter_reason: NEWSLETTER_NOT_LINKED };
   } catch (e) {
     console.warn('[cycle_grow] updates history unreadable', (e as Error).message);
     return { updates: null, updates_reason: 'Unreadable: Updates history could not be read' };
@@ -409,7 +432,8 @@ r.get('/modules/:slug', async (c) => {
     const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
     const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
     // D1333 (#3481): every Grow module's Publish to… and "Published from here" (`parts.publish`).
-    const parts = { ...(recs.parts ?? {}), ...(await mercuryPart(c, user, pid, meta.slug)), publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
+    const parts = { ...(recs.parts ?? {}), ...(await mercuryPart(c, user, pid, meta.slug)), ...(await beehiivPart(c, user, pid, meta.slug)),
+      publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
     return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow') }, ...(Object.keys(parts).length ? { parts } : {}) });
   } catch (e) { return fail(c, e); }
 });
@@ -422,6 +446,18 @@ async function mercuryPart(c: C, user: User, pid: number, slug: string): Promise
   } catch (e) {
     console.error('[cycle_grow] mercury part unreadable:', slug, (e as Error).name);
     return { from_mercury: { state: 'unreadable', reason: 'Unreadable: the Mercury figures could not be read' } };
+  }
+}
+
+/** D2407: Distribution's and Revenue and traction's Beehiiv part; a failed read is `unreadable`, never empty, and the rest of the module still loads. */
+async function beehiivPart(c: C, user: User, pid: number, slug: string): Promise<{ from_beehiiv?: unknown }> {
+  if (!(BEEHIIV_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid) };
+    return { from_beehiiv: await beehiivModulePart(c.env, pid, slug as BeehiivSlug, viewer) };
+  } catch (e) {
+    console.error('[cycle_grow] beehiiv part unreadable:', slug, (e as Error).name);
+    return { from_beehiiv: { state: 'unreadable', reason: BEEHIIV_SENTENCES.unreadable } };
   }
 }
 
@@ -601,6 +637,160 @@ r.delete('/mercury/facts/:id', async (c) => {
     return c.json({ ok: true, id });
   } catch (e) { return fail(c, e); }
 });
+
+// ── D2407 (#2407 parts 1–2): the founder's own Beehiiv ─────────────────────
+
+class BeehiivRefused extends Error {
+  status: number; code: string;
+  constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
+}
+
+/** Each refusal's sentence, written here: never Beehiiv's text. */
+export const BEEHIIV_REFUSALS: Record<string, string> = {
+  support_session_refused: 'A support session cannot read or change a member’s Beehiiv.',
+  beehiiv_not_connected: 'Beehiiv is not connected. Sign in with Beehiiv on your Connectors page first.',
+  company_not_enabled: 'Your Beehiiv is not switched on for this venture’s company. Switch it on on the Beehiiv connector page.',
+  venture_served: 'A teammate’s Beehiiv already serves this venture. They can unlink it.',
+  publication_not_yours: 'That publication is not one your Beehiiv lists. Choose one from the list.',
+  bad_id: 'That is not a Beehiiv publication.',
+  not_linked: 'Choose a Beehiiv publication for this venture first.',
+  not_your_beehiiv: 'Only the member whose Beehiiv serves this venture can do this.',
+  sign_in_again: 'Beehiiv asked you to sign in again.',
+  rate_limited: 'Beehiiv asked us to wait. Try again in a minute.',
+  beehiiv_unreadable: 'Beehiiv could not be read. Nothing changed; try again.',
+  proposal_not_found: 'There is no channel proposal on this venture.',
+  proposal_decided: 'That proposal was already decided.',
+  unknown_channel: 'That channel is not on this venture.',
+  fact_not_found: 'That figure is not on this venture.',
+};
+
+const beehiivReadRefusal = (e: BeehiivReadError): BeehiivRefused =>
+  e.code === 'not_connected' ? new BeehiivRefused(409, 'beehiiv_not_connected')
+    : e.code === 'unauthorized' ? new BeehiivRefused(409, 'sign_in_again')
+      : e.code === 'rate_limited' ? new BeehiivRefused(429, 'rate_limited')
+        : e.code === 'bad_id' ? new BeehiivRefused(400, 'bad_id') : new BeehiivRefused(502, 'beehiiv_unreadable');
+
+const beehiiv = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => {
+  try {
+    const user = await requireAuth(c);
+    if (await isSupportSession(c)) throw new BeehiivRefused(403, 'support_session_refused');
+    return await fn(c, user);
+  } catch (e) {
+    const r = e instanceof BeehiivRefused ? e : e instanceof BeehiivReadError ? beehiivReadRefusal(e) : null;
+    if (r) return c.json({ error: r.code, detail: BEEHIIV_REFUSALS[r.code] }, r.status as 400);
+    return fail(c, e);
+  }
+};
+
+/** The caller's own active Beehiiv sign-in, switched on for the venture's company. */
+async function ownBeehiiv(c: C, user: User, pid: number): Promise<IntegrationRow> {
+  const row = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'beehiiv' AND status = 'active' AND auth_type = 'oauth_mcp' LIMIT 1")
+    .bind(user.id).first<IntegrationRow>();
+  if (!row) throw new BeehiivRefused(409, 'beehiiv_not_connected');
+  if (!(await projectEnabled(c.env, Number(row.id), pid))) throw new BeehiivRefused(409, 'company_not_enabled');
+  return row;
+}
+
+/** The venture's link, served by the caller's own active Beehiiv, still switched on for its company. */
+async function servedLink(c: C, user: User, pid: number) {
+  const link = await beehiivLinkOf(c.env, pid);
+  if (!link) throw new BeehiivRefused(409, 'not_linked');
+  if (link.owner_id !== Number(user.id)) throw new BeehiivRefused(403, 'not_your_beehiiv');
+  if (!link.active) throw new BeehiivRefused(409, 'beehiiv_not_connected');
+  if (!(await projectEnabled(c.env, link.integration_id, pid))) throw new BeehiivRefused(409, 'company_not_enabled');
+  return link;
+}
+
+r.get('/beehiiv/publications', beehiiv(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const row = await ownBeehiiv(c, user, pid);
+  const link = await beehiivLinkOf(c.env, pid);
+  const own = !!link && link.integration_id === Number(row.id);
+  let choices: Array<{ id: string; name: string | null }> | null = null;
+  let choicesError: string | null = null;
+  try { choices = await (await beehiivReadsFor(c.env, row)).publications(); } catch (e) {
+    if (!(e instanceof BeehiivReadError)) throw e;
+    choicesError = beehiivReadRefusal(e).code;
+    console.warn('[cycle_grow] beehiiv publications unreadable', { outcome: choicesError });
+  }
+  return c.json({
+    ok: true, project_id: pid,
+    link: own ? { publication_id: link!.publication_id, name: link!.publication_name } : null,
+    served_by: link && !own ? { name: link.owner_name } : null,
+    choices, choices_error: choicesError ? { code: choicesError, detail: BEEHIIV_REFUSALS[choicesError] } : null,
+  });
+}));
+
+r.put('/beehiiv/publication', beehiiv(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await ownBeehiiv(c, user, pid);
+  const mine = Number(row.id);
+  const existing = await beehiivLinkOf(c.env, pid);
+  if (existing && existing.integration_id !== mine) throw new BeehiivRefused(409, 'venture_served');
+  if (b.publication_id === null) {
+    if (await unlinkPublication(c.env, mine, pid)) {
+      await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_publication_unlinked', summary: 'Beehiiv publication unlinked' });
+    }
+    return c.json({ ok: true, project_id: pid, link: null });
+  }
+  const wanted = beehiivId(b.publication_id);
+  const chosen = (await (await beehiivReadsFor(c.env, row)).publications()).find((p) => p.id === wanted);
+  if (!chosen) throw new BeehiivRefused(400, 'publication_not_yours');
+  if (await linkPublication(c.env, { integrationId: mine, projectId: pid, userId: user.id, publication: chosen }) === 'served') throw new BeehiivRefused(409, 'venture_served');
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_publication_linked', summary: 'Beehiiv publication linked' });
+  return c.json({ ok: true, project_id: pid, link: { publication_id: chosen.id, name: chosen.name } });
+}));
+
+r.post('/beehiiv/sync', beehiiv(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const link = await servedLink(c, user, pid);
+  const row = await c.env.DB.prepare('SELECT * FROM integrations WHERE id = ?').bind(link.integration_id).first<IntegrationRow>();
+  const reads = await beehiivReadsFor(c.env, row!);
+  const counts = await syncBeehiiv(c.env, reads, { integrationId: link.integration_id, projectId: pid, publicationId: link.publication_id, today: new Date().toISOString().slice(0, 10) });
+  await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?').bind(link.integration_id).run();
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_synced',
+    summary: `Grow synced from Beehiiv: ${counts.facts} figures, ${counts.posts} posts, ${counts.kept_deleted} kept deleted${counts.partial ? ', partial' : ''}` });
+  return c.json({ ok: true, counts });
+}));
+
+const BEEHIIV_DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'proposal_not_found'], decided: [409, 'proposal_decided'], unknown_channel: [404, 'unknown_channel'],
+};
+
+// Accept and Dismiss: plain paths, one per verb, so the API drift guard can read them.
+r.post('/beehiiv/channel-proposal/accept', beehiiv(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const link = await servedLink(c, user, pid);
+  const create = async () => (await addChannel(c.env, pid, user, { name: link.publication_name ?? 'Newsletter', utm_source: b.utm_source, kind: 'newsletter' })).uid;
+  const out = await acceptChannelProposal(c.env, pid, user.id, { growth_channel_uid: b.growth_channel_uid }, create);
+  if (out !== 'ok') throw new BeehiivRefused(...BEEHIIV_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_channel_accepted', summary: 'Beehiiv publication linked to a channel' });
+  return c.json({ ok: true, state: 'accepted' });
+}));
+r.post('/beehiiv/channel-proposal/dismiss', beehiiv(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  await servedLink(c, user, pid);
+  const out = await dismissChannelProposal(c.env, pid, user.id);
+  if (out !== 'ok') throw new BeehiivRefused(...BEEHIIV_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_channel_dismissed', summary: 'Beehiiv channel proposal dismissed' });
+  return c.json({ ok: true, state: 'dismissed' });
+}));
+
+const deleteBeehiiv = (store: 'beehiiv_grow_facts' | 'beehiiv_post_stats') => beehiiv(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const id = Number(param(c, 'id'));
+  const slug = Number.isSafeInteger(id) && id > 0 ? await deleteBeehiivRow(c.env, store, pid, id) : null;
+  if (!slug) throw new BeehiivRefused(404, 'fact_not_found');
+  await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: store === 'beehiiv_grow_facts' ? 'grow_beehiiv_fact_deleted' : 'grow_beehiiv_post_deleted',
+    summary: store === 'beehiiv_grow_facts' ? 'Beehiiv figure deleted' : 'Beehiiv post figures deleted' });
+  return c.json({ ok: true, id });
+});
+r.delete('/beehiiv/facts/:id', deleteBeehiiv('beehiiv_grow_facts'));
+r.delete('/beehiiv/posts/:id', deleteBeehiiv('beehiiv_post_stats'));
 
 // ── D1095 (#2960): From Google — a metrics Sheet into Revenue and traction, tagged Calendar events into Durable company-building.
 

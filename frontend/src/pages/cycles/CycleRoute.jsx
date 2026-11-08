@@ -32,24 +32,16 @@ import RecordView, { RecordPhoneProvider } from './RecordView';
 import { HEADER_BUTTON, RecordHeaderProvider } from './RecordHeader.jsx';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import DistributionTabs from './distribution/DistributionTabs.jsx';
-import OverviewTab from './distribution/OverviewTab.jsx';
-import ChannelsTab from './distribution/ChannelsTab.jsx';
-import ProspectsPage from './distribution/ProspectsPage.jsx';
 import DistributionAskIntent from './distribution/DistributionAskIntent.jsx';
 import InboxTab, { InboxNeedsYou, useInboxUnread } from './distribution/InboxTab.jsx';
 import { SequenceNeedsYou } from './distribution/SequenceBuilder.jsx';
 import NewsletterTab from './distribution/NewsletterTab.jsx';
-import CampaignsTab from './distribution/CampaignsTab.jsx';
-import ResultsTab from './distribution/ResultsTab.jsx';
-import NewCampaignPage from './distribution/NewCampaignPage.jsx';
-import AdsTab from './distribution/AdsTab.jsx';
 import { ComingSoon } from './distribution/DistributionParts.jsx';
 import { distributionPrimary } from './distribution/distributionModel.js';
 import { EmailAction } from '../email/emailParts.jsx';
 import RecordEmailSheet from '../email/RecordEmailSheet.jsx';
 import { emailHref, personOfRecord } from '../email/emailModel.js';
 import { prototypeLovable } from './lovable/lovableModel';
-import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { CYCLE_GUTTER, RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
@@ -70,11 +62,7 @@ import RaisePosthog from './RaisePosthog';
 import { ImprovementPosthog, RevenuePosthog } from './GrowPosthog';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
-import CalendarTab, { CalendarWeek } from './distribution/CalendarTab.jsx';
 import { buildPartsMap } from './buildParts';
-import UpdatesHistory from './UpdatesHistory';
-import ReportingDesk from './ReportingDesk';
-import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
 import { PmfPart } from './PmfPart';
 import { PmfChip } from './PmfMethod';
 import UpdateAskReplies from './UpdateAskReplies';
@@ -93,23 +81,49 @@ import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
-import { NarrativeHome, NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
 import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
 import { NarrativeAdminGate, narrativeFormAccess } from '../raise/narrative/NarrativeAdmin';
-import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool';
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
-import { DataRoomHomeNav, DataRoomTabPage } from '../raise/dataroom/DataRoomTool';
-import DataRoomUpload from '../raise/dataroom/DataRoomUpload.jsx';
 import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
 import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
-import { UseOfFundsHomeNav, UseOfFundsTabPage } from '../raise/useoffunds/UseOfFundsTool';
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
-import { CapRelHomeNav, CapRelTabPage } from '../raise/caprel/CapRelTool';
 import EvidencePart from './evidence/EvidencePart';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
 import RankByFit from '../../ui/RankByFit';
 import { applyRank } from '../../lib/rankByFit';
 import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
+import { lazyStep } from './lazyStep.jsx';
+
+// D4574 (#4574, H5): each step's module behind its own lazy boundary, so a step page
+// fetches its own step, not all of them. Each keeps its local name, so every render
+// site reads as before; only components go lazy (hooks and models stay static).
+const OverviewTab = lazyStep(() => import('./distribution/OverviewTab.jsx'));
+const ChannelsTab = lazyStep(() => import('./distribution/ChannelsTab.jsx'));
+const ProspectsPage = lazyStep(() => import('./distribution/ProspectsPage.jsx'));
+const CampaignsTab = lazyStep(() => import('./distribution/CampaignsTab.jsx'));
+const ResultsTab = lazyStep(() => import('./distribution/ResultsTab.jsx'));
+const NewCampaignPage = lazyStep(() => import('./distribution/NewCampaignPage.jsx'));
+const AdsTab = lazyStep(() => import('./distribution/AdsTab.jsx'));
+const InterviewRecord = lazyStep(() => import('../founder/InterviewReviewPage'));
+const CalendarTab = lazyStep(() => import('./distribution/CalendarTab.jsx'));
+const CalendarWeek = lazyStep(() => import('./distribution/CalendarTab.jsx'), 'CalendarWeek');
+const UpdatesHistory = lazyStep(() => import('./UpdatesHistory'));
+const ReportingDesk = lazyStep(() => import('./ReportingDesk'));
+const BuildPlan = lazyStep(() => import('./BuildPlan'));
+const BuildPlanDoor = lazyStep(() => import('./BuildPlan'), 'BuildPlanDoor', { fallback: null });
+const VerdictRecordWithPlan = lazyStep(() => import('./BuildPlan'), 'VerdictRecordWithPlan');
+const NarrativeHome = lazyStep(() => import('../raise/narrative/NarrativeTool'), 'NarrativeHome');
+const NarrativeTabBar = lazyStep(() => import('../raise/narrative/NarrativeTool'), 'NarrativeTabBar', { fallback: null });
+const NarrativeTabPage = lazyStep(() => import('../raise/narrative/NarrativeTool'), 'NarrativeTabPage');
+const CapTableHomeNav = lazyStep(() => import('../raise/captable/CapTableTool'), 'CapTableHomeNav', { fallback: null });
+const CapTableTabPage = lazyStep(() => import('../raise/captable/CapTableTool'), 'CapTableTabPage');
+const DataRoomHomeNav = lazyStep(() => import('../raise/dataroom/DataRoomTool'), 'DataRoomHomeNav', { fallback: null });
+const DataRoomTabPage = lazyStep(() => import('../raise/dataroom/DataRoomTool'), 'DataRoomTabPage');
+const DataRoomUpload = lazyStep(() => import('../raise/dataroom/DataRoomUpload.jsx'));
+const UseOfFundsHomeNav = lazyStep(() => import('../raise/useoffunds/UseOfFundsTool'), 'UseOfFundsHomeNav', { fallback: null });
+const UseOfFundsTabPage = lazyStep(() => import('../raise/useoffunds/UseOfFundsTool'), 'UseOfFundsTabPage');
+const CapRelHomeNav = lazyStep(() => import('../raise/caprel/CapRelTool'), 'CapRelHomeNav', { fallback: null });
+const CapRelTabPage = lazyStep(() => import('../raise/caprel/CapRelTool'), 'CapRelTabPage');
 
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
@@ -1123,7 +1137,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
         loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(formWrites, projectId) : null}
         onSearch={formOpen.search ? (_field, q) => formOpen.search(formWrites, projectId, q) : null}
-        onSubmit={(values) => formOpen.submit(formWrites, projectId, values)}
+        onSubmit={(values, memory) => formOpen.submit(formWrites, projectId, values, memory)}
         onSaved={saved}
         onClose={closeAdd} />
     ) : editing && edit.idOf(editing) != null && edit.readsRecord ? (

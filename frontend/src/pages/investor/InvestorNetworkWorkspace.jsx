@@ -304,7 +304,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
         propositions: current.propositions.map((item) => item.uid === prop.uid ? { ...item, status: decision === 'accept' ? 'accepted' : 'declined' } : item),
       }));
     } catch (error) {
-      if (error?.status === 409) {
+      if (error?.data?.error === 'credit_conflict') {
+        // D4606: the debit lost a race and nothing was spent.
+        setActionError('Your credits changed at the same moment. Nothing was spent. Try again.');
+      } else if (error?.status === 409) {
         setActionError('This proposition changed elsewhere. The desk has been refreshed.');
         load();
       } else if (error?.status === 402 || error?.data?.code === 'intro_credits_exhausted') {

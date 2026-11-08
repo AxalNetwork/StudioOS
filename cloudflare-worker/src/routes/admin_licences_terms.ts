@@ -180,6 +180,59 @@ r.patch('/:uid/terms', async (c) => {
 });
 
 
+// D4671 — complete the entity and signatory a contract names. A contract whose
+// `{{licence.legal_entity_name}}`, address or signatory is still a placeholder
+// is refused at send; this is where HQ fills them without reaching for SQL.
+// Only the keys sent change. Every value is trimmed, bounded, free of control
+// characters and of `{{ }}` (a value that is itself a placeholder would defeat
+// the unresolved-field refusal), and a recorded value cannot be blanked.
+const ENTITY_FIELDS: Record<string, number> = {
+  legal_entity_name: 200, brand_name: 120, registered_address: 500,
+  signatory_name: 200, signatory_title: 200,
+};
+r.patch('/:uid/entity', async (c) => {
+  try {
+    const admin = await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+    if (!b || typeof b !== 'object') return c.json({ error: 'invalid_body' }, 400);
+    const next: Record<string, string> = {};
+    for (const [key, max] of Object.entries(ENTITY_FIELDS)) {
+      if (!(key in b)) continue;
+      const raw = b[key];
+      if (typeof raw !== 'string') return c.json({ error: 'invalid_field', field: key, message: `${key} must be text.` }, 400);
+      const v = raw.trim();
+      if (!v) return c.json({ error: 'invalid_field', field: key, message: `${key} cannot be blank.` }, 400);
+      if (v.length > max) return c.json({ error: 'invalid_field', field: key, message: `${key} is at most ${max} characters.` }, 400);
+      // eslint-disable-next-line no-control-regex
+      if (/[\u0000-\u001f\u007f]/.test(v) || /\{\{|\}\}/.test(v)) {
+        return c.json({ error: 'invalid_field', field: key, message: `${key} has characters a contract cannot carry.` }, 400);
+      }
+      next[key] = v;
+    }
+    const keys = Object.keys(next);
+    if (!keys.length) return c.json({ error: 'nothing_to_change', message: 'Send at least one of: ' + Object.keys(ENTITY_FIELDS).join(', ') + '.' }, 400);
+    const before: Record<string, string | null> = {};
+    for (const k of keys) before[k] = (licence as any)[k] ?? null;
+    // One fixed statement: a field not sent binds NULL and keeps its column.
+    await c.env.DB.prepare(
+      `UPDATE territory_licences
+          SET legal_entity_name = COALESCE(?, legal_entity_name), brand_name = COALESCE(?, brand_name),
+              registered_address = COALESCE(?, registered_address), signatory_name = COALESCE(?, signatory_name),
+              signatory_title = COALESCE(?, signatory_title), revision = revision + 1, updated_at = ?
+        WHERE id = ?`,
+    ).bind(
+      next.legal_entity_name ?? null, next.brand_name ?? null, next.registered_address ?? null,
+      next.signatory_name ?? null, next.signatory_title ?? null, nowIso(), licence.id,
+    ).run();
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    await logEvent(c.env, licence.id, 'terms_changed', admin.id, { entity: keys }, 'Entity and signatory details completed',
+      { before, after: next }, pushOutcome(pushed));
+    return c.json({ ok: true, ...next, pushed });
+  } catch (e) { return mapError(c, e); }
+});
+
 // D797 (#2230) — the licence's terms schedule: deal terms, renewal and notice,
 // money and reporting, beyond Step 4's fee and shares. The field list is
 // `services/licenceTerms.ts`; migration 512's CHECKs hold the same ranges.

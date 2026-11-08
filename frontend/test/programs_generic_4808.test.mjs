@@ -18,6 +18,11 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import adminProgramsGenericRoutes from '../src/routes/adminProgramsGeneric.jsx';
+// The route table loads both pages through React.lazy. Loading them here first means the first mount
+// does not wait on a cold import (a transform that, on a loaded machine, outlasts the settle below and
+// leaves the page unmounted); the settle then only covers the page's own reads.
+import '../src/pages/admin/programs/GenericProgramPage.jsx';
+import '../src/pages/admin/programs/ProposalReviewPage.jsx';
 import { catalogueCards } from '../src/pages/admin/programs/catalogueModel.js';
 import {
   approvedRows, capabilityRows, genericKeyFrom, genericTabFrom, metadataRows, proposalSummary, specRows,
