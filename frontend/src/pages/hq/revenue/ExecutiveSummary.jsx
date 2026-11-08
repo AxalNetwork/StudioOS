@@ -163,7 +163,7 @@ export function NeedsAttention({ items, onStatement }) {
       <ol className="divide-y divide-axal-hairline dark:divide-gray-800">
         {items.map((a) => {
           const sev = SEV[a.severity];
-          const btn = `${BTN} ${a.severity === 'critical' ? 'border-axal-ink bg-axal-ink text-white hover:bg-black dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900' : ''}`;
+          const btn = `${BTN} ${a.severity === 'critical' ? 'border-axal-ink bg-axal-ink text-white hover:bg-black dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white' : ''}`;
           return (
             <li key={a.key} className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[96px_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-4" data-severity={a.severity}>
               <span className={`font-mono text-[12px] font-extrabold uppercase tracking-[.05em] ${sev.cls}`}><span aria-hidden="true">{sev.glyph} </span>{sev.word}</span>

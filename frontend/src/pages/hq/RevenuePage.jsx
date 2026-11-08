@@ -36,13 +36,13 @@ import { licenceLedgerApi } from '../../lib/api/licenceLedger';
 import { reportError } from '../../lib/log';
 import { RailFrame, WorkerRail, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
-import { RevenueHeader, DataCoverageDrawer } from './revenue/RevenueHeader.jsx';
-import { ExecutiveSummary, NeedsAttention } from './revenue/ExecutiveSummary.jsx';
-import { AiEconomicsSection, RevenueStreams, RevenueTrend } from './revenue/RevenueStreams.jsx';
-import { ReceivablesSection, StatementDrawer } from './revenue/Receivables.jsx';
-import { SubsidiariesSection } from './revenue/Subsidiaries.jsx';
-import { BillingExceptions, RefundForm } from './revenue/BillingExceptions.jsx';
-import { PromotionsSection } from './revenue/Promotions.jsx';
+import { RevenueHeader, DataCoverageDrawer } from './revenue/RevenueHeader';
+import { ExecutiveSummary, NeedsAttention } from './revenue/ExecutiveSummary';
+import { AiEconomicsSection, RevenueStreams, RevenueTrend } from './revenue/RevenueStreams';
+import { ReceivablesSection, StatementDrawer } from './revenue/Receivables';
+import { SubsidiariesSection } from './revenue/Subsidiaries';
+import { BillingExceptions, RefundForm } from './revenue/BillingExceptions';
+import { PromotionsSection } from './revenue/Promotions';
 import {
   UNAVAILABLE, attentionItems, coverageSources, isReady, periodLabel, periodOptions,
 } from './revenue/revenueModel.js';
@@ -52,14 +52,14 @@ export {
   UNAVAILABLE, UNRECORDED_CURRENCY, money, isOpenDispute, evidenceOverdue, ceilingFacts, tokenMarginView,
   statementAllowsPaidInFull, STATEMENT_DRAW_HELD,
 } from './revenue/revenueModel.js';
-export { BillingExceptions, refundAmountShape } from './revenue/BillingExceptions.jsx';
+export { BillingExceptions, refundAmountShape } from './revenue/BillingExceptions';
 export {
   STATEMENT_PERIOD_RE, statementDrawPayload, statementPaidPayload, statementVoidPayload, statementDisputePayload,
   statementAllowsIssue, licencesDrawableForStatements, floorsInCurrency, StatementFacts, StatementActions,
-} from './revenue/StatementActions.jsx';
-export { StatementDrawHeld } from './revenue/Receivables.jsx';
-export { ceilingPayload, CEILING_ENFORCEMENT, CeilingEditor } from './revenue/Promotions.jsx';
-export { TokenPnl } from './revenue/RevenueStreams.jsx';
+} from './revenue/StatementActions';
+export { StatementDrawHeld } from './revenue/Receivables';
+export { ceilingPayload, CEILING_ENFORCEMENT, CeilingEditor } from './revenue/Promotions';
+export { TokenPnl } from './revenue/RevenueStreams';
 
 export default function RevenuePage() {
   const [period, setPeriod] = useState(null);       // null until the first summary names the current quarter
