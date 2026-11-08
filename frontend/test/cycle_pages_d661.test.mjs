@@ -269,7 +269,7 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   // D914 (#2698): an admin reading the Investor narrative is offered no Add.
   assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
   // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
-  assert.match(route, /onSubmit=\{\(values\) => formOpen\.submit\(formWrites, projectId, values\)\}/);
+  assert.match(route, /onSubmit=\{\(values, memory\) => formOpen\.submit\(formWrites, projectId, values, memory\)\}/);
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
   assert.match(route, /const saved = \(\) => \{ dirty\.current = true; \};/);
   // D695 (#1656): the Add, an Edit from the row's values, and an Edit from its record (Validate's).
