@@ -108,6 +108,9 @@ async function call(app: any, db: DatabaseSync, who: number, path: string, init:
 }
 const progs = (db: DatabaseSync, who: number, path: string, init?: Parameters<typeof call>[4]) => call(adminPrograms, db, who, path, init);
 
+/** D4806: Publish names the revision of the draft the reviewer saw (`draft.hash`), as the Playbook page sends it. */
+const publishAs = async (db: DatabaseSync, path: string) => ({ method: 'POST', body: { expected_hash: ((await progs(db, SUPER, path)).body as any).draft.hash } }) as any;
+
 const envOf = (db: DatabaseSync, extra: Record<string, unknown> = {}) => ({ DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', ...extra }) as any;
 
 /** The catalogue's fixture: every figure below is worked out by hand from it. */
@@ -311,11 +314,11 @@ test('the playbook: an Admin reads what is published; a Super Admin edits the dr
   assert.equal(edit.body.playbook.sections.find((s: any) => s.key === 'terms').body, 'No contract template is linked to this program yet.',
     'an edit never reaches the published playbook');
 
-  const pub = await progs(db, SUPER, '/mentor-cohorts/playbook/publish', { method: 'POST' });
+  const pub = await progs(db, SUPER, '/mentor-cohorts/playbook/publish', await publishAs(db, '/mentor-cohorts'));
   assert.equal(pub.status, 200, JSON.stringify(pub.body));
   assert.equal(pub.body.playbook.version, 2);
   assert.equal(pub.body.draft.differs, false);
-  const again = await progs(db, SUPER, '/mentor-cohorts/playbook/publish', { method: 'POST' });
+  const again = await progs(db, SUPER, '/mentor-cohorts/playbook/publish', await publishAs(db, '/mentor-cohorts'));
   assert.equal(again.status, 409);
   assert.equal(again.body.code, 'nothing_to_publish');
 
