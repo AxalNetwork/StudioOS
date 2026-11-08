@@ -72,6 +72,12 @@ async function mounted(url, element, handle, user) {
   function Probe() { const l = useLocation(); at.path = `${l.pathname}${l.search}`; return null; }
   await act(async () => rootNode.render(h(MemoryRouter, { initialEntries: [url] }, h(AuthProvider, null, element, h(Probe)))));
   const flush = () => act(async () => { for (let i = 0; i < 40; i += 1) await new Promise((r) => setTimeout(r, 5)); });
+  // The routes sit behind Suspense with a null fallback, and the page's module loads on first use. A cold load can take
+  // longer than one flush on a busy runner, so wait (up to 5 s) until the route has drawn something, then let its reads
+  // settle. A fixed 200 ms read the page before it existed and failed CI intermittently.
+  for (let waited = 0; !container.childNodes?.length && waited < 5000; waited += 25) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 25)); });
+  }
   await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');

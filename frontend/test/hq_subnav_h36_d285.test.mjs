@@ -80,7 +80,7 @@ const MOVED = {
 };
 for (const list of [PLATFORM, CONTENT]) for (const p of list) if (MOVED[p[1]]) p[1] = MOVED[p[1]];
 // D981 (#2376) — #2375's Licences strip: the ledger and Program grants.
-const LICENCES = [['Ledger', '/admin/licences'], ['Program grants', '/admin/licences/programs']];
+const LICENCES = [['Ledger', '/admin/licences'], ['Program access by licence', '/admin/licences/programs']];
 const pairs = (items) => items.map((i) => [i.label, i.route]);
 
 /** The literal links inside one `<HqSubNavStrip label="…">` block in the chrome. */

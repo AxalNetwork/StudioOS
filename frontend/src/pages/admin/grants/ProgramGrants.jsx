@@ -119,8 +119,8 @@ function ProgramGrantsPage() {
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="program-grants">
       <AdminPageHeader
-        crumb={{ label: 'Licences', to: LEDGER_PATH, current: 'Program grants' }}
-        title="Program grants"
+        crumb={{ label: 'Licences', to: LEDGER_PATH, current: 'Program access by licence' }}
+        title="Program access by licence"
         pills={[{ label: 'HQ only', tone: 'hq' }]}
         actions={actions}
         line="Which programs each studio may run, and on what terms. Studios ask; HQ decides."
