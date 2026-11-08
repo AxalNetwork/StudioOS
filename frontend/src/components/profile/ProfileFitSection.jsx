@@ -3,7 +3,8 @@ import AxalValuesBars from './AxalValuesBars.jsx';
 import { Link } from 'react-router-dom';
 import { Loader2, AlertCircle, Lock, Sparkles, ChevronRight } from 'lucide-react';
 import { api, assessment } from '../../lib/api';
-import SkillRadar from '../play/SkillRadar';
+// D4574 (#4574, H6): the radar's recharts chunk loads when a radar draws, not with every Studio home.
+import SkillRadar from '../play/SkillRadarLazy';
 import { openPaywall } from '../PaywallModal';
 import { archetypeIllustration, archetypeLicenceTitle, archetypeMeta, humanize } from '../../lib/assessmentMeta';
 import { STUDIO_CHAT_ANCHOR } from '../advisor/interviewCompleteRow';

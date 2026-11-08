@@ -1,4 +1,5 @@
 // D4492: real Prospects route and wizard consent integration, with mutation controls.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

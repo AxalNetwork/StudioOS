@@ -5,6 +5,7 @@
 // (routes/captable.ts, services/captable.ts, services/capTableToday.ts) and
 // are worked out by hand: 12,000,000 shares after the Seed, so each payout is
 // a whole fraction of the exit.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
