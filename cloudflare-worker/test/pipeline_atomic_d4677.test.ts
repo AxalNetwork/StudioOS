@@ -82,7 +82,12 @@ function freshDb() {
     CREATE TABLE legal_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, deal_id INTEGER NOT NULL, type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft',
       content TEXT, file_url TEXT, generated_by INTEGER, signed_by INTEGER, version INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, fund_id INTEGER);
     CREATE TABLE activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE user_sessions (jti TEXT PRIMARY KEY, user_id INTEGER, factor TEXT, created_at TEXT, last_step_up_at TEXT, revoked_at TEXT, last_seen_at TEXT);
   `);
+  // D4669 — every token is held to its session row, so each caller's `t-<id>` session exists.
+  for (const id of [ADMIN, OPERATOR]) {
+    db.prepare("INSERT INTO user_sessions (jti, user_id, factor, created_at) VALUES (?, ?, 'password', strftime('%Y-%m-%d %H:%M:%S','now'))").run(`t-${id}`, id);
+  }
   // The score table is the real one: the board reads it through the integrity service.
   db.exec(SCORE_TABLE);
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(ADMIN, 'admin', 'Ada', 'ada@example.test');

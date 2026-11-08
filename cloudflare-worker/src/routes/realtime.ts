@@ -16,7 +16,7 @@ import { heldLicences, holdsLicence } from '../services/accountLicences';
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { decodeJWT } from '../auth';
+import { decodeJWT, sessionStanding } from '../auth';
 import { getSQL } from '../db';
 import { doNamespace } from '../util/doNamespace';
 
@@ -63,9 +63,16 @@ export async function authenticateForUpgrade(c: any): Promise<{ id: number; emai
   try {
     const payload = await decodeJWT(c.env, token);
     const sql = getSQL(c.env);
-    const rows = await sql`SELECT id, email, role, is_active, kyc_status FROM users WHERE id = ${payload.user_id}`;
+    const rows = await sql`SELECT id, email, role, is_active, kyc_status, jwt_min_iat FROM users WHERE id = ${payload.user_id}`;
     await sql.end();
     if (!rows.length || !rows[0].is_active) return null;
+    // D4669 — the same standing `getCurrentUser` asks for: the sign-out floor,
+    // the session row, the support-session record. This door decoded the
+    // token and checked the account only, so a revoked or signed-out session
+    // could still open a realtime channel. An unreadable store refuses.
+    const standing = await sessionStanding(c.env, payload, rows[0]);
+    if (!standing.ok) return null;
+    if (standing.stepUpDue && new Date(standing.stepUpDue).getTime() < Date.now()) return null;
     return { id: rows[0].id, email: rows[0].email, role: rows[0].role, kyc_status: rows[0].kyc_status ?? null, licences: await heldLicences(c.env.DB, rows[0]) };
   } catch {
     return null;

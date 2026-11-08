@@ -295,7 +295,9 @@ test('the support-sessions table names people, and the card says what each act r
   const reach = renderedText(between(html, 'data-testid="access-reach"', '</section>'));
   assert.match(reach, /Revoke this session\s*One session row\./);
   assert.match(reach, /Sign out account\s*Every session that account holds, on every device/);
-  assert.match(reach, /End support session\s*Closes the support-session record[\s\S]*stays valid until it expires, at most 30 minutes/);
+  // D4669 replaces C1: an ended support session's token is refused from its next request.
+  assert.match(reach, /End support session\s*Ends the support session: its token is refused from its next request/);
+  assert.doesNotMatch(reach, /stays valid until it expires|carries no session id/);
   assert.match(reach, /Emergency re-authentication\s*Every HQ-held account; branch databases are not touched; you will be signed out too\./);
   assert.match(reach, /at\s+least 8 characters/);
 });
@@ -320,8 +322,9 @@ test('each act states its exact scope and whether you are affected', () => {
   assert.match(own.you.text, /You will be signed out too: this is your own account, this session included/);
 
   const end = actionCopy({ kind: 'end', impId: 7, admin: 'Sam Super', target: 'Fran Target', started: 'Sat 7 Nov 2026, 14:02:00 UTC' }, { expiryMinutes: 30, now: NOW });
-  assert.equal(end.scope.title, 'Closes one support-session record');
-  assert.match(end.scope.items.join('|'), /stays valid until it expires: at most 30 minutes after it was minted, no later than Sat 7 Nov 2026, 15:00 UTC/);
+  assert.equal(end.scope.title, 'Ends one support session');
+  assert.match(end.scope.items.join('|'), /Its token is refused from its next request/);
+  assert.doesNotMatch(end.scope.items.join('|'), /stays valid|To cut the support token now/);
   assert.match(end.scope.items.join('|'), /Fran Target is not signed out of their own sessions/);
   assert.match(end.you.text, /Your own admin session continues/);
 
@@ -593,8 +596,15 @@ test('mounted: emergency re-authentication — HQ-held wording, typed confirmati
     await m.click(m.byId('action-confirm'));
     assert.deepEqual(m.calls, [['emergency', undefined, 'Credential leak suspected, INC-112']]);
     assert.equal(m.byId('action-result'), undefined);
-    await act(async () => { m.replies[0].res({ ok: true, affected: 14, revoked_at: 1793975405 }); });
+    await act(async () => {
+      m.replies[0].res({
+        ok: true, affected: 14, revoked_at: 1793975405,
+        outcomes: [{ deployment: 'hq', outcome: 'done', affected: 14 }, { deployment: 'fr', outcome: 'not_reached', reason: 'A branch is its own deployment.' }],
+      });
+    });
     assert.match(m.text(m.byId('action-affected')), /Accounts signed out:14— every active HQ-held account, including yours\. Branch databases were not touched\./);
+    // D4669: one line per deployment, as the server reported it.
+    assert.match(m.text(m.byId('hq-deployment-outcomes')), /HQ · done · 14 accounts\s*fr · not reached — A branch is its own deployment\./);
     assert.equal(m.props(m.byId('action-sign-in')).href, '/login');
     for (const id of [11, 12, 13, 14]) assert.equal(m.props(m.byId(`hq-session-${id}`))['data-status'], 'revoked');
   } finally { await m.done(); restore(); }
@@ -615,7 +625,7 @@ test('mounted: an emergency reply without a count draws Unavailable, never 0', a
   } finally { await m.done(); restore(); }
 });
 
-test('mounted: End support session — closed, the token still valid until …, and a Sign out account shortcut (C1)', async () => {
+test('mounted: End support session — ended, its token refused from its next request (D4669, replacing C1)', async () => {
   const restore = installDocument('', { focus: true });
   const m = await mount({ list: LIST() });
   try {
@@ -627,16 +637,13 @@ test('mounted: End support session — closed, the token still valid until …, 
     await m.click(m.byId('action-confirm'));
     assert.deepEqual(m.calls, [['end', 7, 'Support ticket resolved']]);
     await act(async () => { m.replies[0].res({ ok: true, impersonation_session_id: 7, target_user_id: 903 }); });
-    assert.match(m.text(m.dialog()), /Support session record closed — its token is still valid/);
-    assert.match(m.text(m.dialog()), /Its token stays valid until it expires — no later than Sat 7 Nov 2026, 15:00 UTC\./);
-    assert.doesNotMatch(m.text(m.dialog()), /\bended\b(?! support)/i);
+    assert.match(m.text(m.dialog()), /Support session ended/);
+    assert.match(m.text(m.dialog()), /Its token is refused from its next request, and the record is closed so it can't be extended\./);
+    assert.doesNotMatch(m.text(m.dialog()), /still valid|stays valid/);
     const row = m.byId('hq-live-impersonation-7');
-    assert.match(m.text(row), /Record closed/);
-    assert.match(m.text(row), /Token still valid until no later than Sat 7 Nov 2026, 15:00 UTC/);
-    // The shortcut opens Sign out account for the person the support session acted as.
-    await m.click(m.byId('action-end-sign-out'));
-    assert.match(m.text(m.dialog()), /Sign out Fran Target everywhere\?/);
-    assert.equal(m.props(m.dialog())['data-step'], 1);
+    assert.match(m.text(row), /Ended/);
+    assert.doesNotMatch(m.text(row), /still valid/);
+    assert.equal(m.byId('action-end-sign-out'), undefined, 'no shortcut: the token no longer outlives the end');
   } finally { await m.done(); restore(); }
 });
 

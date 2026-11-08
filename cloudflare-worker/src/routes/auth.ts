@@ -940,36 +940,37 @@ auth.post('/logout', safe('logout', 'Logout failed.', async (c) => {
   // Best-effort session revocation. We don't await requireAuth() because
   // that would 401 a session whose cookie expired client-side — and the
   // user still wants the cookie cleared in that case.
+  //
+  // D4669 — EVERY TOKEN THE REQUEST PRESENTS, read the way `getCurrentUser`
+  // reads them. This used to take the Bearer if there was one and otherwise
+  // look for HQ's cookie name only, so on a branch (whose cookie is
+  // `studioos_auth_<code>`, D104) a sign-out revoked nothing, and under a
+  // support Bearer the operator's own cookie session was left standing. The
+  // answer now says whether a session was ended, instead of `ok` regardless.
+  let sessionRevoked: 'revoked' | 'none' | 'failed' = 'none';
   try {
-    const authHeader = c.req.header('Authorization');
-    let token: string | null = null;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.slice(7);
-    } else {
-      const cookieHeader = c.req.header('Cookie') || '';
-      for (const part of cookieHeader.split(';')) {
-        const t = part.trim();
-        if (t.startsWith('studioos_auth=')) { token = t.slice('studioos_auth='.length); break; }
+    const { decodeJWT, extractJwtCandidates } = await import('../auth');
+    const { bearer, cookie } = extractJwtCandidates(c);
+    for (const token of [...new Set([bearer, cookie].filter(Boolean) as string[])]) {
+      let payload: { jti?: string; user_id?: number } | null = null;
+      try { payload = await decodeJWT(c.env, token); } catch { payload = null; }
+      if (!payload?.jti) continue;
+      try {
+        await c.env.DB.prepare(
+          "UPDATE user_sessions SET revoked_at = datetime('now') WHERE jti = ? AND user_id = ? AND revoked_at IS NULL"
+        ).bind(payload.jti, payload.user_id).run();
+        if (sessionRevoked === 'none') sessionRevoked = 'revoked';
+      } catch (e) {
+        sessionRevoked = 'failed';
+        console.error('[AUTH:logout] session revoke failed:', e);
       }
     }
-    if (token) {
-      const { decodeJWT } = await import('../auth');
-      try {
-        const payload = await decodeJWT(c.env, token);
-        if (payload?.jti) {
-          try {
-            await c.env.DB.prepare(
-              "UPDATE user_sessions SET revoked_at = datetime('now') WHERE jti = ? AND user_id = ? AND revoked_at IS NULL"
-            ).bind(payload.jti, payload.user_id).run();
-          } catch {}
-        }
-      } catch {}
-    }
   } catch (e) {
+    sessionRevoked = 'failed';
     console.error('[AUTH:logout] session revoke failed (non-fatal):', e);
   }
   clearAuthCookies(c);
-  return c.json({ ok: true });
+  return c.json({ ok: true, session_revoked: sessionRevoked });
 }));
 
 auth.get('/me', async (c) => {
@@ -1488,6 +1489,10 @@ auth.post('/support/redeem', safe('support-redeem', 'Could not open the support 
     session = await redeemSupportCode(c.env, String(parsed.body?.code || ''));
   } catch (e: any) {
     const msg = String(e?.message || '');
+    // D4669 — the branch could not record the session, so none was opened.
+    if (/^support-unavailable: /.test(msg)) {
+      return c.json({ error: msg.replace(/^support-unavailable: /, ''), code: 'support_session_unrecorded' }, 503);
+    }
     if (/^support: /.test(msg)) {
       return c.json({ error: msg.replace(/^support: /, ''), code: 'support_code_invalid' }, 400);
     }

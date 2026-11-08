@@ -1748,25 +1748,17 @@ export async function redeemSupportCode(
     throw new Error('support: that account is no longer active on this branch.');
   }
 
-  const jti = crypto.randomUUID();
-  const token = await createJWT(
-    env, target.id, String(target.email ?? ''), target.role, undefined, jti,
-    `${SUPPORT_SESSION_MINUTES}m`,
-  );
-  const expiresAt = new Date(Date.now() + SUPPORT_SESSION_MINUTES * 60_000).toISOString();
-
-  try {
-    await env.DB.prepare(
-      `INSERT INTO user_sessions (user_id, jti, factor, assurance_level) VALUES (?, ?, 'hq_support', 'hq_support')`,
-    ).bind(target.id, jti).run();
-  } catch (e) {
-    console.warn('[rpc:redeemSupportCode] session row failed', (e as Error).message);
-  }
-
+  // D4669 — THE RECORD AND THE SESSION ROW FIRST, THEN THE TOKEN. The token
+  // names both (`sid` and `jti`) and every request re-reads them, so ending
+  // the support session or revoking its row ends the access. Either write
+  // failing refuses the redeem: a support token nobody could end, or one the
+  // branch's own audit does not show, is not issued. The code is already
+  // spent by then, which is the safe side: HQ starts a new session.
+  let supportSessionId: number | null = null;
   try {
     const { ensureCohortTimingSchema } = await import('../services/cohortTiming');
     await ensureCohortTimingSchema(env);
-    await env.DB.prepare(
+    const ins = await env.DB.prepare(
       `INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context) VALUES (?, ?, ?)`,
     ).bind(
       // ZERO, DELIBERATELY. The column is NOT NULL with no foreign key, and no
@@ -1777,9 +1769,34 @@ export async function redeemSupportCode(
       0, target.id,
       `hq_support:${claimed.hq_actor_name}|${claimed.reason}`.slice(0, 500),
     ).run();
+    supportSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
   } catch (e) {
     console.warn('[rpc:redeemSupportCode] impersonation row failed', (e as Error).message);
   }
+  if (supportSessionId === null) {
+    throw new Error('support-unavailable: the support session could not be recorded on this branch, so it was not opened. Ask HQ to start a new support session.');
+  }
+
+  const jti = crypto.randomUUID();
+  try {
+    await env.DB.prepare(
+      `INSERT INTO user_sessions (user_id, jti, factor, assurance_level) VALUES (?, ?, 'hq_support', 'hq_support')`,
+    ).bind(target.id, jti).run();
+  } catch (e) {
+    console.warn('[rpc:redeemSupportCode] session row failed', (e as Error).message);
+    try {
+      await env.DB.prepare(
+        "UPDATE impersonation_sessions SET ended_at = datetime('now') WHERE id = ? AND ended_at IS NULL",
+      ).bind(supportSessionId).run();
+    } catch { /* the record stays open; no token was minted for it */ }
+    throw new Error('support-unavailable: the support session could not be recorded on this branch, so it was not opened. Ask HQ to start a new support session.');
+  }
+
+  const token = await createJWT(
+    env, target.id, String(target.email ?? ''), target.role, undefined, jti,
+    `${SUPPORT_SESSION_MINUTES}m`, supportSessionId,
+  );
+  const expiresAt = new Date(Date.now() + SUPPORT_SESSION_MINUTES * 60_000).toISOString();
 
   try {
     await env.DB.prepare(
