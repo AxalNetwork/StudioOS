@@ -51,7 +51,7 @@ test('a detected incident: severity, since and observed, with the console and th
   assert.match(t, /The Stripe webhook refused 4 deliveries in a row High/);
   assert.match(t, /Detected · since 2026-11-07 09:00 · observed 2026-11-07 12:00/);
   assert.match(html, /href="\/admin\/platform\/payments\/stripe"/);
-  assert.match(html, new RegExp(`href="${GUIDE_PREFIX.replace(/[.]/g, '\\.')}operations/PLATFORM_OBSERVABILITY\\.md#72-the-stripe-webhook-is-refusing-or-silent"`));
+  assert.match(html, new RegExp(`href="${GUIDE_PREFIX.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}operations/PLATFORM_OBSERVABILITY\\.md#72-the-stripe-webhook-is-refusing-or-silent"`));
   assert.match(t, /Published incidents 2 in 30 days/, 'published stays apart from what is detected');
 });
 
