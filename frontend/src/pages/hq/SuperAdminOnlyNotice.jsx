@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Landmark } from 'lucide-react';
 import { HQ_EYEBROW, HQ_TITLE, hqLine, hqLinks } from './hqNoticeModel';
+import { clearHandover, peekHandover } from './handoverNote';
 
 /**
  * What an admin without the elevation sees on an HQ-only route.
@@ -27,12 +28,20 @@ import { HQ_EYEBROW, HQ_TITLE, hqLine, hqLinks } from './hqNoticeModel';
 export default function SuperAdminOnlyNotice() {
   // D940 (#2745, SHL7a): the canvas's card. It names what HQ manages here and links Studio and My licence, never the console.
   const { pathname } = useLocation();
+  // D5040: an account that has just handed the elevation on lands here, and is told so once.
+  const [handover] = useState(peekHandover);
+  useEffect(() => { if (handover) clearHandover(); }, [handover]);
   return (
     <section aria-labelledby="super-admin-only-title" className="mx-auto mt-14 w-full max-w-[600px] rounded-xl border-[1.5px] border-dashed border-gray-300 bg-white p-6 dark:border-gray-700 dark:bg-gray-900" data-testid="super-admin-only-notice">
       <div className="flex items-center gap-2 text-[10.5px] font-extrabold uppercase tracking-[.09em] text-axal-muted dark:text-gray-400">
         <Landmark size={13} aria-hidden="true" /> {HQ_EYEBROW}
       </div>
       <h1 id="super-admin-only-title" className="mt-2 text-[18px] font-extrabold tracking-[-.01em] text-axal-ink dark:text-gray-100">{HQ_TITLE}</h1>
+      {handover && (
+        <p role="status" className="mt-2 text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="super-admin-handed-note">
+          You handed the Super Admin elevation to {handover.name}. HQ&rsquo;s pages have closed for this account; the change and your reason are recorded in Security.
+        </p>
+      )}
       <p className="mt-2 text-[13px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="super-admin-only-line">{hqLine(pathname)}</p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {hqLinks(pathname).map((l, i) => (

@@ -8,6 +8,9 @@ import { Unrecorded, RailFrame, WorkerRail, useMovedNotice } from '../../ui';
 import { TEAM_MOVED_NOTICES } from '../admin/accountsAddress';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import { useAuth } from '../../hooks/useAuthSync';
+import { reportError } from '../../lib/log';
+import { leaveHq } from './handoverNote';
 
 /**
  * HQ · Team — the cross-tenant people desk (canvas H4, H9 since D138, H20 since D221).
@@ -46,6 +49,7 @@ export default function HqAccountsPage({ onImpersonate }) {
   // table's own three states: undefined loading, null unreadable, an object.
   const [team, setTeam] = useState(undefined);
   const { branch: viewAs } = useViewAsBranch();
+  const { user, setUser, refresh } = useAuth();
   // D941 (#2746): Team moved from /admin/accounts; an old link forwards here with ?moved=team.
   const moved = useMovedNotice(TEAM_MOVED_NOTICES);
 
@@ -117,7 +121,10 @@ export default function HqAccountsPage({ onImpersonate }) {
             HQ&rsquo;s accounts under {viewAs}&rsquo;s name. Return to HQ view to see them.
           </p>
         ) : (
-          <SuperAdminHolders onChanged={() => setReloadKey((n) => n + 1)} />
+          <SuperAdminHolders
+            onChanged={() => setReloadKey((n) => n + 1)}
+            onTransferred={(name) => leaveHq({ name, user, setUser, refresh, onRefreshError: (e) => reportError('hq-team:handover-refresh', e) })}
+          />
         )}
 
         <HqTeamTable reloadKey={reloadKey} onLoaded={setTeam} />

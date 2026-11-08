@@ -37,7 +37,7 @@ function messageOf(e) {
   return FRIENDLY[msg] || msg;
 }
 
-export default function SuperAdminHolders({ onChanged }) {
+export default function SuperAdminHolders({ onChanged, onTransferred }) {
   const [holders, setHolders] = useState(null);   // null = not loaded yet
   const [admins, setAdmins] = useState([]);
   const [error, setError] = useState(null);
@@ -83,20 +83,29 @@ export default function SuperAdminHolders({ onChanged }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Resolves true when the change was CONFIRMED by the server and false when it was refused or
+  // failed (D5040). It used to resolve either way, so the form below cleared the operator's reason
+  // and selection after a refusal too, and they had to type it all again.
   const run = async (fn, handedTo = null) => {
     setBusy(true);
     setError(null);
     try {
       await fn();
       if (handedTo) {
-        setHanded({ name: handedTo.name || handedTo.email, at: new Date() });
-        return;
+        const name = handedTo.name || handedTo.email;
+        setHanded({ name, at: new Date() });
+        // D5040 — THE SECURITY TRANSITION IS NOT A RELOAD. The server has moved the elevation, so the
+        // page above this one (AccountsPage) is told, and takes HQ's screens away from this browser now
+        // (`leaveHq` never throws: a failed /me re-read is reported there and changes nothing).
+        await onTransferred?.(name);
+        return true;
       }
       await load();
       // The Team table above renders the super-admin badge from the same
       // elevation, so it is told rather than left stale until a reload.
       onChanged?.();
-    } catch (e) { setError(messageOf(e)); } finally { setBusy(false); }
+      return true;
+    } catch (e) { setError(messageOf(e)); return false; } finally { setBusy(false); }
   };
 
   const holderIds = new Set((holders || []).map((h) => h.id));
@@ -120,7 +129,7 @@ export default function SuperAdminHolders({ onChanged }) {
         </p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">
           You no longer hold the elevation, so HQ's pages stop answering this account. The change
-          and your reason are recorded in Security. Reload to leave HQ.
+          and your reason are recorded in Security.
         </p>
         <button
           type="button"
@@ -189,7 +198,7 @@ export default function SuperAdminHolders({ onChanged }) {
           run(
             () => api.superAdminGrant(Number(pick), { transfer: hasHolder, reason: reason.trim() }),
             hasHolder ? to || { name: `account ${pick}` } : null,
-          ).then(() => { setPick(''); setReason(''); });
+          ).then((ok) => { if (ok) { setPick(''); setReason(''); } });
         }}
       >
         <label htmlFor="super-admin-grant" className="text-[12px] font-semibold text-axal-muted">
