@@ -1682,6 +1682,14 @@ esign.post('/sign/:token', async (c) => {
           }
         } catch (e) { console.warn('[esign] program_schedule_sign_failed', (e as Error)?.name || 'error'); }
       }
+      // D5049 — a package or program agreement version: the version that names this envelope is executed
+      // once, with its signed copy's hash. Its own try, so it never fails the signature.
+      if (envelopeRow?.envelope_uuid) {
+        try {
+          const { onAgreementEnvelopeCompleted } = await import('../services/programAgreements');
+          await onAgreementEnvelopeCompleted(c.env, envelopeRow.envelope_uuid);
+        } catch (e) { console.warn('[esign] licence_agreement_sign_failed', (e as Error)?.name || 'error'); }
+      }
       // D959 — an investor's cohort NDA: the grant that names this envelope
       // records its signature once. Its own try, so it never fails the signature.
       if (envelopeRow?.document_type === INVESTOR_COHORT_NDA_DOC_TYPE && envelopeRow.envelope_uuid) {
