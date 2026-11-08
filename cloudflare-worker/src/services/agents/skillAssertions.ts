@@ -209,7 +209,7 @@ export function headingOf(line: string): string | null {
   let t = line.replace(/\s+/g, ' ').trim();
   let m: RegExpExecArray | null;
   if ((m = /^#{1,6} (.+?)(?: #+)?$/.exec(t))) t = m[1];
-  else if ((m = /^(\*\*|__)(.+?)\1 ?:?$/.exec(t))) t = m[2];
+  else if ((m = /^(\*\*|__)((?:(?!\*\*|__).)+)\1 ?:?$/.exec(t))) t = m[2];
   else if ((m = /^([^:|*#\-+•`>~ ][^:|]{0,79}):$/.exec(t))) t = m[1];
   else return null;
   t = t.replace(/^(\*\*|__)(.+?)\1$/, '$2').replace(/ ?:$/, '').replace(/^\d{1,2}[.)] /, '');
@@ -451,8 +451,9 @@ export function claimsMiss(a: ClaimsAssertion, parts: readonly string[]): string
 // `output_schema: { format: "json", schema: { … } }`, for a case whose output
 // contract is a typed artifact. The JSON value is the whole output when it
 // starts with `{` or `[` (nothing may follow it), or else the content of the
-// output's one ``` or ```json fence; two such fences, none, or JSON that does
-// not parse fail. The schema is this closed subset of JSON Schema, and a
+// output's one ``` or ```json fence (a fence is a line of its own; a block
+// with another label, such as ```text, is ignored); two such fences, none, or
+// JSON that does not parse fail. The schema is this closed subset of JSON Schema, and a
 // keyword outside it is refused:
 //   type                  object | array | string | number | integer | boolean | null (required)
 //   enum                  up to 20 allowed values, for string, number, integer or boolean
@@ -535,9 +536,17 @@ export function jsonOf(output: string): { ok: true; value: unknown } | { ok: fal
   let text: string;
   if (t.startsWith('{') || t.startsWith('[')) text = t;
   else {
-    const blocks = [...t.matchAll(/```(?:json)?[ \t]*\r?\n([\s\S]*?)```/gi)];
+    // Fences are read line by line, so a ```text block never pairs with a ```json one.
+    const blocks: string[] = [];
+    let open: { info: string; body: string[] } | null = null;
+    for (const line of t.split(/\r?\n/)) {
+      const fence = /^\s*```\s*([a-z0-9_-]*)\s*$/i.exec(line);
+      if (fence && !open) { open = { info: fence[1].toLowerCase(), body: [] }; continue; }
+      if (fence && open && !fence[1]) { if (open.info === '' || open.info === 'json') blocks.push(open.body.join('\n')); open = null; continue; }
+      open?.body.push(line);
+    }
     if (blocks.length !== 1) return { ok: false, miss: blocks.length ? `It gave ${blocks.length} code blocks; the case expects one JSON value.` : 'It gave no JSON: the whole output, or one ```json block, must be the JSON value.' };
-    text = blocks[0][1];
+    text = blocks[0];
   }
   try { return { ok: true, value: JSON.parse(text) }; } catch { return { ok: false, miss: 'Its JSON does not parse.' }; }
 }

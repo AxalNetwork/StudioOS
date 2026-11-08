@@ -59,6 +59,7 @@ test('structure: every accepted heading form passes', () => {
   assert.equal(headingOf('  ##   Next   steps  '), 'next steps');
   assert.equal(headingOf('Runway: Not recorded'), null, 'a Field: value line is not a heading');
   assert.equal(headingOf('- Risks:'), null, 'a list item is not a heading');
+  assert.equal(headingOf('**Note:** see **Risks**'), null, 'a line that only starts and ends in bold is not a heading');
 });
 
 test('structure: a missing, renamed, empty, misordered or fenced section fails with its name', () => {
@@ -249,6 +250,8 @@ test('output_schema: the whole output, or its one json fence, meeting the schema
   passes(CHANGE, '{"changes": [{"field": "mrr_usd", "to": 41200}]}');
   passes(CHANGE, 'Here is the proposed change:\n```json\n{"changes": [{"field": "status", "to": 1.5, "note": "made up"}]}\n```\nA named person decides.');
   passes(CHANGE, '```\n{"changes": [{"field": "mrr_usd", "to": 0}]}\n```');
+  // Another block's label is ignored; it never pairs with the json fence.
+  passes(CHANGE, '```text\nnotes\n```\n```json\n{"changes": [{"field": "mrr_usd", "to": 0}]}\n```');
 });
 
 test('output_schema: no JSON, two fences, bad JSON or a value off the schema fails at its path', () => {
