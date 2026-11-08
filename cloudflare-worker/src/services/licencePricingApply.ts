@@ -363,7 +363,6 @@ export function applyStatements(env: Env, a: {
   contractUid: string | null; reviewOn: string;
 }): D1PreparedStatement[] {
   const { licence, snap, input, plan } = a;
-  const guard = 'EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND terms_revision = ?)';
   const rev = input.expected_terms_revision;
   const stmts: D1PreparedStatement[] = [
     env.DB.prepare(
@@ -373,7 +372,8 @@ export function applyStatements(env: Env, a: {
          decision, override_reason, effective_from, created_at, created_by,
          licence_snapshot_uid, reason, terms_revision_before, terms_revision_after, pricing_review_on, contractual_change, agreement_acknowledged,
          contract_uid_at_decision, review_uid)
-       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard}`,
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND terms_revision = ?)`,
     ).bind(
       a.decisionUid, licence.uid, snap.lead_snapshot_uid, snap.currency,
       snap.recommended.initial_fee_cents, snap.recommended.annual_fee_cents, snap.recommended.royalty_bps, snap.recommended.minimum_royalty_cents, snap.recommended.regulatory_surcharge_cents,
