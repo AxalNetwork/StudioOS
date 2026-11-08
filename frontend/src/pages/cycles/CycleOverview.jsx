@@ -3,6 +3,7 @@ import { Unrecorded, Unreadable } from '../../ui';
 import { Chart, Spark } from './CycleCharts';
 import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
 import { MODULES } from './modules';
+import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 /**
@@ -201,7 +202,8 @@ export function CycleCard({ cycle, card, slug, onRetry, search = '', span = '' }
   const name = card?.name || slug;
   const next = card?.next;
   const href = nextHref(next?.href, search);
-  const moduleHref = card?.slug ? `/${cycle}/${card.slug}${linkSearch(search)}` : null;
+  // #4853: the Pitch card's module link is the Studio's own address.
+  const moduleHref = card?.slug ? canonicalPitchHref(`/${cycle}/${card.slug}${linkSearch(search)}`) : null;
   // D1466 (RO06): a card holding more than it can draw at its row's height is
   // cut off, and its module page holds the rest.
   const cut = view.state === 'ok' && view.charts.length > CARD_CHART_LIMIT;

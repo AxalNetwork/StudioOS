@@ -2566,3 +2566,24 @@ Both hashes match S1's decode, so this is the content S1 read. The font link was
 | D711 | S14 | #1865 | L0–L7: every library document passes the paper rules |
 
 **Counts unchanged: 97 / 28 / 26**, recounted. Nothing entered `canvases/`.
+
+## Landed 2026-11-07 — Admin v2 redesigns: Approvals, Community, Contracts and Platform (#4814, #4820, #4811, #4860)
+
+The owner's Claude Design canvas "Axal VC – platform design" carries four new board sets, drawn on 2026-11-07 from the issue briefs. Each landed under the name Claude Design gave it, as a page plus its boards, and each board file imports its page by that name:
+- **`Approvals v2 Page.dc.html`**, **`Approvals v2 · Boards.dc.html`**: boards AP-01 to AP-19 (D4814).
+- **`Community v2 Page.dc.html`**, **`Community v2 · Boards.dc.html`**: boards CM01 to CM12e (D4820).
+- **`Contracts v2 Page.dc.html`**, **`Contracts v2 · Boards.dc.html`**: boards CT01 to CT16 and spec boards CT90 to CT94 (D4811).
+- **`Platform v2 Page.dc.html`**, **`Platform v2 · Boards.dc.html`**: boards PL01 to PL12 (D4860).
+
+The v1 `Approvals` and `Community` canvases stay in place: the live pages are built to them, and their tests read them. Each v2 replaces its v1 when its build lands. None is built yet; each surface's build is its own task. The canvases' figures are sample content: the decision files list which figures need a read or a store confirmed.
+
+## Landed 2026-11-07 — HQ and Research v2 redesigns: Security, Research, Programs, Fund administration and Licences (#4803, #3701, #4873, #4812, #4819)
+
+Five more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-07 from the issue briefs. As before, each landed under the name Claude Design gave it, as a page plus its boards, and each board file imports its page by that name:
+- **`Security v2 Page.dc.html`**, **`Security v2 · Boards.dc.html`**: boards SE01 to SE12 and spec boards SEA to SEE (D4803, covering #4800 to #4803).
+- **`Research v2 Page.dc.html`**, **`Research v2 · Boards.dc.html`**: boards RS01 to RS12 and spec boards RSA to RSC (D3701, the canonical V2 prompt).
+- **`Programs v2 Page.dc.html`**, **`Programs v2 · Boards.dc.html`**: boards PG01 to PG08 (D4873).
+- **`Fund Admin v2 Page.dc.html`**, **`Fund Admin v2 · Boards.dc.html`**: boards FA01 to FA14 (D4812).
+- **`Licences v2 Page.dc.html`**, **`Licences v2 · Boards.dc.html`**: boards L00 to L22 (D4819).
+
+None is built yet; each surface's build is its own task. Figures are sample content, except where a decision file says a board shows the live state (Licences L0, the zero-licence ledger). Each decision file lists what is frontend-only and what needs backend work.

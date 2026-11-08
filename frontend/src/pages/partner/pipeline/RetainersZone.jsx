@@ -1,6 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
+import { usePipelineZone } from './usePipelineZone';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -136,7 +139,9 @@ function RetainerForm({ row, onSave, onDelete, busy, note }) {
     setHours(r?.retained_hours != null ? String(r.retained_hours) : '');
     setRenews(r?.renews_at || '');
     setEnded(r?.ended_at || '');
-  }, [r]);
+    // By VALUE, not identity: a background refresh hands every row a new `r`
+    // object, and resetting on that would discard another row's unsaved edit.
+  }, [r?.shape, r?.cadence, r?.amount_cents, r?.retained_hours, r?.renews_at, r?.ended_at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function submit() {
     // Typed dollars become integer cents HERE and nowhere else — the worker
@@ -334,21 +339,11 @@ function RetainerRow({ row, onSaveRetainer, onDeleteRetainer, onSaveUsage, onDel
 }
 
 export default function PartnerRetainersZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null });
+  const { state, load, run, busy, note } = usePipelineZone(
+    () => readAllPages((cur) => api.listPartnerRetainers(cur)), 'The retainer record did not load.',
+  );
   const [view, setView] = useState('all');
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);
 
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      const r = await api.listPartnerRetainers();
-      setState({ loading: false, error: '', data: r || {} });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'The retainer record did not load.', data: null });
-    }
-  }, []);
-  useEffect(() => { load(); }, [load]);
 
   /**
    * One write, with its result reported ON THE ROW THAT MADE IT.
@@ -358,19 +353,6 @@ export default function PartnerRetainersZone() {
    * "Hours logged." under every other row a person had expanded — each of them
    * a claim about a write that did not happen there.
    */
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
-    }
-  }, [load]);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -391,7 +373,8 @@ export default function PartnerRetainersZone() {
   // consumed one — and sweeping it into `Under-consuming` would report it as a
   // churn risk on the strength of a number it does not have.
   const live = useMemo(
-    () => items.filter((r) => r.retainer && !r.retainer.ended_at),
+    // D4693: the Worker's own rule (`retainer.active`): not ended, and its engagement not cancelled.
+    () => items.filter((r) => r.retainer && (r.retainer.active ?? !r.retainer.ended_at)),
     [items],
   );
   const renewingSoon = useMemo(
@@ -494,6 +477,7 @@ export default function PartnerRetainersZone() {
       )}
     >
       <div className="space-y-6">
+        <PartialRead data={state.data} noun="engagements" onRetry={load} />
         <ZoneHeading
           title="Retainers"
           blurb={

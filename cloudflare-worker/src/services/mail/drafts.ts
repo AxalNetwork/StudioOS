@@ -132,6 +132,7 @@ type Row = {
   uid: string; person_ref: string; intent: string; tone: string; length: string; refs_json: string; blocks_json: string;
   subject: string; body: string; parent_uid: string | null; instruction: string | null; model: string | null;
   prompt_tokens: number | null; completion_tokens: number | null; cost_micro_usd: number | null; created_at: string;
+  edited_to: string | null; edited_subject: string | null; edited_body: string | null; edit_revision: number | null; edited_at: string | null;
 };
 const json = (v: string) => { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch { return []; } };
 
@@ -140,7 +141,26 @@ export function draftView(r: Row) {
     uid: r.uid, parent_uid: r.parent_uid, person: r.person_ref, intent: r.intent, tone: r.tone, length: r.length,
     subject: r.subject, body: r.body, instruction: r.instruction, sources: json(r.refs_json), blocks: json(r.blocks_json),
     model: r.model, cost: { charged_microusd: r.cost_micro_usd == null ? null : Number(r.cost_micro_usd) }, created_at: r.created_at,
+    edit: editOf(r),
   };
+}
+
+/**
+ * D4660: the member's own text for this version, or null when they never saved
+ * an edit. `subject` and `body` above stay what Eadwyn generated (the source
+ * snapshot); this is what the member made of it, with the revision a save must
+ * name.
+ */
+export function editOf(r: Row): { to: string; subject: string; body: string; revision: number; at: string | null } | null {
+  const revision = Number(r.edit_revision ?? 0);
+  if (revision < 1) return null;
+  return { to: r.edited_to ?? '', subject: r.edited_subject ?? r.subject, body: r.edited_body ?? r.body, revision, at: r.edited_at };
+}
+
+/** The text a revision starts from: the member's saved edit when there is one, else the generated text. */
+export function currentText(r: Row): { subject: string; body: string } {
+  const e = editOf(r);
+  return e ? { subject: e.subject, body: e.body } : { subject: r.subject, body: r.body };
 }
 export type DraftView = ReturnType<typeof draftView>;
 
@@ -163,7 +183,7 @@ export async function insertDraft(env: Env, user: User, d: NewDraft): Promise<Dr
 
 async function rowOf(env: Env, user: User, uid: string): Promise<Row | null> {
   if (!/^[a-f0-9]{32}$/.test(uid)) return null;
-  return await env.DB.prepare('SELECT uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at FROM mail_drafts WHERE uid = ? AND user_id = ?').bind(uid, user.id).first<Row>();
+  return await env.DB.prepare('SELECT uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at, edited_to, edited_subject, edited_body, edit_revision, edited_at FROM mail_drafts WHERE uid = ? AND user_id = ?').bind(uid, user.id).first<Row>();
 }
 
 export async function draftOf(env: Env, user: User, uid: string): Promise<DraftView | null> {
@@ -174,9 +194,48 @@ export async function draftOf(env: Env, user: User, uid: string): Promise<DraftV
 /** The member's own drafts, newest first; `person` narrows to one recipient. */
 export async function listDrafts(env: Env, user: User, person: string | null) {
   const rows = person
-    ? await env.DB.prepare('SELECT uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at FROM mail_drafts WHERE user_id = ? AND person_ref = ? ORDER BY created_at DESC, id DESC LIMIT 100').bind(user.id, person).all<Row>()
-    : await env.DB.prepare('SELECT uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at FROM mail_drafts WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100').bind(user.id).all<Row>();
+    ? await env.DB.prepare('SELECT uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at, edited_to, edited_subject, edited_body, edit_revision, edited_at FROM mail_drafts WHERE user_id = ? AND person_ref = ? ORDER BY created_at DESC, id DESC LIMIT 100').bind(user.id, person).all<Row>()
+    : await env.DB.prepare('SELECT uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at, edited_to, edited_subject, edited_body, edit_revision, edited_at FROM mail_drafts WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100').bind(user.id).all<Row>();
   return (rows.results || []).map(draftView);
+}
+
+export const EDIT_SUBJECT_MAX = 200;
+export const EDIT_BODY_MAX = 8000;
+export const EDIT_TO_MAX = 254;
+
+export type EditOutcome =
+  | { ok: true; draft: DraftView }
+  | { ok: false; status: 404 | 400 | 409; code: string; message: string; current?: DraftView };
+
+/**
+ * D4660: saves the member's edit of one version, with no model run and no
+ * charge. The text is stored exactly as typed (a draft may be half-written, so
+ * nothing is trimmed or checked as an address). A save names the revision it
+ * read (`expected`), and writes only from that one: a second tab holding an
+ * older copy is refused with the current draft, never silently overwritten.
+ */
+export async function saveDraftEdit(env: Env, user: User, uid: string, input: { to: unknown; subject: unknown; body: unknown; expected: unknown }): Promise<EditOutcome> {
+  const row = await rowOf(env, user, uid);
+  if (!row) return { ok: false, status: 404, code: 'not_found', message: 'Draft not found.' };
+  const { to, subject, body, expected } = input;
+  if (typeof subject !== 'string' || typeof body !== 'string' || (to != null && typeof to !== 'string')) {
+    return { ok: false, status: 400, code: 'edit_invalid', message: 'Send the recipient, subject and body as text.' };
+  }
+  if (subject.length > EDIT_SUBJECT_MAX || body.length > EDIT_BODY_MAX || (to ?? '').length > EDIT_TO_MAX) {
+    return { ok: false, status: 400, code: 'edit_too_long', message: `Keep the subject under ${EDIT_SUBJECT_MAX} characters, the body under ${EDIT_BODY_MAX} and the address under ${EDIT_TO_MAX}.` };
+  }
+  if (!Number.isInteger(expected) || (expected as number) < 0) {
+    return { ok: false, status: 400, code: 'revision_required', message: 'Name the revision of the draft you read.' };
+  }
+  const r = await env.DB.prepare(
+    `UPDATE mail_drafts SET edited_to = ?, edited_subject = ?, edited_body = ?, edit_revision = edit_revision + 1, edited_at = datetime('now')
+     WHERE uid = ? AND user_id = ? AND edit_revision = ?`,
+  ).bind(to ?? '', subject, body, uid, user.id, expected).run();
+  if (!r.meta?.changes) {
+    const now = await draftOf(env, user, uid);
+    return { ok: false, status: 409, code: 'stale_edit', message: 'This draft was changed in another tab. Reload it to see the latest text.', current: now ?? undefined };
+  }
+  return { ok: true, draft: (await draftOf(env, user, uid))! };
 }
 
 /** Deletes one of the member's own drafts. Its revisions keep their parent's uid, which then names nothing. */
@@ -187,11 +246,12 @@ export async function deleteDraft(env: Env, user: User, uid: string): Promise<bo
 }
 
 /** The parent of a revision, as its ask: the same person, intent, tone, length, refs and blocks. */
-export async function parentAsk(env: Env, user: User, uid: string): Promise<{ row: Row; body: Record<string, unknown> } | null> {
+export async function parentAsk(env: Env, user: User, uid: string): Promise<{ row: Row; current: { subject: string; body: string }; body: Record<string, unknown> } | null> {
   const row = await rowOf(env, user, uid);
   if (!row) return null;
   return {
     row,
+    current: currentText(row),
     body: { person: row.person_ref, intent: row.intent, tone: row.tone, length: row.length,
       refs: json(row.refs_json).map((s: any) => s?.ref).filter(Boolean), blocks: json(row.blocks_json).map((b: any) => b?.kind).filter(Boolean) },
   };

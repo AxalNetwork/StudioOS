@@ -33,12 +33,22 @@ export async function evidenceRead(promise) {
   }
 }
 
+/**
+ * The interviews array out of what `listInterviews` answers: the Worker's
+ * `{ project_id, interviews: [...] }` envelope (or a bare array), and null for
+ * anything else. A malformed answer is a failed read, never an empty list
+ * (D4625, #4625): the record mount used to call `.find` on the envelope, which
+ * threw, and its catch read as "no such interview".
+ */
+export function interviewListOf(data) {
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data?.interviews) ? data.interviews : null;
+}
+
 /** The interviews array out of a successful listInterviews read. */
 export function interviewsOf(read) {
   if (!read?.ok) return null;
-  const d = read.data;
-  if (Array.isArray(d)) return d;
-  return Array.isArray(d?.interviews) ? d.interviews : [];
+  return interviewListOf(read.data) ?? [];
 }
 
 /** The signups array out of a successful waitlist read. */

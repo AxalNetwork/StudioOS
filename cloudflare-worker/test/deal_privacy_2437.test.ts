@@ -38,7 +38,7 @@ const ROLE: Record<number, string> = { 1: 'admin', 2: 'investor', 3: 'investor',
 
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments', 'reference_checks']) db.exec(ddl(t));
+  for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments', 'reference_checks', 'user_company_links', 'company_profiles']) db.exec(ddl(t));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   for (const [id, role] of Object.entries(ROLE)) u.run(Number(id), role, `User ${id}`, `u${id}@example.test`);
   db.exec(`UPDATE users SET founder_id = 50 WHERE id = ${FOUNDER}`);

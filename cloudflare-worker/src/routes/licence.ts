@@ -126,6 +126,8 @@ export type LicencePull = {
   at: string | null;
   reason?: string;
   retry_after?: string;
+  /** #4686 — HQ answered and the copy was stored, but not every section of it. */
+  partial?: boolean;
 };
 
 /**
@@ -257,6 +259,7 @@ export async function pullLicenceCopy(env: Env): Promise<LicencePull> {
   const at = nowIso();
   const until = new Date(Date.parse(at) + LICENCE_PULL_WINDOW_SECONDS * 1000).toISOString();
   let ok = false;
+  let partial = false;
   let reason: string | undefined;
   try {
     const answer = await withDeadline(hq.licence(code, secret), LICENCE_PULL_DEADLINE_MS, 'licence-pull');
@@ -275,8 +278,15 @@ export async function pullLicenceCopy(env: Env): Promise<LicencePull> {
       reason = 'HQ answered without a licence id, so the answer was not stored.';
     } else {
       try {
-        await applyLicenceCopy(env, answer as Record<string, unknown>);
+        const applied = await applyLicenceCopy(env, answer as Record<string, unknown>);
         ok = true;
+        // #4686 — a copy stored without some of its sections is not a full pull.
+        // The row exists, so the page renders; the pull says what is missing.
+        if (applied?.partial === true) {
+          partial = true;
+          reason = 'HQ answered and the licence was stored, but part of the copy could not be written here, '
+            + 'so some sections may be out of date until HQ next pushes.';
+        }
       } catch (e) {
         reason = `HQ answered, but the copy could not be stored: ${(e as Error).message}`;
       }
@@ -306,7 +316,7 @@ export async function pullLicenceCopy(env: Env): Promise<LicencePull> {
   }
 
   return ok
-    ? { called: true, ok: true, at }
+    ? { called: true, ok: true, at, ...(partial ? { partial: true, reason } : {}) }
     : { called: true, ok: false, at, ...(reason ? { reason } : {}), retry_after: until };
 }
 

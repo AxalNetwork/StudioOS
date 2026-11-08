@@ -5,7 +5,7 @@ import {
   // own composition now, and `ProofTile` below is the tile that carries the
   // artboard's note under each figure.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
+  Section, Field, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -13,6 +13,7 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../../../workspaces/canvasKit';
+import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
 
 /**
  * Offers · Proof — `/offers/proof`.
@@ -140,7 +141,7 @@ function ConsentRow({ consent, onWithdraw, busy }) {
   );
 }
 
-function AskPanel({ item, onAsk, busy, issuedToken }) {
+function AskPanel({ item, onAsk, busy, issuedToken, note }) {
   const [form, setForm] = useState({ consenter_name: '', consenter_email: '', consenter_role: '' });
 
   // NOT named `issued`, though the parent's state is. The two are different
@@ -197,6 +198,7 @@ function AskPanel({ item, onAsk, busy, issuedToken }) {
       >
         Create the ask
       </button>
+      <WriteNote note={scopedNote(note, `ask:${item.id}`)} busy={busy} />
       <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
         This records the ask and gives you a link. It does not send anything —
         whether this product should email your client on your behalf is not a
@@ -286,17 +288,17 @@ function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issu
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className={buttonClass} disabled={busy}
-              onClick={async () => { await onSave(item, draft); setEdit(false); }}>Save</button>
+              onClick={() => onSave(item, draft, () => setEdit(false))}>Save</button>
             <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
               disabled={busy} onClick={() => onDelete(item)}>Delete</button>
           </div>
-          <SaveNote note={note?.scope === `proof:${item.id}` ? note : null} />
+          <WriteNote note={scopedNote(note, `proof:${item.id}`)} busy={busy} />
         </div>
       )}
 
       {asking && (
         <AskPanel
-          item={item} busy={busy} onAsk={onAsk}
+          item={item} busy={busy} onAsk={onAsk} note={note}
           issuedToken={issued?.itemId === item.id ? issued : null}
         />
       )}
@@ -337,7 +339,7 @@ function ProofCard({ item, onSave, onDelete, onAsk, onWithdraw, busy, note, issu
  * published outcome is a normal thing to want: two people at the client, or a
  * replacement for one who withdrew.
  */
-function AskModal({ items, busy, issued, onAsk, onClose }) {
+function AskModal({ items, busy, issued, onAsk, onClose, note }) {
   const [pick, setPick] = useState(items[0]?.id ?? null);
   const item = items.find((i) => i.id === pick) || null;
   return (
@@ -365,7 +367,7 @@ function AskModal({ items, busy, issued, onAsk, onClose }) {
             </Field>
             {item && (
               <AskPanel
-                item={item} busy={busy} onAsk={onAsk}
+                item={item} busy={busy} onAsk={onAsk} note={note}
                 issuedToken={issued?.itemId === item.id ? issued : null}
               />
             )}
@@ -378,8 +380,6 @@ function AskModal({ items, busy, issued, onAsk, onClose }) {
 
 export default function PartnerProofZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null });
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);
   const [issued, setIssued] = useState(null);
   const [adding, setAdding] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -391,41 +391,30 @@ export default function PartnerProofZone() {
     try {
       const r = await api.listPartnerProof();
       setState({ loading: false, error: '', data: r || {} });
+      return true;
     } catch (e) {
       setState({ loading: false, error: e?.message || 'The proof record did not load.', data: null });
+      return false;
     }
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
-    }
-  }, [load]);
+  // #4688: one write mechanism, shared with Visibility and Audience fit. See
+  // `useGuardedWrite.jsx` for what "saved" means and what Retry repeats.
+  const { busy, note, save, reload, clearNote } = useGuardedWrite(load);
+  const run = useCallback(
+    (write, saved, scope, onSaved) => save(write, { saved, scope, onSaved }),
+    [save],
+  );
+  const toggleAdding = (open) => { clearNote(); setAdding(open); };
 
-  const ask = useCallback(async (item, form) => {
-    setBusy(true);
-    setNote(null);
-    try {
+  const ask = useCallback((item, form) => run(
+    async () => {
       const r = await api.requestPartnerProofConsent(item.id, form);
-      // Held in component state only, and only until the next load. It is never
-      // written anywhere and never re-fetched, because no later read returns it.
       setIssued({ itemId: item.id, request_token: r.request_token, consenter_name: r.consenter_name });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'The ask was not recorded.', scope: `proof:${item.id}` });
-    } finally {
-      setBusy(false);
-    }
-  }, [load]);
+    },
+    'The ask is recorded.', `ask:${item.id}`,
+  ), [run]);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -467,7 +456,7 @@ export default function PartnerProofZone() {
   // `Ask for consent` is supplied by this page: a handler the page does not
   // supply renders nothing at all, which is the whole point of the kind.
   const handlers = {
-    askConsent: () => { setNote(null); setAsking(true); },
+    askConsent: () => { clearNote(); setAsking(true); },
   };
   const rowActions = partnerZoneActions('offers/proof', { handlers, view: { header: ['Outcome', 'Kind', 'Provenance', 'Founder', 'Consent', 'What it says'], rows: visible, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, CONSENT_LABEL[consentState(r)], r.outcome_note] } });
 
@@ -503,10 +492,51 @@ export default function PartnerProofZone() {
         filters={unlinked ? [] : partnerZoneFilters('offers/proof', { value: view, onChange: setView })}
         actions={rowActions}
       />
+      {/* THE EDITOR IS NOT A CHILD OF `ZoneBody` (#4688): with no rows `ZoneBody`
+          draws only its empty state, so a form among its children never
+          mounted for the first record. Mounted by `adding` alone, it also
+          survives a refresh and an unreadable list. */}
+      {adding && (
+        <div className="mb-6 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700" data-testid="proof-editor">
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Title">
+              <input className={inputClass} value={newItem.title} maxLength={200}
+                onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} />
+            </Field>
+            <Field label="Kind">
+              <select className={inputClass} value={newItem.kind}
+                onChange={(e) => setNewItem({ ...newItem, kind: e.target.value })}>
+                {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Field label="What the work was">
+              <textarea className={inputClass} rows={3} value={newItem.detail} maxLength={4000}
+                onChange={(e) => setNewItem({ ...newItem, detail: e.target.value })} />
+            </Field>
+          </div>
+          <button
+            type="button" className={`${buttonClass} mt-3`}
+            disabled={busy || !newItem.title.trim()}
+            onClick={() => run(
+              () => api.createPartnerProof(newItem), 'Added.', 'new',
+              () => {
+                setNewItem({ title: '', kind: 'case_study', detail: '', outcome_note: '' });
+                setAdding(false);
+              },
+            )}
+          >
+            Add item
+          </button>
+          <WriteNote note={scopedNote(note, 'new')} busy={busy} />
+        </div>
+      )}
+      <WriteNote note={zoneNote(note)} busy={busy} onReload={reload} />
       <ZoneBody
         loading={state.loading}
         error={unlinked ? null : state.error}
-        onRetry={load}
+        onRetry={reload}
         notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || (items.length === 0)}
         empty={(
@@ -518,7 +548,7 @@ export default function PartnerProofZone() {
               + 'until they do, this page will say which of the two it is.'
             }
             action={(
-              <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
+              <button type="button" className={buttonClass} onClick={() => toggleAdding(true)}>
                 Add a case study
               </button>
             )}
@@ -534,7 +564,7 @@ export default function PartnerProofZone() {
               + 'warning: an unconsented outcome has no published form to suppress.'
             }
             action={(
-              <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
+              <button type="button" className={ghostButtonClass} onClick={() => toggleAdding(!adding)}>
                 {adding ? 'Cancel' : 'Add an item'}
               </button>
             )}
@@ -606,41 +636,6 @@ export default function PartnerProofZone() {
             nothingToDraft="Every outcome is published, so there is nothing to ask for."
           />
 
-          {adding && (
-            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Title">
-                  <input className={inputClass} value={newItem.title} maxLength={200}
-                    onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} />
-                </Field>
-                <Field label="Kind">
-                  <select className={inputClass} value={newItem.kind}
-                    onChange={(e) => setNewItem({ ...newItem, kind: e.target.value })}>
-                    {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                </Field>
-              </div>
-              <div className="mt-3">
-                <Field label="What the work was">
-                  <textarea className={inputClass} rows={3} value={newItem.detail} maxLength={4000}
-                    onChange={(e) => setNewItem({ ...newItem, detail: e.target.value })} />
-                </Field>
-              </div>
-              <button
-                type="button" className={`${buttonClass} mt-3`}
-                disabled={busy || !newItem.title.trim()}
-                onClick={async () => {
-                  await run(() => api.createPartnerProof(newItem), 'Added.', 'new');
-                  setNewItem({ title: '', kind: 'case_study', detail: '', outcome_note: '' });
-                  setAdding(false);
-                }}
-              >
-                Add item
-              </button>
-              <SaveNote note={note?.scope === 'new' ? note : null} />
-            </div>
-          )}
-
           <Section title="Proof">
             {/* A narrowed view that finds nothing says which view it is, the way
                 `LibraryZone` does: a bare empty list under a selected chip reads
@@ -659,12 +654,12 @@ export default function PartnerProofZone() {
                   busy={busy}
                   note={note}
                   issued={issued}
-                  onSave={(it, draft) => run(
+                  onSave={(it, draft, onSaved) => run(
                     () => api.updatePartnerProof(it.id, {
                       title: draft.title, kind: draft.kind,
                       detail: draft.detail, outcome_note: draft.outcome_note,
                     }),
-                    'Saved.', `proof:${it.id}`,
+                    'Saved.', `proof:${it.id}`, onSaved,
                   )}
                   onDelete={(it) => run(
                     () => api.deletePartnerProof(it.id),
@@ -682,7 +677,7 @@ export default function PartnerProofZone() {
 
           {asking && (
             <AskModal
-              items={items} busy={busy} issued={issued}
+              items={items} busy={busy} issued={issued} note={note}
               onAsk={ask} onClose={() => setAsking(false)}
             />
           )}

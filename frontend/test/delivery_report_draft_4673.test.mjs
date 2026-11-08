@@ -62,6 +62,7 @@ test('the composer uses the rule: gated responses, invalidated on every selectio
   assert.equal((zone.match(/if \(!gate\.current\.isCurrent\(ticket\)\) return;/g) || []).length, 2, 'both the success and the failure path are gated');
   assert.equal((zone.match(/gate\.current\.invalidate\(\);/g) || []).length, 2, 'engagement and period changes both retire the composition');
   assert.match(zone, /setDraft\(draftFrom\(r, asked\)\)/);
-  assert.match(zone, /api\.savePartnerStatusReport\(\.\.\.saveRequest\(draft, \{ shipped, next_up: nextUp \}\)\)/);
+  assert.match(zone, /const sending = saveRequest\(draft, \{ shipped, next_up: nextUp \}\);/);
+  assert.match(zone, /api\.savePartnerStatusReport\(\.\.\.sending\)/);
   assert.doesNotMatch(zone, /savePartnerStatusReport\(engagementId/, 'never the selector\'s engagement');
 });

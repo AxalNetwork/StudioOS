@@ -28,6 +28,7 @@ import { licenceLedgerApi } from '../src/lib/api/licenceLedger.js';
 import { TermsScheduleForm, saveError } from '../src/pages/admin/LicenceTermsSchedule.jsx';
 import { RequestsPanelView, loadLicenceRequests } from '../src/pages/admin/LicenceRequestsPanel.jsx';
 import { EscalationKindFilter, escalationCardProps } from '../src/pages/hq/HqSupportPage.jsx';
+import { licencePageSource } from './_licencePage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -113,6 +114,8 @@ test('the save sends exactly what was typed and changed: cents and bps converted
     terms: { late_interest_bps: 150, minimum_guarantee_cents: null, payment_terms_days: 30 },
     sections: { late_interest_bps: '§4.7', exclusive: null, payment_terms_days: '§4.6' },
     reason: 'Renegotiated at renewal',
+    // D4694: a save names the revision the form was read at (STORED carries none: no schedule yet is revision 0).
+    expected_revision: 0,
   });
   // An untouched form sends nothing.
   assert.deepEqual(buildSave(STORED, formWith(), 'A reason'), { ok: false, errors: { form: 'Nothing has changed.' } });
@@ -250,7 +253,7 @@ test('Open terms goes to the term\'s row or its step; a notice of non-renewal is
 });
 
 test('the licence page mounts the schedule, the panel, and Grant admin prefills the existing appointment', () => {
-  const SRC = codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx'));
+  const SRC = codeOnly(licencePageSource());
   // D4707: the tab bar is drawn from licenceNavModel's list, test ids and all.
   assert.ok(readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8').includes("testId: 'licence-schedule-tab'"));
   assert.ok(SRC.includes('data-testid={t.testId}'));

@@ -66,44 +66,55 @@ type GraduateFacts = {
  * from their application, conferral date from the milestone row itself.
  */
 async function loadGraduateFacts(env: Env, userId: number): Promise<GraduateFacts | null> {
+  // D4659: a graduate by the one programme rule (view spinout_lab_graduates,
+  // by_rule = 1), conferred when the last required step landed, and the
+  // company is the enrollment's venture — never "the lowest-numbered project
+  // this founder owns". No venture recorded (several projects, none chosen)
+  // means the facts are incomplete and nothing is issued yet.
   try {
     const row = await env.DB.prepare(
       `SELECT
          u.id                AS user_id,
          u.name              AS name,
          u.spinout_lab_started_at AS started_at,
-         m.completed_at      AS conferred_at,
+         g.graduated_at      AS conferred_at,
          f.spinout_lab_cohort AS cohort,
-         p.id                AS project_id,
-         p.name              AS project_name,
          a.company_name      AS application_company,
          a.jurisdiction      AS jurisdiction
        FROM users u
-       JOIN spinout_lab_milestones m
-         ON m.user_id = u.id AND m.milestone_key = 'incorporation_completed'
+       JOIN spinout_lab_graduates g ON g.user_id = u.id AND g.by_rule = 1
        LEFT JOIN user_spinout_flags f ON f.user_id = u.id
-       LEFT JOIN projects p
-         ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
-       LEFT JOIN spinout_applications a
-         ON a.user_id = u.id
+       LEFT JOIN spinout_applications a ON a.user_id = u.id
        WHERE u.id = ?
-       ORDER BY p.id ASC, a.id DESC
+       ORDER BY a.id DESC
        LIMIT 1`,
     ).bind(userId).first<any>();
     if (!row) return null;
-    return {
-      user_id: Number(row.user_id),
-      name: row.name ?? null,
-      conferred_at: row.conferred_at ?? null,
-      cohort: row.cohort ?? null,
-      company: (row.project_name || row.application_company || null),
-      project_id: row.project_id ?? null,
-      jurisdiction: row.jurisdiction ?? null,
-      started_at: row.started_at ?? null,
-    };
+    const { resolveVenture } = await import('./labVenture');
+    const venture = await resolveVenture(env, userId);
+    if (venture.status === 'bound') {
+      return { ...base(row), project_id: venture.project.id, company: venture.project.name || row.application_company || null };
+    }
+    // No project at all: nothing is ambiguous, the application names the company.
+    if (venture.status === 'none') return base(row);
+    // Several projects and none chosen, or the chosen one deleted: wait for the choice.
+    return { ...base(row), conferred_at: null, project_id: null, company: null };
   } catch {
     return null; // tables predating the Lab migrations
   }
+}
+
+function base(row: any): GraduateFacts {
+  return {
+    user_id: Number(row.user_id),
+    name: row.name ?? null,
+    conferred_at: row.conferred_at ?? null,
+    cohort: row.cohort ?? null,
+    company: row.application_company ?? null,
+    project_id: null,
+    jurisdiction: row.jurisdiction ?? null,
+    started_at: row.started_at ?? null,
+  };
 }
 
 /**
@@ -210,13 +221,13 @@ export async function backfillCertificates(
   try {
     const cap = Math.max(1, Math.min(500, Number(limit) || 100));
     const rows = await env.DB.prepare(
-      `SELECT DISTINCT m.user_id
-         FROM spinout_lab_milestones m
+      `SELECT g.user_id
+         FROM spinout_lab_graduates g
          LEFT JOIN spinout_certificates c
-           ON c.user_id = m.user_id AND c.status = 'issued'
-        WHERE m.milestone_key = 'incorporation_completed'
+           ON c.user_id = g.user_id AND c.status = 'issued'
+        WHERE g.by_rule = 1
           AND c.id IS NULL
-        ORDER BY m.user_id ASC
+        ORDER BY g.user_id ASC
         LIMIT ?`,
     ).bind(cap + 1).all<{ user_id: number }>();
 

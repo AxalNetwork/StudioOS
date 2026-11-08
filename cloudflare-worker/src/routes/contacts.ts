@@ -1565,7 +1565,7 @@ r.post('/:uid/promote', async (c) => {
 
       // Free-tier cap mirrors create-interview / waitlist-promote so the button
       // is not a tier-cap bypass. Explicit 402 — never a silent fallback.
-      if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+      if (holdsLicence(user, 'founder') && !userMeetsTier(user, 'growth')) {
         const cnt = await db.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
           .bind(row.project_id).first<{ n: number }>();
         if (Number(cnt?.n ?? 0) >= FREE_TIER_LIMITS.discoveryInterviews) {

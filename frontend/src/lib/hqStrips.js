@@ -22,10 +22,11 @@ import { SIDEBAR_GROUPS } from '../sidebarConfig.js';
 const strip = (pairs) => pairs.map(([label, route]) => ({ label, route }));
 
 export const HQ_STRIPS = {
-  // D981 (#2376): the ledger and Program grants, #2375's "Ledger · Program grants".
+  // D981 (#2376): the ledger and Program grants, #2375's "Ledger · Program grants";
+  // D4819 (#4819) names the second "Program access by licence", at the same address.
   Licences: strip([
     ['Ledger', '/admin/licences'],
-    ['Program grants', '/admin/licences/programs'],
+    ['Program access by licence', '/admin/licences/programs'],
   ]),
   Platform: strip([
     ['Overview', '/admin/platform'],
