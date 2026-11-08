@@ -1112,7 +1112,9 @@ advisors.post('/slots/:id/book', async (c) => {
             status: 'pending',
             ics_status: 'TENTATIVE' as const,
             location_kind: 'video',
-            location_uri: slot.meeting_url || null,
+            // #4715: the meeting link goes out with the confirmation
+            // (deferCalendarConfirm), not with the request.
+            location_uri: null,
             organizer_email: advisorMeta?.email || null,
             attendees: [
               { email: advisorMeta?.email || null, name: advisorMeta?.display_name || null, role: 'advisor' },
