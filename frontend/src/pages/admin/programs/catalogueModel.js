@@ -14,7 +14,7 @@
  * A read that did not answer at all is loading or unreadable for every block it feeds.
  */
 import {
-  COULD_NOT_READ, NOT_READ_YET, NOT_RECORDED, NONE_CLAIM, OVERDUE_HOURS, PROGRAMS, ageText, isFailed, isLoading,
+  COULD_NOT_READ, NOT_READ_YET, NOT_RECORDED, NONE_CLAIM, OVERDUE_HOURS, PROGRAMS, READING, ageText, isFailed, isLoading,
   grantBadgeOf, plural, programByKey,
 } from './programsModel';
 
@@ -339,7 +339,12 @@ export const STATUS_WORD = Object.freeze({
  */
 export function catalogueCards(read) {
   const reg = pick(read, ['programs']);
-  if (reg.state !== 'ready') return { state: reg.state, reason: reg.reason, cards: PROGRAMS.map((p) => ({ ...p, row: null })) };
+  // D4807: while the registry has not answered, the card keeps its door and its name, but its status and grant are
+  // words about the read (Reading…, Could not be read), never the constant's "Live" or "HQ-held" standing in for a fact.
+  if (reg.state !== 'ready') {
+    const word = reg.state === 'loading' ? READING : reg.state === 'pending' ? NOT_READ_YET : reg.state === 'unrecorded' ? NOT_RECORDED : COULD_NOT_READ;
+    return { state: reg.state, reason: reg.reason, cards: PROGRAMS.map((p) => ({ ...p, status: word, grant: word, hqGrant: word, row: null, fallback: reg.state })) };
+  }
   const rows = Array.isArray(reg.data.rows) ? reg.data.rows : [];
   const cards = rows.map((r) => {
     const base = programByKey(r.key) || { key: r.key, grant: 'Not offered yet', hqGrant: 'HQ only' };
