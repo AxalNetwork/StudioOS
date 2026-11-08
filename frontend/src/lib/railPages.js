@@ -496,6 +496,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },
   { route: '/spinout-lab/investor-workspace', railCount: 0, pageTestIds: ['investor-workspace-axal-vc-fund'], roles: ['investor'], why: 'Owner request: the LP investor workspace has no AI side rail; its content and access gates remain.' },
   { route: '/spinout-lab/apply', roles: ['investor', 'advisor', 'partner'], why: 'The Spin-Out Lab application, before a lane is chosen: a founder’s or an exploring member’s page, keyed under their own profile; the other profiles have no key for it (D1408: `authOnly` routes are now checked for every profile).' },
+  { route: '/spinout-lab/certificate', roles: ['investor', 'advisor', 'partner'], why: 'D4661 (#4661): a graduate keeps their own certificate whatever their account role, so the route admits any signed-in account; it is a founder\u2019s or an exploring member\u2019s page, keyed under their own profile, and the other profiles have no key for it.' },
   { route: '/spinout-lab/brief', roles: [], why: 'The public Spin-Out Lab brief.' },
   { route: '/advisors/:uid', roles: [], why: 'An advisor’s public profile.' },
   { route: '/b/*', roles: [], why: 'A public booking page.' },
