@@ -283,3 +283,22 @@ test('an influencer asks HQ for an offer; HQ is told; a member who is not one is
   const n = db.prepare("SELECT user_id FROM notifications_inbox WHERE type = 'influencer_offer_requested'").all() as any[];
   assert.deepEqual(n.map((x) => x.user_id), [SUPER]);
 });
+
+test('D4810: every influencer’s offers in one paged read, newest first, each with its influencer; bounded; the Super Admin’s', async () => {
+  const { db, env } = world();
+  offer(db, 'o-real', 'promo_jane20');
+  // 120 more offers: a code no longer in Promos still answers, said as unreadable.
+  for (let i = 0; i < 120; i += 1) offer(db, `o-${i}`, `promo-missing-${i}`);
+  const first = await hit(env, db, 'GET', '/api/admin/influencer-offers?limit=50&offset=0', SUPER);
+  assert.equal(first.status, 200, first.text);
+  assert.deepEqual([first.body.items.length, first.body.total, first.body.limit, first.body.offset], [50, 121, 50, 0]);
+  assert.deepEqual(first.body.items[0].influencer, { user_uid: 'uid-jane', handle: null, name: 'Jane Creator' });
+  assert.equal(first.body.items[0].offer.uid, 'o-119', 'newest first');
+  const last = await hit(env, db, 'GET', '/api/admin/influencer-offers?limit=50&offset=100', SUPER);
+  assert.equal(last.body.items.length, 21);
+  const real = last.body.items.find((x: any) => x.offer.uid === 'o-real').offer;
+  assert.deepEqual([real.code, real.code_state], ['JANE20', 'live'], 'the same view as the influencer’s own read');
+  assert.equal(last.body.items.find((x: any) => x.offer.uid === 'o-0').offer.code_state, 'unreadable');
+  for (const q of ['limit=0', 'limit=101', 'offset=-1', 'limit=x']) assert.equal((await hit(env, db, 'GET', `/api/admin/influencer-offers?${q}`, SUPER)).status, 400, q);
+  assert.equal((await hit(env, db, 'GET', '/api/admin/influencer-offers', MEMBER)).status, 403, 'offers carry budgets and spend');
+});
