@@ -58,7 +58,9 @@ test('D5050 a draft reads Draft and says it has no document; a package with no p
 test('D5050 the filter choices are the Worker\'s values', () => {
   // The Worker is the authority (services/contractAgreementSources.ts, services/agreementTemplates.ts).
   const sources = readFileSync('cloudflare-worker/src/services/contractAgreementSources.ts', 'utf8');
-  const listOf = (name) => [...sources.match(new RegExp(`export const ${name} = \\[([^\\]]+)\\]`))[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  // Literal patterns, one per list (no RegExp built from input).
+  const LISTS = { AGREEMENT_TYPES: /export const AGREEMENT_TYPES = \[([^\]]+)\]/, LEGAL_STATUSES: /export const LEGAL_STATUSES = \[([^\]]+)\]/ };
+  const listOf = (name) => [...sources.match(LISTS[name])[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
   assert.deepEqual(AGREEMENT_TYPE_OPTIONS.map(([v]) => v).filter(Boolean), listOf('AGREEMENT_TYPES'));
   assert.deepEqual(LEGAL_STATUS_OPTIONS.map(([v]) => v).filter(Boolean), listOf('LEGAL_STATUSES'));
   const templates = readFileSync('cloudflare-worker/src/services/agreementTemplates.ts', 'utf8');
