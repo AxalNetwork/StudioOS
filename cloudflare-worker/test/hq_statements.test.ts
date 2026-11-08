@@ -749,3 +749,76 @@ test('D514 — every action a PATCH carries writes its own audit row', async () 
   assert.equal(audit(app.db)[4].details.note, 'Withdrawn after review');
   assert.equal(audit(app.db)[4].details.from_status, 'issued');
 });
+
+/* ------------------------------------------------------------------ *
+ * D5029 — a currency is a listed one or the write is refused          *
+ * ------------------------------------------------------------------ */
+
+test('D5029: a draw in a licence\'s own currency stores that currency; a licence whose currency is not a listed one is refused, never drawn as euros', async () => {
+  // Mutations checked: the old `licence.currency || 'EUR'` (an unlisted currency drawn as EUR); the refusal removed.
+  const { call, report, rows, db } = statementsApp();
+  const add = db.prepare(`INSERT INTO territory_licences (uid, licence_ref, legal_entity_name, brand_name, revenue_share_bps, currency, status) VALUES (?,?,?,?,?,?,?)`);
+  add.run('lic_jp', 'AXL-020', 'Axal VC Japan KK', 'Axal VC Japan', 3500, 'JPY', 'active');
+  add.run('lic_bad', 'AXL-021', 'Axal VC Nowhere', 'Axal VC Nowhere', 3500, 'XYZ', 'active');
+  add.run('lic_blank', 'AXL-022', 'Axal VC Blank', 'Axal VC Blank', 3500, '', 'active');
+  report('other', 1_000_000, { licence_uid: 'lic_jp', currency: 'JPY' });
+  report('other', 1_000_000, { licence_uid: 'lic_bad', currency: 'XYZ' });
+
+  const jp = await call(...draw({ licence_uid: 'lic_jp', period: '2026-Q3' }));
+  assert.equal(jp.status, 201, JSON.stringify(jp.body));
+  assert.equal(jp.body.currency, 'JPY');
+  assert.equal(jp.body.owed_cents, 350_000, 'a count of yen: the share of 1,000,000 yen is 350,000 yen');
+
+  for (const uid of ['lic_bad', 'lic_blank']) {
+    const refused = await call(...draw({ licence_uid: uid, period: '2026-Q3' }));
+    assert.equal(refused.status, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.error, 'currency_unknown');
+  }
+  assert.deepEqual(rows().map((r) => r.licence_uid), ['lic_jp'], 'nothing was drawn in a guessed currency');
+});
+
+test('D5029: a statement with no usable currency is its own bucket in the totals, not euros', async () => {
+  const { call, report, db } = statementsApp();
+  report('other', 100_000);
+  await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
+  db.prepare("UPDATE subsidiary_statements SET currency = '' WHERE licence_uid = 'lic_fr'").run();
+  const r = await call('/statements');
+  assert.deepEqual(Object.keys(r.body.totals_by_currency), ['UNRECORDED']);
+  assert.equal(r.body.totals_by_currency.UNRECORDED.owed, 35_000);
+});
+
+test('D5029: a ceiling names a listed currency or the licence\'s own, and a figure past the safe integer is refused', async () => {
+  // Mutations checked: the 'EUR' default restored; /^[A-Z]{3}$/ alone (ABC accepted); Number.isInteger instead of isSafeInteger.
+  const { call, db } = statementsApp();
+  db.prepare(`INSERT INTO territory_licences (uid, licence_ref, legal_entity_name, brand_name, revenue_share_bps, currency, status) VALUES (?,?,?,?,?,?,?)`)
+    .run('lic_bad', 'AXL-021', 'Axal VC Nowhere', 'Axal VC Nowhere', 3500, 'XYZ', 'active');
+  const put = (uid: string, body: Record<string, unknown>) => call(`/promo-ceilings/${uid}`, { method: 'PUT', body: JSON.stringify({ period: '2026-Q3', ...body }) });
+
+  const abc = await put('lic_fr', { ceiling_cents: 1000, currency: 'ABC' });
+  assert.equal(abc.status, 400, JSON.stringify(abc.body));
+  assert.equal(abc.body.error, 'bad_currency');
+  const lower = await put('lic_fr', { ceiling_cents: 1000, currency: 'jpy' });
+  assert.equal(lower.status, 200, JSON.stringify(lower.body));
+  assert.equal(lower.body.currency, 'JPY');
+  const own = await put('lic_fr', { ceiling_cents: 1000 });
+  assert.equal(own.body.currency, 'EUR', 'the licence\'s own currency when none is named');
+  const unlisted = await put('lic_bad', { ceiling_cents: 1000 });
+  assert.equal(unlisted.status, 400, 'a licence whose own currency is not a listed one has no currency to default to');
+  assert.equal(unlisted.body.error, 'bad_currency');
+
+  const huge = await put('lic_fr', { ceiling_cents: 2 ** 53 });
+  assert.equal(huge.status, 400);
+  assert.equal(huge.body.error, 'bad_ceiling');
+  assert.equal((await put('lic_fr', { ceiling_cents: Number.MAX_SAFE_INTEGER })).status, 200, 'the largest safe integer is still a ceiling');
+});
+
+test('D5029: a paid or disputed figure past the safe integer is refused, not stored rounded', async () => {
+  const { call, report } = statementsApp();
+  for (const stream of ['subscriptions', 'licence_fees', 'token_margin', 'other']) report(stream, 100_000);
+  const { body } = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
+  for (const field of ['paid_cents', 'disputed_cents']) {
+    const r = await call(`/statements/${body.uid}`, { method: 'PATCH', body: JSON.stringify({ [field]: 2 ** 53 }) });
+    assert.equal(r.status, 400, `${field}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body.error, 'bad_amount');
+  }
+});

@@ -382,3 +382,29 @@ test('an invoice is due after D797\'s payment terms, and a licence whose terms n
   assert.deepEqual([other.status, other.body.error], [409, 'licensor_not_payee']);
   assert.equal(f.rows("SELECT uid FROM licence_fee_invoices WHERE licence_uid = 'lic_b'").length, 0);
 });
+
+// D5029 ───────────────────────────────────────────────────────────────────────
+test('D5029: the invoice paper prints the fee at the currency\'s own decimals, and a currency StudioOS cannot price in is refused at issue', async () => {
+  // Mutations checked: formatMinorMoney replaced by the two-decimal formatMoney (a yen fee printed as ¥12,000.00 and a
+  // dinar fee as KWD 1,200.000 read as 1.2 million); the currency check removed (an invoice drawn in "XYZ").
+  const f = await fixture();
+  f.db.prepare("UPDATE territory_licences SET currency = 'JPY', annual_fee_cents = 1200000 WHERE uid = 'lic_a'").run();
+  f.db.prepare("UPDATE territory_licences SET currency = 'KWD', annual_fee_cents = 12345 WHERE uid = 'lic_b'").run();
+  const yen = (await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices')).body.invoice;
+  assert.equal(yen.amount_cents, 1200000);
+  const yenFigures = JSON.parse(f.rows('SELECT figures_json FROM licence_fee_invoices WHERE uid = ?', yen.uid)[0].figures_json);
+  assert.ok(yenFigures.key_figures.some((k: any) => k.label === 'Amount due' && k.value === 'JPY 1,200,000'), JSON.stringify(yenFigures.key_figures));
+  const dinar = (await f.call(SUPER, 'POST', '/admin/licences/lic_b/fee-invoices')).body.invoice;
+  const dinarFigures = JSON.parse(f.rows('SELECT figures_json FROM licence_fee_invoices WHERE uid = ?', dinar.uid)[0].figures_json);
+  assert.ok(dinarFigures.key_figures.some((k: any) => k.label === 'Amount due' && k.value === 'KWD 12.345'), JSON.stringify(dinarFigures.key_figures));
+
+  f.db.prepare("UPDATE territory_licences SET currency = 'XYZ' WHERE uid = 'lic_nostart'").run();
+  f.db.prepare("UPDATE territory_licences SET starts_on = '2021-01-01', currency = 'XYZ' WHERE uid = 'lic_nofee'").run();
+  f.db.prepare("UPDATE territory_licences SET annual_fee_cents = 500000 WHERE uid = 'lic_nofee'").run();
+  const before = f.rows('SELECT uid FROM licence_fee_invoices').length;
+  const refused = await f.call(SUPER, 'POST', '/admin/licences/lic_nofee/fee-invoices');
+  assert.equal(refused.status, 409, refused.text);
+  assert.equal(refused.body.error, 'currency_unknown');
+  assert.match(refused.text, /not one StudioOS can price in/);
+  assert.equal(f.rows('SELECT uid FROM licence_fee_invoices').length, before, 'no invoice was drawn in a guessed currency');
+});

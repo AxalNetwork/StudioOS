@@ -84,11 +84,13 @@ test('LTV and token margin per branch render Not recorded with the canvas reason
     assert.ok(t.includes(NOT_RECORDED_H21.ltv));
     assert.ok(t.includes(NOT_RECORDED_H21.tokenMargin));
   }
-  // The reasons are the canvas's own, not new ones.
+  // The LTV reason is the canvas's own. The per-branch margin's is not: the canvas predates D762, which records the
+  // charge beside the cost, so "no price is recorded" is no longer true. What is still not recorded per branch is the
+  // split: AI spend is not tied to a licence (U1).
   assert.ok(CANVAS.includes('no store reconciles revenue to account lifetime'));
-  assert.ok(CANVAS.includes('gateway cost is an estimate, not a ledger'));
   assert.match(NOT_RECORDED_H21.ltv, /no store reconciles revenue to account lifetime/i);
-  assert.match(NOT_RECORDED_H21.tokenMargin, /gateway cost is an estimate, not a ledger/i);
+  assert.match(NOT_RECORDED_H21.tokenMargin, /not tied to a licence/i);
+  assert.doesNotMatch(NOT_RECORDED_H21.tokenMargin, /no price is recorded|not a ledger/i, 'the pre-D762 reason is back');
 });
 
 test('empty: both stores answered with nothing, and the page says so rather than drawing zeros', () => {
