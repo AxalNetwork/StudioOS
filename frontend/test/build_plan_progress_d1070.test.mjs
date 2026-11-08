@@ -106,7 +106,7 @@ test('the chart: each item in its furthest bucket, the lead never claims 0 built
   assert.deepEqual(by, { [MUST]: 'progress', [FEAT]: 'sent', [RISK]: 'unrecorded', [ROAD]: 'notstarted', [STEP]: 'accepted', [DOOR]: 'accepted' });
   assert.equal(bucketOf('feature', { built: { state: 'done' } }), 'built');
   const chart = stageChart(rows);
-  assert.deepEqual(chart.find((m) => m.module === 'solution-design').counts, { accepted: 0, sent: 1, progress: 0, built: 0, notstarted: 0, unrecorded: 1 });
+  assert.deepEqual(chart.find((m) => m.module === 'solution-design').counts, { accepted: 0, sent: 1, progress: 0, built: 0, tested: 0, notstarted: 0, unrecorded: 1 });
   assert.equal(stageLead(rows), '6 accepted items, 3 sent to a tool. Built and live are not recorded here yet.');
   assert.doesNotMatch(stageLead(rows), /\b0 of\b/, 'no read carries built, so it is never counted as none');
   assert.match(chartLabel(chart), /In Solution design, 1 is not recorded\./);
@@ -137,14 +137,14 @@ test('D968 the later stages: each fills from the states read, an absent stage st
   assert.deepEqual(['built', 'live', 'tested'].map((k) => by[RISK].stages[k].state), ['na', 'na', 'na']);
   assert.deepEqual(by[DOOR].stages.live, { state: 'unrecorded', text: 'Not recorded', source: 'No read here carries this stage yet' }, 'an item the read does not name is Not recorded');
   assert.deepEqual([MUST, ROAD, STEP, FEAT].map((u) => by[u].bucket), ['built', 'built', 'built', 'sent']);
-  assert.equal(stageLead(Object.values(by)), '3 of 6 accepted items are built or live.');
+  assert.equal(stageLead(Object.values(by)), '3 of 6 accepted items are built or live. Built or live: 2 not recorded.', 'the two whose Live or Built no source reports are said, not counted as not built');
   // A failed read: every applicable later stage is Not recorded with that reason.
   const blind = Object.fromEntries(progressRows(PLAN(), HANDOFFS, LINKS, null).map((r) => [r.uid, r]));
   assert.deepEqual(blind[MUST].stages.built, { state: 'unrecorded', text: 'Not recorded', source: STATES_UNREAD });
   assert.equal(blind[RISK].stages.built.state, 'na');
-  // Not yet for every reported stage: the lead says none is built, never that it is not recorded.
+  // One item's Built is "Not yet" but its Live is not recorded, and the rest are not read: the lead does not say none is built (D4600).
   const pending = progressRows(PLAN(), HANDOFFS, LINKS, [STATES()[1]]);
-  assert.equal(stageLead(pending), '6 accepted items, 3 sent to a tool. None is built or live yet.');
+  assert.equal(stageLead(pending), '6 accepted items, 3 sent to a tool. Built and live are not recorded here yet.');
   assert.equal(laterStage('prototype-test', 'tested', [], { tested: { reported: true, done: true, at: null, source: 'Validate › Experiments', value: 'Setup took a day' } }).text, 'Setup took a day · Day not recorded');
   assert.equal(laterStage('feature', 'built', [], { built: { reported: true, done: true, at: 'garbage', source: 'Build › MVP scope' } }).text, 'Day not recorded', 'an unreadable day is never shown as one');
 });
@@ -351,7 +351,7 @@ test('mounted D968: Built, Live and Tested fill from the states read, with the d
   const r = await mounted({ handle: handler({ '/cycles/build/plan/states?': { answer: () => response({ states: STATES(mustAt, `${ago(8)}T12:00:00Z`), total: 4, limit: 500, offset: 0 }) } }) });
   try {
     assert.ok(r.requests.some((q) => /\/cycles\/build\/plan\/states\?project=3&scope=venture&limit=500&offset=0$/.test(q.url)), 'the states read is made, first page');
-    assert.equal(r.textOf('plan-progress-lead'), '3 of 6 accepted items are built or live.');
+    assert.equal(r.textOf('plan-progress-lead'), '3 of 6 accepted items are built or live. Built or live: 2 not recorded.');
     assert.match(r.textOf('plan-progress-table'), new RegExp(`One-day setup wizard.*${dayMon(mustAt)}.*Build › MVP scope.*Not recorded.*No connector reports a deploy here`, 's'));
     assert.match(r.textOf('plan-progress-table'), /Spring release · \d+ \w{3}.*Connector · GitHub release/s);
     assert.deepEqual(r.texts('plan-progress-cell-note'), ['Formation steps store no day a step was done']);
