@@ -88,6 +88,7 @@ export const unavailable = (issue, reason = NOT_ON) => Object.freeze({ available
 export const SURFACES = Object.freeze({
   grid: { issue: 3749, what: 'The 17 structures, divider drag and the 4:3 slide size' },
   saveCard: { issue: 3751, what: 'Autosave, one card at a time' },
+  saveDoc: { issue: 4596, what: 'Autosave of the cards kept, their order, the theme and the audience' },
   discardDraft: { issue: 3751, what: 'Discard the unsaved draft' },
   draft: { issue: 3751, what: 'Restore unsaved changes' },
   batch: { issue: 3753, what: 'Live build progress, per area' },
@@ -190,6 +191,7 @@ export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES
 // D1501 (#3751): wired. A card's working copy (`If-Match: <rev>`, 0 for its first), the draft read for
 // "Restore unsaved changes from …", and Discard.
 export const saveCard = (deckId, uid, card, rev, opts) => through(() => deckDraftApi.saveCard(deckId, uid, card, rev, opts), SURFACES.saveCard.issue);
+export const saveDoc = (deckId, body, rev) => through(() => deckDraftApi.saveDoc(deckId, body, rev), SURFACES.saveDoc.issue);
 export const discardDraft = (deckId) => through(() => deckDraftApi.discard(deckId), SURFACES.discardDraft.issue);
 export const draft = (deckId) => through(() => deckDraftApi.draft(deckId), SURFACES.draft.issue);
 // D1502 part 2 (#3753): a run, read to resume it (pd2b, pd2c), and Stop. Follow it live with

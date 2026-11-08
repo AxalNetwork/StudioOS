@@ -60,6 +60,7 @@ export const CONTRACTS = Object.freeze({
   retryFailed: { issue: 3879, route: 'POST /api/decks/areas/batches/:uid/retry-failed', schema: 'deckRetryFailed.schema.json' },
   saveAsTemplate: { issue: 3782, route: 'POST /api/decks/:id/save-as-template', schema: 'deckSaveAsTemplate.schema.json' },
   saveCard: { issue: 3751, route: 'PATCH /api/decks/:id/cards/:uid', schema: 'deckSaveCard.schema.json' },
+  saveDoc: { issue: 4596, route: 'PUT /api/decks/:id/draft-doc', schema: 'deckSaveDoc.schema.json' },
   setDeckSource: { issue: 3881, route: 'PUT /api/data-room/:projectUid/files/:uid/deck-source', schema: 'deckSource.schema.json' },
   slideAnalytics: { issue: 3820, route: 'GET /api/decks/:id/investor-links/:shareId/analytics', schema: 'deckSlideAnalytics.schema.json' },
   stagePlan: { issue: 3774, route: 'GET /api/decks/:id/stage-plan', schema: 'deckStagePlan.schema.json' },

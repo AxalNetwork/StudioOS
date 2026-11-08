@@ -54,7 +54,7 @@ import { movedLine } from './structureModel';
 import { scriptOfTheme } from './deckLanguage';
 import { apply as applyOp, editKey, emptyHistory, findIn, historyCounts, perform, redo as redoStep, undo as undoStep } from './gridOps';
 import { createAutosave, clockOf, idbStore, keyOf, restoreOffer } from './deckAutosave';
-import { discardDraft as discardDraftAdapter, draft as draftAdapter, saveCard as saveCardAdapter } from './deckV2Adapter';
+import { discardDraft as discardDraftAdapter, draft as draftAdapter, saveCard as saveCardAdapter, saveDoc as saveDocAdapter } from './deckV2Adapter';
 import { ConflictView, FindReplaceSheet, RestoreBanner, StillCharged, SyncLine } from './EditingParts';
 import usePreflight from './usePreflight';
 import { FindingStrip, PreflightGate, PreflightMeasure, PreflightPanel } from './PreflightPanel';
@@ -576,8 +576,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   useEffect(() => {
     if (readOnly || deckId == null) return undefined;
     const store = idbStore();
-    const a = createAutosave({ deckId, save: saveCardAdapter, store, onChange: setSync });
-    a.base(cardsOf(deck));
+    const a = createAutosave({ deckId, save: saveCardAdapter, saveDoc: saveDocAdapter, store, onChange: setSync });
+    a.base(cardsOf(deck), { theme: deck.theme ?? null, audience: deck.audience ?? null });
     // Nothing is sent until the restore question, if any, is answered.
     a.hold(true);
     autosave.current = a;
@@ -586,7 +586,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     Promise.all([store ? store.get(keyOf(deckId)) : null, draftAdapter(deckId)]).then(([local, d]) => {
       if (!live) return;
       const draftRead = d?.available ? d.value : null;
-      if (draftRead) a.prime(draftRead.cards);
+      if (draftRead) a.prime(draftRead.cards, draftRead.doc ?? null);
       const o = restoreOffer({ doc: opened, local, draft: draftRead });
       if (o) setOffer(o); else a.hold(false);
     }, (e) => { reportError('pitch-editor:draft', e); if (live) a.hold(false); });
@@ -606,7 +606,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   useEffect(() => { autosave.current?.edit(ed.doc); }, [ed.doc]);
   const restore = () => {
     if (!offer) return;
-    autosave.current?.revisions(offer.revs);
+    autosave.current?.revisions(offer.revs, offer.docRev);
     autosave.current?.hold(false);
     edit({ type: 'setDoc', parts: offer.doc }, { label: 'Restore unsaved changes' });
     setOffer(null); setPickState(NO_PICK);
@@ -614,7 +614,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const discardOffer = () => {
     if (!offer) return;
     setRestoring(true);
-    discardDraftAdapter(deckId).then(() => autosave.current?.discard(cardsOf(deck))).then(() => {
+    discardDraftAdapter(deckId).then(() => autosave.current?.discard(cardsOf(deck), { theme: deck.theme ?? null, audience: deck.audience ?? null })).then(() => {
       setRestoring(false); setOffer(null); autosave.current?.hold(false);
     });
   };
@@ -624,15 +624,27 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const keepTheirs = (copy) => {
     const a = autosave.current;
     if (!a || !conflict) return;
-    const theirs = a.resolve(copy ? 'copy' : 'theirs');
+    const resolved = a.resolve(copy ? 'copy' : 'theirs');
+    const theirs = resolved?.theirs;
     if (!theirs) return;
     edit((doc) => {
       const i = cardIndexByUid(doc.cards, conflict.uid);
       if (i < 0) return null;
       const placed = { type: 'setCard', index: i, card: { ...theirs, uid: conflict.uid } };
-      return copy ? [placed, { type: 'insertCard', index: i + 1, card: withNewUid(conflict.mine) }] : placed;
+      return copy ? [placed, { type: 'insertCard', index: i + 1, card: withNewUid(resolved.mine) }] : placed;
     }, { label: copy ? 'Copy mine to a new card' : 'Keep theirs' });
   };
+
+  const syncPanel = (
+    <>
+      {offer && !readOnly ? <RestoreBanner at={offer.at} busy={restoring} onRestore={restore} onDiscard={discardOffer} /> : null}
+      {!readOnly ? <SyncLine sync={sync} /> : null}
+      {conflict && !readOnly ? (
+        <ConflictView conflict={conflict} index={conflictAt >= 0 ? conflictAt : null} onMine={() => autosave.current?.resolve('mine')}
+          onTheirs={() => keepTheirs(false)} onCopy={() => keepTheirs(true)} />
+      ) : null}
+    </>
+  );
 
   // D1515: Undo, Redo and Find, from the header, ⋯ and the keyboard.
   const undo = () => dispatch({ type: 'undo' });
@@ -786,9 +798,13 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         return ov ? <PreflightOverlay overlay={ov} card={pf.snapshot.slides?.[ov.card]} theme={pf.snapshot.theme} kit={kitData} /> : null;
       })() : null}
       {phone ? (
+        <>
+        {/* D4596: the same restore question, sync line and conflict view on a phone; saving waits on them, so they cannot be hidden. */}
+        <div className="flex flex-col gap-2" data-testid="pitch-editor-phone-sync">{syncPanel}</div>
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
           onNotes={(v) => edit({ type: 'setFlag', index: sel, key: 'notes', value: v }, { label: 'Notes', coalesce: `notes:${cardUid(card) ?? sel}` })} notesMax={model.notes_max}
           deckId={base.deck.id} items={items} aiOn={aiOn} off={off} onTokens={onTokens} model={model} onPlace={placeCard} onProposals={onProposals} />
+        </>
       ) : (
         <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
@@ -803,12 +819,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           </div>
           <div className="flex min-w-0 flex-col gap-3">
             {/* D1515: the restore question, the offline line, the conflict view and "Still charged", above the stage. */}
-            {offer && !readOnly ? <RestoreBanner at={offer.at} busy={restoring} onRestore={restore} onDiscard={discardOffer} /> : null}
-            {!readOnly ? <SyncLine sync={sync} /> : null}
-            {conflict && conflictAt >= 0 && !readOnly ? (
-              <ConflictView conflict={conflict} index={conflictAt} onMine={() => autosave.current?.resolve('mine')}
-                onTheirs={() => keepTheirs(false)} onCopy={() => keepTheirs(true)} />
-            ) : null}
+            {syncPanel}
             {ed.undone?.charged ? <StillCharged onClose={() => dispatch({ type: 'seen' })} /> : null}
             {structureNote ? <span className={MUTED} role="status" data-testid="pitch-editor-structure-note">{structureNote} The speaker notes keep each one.</span> : null}
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
@@ -1389,7 +1400,7 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
       {card ? (
         <label className={`${CARD} flex flex-col gap-1.5 p-3`}>
           <span className={EYE}>Speaker notes · card {sel + 1}</span>
-          <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} spellCheck onChange={(e) => onNotes(e.target.value)} />
+          <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} spellCheck data-testid="pitch-editor-phone-notes" onChange={(e) => onNotes(e.target.value)} />
         </label>
       ) : null}
       {card && !readOnly && all.length ? (

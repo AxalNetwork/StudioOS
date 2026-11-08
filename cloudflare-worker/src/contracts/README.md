@@ -35,6 +35,7 @@ reply against its schema, not only that the route exists.
 | `deckReplaceImages.schema.json` | `POST /api/decks/:id/images/replace-all/quote` (D1561, #3808): every image area priced as one quote, the hold with one redraw each, the areas left out and why, or why it cannot run. |
 | `deckSource.schema.json` | `PUT /api/data-room/:projectUid/files/:uid/deck-source` (#3881): the public opt-in and extraction state, without internal job or billing fields. |
 | `deckSaveCard.schema.json` | `PATCH /api/decks/:id/cards/:uid` (D1501, #3751): the card's working copy with its new revision. |
+| `deckSaveDoc.schema.json` | `PUT /api/decks/:id/draft-doc` (D4596, #4596): the working copy's deck-level state with its new revision. |
 | `deckSaveAsTemplate.schema.json` | `POST /api/decks/:id/save-as-template` (D1535, #3782): the template a deck was saved as. |
 | `deckSlideAnalytics.schema.json` | `GET /api/decks/:id/investor-links/:shareId/analytics` (D1573, #3820): one investor link's views, its Time per slide consent, seconds per card by uid, the most-read card and the visit timeline; missing is null, never 0. |
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
