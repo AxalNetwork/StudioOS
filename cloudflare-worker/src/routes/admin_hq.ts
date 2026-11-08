@@ -37,6 +37,7 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { hydrate, type LicenceRow } from './admin_licences';
 import { DERIVED_UNAVAILABLE } from './licence';
+import { normalizeTeamSearch } from '../util/teamSearch';
 import { fanOut, branchRead, branchBindings, coverage, teamCoverage, withRegistry, type BranchResult } from '../services/branches';
 import { openEscalations } from '../rpc/hqOps';
 import type { BranchOverview, BranchAccountHit, FundsRegistry } from '../rpc/branchOps';
@@ -445,11 +446,18 @@ r.get('/admins', async (c) => {
   // beside one branch's rows is what would make the overlay a filter on an HQ
   // table, which is the one thing H12 says it is not.
   const scopedTeam = scopeOf(c);
+  // D5042 — ONE POLICY FOR WHEN TO ASK, scoped or not. The query is normalized once; a branch is asked
+  // only for a query of the right length, and only with the normalized string.
+  const search = normalizeTeamSearch(c.req.query('q'));
+  const willAsk = search.state === 'asked';
   if (scopedTeam) {
-    const asked = String(c.req.query('q') || '').trim();
-    const one = await stampLicence(env, await branchRead<BranchAccountSearch>(
-      env, scopedTeam, 'searchAccounts', [asked, BRANCH_SEARCH_LIMIT],
-    ));
+    const asked = willAsk ? search.query : '';
+    const bound = branchBindings(env).find((b) => b.code === scopedTeam.toLowerCase());
+    // Not asking is not a read: a bound branch is `not_asked`; an unbound code still goes through
+    // `branchRead`, which answers `not_deployed` without an RPC.
+    const one = await stampLicence(env, willAsk || !bound
+      ? await branchRead<BranchAccountSearch>(env, scopedTeam, 'searchAccounts', [asked, BRANCH_SEARCH_LIMIT])
+      : { code: bound.code, binding: bound.binding, status: 'not_asked' as const } as BranchResult<BranchAccountSearch>);
     return c.json({
       scope: {
         branch: one.code,
@@ -461,8 +469,11 @@ r.get('/admins', async (c) => {
         asked,
         ...(one.reason ? { reason: one.reason } : {}),
       },
+      searched: willAsk,
+      search,
       branches: [one],
-      branches_coverage: coverage([one]),
+      // One branch read alone: the registry is not part of the question, and an unasked branch is not a failed one.
+      branches_coverage: teamCoverage([one], { searched: willAsk, registryAvailable: true }),
     });
   }
   // `last_active_at` is a runtime-added column on databases older than
@@ -581,9 +592,10 @@ r.get('/admins', async (c) => {
   // listed exhaustively from here (D.2 — its accounts are on its own database),
   // so an unasked branch answers nothing and says so rather than rendering as
   // an empty territory.
-  const q = String(c.req.query('q') || '').trim();
+  const q = search.query;
   const deployments = await deployedBranches(env);
-  const searched = q.length > 0;
+  // `searched` now means BRANCHES WERE ASKED: a query below the minimum, above the maximum or empty asks nobody.
+  const searched = willAsk;
   // D5041 — WITH NO SEARCH NOBODY IS ASKED, AND ABSENCE IS NOT "NOT DEPLOYED". The idle rows come from
   // the bindings this Worker holds plus the registry: a bound branch is `not_asked` (ready to search),
   // a registry row with no binding is `not_deployed`. No RPC is made. `withRegistry([], registry)`
@@ -611,6 +623,7 @@ r.get('/admins', async (c) => {
     ladder_readable: ladderReadable,
     ...(ladderReadable ? {} : { ladder_reason: ladderReason }),
     searched,
+    search,
     branches,
     branches_coverage: teamCoverage(branches, { searched, registryAvailable: deployments.available }),
     ...registryFlags(deployments),

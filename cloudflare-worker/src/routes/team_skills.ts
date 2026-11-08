@@ -11,7 +11,10 @@
  *   PATCH /skills/:uid                   edit the draft, or retire it
  *   POST /skills/:uid/publish            a new immutable version (`services/agents/skillPublish.ts`); an HQ
  *                                        skill needs a second Super Admin's approval and its golden cases
- *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`)
+ *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`) on every
+ *                                        required model (D4533: 409 `evaluation_incomplete`); a refusal carries
+ *                                        the release decision as `freshness`, and so does the reply
+ *                                        `{ skill, freshness }` (null for a company skill)
  *
  * D4121 (#4121): what an agent's runs cost, skill by skill (a run carries one skill, #3954).
  *   GET  /agents/:uid/cost-estimate?add=&remove=   the agent with skills added or removed:
@@ -416,7 +419,8 @@ router.post('/skills/:uid/publish', async (c) => {
   const done = await publishDraft(c.env, s, user);
   if (!done.ok) return say(c, done.status, done.code, done.message, done.extra);
   const tax = await taxonomy(c.env);
-  return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: done.skill_md } });
+  // D4533: an HQ publish answers the decision it was let through on (`freshness`), and null for a company skill.
+  return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: done.skill_md }, freshness: done.freshness });
 });
 
 // ── An agent's skills (A2, #3956) ───────────────────────────────────────────

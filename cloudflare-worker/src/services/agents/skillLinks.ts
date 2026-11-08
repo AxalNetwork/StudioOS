@@ -36,10 +36,14 @@ export type SkillRow = {
   id: number; uid: string; scope: 'hq' | 'company'; company_id: number | null; slug: string; name: string; purpose: string;
   steps_json: string; allowed_tools_json: string; output_kind: string; status: 'draft' | 'published' | 'retired';
   current_version: number; created_by: number; updated_by: number | null; created_at: string; updated_at: string;
+  /** D4533: the draft's declared model set (sorted JSON ids); null or absent means the default set. */
+  required_models_json?: string | null;
 };
 export type VersionRow = {
   skill_id: number; version: number; skill_md: string; name: string; purpose: string; steps_json: string;
   allowed_tools_json: string; output_kind: string; taxonomy_json: string; roles_json: string; published_at: string; published_by: number;
+  /** D4533: an HQ version's release-evidence manifest; null on a company version and on one published before it. */
+  evidence_json?: string | null;
 };
 export type AttachCode = 'not_found' | 'version_not_published' | 'skill_retired' | 'skill_suspended' | 'role_mismatch' | 'tool_not_approved';
 export type Blocked = { code: AttachCode; tool?: { key: string; label: string } };

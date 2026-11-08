@@ -8,12 +8,16 @@
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
  *                                    and `reviewers`: the other active Super Admins who can be asked ({ uid, name }; null when unread)
- *   GET  /:uid/diff?from=vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed
- *   POST /:uid/review                { reviewer_uid }   ask a named Super Admin to review the current draft
+ *                                    D4533: `models` (the required set and its source), `freshness` (the release decision
+ *                                    publish refuses on), each review's `changes`, each version's `evidence` (null: no manifest)
+ *   GET  /:uid/diff?from=vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed;
+ *                                    D4533: `evidence`, the cases added and removed, the required models and the evaluator
+ *   POST /:uid/review                { reviewer_uid }   ask a named Super Admin to review the current draft, on its evidence
  *   POST /:uid/review/approve        { comment? }       the named reviewer approves; never the draft's author
  *   POST /:uid/review/request-changes { comment }       the named reviewer sends it back
  *   PUT  /:uid/cases                 { cases: [{ uid?, name, input, expect }], reason }   the skill's golden cases
- *   POST /:uid/evals                 { models? }        run every live case on each model, through `run()`, charged to HQ
+ *   PUT  /:uid/models                D4533: { models: [id] | null, reason }  the required model set (null: the default) → { models, evals }
+ *   POST /:uid/evals                 { models? }        run every live case on each model (default: the required set), through `run()`, charged to HQ
  *   POST /evals/published            { models?, uid? }  D1612 part D (#3954): every published Axal skill's golden cases (its
  *                                    starter case and HQ's live ones) on its CURRENT version; a case that passed and now
  *                                    fails is a regression, told to HQ once → { skills, results, regressions }
@@ -32,8 +36,10 @@
  * `PATCH /skills/:uid`), and so does the single publish (`POST
  * /skills/:uid/publish`); all three refuse a write-capable tool (400
  * `tool_not_read_only`, `{ tool }`), and publish refuses an HQ draft with no
- * approval (409 `needs_approval`) or below 9 of 10 golden-case runs (409
- * `golden_cases_failing`). See `services/agents/skillLifecycle.ts`.
+ * approval on its current evidence (409 `needs_approval`), a required run with
+ * no result (409 `evaluation_incomplete`) or below 9 of 10 golden-case runs
+ * (409 `golden_cases_failing`). See `services/agents/skillLifecycle.ts`, and
+ * D4533 for the release evidence and the lifecycle matrix.
  *
  * Every change writes the admin audit row (`logAdminAction`) with the reason,
  * and the state before and after. A person is `{ uid, name }`, never an email.
@@ -52,8 +58,12 @@ import { axesOf, skillByUid, taxonomyMaps, versionOf, type SkillRow, type Versio
 import { draftParts, draftPartsOf, publishDraft } from '../services/agents/skillPublish';
 import { pinTokenMap } from '../services/agents/runCost';
 import {
-  CASES_MAX, PASS_BAR, approvalFor, checkCase, diffParts, draftHash, evalSummary, lifecycleStatus, meetsBar, openReview, pinnedAgents, runCase,
+  CASES_MAX, PASS_BAR, checkCase, diffParts, draftHash, evalSummary, lifecycleStatus, meetsBar, openReview, pinnedAgents, runCase,
   type CaseExpect, type CaseInput, type DraftParts, type ReviewRow,
+} from '../services/agents/skillLifecycle';
+import {
+  MODELS_MAX, diffEvidence, evidenceChanges, evidenceFrom, evidenceHashOf, evidenceOf, liveCases, parseEvidence, releaseDecision, requiredModels, suiteRevision,
+  type Evidence,
 } from '../services/agents/skillLifecycle';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import { campaignProgress, cancelCampaign, continueCampaign, evaluatePublished, startCampaign } from '../services/agents/skillEval';
@@ -66,7 +76,6 @@ const adminHqSkills = new Hono<{ Bindings: Env }>();
 export const REASON_MIN = 10;
 export const REASON_MAX = 500;
 const BULK_MAX = 50;
-const MODELS_MAX = 5;
 const LEVELS = ['aware', 'working', 'proficient', 'advanced', 'expert'];
 
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
@@ -107,18 +116,35 @@ function areaAndLevel(p: DraftParts, category: ReadonlyMap<string, string>) {
   return { area: axis ? { slug: axis.slug, label: axis.label } : null, level };
 }
 
-async function reviewDto(env: Env, r: ReviewRow | null, hash: string) {
+// D4533: `current` is the whole evidence; `changes` says which part moved since (null: not recorded on a review from before D4533).
+async function reviewDto(env: Env, r: ReviewRow | null, e: Evidence) {
   if (!r) return null;
   return {
-    status: r.status, current: r.draft_hash === hash, comment: r.comment, requested_at: r.requested_at, decided_at: r.decided_at,
+    status: r.status, current: r.evidence_hash === e.evidence_hash, comment: r.comment, requested_at: r.requested_at, decided_at: r.decided_at,
     requested_by: await personOf(env, r.requested_by), reviewer: await personOf(env, r.reviewer_id),
+    changes: evidenceChanges(r.draft_hash, parseEvidence(r.evidence_json), e),
+  };
+}
+
+/**
+ * D4533: what a version was released on, from its manifest. A version
+ * published before D4533 has none: `null`, which the screen reads "Not
+ * recorded", never "passed".
+ */
+async function versionEvidence(env: Env, json: string | null) {
+  const m = parse<Record<string, any> | null>(json, null);
+  if (!m || m.manifest !== 1) return null;
+  return {
+    definition_hash: m.definition_hash, evidence_hash: m.evidence_hash, suite: m.suite, evaluator_version: m.evaluator_version, models: m.models,
+    bar: m.bar, results: m.results,
+    review: m.review ? { reviewer: await personOf(env, m.review.reviewer_id), requested_by: await personOf(env, m.review.requested_by), decided_at: m.review.decided_at } : null,
   };
 }
 
 // ── The library ─────────────────────────────────────────────────────────────
 
 type LibraryRow = SkillRow & {
-  tags_json: string; role_keys_json: string; open_hash: string | null; agents: number; live_cases: number;
+  tags_json: string; role_keys_json: string; case_uids_json: string; open_evidence: string | null; agents: number; live_cases: number;
 };
 
 adminHqSkills.get('/', async (c) => {
@@ -135,7 +161,9 @@ adminHqSkills.get('/', async (c) => {
         FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t) AS tags_json,
       (SELECT json_group_array(r.role_key)
         FROM (SELECT role_key FROM agent_skill_roles WHERE skill_id = s.id ORDER BY rowid) r) AS role_keys_json,
-      (SELECT draft_hash FROM agent_skill_reviews WHERE skill_id = s.id AND status = 'requested') AS open_hash,
+      (SELECT json_group_array(k.uid)
+        FROM (SELECT uid FROM agent_skill_cases WHERE skill_id = s.id AND removed_at IS NULL ORDER BY id) k) AS case_uids_json,
+      (SELECT evidence_hash FROM agent_skill_reviews WHERE skill_id = s.id AND status = 'requested') AS open_evidence,
       (SELECT COUNT(*) FROM agent_skill_links l JOIN team_agents a ON a.id = l.agent_id
         WHERE l.skill_id = s.id AND a.status <> 'removed') AS agents,
       (SELECT COUNT(*) FROM agent_skill_cases WHERE skill_id = s.id AND removed_at IS NULL) AS live_cases
@@ -144,40 +172,46 @@ adminHqSkills.get('/', async (c) => {
     taxonomyMaps(env),
   ]);
   const rows = result.results ?? [];
+  // D4533: each row's evidence from the same reads as the detail route's: definition, live case uids, evaluator, required models.
   const drafts = await Promise.all(rows.map(async (row) => {
     const draft = draftParts(row, parse<Tag[]>(row.tags_json, []), parse<string[]>(row.role_keys_json, []));
-    return { row, draft, hash: await draftHash(draft) };
+    const models = requiredModels(env, row.required_models_json);
+    const evidence = await evidenceHashOf(await draftHash(draft), await suiteRevision(parse<string[]>(row.case_uids_json, [])), models);
+    return { row, draft, models: models.required, evidence };
   }));
 
-  // Only the latest result per case/model counts. A model run solely on a
-  // removed case still counts towards the denominator, as on the detail page.
+  // Only the latest result per case and REQUIRED model under the current
+  // evidence counts; a required run with no result is not evaluated, as on the detail page.
   const [evalResult, tokens] = await Promise.all([
-    env.DB.prepare(`WITH latest AS (
+    env.DB.prepare(`WITH want AS (
+        SELECT CAST(j.key AS INTEGER) AS skill_id, json_extract(j.value, '$.e') AS evidence, json_extract(j.value, '$.m') AS models FROM json_each(?) j
+      ), latest AS (
         SELECT MAX(r.id) AS id
-        FROM json_each(?) j JOIN agent_skill_eval_results r
-          ON r.skill_id = CAST(j.key AS INTEGER) AND r.draft_hash = j.value
+        FROM want w JOIN agent_skill_eval_results r ON r.skill_id = w.skill_id AND r.evidence_hash = w.evidence
+        WHERE r.model_id IN (SELECT value FROM json_each(w.models))
         GROUP BY r.skill_id, r.case_id, r.model_id
       )
-      SELECT r.skill_id, COUNT(DISTINCT r.model_id) AS models,
-        SUM(CASE WHEN k.id IS NOT NULL AND r.result = 'pass' THEN 1 ELSE 0 END) AS pass,
+      SELECT r.skill_id, COUNT(*) AS recorded,
+        SUM(CASE WHEN r.result = 'pass' THEN 1 ELSE 0 END) AS pass,
         MAX(r.run_at) AS last_run
       FROM latest JOIN agent_skill_eval_results r ON r.id = latest.id
-      LEFT JOIN agent_skill_cases k ON k.id = r.case_id AND k.skill_id = r.skill_id AND k.removed_at IS NULL
-      GROUP BY r.skill_id`).bind(JSON.stringify(Object.fromEntries(drafts.map(({ row, hash }) => [row.id, hash]))))
-      .all<{ skill_id: number; models: number; pass: number; last_run: string }>(),
+      JOIN agent_skill_cases k ON k.id = r.case_id AND k.skill_id = r.skill_id AND k.removed_at IS NULL
+      GROUP BY r.skill_id`).bind(JSON.stringify(Object.fromEntries(drafts.map(({ row, models, evidence }) => [row.id, { e: evidence, m: models }]))))
+      .all<{ skill_id: number; recorded: number; pass: number; last_run: string }>(),
     pinTokenMap(env, rows.filter((s) => s.current_version).map((s) => ({ skill_id: s.id, version: s.current_version }))),
   ]);
   const evals = new Map((evalResult.results ?? []).map((r) => [r.skill_id, r]));
-  const skills = drafts.map(({ row, draft, hash }) => {
+  const skills = drafts.map(({ row, draft, models, evidence }) => {
     const summary = evals.get(row.id);
     const pass = summary?.pass ?? 0;
-    const total = row.live_cases * (summary?.models ?? 0);
+    const total = row.live_cases * models.length;
+    const notEvaluated = total - (summary?.recorded ?? 0);
     return {
       uid: row.uid, name: draft.name, ...areaAndLevel(draft, tax.category),
-      status: lifecycleStatus(row.status, row.open_hash ? { draft_hash: row.open_hash } : null, hash),
+      status: lifecycleStatus(row.status, row.open_evidence ? { evidence_hash: row.open_evidence } : null, evidence),
       version: row.current_version || null, agents: row.agents,
       tokens_per_run: tokens.get(`${row.id}:${row.current_version}`) ?? null,
-      golden: { pass, total, meets_bar: meetsBar(pass, total) }, last_eval: summary?.last_run ?? null,
+      golden: { pass, total, not_evaluated: notEvaluated, meets_bar: notEvaluated === 0 && meetsBar(pass, total) }, last_eval: summary?.last_run ?? null,
     };
   });
   return c.json({ skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null });
@@ -215,11 +249,12 @@ adminHqSkills.get('/:uid', async (c) => {
   const s = await hqSkill(c.env, c.req.param('uid'));
   if (!s) return noSkill(c);
   const d = await draftPartsOf(c.env, s);
-  const hash = await draftHash(d);
+  const freshness = await releaseDecision(c.env, s, d);
+  const e = freshness.evidence;
   const open = await openReview(c.env, s.id);
   const history = (await c.env.DB.prepare('SELECT * FROM agent_skill_reviews WHERE skill_id = ? ORDER BY id DESC LIMIT 20').bind(s.id).all<ReviewRow>()).results ?? [];
-  const versions = (await c.env.DB.prepare('SELECT version, published_at, published_by FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC')
-    .bind(s.id).all<{ version: number; published_at: string; published_by: number }>()).results ?? [];
+  const versions = (await c.env.DB.prepare('SELECT version, published_at, published_by, evidence_json FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC')
+    .bind(s.id).all<{ version: number; published_at: string; published_by: number; evidence_json: string | null }>()).results ?? [];
   const cases = (await c.env.DB.prepare('SELECT uid, name, input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
     .bind(s.id).all<{ uid: string; name: string; input_json: string; expect_json: string }>()).results ?? [];
   const retired = await c.env.DB.prepare(`SELECT r.reason, r.pinned_agents, r.retired_at, r.retired_by, s.uid AS replacement_uid, s.name AS replacement_name
@@ -234,14 +269,18 @@ adminHqSkills.get('/:uid', async (c) => {
     reviewers,
     skill: {
       uid: s.uid, ...d, ...areaAndLevel(d, tax.category),
-      status: lifecycleStatus(s.status, open, hash), version: s.current_version || null, draft_hash: hash,
+      status: lifecycleStatus(s.status, open, e.evidence_hash), version: s.current_version || null, draft_hash: e.definition_hash,
       radar: { axes: axesOf(d.tags, tax.category) },
       agents: await pinnedAgents(c.env, s.id), author: await personOf(c.env, s.created_by), updated_by: await personOf(c.env, s.updated_by),
     },
-    review: { open: await reviewDto(c.env, open, hash), approved: !!(await approvalFor(c.env, s.id, hash)), history: await Promise.all(history.map((r) => reviewDto(c.env, r, hash))) },
+    review: { open: await reviewDto(c.env, open, e), approved: freshness.review.approved, history: await Promise.all(history.map((r) => reviewDto(c.env, r, e))) },
     cases: cases.map((k) => ({ uid: k.uid, name: k.name, input: parse(k.input_json, {}), expect: parse(k.expect_json, {}) })),
-    evals: { ...(await evalSummary(c.env, s.id, hash)), pass_bar: PASS_BAR },
-    versions: await Promise.all(versions.map(async (v) => ({ version: v.version, published_at: v.published_at, by: await personOf(c.env, v.published_by) }))),
+    evals: { ...(await evalSummary(c.env, s.id, e)), pass_bar: PASS_BAR },
+    models: e.models,
+    freshness,
+    versions: await Promise.all(versions.map(async (v) => ({
+      version: v.version, published_at: v.published_at, by: await personOf(c.env, v.published_by), evidence: await versionEvidence(c.env, v.evidence_json),
+    }))),
     retired: retired ? {
       reason: retired.reason, pinned_agents: retired.pinned_agents, at: retired.retired_at, by: await personOf(c.env, retired.retired_by),
       replacement: { uid: retired.replacement_uid, name: retired.replacement_name },
@@ -253,18 +292,19 @@ adminHqSkills.get('/:uid/diff', async (c) => {
   await requireSuperAdmin(c);
   const s = await hqSkill(c.env, c.req.param('uid'));
   if (!s) return noSkill(c);
-  const side = async (raw: string | undefined, fallback: string): Promise<DraftParts | null> => {
+  // D4533: each side's evidence too: the draft's as it stands, a version's from its manifest (null without one).
+  const side = async (raw: string | undefined, fallback: string): Promise<{ parts: DraftParts; evidence: Evidence | null } | null> => {
     const v = (raw ?? fallback).trim();
-    if (v === 'draft') return draftPartsOf(c.env, s);
+    if (v === 'draft') { const parts = await draftPartsOf(c.env, s); return { parts, evidence: await evidenceOf(c.env, s, parts) }; }
     const m = /^v([1-9][0-9]{0,5})$/.exec(v);
     const row = m ? await versionOf(c.env, s.id, Number(m[1])) : null;
-    return row ? versionParts(row) : null;
+    return row ? { parts: versionParts(row), evidence: parseEvidence(row.evidence_json) } : null;
   };
   const fromDefault = s.current_version > 0 ? `v${s.current_version}` : 'draft';
   const from = await side(c.req.query('from'), fromDefault);
   const to = await side(c.req.query('to'), 'draft');
   if (!from || !to) return say(c, 400, 'version_unknown', 'Compare a published version (v1, v2, …) or the draft.');
-  return c.json({ from: c.req.query('from') ?? fromDefault, to: c.req.query('to') ?? 'draft', ...diffParts(from, to) });
+  return c.json({ from: c.req.query('from') ?? fromDefault, to: c.req.query('to') ?? 'draft', ...diffParts(from.parts, to.parts), evidence: diffEvidence(from.evidence, to.evidence) });
 });
 
 // ── Review ──────────────────────────────────────────────────────────────────
@@ -282,18 +322,21 @@ adminHqSkills.post('/:uid/review', async (c) => {
   if (!reviewer || !isSuperAdmin(reviewer as any)) return say(c, 422, 'reviewer_invalid', 'Name a Super Admin to review the draft.');
   // The author is never their own reviewer: not who asks, not who last wrote the draft.
   if (reviewer.id === admin.id || reviewer.id === s.updated_by) return say(c, 422, 'reviewer_is_author', 'A second Super Admin reviews the draft, not its author.');
-  const hash = await draftHash(await draftPartsOf(c.env, s));
+  // D4533: the review is asked on the whole evidence: the draft, its cases, the evaluator and the required models.
+  const e = await evidenceOf(c.env, s, await draftPartsOf(c.env, s));
   const open = await openReview(c.env, s.id);
-  if (open && open.draft_hash === hash) return say(c, 409, 'review_open', 'A review of this draft is already open.');
+  if (open && open.evidence_hash === e.evidence_hash) return say(c, 409, 'review_open', 'A review of this draft is already open.');
   const done = await c.env.DB.batch([
-    // A review left open on an older text is withdrawn: it was asked about another draft.
+    // A review left open on older evidence is withdrawn: it was asked about another draft.
     ...(open ? [c.env.DB.prepare("UPDATE agent_skill_reviews SET status = 'withdrawn', decided_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'requested'").bind(open.id)] : []),
-    c.env.DB.prepare('INSERT INTO agent_skill_reviews (skill_id, draft_hash, requested_by, reviewer_id) VALUES (?, ?, ?, ?)').bind(s.id, hash, admin.id, reviewer.id),
+    c.env.DB.prepare('INSERT INTO agent_skill_reviews (skill_id, draft_hash, requested_by, reviewer_id, evidence_hash, evidence_json) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(s.id, e.definition_hash, admin.id, reviewer.id, e.evidence_hash, JSON.stringify(e)),
   ]).catch(() => null);
   if (!done) return say(c, 409, 'review_conflict', 'Someone asked for a review of this skill just now. Reload it.');
-  await audit(c.env, admin, 'agent_skill_review_requested', s, null, { status: lifecycleStatus(s.status, open, hash) }, { status: 'in_review' }, { reviewer: { uid: reviewer.uid, name: reviewer.name } });
+  await audit(c.env, admin, 'agent_skill_review_requested', s, null, { status: lifecycleStatus(s.status, open, e.evidence_hash) }, { status: 'in_review' },
+    { reviewer: { uid: reviewer.uid, name: reviewer.name }, evidence_hash: e.evidence_hash });
   await notify(c.env, { userId: reviewer.id, type: 'agent_skill_review_requested', title: `Review the Axal skill "${s.name}"`, body: null, link: null, payload: { skill_uid: s.uid }, channels: ['in_app'] });
-  return c.json({ status: 'in_review', review: await reviewDto(c.env, await openReview(c.env, s.id), hash) }, 201);
+  return c.json({ status: 'in_review', review: await reviewDto(c.env, await openReview(c.env, s.id), e) }, 201);
 });
 
 async function decide(c: C, decision: 'approved' | 'changes_requested') {
@@ -303,10 +346,14 @@ async function decide(c: C, decision: 'approved' | 'changes_requested') {
   const b = await body(c);
   const comment = typeof b.comment === 'string' ? b.comment.replace(/\s+/g, ' ').trim().slice(0, 2000) : '';
   if (decision === 'changes_requested' && comment.length < REASON_MIN) return say(c, 400, 'comment_required', `Say what to change, in at least ${REASON_MIN} characters.`);
-  const hash = await draftHash(await draftPartsOf(c.env, s));
+  const e = await evidenceOf(c.env, s, await draftPartsOf(c.env, s));
   const open = await openReview(c.env, s.id);
   if (!open) return say(c, 409, 'no_review', 'No review of this skill is open.');
-  if (open.draft_hash !== hash) return say(c, 409, 'review_stale', 'The draft changed after the review was asked for. Request a new review.');
+  // D4533: stale when the draft, its cases, the evaluator or the required models changed since it was asked.
+  if (open.evidence_hash !== e.evidence_hash) {
+    return say(c, 409, 'review_stale', 'The draft, its golden cases, the evaluator or the required models changed after the review was asked for. Request a new review.',
+      { changes: evidenceChanges(open.draft_hash, parseEvidence(open.evidence_json), e) });
+  }
   // No self-approval: the author (who asked, or who last wrote the draft) never decides.
   if (admin.id === open.requested_by || admin.id === s.updated_by) return say(c, 403, 'self_approval', 'The draft\'s author cannot approve it. A second Super Admin does.');
   if (admin.id !== open.reviewer_id) return say(c, 403, 'not_reviewer', 'Only the Super Admin asked to review this draft decides it.');
@@ -319,7 +366,7 @@ async function decide(c: C, decision: 'approved' | 'changes_requested') {
     userId: open.requested_by, type: `agent_skill_review_${decision}`, channels: ['in_app'], link: null, payload: { skill_uid: s.uid },
     title: decision === 'approved' ? `"${s.name}" was approved and can be published` : `Changes were asked for on "${s.name}"`, body: comment || null,
   });
-  return c.json({ status: 'draft', review: await reviewDto(c.env, await c.env.DB.prepare('SELECT * FROM agent_skill_reviews WHERE id = ?').bind(open.id).first<ReviewRow>(), hash) });
+  return c.json({ status: 'draft', review: await reviewDto(c.env, await c.env.DB.prepare('SELECT * FROM agent_skill_reviews WHERE id = ?').bind(open.id).first<ReviewRow>(), e) });
 }
 adminHqSkills.post('/:uid/review/approve', (c) => decide(c, 'approved'));
 adminHqSkills.post('/:uid/review/request-changes', (c) => decide(c, 'changes_requested'));
@@ -350,13 +397,40 @@ adminHqSkills.put('/:uid/cases', async (c) => {
   stmts.push(...removed.map((l) => c.env.DB.prepare('UPDATE agent_skill_cases SET removed_at = CURRENT_TIMESTAMP WHERE id = ?').bind(l.id)));
   if (stmts.length) await c.env.DB.batch(stmts);
   await audit(c.env, admin, 'agent_skill_cases_set', s, reason, { cases: live.length }, { cases: keep.size + (stmts.length - removed.length) });
-  const hash = await draftHash(await draftPartsOf(c.env, s));
-  return c.json({ evals: { ...(await evalSummary(c.env, s.id, hash)), pass_bar: PASS_BAR } });
+  // D4533: a changed suite is new evidence: the summary below is on it, so the earlier results read not evaluated.
+  const e = await evidenceOf(c.env, s, await draftPartsOf(c.env, s));
+  return c.json({ evals: { ...(await evalSummary(c.env, s.id, e)), pass_bar: PASS_BAR } });
 });
 
-/** The models an eval runs on: those asked for, else every model agents may run on today. */
-function evalModels(env: Env, admin: User, asked: unknown): { ok: true; models: string[] } | { ok: false; message: string } {
+// D4533: the models this draft must pass on. A change is new evidence: a new review and new results.
+adminHqSkills.put('/:uid/models', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const s = await hqSkill(c.env, c.req.param('uid'));
+  if (!s) return noSkill(c);
+  if (s.status === 'retired') return say(c, 409, 'retired', 'A retired skill is not evaluated.');
+  const b = await body(c);
+  const reason = reasonOf(b.reason);
+  if (!reason) return refuseReason(c);
+  let declared: string | null = null;
+  if (b.models !== null) {
+    const m = evalModels(c.env, admin, b.models ?? []);
+    if (!m.ok) return say(c, 400, 'models_invalid', m.message);
+    declared = JSON.stringify([...m.models].sort());
+  }
+  const before = requiredModels(c.env, s.required_models_json);
+  await c.env.DB.prepare('UPDATE agent_skills SET required_models_json = ? WHERE id = ?').bind(declared, s.id).run();
+  const e = await evidenceOf(c.env, { ...s, required_models_json: declared }, await draftPartsOf(c.env, s));
+  await audit(c.env, admin, 'agent_skill_models_set', s, reason, before, e.models);
+  return c.json({ models: e.models, evals: { ...(await evalSummary(c.env, s.id, e)), pass_bar: PASS_BAR } });
+});
+
+/**
+ * The models an eval runs on: those asked for, else (D4533) the skill's
+ * required set when one is given, else every model agents may run on today.
+ */
+function evalModels(env: Env, admin: User, asked: unknown, required?: string[]): { ok: true; models: string[] } | { ok: false; message: string } {
   const allowed = agentModels(env, admin).filter((m) => !m.plan_locked).map((m) => m.id);
+  if (asked == null && required?.length) return { ok: true, models: required };
   if (asked == null) return allowed.length ? { ok: true, models: allowed.slice(0, MODELS_MAX) } : { ok: false, message: 'No model is offered to agents right now.' };
   if (!Array.isArray(asked) || !asked.length || asked.length > MODELS_MAX || asked.some((m) => typeof m !== 'string' || !allowed.includes(m))) {
     return { ok: false, message: `Choose 1 to ${MODELS_MAX} of the models agents may run on.` };
@@ -366,28 +440,34 @@ function evalModels(env: Env, admin: User, asked: unknown): { ok: true; models: 
 
 async function runEvals(env: Env, admin: User, s: SkillRow, models: string[]) {
   const d = await draftPartsOf(env, s);
-  const hash = await draftHash(d);
-  const cases = (await env.DB.prepare('SELECT id, input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
-    .bind(s.id).all<{ id: number; input_json: string; expect_json: string }>()).results ?? [];
+  // D4533: each result is recorded under the evidence it was run on, and the cases run are that evidence's suite (one read).
+  const cases = await liveCases(env, s.id);
+  const e = await evidenceFrom(d, cases, requiredModels(env, s.required_models_json));
   for (const k of cases) {
     for (const model of models) {
       const r = await runCase(env, d, parse<CaseInput>(k.input_json, { records: {} }), parse<CaseExpect>(k.expect_json, null as any), model, admin.id);
-      await env.DB.prepare(`INSERT INTO agent_skill_eval_results (case_id, skill_id, draft_hash, model_id, result, detail, usage_log_id, run_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(k.id, s.id, hash, model, r.result, r.detail, r.usage_log_id, admin.id).run();
+      await env.DB.prepare(`INSERT INTO agent_skill_eval_results (case_id, skill_id, draft_hash, model_id, result, detail, usage_log_id, run_by, evidence_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(k.id, s.id, e.definition_hash, model, r.result, r.detail, r.usage_log_id, admin.id, e.evidence_hash).run();
     }
   }
-  return { cases: cases.length, summary: await evalSummary(env, s.id, hash) };
+  return { cases: cases.length, evidence: e, summary: await evalSummary(env, s.id, e) };
 }
+
+/** What an eval audit row records of the evidence it ran on (D4533): enough to attribute every result. */
+const evidenceAudit = (e: Evidence) => ({
+  evidence_hash: e.evidence_hash, definition_hash: e.definition_hash, suite_revision: e.suite.revision, case_uids: e.suite.cases.map((k) => k.uid),
+  evaluator_version: e.evaluator_version, required_models: e.models.required,
+});
 
 adminHqSkills.post('/:uid/evals', async (c) => {
   const admin = await requireSuperAdmin(c);
   const s = await hqSkill(c.env, c.req.param('uid'));
   if (!s) return noSkill(c);
-  const m = evalModels(c.env, admin, (await body(c)).models);
+  const m = evalModels(c.env, admin, (await body(c)).models, requiredModels(c.env, s.required_models_json).required);
   if (!m.ok) return say(c, 400, 'models_invalid', m.message);
   const done = await runEvals(c.env, admin, s, m.models);
   if (!done.cases) return say(c, 409, 'no_cases', 'This skill has no golden cases yet. Add one, then run the evals.');
-  await audit(c.env, admin, 'agent_skill_evals_run', s, null, null, { pass: done.summary.pass, total: done.summary.total }, { models: m.models });
+  await audit(c.env, admin, 'agent_skill_evals_run', s, null, null, { pass: done.summary.pass, total: done.summary.total }, { models: m.models, ...evidenceAudit(done.evidence) });
   return c.json({ evals: { ...done.summary, pass_bar: PASS_BAR } });
 });
 
@@ -514,9 +594,10 @@ adminHqSkills.post('/bulk', async (c) => {
       const r = await retire(c.env, admin, s, b.replacement_uid, reason);
       results.push(r.ok ? { uid, ok: true, pinned_agents: r.pinned_agents } : { uid, ok: false, code: r.code, message: r.message });
     } else {
-      const r = await runEvals(c.env, admin, s, (models as { ok: true; models: string[] }).models);
+      // D4533: without a choice, each skill runs on its own required set.
+      const r = await runEvals(c.env, admin, s, b.models == null ? requiredModels(c.env, s.required_models_json).required : (models as { ok: true; models: string[] }).models);
       if (!r.cases) { results.push({ uid, ok: false, code: 'no_cases', message: 'This skill has no golden cases yet.' }); continue; }
-      await audit(c.env, admin, 'agent_skill_evals_run', s, reason, null, { pass: r.summary.pass, total: r.summary.total });
+      await audit(c.env, admin, 'agent_skill_evals_run', s, reason, null, { pass: r.summary.pass, total: r.summary.total }, evidenceAudit(r.evidence));
       results.push({ uid, ok: true, pass: r.summary.pass, total: r.summary.total, meets_bar: r.summary.meets_bar });
     }
   }

@@ -8,6 +8,7 @@ import {
 } from '../expertise/kit';
 import { bookingView, formatDateTime } from '../advisory/kit';
 import { acceptanceRate, classifyBooking, decisionMoment, medianDecision, spanText } from './opportunityLog';
+import { partialLine, readEveryPage } from './everyPage';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -70,13 +71,15 @@ export default function OpportunitiesZone() {
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const bookings = await api.listMyAdvisorBookings();
+      // #4714 (D4714): every page, so the rate and counts cover every request.
+      const bookings = await readEveryPage((page) => api.listMyAdvisorBookings(undefined, page));
       // The templates are a SECOND source and must not take the page down with
       // them: an advisor with no service definitions still has a decision log.
       const services = await api.listMyAdvisorServices().catch(() => null);
       setState({
         loading: false, error: '',
         bookings: bookings?.items || [],
+        partial: partialLine(bookings),
         services: services?.items || [],
         servicesUnavailable: services === null,
       });
@@ -170,6 +173,7 @@ export default function OpportunitiesZone() {
         })}
       />
 
+      {state.partial && <p className="mb-2 text-[11px] text-axal-faint" data-testid="opportunities-partial">{state.partial}</p>}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Awaiting you" value={counts.awaiting}
           note={counts.awaiting === 0 ? 'Nothing is waiting on an answer'
