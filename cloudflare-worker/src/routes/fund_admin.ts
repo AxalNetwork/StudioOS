@@ -15,12 +15,17 @@
  * searched, sorted and paged on the Worker, behind the same gate, audited
  * first (`services/fundAdminLps.ts`). D1162 adds `?lp=<id>`, one LP's row for
  * FND6's drawer, and each row's booklet uid.
+ *
+ * `GET /activity` (D4812) is the Overview's Recent activity: the fund acts HQ
+ * admins took, newest first, from `admin_audit_log` (`services/fundAdminActivity.ts`),
+ * behind the same gate. `?fund=` keeps one fund; `?before=` pages back.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { fundAdminAccess, requireFundAdminReader } from '../services/fundAdminAccess';
 import { AUDIT_UNAVAILABLE, fundAdminOverview } from '../services/fundAdminOverview';
 import { fundAdminLps, parseLpQuery } from '../services/fundAdminLps';
+import { fundAdminActivity, parseActivityQuery } from '../services/fundAdminActivity';
 
 const fundAdmin = new Hono<{ Bindings: Env }>();
 
@@ -41,6 +46,18 @@ fundAdmin.get('/lps', async (c) => {
   if (!roster) return c.json(AUDIT_UNAVAILABLE, 503);
   if (roster === 'fund_not_administered') return c.json({ code: 'fund_not_administered', detail: 'This fund is not administered here.' }, 404);
   return c.json(roster);
+});
+
+fundAdmin.get('/activity', async (c) => {
+  await requireFundAdminReader(c);
+  const query = parseActivityQuery((k) => c.req.query(k));
+  if (typeof query === 'string') return c.json({ code: 'invalid_activity_query', detail: `The ${query} parameter is not valid.` }, 400);
+  try {
+    return c.json(await fundAdminActivity(c.env, query));
+  } catch (e) {
+    console.warn('[fund_admin] activity unreadable', (e as Error).message);
+    return c.json({ code: 'fund_activity_unreadable', detail: 'Recent activity could not be read.' }, 503);
+  }
 });
 
 export default fundAdmin;

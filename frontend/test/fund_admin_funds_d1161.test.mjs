@@ -294,7 +294,9 @@ test('an Admin sees the economics sentence where Change would be, and the people
     assert.match(v.text('fund-waterfall'), /Not recorded: the distribution job has no hurdle or tiers\./);
     assert.match(v.text('fund-lpa-state'), /Version 3/);
     assert.equal(v.text('fund-admin-primary'), 'Edit fund facts');
-    assert.equal(v.text('fund-admin-tab-funds').startsWith('Funds'), true);
+    // D4812: Funds is no peer tab; a fund's page carries a crumb back to Fund administration.
+    assert.ok(!v.by('fund-admin-tab-funds'));
+    assert.match(v.text('admin-page-crumb'), /Fund administration/);
     assert.equal(named(s, 'get')[0][1], 7);
   } finally { await v.close(); }
 });

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { LightboxPhoneProvider, AdminPageHeader, HeaderMenuItem, HeaderTab, actionPrimary, useMovedNotice } from '../../../ui';
 import { useAuth } from '../../../hooks/useAuthSync';
@@ -15,9 +16,10 @@ import { fundNoticesApi } from '../../../lib/api/fundNotices';
 import { fundBookletsApi } from '../../../lib/api/fundBooklets';
 import { Banner } from '../../account/ConnectorSheet';
 import {
-  BANKING_PARTS, LEGACY_TABS, LINE, MOVED_NOTICES, TABS, TITLE, administeredFunds, fundFilter, fundsCsv,
-  headerPrimary, keepFund, legacyHref, moreItems, pickFund, profilePill, tabCounts, tabOfView, viewFrom, viewHref, withFund,
+  LEGACY_TABS, LINE, MOVED_NOTICES, TITLE, administeredFunds, fundFilter, fundsCsv,
+  headerPrimary, keepFund, legacyHref, moreItems, pickFund, profilePill, tabOfView, viewFrom, viewHref, withFund,
 } from './fundAdminModel';
+import { ENTITY_SCOPE, ENTITY_VIEWS, WORKSPACES, primaryAction, updatedText, workspaceFlags, workspaceOf } from './workspaceModel';
 import { useRead } from './useRead';
 import { Refusal } from './Refusal';
 import { OverviewTab } from './OverviewTab';
@@ -104,6 +106,12 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const moved = useMovedNotice(MOVED_NOTICES);
   const access = useRead(() => apis.fundAdmin.access(), [apis], { enabled: !branch });
   const overview = useRead(() => apis.fundAdmin.overview(), [apis], { enabled: !branch });
+  // D4812: the Overview's NAV and distributions come from the performance list, read only there.
+  const performance = useRead(() => apis.performance.list(), [apis], { enabled: !branch && view === 'overview' && Boolean(apis.performance?.list) });
+  // D4812 (FA-01): "Updated 14:30 UTC · Refresh" replaces the page-wide as-of date.
+  const [readAt, setReadAt] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => { if (overview.status === 'ready') setReadAt(new Date()); }, [overview.status, overview.data]);
 
   if (forward) return <Navigate to={forward} replace />;
 
@@ -126,25 +134,33 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
     else setParams(p, { replace: true });
   };
   const fundProps = { apis, access: acts, funds, fund, overview, onFund: (id) => go({ fund: id }) };
-  const counts = tabCounts(overview.status === 'ready' ? overview.data : overview.status === 'unreadable' ? {} : null);
   const keep = keepFund(location.search);
-  const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
   const pill = profilePill(acts);
-  // D1161: `/admin/fund-admin/funds/:id` is one fund's page under the Funds tab.
+  // D1161: `/admin/fund-admin/funds/:id` is one fund's page; it sits in no workspace (D4812).
   const oneFund = view === 'funds' ? fundIdFrom(location.pathname) : null;
-  const primary = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null, oneFund);
-  // D1162: Add LP keeps the roster’s filters.
-  if (primary && view === 'lps') primary.to = `/admin/fund-admin/lps${withQuery(location.search, 'add', true)}`;
   const filterView = view === 'reports' && !/\/(periods|notices)\/?$/.test(location.pathname) ? 'reportPacks' : tab;
   const filter = fundFilter(funds, location.search, filterView);
+  const scopeId = filter.pills.find((p) => p.on && p.id != null)?.id ?? null;
+  const ws = workspaceOf(view);
+  const overviewData = overview.status === 'ready' ? overview.data : null;
+  const flags = workspaceFlags(overviewData, scopeId);
+  const fallback = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null, oneFund);
+  // D1162: Add LP keeps the roster’s filters.
+  if (fallback && view === 'lps') fallback.to = `/admin/fund-admin/lps${withQuery(location.search, 'add', true)}`;
+  const primary = primaryAction({ view, access: acts, overview: overviewData, fundId: scopeId ?? (PER_FUND_VIEWS.includes(tab) ? fund?.id ?? null : null), fallback });
+  const updated = updatedText(readAt);
+  const refresh = () => { access.reload(); overview.reload(); performance.reload(); setRefreshKey((k) => k + 1); };
+  const current = WORKSPACES.find((w) => w.key === ws);
+  const scopeLabel = scopeId != null ? funds.find((f) => f.id === scopeId)?.name || 'One fund' : `All funds · ${funds.length} fund${funds.length === 1 ? '' : 's'}`;
 
-  const exportCsv = () => downloadCsv(fundsCsv(overview.status === 'ready' ? overview.data : null));
+  const exportCsv = () => downloadCsv(fundsCsv(overviewData));
 
   return (
     <LightboxPhoneProvider phone="sheet">
     <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
       <div className="px-4 pt-5 sm:px-6">
         <AdminPageHeader
+          crumb={view === 'funds' ? { label: TITLE, to: `/admin/fund-admin${keep}`, current: oneFund ? 'Fund' : 'Funds' } : null}
           title={TITLE}
           pills={pill ? [{ ...pill, testId: 'fund-admin-role' }] : []}
           line={LINE}
@@ -152,15 +168,26 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
           more={moreItems(acts).map((m) => (m.to
             ? <HeaderMenuItem key={m.key} to={m.to} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>
             : <HeaderMenuItem key={m.key} onSelect={exportCsv} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>))}
-          chip={asOf ? <span title="Every figure on this page is as of this date." className="inline-flex rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-muted dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400" data-testid="fund-admin-as-of">{asOf}</span> : null}
+          chip={(
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="fund-admin-context">
+              {funds.length > 0 && view !== 'books' && view !== 'funds' && (ENTITY_VIEWS.includes(view)
+                ? <span className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="fund-admin-scope-entities">Scope: {ENTITY_SCOPE}</span>
+                : <FundScope filter={filter} pathname={location.pathname} search={location.search} />)}
+              {updated && (
+                <span className="inline-flex items-center gap-1.5 font-mono text-[12px] text-axal-muted dark:text-gray-400" data-testid="fund-admin-updated">
+                  {updated} ·
+                  <button type="button" className="min-h-[44px] font-sans text-[12.5px] font-bold text-axal-violet-deep hover:underline sm:min-h-0 dark:text-violet-300" onClick={refresh} data-testid="fund-admin-refresh">Refresh</button>
+                </span>
+              )}
+            </div>
+          )}
           notice={moved}
-          tabs={TABS.map((t) => (t.path
-            // Literal heads, so the admin route guard reads each tab's door (D1157).
-            ? <HeaderTab key={t.key} to={`/admin/fund-admin/${t.path}${keep}`} end={false} count={counts[t.key] || null} data-testid={`fund-admin-tab-${t.key}`}>{t.label}</HeaderTab>
-            : <HeaderTab key={t.key} to={`/admin/fund-admin${keep}`} count={null} data-testid={`fund-admin-tab-${t.key}`}>{t.label}</HeaderTab>))}
+          tabs={WORKSPACES.map((w) => (w.path
+            // Literal heads, so the admin route guard reads each workspace's door (D1157).
+            ? <HeaderTab key={w.key} to={`/admin/fund-admin/${w.path}${keep}`} active={ws === w.key} count={flags[w.key] || null} data-testid={`fund-admin-tab-${w.key}`}>{w.label}</HeaderTab>
+            : <HeaderTab key={w.key} to={`/admin/fund-admin${keep}`} active={ws === w.key} count={null} data-testid={`fund-admin-tab-${w.key}`}>{w.label}</HeaderTab>))}
           data-testid="fund-admin-header"
         />
-        {funds.length > 0 && view !== 'books' && view !== 'funds' && <FundFilter filter={filter} pathname={location.pathname} search={location.search} />}
       </div>
       {access.status === 'unreadable' && (
         <div className="mx-4 mt-4 sm:mx-6">
@@ -170,21 +197,18 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
           </Banner>
         </div>
       )}
-      {tab === 'banking' && (
-        <nav className="mx-4 mt-4 flex flex-wrap gap-2 sm:mx-6" aria-label="Banking" data-testid="fund-admin-banking-parts">
-          {BANKING_PARTS.map((b) => {
-            const props = { 'aria-current': b.key === view ? 'page' : undefined, 'data-testid': `fund-admin-part-${b.key}`,
-              className: `rounded-axal-pill border px-3 py-1 text-[12px] font-bold ${b.key === view
+      {current && current.parts.length > 1 && (
+        <nav className="mx-4 mt-4 flex flex-wrap gap-2 sm:mx-6" aria-label={current.label} data-testid={`fund-admin-${current.key}-parts`}>
+          {current.parts.map((b) => (
+            <Link key={b.key} to={`/admin/fund-admin/${b.path}${keep}`} aria-current={b.key === view ? 'page' : undefined} data-testid={`fund-admin-part-${b.key}`}
+              className={`inline-flex min-h-[44px] items-center rounded-axal-pill border px-3.5 text-[13px] font-bold sm:min-h-[34px] ${b.key === view
                 ? 'border-axal-violet bg-axal-violet/10 text-axal-violet-deep dark:text-violet-300'
-                : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}` };
-            return b.key === 'banking'
-              ? <Link key={b.key} to={`/admin/fund-admin/banking${keep}`} {...props}>{b.label}</Link>
-              : <Link key={b.key} to={`/admin/fund-admin/banking/${b.key}${keep}`} {...props}>{b.label}</Link>;
-          })}
+                : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`}>{b.label}</Link>
+          ))}
         </nav>
       )}
       <div data-testid={`fund-admin-panel-${view}`}>
-        {view === 'overview' && <OverviewTab overview={overview} onOpen={(next) => go(next)} />}
+        {view === 'overview' && <OverviewTab overview={overview} performance={performance} apis={apis} fundId={scopeId} scopeLabel={scopeLabel} readAt={updated ? updated.replace(/^Updated /, '') : null} refreshKey={refreshKey} />}
         {view === 'banking' && <BankingTab apis={apis} access={acts} />}
         {view === 'reconciliation' && <ReconciliationTab apis={apis} access={acts} />}
         {view === 'calls' && <CallsTab {...fundProps} />}
@@ -192,7 +216,7 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
         {view === 'fees' && <FeesTab key={fund?.id} {...fundProps} />}
         {view === 'reports' && <ReportsTab key={params.get('fund') || 'all'} {...fundProps} />}
         {view === 'performance' && (
-          <PerformanceTab apis={apis} access={acts} funds={funds} fundId={filter.pills.find((p) => p.on && p.id != null)?.id ?? null} onChanged={overview.reload} />
+          <PerformanceTab apis={apis} access={acts} funds={funds} fundId={scopeId} onChanged={overview.reload} />
         )}
         {view === 'lps' && <LpsTab apis={apis} access={acts} funds={funds} />}
         {view === 'books' && <BooksTab key={params.get('fund') || 'first'} apis={apis} selectedFund={params.get('fund')} onFund={(id) => go({ fund: id })} />}
@@ -208,28 +232,35 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
 
 const PER_FUND_VIEWS = ['calls', 'distributions', 'fees', 'reports'];
 
-/** The fund filter (FND2): pills on a desktop, a select on a phone; kept across tabs as `?fund=`. */
-function FundFilter({ filter, pathname, search }) {
-  const navigate = useNavigate();
+/**
+ * D4812 (FA-08): the one fund-scope control, "Fund scope: All funds ▾". It
+ * replaces D1160's pills and the phone select, which drew the same state
+ * twice. Each choice is a link, so the scope stays in the address (`?fund=`)
+ * and a keyboard or a screen reader opens it like any disclosure. A view that
+ * acts on one fund offers no All funds: the fund is chosen explicitly.
+ */
+function FundScope({ filter, pathname, search }) {
+  const ref = useRef(null);
+  const on = filter.pills.find((p) => p.on);
+  const close = () => { if (ref.current) ref.current.open = false; };
   return (
-    <div className="mt-3 flex flex-col gap-1.5" data-testid="fund-admin-filter">
-      <nav aria-label="Fund" className="hidden w-fit flex-wrap gap-0.5 rounded-full border border-axal-hairline bg-[#faf9fc] p-[3px] sm:flex dark:border-gray-700 dark:bg-gray-800">
+    <details ref={ref} className="relative" data-testid="fund-admin-filter">
+      <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink sm:min-h-[34px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="fund-admin-scope">
+        <span className="text-axal-muted dark:text-gray-400">Fund scope:</span>
+        <span className="font-bold">{on?.label || 'Choose a fund'}</span>
+        <span aria-hidden="true">▾</span>
+      </summary>
+      <ul aria-label="Fund scope" className="absolute left-0 z-20 mt-1 min-w-[240px] list-none rounded-[10px] border border-axal-hairline bg-white p-1 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         {filter.pills.map((p) => (
-          <Link key={p.key} to={withFund(pathname, search, p.id)} aria-current={p.on ? 'true' : undefined} data-testid={`fund-admin-filter-${p.key}`}
-            className={`inline-flex min-h-[30px] items-center whitespace-nowrap rounded-full px-[13px] text-[12.5px] ${p.on
-              ? 'bg-white font-extrabold text-axal-ink shadow-[0_0_0_1px_theme(colors.axal.hairline)] dark:bg-gray-900 dark:text-gray-100'
-              : 'font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}>{p.label}</Link>
+          <li key={p.key}>
+            <Link to={withFund(pathname, search, p.id)} onClick={close} aria-current={p.on ? 'true' : undefined} data-testid={`fund-admin-filter-${p.key}`}
+              className={`flex min-h-[44px] items-center rounded-[7px] px-3 text-[13px] sm:min-h-[36px] ${p.on ? 'bg-axal-lavender font-bold text-axal-ink dark:bg-violet-950/40 dark:text-gray-100' : 'text-zinc-700 hover:bg-[#faf9fc] dark:text-gray-200 dark:hover:bg-gray-800'}`}>
+              {p.label}{p.id == null ? <span className="ml-2 text-[12px] font-normal text-axal-muted dark:text-gray-400">every administered fund</span> : null}
+            </Link>
+          </li>
         ))}
-      </nav>
-      <label className="flex min-h-[44px] items-center gap-2.5 rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] font-semibold text-axal-ink sm:hidden dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-        <span className="font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">Fund</span>
-        <select className="min-w-0 flex-1 bg-transparent" value={filter.pills.find((p) => p.on)?.key || ''} data-testid="fund-admin-filter-select"
-          onChange={(e) => { const p = filter.pills.find((x) => x.key === e.target.value); if (p) navigate(withFund(pathname, search, p.id)); }}>
-          {filter.pills.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-        </select>
-      </label>
-      {filter.note && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="fund-admin-filter-note">{filter.note}</p>}
-    </div>
+      </ul>
+    </details>
   );
 }
 

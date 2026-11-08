@@ -19,6 +19,19 @@ export const fundAdminApi = {
    * sort, dir, page, per_page; empty ones are left out. Audited before it
    * answers; a 503 means the read was not made.
    */
+  /**
+   * D4812: the Overview's Recent activity — the fund acts HQ admins took,
+   * newest first. `fund` keeps one fund; `before` is the last page's
+   * `next_before`. A 503 means the store could not be read, never "no activity".
+   */
+  activity: ({ fund = null, before = null, limit = null } = {}) => {
+    const qs = new URLSearchParams();
+    if (fund != null) qs.set('fund', String(fund));
+    if (before != null) qs.set('before', String(before));
+    if (limit != null) qs.set('limit', String(limit));
+    const s = qs.toString();
+    return request(`/fund-admin/activity${s ? `?${s}` : ''}`);
+  },
   lps: (params = {}) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {

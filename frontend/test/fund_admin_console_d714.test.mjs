@@ -18,7 +18,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 
 import { FundAdminConsoleView } from '../src/pages/admin/fundAdmin/FundAdminConsole.jsx';
-import { TABS, tabFrom, tabFlags, HQ_ONLY, PAYMENT_INSTRUCTIONS_ADMIN } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
+import { TABS, tabFrom, HQ_ONLY, PAYMENT_INSTRUCTIONS_ADMIN } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
+import { workspaceFlags } from '../src/pages/admin/fundAdmin/workspaceModel.js';
 import { Table } from '../src/pages/admin/fundAdmin/parts.jsx';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 
@@ -169,6 +170,7 @@ function stubs(over = {}) {
   };
 }
 
+const hrefOf = (n) => Object.entries(n || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1]?.href;
 const ADMIN = { id: 2, role: 'admin', is_super_admin: 0 };
 const SUPER = { id: 1, role: 'admin', is_super_admin: 1 };
 
@@ -223,7 +225,7 @@ test('the tabs are the canvas\'s (D1157 replaces decision 7\'s order), and a D71
 
 test('each tab renders its fixture', async () => {
   const expect = {
-    overview: ['Axal Holdings', 'Checking · ending 9001 · Operating', '$12,345.67', 'Example Fund I', '2 overdue', '2026Q3 · issued', '1 draft · 2 prepared', '3 proposed · 1 need review'],
+    overview: ['Axal Holdings', 'Checking · ending 9001 · Operating', '$12,345.67', 'Example Fund I', '2 capital-call lines overdue', 'Fees 2026Q3 · issued', '2 report packs ready to issue', '3 proposed · 1 need review'],
     banking: ['Holdings Org', 'ending 9001', 'Current $12,345.67', 'Available Unreadable', 'Page 1 of 2', 'LP One'],
     reconciliation: ['$1,000.00 · Capital-call line #11', 'Fee period #41', 'Needs review'],
     calls: ['Capital calls', '$500,000.00', '$100,000.00', '$75,000.00', '$25,000.00', 'Outstanding by age', 'Call 2 · $50,000.00 · due 2026-10-01', 'LP One', 'Record receipt', 'Open LP', 'Earlier calls', 'Proof of funds shared by LPs', 'Show proofs of funds'],
@@ -330,7 +332,8 @@ test('the gated acts call what they name, with the previewed figures', async () 
 // ------------------------------------------------------------------ empty, Not recorded, Unreadable
 
 test('Not recorded is the store\'s own reason, never a zero', async () => {
-  const { m } = await open(SUPER, 'overview');
+  // D4812: All funds, so the fund with nothing due is in scope.
+  const m = await mount(SUPER, stubs({ access: async () => access(true) }).apis, '/admin/fund-admin');
   const fund = m.text(m.by('overview-entity-fund'));
   assert.ok(fund.includes('No Mercury connection'), fund);
   assert.ok(m.text().includes('No fee period yet'));
@@ -528,11 +531,13 @@ test('D749: the Transactions pill reads the mark for a marked line', async () =>
 
 // ------------------------------------------------------------------ the canvas PR's layout (S1's brief, 2026-10-18)
 
-test('canvas: the chrome names the viewer\'s profile and the overview\'s date, with no "laid out from existing parts" note', async () => {
+test('canvas: the chrome names the viewer\'s profile and when the overview was read, with no "laid out from existing parts" note', async () => {
   for (const [user, role] of [[ADMIN, 'Admin'], [SUPER, 'Super Admin']]) {
     const { m } = await open(user, 'overview');
     assert.equal(m.text(m.by('fund-admin-role')), role);
-    assert.equal(m.text(m.by('fund-admin-as-of')), 'As of 2026-10-18');
+    // D4812 (FA-01): "Updated HH:MM UTC · Refresh" replaces the page-wide as-of chip.
+    assert.match(m.text(m.by('fund-admin-updated')), /^Updated \d{2}:\d{2} UTC · Refresh$/);
+    assert.ok(!m.by('fund-admin-as-of'));
     assert.ok(!m.by('fund-admin-layout-note'));
     assert.doesNotMatch(m.text(), /laid out from existing parts/);
     await m.unmount();
@@ -543,39 +548,41 @@ test('canvas: the chrome names the viewer\'s profile and the overview\'s date, w
   await m.unmount();
 });
 
-test('canvas: the tabs carry the amber count flags from the overview, and a block that is not ok flags nothing', async () => {
-  assert.deepEqual(tabFlags(OVERVIEW()), { calls: 2, reconciliation: 4, reports: 2 });
+test('canvas: the workspaces carry the amber flags from the overview, and a block that is not ok flags nothing', async () => {
+  const flag = (n, key) => ({ kind: 'flag', value: n, testId: `fund-admin-flag-${key}` });
+  assert.deepEqual(workspaceFlags(OVERVIEW()), { capital: flag(2, 'capital'), reporting: flag(2, 'reporting'), banking: flag(4, 'banking') });
   const bad = { ...OVERVIEW(), funds: { state: 'unreadable', items: [{ fund_id: 7, overdue_lines: 9 }] }, matches: { state: 'unreadable', items: [{ fund_id: 7, proposed: 5, needs_review: 0 }] } };
-  assert.deepEqual(tabFlags(bad), { calls: 0, reconciliation: 0, reports: 2 });
-  assert.deepEqual(tabFlags(null), { calls: 0, reconciliation: 0, reports: 0 });
+  assert.deepEqual(workspaceFlags(bad), { capital: null, reporting: flag(2, 'reporting'), banking: null });
+  assert.deepEqual(workspaceFlags(null), { capital: null, reporting: null, banking: null });
+  assert.deepEqual(workspaceFlags(OVERVIEW(), 8), { capital: null, reporting: null, banking: null }, 'the flags follow the fund scope');
   const { m } = await open(ADMIN, 'overview');
-  // D1157: Reconciliation is a part of Banking, so its matches flag the Banking tab.
+  // D1157: Reconciliation is a part of Banking & Books, so its matches flag that workspace.
   assert.equal(m.text(m.by('fund-admin-flag-banking')), '4');
-  assert.equal(m.text(m.by('fund-admin-flag-calls')), '2');
-  assert.equal(m.text(m.by('fund-admin-flag-reports')), '2');
+  assert.equal(m.text(m.by('fund-admin-flag-capital')), '2');
+  assert.equal(m.text(m.by('fund-admin-flag-reporting')), '2');
   assert.ok(!m.by('fund-admin-flag-fees') && !m.by('fund-admin-flag-reconciliation'));
   await m.unmount();
 });
 
-test('canvas Overview: each entity card names its Mercury state, and each fund row carries its fee period, drafts and matches', async () => {
-  const { m } = await open(ADMIN, 'overview');
+test('canvas Overview: each entity card names its Mercury state, and each fund row says what waits on it', async () => {
+  const m = await mount(ADMIN, stubs().apis);
   assert.ok(m.text(m.by('overview-entity-holdings')).includes('Connected'));
   assert.ok(m.text(m.by('overview-entity-fund')).includes('Not connected'));
   assert.ok(m.text(m.by('overview-entity-no-account-fund')).includes('No bank account yet'));
   const row = m.text(m.by('overview-fund-7'));
-  for (const w of ['$500,000.00', '$100,000.00', '$75,000.00', '$25,000.00', '2 overdue', '2026-11-01', '2026Q3 · issued · net $2,500.00', '1 draft · 2 prepared', '3 proposed · 1 need review']) {
+  for (const w of ['$500,000.00 committed', '$25,000.00 outstanding', '2 lines overdue', '2 ready to issue', '4 to match', 'Fees 2026Q3 · issued']) {
     assert.ok(row.includes(w), `fund 7 row lacks "${w}": ${row}`);
   }
   const other = m.text(m.by('overview-fund-8'));
-  assert.ok(other.includes('No fee period yet') && other.includes('No line due'), other);
-  await m.click('overview-open-7');
-  assert.ok(m.by('fund-admin-panel-calls'), 'a fund opens on its Capital calls');
+  assert.ok(other.includes('No fee period yet') && other.includes('No line due') && other.includes('No reports waiting'), other);
+  assert.equal(hrefOf(m.by('overview-open-7')), '/admin/fund-admin/funds/7', 'a fund opens on its own page');
+  assert.equal(hrefOf(m.by('overview-open-8')), '/admin/fund-admin/lps?add=1&fund=8', 'a fund with nothing committed opens on Add LP');
   await m.unmount();
   const s = stubs({ overview: async () => ({ ...OVERVIEW(), fees: { state: 'unreadable', items: [] } }) });
   const u = await mount(ADMIN, s.apis);
-  assert.ok(m.text !== undefined && u.by('overview-fees-unreadable'));
-  assert.ok(u.text(u.by('overview-fund-7')).includes('Unreadable'), 'the failed block\'s column says so');
-  assert.ok(u.text(u.by('overview-fund-7')).includes('1 draft · 2 prepared'), 'the other blocks still draw');
+  assert.ok(u.by('overview-fees-unreadable'));
+  assert.ok(u.by('overview-fund-fee-unreadable-7'), 'the failed block says so on the row');
+  assert.ok(u.text(u.by('overview-fund-7')).includes('2 ready to issue'), 'the other blocks still draw');
   await u.unmount();
   const e = stubs({ overview: async () => ({ ...OVERVIEW(), entities: { state: 'ok', items: [{ ...OVERVIEW().entities.items[0], connection: { status: 'error', org_name: 'Holdings Org', last_synced_at: null, last_error: 'unauthorized' } }] } }) });
   const n = await mount(ADMIN, e.apis);
