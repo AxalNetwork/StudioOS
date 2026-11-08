@@ -86,6 +86,9 @@ const ALL_TABLES = [
 
 const SECURITY_EVENTS_MIGRATION = readFileSync(
   resolve(process.cwd(), 'cloudflare-worker/sql/migrations/282_security_events.sql'), 'utf8',
+) + readFileSync(
+  // D4691 — the support operator column the feed reads.
+  resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611072219_security_events_support_actor.sql'), 'utf8',
 );
 
 function freshDb(tables: string[] = ALL_TABLES) {

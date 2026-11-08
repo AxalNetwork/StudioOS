@@ -58,10 +58,10 @@ export const PROGRAM_DEFINITIONS = {
   people:
     'Distinct accounts that took part in the period: an active mentor assignment, an active enrolment in a published Learning program, a Refer & Earn submission, or a perk claim. The Lab is left out until a cohort\'s founders are defined.',
   waiting:
-    'Items waiting for an admin now: cohort applications, Refer & Earn reviews (including those waiting on the member), perk listings in review and office-hours hosts. Ages are in the Approvals lanes\' bands: under 24 hours, 24 to 72, and 72 or more.',
+    'Items waiting for an admin now: cohort applications, Refer & Earn reviews (including those waiting on the member), strategic access requests, perk listings in review and office-hours hosts. Ages, where a queue records them, are in the Approvals lanes\' bands: under 24 hours, 24 to 72, and 72 or more.',
   credits:
     'Perk credits granted in the period by source, and spent, from the credit ledger. Deductions, revokes and refunds are summed apart, never netted.',
-  mentors: 'Distinct people holding an active assignment whose current role is Advisor.',
+  mentors: 'Distinct people holding an active assignment whose account is active and holds the Advisor licence, as their role or as an additional licence.',
   coverage:
     'Cohorts that are scheduled or running and not postponed, and how many have at least one active assignment held by a current Advisor.',
   learning: 'Published Learning programs, and the active enrolments in them. A person in two programs is two enrolments.',
@@ -178,6 +178,8 @@ async function hostQueue(env: Env, nowMs: number) {
 
 /** The queues the Waiting tile sums, and the one it names as left out. */
 export const WAITING_COVERED = ['cohort', 'referrals', 'perks', 'hosts'] as const;
+/** D4807: every queue an admin can act on, so the headline total and the queues beside it reconcile without a footnote. */
+export const WAITING_QUEUES = [...WAITING_COVERED, 'strategic'] as const;
 
 // ---------------------------------------------------------------------------
 // Card figures
@@ -552,24 +554,24 @@ function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
 }
 
 function waitingTile(q: Queues) {
-  const parts = WAITING_COVERED.map((k) => [k, q[k]] as const);
+  const parts = WAITING_QUEUES.map((k) => [k, q[k]] as const);
   const bad = parts.filter(([, v]) => !v.available).map(([k]) => k);
-  const left_out = [{ queue: 'strategic', reason: 'Strategic access requests are counted separately; this total covers the Approvals lanes and their recorded ages.' }];
   if (bad.length) {
     return {
       available: false as const, unreadable: true as const,
       reason: `The ${bad.join(', ')} queue could not be read, so the total would be short. That is not the same as none.`,
-      covers: WAITING_COVERED, left_out,
+      covers: WAITING_QUEUES, left_out: [] as Array<{ queue: string; reason: string }>,
     };
   }
-  const read = parts.map(([, v]) => v as { count: number; oldest_hours: number | null });
-  const ages = read.map((v) => v.oldest_hours).filter((x): x is number => x !== null);
+  const read = parts.map(([, v]) => v as { count: number; oldest_hours?: number | null });
+  // A queue that records no age (strategic requests) adds to the count and to no age.
+  const ages = read.map((v) => v.oldest_hours ?? null).filter((x): x is number => x !== null);
   return {
     available: true as const,
     count: read.reduce((t, v) => t + v.count, 0),
     oldest_hours: ages.length ? Math.max(...ages) : null,
-    covers: WAITING_COVERED,
-    left_out,
+    covers: WAITING_QUEUES,
+    left_out: [] as Array<{ queue: string; reason: string }>,
   };
 }
 

@@ -200,7 +200,7 @@ test('the row\'s read: one case on the caller\'s list is a yes; a failed read is
   assert.equal(again.value, true);
   assert.ok(!calls.includes('again'), 'read once per account');
   await m.unmount();
-  assert.ok(read('frontend/src/App.jsx').includes("const sidebarGroups = withDiligenceRow(getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView), shellRole, ddInvolved);"));
+  assert.ok(read('frontend/src/App.jsx').includes("const sidebarGroups = withDiligenceRow(getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView, heldLicences), ddRole, ddInvolved);"));
 });
 
 // ------------------------------------------------------------------ rendered

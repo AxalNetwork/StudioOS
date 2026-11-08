@@ -25,6 +25,8 @@
  * deletion that did not happen would be worse than the gap it closes.
  */
 import type { Env } from '../types';
+import { adminAuditStatement } from './adminAudit';
+import { hashEmail } from '../util/hashEmail';
 
 /**
  * The outcomes HQ MAY RECORD — which is not the whole CHECK in migration 272.
@@ -36,8 +38,39 @@ import type { Env } from '../types';
  */
 export const HQ_DSR_OUTCOMES = ['fulfilled', 'denied'] as const;
 
-/** GDPR Art. 12(3): one month from receipt. Counted from the request, not from triage. */
+/**
+ * The clock HQ's list runs, as the code has always run it (D4675 makes it
+ * explicit and tested; it does not change it):
+ *
+ *   · it starts at RECEIPT, the stamp on `users.deletion_requested_at`;
+ *   · it is DSR_CLOCK_DAYS spans of exactly 24 hours, counted in UTC, so a
+ *     month's length, a leap day and a daylight-saving change move nothing;
+ *   · nothing pauses or extends it — the ledger records no extension.
+ *
+ * Whether that is the right policy (a calendar month, an extension, a pause
+ * while identity is checked) is the owner's and a legal reviewer's call,
+ * asked on #4675. Until it is answered this is the rule, and the tests pin it.
+ */
 export const DSR_CLOCK_DAYS = 30;
+export const DSR_DAY_MS = 86400000;
+
+/**
+ * A stored stamp as UTC milliseconds. D1 writes `datetime('now')`, which is
+ * UTC with no zone suffix ('YYYY-MM-DD HH:MM:SS'); read without the `Z` it
+ * would be taken as the server's local time and every clock would shift by
+ * the offset. NaN for anything unparseable, so `dsrDaysLeft` says unknown.
+ */
+export function dsrStampMs(s: string | null | undefined): number {
+  if (!s) return NaN;
+  const iso = s.includes('T') ? s : `${s.replace(' ', 'T')}Z`;
+  return Date.parse(iso);
+}
+
+/** The instant the clock runs out (receipt + DSR_CLOCK_DAYS × 24h), as ISO-8601 UTC, or null when unknown. */
+export function dsrDeadlineIso(requestedMs: number, clockDays: number = DSR_CLOCK_DAYS): string | null {
+  if (!Number.isFinite(requestedMs)) return null;
+  return new Date(requestedMs + clockDays * DSR_DAY_MS).toISOString();
+}
 
 /**
  * Days remaining on the statutory clock — negative once it has run out.
@@ -55,7 +88,7 @@ export const DSR_CLOCK_DAYS = 30;
  */
 export function dsrDaysLeft(requestedMs: number, nowMs: number, clockDays: number = DSR_CLOCK_DAYS): number | null {
   if (!Number.isFinite(requestedMs)) return null;
-  return clockDays - Math.floor((nowMs - requestedMs) / 86400000);
+  return clockDays - Math.floor((nowMs - requestedMs) / DSR_DAY_MS);
 }
 export type HqDsrOutcome = (typeof HQ_DSR_OUTCOMES)[number];
 
@@ -100,51 +133,249 @@ export async function withdrawDsrRequest(env: Env, userId: number): Promise<void
 }
 
 /**
- * HQ closes one, and BOTH HALVES MOVE IN ONE BATCH.
+ * D4675 — AN OPEN LEDGER ROW THE OPEN FLAG NO LONGER BACKS IS A WITHDRAWAL.
  *
- * The ledger row is the record and `users.deletion_requested_at` is the open
- * flag. If either moved alone they would disagree and the disagreement would
- * be invisible — a closed request still listed, or an open one nobody can see.
- * If the batch cannot run, nothing moves: clearing the flag with no record is
- * strictly worse than failing, so this throws and the caller says why.
- *
- * Statement 1 DERIVES the open row when there is none. A request made before
- * migration 272 has a timestamp on `users` and no ledger row, and carrying the
- * fact the database already holds is a different act from the backfill D136
- * refused — that one would have written an acceptance nobody gave.
+ * Only two acts clear `users.deletion_requested_at`: the subject's cancel and
+ * HQ's close, and HQ's close moves the ledger in the same batch. So an open
+ * row whose `requested_at` is not the flag's current value is a cancel whose
+ * ledger write did not land (before D4675 the two were separate writes). It is
+ * recorded as the subject's withdrawal, which is what happened, and that frees
+ * the one-open-row index for the request the flag now holds. A row that does
+ * match the flag is left alone.
  */
-export async function closeDsrRequest(
-  env: Env,
-  opts: { userId: number; actorUserId: number; outcome: HqDsrOutcome; reason: string },
-): Promise<void> {
-  const { userId, actorUserId, outcome, reason } = opts;
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT OR IGNORE INTO dsr_requests (user_id, requested_at)
-       SELECT id, deletion_requested_at FROM users
-        WHERE id = ? AND deletion_requested_at IS NOT NULL`,
-    ).bind(userId),
-    env.DB.prepare(
-      `UPDATE dsr_requests
-          SET outcome = ?, closed_at = datetime('now'), closed_by_user_id = ?, close_reason = ?
-        WHERE user_id = ? AND outcome IS NULL`,
-    ).bind(outcome, actorUserId, reason, userId),
-    env.DB.prepare(
-      'UPDATE users SET deletion_requested_at = NULL WHERE id = ?',
-    ).bind(userId),
-    // ADDRESSED TO THE SUBJECT, not to the operator: `user_id` is what
-    // routes/activity.ts GET /recent reads for a person's own feed, so this
-    // row is how they learn the outcome. HQ's side is `logAdminAction` at the
-    // call site; this one is theirs — the two-row shape `toggle-active` uses.
-    env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id)
-       VALUES ('account_deletion_request_closed', ?, ?, ?)`,
-    ).bind(
-      `Your erasure request was recorded as ${outcome} by Axal VC HQ. Reason: ${reason}`,
-      'Axal VC HQ',
-      userId,
-    ),
-  ]);
+function reconcileOrphanStatement(env: Env, userId: number) {
+  return env.DB.prepare(
+    `UPDATE dsr_requests SET outcome = 'withdrawn', closed_at = datetime('now')
+      WHERE user_id = ? AND outcome IS NULL
+        AND requested_at IS NOT (SELECT deletion_requested_at FROM users WHERE id = ?)`,
+  ).bind(userId, userId);
+}
+
+/**
+ * D4675 — THE SUBJECT ASKS: the open flag and the ledger row in ONE batch.
+ *
+ * Before, the flag was set first and the ledger row written after, as a
+ * separate statement, so an interruption between them left an open request
+ * the ledger did not hold. Now both land together. If the batch cannot run —
+ * a database without migration 272 has no ledger — the flag alone is set,
+ * because a member must never be unable to ask; HQ's close derives the row.
+ * `ledger` says which happened.
+ */
+export async function requestErasure(env: Env, userId: number): Promise<{ ledger: boolean }> {
+  const flag = env.DB.prepare(
+    "UPDATE users SET deletion_requested_at = COALESCE(deletion_requested_at, datetime('now')) WHERE id = ?",
+  ).bind(userId);
+  try {
+    await env.DB.batch([
+      flag,
+      reconcileOrphanStatement(env, userId),
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO dsr_requests (user_id, requested_at)
+         SELECT id, deletion_requested_at FROM users
+          WHERE id = ? AND deletion_requested_at IS NOT NULL`,
+      ).bind(userId),
+    ]);
+    return { ledger: true };
+  } catch (e) {
+    console.warn('[dsr] request ledger batch failed; recording the flag alone', (e as Error).message);
+    await env.DB.prepare(
+      "UPDATE users SET deletion_requested_at = COALESCE(deletion_requested_at, datetime('now')) WHERE id = ?",
+    ).bind(userId).run();
+    return { ledger: false };
+  }
+}
+
+/**
+ * D4675 — THE SUBJECT CANCELS: the flag and the withdrawal in ONE batch.
+ *
+ * `cancelled` is true only when a request was actually open. A cancel that
+ * finds none (HQ closed it a moment earlier) changes nothing and says so,
+ * rather than writing "cancelled" over a decision already recorded. The same
+ * fallback as `requestErasure`: without a ledger the flag is still cleared.
+ */
+export async function cancelErasure(env: Env, userId: number): Promise<{ cancelled: boolean; ledger: boolean }> {
+  try {
+    const out = await env.DB.batch([
+      env.DB.prepare(
+        'UPDATE users SET deletion_requested_at = NULL WHERE id = ? AND deletion_requested_at IS NOT NULL',
+      ).bind(userId),
+      env.DB.prepare(
+        `UPDATE dsr_requests SET outcome = 'withdrawn', closed_at = datetime('now')
+          WHERE user_id = ? AND outcome IS NULL`,
+      ).bind(userId),
+    ]);
+    return { cancelled: Number(out?.[0]?.meta?.changes) > 0, ledger: true };
+  } catch (e) {
+    console.warn('[dsr] cancel ledger batch failed; clearing the flag alone', (e as Error).message);
+    const r = await env.DB.prepare(
+      'UPDATE users SET deletion_requested_at = NULL WHERE id = ? AND deletion_requested_at IS NOT NULL',
+    ).bind(userId).run();
+    return { cancelled: Number(r?.meta?.changes) > 0, ledger: false };
+  }
+}
+
+/** A close key: what the client generated once for one close, and reuses on every retry of it. */
+export const DSR_CLOSE_KEY_RE = /^[A-Za-z0-9_-]{16,100}$/;
+
+export type DsrCloseInput = {
+  userId: number;
+  actorUserId: number;
+  actorEmail: string;
+  outcome: HqDsrOutcome;
+  reason: string;
+  /** The receipt stamp of the request the operator reviewed, exactly as the list showed it. */
+  requestedAt: string;
+  /** The ledger row the list showed, or null for a request the ledger does not hold yet. */
+  requestId: number | null;
+  closeKey: string;
+};
+
+export type DsrClosedLedgerRow = {
+  id: number; user_id: number; requested_at: string; outcome: string;
+  closed_at: string | null; closed_by_user_id: number | null;
+};
+
+export type DsrCloseResult =
+  /** This close is on record. `replayed`: it was already, from an earlier attempt with the same key. */
+  | { status: 'closed'; replayed: boolean; row: DsrClosedLedgerRow }
+  /** A different request is open now (the subject withdrew and asked again). Nothing was written. */
+  | { status: 'stale'; current_requested_at: string }
+  /** No request is open: it was closed or withdrawn first. Nothing was written. */
+  | { status: 'not_open'; last: { outcome: string; closed_at: string | null } | null }
+  /** The key belongs to a different close. Nothing was written. */
+  | { status: 'key_conflict' }
+  /** The batch ran, and what it did could not be read back. Retrying with the same key is safe. */
+  | { status: 'unconfirmed'; reason: string };
+
+async function closedByKey(env: Env, closeKey: string): Promise<DsrClosedLedgerRow | null> {
+  return (await env.DB.prepare(
+    `SELECT id, user_id, requested_at, outcome, closed_at, closed_by_user_id
+       FROM dsr_requests WHERE close_key = ?`,
+  ).bind(closeKey).first<DsrClosedLedgerRow>()) ?? null;
+}
+
+/** A row found by key is this close only if it is the same subject, operator and outcome. */
+function sameClose(row: DsrClosedLedgerRow, input: DsrCloseInput): boolean {
+  return Number(row.user_id) === input.userId
+    && Number(row.closed_by_user_id) === input.actorUserId
+    && row.outcome === input.outcome;
+}
+
+/**
+ * HQ CLOSES ONE REQUEST — THE ONE THE OPERATOR REVIEWED — IN ONE BATCH.
+ *
+ * D168 put the ledger row and the open flag in one batch. D4675 adds what
+ * that batch did not guarantee:
+ *
+ *   · THE EXACT REQUEST. The caller names the request it reviewed by its
+ *     receipt stamp (and ledger id when it has one). The close applies only
+ *     while that request is still the open one; if the subject withdrew and
+ *     asked again, the new request is NOT closed on the strength of a review
+ *     of the old one.
+ *   · ONE RECORD PER ACT. Every statement after the claim is conditioned on
+ *     the claim having changed a row, so a close that lost a race writes no
+ *     notice to the subject and no audit row for an act that did not happen.
+ *   · THE AUDIT EVIDENCE IN THE SAME UNIT. The `admin_audit_log` row and the
+ *     actor's `activity_logs` row are in the batch, not written afterwards,
+ *     so the decision and its record land together or not at all.
+ *   · A RETRY IS NOT A SECOND ACT. The key is stored on the row; an attempt
+ *     whose key is already on record answers with that record.
+ *
+ * Statement order is load-bearing: each `changes() > 0` reads the statement
+ * just before it. The caller must have run `ensureAdminAuditLogTable`.
+ * Throws when the batch cannot run; D1 rolls a failed batch back whole.
+ */
+export async function closeDsrRequest(env: Env, input: DsrCloseInput): Promise<DsrCloseResult> {
+  const { userId, actorUserId, outcome, reason, requestedAt, requestId, closeKey } = input;
+
+  const prior = await closedByKey(env, closeKey);
+  if (prior) return sameClose(prior, input) ? { status: 'closed', replayed: true, row: prior } : { status: 'key_conflict' };
+
+  const auditDetails = { reason, target_user_id: userId, outcome, requested_at: requestedAt, close_key: closeKey };
+  const actorHash = await hashEmail(input.actorEmail || '');
+  try {
+    await env.DB.batch([
+      reconcileOrphanStatement(env, userId),
+      // Derive the row for a request made before migration 272 — only for the
+      // request reviewed: the flag must still hold that exact stamp.
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO dsr_requests (user_id, requested_at)
+         SELECT id, deletion_requested_at FROM users
+          WHERE id = ? AND deletion_requested_at = ?`,
+      ).bind(userId, requestedAt),
+      // THE CLAIM. Everything below is conditioned on it.
+      env.DB.prepare(
+        `UPDATE dsr_requests
+            SET outcome = ?, closed_at = datetime('now'), closed_by_user_id = ?, close_reason = ?, close_key = ?
+          WHERE user_id = ? AND outcome IS NULL AND requested_at = ?
+            AND (? IS NULL OR id = ?)
+            AND EXISTS (SELECT 1 FROM users WHERE id = ? AND deletion_requested_at = ?)`,
+      ).bind(outcome, actorUserId, reason, closeKey, userId, requestedAt, requestId, requestId, userId, requestedAt),
+      // ADDRESSED TO THE SUBJECT: `user_id` is what routes/activity.ts
+      // GET /recent reads for a person's own feed.
+      env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor, user_id)
+         SELECT 'account_deletion_request_closed', ?, 'Axal VC HQ', ? WHERE changes() > 0`,
+      ).bind(`Your erasure request was recorded as ${outcome} by Axal VC HQ. Reason: ${reason}`, userId),
+      // HQ's governance feed reads this one (D159).
+      adminAuditStatement(env, actorUserId, 'dsr_request_closed', auditDetails, { onlyIfChanged: true }),
+      // The hashed-actor row `logAdminAction` writes for every admin act (T22.1).
+      env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor, user_id)
+         SELECT 'dsr_request_closed', ?, ?, ? WHERE changes() > 0`,
+      ).bind(JSON.stringify(auditDetails), actorHash, actorUserId),
+      // The open flag, last, and only for the request this close claimed.
+      env.DB.prepare(
+        `UPDATE users SET deletion_requested_at = NULL
+          WHERE id = ? AND deletion_requested_at = ?
+            AND EXISTS (SELECT 1 FROM dsr_requests WHERE close_key = ?)`,
+      ).bind(userId, requestedAt, closeKey),
+    ]);
+  } catch (e) {
+    // Two identical retries racing: the second hits the key's unique index.
+    // If the key is on record, that is this close; otherwise the failure is real.
+    let raced: DsrClosedLedgerRow | null = null;
+    try { raced = await closedByKey(env, closeKey); } catch { raced = null; }
+    if (raced) return sameClose(raced, input) ? { status: 'closed', replayed: true, row: raced } : { status: 'key_conflict' };
+    throw e;
+  }
+
+  try {
+    const row = await closedByKey(env, closeKey);
+    if (row) return sameClose(row, input) ? { status: 'closed', replayed: false, row } : { status: 'key_conflict' };
+    const user = await env.DB.prepare('SELECT deletion_requested_at FROM users WHERE id = ?')
+      .bind(userId).first<{ deletion_requested_at: string | null }>();
+    if (user?.deletion_requested_at) return { status: 'stale', current_requested_at: user.deletion_requested_at };
+    const last = await env.DB.prepare(
+      `SELECT outcome, closed_at FROM dsr_requests
+        WHERE user_id = ? AND outcome IS NOT NULL
+        ORDER BY closed_at DESC, id DESC LIMIT 1`,
+    ).bind(userId).first<{ outcome: string; closed_at: string | null }>();
+    return { status: 'not_open', last: last ? { outcome: last.outcome, closed_at: last.closed_at ?? null } : null };
+  } catch (e) {
+    return {
+      status: 'unconfirmed',
+      reason: `The close was sent, and what it recorded could not be read back. (${(e as Error).message})`,
+    };
+  }
+}
+
+/**
+ * D4675 — the open ledger row behind each open request, so HQ's list can name
+ * the exact request a close targets. `null` when the ledger cannot be read:
+ * the close then targets the request by its receipt stamp alone.
+ */
+export async function loadOpenDsrRequestIds(env: Env): Promise<Map<number, { id: number; requested_at: string }> | null> {
+  try {
+    const rows = await env.DB.prepare(
+      'SELECT id, user_id, requested_at FROM dsr_requests WHERE outcome IS NULL',
+    ).all<{ id: number; user_id: number; requested_at: string }>();
+    const out = new Map<number, { id: number; requested_at: string }>();
+    for (const r of rows.results || []) out.set(Number(r.user_id), { id: Number(r.id), requested_at: r.requested_at });
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 /**

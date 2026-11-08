@@ -24,6 +24,7 @@ import { changeProfileView } from '../accounts/allAccountsModel';
 // D1306 (#3403): the drawer's tabs and ACC7's dialogs, in place of every browser pop-up.
 import AccountDialog from '../accounts/AccountDialog';
 import AccountSubAccounts from '../accounts/AccountSubAccounts';
+import AccountLicencesBlock from '../accounts/AccountLicencesBlock';
 import {
   DRAWER_TABS, PROFILE_CHOICES, PROFILE_LABEL, SUPPORT_SESSION_CEILING_MINUTES, SUPPORT_SESSION_MINUTES,
   accountDialog, day, drawerRefusal, identityWord, notesSavedLine, onboardingProfileLine, profileLabel,
@@ -912,6 +913,8 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                   </div>
                 );
               })()}
+              {/* D4473 (#4473): the member's licences, granted and revoked here. */}
+              <AccountLicencesBlock userId={userRow.id} />
               {integrations.length > 0 && (
                 <div className="col-span-2 mt-3">
                   <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Connected integrations</div>

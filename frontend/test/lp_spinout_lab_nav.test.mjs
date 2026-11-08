@@ -167,7 +167,7 @@ test('the sales page overlays live fund metrics with the workspace fallback sema
 /* ------------------------------------------- shell and router cannot drift */
 
 test('both the shell and the router resolve the active role through the shared helper', () => {
-  assert.match(app, /import \{ resolveActiveRole \} from '\.\/lib\/activeRole'/);
+  assert.match(app, /import \{ resolveActiveRole, resolveHeldLicences \} from '\.\/lib\/activeRole'/);
   const calls = app.match(/resolveActiveRole\(\{/g) || [];
   assert.equal(
     calls.length,

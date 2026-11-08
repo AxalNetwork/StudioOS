@@ -98,7 +98,7 @@ test('A4 owns the founder Raise landing while workspace mode retains its detaile
   // no longer be satisfied by deleting one side of it.
   const zone = routeBlock(app, '/raise');
   assert.ok(zone?.includes('founderRaiseLanding'), 'the Raise zone root must defer ownership to A4');
-  assert.match(app, /founderRaiseLanding = effectiveRole === 'founder'[\s\S]*?get\('mode'\) !== 'workspace'/);
+  assert.match(app, /founderRaiseLanding = holds\('founder'\)[\s\S]*?get\('mode'\) !== 'workspace'/);
   // D661 (#1474): the landing a founder gets is the Raise cycle overview now.
   assert.match(zone, /founderRaiseLanding\s*\?\s*guard\([^)]*\), <CycleRoute cycle="raise" \/>\)/);
   // D898 group E: the template builder retired; the editor is the studio's, at /raise/pitch/edit.
@@ -126,7 +126,7 @@ test('a founder never gets two tab bars on one page', () => {
   // D4439: the founder's old address forwards; the canonical page owns one Grow frame.
   // Partners retain their Offers bar at the original address.
   const comarketing = app.split('\n').find((l) => l.includes('path="/comarketing"'));
-  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*<CoMarketingFounderRedirect \/>/,
+  assert.match(comarketing, /effectiveRole === 'founder' && !holds\('partner'\)\s*\?\s*<CoMarketingFounderRedirect \/>/,
     '/comarketing must forward founders to Partner network');
   const founderPage = readFileSync('frontend/src/pages/founder/FounderCoMarketingPage.jsx', 'utf8');
   assert.match(founderPage, /<FounderWorkspacePage page="grow" hideHeader>/);

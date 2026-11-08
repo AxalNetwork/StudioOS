@@ -5,6 +5,7 @@ import { api } from '../../lib/api.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext.js';
 import { CheckInStatus } from '../../components/FounderWellbeingMenu.jsx';
 import { PhoneSheet, SheetRow } from './PhoneSheet.jsx';
+import { resolveHeldLicences } from '../../lib/activeRole.js';
 
 // Messages is here because a founder's phone draws the band, not the top bar
 // that carries the Messages door (D284); the More page that carried it was
@@ -12,11 +13,27 @@ import { PhoneSheet, SheetRow } from './PhoneSheet.jsx';
 const ACCOUNT_ROWS = [
   ['Email', '/email'], ['Your profile', '/profile'], ['Account', '/account'], ['Usage', '/account/usage'],
   ['Connectors', '/account/connectors'], ['Trust Center', '/trust/me'],
-  // D4152 (#4152 §2): Billing lives in the Account menu, on a phone too.
+  // D4152 (#4152 §2): Billing lives in the Account menu, on a phone too. D4473: `accountRowsFor` relabels and adds here.
   ['Portfolio', '/account/portfolio'], ['Billing', '/account/billing'], ['Perks', '/perks'],
   ['Calendar', '/calendar'], ['Events', '/my/events'], ['Learning', '/learning'],
   ['Help Center', '/help'], ['Pricing', '/pricing'],
 ];
+
+/**
+ * D4473 (#4473): the sheet's rows for this account, the same three as the desktop Account menu. Account Portfolio
+ * reads "Companies" when Investor is held, followed by the investment holdings "Portfolio"; "Licences" for every
+ * member account (not an admin's).
+ */
+export function accountRowsFor(user) {
+  const held = resolveHeldLicences({ user });
+  const investor = held.includes('investor');
+  return ACCOUNT_ROWS.flatMap(([title, to]) => {
+    if (to !== '/account/portfolio') return [[title, to]];
+    return [[investor ? 'Companies' : 'Portfolio', to],
+      ...(investor ? [['Portfolio', '/portfolio']] : []),
+      ...(user?.role === 'admin' ? [] : [['Licences', '/account/licences']])];
+  });
+}
 
 /** The first letters of the first two words of the name, or the email's first letter. */
 export function initialsOf(user) {
@@ -45,7 +62,7 @@ export function AccountSheet({ user, branchFact, onLogout, onClose, opener }) {
           {branchFact.status && branchFact.status !== 'active' && ` · ${String(branchFact.status).toUpperCase()}`}</p>}
       </div>
     </div>
-    {ACCOUNT_ROWS.map(([title, to]) => <SheetRow key={to} title={title} right={to === '/my/events' && eventsCurrent ? 'Current' : undefined} to={to} onClose={onClose} />)}
+    {accountRowsFor(user).map(([title, to]) => <SheetRow key={to} title={title} right={to === '/my/events' && eventsCurrent ? 'Current' : undefined} to={to} onClose={onClose} />)}
     <SheetRow title="Founder Wellbeing" to="/wellbeing" onClose={onClose}
       description={check.status === 'unreadable' ? 'Unreadable' : <CheckInStatus {...check} />} />
     <SheetRow title="Refer & Earn" to="/referrals" onClose={onClose} />

@@ -27,6 +27,7 @@ import { branchPrograms } from '../src/rpc/branchOps.ts';
 import {
   HQ_READS_REASON, REFERRAL_REWARDS_REASON,
   loadProgramsForBranch, programCatalogue,
+  PROGRAM_DEFINITIONS, LAB_PEOPLE_REASON, PRODUCT_TESTING_HQ_ONLY,
 } from '../src/services/programCatalogue.ts';
 import { PROGRAM_KEYS, PAUSE_NOT_DECIDED } from '../src/services/programRegistry.ts';
 import { MENTOR_ACCESS_ACTIONS, NOT_AUDITED_YET } from '../src/services/programActivity.ts';
@@ -384,8 +385,9 @@ test('the catalogue: the queues, their bands and the Waiting total, exact', asyn
   const tile = cat.tiles.waiting as any;
   assert.equal(tile.count, 6);
   assert.equal(tile.oldest_hours, 80);
-  assert.deepEqual(tile.covers, ['cohort', 'referrals', 'perks', 'hosts']);
-  assert.deepEqual(tile.left_out.map((x: any) => x.queue), ['strategic']);
+  // D4807: every actionable queue is in the headline, so there is nothing left out to footnote.
+  assert.deepEqual(tile.covers, ['cohort', 'referrals', 'perks', 'hosts', 'strategic']);
+  assert.deepEqual(tile.left_out, []);
 });
 
 test('the catalogue leaves a deactivated Advisor out (D960): no mentor, no cohort covered', async () => {
@@ -459,6 +461,9 @@ test('D1119: part 4 claims and strategic requests are read, including zero and i
   const cat = await read();
   assert.deepEqual(rowOf(cat, 'perks').figures.claims, { available: true, count: 3 });
   assert.deepEqual(cat.waiting.strategic, { available: true, count: 2 });
+  // D4807: the headline is the sum of every queue beside it, strategic requests included; no footnote reconciles it.
+  const w = cat.waiting as any;
+  assert.equal((cat.tiles.waiting as any).count, w.cohort.count + w.referrals.count + w.perks.count + w.hosts.count + w.strategic.count);
   assert.deepEqual(rowOf(cat, 'refer-and-earn').needs_you, { available: true, count: 4, strategic_requests: { available: true, count: 2 } });
   assert.deepEqual(cat.joins_weekly.perks, { available: true, count: 3, total: 3, weeks: [
     { week: '2026-09-28', count: 1 }, { week: '2026-10-05', count: 0 },
@@ -476,6 +481,9 @@ test('D1119: part 4 claims and strategic requests are read, including zero and i
   db.exec('DROP TABLE referral_strategic_access;');
   const brokenQueue = await read();
   assert.equal((brokenQueue.waiting.strategic as any).unreadable, true);
+  // D4807: an unreadable queue makes the headline unreadable, never short.
+  assert.equal((brokenQueue.tiles.waiting as any).unreadable, true);
+  assert.match(String((brokenQueue.tiles.waiting as any).reason), /strategic queue could not be read/);
   assert.equal(rowOf(brokenQueue, 'refer-and-earn').needs_you.unreadable, true);
   assert.equal((brokenQueue.waiting.perks as any).available, true);
 });
@@ -833,4 +841,21 @@ test('no Programs response in this file carries an email address or a person\'s 
   const all = SEEN.join('\n');
   assert.equal(/person\d+@example\.test/.test(all), false);
   for (const name of ['Sam Super', 'Ada Admin', 'Ava Advisor', 'Finn Former', 'Fay Founder']) assert.equal(all.includes(name), false, name);
+});
+
+test('D4807: no internal decision, issue or open-question reference is sent in words the page draws', async () => {
+  const db = fresh();
+  catalogueFixture(db);
+  const cat = await programCatalogue(envOf(db), { id: SUPER, superAdmin: true }, 4, NOW);
+  // The words a reader sees: every string in the read except keys, ids, stamps and numbers.
+  const words: string[] = [];
+  const walk = (v: unknown, key = '') => {
+    if (typeof v === 'string') { if (!/^(key|uid|program|queue|scope|state|kind|status|group|grp|week|month|aged)$/.test(key)) words.push(v); }
+    else if (Array.isArray(v)) v.forEach((x) => walk(x, key));
+    else if (v && typeof v === 'object') Object.entries(v).forEach(([k, x]) => walk(x, k));
+  };
+  walk(cat);
+  words.push(...Object.values(PROGRAM_DEFINITIONS), LAB_PEOPLE_REASON, HQ_READS_REASON, REFERRAL_REWARDS_REASON, PRODUCT_TESTING_HQ_ONLY);
+  const internal = words.flatMap((w) => w.match(/\bO-FND\b|\bOD-[A-Z0-9]+\b|\bD\d{3,5}\b|#\d{3,5}\b/g) ?? []);
+  assert.deepEqual(internal, [], `internal references in the read: ${internal.join(', ')}`);
 });

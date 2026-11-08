@@ -42,12 +42,14 @@ test('the old route sends only a founder to the counted forward; the partner Off
   // as identity functions, rather than pinning one whitespace-sensitive line.
   const declaration = routeBlock(read('../src/App.jsx'), '/comarketing').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
   const { code } = await transformWithOxc('function route() { return (' + declaration + '); }', 'route.jsx', { jsx: { runtime: 'classic' } });
-  const names = ['React', 'Route', 'guard', 'partnerPrivateWorkspace', 'effectiveRole', 'user', 'CoMarketingFounderRedirect', 'PartnerWorkspaceTabs', 'CoMarketingPage', 'founderWorkspace', 'founderEditor'];
+  const names = ['React', 'Route', 'guard', 'partnerPrivateWorkspace', 'effectiveRole', 'user', 'CoMarketingFounderRedirect', 'PartnerWorkspaceTabs', 'CoMarketingPage', 'founderWorkspace', 'founderEditor', 'holds'];
   for (const role of ['founder', 'partner', 'admin', 'investor']) {
     const allowed = [];
     const route = new Function(...names, code + '; return route();')(React, Route,
       (roles, page) => { allowed.push(roles.includes(role)); return roles.includes(role) ? page : 'refused'; },
-      (page) => page, role, { role }, CoMarketingFounderRedirect, 'partner-offers', 'co-marketing', (_name, page) => page, (page) => page);
+      (page) => page, role, { role }, CoMarketingFounderRedirect, 'partner-offers', 'co-marketing', (_name, page) => page, (page) => page,
+      // D4473: a single-licence session holds exactly its own role.
+      (licence) => licence === role);
     assert.deepEqual(allowed, [role !== 'investor']);
     if (role === 'investor') assert.equal(route.props.element, 'refused');
     else if (role === 'founder') assert.equal(route.props.element.type, CoMarketingFounderRedirect);

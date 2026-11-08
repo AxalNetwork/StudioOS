@@ -1134,7 +1134,31 @@ async function recordGateRefusal(
     userId: Number(user.id),
     email: user.email,
     ip,
+    supportUserId: await supportOperatorOf(c, Number(user.id)),
   });
+}
+
+/**
+ * D4691 — who is really calling, when the caller is a support session: the
+ * operator's HQ id from an impersonation token, 0 for a branch support token
+ * (its session row's factor names it; the operator is held at HQ), or null
+ * when the account holder is acting as themselves. Never throws: it only
+ * labels a security event, so a failed read labels nothing.
+ */
+export async function supportOperatorOf(c: Context<{ Bindings: Env }>, userId: number): Promise<number | null> {
+  try {
+    const sel = await selectJwt(c);
+    const by = Number(sel?.payload?.impersonated_by);
+    if (Number.isSafeInteger(by) && by > 0) return by;
+    const jti = typeof sel?.payload?.jti === 'string' ? sel.payload.jti : null;
+    if (!jti) return null;
+    const row = await c.env.DB.prepare(
+      'SELECT factor FROM user_sessions WHERE jti = ? AND user_id = ?',
+    ).bind(jti, userId).first<{ factor: string | null }>();
+    return row?.factor === 'hq_support' ? 0 : null;
+  } catch {
+    return null;
+  }
 }
 
 // ─────────────────────────────────────── BLOCK-AUTH-03 — step-up auth ──

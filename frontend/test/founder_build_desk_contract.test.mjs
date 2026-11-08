@@ -15,10 +15,10 @@ test('founder /execution redirects to the Build cycle, and the editor keeps its 
   // FounderBuildDesk, the element `/build` mounts. It redirects to `/build`
   // with the query kept (`?new=1` and `?project_id=` survive), so A3 has one
   // address; the editor keeps `?mode=workspace`.
-  assert.match(route, /effectiveRole === 'founder' && !founderExecutionEditor\s*\? <Navigate to=\{`\/build\$\{location\.search\}`\} replace \/>/,
+  assert.match(route, /holds\('founder'\) && !founderExecutionEditor\s*\? <Navigate to=\{`\/build\$\{location\.search\}`\} replace \/>/,
     'founder /execution no longer lands on A3 at /build');
   assert.ok(!route.includes('<FounderBuildDesk />'), '/execution is a second address for A3 again');
-  assert.match(app, /const founderExecutionEditor = effectiveRole === 'founder'\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
+  assert.match(app, /const founderExecutionEditor = holds\('founder'\)\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
   // D661 (#1474): a founder's /build is the Build cycle overview now, and the
   // A3 desk is retired: its file is gone. The create-a-startup form it held
   // moved with it (`projects_partners_retired.test.mjs`).

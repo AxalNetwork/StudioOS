@@ -132,6 +132,13 @@ export function buildOverview({ overview, feed }) {
     } else if (!drill || drill.available === false || drill.state !== 'last_run_passed') {
       couldNot('drill-unreadable', 'The restore drill could not be checked',
         `${drill?.reason || 'The drill marker could not be read.'} This is not a pass.`, 'overview', 'resilience');
+    } else if (drill.fresh === false) {
+      // D4691: a pass older than its window is history; it does not vouch for recovery today.
+      findings.push({
+        id: 'drill-stale', state: 'stale', title: 'The last restore drill is out of date',
+        detail: `It passed ${stampOf(drill.at) || 'on an unstamped date'}, more than ${drill.stale_after_days ?? 'the allowed number of'} days ago. This is not a current pass.`,
+        when: stampOf(drill.at) || 'Undated', where: 'Resilience', tab: 'resilience', action: { label: 'Open Resilience', tab: 'resilience' },
+      });
     }
 
     // ── Administrator MFA, "x of n", linking to the admins (D4803). ───────
@@ -158,7 +165,12 @@ export function buildOverview({ overview, feed }) {
     }
 
     // ── Deletion requests against their statutory clock. ─────────────────
-    const dsr = ov.dsr?.rows || [];
+    // D4691: an unreadable deletion-request read is said so, never counted as none.
+    const dsrReadable = ov.dsr?.available !== false;
+    if (!dsrReadable) {
+      couldNot('dsr-unreadable', 'Deletion requests could not be checked', ov.dsr?.reason || 'The deletion-request store could not be read. This is not a claim that none are open.', 'overview', 'privacy');
+    }
+    const dsr = dsrReadable ? ov.dsr?.rows || [] : [];
     const clock = isNum(ov.dsr?.clock_days) ? `${ov.dsr.clock_days}-day clock` : 'statutory clock';
     const overdue = dsr.filter((d) => isNum(d.days_left) && d.days_left < 0).length;
     const near = dsr.filter((d) => isNum(d.days_left) && d.days_left >= 0 && d.days_left <= 14).length;
@@ -178,7 +190,7 @@ export function buildOverview({ overview, feed }) {
         when: readNote(readOv), where: 'Privacy', tab: 'privacy', action: { label: 'Open Privacy', tab: 'privacy' },
       });
     }
-    if (overdue === 0 && near === 0) {
+    if (dsrReadable && overdue === 0 && near === 0) {
       clear.push({ id: 'dsr', state: 'measured_zero', label: '0 deletion requests near deadline', evidence: `${readNote(readOv)} · ${plural(dsr.length, 'open request', 'open requests')}` });
     }
 
@@ -346,11 +358,15 @@ function buildAreas({ ov, fd, overview, feed, readOv, readFeed }) {
     area('recovery', 'Backup & recovery', 'resilience', () => {
       const d = ov.backup_dr?.drill;
       const b = ov.backup_dr?.backup;
-      const backup = b?.available ? 'Backup present' : 'Backup heartbeat unavailable';
+      // D4691: a heartbeat older than its window, or not valid evidence, is not a present backup.
+      const backup = b?.available && b.fresh !== false ? 'Backup present'
+        : b?.available ? 'Backup stale' : b?.state === 'invalid' ? 'Backup heartbeat invalid' : 'Backup heartbeat unavailable';
       if (d?.state === 'last_run_failed') return { state: 'failed', fact: `${backup} · restore drill failed`, freshness: d.at ? `Drill ${stampOf(d.at)}` : null };
       if (d?.state === 'never_run') return { state: 'action_required', fact: `${backup} · restore drill never run`, freshness: at };
       if (d?.state === 'last_run_passed') {
-        return { state: b?.available ? 'verified' : 'unavailable', fact: `${backup} · restore drill passed`, freshness: d.at ? `Drill ${stampOf(d.at)}` : null };
+        const current = d.fresh !== false && b?.available && b.fresh !== false;
+        const stale = d.fresh === false || (b?.available && b.fresh === false);
+        return { state: current ? 'verified' : stale ? 'stale' : 'unavailable', fact: `${backup} · restore drill ${d.fresh === false ? 'passed, out of date' : 'passed'}`, freshness: d.at ? `Drill ${stampOf(d.at)}` : null };
       }
       return { state: 'unavailable', fact: `${backup} · drill record unreadable`, freshness: at };
     }),
