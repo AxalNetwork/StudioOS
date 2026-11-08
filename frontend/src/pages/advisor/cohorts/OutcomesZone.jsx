@@ -43,9 +43,9 @@ export default function OutcomesZone() {
   const load = useCallback(async () => {
     setState((c) => ({ ...c, loading: true, error: '' }));
     try {
-      // Both are public and both answer `[]` rather than throwing on a missing
-      // table, so a rejection here is a genuine transport failure — which is
-      // why it becomes an error rather than an empty program.
+      // Both are public. D4661: a read the Worker could not make is a 503, never
+      // `[]`, so a rejection here is a failed read — which is why it becomes an
+      // error with a retry rather than an empty program.
       const [cohort, graduates] = await Promise.all([
         spinoutLab.cohort(),
         spinoutLab.graduates(),
