@@ -7,13 +7,13 @@ import { communityApi } from '../../../../lib/api/community';
 import { reportError } from '../../../../lib/log';
 import { RECENT_ROWS } from '../communityModel';
 import { ACTIVITY_KINDS, activityPage } from '../lightboxModel';
-import { Card, LINK, MONO, Opener, SUB, idle } from './parts';
+import { Card, DomainActions, LINK, MONO, SUB, idle } from './parts';
 import { Link } from 'react-router-dom';
 
 export const CHIPS = [{ value: '', label: 'All' }, ...ACTIVITY_KINDS];
 
 /** CM1 row 7: the ten newest, with the filter chips. Its own read, so a chip reads again only this card. */
-export function RecentCard({ refresh, onOpen }) {
+export function RecentCard({ refresh, onOpen, span = 7 }) {
   const [kind, setKind] = useState('');
   const [tick, setTick] = useState(0);
   const [read, setRead] = useState(idle);
@@ -29,9 +29,9 @@ export function RecentCard({ refresh, onOpen }) {
   const view = read.status === 'ready' ? activityPage(read.data, 1) : null;
   const state = read.status === 'loading' ? 'loading' : (read.status === 'error' || view?.state !== 'ready') ? 'unreadable' : 'ready';
   return (
-    <Card id="recent" title="Recent activity" span={12} state={state} onRetry={() => setTick((t) => t + 1)}
+    <Card id="recent" title="Recent activity" span={span} state={state} onRetry={() => setTick((t) => t + 1)}
       reason="Community activity could not be read. That is not the same as nothing happening."
-      foot={<Opener box="activity" onOpen={onOpen}>See all activity</Opener>}>
+      foot={<DomainActions box="activity" onOpen={onOpen} />}>
       {() => (<>
         <div role="group" aria-label="Kind" className="flex flex-wrap gap-1.5" data-testid="community-recent-chips">
           {CHIPS.map((c) => (

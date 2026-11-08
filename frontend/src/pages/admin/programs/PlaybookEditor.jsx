@@ -80,7 +80,7 @@ function PublishDialog({ program, pb, onClose, onPublished }) {
     setBusy(true);
     setRefusal('');
     try {
-      onPublished(await programsApi.publish(program));
+      onPublished(await programsApi.publish(program, pb.draftHash));
     } catch (e) {
       setRefusal(refusalSentence(e, 'The playbook was not published. Try again.'));
       setBusy(false);
@@ -89,7 +89,7 @@ function PublishDialog({ program, pb, onClose, onPublished }) {
   const label = `Publish version ${next}?`;
   return (
     <Lightbox label={label} title={label} onClose={onClose} testId="programs-playbook-publish-dialog"
-      footer={<DialogButtons onClose={onClose} action="Publish" busy={busy} onAction={go} refusal={refusal} testId="programs-playbook-publish-go" />}>
+      footer={<DialogButtons onClose={onClose} action="Publish" busy={busy} disabled={!pb.draftHash} onAction={go} refusal={refusal} testId="programs-playbook-publish-go" />}>
       <div className={DIALOG_BODY}>
         <ul className={DIALOG_LINES}>
           <li>{PUBLISH_LINE}</li>

@@ -7,7 +7,7 @@ import {
   buttonClass, ghostButtonClass, inputClass, money,
 } from '../expertise/kit';
 import { bookingView, formatDateTime } from '../advisory/kit';
-import { classifyBooking } from './opportunityLog';
+import { acceptanceRate, classifyBooking } from './opportunityLog';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -46,10 +46,11 @@ const VIEW_LABEL = {
   accepted: 'Accepted',
   declined: 'Declined',
   expired: 'Expired unanswered',
-  withdrawn: 'Withdrawn by you',
+  withdrawn: 'Withdrawn',
+  unrecorded: 'Decision not recorded',
 };
 const VIEW_TONE = {
-  awaiting: 'warn', accepted: 'ok', declined: 'neutral', expired: 'danger', withdrawn: 'neutral',
+  awaiting: 'warn', accepted: 'ok', declined: 'neutral', expired: 'danger', withdrawn: 'neutral', unrecorded: 'neutral',
 };
 const KIND_LABEL = { fixed: 'Fixed', package: 'Package', retainer: 'Retainer' };
 
@@ -99,14 +100,17 @@ export default function OpportunitiesZone() {
   }), [state.bookings, now]);
 
   const counts = useMemo(() => {
-    const out = { awaiting: 0, accepted: 0, declined: 0, expired: 0, withdrawn: 0 };
+    const out = { awaiting: 0, accepted: 0, declined: 0, expired: 0, withdrawn: 0, unrecorded: 0 };
     for (const r of rows) out[r.bucket] += 1;
     return out;
   }, [rows]);
-  // DECIDED EXCLUDES the withdrawn and the never-answered. An accept rate over
-  // requests the advisor never answered would report silence as a refusal.
+  // DECIDED EXCLUDES the withdrawn, the never-answered and the unrecorded. An
+  // accept rate over requests the advisor never answered would report silence as
+  // a refusal; and (#4702) a client cancelling a session the advisor had accepted
+  // is still an accept, and a cancelled row from before the answer was recorded
+  // is neither, so it is counted apart rather than as a decline.
   const decided = counts.accepted + counts.declined;
-  const acceptRate = decided > 0 ? Math.round((counts.accepted / decided) * 100) : null;
+  const acceptRate = acceptanceRate(counts);
 
   // The queue the artboard asks for: "sorted by what expires first, not what
   // arrived first". A row whose slot is gone cannot expire, so it sorts last.
@@ -252,8 +256,10 @@ export default function OpportunitiesZone() {
                 <td className="py-2 pr-3 text-axal-muted">{r.raw.updated_at ? formatDateTime(r.raw.updated_at) : <Unrecorded />}</td>
                 <td className="py-2 text-axal-muted">{
                   r.bucket === 'expired' ? 'Never answered. The slot passed.'
-                    : r.bucket === 'withdrawn' ? (r.raw.cancel_reason === 'capacity_race' ? 'The last seat went to someone else.' : 'You withdrew the whole slot.')
-                      : r.raw.cancel_reason || <Unrecorded>No reason recorded</Unrecorded>
+                    : r.bucket === 'withdrawn' ? (r.raw.cancel_reason === 'capacity_race' ? 'The last seat went to someone else.' : r.raw.cancelled_by === 'client' ? 'The client withdrew the request.' : 'You withdrew the whole slot.')
+                      : r.bucket === 'unrecorded' ? 'Cancelled before the answer was recorded, so it is not counted as accepted or declined.'
+                        : r.raw.status === 'cancelled' && r.bucket === 'accepted' ? (r.raw.cancelled_by === 'client' ? 'Accepted, then the client cancelled.' : 'Accepted, then cancelled.')
+                          : r.raw.cancel_reason || <Unrecorded>No reason recorded</Unrecorded>
                 }</td>
               </tr>
             ))}</tbody>

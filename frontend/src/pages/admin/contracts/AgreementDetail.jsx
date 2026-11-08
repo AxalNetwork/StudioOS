@@ -4,6 +4,16 @@ import { contractsApi } from '../../../lib/api/contracts';
 import { reportError } from '../../../lib/log';
 import { ReadState, useRead, SidePanel, Recorded, Missing, button, input, date, downloadPdf } from './parts';
 import useRecordCrumb from '../useRecordCrumb';
+import { agreementRowSemantics } from '../../../lib/contractLifecycle';
+import { InconsistencyFlag, LifecycleBadge } from './LifecycleBadge';
+
+/** D4811: the agreement's lifecycle in its own words, or the contradiction it records. */
+function AgreementState({ row }) {
+  const m = agreementRowSemantics(row);
+  return <p className="flex flex-wrap items-center gap-2">{m.warning
+    ? <InconsistencyFlag text={m.warning} />
+    : <LifecycleBadge badge={m.badge} />}{m.line && m.line !== m.badge?.label && <span>{m.line}</span>}</p>;
+}
 
 const FILE_KINDS = { signed_copy: 'Signed copy', docx_export: 'Word export', docusign_source: 'DocuSign source', docusign_signed: 'DocuSign signed copy' };
 const RENDERERS = { browser_run: 'Browser Run', pdf_lib: 'Fallback', docx: 'Word', docusign: 'DocuSign' };
@@ -40,7 +50,7 @@ export default function AgreementDetail({ uid, onClose, onChanged }) {
   // D775 (#2101): the open agreement is the rail's record once it is read.
   useRecordCrumb(row?.title || null, 'agreement', uid);
   return <SidePanel title={row?.title || 'Agreement'} onClose={onClose} testId="contract-agreement-sheet">
-    <ReadState read={detail} what="Agreement">{row && <><p>{row.doc_type_label || row.doc_type} · <span className="font-mono">{row.source}</span> · {row.provider || 'Not recorded'}</p><p>{row.status}</p>
+    <ReadState read={detail} what="Agreement">{row && <><p>{row.doc_type_label || row.doc_type} · <span className="font-mono">{row.source}</span> · {row.provider || 'Not recorded'}</p><AgreementState row={row} />
       <h3 className="font-bold">Parties</h3><p>Company: <Recorded value={row.project_name} reason="This agreement has no recorded company link." /></p>
       <p>Recipient: <Recorded value={row.recipient_name || row.recipient_email} reason="No recipient is recorded in this store." /></p>
       <ReadState read={history} what="Signing history">{history.data && <>
