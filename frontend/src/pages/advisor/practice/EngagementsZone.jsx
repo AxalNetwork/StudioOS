@@ -14,6 +14,7 @@ import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import useScrollToHash from '../../../hooks/useScrollToHash';
 import AdvisorAccessLog from './ClientAccessLog';
+import { partialLine, readEveryPage } from './everyPage';
 import MyTasks from '../../work/MyTasks.jsx';
 
 /**
@@ -69,6 +70,7 @@ export default function EngagementsZone() {
   const [decision, setDecision] = useState({ decision: 'renewed', note: '', term_ends_at: '' });
   const [adding, setAdding] = useState(false);
   const [candidates, setCandidates] = useState([]);
+  const [partial, setPartial] = useState(null);
   // #4714 (D4714): whether the bookings the candidates come from were read.
   const [candidatesRead, setCandidatesRead] = useState(true);
   const [draft, setDraft] = useState({
@@ -79,12 +81,15 @@ export default function EngagementsZone() {
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const data = await api.listMyAdvisorEngagements();
+      // #4714 (D4714): every page; `totals` are the whole set's.
+      const read = await readEveryPage((page) => api.listMyAdvisorEngagements(page));
+      const data = { items: read.items, totals: read.first?.totals || null };
+      setPartial(partialLine(read));
       // WHO THIS ADVISOR MAY LINK, as a TOLERATED SECOND SOURCE. The candidates
       // are the people who have booked them — the relationship the worker checks
       // — and an advisor whose bookings will not load still has a contract
       // board, so this never takes the page down with it.
-      const held = await api.listMyAdvisorBookings().catch(() => null);
+      const held = await readEveryPage((page) => api.listMyAdvisorBookings(undefined, page)).catch(() => null);
       setCandidatesRead(held != null);
       const seen = new Map();
       for (const b of held?.items || []) {
@@ -275,6 +280,7 @@ export default function EngagementsZone() {
       {adding && <Card padding="md" className="mt-3" data-testid="engagement-create-empty">{createForm}</Card>}
       </>}
     >
+      {partial && <p className="mb-2 text-[11px] text-axal-faint" data-testid="engagements-partial">{partial}</p>}
       <ZoneToolbar
         className="mb-3"
         role="advisor"

@@ -68,6 +68,17 @@ function unanswered(d) {
   return out;
 }
 
+/**
+ * #4714 (D4714): a list's size is the server's `page.total`, over the whole
+ * set. The board reads one page as a bounded preview, so its row count is
+ * never presented as the total; an older response without `page` falls back
+ * to the rows, nulled at the cap it would have hit.
+ */
+function wholeCount(d, cap = null) {
+  const t = d?.page?.total ?? d?.total;
+  return Number.isFinite(Number(t)) && t != null ? Number(t) : total(d?.items, cap);
+}
+
 export default function advisorPracticeBoard(role, api) {
   return {
     sources: {
@@ -122,7 +133,7 @@ export default function advisorPracticeBoard(role, api) {
           count(d?.totals?.active, 'active engagement'),
           d?.totals?.renewal_due ? count(d.totals.renewal_due, 'renewal due', 'renewals due') : null,
         ),
-        total: (d) => total(d?.items),
+        total: (d) => wholeCount(d),
         rows: (d) => top((d?.items || []).filter((e) => e.lane === 'signed' || e.lane === 'renewal_due')).map((e) => [
           e.client_name, LANE_LABEL[e.lane] || title(e.lane), day(e.term_ends_at),
         ]),
@@ -146,7 +157,7 @@ export default function advisorPracticeBoard(role, api) {
           d?.totals?.sent ? count(d.totals.sent, 'sent', 'sent') : null,
           d?.totals?.opened ? count(d.totals.opened, 'opened', 'opened') : null,
         ),
-        total: (d) => total(d?.items),
+        total: (d) => wholeCount(d),
         rows: (d) => top(d?.items).map((i) => [
           i.client_name, i.title, STATE_LABEL[i.state] || title(i.state),
         ]),
@@ -163,9 +174,9 @@ export default function advisorPracticeBoard(role, api) {
         cols: '1.3fr 1.1fr 1fr .9fr',
         columns: ['Client', 'Topic', 'When', 'State'],
         empty: 'No session is booked.',
-        summary: (d) => summary(count(Array.isArray(d?.items) ? d.items.length : null, 'session')),
-        // advisors.ts reads bookings with LIMIT 200 (D403).
-        total: (d) => total(d?.items, 200),
+        summary: (d) => summary(count(wholeCount(d, 200), 'session')),
+        // #4714: the bookings read is a page of 200 with `page.total` over all.
+        total: (d) => wholeCount(d, 200),
         rows: (d) => top(d?.items).map((b) => [
           b.client_name, b.topic, day(b.slot_starts_at), title(b.status),
         ]),
