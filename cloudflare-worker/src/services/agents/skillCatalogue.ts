@@ -19,6 +19,7 @@
 import type { Env } from '../../types';
 import { READ_KEYS } from './catalogue';
 import { draftHash, type CaseExpect } from './skillLifecycle';
+import { ASSERTION_KEYS } from './skillAssertions';
 import { checkLibrary } from './skillLibrarySeed';
 import { isSkillSlug } from './skills';
 import { draftPartsOf } from './skillPublish';
@@ -32,8 +33,8 @@ export const ROLES_REVIEW_AT = 3;
 export const TAGS_REVIEW_AT = 7;
 const FRONT_KEYS = ['name', 'description', 'roles', 'tools', 'output', 'taxonomy', 'version'];
 const CASE_KEYS = ['skill', 'version', 'note', 'input', 'expect'];
-/** The `expect` keys `checkCase` keeps and `judge()` evaluates (`numbers` since #4531). */
-const EXPECT_KEYS = ['output', 'must_include', 'must_say_not_recorded', 'must_not_include', 'numbers'];
+/** The `expect` keys `checkCase` keeps and `judge()` evaluates (`numbers` and the slice-2 assertions since #4531). */
+const EXPECT_KEYS: readonly string[] = ['output', 'must_include', 'must_say_not_recorded', 'must_not_include', ...ASSERTION_KEYS];
 const READ_SOURCES = new Set(READ_KEYS.map((k) => k.split('.')[0]));
 const AXES = new Set<string>(RADAR_AXES.map((a) => a.slug));
 

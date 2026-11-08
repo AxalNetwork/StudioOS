@@ -1,5 +1,6 @@
 import { withMentorEligible } from '../services/mentorEligibility';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
+import { actingAdvisor, actsForAdvisor, mayActAsAdvisor, ADVISOR_LICENCE_REQUIRED } from '../services/advisorAccess';
 /**
  * T13 — Advisors + office-hour slots + bookings + reviews.
  * Mounted at /api/advisors. Port of backend/app/api/routes/advisors.py.
@@ -328,14 +329,9 @@ async function loadAdvisorByUid(env: Env, uid: string): Promise<AdvisorRow | nul
 async function loadAdvisorById(env: Env, id: number): Promise<AdvisorRow | null> {
   return env.DB.prepare('SELECT * FROM advisors WHERE id = ?').bind(id).first<AdvisorRow>();
 }
+/** #4715: the policy's eligibility and ownership checks (services/advisorAccess.ts). */
 async function myAdvisor(env: Env, user: User): Promise<AdvisorRow | null> {
-  if (!holdsLicence(user, 'advisor') && !isAdmin(user)) return null;
-  if ((user as any).advisor_id) {
-    const row = await env.DB.prepare('SELECT * FROM advisors WHERE id = ?')
-      .bind((user as any).advisor_id).first<AdvisorRow>();
-    if (row?.user_id === user.id) return row;
-  }
-  return env.DB.prepare('SELECT * FROM advisors WHERE user_id = ?').bind(user.id).first<AdvisorRow>();
+  return actingAdvisor<AdvisorRow & { user_id: number | null }>(env, user);
 }
 
 async function takenForSlot(env: Env, slotId: number): Promise<number> {
@@ -450,8 +446,7 @@ function mergeProfileFields(existing: AdvisorRow | null, body: any) {
  * POST created an active profile, because `myAdvisor` answered null for them
  * and null read as "make one".
  */
-const mayHoldAdvisorProfile = (user: User) => holdsLicence(user, 'advisor') || isAdmin(user);
-const ADVISOR_LICENCE_REQUIRED = { code: 'advisor_licence_required', message: 'An advisor profile needs the Advisor licence.' } as const;
+const mayHoldAdvisorProfile = mayActAsAdvisor;
 
 /**
  * D4674: a value over its limit, an unsupported currency or a malformed price is
@@ -1408,8 +1403,9 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   const user = await requireAuth(c);
   const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?').bind(id).first<BookingRow>();
   if (!b) return c.json({ detail: 'Booking not found' }, 404);
-  const m = b.advisor_id;
-  const isAdvisor = !!(user as any).advisor_id && (user as any).advisor_id === m;
+  // #4715: the advisor side is the policy's answer (licence today, owned row),
+  // never the stored users.advisor_id pointer on its own.
+  const isAdvisor = await actsForAdvisor(c.env, user, b.advisor_id);
   const isOwner = b.founder_user_id === user.id;
   const adm = isAdmin(user);
   let allowed = adm;
@@ -1529,7 +1525,7 @@ advisors.post('/bookings/:id/review', async (c) => {
     const b = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?').bind(id).first<BookingRow>();
     if (!b) return c.json({ detail: 'Booking not found' }, 404);
     if (b.status !== 'completed') return c.json({ detail: 'Can only review completed bookings' }, 409);
-    const isAdvisor = !!(user as any).advisor_id && (user as any).advisor_id === b.advisor_id;
+    const isAdvisor = await actsForAdvisor(c.env, user, b.advisor_id);
     const isOwner = b.founder_user_id === user.id;
     if (!isAdvisor && !isOwner && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
     const reviewer_role = isAdvisor && !isOwner ? 'advisor' : 'founder';
@@ -3425,6 +3421,9 @@ advisors.get('/me/cohort', async (c) => {
   try {
     const user = await requireAuth(c);
     await ensureAdvisorStoresSchema(c.env);
+    // #4715: eligibility first, as every cohort read: an account that no longer
+    // holds the Advisor licence keeps its assignment rows but lists no cohort.
+    if (!mayHoldCohortAssignment(user)) return c.json({ items: [] });
     // Scoped on the SIGNED-IN USER, not on an advisor profile id and not on a
     // path parameter. 206 keys assignments on `users(id)` precisely so an
     // advisor with no profile row yet is still assignable — see its header.
@@ -3777,6 +3776,11 @@ advisors.patch('/me/guidance/:uid', async (c) => {
     const user = await requireAuth(c);
     await ensureAdvisorStoresSchema(c.env);
     await ensureCohortGuidanceSchema(c.env);
+    // #4715: writing guidance founders read is an advisor's act, so the
+    // licence is checked today, as `requireOwnCohort` does for the other writes.
+    if (!mayHoldCohortAssignment(user)) {
+      return c.json({ detail: 'Only an advisor can open a cohort batch' }, 403);
+    }
     const uid = String(c.req.param('uid') || '');
     // Ownership is the advisor column on the row itself — the assignment may
     // since have been withdrawn, and guidance already written must still be
