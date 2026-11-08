@@ -151,6 +151,7 @@ type BookingRow = {
   amount_cents: number | null; billing_state: string;
   created_at: string; updated_at: string;
   session_type_id?: number | null; booking_link_id?: number | null;
+  offer_json?: string | null;
   // #4702: the advisor's answer, kept apart from what happened to the session.
   advisor_decision?: 'accepted' | 'declined' | null; advisor_decided_at?: string | null;
   cancelled_by?: 'advisor' | 'client' | 'admin' | 'system' | null;
@@ -221,6 +222,35 @@ function slotDto(s: SlotRow, taken = 0): any {
   };
 }
 /**
+ * D4715 (#4715) — the offer a booking is made on, copied from its session type
+ * at booking time so a later rename, length change or reprice of the type does
+ * not rewrite what was booked. `pricing` uses the session-type editor's own
+ * modes: `free` (a free intro), `included`, `price` (with `price_cents`) and
+ * `unset`.
+ */
+export type BookingOffer = {
+  session_type_id: number; name: string; duration_minutes: number | null;
+  pricing: 'free' | 'included' | 'price' | 'unset'; price_cents: number | null;
+  cadence_note: string | null;
+};
+export function offerSnapshot(t: {
+  id: number; name: string; duration_minutes: number | null; cadence_note?: string | null;
+  price_cents: number | null; is_free_intro: number | boolean; is_included?: number | boolean | null;
+} | null): BookingOffer | null {
+  if (!t) return null;
+  const pricing = t.is_free_intro ? 'free' : t.is_included ? 'included' : t.price_cents == null ? 'unset' : 'price';
+  return {
+    session_type_id: t.id, name: t.name, duration_minutes: t.duration_minutes ?? null,
+    pricing, price_cents: pricing === 'price' ? Number(t.price_cents) : null,
+    cadence_note: t.cadence_note ?? null,
+  };
+}
+function readOffer(raw: string | null | undefined): BookingOffer | null {
+  if (!raw) return null;
+  try { const o = JSON.parse(raw); return o && typeof o === 'object' && typeof o.name === 'string' ? o : null; } catch { return null; }
+}
+
+/**
  * The booking as BOTH parties may see it. Deliberately no money — see
  * `advisorMoney` below for the two columns that are the advisor's alone.
  */
@@ -231,6 +261,8 @@ function bookingDto(b: BookingRow, extras: any = {}): any {
     topic: b.topic, notes: b.notes, questions: b.notes, client_message: b.notes, status: b.status,
     cancel_reason: b.cancel_reason,
     session_type_id: b.session_type_id ?? null, booking_link_id: b.booking_link_id ?? null,
+    // D4715: the terms the booking was made on, as copied then (null before the copy existed).
+    offer: readOffer(b.offer_json),
     created_at: b.created_at, updated_at: b.updated_at,
     ...extras,
   };
@@ -1094,8 +1126,8 @@ advisors.post('/slots/:id/book', async (c) => {
     try {
       const r = await c.env.DB.prepare(
         `INSERT INTO advisor_bookings
-          (uid, slot_id, advisor_id, founder_user_id, topic, notes, status, session_type_id, booking_link_id, created_at, updated_at)
-         SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?
+          (uid, slot_id, advisor_id, founder_user_id, topic, notes, status, session_type_id, booking_link_id, offer_json, created_at, updated_at)
+         SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?
           WHERE EXISTS (SELECT 1 FROM advisor_office_hour_slots s
                          WHERE s.id = ? AND s.is_cancelled = 0 AND (s.blocked_reason IS NULL OR TRIM(s.blocked_reason) = ''))
             AND (SELECT COUNT(*) FROM advisor_bookings x
@@ -1116,12 +1148,14 @@ advisors.post('/slots/:id/book', async (c) => {
          ON CONFLICT (slot_id, founder_user_id) DO UPDATE SET
            status = 'pending', cancel_reason = NULL, topic = excluded.topic, notes = excluded.notes,
            session_type_id = excluded.session_type_id, booking_link_id = excluded.booking_link_id,
+           offer_json = excluded.offer_json,
            amount_cents = NULL, billing_state = 'unpriced', created_at = excluded.created_at, updated_at = excluded.updated_at
            WHERE advisor_bookings.status = 'cancelled'`
       ).bind(newUid(), slotId, slot.advisor_id, user.id,
              (body.topic || '').toString().slice(0, 200),
              (body.notes || '').toString().slice(0, 2000),
-             type?.id ?? null, context?.link.id ?? null, nowIso(), nowIso(),
+             type?.id ?? null, context?.link.id ?? null,
+             type ? JSON.stringify(offerSnapshot(type)) : null, nowIso(), nowIso(),
              slotId,
              slotId, slotId,
              type?.id ?? null, type?.id ?? null, slot.advisor_id,

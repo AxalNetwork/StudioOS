@@ -60,7 +60,7 @@ const SCHEMA = `
   '238_advisor_engagements', '239_advisor_deliverables', '202611062152_advisor_deliverable_recipients',
   '240_advisor_sessions_config', '218_advisor_client_grants', '394_advisor_practice', '202611071547_advisor_engagement_events',
   // #4702: the advisor's recorded answer and who cancelled, written by every booking transition.
-  '202611071558_advisor_booking_decision'].map(mig).join('\n');
+  '202611071558_advisor_booking_decision', '202611082030_advisor_booking_offer'].map(mig).join('\n');
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
