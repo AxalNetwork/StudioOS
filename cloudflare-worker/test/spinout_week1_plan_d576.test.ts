@@ -22,6 +22,7 @@ import adminCohort from '../src/routes/admin_cohort.ts';
 import { TTO_STATUSES } from '../src/services/applicationLifecycle.ts';
 import { MILESTONES, OPTIONAL_MILESTONES } from '../src/services/spinoutLabCatalog.ts';
 import { RULES, RULE_KEYS, WEEK1_KEYS, planSteps, planView, ruleFor, parseSteps } from '../src/services/week1Plan.ts';
+import { enrollLegacy } from './_lab_evidence.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN_ID = 900;
@@ -48,6 +49,8 @@ function freshDb({ migrate = true } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of TABLES) db.exec(ddl(t));
   db.exec(M315); db.exec(M316);
+  // Migration 602's interview outcome, which the withdrawal's interview cancel reads.
+  db.exec('ALTER TABLE spinout_application_interviews ADD COLUMN outcome TEXT');
   if (migrate) db.exec(M396);
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   u.run(ADMIN_ID, 'admin', 'Admin One', 'admin@example.test');
@@ -270,6 +273,7 @@ test('D576: Week 1 starting computes a plan only when none is stored', async () 
   // An application from before this change: no plan stored.
   db.prepare(`INSERT INTO spinout_applications (user_id, company_name, idea, cohort, status, answers_json) VALUES (?, 'Co', 'Idea', 'C', 'accepted', ?)`)
     .run(FOUNDER_ID, JSON.stringify(answers('disclosed')));
+  enrollLegacy(db, FOUNDER_ID); // D4657: only an enrolled founder may start
   const s = await lab(db, '/start', json('POST'));
   assert.equal(s.status, 200, JSON.stringify(s.body));
   assert.deepEqual([planRow(db).rule_key, planRow(db).computed_by], ['disclosed', `user:${FOUNDER_ID}`]);

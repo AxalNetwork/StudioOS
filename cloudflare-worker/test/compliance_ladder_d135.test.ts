@@ -107,6 +107,7 @@ function freshDb() {
       user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
       legal_entity_name TEXT, brand_name TEXT, registered_address TEXT,
       signatory_name TEXT, signatory_title TEXT, status TEXT NOT NULL DEFAULT 'active',
@@ -133,6 +134,7 @@ function freshDb() {
     ,
       before_json TEXT, after_json TEXT, outcome TEXT);
     CREATE TABLE licence_territories (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER, country_code TEXT);
+    CREATE TABLE licence_seats (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER, seat_type TEXT, seats_licensed INTEGER);
   `);
   // Migration 264's own DDL, sliced from the file rather than retyped, so the
   // fixture cannot drift from the table the code will actually meet.
@@ -149,9 +151,12 @@ function freshDb() {
     ).run(id, `totp-${id}`);
   }
   db.prepare(
-    "INSERT INTO territory_licences (uid, licence_ref, legal_entity_name, brand_name, status) VALUES (?,?,?,?,'active')",
+    "INSERT INTO territory_licences (uid, licence_ref, legal_entity_name, brand_name, status, annual_fee_cents, revenue_share_bps, renews_on) VALUES (?,?,?,?,'active', 100000, 1000, '2027-01-01')",
   ).run(LIC, 'AXL-001', 'Axal VC France SAS', 'Axal VC France');
   db.prepare("INSERT INTO licence_admins (licence_id, user_id, admin_role) VALUES (1, ?, 'principal')").run(HOLDER);
+  // #4678: reinstating re-checks the prerequisites, so the licence has territory and seats.
+  db.prepare("INSERT INTO licence_territories (licence_id, country_code) VALUES (1, 'FR')").run();
+  db.prepare("INSERT INTO licence_seats (licence_id, seat_type, seats_licensed) VALUES (1, 'founder', 5)").run();
   return db;
 }
 
@@ -333,8 +338,10 @@ test('the sweep NEVER terminates, whatever the deadline says', async () => {
   await freezeOverdueNotices(env(db), { notify: async () => 1 });
   assert.equal(licStatus(db), 'suspended',
     'a clock ended an account — termination is a deliberate act, never automatic');
+  // The fixture holds one country (#4678 gave it the prerequisites); a sweep releases none.
   assert.equal(
-    Number((db.prepare("SELECT COUNT(*) AS n FROM licence_territories").get() as any)?.n ?? 0), 0,
+    Number((db.prepare("SELECT COUNT(*) AS n FROM licence_territories").get() as any)?.n ?? 0), 1,
+    'a suspension released territory; only a termination does',
   );
 });
 

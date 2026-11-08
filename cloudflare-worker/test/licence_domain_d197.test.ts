@@ -34,6 +34,7 @@ import { Hono } from 'hono';
 
 import licences from '../src/routes/admin_licences.ts';
 import licence from '../src/routes/licence.ts';
+import { licenceRoutesSource } from './_licenceRoutes.mjs';
 import {
   CNAME_TARGET, SERVES_REASON, TXT_PREFIX, domainPayload, mintChallengeToken, normaliseHostname,
   recordsFor, validateHostname, verifyRecords,
@@ -122,6 +123,7 @@ function freshDb() {
       viewed_user_id INTEGER, filters_json TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, entity_id INTEGER,
       legal_entity_name TEXT, brand_name TEXT, registered_address TEXT,
       signatory_name TEXT, signatory_title TEXT, status TEXT NOT NULL DEFAULT 'active',
@@ -637,7 +639,7 @@ test('a detach is recorded through logAdminAction, naming the licence and the ho
 });
 
 test('HQ cannot bind, check or approve a host — detach is the only route it has', () => {
-  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_licences.ts'), 'utf8');
+  const src = licenceRoutesSource();
   const registered = [...src.matchAll(/^r\.(get|post|put|patch|delete)\('([^']+)'/gm)].map((m) => m[2]);
   const domainRoutes = registered.filter((p) => p.includes('domain'));
   // H31: "There is no Approve, no Add domain, and no DNS editor for HQ to

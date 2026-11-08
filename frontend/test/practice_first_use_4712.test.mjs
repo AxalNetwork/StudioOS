@@ -215,7 +215,10 @@ test('mounted Delivery: Send says which version goes out; a version with content
 });
 
 test('mounted Sessions, empty: availability is published here, and a confirmed session is closed here', async () => {
-  // Mutation checked: SlotPublisher not mounted → no publish control on the page.
+  // Merged with #4687 (main): the page's publish card and "Run your sessions" panel
+  // (SessionActions.jsx) carry this PR's rules: slotBody checks a slot before it is
+  // sent, and a cancel needs a reason because the founder is told.
+  // Mutation checked: PublishAvailabilityCard not mounted → no "Publish a slot" control.
   const confirmed = { id: 5, status: 'confirmed', topic: 'First session', founder_name: 'Fran', slot_starts_at: '2026-11-20T10:00:00Z', slot_ends_at: '2026-11-20T11:00:00Z', billing_state: 'unpriced', amount_cents: null };
   const m = await mount(SessionsZone, (c) => {
     if (c.path === '/api/advisors/me/bookings') return json({ items: [confirmed] });
@@ -225,49 +228,50 @@ test('mounted Sessions, empty: availability is published here, and a confirmed s
   });
   try {
     assert.match(m.text(), /No slots in this window/);
-    assert.ok(m.byTestId('slot-publisher-toggle'), 'the publisher is on the page with an empty calendar');
+    assert.ok(m.byTestId('publish-availability'), 'the publisher is on the page with an empty calendar');
     await m.press(/^Publish a slot$/);
-    assert.ok(m.byTestId('slot-publisher-form'));
-    await m.submit('slot-publisher-form');
+    await m.press(/^Publish slot$/);
     assert.equal(m.writes().length, 0, 'an empty slot is refused before it is sent');
+    assert.match(m.text(), /Choose when the slot starts and when it ends\./);
     const day = (d) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 16);
     await m.type('slot-starts', day(3)); await m.type('slot-ends', `${day(3).slice(0, 11)}${String((Number(day(3).slice(11, 13)) + 1) % 24).padStart(2, '0')}${day(3).slice(13)}`);
+    await m.type('slot-seats', '21');
+    await m.press(/^Publish slot$/);
+    assert.equal(m.writes().length, 0, 'more than 20 seats is refused before it is sent');
     await m.type('slot-seats', '1');
-    await m.submit('slot-publisher-form');
+    await m.press(/^Publish slot$/);
     const slotPost = m.writes().find((c) => c.path === '/api/advisors/me/slots');
     assert.ok(slotPost, JSON.stringify(m.writes()));
     assert.equal(slotPost.body.capacity, 1);
 
     // the confirmed session: cancel needs a reason, then held / no-show work
-    await m.pressId('lifecycle-open-5');
-    await m.pressId('lifecycle-cancel-5');
-    await m.submit('lifecycle-form-5');
+    await m.press(/^Cancel session$/);
+    await m.press(/^Confirm cancellation$/);
     assert.equal(m.writes().filter((c) => c.path.includes('/bookings/5/')).length, 0, 'a cancel with no reason is refused');
     assert.match(m.text(), /Say why you are cancelling/);
     await m.type('lifecycle-note-5', 'Travel');
-    await m.submit('lifecycle-form-5');
+    await m.press(/^Confirm cancellation$/);
     assert.deepEqual(m.writes().filter((c) => c.path.includes('/bookings/5/')).map((c) => [c.path, c.body]),
       [['/api/advisors/bookings/5/cancel', { reason: 'Travel' }]]);
   } finally { await m.close(); }
-  for (const [outcome, path] of [['complete', 'complete'], ['no_show', 'no-show']]) {
+  for (const [label, path] of [[/^Session held$/, 'complete'], [/^No-show$/, 'no-show']]) {
     const k = await mount(SessionsZone, (c) => {
       if (c.path === '/api/advisors/me/bookings') return json({ items: [confirmed] });
       if (/\/bookings\/5\//.test(c.path)) return json({ ok: true });
       return base(c);
     });
     try {
-      await k.pressId('lifecycle-open-5');
-      await k.pressId(`lifecycle-${outcome}-5`);
-      await k.submit('lifecycle-form-5');
+      await k.press(label);
+      if (path === 'no-show') await k.press(/^Record no-show$/);
       assert.deepEqual(k.writes().filter((c) => c.path.includes('/bookings/5/')).map((c) => c.path), [`/api/advisors/bookings/5/${path}`]);
     } finally { await k.close(); }
   }
 });
 
 test('a session already closed offers no lifecycle form; no mounted page sends the advisor to a retired one', () => {
-  const lifecycle = read('pages/advisor/practice/SessionLifecycle.jsx');
-  assert.match(lifecycle, /if \(booking\.status !== 'confirmed'\) return null;/);
-  for (const f of ['SessionsZone', 'DeliveryZone', 'EngagementsZone', 'SlotPublisher', 'SessionLifecycle']) {
+  const lifecycle = read('pages/advisor/practice/SessionActions.jsx');
+  assert.match(lifecycle, /const confirmed = bookings\.filter\(\(b\) => b\.status === 'confirmed'\);/);
+  for (const f of ['SessionsZone', 'DeliveryZone', 'EngagementsZone', 'SessionActions']) {
     const src = read(`pages/advisor/practice/${f}.jsx`);
     assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''), /advisor\/advisory\/(opportunities|engagements|delivery)/, `${f} links to a retired tab`);
   }

@@ -470,6 +470,28 @@ export async function syncCatalog(env: Env): Promise<{ synced: number }> {
 }
 
 /**
+ * D4856 (#4856): THE ONE MODE RULE of the mirror. A row belongs to the catalogue
+ * when its Stripe `livemode` equals the stamp of the key this deployment runs
+ * on (1 live, 0 test); no key has no stamp, so no row belongs. `getCatalog`
+ * binds this stamp in SQL; `catalogRowScope` is the same rule for a row already
+ * in hand (the HQ summary), and a test holds the two to the same rows.
+ */
+export function catalogModeStamp(mode: StripeMode): 1 | 0 | null {
+  return mode === 'unconfigured' ? null : mode === 'live' ? 1 : 0;
+}
+
+/**
+ * Where a mirrored row sits against the current mode: `current` (the
+ * catalogue), `other` (stamped for the other mode, or there is no key), or
+ * `unknown` (null or unrecognised `livemode`, which is never folded into either).
+ */
+export function catalogRowScope(livemode: unknown, mode: StripeMode): 'current' | 'other' | 'unknown' {
+  const n = livemode === null || livemode === undefined || livemode === '' ? NaN : Number(livemode);
+  if (n !== 0 && n !== 1) return 'unknown';
+  return n === catalogModeStamp(mode) ? 'current' : 'other';
+}
+
+/**
  * Read the mirrored catalog from D1, optionally filtered by kind. Self-heals:
  * if the mirror is empty and Stripe is configured, runs a sync first.
  */
@@ -482,7 +504,7 @@ export async function getCatalog(
   await ensureCatalogSchema(env);
 
   const mode = stripeMode(env);
-  const stamp = mode === 'unconfigured' ? null : mode === 'live' ? 1 : 0;
+  const stamp = catalogModeStamp(mode);
   const countRow = opts?.sync === false ? null : await env.DB.prepare(
     'SELECT COUNT(*) AS n, SUM(CASE WHEN livemode IS NULL OR livemode <> ? THEN 1 ELSE 0 END) AS mismatched FROM stripe_products',
   ).bind(stamp).first<{ n: number; mismatched: number | null }>();
@@ -650,14 +672,23 @@ export const CATALOG_SYNC_BASIS =
 export type CatalogMirrorSummary =
   | {
       available: true;
+      /** D4856: the key's mode, the one `getCatalog` scopes by. */
+      stripe_mode: StripeMode;
+      /** D4856: products and prices are CURRENT-MODE rows only: the catalogue anyone can buy from. */
       products: { all: number; active: number };
       prices: { all: number; active: number; active_under_inactive_products: number };
-      /** D4703: true when every row's price list parsed, so the counts are the whole mirror. */
+      /** D4856: rows stamped for the other mode, and rows with no recognisable stamp; neither is in the counts above. */
+      other_mode: { mode: 'live' | 'test' | null; products: number };
+      unknown_mode: { products: number };
+      /** D4856: no sync outcome is stored, so whether one is running or failed is not recorded. */
+      sync_state: 'not_recorded';
+      /** D4703: true when every current-mode row's price list parsed, so the counts are the whole current catalogue. */
       complete: boolean;
       /** D4703: when this summary was read; `last_written_at` is when the mirror last changed. */
       read_at: string;
       /** Rows whose price list does not parse: counted here, never as zero prices. */
       unreadable_price_rows: number;
+      /** Latest write to a current-mode row; null when there is none (read as Not recorded). */
       last_written_at: string | null;
       sync_basis: string;
     }
@@ -676,15 +707,20 @@ export type CatalogMirrorSummary =
  * default, and compared raw an ISO stamp sorts above a SQL one from later the
  * same day (`'T'` > `' '`). `datetime()` makes them one format first.
  *
+ * D4856: ONLY CURRENT-MODE ROWS ARE COUNTED as products and prices, by the same
+ * rule `getCatalog` reads with (`catalogRowScope`); other-mode and unknown-mode
+ * rows are counted apart and never folded in.
+ *
  * Counted in JS rather than with `json_each`: the table is one row per product,
  * and a table-valued function in SQL would be new to this codebase for one count.
  */
 export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorSummary> {
-  let rows: Array<{ active: number; prices_json: string | null; synced: string | null }>;
+  type Row = { active: number; prices_json: string | null; synced: string | null; livemode: unknown };
+  let rows: Row[];
   try {
     const res = await env.DB.prepare(
-      `SELECT active, prices_json, datetime(synced_at) AS synced FROM stripe_products`,
-    ).all<{ active: number; prices_json: string | null; synced: string | null }>();
+      `SELECT active, prices_json, datetime(synced_at) AS synced, livemode FROM stripe_products`,
+    ).all<Row>();
     rows = res.results || [];
   } catch {
     return { available: false, reason: 'The catalog mirror could not be read on this database.' };
@@ -695,7 +731,15 @@ export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorS
   let pricesActiveOrphaned = 0;
   let unreadable = 0;
   let last: string | null = null;
+  let current = 0;
+  let other = 0;
+  let unknownMode = 0;
+  const mode = stripeMode(env);
   for (const row of rows) {
+    const scope = catalogRowScope(row.livemode, mode);
+    if (scope === 'other') { other += 1; continue; }
+    if (scope === 'unknown') { unknownMode += 1; continue; }
+    current += 1;
     if (Number(row.active) === 1) productsActive += 1;
     if (row.synced && (last === null || row.synced > last)) last = row.synced;
     let prices: unknown;
@@ -720,7 +764,11 @@ export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorS
   }
   return {
     available: true,
-    products: { all: rows.length, active: productsActive },
+    stripe_mode: mode,
+    products: { all: current, active: productsActive },
+    other_mode: { mode: mode === 'unconfigured' ? null : mode === 'live' ? 'test' : 'live', products: other },
+    unknown_mode: { products: unknownMode },
+    sync_state: 'not_recorded',
     prices: { all: pricesAll, active: pricesActive, active_under_inactive_products: pricesActiveOrphaned },
     unreadable_price_rows: unreadable,
     complete: unreadable === 0,

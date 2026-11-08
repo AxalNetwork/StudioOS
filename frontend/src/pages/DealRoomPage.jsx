@@ -1,6 +1,6 @@
 import DealFreePlan from '../components/deals/DealFreePlan';
 import { dealMoney, dealBackLink } from '../components/deals/dealMoney';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
@@ -75,22 +75,35 @@ export default function DealRoomPage() {
   const [mine, setMine] = useState({ status: 'loading' });
   const [respondTo, setRespondTo] = useState(null);
 
+  // D4633: every read is for the deal in the address when it started. An
+  // answer that arrives after the address moved to another deal lands nowhere,
+  // so it cannot replace the header, the key strip, the stage or the target of
+  // an action. Each read also carries a serial, so a retry supersedes it.
+  const route = useRef(dealId);
+  route.current = dealId;
+  const serials = useRef({ deal: 0, stage: 0, mine: 0 });
+  const begin = (key) => { const n = ++serials.current[key]; const id = dealId; return () => route.current === id && serials.current[key] === n; };
   const loadDeal = () => {
+    const current = begin('deal');
     setLoading(true); setError(null);
+    setDeal((d) => (d && String(d.id) === String(dealId) ? d : null));
     api.getDeal(dealId)
-      .then(d => { setDeal(d); document.title = `${d.project_name || 'Deal Room'} — axal`; })
-      .catch(e => { setError(e || { status: 0 }); reportError('DealRoom:getDeal', e); })
-      .finally(() => setLoading(false));
+      .then(d => { if (!current()) return; setDeal(d); document.title = `${d.project_name || 'Deal Room'} — axal`; })
+      .catch(e => { reportError('DealRoom:getDeal', e); if (current()) setError(e || { status: 0 }); })
+      .finally(() => { if (current()) setLoading(false); });
   };
   const loadStage = () => {
+    const current = begin('stage');
     setStage({ status: 'loading' });
-    dealContextApi.stage(dealId).then((data) => setStage({ status: 'ready', data }))
-      .catch((e) => { reportError('DealRoom:stage', e); setStage({ status: 'unreadable' }); });
+    dealContextApi.stage(dealId).then((data) => { if (current()) setStage({ status: 'ready', data }); })
+      .catch((e) => { reportError('DealRoom:stage', e); if (current()) setStage({ status: 'unreadable' }); });
   };
   const loadMine = () => {
+    const current = begin('mine');
+    const id = dealId;
     setMine({ status: 'loading' });
-    api.dealCommitments(dealId).then((d) => setMine({ status: 'ready', items: Array.isArray(d) ? d : null }))
-      .catch((e) => { reportError('DealRoom:keyCommitments', e); setMine({ status: 'unreadable' }); });
+    api.dealCommitments(dealId).then((d) => { if (current()) setMine({ status: 'ready', dealId: id, items: Array.isArray(d) ? d : null }); })
+      .catch((e) => { reportError('DealRoom:keyCommitments', e); if (current()) setMine({ status: 'unreadable', dealId: id }); });
   };
 
   useEffect(() => { if (!blocked) loadDeal(); /* eslint-disable-next-line */ }, [dealId, blocked]);
@@ -120,7 +133,8 @@ export default function DealRoomPage() {
   );
 
   if (blocked) return <NoPermission kind={blocked} />;
-  if (loading) return <DealLoading tabs={tabRow(dealId)} />;
+  // D4633: nothing, an action least of all, is drawn for a deal the address no longer names.
+  if (loading || (deal && String(deal.id) !== String(dealId))) return <DealLoading tabs={tabRow(dealId)} />;
   if (error || !deal) {
     const kind = readFailure(error);
     if (kind === 'not_on_deal') return <NoPermission kind="not_on_deal" />;

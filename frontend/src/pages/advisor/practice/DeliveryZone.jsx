@@ -234,53 +234,50 @@ export default function DeliveryZone() {
   const ratings = Object.values(held.reviews).filter(Array.isArray).flat().map((r) => Number(r.rating)).filter(Boolean);
   const avg = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
 
-  // #4712: ONE form, drawn under the empty state when nothing is on file yet
-  // and inside the collection once there is something. It lived only in the
-  // children `ZoneBody` does not draw for an empty collection, so "Record a
-  // work product" set `adding` and showed nothing.
-  const newProductForm = (
-      <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Title">
-            <input className={inputClass} value={draft.title} placeholder="Q2 advisory review"
-              onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-          </Field>
-          <Field label="Engagement" hint="A work product under a contract takes its client from it. Sending requires one whose client has an Axal account — nothing an unlinked client is sent can ever be recorded as opened.">
-            <select className={inputClass} value={draft.engagement_id}
-              onChange={(e) => setDraft({ ...draft, engagement_id: e.target.value })}>
-              <option value="">No engagement — type a client below</option>
-              {engagements.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.client_name}{e.founder_user_id ? '' : ' (no account — cannot be sent)'}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {!draft.engagement_id && (
-            <Field label="Client" hint="Used when there is no engagement to take the name from.">
-              <input className={inputClass} value={draft.client_name} placeholder="Halverton"
-                onChange={(e) => setDraft({ ...draft, client_name: e.target.value })} />
-            </Field>
-          )}
-          <Field label="What changed" hint="The line the version trail shows against v1.">
-            <input className={inputClass} value={draft.summary} placeholder="First pass from the Aug 5 teardown"
-              onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
-          </Field>
-          <Field label="Link">
-            <input className={inputClass} value={draft.link_url} placeholder="https://…"
-              onChange={(e) => setDraft({ ...draft, link_url: e.target.value })} />
-          </Field>
-        </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-          It opens at <strong>v1, not sent</strong>. Sending is its own step, because that is the
-          moment the client can start reading it.
-        </p>
-        <button type="button" className={`${buttonClass} mt-2`}
-          disabled={busy === 'new' || !draft.title.trim() || (!draft.engagement_id && !draft.client_name.trim())}
-          onClick={create}>
-          Add as v1
-        </button>
-      </div>
+
+  const createForm = (
+          <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Title">
+                <input className={inputClass} value={draft.title} placeholder="Q2 advisory review"
+                  onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+              </Field>
+              <Field label="Engagement" hint="A work product under a contract takes its client from it. Sending requires one whose client has an Axal account — nothing an unlinked client is sent can ever be recorded as opened.">
+                <select className={inputClass} value={draft.engagement_id}
+                  onChange={(e) => setDraft({ ...draft, engagement_id: e.target.value })}>
+                  <option value="">No engagement — type a client below</option>
+                  {engagements.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.client_name}{e.founder_user_id ? '' : ' (no account — cannot be sent)'}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {!draft.engagement_id && (
+                <Field label="Client" hint="Used when there is no engagement to take the name from.">
+                  <input className={inputClass} value={draft.client_name} placeholder="Halverton"
+                    onChange={(e) => setDraft({ ...draft, client_name: e.target.value })} />
+                </Field>
+              )}
+              <Field label="What changed" hint="The line the version trail shows against v1.">
+                <input className={inputClass} value={draft.summary} placeholder="First pass from the Aug 5 teardown"
+                  onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
+              </Field>
+              <Field label="Link">
+                <input className={inputClass} value={draft.link_url} placeholder="https://…"
+                  onChange={(e) => setDraft({ ...draft, link_url: e.target.value })} />
+              </Field>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+              It opens at <strong>v1, not sent</strong>. Sending is its own step, because that is the
+              moment the client can start reading it.
+            </p>
+            <button type="button" className={`${buttonClass} mt-2`}
+              disabled={busy === 'new' || !draft.title.trim() || (!draft.engagement_id && !draft.client_name.trim())}
+              onClick={create}>
+              Add as v1
+            </button>
+          </div>
   );
 
   return (
@@ -290,14 +287,17 @@ export default function DeliveryZone() {
       error={state.error}
       isEmpty={!state.loading && !state.error && items.length === 0}
       onRetry={load}
-      empty={<><NothingYet
+      empty={<>
+      <NothingYet
         title="No work product is on file"
         body="This collection fills as you record what you send a client — each version, when it went out, and whether they opened it. It is empty because nothing has been recorded, not because anything was lost."
-        action={<button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
-          {adding ? 'Close' : 'Record a work product'}
-        </button>}
+        action={<button type="button" className={buttonClass} onClick={() => setAdding(true)}>Record a work product</button>}
       />
-        {adding && <div className="mt-3">{newProductForm}</div>}</>}
+      {/* D4687 (#4687): the form used to live only in the non-empty body, so a
+          first-use advisor could not open it. The held-sessions review loop is
+          drawn once, outside `ZoneBody`, below (#4712). */}
+      {adding && <Card padding="md" className="mt-3" data-testid="work-product-create-empty">{createForm}</Card>}
+      </>}
     >
       <ZoneToolbar
         className="mb-3"
@@ -383,7 +383,7 @@ export default function DeliveryZone() {
             {adding ? 'Close' : 'New work product'}
           </button>}
         />
-        {adding && newProductForm}
+        {adding && createForm}
         {/* D571 — "By client" GROUPS rather than only sorting: the Ops canvas's
             per-client deliverables (A1), with the flow legend, the due column
             it cannot fill, and the edit and attach forms. Still every row:
@@ -469,6 +469,7 @@ export default function DeliveryZone() {
           </p>
         </Card>
       </div>
+
 
       <StatedLimit title="What this collection cannot say">
         <p>

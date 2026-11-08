@@ -6,7 +6,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -19,8 +18,10 @@ import { HistoryRow } from '../src/pages/admin/LicenceHistory.jsx';
 import { LicenceReasonDialog } from '../src/pages/admin/LicenceReasonDialog.jsx';
 import { adminLicenceHistoryApi } from '../src/lib/api/adminLicenceHistory.js';
 import { renderedText } from './_renderedText.mjs';
+import { licencePageSource } from './_licencePage.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
-const PAGE = readFileSync(new URL('../src/pages/admin/AdminLicences.jsx', import.meta.url), 'utf8');
+const PAGE = licencePageSource();
 
 // ── URL state ──────────────────────────────────────────────────────────────
 
@@ -102,7 +103,9 @@ test('tabs are a tablist with selection, roving focus and arrow keys; filters an
   assert.match(PAGE, /overflow-x-auto whitespace-nowrap/, 'a narrow screen scrolls the tab row rather than wrapping it');
   assert.match(PAGE, /aria-pressed=\{kindFilter === id\}/);
   assert.match(PAGE, /aria-pressed=\{form\.kind === id\}/);
-  assert.match(PAGE, /aria-current=\{sel === l\.uid \? 'true' : undefined\}/);
+  // D4819: the ledger and the open licence are two views now, so the licence
+  // that is current is the breadcrumb's current page, not a highlighted row.
+  assert.match(PAGE, /<span aria-current="page"[^>]*>\{open \? \(open\.brand_name \|\| open\.licence_ref\) : 'Licence'\}<\/span>/);
   for (const label of ['Licence reference', 'Legal entity name', 'Brand name in product']) {
     assert.ok(PAGE.includes(`aria-label="${label}"`), label);
   }
@@ -186,7 +189,7 @@ test('history pages through the Worker route with the cursor it was given', asyn
   } finally { globalThis.fetch = real; }
   assert.match(seen[0], /\/api\/admin\/licences\/lic%201\/events\?limit=50$/);
   assert.match(seen[1], /\/api\/admin\/licences\/lic%201\/events\?limit=50&before=40$/);
-  const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/admin_licences.ts', import.meta.url), 'utf8');
+  const worker = licenceRoutesSource();
   assert.ok(worker.includes("r.get('/:uid/events'"));
   assert.match(PAGE, /\{step === HISTORY_STEP && <LicenceHistory licence=\{d\} \/>\}/);
 });

@@ -298,20 +298,31 @@ export function FlagsCard() {
  * Offers (in11c)
  * ------------------------------------------------------------------ */
 
+/** D4810: an offers page; the cap is the Worker's (OFFERS_PAGE_MAX). */
+export const OFFERS_PAGE = 50;
+
 export function OffersTab({ superAdmin }) {
+  const [offset, setOffset] = useState(0);
+  // D4810: two reads whatever the number of influencers: the influencers (for
+  // New offer) and one page of every influencer's offers. It was one offers
+  // read per influencer, awaited in turn.
   const [read, reload] = useRead(async () => {
-    const { influencers = [] } = await adminInfluencersApi.list('all');
-    const rows = [];
-    for (const m of influencers) {
-      try {
-        const { offers = [] } = await adminInfluencersApi.offers(m.user_uid);
-        for (const o of offers) rows.push({ m, o });
-      } catch {
-        rows.push({ m, o: null });
-      }
-    }
-    return { influencers, rows };
-  }, []);
+    const [{ influencers = [] }, page] = await Promise.all([
+      adminInfluencersApi.list('all'),
+      // Offers carry budgets and spend: the Worker reads them to the Super Admin only.
+      adminInfluencersApi.allOffers({ limit: OFFERS_PAGE, offset }).catch((e) => {
+        if (Number(e?.status) === 403) return { refused: true };
+        throw e;
+      }),
+    ]);
+    if (page?.refused) return { influencers, rows: [], total: 0, refused: true };
+    if (!Array.isArray(page?.items)) throw new Error('The offers did not come back as a list.');
+    const rows = page.items.map(({ influencer, offer }) => ({
+      m: { uid: influencer?.user_uid, user_uid: influencer?.user_uid, handle: influencer?.handle ?? null, person: { name: influencer?.name ?? null } },
+      o: offer,
+    }));
+    return { influencers, rows, total: Number(page.total) || 0 };
+  }, [offset]);
   const [linking, setLinking] = useState(false);
   const [act, setAct] = useState(null);
   const rows = read.status === 'ready' ? read.data.rows : [];
@@ -326,7 +337,8 @@ export function OffersTab({ superAdmin }) {
       ) : null}
       {read.status === 'loading' ? <Skeleton lines={3} /> : null}
       {read.status === 'error' ? <BlockFailed what="The offers" onRetry={reload} testId="influencers-offers-unreadable" /> : null}
-      {read.status === 'ready' && !rows.length ? <p className={`m-0 ${SUB}`} data-testid="influencers-offers-empty">No influencer has an offer yet.</p> : null}
+      {read.status === 'ready' && read.data.refused ? <p className={`m-0 ${SUB}`} data-testid="influencers-offers-refused">Offers carry budgets and spend, so only the Super Admin reads them.</p> : null}
+      {read.status === 'ready' && !read.data.refused && !rows.length ? <p className={`m-0 ${SUB}`} data-testid="influencers-offers-empty">No influencer has an offer yet.</p> : null}
       {rows.length ? (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-[13px]" data-testid="influencers-offers-table">
@@ -356,6 +368,15 @@ export function OffersTab({ superAdmin }) {
               })}
             </tbody>
           </table>
+        </div>
+      ) : null}
+      {read.status === 'ready' && read.data.total > OFFERS_PAGE ? (
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="influencers-offers-pages">
+          <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{`${offset + 1}–${offset + rows.length} of ${read.data.total}`}</span>
+          <span className="flex gap-2">
+            <button type="button" className="text-[12.5px] font-bold text-axal-violet disabled:opacity-40 dark:text-violet-300" disabled={offset === 0} onClick={() => setOffset((o) => Math.max(0, o - OFFERS_PAGE))} data-testid="influencers-offers-prev">Previous</button>
+            <button type="button" className="text-[12.5px] font-bold text-axal-violet disabled:opacity-40 dark:text-violet-300" disabled={offset + OFFERS_PAGE >= read.data.total} onClick={() => setOffset((o) => o + OFFERS_PAGE)} data-testid="influencers-offers-next">Next</button>
+          </span>
         </div>
       ) : null}
       {linking ? <LinkOfferDialog influencers={read.data.influencers} onClose={() => setLinking(false)} onLinked={reload} /> : null}

@@ -116,6 +116,15 @@ test('a withdrawal needs a reason; it is kept with the withdrawal, and only your
   assert.equal(f.db.prepare('SELECT capital_committed FROM deals WHERE id = 101').get().capital_committed, 80000);
 });
 
+test('D4632: a withdrawal whose audit row fails is not withdrawn: status, reason and record land together or not at all', async () => {
+  const f = fixture();
+  f.db.exec(`CREATE TRIGGER no_audit BEFORE INSERT ON activity_logs WHEN NEW.action = 'deal_commitment_withdrawn' BEGIN SELECT RAISE(ABORT, 'refused'); END`);
+  const r = await call(f, '/101/commitments/c-ivy/withdrawal', 1, 'POST', { reason: 'Our fund closed its allocation.' });
+  assert.equal(r.status, 500);
+  assert.equal(f.db.prepare("SELECT status FROM commitments WHERE uid = 'c-ivy'").get().status, 'pending', 'the withdrawal rolled back with its record');
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'deal_commitment_withdrawn'").get().n, 0);
+});
+
 test('the wiring: mounted before the deal routes, with no new interpolated SQL, and no reason or message in a log line', () => {
   const index = readFileSync('cloudflare-worker/src/index.ts', 'utf8');
   assert.ok(index.indexOf("app.route('/api/deals', dealWorkroom)") > 0);
