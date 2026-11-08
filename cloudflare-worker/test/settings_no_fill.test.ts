@@ -79,8 +79,6 @@ const EDITABLE = [
   'website', 'linkedin_url', 'description',
   // #3932 (migration 757): reasoned about in the header, refused like the rest.
   'default_currency',
-  // #4964 (migration 202611072325): regions as codes, reasoned about in the header beside international_presence.
-  'region_codes',
 ];
 
 test('the route still edits exactly the columns this refusal was reasoned about', () => {
