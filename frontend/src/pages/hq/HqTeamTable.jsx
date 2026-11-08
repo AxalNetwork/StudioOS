@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Users, ShieldCheck, Search, Loader2, AlertTriangle, LogOut } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import { daysTo, rungRank } from '../../lib/notices';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
+import { TEAM_SEARCH_MAX, branchQueryFor, searchStatus } from './teamSearchPolicy';
 import { branchCoverageLine, branchStateText, registryUnreadable, wholeTeamEstablished } from './hqTeamBranchModel';
 
 /**
@@ -606,33 +607,48 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
   const [revokeFor, setRevokeFor] = useState(null);
   const [revoked, setRevoked] = useState({});
   const [asked, setAsked] = useState('');
+  // D5042 — WHICH ANSWER IS ON SCREEN. `answeredFor` is the branch query the committed `data` was read
+  // for; `pending` is a read in flight. A slow answer for "gu" must not land after a faster one for
+  // "gui" (`generation`), and branch hits are shown as current only for the query that is asked now.
+  const [answeredFor, setAnsweredFor] = useState('');
+  const [pending, setPending] = useState(false);
+  const generation = useRef(0);
   // D153 / H12 frame 2 — the same scope the shell bar names. Under it the
   // route reads ONE branch and does not read HQ's roster at all, so the
   // HQ-held half below is absent rather than filtered away: a narrowed HQ
   // table is exactly what H12 says the overlay is not.
   const { branch: viewAs } = useViewAsBranch();
 
-  // The 250ms / two-character debounce `AdminPage` already uses, for the same
-  // reason: each keystroke would otherwise ask every branch over its own link.
+  // The 250ms debounce `AdminPage` already uses, for the same reason: each keystroke would otherwise
+  // ask every branch over its own link. WHAT is asked is the shared policy (`teamSearchPolicy.js`,
+  // mirroring the Worker's `util/teamSearch.ts`): the normalized query, at least two characters.
   useEffect(() => {
-    const t = setTimeout(() => {
-      const next = typed.trim();
-      setAsked(next.length >= 2 ? next : '');
-    }, 250);
+    const t = setTimeout(() => setAsked(branchQueryFor(typed)), 250);
     return () => clearTimeout(t);
   }, [typed]);
 
   const load = useCallback(async () => {
+    // D5042 — each read takes a number; only the NEWEST read may commit. The last committed result stays
+    // on screen while a newer one is in flight (it is marked as not current below), and an older read that
+    // resolves late is dropped whether it succeeded or failed.
+    const mine = ++generation.current;
     setError(null);
+    setPending(true);
     try {
       const res = await api.hqAdmins(asked, viewAs || undefined);
+      if (generation.current !== mine) return;
       setData(res && typeof res === 'object' ? res : null);
+      setAnsweredFor(asked);
     } catch (e) {
+      if (generation.current !== mine) return;
       reportError('HqTeamTable:load', e);
       setData(null);
       setError(String(e?.message || e || 'Request failed'));
+    } finally {
+      if (generation.current === mine) setPending(false);
     }
   }, [asked, viewAs]);
+
 
   useEffect(() => { load(); }, [load, reloadKey]);
 
@@ -677,6 +693,19 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
       || String(a.name || a.email).localeCompare(String(b.name || b.email)));
 
   const branches = Array.isArray(data.branches) ? data.branches : [];
+  // D5042 — the branch groups below answer `answeredFor`. They are CURRENT only while that is the query
+  // asked now; otherwise the last committed answer stays on screen, marked, until the newer one lands.
+  // When the search was cleared, the old hits are not shown at all: they answer a question nobody is asking.
+  const current = answeredFor === asked;
+  const hideHits = !current && asked === '';
+  const status = searchStatus({
+    typed,
+    sent: asked,
+    pending,
+    answeredFor,
+    hits: current ? branches.reduce((n, b) => n + (b.status === 'ok' ? (b.data?.results || []).length : 0), 0) : 0,
+    failed: current ? branches.filter((b) => b.status === 'unreadable').length : 0,
+  });
 
   return (
     <Card className="p-5" data-testid="hq-team">
@@ -699,11 +728,25 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
             onChange={(e) => setTyped(e.target.value)}
             placeholder="Filter admins · ask branches"
             aria-label="Filter administrators and search branches"
+            aria-describedby="hq-team-search-status"
+            maxLength={TEAM_SEARCH_MAX}
             data-testid="hq-team-search"
             className="w-56 bg-transparent text-[12.5px] text-axal-ink outline-none"
           />
         </label>
       </div>
+
+      {/* One polite status region for the branch search (D5042): the hint under the minimum, the search in
+          flight, and what the branches answered. Visible for the hint, announced for the rest. */}
+      <p
+        id="hq-team-search-status"
+        role="status"
+        aria-live="polite"
+        className={status.kind === 'hint' ? 'mt-1 text-right text-[11.5px] text-axal-faint' : 'sr-only'}
+        data-testid="hq-team-search-status"
+      >
+        {status.text}
+      </p>
 
       {viewAs && (
         <p className="mt-3 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-team-scoped-note">
@@ -783,12 +826,23 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
         </div>
       )}
 
+      {!current && asked !== '' && (
+        <p className="mt-4 text-[12px] text-axal-faint" data-testid="hq-team-search-stale">
+          Showing the last answer ({answeredFor ? `for “${answeredFor}”` : 'no search'}) while the branches answer for “{asked}”.
+        </p>
+      )}
+
       {branches.map((b) => (
-        <div key={b.code} className="mt-4 border-t border-axal-hairline pt-3" data-testid="hq-team-group-branch">
+        <div
+          key={b.code}
+          className={`mt-4 border-t border-axal-hairline pt-3 ${current ? '' : 'opacity-60'}`}
+          aria-busy={!current}
+          data-testid="hq-team-group-branch"
+        >
           <div className="flex items-baseline gap-2">
             <span className="text-[11px] font-extrabold uppercase tracking-[.08em] text-axal-ink">{b.code}</span>
             <span className="text-[11.5px] text-axal-faint" data-testid={`hq-team-branch-state-${b.code}`}>
-              {branchStateText(b)}
+              {hideHits ? 'Updating…' : branchStateText(b)}
             </span>
           </div>
           {b.status === 'unreadable' && (
@@ -803,10 +857,10 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
               database, so HQ cannot list them from here.
             </p>
           )}
-          {b.status === 'ok' && data.searched && (b.data?.results || []).length === 0 && (
+          {current && b.status === 'ok' && data.searched && (b.data?.results || []).length === 0 && (
             <p className="mt-1 text-[12px] text-axal-faint">Nothing on this branch matched.</p>
           )}
-          {b.status === 'ok' && (b.data?.results || []).length > 0 && (
+          {!hideHits && b.status === 'ok' && (b.data?.results || []).length > 0 && (
             <ul className="mt-1 divide-y divide-axal-hairline">
               {(b.data.results || []).map((hit) => (
                 <MoveHit
