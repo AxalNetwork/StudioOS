@@ -131,3 +131,24 @@ export function pendingNextRedirected() {
     }
   } catch { /* never block app bootstrap */ }
 })();
+
+/**
+ * #4646: areas whose signed-out visitors come back to the exact page they asked for. The route guard sends everyone
+ * else to a bare `/login`, as before; an area joins this list when its deep links (a course, a lesson, a webinar) are
+ * shared and must survive sign-in.
+ */
+export const RETURN_AFTER_LOGIN_PREFIXES = Object.freeze(['/learning']);
+
+/**
+ * Where the route guard sends a signed-out visitor: `/login?next=<the page they asked for>` for an area that keeps its
+ * destination, else `/login`. The destination is the same-origin path, query and fragment the login page already
+ * validates (`sanitizeNextPath`), so email-link, Google, passkey and authenticator sign-in all land on it; one that
+ * fails the check (too long, not a path) falls back to `/login` rather than carrying anything unsafe.
+ */
+export function loginRedirectFor(location) {
+  const pathname = String(location?.pathname || '');
+  const here = `${pathname}${location?.search || ''}${location?.hash || ''}`;
+  const kept = RETURN_AFTER_LOGIN_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const safe = kept ? sanitizeNextPath(here) : null;
+  return safe ? `/login?next=${encodeURIComponent(safe)}` : '/login';
+}

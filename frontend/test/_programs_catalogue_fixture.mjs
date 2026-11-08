@@ -13,7 +13,7 @@ export const pendingBlock = (reason) => ({ available: false, pending: true, reas
 export const PART4_CLAIMS = 'Perk claims are read through part 4’s claims service, which is not on this Worker yet.';
 export const PART4_STRATEGIC = 'Strategic referral access is read through part 4’s queue service, which is not on this Worker yet.';
 export const HQ_READS = 'HQ reads these figures.';
-export const LAB_PEOPLE = 'Who a cohort’s founders are waits on O-FND and #2374.';
+export const LAB_PEOPLE = 'The Lab is left out until a cohort\'s founders are defined.';
 
 const queue = (count, bands = [count, 0, 0], oldest = 10, aged = 'since applied', extra = {}) => ({
   available: true, count, oldest_hours: count ? oldest : null,

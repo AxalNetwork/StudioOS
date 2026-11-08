@@ -71,7 +71,7 @@ export function ProgramsUnlinked({ user }) {
       <div className={`${CARD} mx-auto flex max-w-xl flex-col items-center gap-3 p-10 text-center`} data-testid="licence-programs-hq">
         <p className="text-lg font-extrabold tracking-tight text-gray-900 dark:text-white">You are viewing as an Admin.</p>
         <p className="text-sm text-gray-600 dark:text-gray-400">HQ is not a studio, so it holds no grants.</p>
-        <Link to={GRANTS_PATH} className={PRIMARY}>Open Program grants</Link>
+        <Link to={GRANTS_PATH} className={PRIMARY}>Open Program access by licence</Link>
       </div>
     );
   }

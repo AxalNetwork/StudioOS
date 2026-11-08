@@ -62,7 +62,10 @@ export const learningApi = {
   program: (uid) => request(`/learning/programs/${encodeURIComponent(uid)}`),
   enrolInProgram: (uid) => request(`/learning/programs/${encodeURIComponent(uid)}/enrol`, { method: 'POST' }),
   assignedPrograms: () => request('/learning/programs/mine'),
-  programLearners: (uid) => request(`/learning/programs/${encodeURIComponent(uid)}/learners`),
+  // D4810: `{ limit, offset }` reads a page (with `total`); without, every learner.
+  programLearners: (uid, page = null) => request(`/learning/programs/${encodeURIComponent(uid)}/learners${page ? `?limit=${Number(page.limit)}&offset=${Number(page.offset) || 0}` : ''}`),
+  // D4810: Completion by program, one read for every published program in the caller's scope.
+  programsCompletion: () => request('/learning/programs/mine/completion'),
   programLearner: (uid, userUid) => request(`/learning/programs/${encodeURIComponent(uid)}/learners/${encodeURIComponent(userUid)}`),
 
   // D560 — webinars. `join_url` arrives only for a registered member, from 15

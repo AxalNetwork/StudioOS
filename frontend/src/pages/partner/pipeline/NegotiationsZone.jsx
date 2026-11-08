@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
 import { usePipelineZone } from './usePipelineZone';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
@@ -347,7 +349,7 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
 
 export default function PartnerNegotiationsZone() {
   const { state, load, run, busy, note } = usePipelineZone(
-    () => api.listPartnerNegotiations(), 'The negotiation record did not load.',
+    () => readAllPages((cur) => api.listPartnerNegotiations(cur)), 'The negotiation record did not load.',
   );
   const [view, setView] = useState('all');
 
@@ -376,7 +378,8 @@ export default function PartnerNegotiationsZone() {
   //
   // A CLOSED NEGOTIATION IS IN NONE OF THEM. The board is what is in play.
   const open = useMemo(
-    () => tracked.filter((r) => r.negotiation.stage !== 'closed'),
+    // D4693: the Worker's own rule (`negotiation.open`): not closed AND the quote behind it still waiting.
+    () => tracked.filter((r) => r.negotiation.open ?? r.negotiation.stage !== 'closed'),
     [tracked],
   );
   /**
@@ -402,11 +405,11 @@ export default function PartnerNegotiationsZone() {
     return open;
   }, [view, open]);
   const stalled = useMemo(
-    () => tracked.filter((r) => (r.negotiation.days_stalled ?? 0) >= 7 && r.negotiation.stage !== 'closed'),
+    () => tracked.filter((r) => (r.negotiation.days_stalled ?? 0) >= 7 && (r.negotiation.open ?? r.negotiation.stage !== 'closed')),
     [tracked],
   );
   const ourCourt = useMemo(
-    () => tracked.filter((r) => r.negotiation.ball === 'us' && r.negotiation.stage !== 'closed'),
+    () => tracked.filter((r) => r.negotiation.ball === 'us' && (r.negotiation.open ?? r.negotiation.stage !== 'closed')),
     [tracked],
   );
 
@@ -482,6 +485,7 @@ export default function PartnerNegotiationsZone() {
       )}
     >
       <div className="space-y-6">
+        <PartialRead data={state.data} noun="negotiations" onRetry={load} />
         <ZoneHeading
           title="Negotiations"
           blurb={
@@ -613,9 +617,9 @@ export default function PartnerNegotiationsZone() {
           surface="pipeline/negotiations"
           railOption="draft:counter"
           label="Proposal · counter drafted"
-          accept="Send counter"
+          accept="Save counter draft"
           run="Draft the counter"
-          foot="Terms read from the clause record."
+          foot="Terms read from the clause record. Saving keeps the draft here; nothing is sent to the client."
           empty="For the negotiation that has been still longest: a counter built from the clauses already on the table — what each side asked, what has been conceded, and the one line that says why the two positions cannot both hold."
           nothingToDraft="No negotiation is open, so there is nothing to counter."
         />

@@ -255,7 +255,7 @@ export const OUTCOMES = Object.freeze([
   { key: 'decline', label: 'Decline', records: 'This is final. The studio reads your note under Your proposals.' },
 ]);
 export const NOTE_LABEL = 'Note to the studio · required for Send back and Decline';
-export const GRANT_LATER = 'Program grants come later: an approval sets no grant yet. HQ sets grant terms on Licences › Program grants once that part lands.';
+export const GRANT_LATER = 'Program grants come later: an approval sets no grant yet. HQ sets grant terms on Licences › Program access by licence once that part lands.';
 export const noteNeeded = (outcome) => outcome === 'send_back' || outcome === 'decline';
 
 export const decideTitle = (name) => `Decide on ${name || 'this proposal'}`;
