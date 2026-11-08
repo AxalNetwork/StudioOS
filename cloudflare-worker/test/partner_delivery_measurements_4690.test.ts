@@ -110,6 +110,7 @@ function freshDb() {
       notes TEXT, status TEXT NOT NULL DEFAULT 'submitted', decided_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      company_id INTEGER,
       UNIQUE (need_id, partner_id)
     );
     CREATE TABLE engagements (
@@ -122,7 +123,9 @@ function freshDb() {
       invoice_id TEXT, invoiced_at TEXT,
       company_id INTEGER,  -- migration 196; the Pipeline's company scope reads it (#4693)
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      -- #4693 (D4693): the pipeline reads scope by company; the column it reads.
+      company_id INTEGER
     );
   `);
   db.exec(migration('208_partner_delivery_stores'));

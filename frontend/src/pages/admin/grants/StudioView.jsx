@@ -139,7 +139,7 @@ export default function StudioView({ uid, requests, reloadAll }) {
     return (
       <div className="flex flex-col gap-3" data-testid="studio-missing">
         <p className="m-0 text-[14px] text-axal-ink dark:text-gray-100">No licence has this reference. It may have been removed from the ledger.</p>
-        <Link to={GRANTS_PATH} className="font-bold text-axal-violet dark:text-violet-300">Back to Program grants</Link>
+        <Link to={GRANTS_PATH} className="font-bold text-axal-violet dark:text-violet-300">Back to Program access by licence</Link>
       </div>
     );
   }
@@ -154,8 +154,8 @@ export default function StudioView({ uid, requests, reloadAll }) {
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="program-grants-studio">
       <AdminPageHeader
-        crumb={{ label: 'Program grants', to: GRANTS_PATH, current: studio }}
-        title={read ? studio : licence.status === 'error' ? 'Program grants' : 'Reading…'}
+        crumb={{ label: 'Program access by licence', to: GRANTS_PATH, current: studio }}
+        title={read ? studio : licence.status === 'error' ? 'Program access by licence' : 'Reading…'}
         pills={read ? [{ label: kindWord(lic.kind) }, { label: statusWord(lic.status), tone: lic.status === 'suspended' ? 'danger' : undefined }] : []}
         actions={actions}
         line={read ? `Licence ${lic.licence_ref || NOT_RECORDED}${lic.renews_on ? ` · renews ${dayWord(lic.renews_on)}` : ''}. The programs this studio may run, and on what terms.` : null}
