@@ -26,6 +26,19 @@
  *           Chunk boundaries fall between tables whenever the next table fits
  *           a fresh chunk, so a self-referencing table is split only when it
  *           is bigger than a chunk on its own (counted as `split_tables`).
+ *           A FOREIGN KEY CYCLE between tables (legal_documents.fund_id →
+ *           vc_funds, vc_funds.lpa_doc_id → legal_documents) has no parent to
+ *           put first, and the deferral does not hold across the statements of
+ *           a remote `wrangler d1 execute --file` import: the 2026-11-01 drill
+ *           (run 41307767798) failed chunk 275 with SQLITE_CONSTRAINT_FOREIGNKEY
+ *           there. So each cycle is broken at one nullable back-edge: that
+ *           table's rows are inserted with the back-edge column(s) NULL, and
+ *           an `UPDATE … SET col=<original> WHERE <pk>=…` per row runs after
+ *           every INSERT (`cycle_edges_broken`, `cycle_rows_updated`). Every
+ *           statement is then valid on its own under immediate FK checks. A
+ *           cycle with no breakable edge (every back-edge NOT NULL, or no
+ *           primary key) is counted as `cyclic_tables` and keeps the old
+ *           export-order fallback.
  *   post    indexes, views and triggers, after the data, so restoring a row
  *           never fires a trigger: the backup already holds what the
  *           triggers wrote.
@@ -159,6 +172,221 @@ const RE_TXN = /^(?:BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE)\b/i;
 const RE_REFS = new RegExp(String.raw`\bREFERENCES\s+${QNAME}`, 'gi');
 const INTERNAL = (t) => t.startsWith('_cf_');
 
+/** Index of the bracket closing the one at `open`, skipping quoted text; -1 if none. */
+function closeParen(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "'" || c === '"' || c === '`' || c === '[') {
+      const close = c === '[' ? ']' : c;
+      for (i += 1; i < text.length; i += 1) {
+        if (text[i] === close) { if (close !== ']' && text[i + 1] === close) { i += 1; continue; } break; }
+      }
+      continue;
+    }
+    if (c === '(') depth += 1;
+    else if (c === ')') { depth -= 1; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+/** Split on commas at bracket depth 0, outside quotes. Items are trimmed. */
+function splitTopLevel(text) {
+  const out = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "'" || c === '"' || c === '`' || c === '[') {
+      const close = c === '[' ? ']' : c;
+      for (i += 1; i < text.length; i += 1) {
+        if (text[i] === close) { if (close !== ']' && text[i + 1] === close) { i += 1; continue; } break; }
+      }
+      continue;
+    }
+    if (c === '(') depth += 1;
+    else if (c === ')') depth -= 1;
+    else if (c === ',' && depth === 0) { out.push(text.slice(start, i).trim()); start = i + 1; }
+  }
+  out.push(text.slice(start).trim());
+  return out;
+}
+
+const RE_LEAD_IDENT = new RegExp(String.raw`^\s*(${IDENT})`);
+const identList = (text) => splitTopLevel(text).map((x) => { const m = RE_LEAD_IDENT.exec(x); return m ? unquote(m[1]) : null; });
+// Keywords tested with string literals blanked, so a DEFAULT 'not null' is not one.
+const blankStrings = (t) => t.replace(/'(?:[^']|'')*'/g, "''");
+
+/**
+ * Read a CREATE TABLE's columns, primary key and foreign keys. Returns
+ * { columns: [{ name, notNull }], pk: [names], fks: [{ cols, parent }] } or
+ * null if the column list cannot be found.
+ */
+export function parseCreateTable(sql) {
+  const m = RE_CREATE_TABLE.exec(sql);
+  if (!m) return null;
+  const open = sql.indexOf('(', m.index + m[0].length);
+  const close = open === -1 ? -1 : closeParen(sql, open);
+  if (close === -1) return null;
+  const columns = [];
+  const pk = [];
+  const fks = [];
+  for (const item of splitTopLevel(sql.slice(open + 1, close))) {
+    if (!item) continue;
+    const bare = blankStrings(item);
+    const lead = /^\s*([A-Za-z_]+)/.exec(bare);
+    const kw = lead ? lead[1].toUpperCase() : '';
+    if (['CONSTRAINT', 'PRIMARY', 'FOREIGN', 'UNIQUE', 'CHECK'].includes(kw)) {
+      let mm;
+      if ((mm = /\bPRIMARY\s+KEY\s*\(/i.exec(bare))) {
+        const o = mm.index + mm[0].length - 1;
+        pk.push(...identList(item.slice(o + 1, closeParen(item, o))).filter(Boolean));
+      } else if ((mm = /\bFOREIGN\s+KEY\s*\(/i.exec(bare))) {
+        const o = mm.index + mm[0].length - 1;
+        const c = closeParen(item, o);
+        const ref = new RegExp(String.raw`\bREFERENCES\s+${QNAME}`, 'i').exec(item.slice(c));
+        if (ref) fks.push({ cols: identList(item.slice(o + 1, c)).filter(Boolean), parent: unquote(ref[1]) });
+      }
+      continue;
+    }
+    const nm = RE_LEAD_IDENT.exec(item);
+    if (!nm) continue;
+    const name = unquote(nm[1]);
+    const rest = blankStrings(item.slice(nm[0].length));
+    columns.push({ name, notNull: /\bNOT\s+NULL\b/i.test(rest) });
+    if (/\bPRIMARY\s+KEY\b/i.test(rest)) pk.push(name);
+    const ref = new RegExp(String.raw`\bREFERENCES\s+${QNAME}`, 'i').exec(item.slice(nm[0].length));
+    if (ref) fks.push({ cols: [name], parent: unquote(ref[1]) });
+  }
+  return { columns, pk, fks };
+}
+
+/**
+ * Parse a one-row `INSERT INTO t [(cols)] VALUES(...)` into its parts, or
+ * null for anything else (multi-row VALUES, INSERT … SELECT, a trailing clause).
+ */
+function parseInsert(stmt) {
+  const m = RE_INSERT.exec(stmt);
+  if (!m) return null;
+  let i = m.index + m[0].length;
+  while (/\s/.test(stmt[i] || '')) i += 1;
+  let cols = null;
+  if (stmt[i] === '(') {
+    const c = closeParen(stmt, i);
+    if (c === -1) return null;
+    cols = identList(stmt.slice(i + 1, c));
+    if (cols.some((x) => !x)) return null;
+    i = c + 1;
+  }
+  const v = /^\s*VALUES\s*\(/i.exec(stmt.slice(i));
+  if (!v) return null;
+  const open = i + v[0].length - 1;
+  const close = closeParen(stmt, open);
+  if (close === -1 || stmt.slice(close + 1).trim() !== ';') return null;
+  return { head: stmt.slice(0, open + 1), cols, values: splitTopLevel(stmt.slice(open + 1, close)) };
+}
+
+const quoteIdent = (name) => `"${name.replace(/"/g, '""')}"`;
+
+/**
+ * Strongly connected components of the graph (tables → parents), Tarjan's
+ * algorithm, in a deterministic order. Self-edges are ignored: a
+ * self-referencing table is not a cycle between tables.
+ */
+function components(tables, edges) {
+  let index = 0;
+  const idx = new Map();
+  const low = new Map();
+  const onStack = new Set();
+  const stack = [];
+  const out = [];
+  const visit = (v) => {
+    idx.set(v, index); low.set(v, index); index += 1;
+    stack.push(v); onStack.add(v);
+    for (const w of edges.get(v) || []) {
+      if (w === v || !tables.includes(w)) continue;
+      if (!idx.has(w)) { visit(w); low.set(v, Math.min(low.get(v), low.get(w))); }
+      else if (onStack.has(w)) low.set(v, Math.min(low.get(v), idx.get(w)));
+    }
+    if (low.get(v) === idx.get(v)) {
+      const comp = [];
+      let w;
+      do { w = stack.pop(); onStack.delete(w); comp.push(w); } while (w !== v);
+      out.push(comp);
+    }
+  };
+  for (const t of tables) if (!idx.has(t)) visit(t);
+  return out;
+}
+
+/**
+ * Choose back-edges whose removal leaves no cycle between tables. An edge
+ * child → parent is breakable when the child has a primary key, and every FK
+ * column of the child that points at the parent is nullable and not part of
+ * that key. Returns { broken: Map(child → Map(parent → cols)), unresolved }.
+ */
+function breakCycles(tables, deps, info) {
+  const edges = new Map(tables.map((t) => [t, new Set(deps.get(t) || [])]));
+  const broken = new Map();
+  const stuck = new Set();
+  for (;;) {
+    const cyc = components(tables, edges).filter((c) => c.length > 1 && !c.every((t) => stuck.has(t)));
+    if (!cyc.length) break;
+    let progressed = false;
+    for (const comp of cyc) {
+      const members = tables.filter((t) => comp.includes(t));
+      let pick = null;
+      for (const child of members) {
+        const ti = info.get(child);
+        if (!ti || !ti.pk.length) continue;
+        for (const parent of members) {
+          if (parent === child || !edges.get(child).has(parent)) continue;
+          const cols = [...new Set(ti.fks.filter((f) => f.parent === parent).flatMap((f) => f.cols))];
+          const nullable = cols.length && cols.every((c) => {
+            const col = ti.columns.find((x) => x.name === c);
+            return col && !col.notNull && !ti.pk.includes(c);
+          });
+          if (nullable) { pick = { child, parent, cols }; break; }
+        }
+        if (pick) break;
+      }
+      if (!pick) { comp.forEach((t) => stuck.add(t)); continue; }
+      edges.get(pick.child).delete(pick.parent);
+      if (!broken.has(pick.child)) broken.set(pick.child, new Map());
+      broken.get(pick.child).set(pick.parent, pick.cols);
+      progressed = true;
+      break; // recompute the components after every removal
+    }
+    if (!progressed) break;
+  }
+  return { broken, edges };
+}
+
+/**
+ * Insert a row with its back-edge columns NULL and return the UPDATE that
+ * restores them, or null if the row cannot be rewritten (left as exported).
+ * A row whose back-edge columns are already NULL needs no UPDATE: { insert }.
+ */
+function deferRow(stmt, ti, cols) {
+  const p = parseInsert(stmt);
+  if (!p) return null;
+  const names = p.cols || ti.columns.map((c) => c.name);
+  if (names.length !== p.values.length) return null;
+  const at = (n) => names.indexOf(n);
+  if (cols.some((c) => at(c) === -1) || ti.pk.some((c) => at(c) === -1)) return null;
+  const isNull = (v) => /^NULL$/i.test(v);
+  const set = cols.filter((c) => !isNull(p.values[at(c)]));
+  if (!set.length) return { insert: stmt, update: null };
+  const keys = ti.pk.map((c) => p.values[at(c)]);
+  if (keys.some(isNull)) return null;
+  const values = p.values.map((v, k) => (cols.includes(names[k]) ? 'NULL' : v));
+  const table = unquote(RE_INSERT.exec(stmt)[1]);
+  return {
+    insert: `${p.head}${values.join(',')});`,
+    update: `UPDATE ${quoteIdent(table)} SET ${set.map((c) => `${quoteIdent(c)}=${p.values[at(c)]}`).join(',')} WHERE ${ti.pk.map((c, k) => `${quoteIdent(c)}=${keys[k]}`).join(' AND ')};`,
+  };
+}
+
 /** Sort tables parents-first. Ties and cycles keep the export's order. */
 function parentsFirst(tables, deps) {
   const order = [];
@@ -191,7 +419,8 @@ export function planRestore(sql, { chunkBytes = DEFAULT_CHUNK_BYTES } = {}) {
   const counts = {
     statements: statements.length, schema: 0, data: 0, post: 0,
     dropped_pragma: 0, dropped_txn: 0, dropped_internal: 0,
-    tables: 0, cyclic_tables: 0, split_tables: 0,
+    tables: 0, cyclic_tables: 0, cycle_edges_broken: 0, cycle_rows_updated: 0,
+    cycle_rows_unparsed: 0, split_tables: 0,
     largest_statement_bytes: 0, over_limit: 0, chunks: 0,
   };
   if (error) return { chunks: [], counts, error };
@@ -199,6 +428,7 @@ export function planRestore(sql, { chunkBytes = DEFAULT_CHUNK_BYTES } = {}) {
   const schema = [];
   const post = [];
   const deps = new Map();
+  const info = new Map();
   const tableOrder = [];
   const rows = new Map();
   const seq = [];
@@ -223,6 +453,8 @@ export function planRestore(sql, { chunkBytes = DEFAULT_CHUNK_BYTES } = {}) {
       const refs = new Set();
       for (const r of s.matchAll(RE_REFS)) refs.add(unquote(r[1]));
       deps.set(t, refs);
+      const parsed = parseCreateTable(s);
+      if (parsed) info.set(t, parsed);
       continue;
     }
     if ((m = RE_INSERT.exec(s) || RE_DELETE.exec(s))) {
@@ -239,7 +471,22 @@ export function planRestore(sql, { chunkBytes = DEFAULT_CHUNK_BYTES } = {}) {
 
   const dataTables = tableOrder.filter((t) => rows.has(t));
   counts.tables = dataTables.length;
-  const { order, cyclic } = parentsFirst(dataTables, deps);
+  // Break every cycle between tables at a nullable back-edge, then order the
+  // rest parents-first: cycle members, and the tables under them, included.
+  const { broken, edges } = breakCycles(dataTables, deps, info);
+  const updates = [];
+  for (const [child, parents] of broken) {
+    counts.cycle_edges_broken += parents.size;
+    const cols = [...new Set([...parents.values()].flat())];
+    rows.set(child, rows.get(child).map((stmt) => {
+      if (!RE_INSERT.test(stmt)) return stmt;
+      const r = deferRow(stmt, info.get(child), cols);
+      if (!r) { counts.cycle_rows_unparsed += 1; return stmt; }
+      if (r.update) { updates.push(r.update); counts.cycle_rows_updated += 1; }
+      return r.insert;
+    }));
+  }
+  const { order, cyclic } = parentsFirst(dataTables, edges);
   counts.cyclic_tables = cyclic;
 
   const chunks = [];
@@ -266,7 +513,8 @@ export function planRestore(sql, { chunkBytes = DEFAULT_CHUNK_BYTES } = {}) {
     }
   };
   pack('schema', schema.map((s) => [s]));
-  pack('data', [...order.map((t) => rows.get(t)), ...(seq.length ? [seq] : [])], DEFER_FK);
+  // The back-edge UPDATEs run after every INSERT, when both ends exist.
+  pack('data', [...order.map((t) => rows.get(t)), ...(updates.length ? [updates] : []), ...(seq.length ? [seq] : [])], DEFER_FK);
   pack('post', post.map((s) => [s]));
   counts.chunks = chunks.length;
   return { chunks, counts, error: null };
