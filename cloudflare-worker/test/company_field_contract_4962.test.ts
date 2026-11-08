@@ -37,7 +37,7 @@ const NORTH = 1;
 function fixture(withTriggers = true) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
-  for (const m of ['597_company_archive_and_events.sql', '685_company_legal_record_and_slugs.sql', '757_company_default_currency.sql', '202611031619_company_logo_change_event.sql']) db.exec(mig(m));
+  for (const m of ['597_company_archive_and_events.sql', '685_company_legal_record_and_slugs.sql', '757_company_default_currency.sql', '202611031619_company_logo_change_event.sql', '202611072255_company_profile_version.sql', '202611072325_company_region_codes.sql']) db.exec(mig(m));
   if (withTriggers) db.exec(mig(TRIGGERS));
   db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)').run(ADA, 'founder', 'Ada Made-up', 'ada@example.test');
   db.prepare("INSERT INTO company_profiles (id, uid, company_name, stage, website, logo_url, created_at, updated_at) VALUES (?, ?, ?, 'seed', 'https://old.example', 'https://elsewhere.example/legacy.png', '2026-01-01', '2026-01-01')").run(NORTH, 'co-north', 'Northwind');

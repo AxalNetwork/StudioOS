@@ -1633,16 +1633,6 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "POST /api/company/:uid/compliance/:task/comments": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "POST /api/company/:uid/compliance/:task/ready": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "POST /api/competitors/:id/candidates": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",

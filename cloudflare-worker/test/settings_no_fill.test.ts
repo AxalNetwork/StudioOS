@@ -23,6 +23,9 @@
  *   international_presence   cite — so neither `restatement` nor `sourced` can
  *                            keep its promise, and `composition` may not occupy a
  *                            column holding a measured value.
+ *   region_codes             FACTS ONLY THE COMPANY HOLDS (#4964): the same
+ *                            fact as international_presence, as codes from a
+ *                            list. A list makes a guess look precise, not true.
  *   expansion_goals          INTENT, which only the founder has.
  *   default_currency         A CHOICE ONLY THE COMPANY MAKES (#3932, #3696 Q4):
  *                            the currency it reports and invoices in. Nothing to

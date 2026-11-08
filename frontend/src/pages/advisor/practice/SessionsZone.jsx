@@ -11,7 +11,7 @@ import {
 } from '../expertise/kit';
 import {
   KIND_LABEL, KIND_TONE, VIEW_DAYS, blackoutLabel, bookedNote, groupByDay,
-  narrowSlots, openNote, ruleNote, ruleValue, slotCounts, slotKind, slotTime,
+  narrowSlots, openNote, ruleNote, ruleValue, slotCounts, slotKind, slotTime, windowFrom,
 } from './sessionGrid';
 import { bookingView, formatDateTime, slotMinutes } from '../advisory/kit';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -154,8 +154,9 @@ export default function SessionsZone() {
         : forView === 'past' ? VIEW_DAYS.past
           : forView === 'unpaid_held' ? VIEW_DAYS.unpaid_held
             : VIEW_DAYS.two_weeks;
-      const res = await api.listMyAdvisorSlots({ days });
-      setSlots({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [] });
+      // #4702: the past view reads the window that just ended, not the one ahead.
+      const res = await api.listMyAdvisorSlots({ days, from: windowFrom(forView, days) });
+      setSlots({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [], truncated: res?.truncated === true });
     } catch (e) {
       setSlots({ loading: false, error: e?.message || 'Your calendar could not be read.', items: [] });
     }
@@ -395,6 +396,11 @@ export default function SessionsZone() {
               </div>
             ))}
           </div>
+          {slots.truncated && (
+            <p className="mt-3 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300" data-testid="slots-truncated">
+              This window holds more than 500 slots, so only the first 500 are shown. Narrow the window to see the rest.
+            </p>
+          )}
           {counts.held > 0 && (
             <p className="mt-3 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
               A held slot is booked and <strong>not charged</strong>: it was taken while the payout

@@ -2609,7 +2609,11 @@ function AppInner() {
       {/* Graduation Certificate (design: Graduation Certificate.dc) — the
           Week-4 credential, conferred on the incorporation_completed
           milestone and downloadable as a vector A4-landscape PDF. */}
-      <Route path="/spinout-lab/certificate" element={guard(labRoles(['admin', 'founder']), <SpinoutLabCertificatePage />)} />
+      {/* #4661: any signed-in account opens it. The page and `GET /certificates/mine`
+          are the member's own, and the page decides from the Worker's graduation
+          rule: a graduate of any role (an Explorer too) keeps their certificate
+          after enrollment ends, which a role gate here took away. */}
+      <Route path="/spinout-lab/certificate" element={authOnly(<SpinoutLabCertificatePage />)} />
       {/* Office Hours tool page (design: Office Hours.dc) — founder-side
           partner session booking; /office-hours stays the advisor console. */}
       <Route path="/spinout-lab/office-hours" element={guard(labRoles(['admin']), <SpinoutLabOfficeHoursPage />)} />
