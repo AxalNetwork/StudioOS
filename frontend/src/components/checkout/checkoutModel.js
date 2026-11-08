@@ -245,7 +245,6 @@ const PROMO_WORDS = {
   product_list_unreadable: 'This code can’t be checked right now. Try again in a moment.',
   // D4855 (#4855): the licence’s promotion ceiling.
   ceiling_exceeded: 'This code’s discount is more than this licence’s promotion budget has left. Pay without it.',
-  ceiling_not_recorded: 'No discount can be given yet. Pay without the code.',
   ceiling_unreadable: 'This code can’t be checked right now. Try again in a moment.',
 };
 export function promoState(quote, asked) {

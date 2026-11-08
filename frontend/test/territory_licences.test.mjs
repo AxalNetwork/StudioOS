@@ -133,15 +133,22 @@ test('the fee is integer cents and the rates are integer basis points', () => {
   assert.ok(!/\b(REAL|FLOAT|DOUBLE)\b/.test(s), 'no float column in a contract ledger');
 });
 
-test('a share above 100% is clamped, not stored', () => {
-  const s = licenceRoutesSource();
-  assert.match(s, /Math\.min\(10000, Math\.max\(0, n\)\)/, '10000 bps is 100%');
+test('a share above 100% is refused, not clamped or stored', () => {
+  // D4694: the PATCH used to clamp 12000 to 10000 and store a share nobody typed. It refuses it now.
+  const route = licenceRoutesSource();
+  assert.doesNotMatch(route, /Math\.min\(10000, Math\.max\(0, n\)\)/, 'no clamping in the route');
+  const rules = readFileSync(resolve(root, 'cloudflare-worker/src/services/licenceTerms.ts'), 'utf8');
+  assert.match(rules, /whole\('revenue_share_bps', 0, 10000, 'whole basis points'\)/, '10000 bps is 100%, and the bound is a refusal');
+  assert.match(rules, /whole\('token_split_bps', 0, 10000, 'whole basis points'\)/);
 });
 
 test('the page converts entered currency to cents and shows bps as a percentage', () => {
   const s = licencePageSource();
-  assert.match(s, /Math\.round\(Number\(f\.annual_fee\) \* 100\)/, 'entered units → integer cents');
-  assert.ok(!/parseFloat\(/.test(s), 'no float parsing of money');
+  // D4694: the conversion moved into the form's pure module (lib/licenceCoreTermsForm.js) with the dirty-field logic.
+  const form = readFileSync(resolve(root, 'frontend/src/lib/licenceCoreTermsForm.js'), 'utf8');
+  assert.match(form, /Math\.round\(n\.value \* 100\)/, 'entered units → integer cents');
+  assert.match(s, /buildCoreSave\(/, 'the page saves through it');
+  assert.ok(!/parseFloat\(/.test(s) && !/parseFloat\(/.test(form), 'no float parsing of money');
   // D149 MOVED THE PROPERTY AND THIS ASSERTION FOLLOWED IT, INVERTED. It used
   // to read `Number(bps) / 100` here under the comment "bps → percent happens
   // in exactly one place" — which was true of this file and false of the tree:
@@ -337,12 +344,18 @@ test('a failed ledger read is unreadable, not an empty ledger', () => {
   assert.match(code, /setData\(UNAVAILABLE\)/, 'a failed licences read must not become { items: [] }');
   assert.match(code, /<Unreadable what="The licence ledger"/);
   // #4700: zero rows on the server's own count, with no search or kind narrowing it.
-  assert.match(code, /!filtered && total === 0 \?/, 'the empty state is gated on a successful read with zero rows');
+  // D4819 moved the test into the ledger model; with a filter, only the summary's
+  // count of every licence can say the ledger is empty.
+  assert.match(code, /const empty = ledgerIsEmpty\(\{ total, filtered, summaryTotal: summaryOk \? Number\(summaryOk\.counts\?\.total\) : null \}\);/,
+    'the empty state is gated on a successful read');
+  const model = codeOnly(read('frontend/src/pages/admin/licenceLedgerModel.js'));
+  assert.match(model, /if \(!filtered\) return total === 0;\n\s+return summaryTotal === 0;/, 'with zero rows');
 });
 
 test('the empty ledger explains itself', () => {
   assert.match(licencePageSource(), /No licences have been issued/i);
-  assert.match(licencePageSource(), /inventing one would misrepresent/i,
+  // D4819: the canvas's sentence (board L00), behind Why is this empty?
+  assert.match(licencePageSource(), /StudioOS does not seed fictional subsidiaries or licence agreements\./,
     'and says why it is not pre-filled');
 });
 

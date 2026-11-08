@@ -202,11 +202,15 @@ test('running it twice is a no-op the second time', async () => {
 /* The wiring, which no unit test above can see. */
 
 const ROUTE = licenceRoutesSource();
+// #4686 — the consequences moved out of the route handler into
+// `runTerminationConsequences` (so a repeat request can resume them); the
+// ordering and reporting rules below are asserted on that function now.
+const RUN_AT = ROUTE.indexOf('export async function runTerminationConsequences');
+const RUN_BODY = ROUTE.slice(RUN_AT, ROUTE.indexOf('async function resumeTermination', RUN_AT));
 
 test('terminate calls it, and calls it AFTER the notification', async () => {
-  const at = ROUTE.indexOf("r.post('/:uid/terminate'");
-  assert.ok(at > 0);
-  const body = ROUTE.slice(at, ROUTE.indexOf('\n});', at));
+  assert.ok(RUN_AT > 0);
+  const body = RUN_BODY;
   const notify = body.indexOf('notifyLicenceAdmins(');
   const deprov = body.indexOf('deprovisionLicenceAdmins(');
   assert.ok(notify > 0, 'terminate must still notify the administrators');
@@ -218,12 +222,11 @@ test('terminate calls it, and calls it AFTER the notification', async () => {
 });
 
 test('the result is reported as its own field, never folded into ok', async () => {
-  const at = ROUTE.indexOf("r.post('/:uid/terminate'");
-  const body = ROUTE.slice(at, ROUTE.indexOf('\n});', at));
-  assert.match(body, /admins_deprovisioned: adminsDeprovisioned/, 'the caller must see what happened per account');
+  const body = RUN_BODY;
+  assert.match(body, /out\.admins_deprovisioned = /, 'the caller must see what happened per account');
   // D139's precedent, and the reason: a recorded termination must not be undone
   // by a failure in the cleanup after it.
-  assert.match(body, /notices_withdrawn: noticesWithdrawn/, 'and D139\'s field must still be reported beside it');
+  assert.match(body, /out\.notices_withdrawn = /, 'and D139\'s field must still be reported beside it');
 });
 
 test('no new licence_events value is written — 187\'s CHECK is not widened here', () => {
@@ -276,12 +279,11 @@ test('D262: a branch that answers is asked with the secret first and no target, 
 });
 
 test('D262: terminate calls it AFTER the push, reports it as its own field, and never rethrows', () => {
-  const at = ROUTE.indexOf("r.post('/:uid/terminate'");
-  const body = ROUTE.slice(at, ROUTE.indexOf('\n});', at));
+  const body = RUN_BODY;
   const push = body.indexOf('pushLicenceToBranch(');
   const unbind = body.indexOf('unbindBranchAdmins(');
   assert.ok(push > 0 && unbind > push, 'the branch must hold `terminated` before its administrators are unbound');
-  assert.match(body, /branch_admins_unbound: branchAdminsUnbound/);
-  const helper = ROUTE.slice(ROUTE.indexOf('export async function unbindBranchAdmins'), at);
+  assert.match(body, /out\.branch_admins_unbound = /);
+  const helper = ROUTE.slice(ROUTE.indexOf('export async function unbindBranchAdmins'), RUN_AT);
   assert.doesNotMatch(helper, /\bthrow\b/, 'the helper throws: a failed cleanup would undo a recorded termination');
 });

@@ -165,19 +165,21 @@ function makeSql(initial = { user: null, milestones: [] }) {
 
     // --- UPDATEs --------------------------------------------------
     // start: COALESCE preserves any existing started_at + non-zero week
-    if (/^UPDATE users SET spinout_lab_active = 1, spinout_lab_week = COALESCE\(NULLIF\(spinout_lab_week, 0\), 1\), spinout_lab_started_at = COALESCE\(spinout_lab_started_at, datetime\('now'\)\) WHERE id = \?$/i.test(text)) {
+    if (/^UPDATE users SET spinout_lab_active = 1, spinout_lab_week = COALESCE\(NULLIF\(spinout_lab_week, 0\), 1\), spinout_lab_started_at = COALESCE\(spinout_lab_started_at, datetime\('now'\)\) WHERE id = \? AND COALESCE\(is_incorporated, 0\) = 0 RETURNING id$/i.test(text)) {
+      if (Number(state.user.is_incorporated) === 1) return [];
       state.user.spinout_lab_active = 1;
       if (!state.user.spinout_lab_week) state.user.spinout_lab_week = 1;
       if (!state.user.spinout_lab_started_at) {
         state.user.spinout_lab_started_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
       }
+      return [{ id: state.user.id }];
+    }
+    if (/^UPDATE users SET spinout_lab_week = MAX\(COALESCE\(spinout_lab_week, 1\), \?\) WHERE id = \? AND spinout_lab_active = 1$/i.test(text)) {
+      if (Number(state.user.spinout_lab_active) === 1) state.user.spinout_lab_week = Math.max(Number(state.user.spinout_lab_week || 1), values[0]);
       return [];
     }
-    if (/^UPDATE users SET spinout_lab_week = \? WHERE id = \?$/i.test(text)) {
-      state.user.spinout_lab_week = values[0];
-      return [];
-    }
-    if (/^UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = \?$/i.test(text)) {
+    if (/^UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = \?( AND spinout_lab_active = 1)?$/i.test(text)) {
+      if (/AND spinout_lab_active = 1$/i.test(text) && Number(state.user.spinout_lab_active) !== 1) return [];
       state.user.spinout_lab_active = 0;
       state.user.is_incorporated = 1;
       return [];

@@ -160,6 +160,17 @@ export async function markLessonComplete({ course, lessonUid, slug }) {
   return fresh;
 }
 
+/**
+ * #4646: the first sign that a learner has begun a lesson. A partly watched first lesson writes only an item position,
+ * and Continue learning and the in-progress count read course rows, so the course would not appear until the lesson was
+ * marked complete. This records the lesson and its course as started (the route never moves a completed row back or a
+ * percent down), so the course shows up in Continue learning from the first minute.
+ */
+export async function recordLessonStarted({ courseUid, lessonUid }) {
+  if (lessonUid) await learningApi.recordProgress({ subject_kind: 'lesson', subject_uid: lessonUid, status: 'started' });
+  if (courseUid) await learningApi.recordProgress({ subject_kind: 'course', subject_uid: courseUid, status: 'started' });
+}
+
 /** "Mark complete" on a standalone video or reading. Returns the stored progress row. */
 export async function markItemComplete(uid) {
   const reply = await learningApi.recordProgress({ subject_kind: 'item', subject_uid: uid, status: 'completed' });
