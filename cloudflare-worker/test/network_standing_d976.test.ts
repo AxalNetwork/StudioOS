@@ -71,6 +71,8 @@ function fixture() {
   db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/241_advisor_money_model.sql'), 'advisor_payout_accounts')));
   db.exec(stripForeignKeys(tableFromBaseline(read('cloudflare-worker/sql/migrations/361_partner_booking_ratings.sql'), 'partner_booking_ratings')));
   db.exec(MIGRATION);
+  // #4715: a booking copies the offer it was made on (offer_json).
+  db.exec(read('cloudflare-worker/sql/migrations/202611082030_advisor_booking_offer.sql'));
   const u = db.prepare('INSERT INTO users (id, email, role, name, partner_id, spinout_lab_active, is_active) VALUES (?,?,?,?,?,?,?)');
   u.run(ADMIN, 'admin@example.test', 'admin', 'Admin fixture', null, 0, 1);
   u.run(VIC, 'vic@example.test', 'advisor', 'Advisor fixture', null, 0, 1);

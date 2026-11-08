@@ -6,7 +6,7 @@ import {
   NothingYet, Pill, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass, money,
 } from '../expertise/kit';
-import { bookingView, formatDateTime } from '../advisory/kit';
+import { bookingView, formatDateTime, offerLine } from '../advisory/kit';
 import { acceptanceRate, classifyBooking, decisionMoment, medianDecision, spanText } from './opportunityLog';
 import { partialLine, readEveryPage } from './everyPage';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -210,6 +210,8 @@ export default function OpportunitiesZone() {
                     <Pill tone="neutral">Founder</Pill>
                   </div>
                   <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">{r.raw.topic || r.note || 'No question was written with the request.'}</p>
+                  {/* D4715: the offer the founder asked for, as recorded on the booking. */}
+                  {r.raw.offer && <p data-testid={`request-offer-${r.raw.id}`} className="mt-1 text-[12px] font-medium">{offerLine(r.raw.offer)}</p>}
                   <p className="mt-1 text-[11px] text-axal-faint">
                     Arrived {formatDateTime(r.raw.created_at)} · slot {r.startsAt ? formatDateTime(r.startsAt) : 'not recorded'}
                   </p>
