@@ -51,7 +51,8 @@ export function statements(output: string): string[] {
   const out: string[] = [];
   for (const line of output.toLowerCase().split(/\r?\n/)) {
     for (const part of line.split(/(?<=[.!?;])(?=\s|$)/)) {
-      const s = part.trim();
+      // One space for every run, so no pattern below backtracks over a long run of whitespace.
+      const s = part.replace(/\s+/g, ' ').trim();
       if (s) out.push(s);
     }
   }

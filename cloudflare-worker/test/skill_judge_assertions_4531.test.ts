@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkCase, judge, type CaseExpect } from '../src/services/agents/skillLifecycle.ts';
-import { JUDGE_VERSION, missingDataMiss, statements } from '../src/services/agents/skillAssertions.ts';
+import { JUDGE_VERSION, missingDataMiss, numberMiss, statements } from '../src/services/agents/skillAssertions.ts';
 import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
 
 const BOARD = SKILL_LIBRARY.find((e) => e.slug === 'board-meeting-brief')!.cases[0].expect as unknown as CaseExpect;
@@ -118,4 +118,11 @@ test('checkCase: numbers are validated, kept, and absent when a case has none', 
     const r = checkCase({ ...base, expect: { output: 'brief', must_include: ['DPI'], numbers: bad } });
     assert.equal(r.ok, false, JSON.stringify(bad).slice(0, 80));
   }
+});
+
+test('a long run of whitespace is one space, so the number pattern cannot backtrack over it', () => {
+  const gap = ' '.repeat(200_000);
+  const parts = statements(`DPI${gap}|${gap}0.20x |`);
+  assert.deepEqual(parts, ['dpi | 0.20x |']);
+  assert.equal(numberMiss({ metric: 'DPI', value: 0.2, unit: 'x', tolerance: 0 }, parts), null);
 });
