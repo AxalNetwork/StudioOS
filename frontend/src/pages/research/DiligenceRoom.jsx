@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
@@ -10,6 +10,7 @@ import useRecordCrumb from '../admin/useRecordCrumb';
 import { StatedLimit } from '../advisor/expertise/kit';
 import { activityLine, day, fileSize, roomFileState, when } from './diligenceRead';
 import { SharedEvidence } from '../cycles/evidence/InvestorEvidence';
+import { createRecordGate } from './recordGate.js';
 
 /**
  * `/research/diligence/:grantUid` — one data room, read by the investor who
@@ -60,13 +61,23 @@ export default function DiligenceRoom({ role = 'investor' }) {
   const [room, setRoom] = useState(null);
   const [state, setState] = useState('loading'); // loading | ready | missing | unreadable
 
+  // D4607: a read that answers after the route has moved on, or after the
+  // page has left, is dropped with its result, its error and its loading state.
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
+  useEffect(() => () => gate.current.invalidate(), []);
+
   const load = useCallback(async () => {
+    const fresh = gate.current.begin();
     setState('loading');
+    setRoom(null);
     try {
       const r = await api.research.diligenceRoom(grantUid);
+      if (!fresh()) return;
       setRoom(r);
       setState('ready');
     } catch (e) {
+      if (!fresh()) return;
       setRoom(null);
       // D278 — branch on the code, never on the sentence.
       setState(e?.code === 'room_not_found' ? 'missing' : 'unreadable');

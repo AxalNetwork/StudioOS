@@ -175,8 +175,12 @@ const PROMO_CAVEATS = [
   + 'only when the recorded count alone reaches its cap.',
   'A code names no licence and no cohort: any buyer can apply it, to the products it lists or '
   + 'to every product when it lists none.',
-  'A promo ceiling is not checked against these codes: nothing enforces one at checkout, and no '
-  + 'screen sets one yet.',
+  'A promo ceiling belongs to a licence, not to a code. A branch checkout refuses a discount that is '
+  + 'more than the ceiling HQ set for the period has left. A branch with no ceiling set for the period '
+  + 'allows discounts until HQ sets one (set on Revenue); its ceiling is Not recorded, which is not 0 and '
+  + 'not unlimited, and what it gives meanwhile is still counted. A checkout on HQ\'s own Worker has no '
+  + 'licence, so no ceiling applies to it. '
+  + 'Only a discount on the first payment is counted: later invoices of a repeating code are not.',
   'For a code that repeats, the number of months is kept by Stripe, not here.',
 ];
 

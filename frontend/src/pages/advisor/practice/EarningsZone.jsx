@@ -7,7 +7,8 @@ import {
   buttonClass, ghostButtonClass, inputClass, money,
 } from '../expertise/kit';
 import {
-  PAYOUT_STATE_LABEL, PAYOUT_TONE, createPeriodGate, cutNote, noteIsDirty, noteIsStale, payoutWhen, periodWindow, receivedCents,
+  PAYOUT_STATE_LABEL, PAYOUT_TONE, cutNote, draftFitsPeriod, latestOnly, noteIsDirty, noteIsStale,
+  payoutWhen, periodWindow, stateTiles,
 } from './earningsLedger';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -142,23 +143,23 @@ export function periodNoteSource(text, modelText, priorSource) {
 export default function EarningsZone() {
   const [view, setView] = useState('this_quarter');
   const [state, setState] = useState({ loading: true, error: '', data: null });
-  const [ledger, setLedger] = useState({ loading: true, error: '', data: null, key: null });
+  const [ledger, setLedger] = useState({ loading: true, error: '', data: null });
   const [payout, setPayout] = useState(null);
   const [payouts, setPayouts] = useState([]);
-  // #4713 (D4713): the note, its draft and the model's text are all FOR one
-  // period, named by `noteKey`. Accept / Discard / Save target `noteKey`, the
-  // period the displayed record belongs to, never the chip currently selected.
   const [note, setNote] = useState(null);
-  const [noteKey, setNoteKey] = useState(null);
   const [draft, setDraft] = useState('');
-  // Only the latest period's reads may commit (reverse-order responses).
-  const gate = useRef(createPeriodGate());
   const [drafting, setDrafting] = useState(false);
   // D773 (#2099): while the band drafts, the run is the Earnings board's
   // `draft:period-narrative` (lib/railOptions/advisor.js).
   useRailOption(drafting ? 'draft:period-narrative' : null, 'Draft it');
   // The model's last text for this window, so Accept can say who wrote what is filed.
   const [modelText, setModelText] = useState(null);
+  // #4679 — tickets so only the latest read/draft for the CURRENT period writes,
+  // and the period each piece of note text belongs to.
+  const ledgerTicket = useRef(latestOnly());
+  const restTicket = useRef(latestOnly());
+  const draftTicket = useRef(latestOnly());
+  const [draftKey, setDraftKey] = useState(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saveNote, setSaveNote] = useState(null);
@@ -212,71 +213,67 @@ export default function EarningsZone() {
     }
   }, []);
 
-  const loadLedger = useCallback(async (w, token = gate.current.begin(w.key)) => {
-    // The previous period's figures are cleared at once, so the old numbers are
-    // never painted under the new label while this read is in flight.
-    setLedger({ loading: true, error: '', data: null, key: w.key });
+  const loadLedger = useCallback(async (w) => {
+    const t = ledgerTicket.current.begin();
+    // The previous window's figures are cleared, not kept under the new
+    // heading while the read is in flight.
+    setLedger({ loading: true, error: '', data: null });
     try {
       const data = await api.getMyAdvisorLedger({ from: w.from, until: w.until });
-      if (!gate.current.isCurrent(token)) return;
-      setLedger({ loading: false, error: '', data, key: w.key });
+      if (!ledgerTicket.current.isCurrent(t)) return;
+      setLedger({ loading: false, error: '', data });
     } catch (e) {
-      if (!gate.current.isCurrent(token)) return;
-      setLedger({ loading: false, error: e?.message || 'This window could not be read.', data: null, key: w.key });
+      if (!ledgerTicket.current.isCurrent(t)) return;
+      setLedger({ loading: false, error: e?.message || 'This window could not be read.', data: null });
     }
   }, []);
 
-  const loadRest = useCallback(async (w, token = gate.current.begin(w.key)) => {
-    // The old period's note, draft and notices go at once; nothing of it stays
-    // on screen while the new period's note is read.
-    setNote(null); setNoteKey(null); setDraft(''); setModelText(null); setEditing(false); setSaveNote(null);
+  const loadRest = useCallback(async (w) => {
     // TOLERATED, NOT REQUIRED. The ledger is the page; the payout cards beside
     // it are configuration and history. A reader whose payout account fails to
     // load should still see what they earned, and each card says its own
     // absence rather than taking the page down.
+    const t = restTicket.current.begin();
     const [acct, hist, n] = await Promise.all([
       api.getMyAdvisorPayoutAccount().catch(() => null),
       api.listMyAdvisorPayouts().catch(() => null),
       api.getMyAdvisorPeriodNote(w.key).catch(() => null),
     ]);
-    if (!gate.current.isCurrent(token)) return;
+    if (!restTicket.current.isCurrent(t)) return;
     setPayout(acct);
     setPayouts(Array.isArray(hist?.items) ? hist.items : []);
     setNote(n?.note || null);
-    setNoteKey(w.key);
     setDraft(n?.note?.body || '');
+    setDraftKey(w.key);
     setModelText(n?.note?.source === 'ai' ? n.note.body : null);
     setEditing(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    // ONE token for the period, shared by its ledger and note reads.
-    const token = gate.current.begin(window_.key);
-    loadLedger(window_, token);
-    loadRest(window_, token);
+    // A new period invalidates any model draft still in flight for the old one,
+    // and the text on screen no longer belongs to the period shown.
+    draftTicket.current.cancel();
+    setDrafting(false); setDraftKey(null); setSaveNote(null);
+    // #4713: the old period's note leaves the screen at once, not when the new
+    // one lands, so it is never read (or filed) under the new period's label.
+    setNote(null); setDraft(''); setModelText(null); setEditing(false);
+    loadLedger(window_); loadRest(window_);
   }, [loadLedger, loadRest, window_]);
 
-  // The note on screen is the period shown only once it has been read for it.
-  const noteShown = noteKey === window_.key;
-  const dirty = noteShown && noteIsDirty(note, draft);
-
-  // #4713: a note edit that is not filed is resolved before the period changes.
-  const changeView = useCallback((next) => {
+  // #4713: typed or drafted text that is not filed is resolved before the
+  // period changes; declining keeps the period and the text.
+  const changeView = (next) => {
     if (next === view) return;
-    if (dirty) {
-      const ok = typeof globalThis.confirm === 'function'
-        ? globalThis.confirm(`You have an unfiled note for ${window_.label}. Switch period and discard it?`)
-        : false;
-      if (!ok) return;
-    }
+    if (noteIsDirty(note, draft)
+      && !window.confirm('This period\'s note is not filed. Switch period and discard it?')) return;
     setView(next);
-  }, [view, dirty, window_]);
+  };
 
   const d = state.data;
-  // The ledger on screen is the period shown, and only that period's.
-  const L = ledger.key === window_.key ? ledger.data : null;
+  const L = ledger.data;
   const totals = L?.totals;
+  const tiles = stateTiles(L);
 
   const nothingRecorded = d
     && !d.billed_cents && !d.collected_cents && !d.written_off_cents && !d.unpriced_count;
@@ -302,15 +299,13 @@ export default function EarningsZone() {
     const cell = (v) => (v == null ? '' : `"${String(v).replace(/"/g, '""')}"`);
     const cents = (v) => (v == null ? '' : (Number(v) / 100).toFixed(2));
     const lines = [
-      ['Client', 'Sessions', 'Unpriced sessions', 'Retainer', 'Gross', 'Platform cut', 'Net of cut'].join(','),
+      ['Client', 'Sessions', 'Unpriced sessions', 'Retainer', 'Gross', 'Platform cut', 'You receive'].join(','),
       ...rows.map((r) => [
         cell(r.client_name), r.sessions, r.unpriced_sessions,
         cents(r.retainer_cents), cents(r.gross_cents), cents(r.cut_cents), cents(r.net_cents),
       ].join(',')),
       ['Total', totals?.sessions ?? '', totals?.unpriced_sessions ?? '', '',
         cents(totals?.gross_cents), cents(totals?.cut_cents), cents(totals?.net_cents)].join(','),
-      // The same definitions as the page: priced work is not money received.
-      ['Collected (net of cut)', '', '', '', '', '', cents(receivedCents(L?.figures))].join(','),
     ];
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -367,10 +362,8 @@ export default function EarningsZone() {
   // ── The AI band ──────────────────────────────────────────────────────────
 
   const narrate = useCallback(async () => {
-    // Bound to the period the figures belong to: a draft that comes back after
-    // the reader has moved on is dropped, never filed under another period.
-    const key = window_.key;
-    if (!noteShown || !L) return;
+    const t = draftTicket.current.begin();
+    const forKey = window_.key;
     setDrafting(true); setSaveNote(null);
     try {
       // COVERAGE LINES, NOT ROWS. The same rule the rail follows: these are
@@ -381,8 +374,9 @@ export default function EarningsZone() {
       const coverage = [
         `${window_.label} gross ${money(totals?.gross_cents) ?? 'not recorded'}`,
         `platform cut ${money(totals?.cut_cents) ?? 'not recorded'} at ${takeRatePct(L?.take_rate)}`,
-        `priced work net of the platform cut ${money(totals?.net_cents) ?? 'not recorded'}`,
-        `recorded as collected (received) ${money(receivedCents(L?.figures)) ?? 'not recorded'}`,
+        `received (collected, net of the cut) ${money(tiles?.received_cents) ?? 'not recorded'}`,
+        `billed and not yet paid ${money(tiles?.unpaid_cents) ?? 'not recorded'}`,
+        `written off ${money(tiles?.written_off_cents) ?? 'not recorded'}`,
         `${totals?.priced_sessions ?? 0} priced sessions, ${totals?.unpriced_sessions ?? 0} with no price recorded`,
         L?.concentration
           ? `top client is ${L.concentration.pct}% of gross`
@@ -392,58 +386,53 @@ export default function EarningsZone() {
       const res = await api.aiWorkspaceExplain({ workspace: 'Practice', zone: 'Earnings', coverage });
       const text = String(res?.text || res?.answer || '').trim();
       if (!text) throw new Error('The model returned nothing to read.');
-      if (gate.current.key !== key) return;
+      // A response for an earlier period is dropped, not filed under this one.
+      if (!draftTicket.current.isCurrent(t)) return;
+      setDraftKey(forKey);
       setDraft(text); setModelText(text); setEditing(true);
     } catch (e) {
-      if (gate.current.key !== key) return;
+      if (!draftTicket.current.isCurrent(t)) return;
       setSaveNote({ ok: false, text: e?.message || 'Nothing was drafted.' });
-    } finally { setDrafting(false); }
-  }, [L, totals, window_, noteShown]);
+    } finally { if (draftTicket.current.isCurrent(t)) setDrafting(false); }
+  }, [L, totals, tiles, window_]);
 
   const accept = useCallback(async () => {
-    // The key is the DISPLAYED record's, captured before the request; a switch
-    // while it is in flight cannot redirect it, and its result is applied only
-    // if that period is still the one shown.
-    const key = noteKey;
-    if (!noteShown || key == null || !L) return;
+    // The text must belong to the period on screen; otherwise nothing is sent.
+    if (!draftFitsPeriod(draftKey, window_.key)) {
+      setSaveNote({ ok: false, text: 'This text was written for another period, so it was not filed. Draft it again.' });
+      return;
+    }
     setBusy(true); setSaveNote(null);
     try {
-      const res = await api.saveMyAdvisorPeriodNote(key, {
+      const res = await api.saveMyAdvisorPeriodNote(window_.key, {
         body: draft,
         // 'edited' when the advisor changed a draft, 'ai' when they accepted
         // it as written, 'advisor' when no draft was involved. Over-crediting
         // the model and hiding it are both wrong, so the distinction is stored
         // (migration 242).
         source: periodNoteSource(draft, modelText, note?.source),
+        period_key: window_.key,
         figures: totals ? {
           gross_cents: totals.gross_cents, cut_cents: totals.cut_cents, net_cents: totals.net_cents,
         } : null,
       });
-      if (gate.current.key !== key) return;
       setNote(res.note); setEditing(false);
       setSaveNote({ ok: true, text: `Filed against ${window_.label}.` });
     } catch (e) {
-      if (gate.current.key !== key) return;
       setSaveNote({ ok: false, text: e?.message || 'That note was not filed.' });
     } finally { setBusy(false); }
-  }, [draft, modelText, note, noteKey, noteShown, totals, window_, L]);
+  }, [draft, draftKey, modelText, note, totals, window_]);
 
   const discard = useCallback(async () => {
-    const key = noteKey;
-    if (!noteShown || key == null) return;
     setBusy(true); setSaveNote(null);
     try {
-      // Nothing filed for this period yet: Discard only drops the local draft,
-      // and never sends a delete for a period that has no record on screen.
-      if (note) await api.deleteMyAdvisorPeriodNote(key);
-      if (gate.current.key !== key) return;
+      await api.deleteMyAdvisorPeriodNote(window_.key);
       setNote(null); setDraft(''); setModelText(null); setEditing(false);
       setSaveNote({ ok: true, text: 'Discarded.' });
     } catch (e) {
-      if (gate.current.key !== key) return;
       setSaveNote({ ok: false, text: e?.message || 'Nothing was discarded.' });
     } finally { setBusy(false); }
-  }, [noteKey, noteShown, note]);
+  }, [window_]);
 
   // ── Connect (PR5b) ───────────────────────────────────────────────────────
   // NEITHER CONTROL MOVES MONEY. Connecting returns a URL the advisor visits
@@ -516,18 +505,15 @@ export default function EarningsZone() {
         {L && (
           <>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Stat label={`${window_.label} priced`}
+              <Stat label={`${window_.label} gross`}
                 value={money(totals?.gross_cents) ?? <Unrecorded />}
-                note="sessions you priced, whether or not they were paid" />
+                note="sessions and retainers you priced" />
               <Stat label="Platform rate" tone="warn"
                 value={money(totals?.cut_cents) ?? <Unrecorded />}
                 note={`${takeRatePct(L.take_rate)} of gross, recorded per line`} />
-              {/* PRICED IS NOT RECEIVED. This tile is only what the advisor
-                  recorded as collected, net of the cut; priced-but-unpaid work
-                  is in the tile beside it and the figures row below. */}
-              <Stat label="Recorded as received" tone="ok"
-                value={money(receivedCents(L.figures)) ?? <Unrecorded />}
-                note="lines you recorded as collected, net of the platform rate" />
+              <Stat label="You received" tone="ok"
+                value={money(tiles?.received_cents) ?? <Unrecorded />}
+                note={`collected, net of the cut — ${tiles?.received_sessions ?? 0} session${tiles?.received_sessions === 1 ? '' : 's'}`} />
               {/* A SHARE OF NOTHING IS NOT NOUGHT PER CENT. 0% reads as "well
                   spread", which is the opposite of what an empty window
                   means, so the worker answers null and the tile says so. */}
@@ -538,29 +524,26 @@ export default function EarningsZone() {
                   : 'nothing priced in this window to concentrate'} />
             </div>
 
-            {/* #4713: the DISTINCT figures, each by what happened to the line.
-                Priced work, billed, collected, written off and outstanding are
-                different facts; the platform's recorded payouts are a sixth,
-                read from the payout ledger and shown as such. */}
-            {L.figures && (
-              <Card padding="md" className="mt-3" data-testid="ledger-figures">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="text-[13px] font-extrabold tracking-tight">Priced, billed and collected · {window_.label}</h3>
-                  <span className="text-[10.5px] text-axal-faint">Net of the platform cut · your own bookkeeping</span>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-3">
-                  <Figure label="Priced" cents={L.figures.priced?.net_cents} hint={`${L.figures.priced?.sessions ?? 0} sessions you priced`} />
-                  <Figure label="Billed" cents={L.figures.billed?.net_cents} hint="Billed, whether or not it has since been collected or written off." />
-                  <Figure strong label="Collected" cents={L.figures.collected?.net_cents} hint="Recorded as collected: the only money received." />
-                  <Figure label="Written off" cents={L.figures.written_off?.net_cents} hint="Billed, then decided against pursuing." />
-                  <Figure label="Outstanding" cents={L.figures.outstanding?.net_cents} hint="Billed and neither collected nor written off." />
-                  {L.recorded_payouts?.available
-                    ? <Figure label="Paid out by the platform" cents={L.recorded_payouts.paid_cents}
-                        hint={L.recorded_payouts.payouts ? `${L.recorded_payouts.payouts} payout${L.recorded_payouts.payouts === 1 ? '' : 's'} recorded paid in this window` : 'No payout is recorded as paid in this window.'} />
-                    : <Card padding="md"><div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Paid out by the platform</div>
-                        <div className="mt-1 text-[18px] font-extrabold"><Unrecorded>Could not be read</Unrecorded></div></Card>}
-                </div>
-              </Card>
+            {/* #4679 — WHERE THE PRICED MONEY STANDS. Only "Received" above is
+                money in hand; these are the other states a priced session can
+                be in, each from the worker's own per-state totals. */}
+            {tiles && (
+              <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="earnings-states">
+                <Stat label="Billed, not yet paid"
+                  value={money(tiles.unpaid_cents) ?? <Unrecorded />}
+                  note={`${tiles.unpaid_sessions} session${tiles.unpaid_sessions === 1 ? '' : 's'} awaiting payment`} />
+                <Stat label="Written off"
+                  value={money(tiles.written_off_cents) ?? <Unrecorded />}
+                  note={`${tiles.written_off_sessions} session${tiles.written_off_sessions === 1 ? '' : 's'} you closed unpaid`} />
+                <Stat label="Owed back"
+                  value={money(tiles.refunds_owed_cents) ?? <Unrecorded />}
+                  note={`collected on a cancelled or missed session; already refunded ${money(tiles.refunded_cents) ?? 'not recorded'}`} />
+                <Stat label="Paid out"
+                  value={money(tiles.paid_out_cents) ?? <Unrecorded />}
+                  note={tiles.void_sessions
+                    ? `${tiles.void_sessions} cancelled or missed session${tiles.void_sessions === 1 ? '' : 's'} left out`
+                    : 'sent to your payout account in this window'} />
+              </div>
             )}
 
             <Card padding="md" className="mt-3">
@@ -574,7 +557,7 @@ export default function EarningsZone() {
                 <table className="w-full min-w-[620px] text-[12px]">
                   <thead>
                     <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
-                      {['Client', 'Sessions', 'Retainer', 'Priced', 'Cut', 'Net of cut'].map((h, i) => (
+                      {['Client', 'Sessions', 'Retainer', 'Gross', 'Cut', 'You receive'].map((h, i) => (
                         <th key={h} className={`px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint ${i ? 'text-right' : ''}`}>
                           {h}
                         </th>
@@ -785,12 +768,12 @@ export default function EarningsZone() {
                 data-testid="input-aiband-d4" />
             )}
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button type="button" className={ghostButtonClass} onClick={narrate} disabled={drafting || busy || !noteShown || !L}>
+              <button type="button" className={ghostButtonClass} onClick={narrate} disabled={drafting || busy}>
                 {drafting ? 'Drafting…' : note ? 'Draft again' : 'Draft it'}
               </button>
               {(editing || !note) && (
                 <button type="button" className={buttonClass} onClick={accept}
-                  disabled={busy || !draft.trim() || !noteShown || !L}>
+                  disabled={busy || !draft.trim()}>
                   {busy ? 'Filing…' : 'Accept'}
                 </button>
               )}
@@ -800,7 +783,7 @@ export default function EarningsZone() {
                 </button>
               )}
               {(note || draft) && (
-                <button type="button" className={ghostButtonClass} onClick={discard} disabled={busy || !noteShown}>
+                <button type="button" className={ghostButtonClass} onClick={discard} disabled={busy}>
                   Discard
                 </button>
               )}
@@ -911,7 +894,7 @@ export default function EarningsZone() {
       <StatedLimit title="No margin here, only revenue">
         Every figure on this page is an amount you recorded against a session, divided by the
         recorded platform rate. Nothing records what a session cost you to deliver — preparation,
-        travel, the hours behind a retainer — so "Net of cut" is revenue less the platform rate
+        travel, the hours behind a retainer — so "You receive" is revenue less the platform rate
         and not profit, and the page does not offer a margin it cannot compute.
       </StatedLimit>
     </div>

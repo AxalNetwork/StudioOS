@@ -353,7 +353,8 @@ test('clearing a price clears the cut and the rate with it', async () => {
   const id = booking(db, 'b1', 1, CLIENT_A);
   await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 30_000 });
   const r = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada,
-    { amount_cents: null, billing_state: 'unpriced' });
+    { amount_cents: null, billing_state: 'unpriced', reprice: true });
+  // #4679: taking a price away is a repricing, so it is said on purpose.
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.amount_cents, null);
   // A stale cut left behind would be a figure with nothing under it.
@@ -836,7 +837,10 @@ test('#4713: repricing is explicit and audited: new amount at the current rate, 
   const id = booking(db, 'b1', 1, CLIENT_A);
   await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 10_000 });
   db.prepare('UPDATE platform_settings SET value = ? WHERE key = ?').run('1200', 'advisor_take_rate_bps');
-  const r = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 20_000 });
+  // main's #4936 makes a change of a priced amount explicit: without `reprice: true` it is refused.
+  const implicit = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 20_000 });
+  assert.deepEqual([implicit.status, implicit.body.code], [409, 'reprice_required']);
+  const r = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 20_000, reprice: true });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual([r.body.amount_cents, r.body.take_rate_bps, r.body.platform_cut_cents], [20_000, 1200, 2400]);
   const ev = db.prepare('SELECT * FROM advisor_booking_price_events WHERE booking_id = ?').all(id) as any[];
@@ -857,24 +861,24 @@ test('#4713: a collected or written-off line cannot be repriced; clearing a bill
   const e = env(db);
   const id = booking(db, 'b1', 1, CLIENT_A);
   await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 10_000, billing_state: 'collected' });
-  const refused = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 99_000 });
-  assert.deepEqual([refused.status, refused.body.code], [409, 'price_settled']);
+  const refused = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 99_000, reprice: true });
+  assert.deepEqual([refused.status, refused.body.code], [409, 'settled_price']);
   assert.equal(rowOf(db, id).amount_cents, 10_000);
   // The explicit two-step correction: back to billed (status-only), then an audited reprice.
   const back = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { billing_state: 'billed' });
   assert.equal(back.status, 200, JSON.stringify(back.body));
-  const fixed = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 12_000 });
+  const fixed = await call(e, 'PATCH', `/me/bookings/${id}/billing`, ada, { amount_cents: 12_000, reprice: true });
   assert.deepEqual([fixed.status, fixed.body.amount_cents], [200, 12_000]);
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM advisor_booking_price_events WHERE booking_id = ?').get(id) as any).n, 1);
   const id2 = booking(db, 'b2', 1, CLIENT_A);
   await call(e, 'PATCH', `/me/bookings/${id2}/billing`, ada, { amount_cents: 10_000 });
-  const cleared = await call(e, 'PATCH', `/me/bookings/${id2}/billing`, ada, { amount_cents: null, billing_state: 'unpriced' });
+  const cleared = await call(e, 'PATCH', `/me/bookings/${id2}/billing`, ada, { amount_cents: null, billing_state: 'unpriced', reprice: true });
   assert.equal(cleared.status, 200);
   const ev = db.prepare('SELECT from_amount_cents, to_amount_cents FROM advisor_booking_price_events WHERE booking_id = ?').all(id2) as any[];
   assert.deepEqual(ev.map((x) => [x.from_amount_cents, x.to_amount_cents]), [[10_000, null]]);
 });
 
-test('#4713: the ledger names priced, billed, collected, written off and outstanding apart, and priced work is never "received"', async () => {
+test('#4713: the ledger names priced, unpaid (billed), collected and written off apart, and priced work is never "received"', async () => {
   // Mutation checked: collected figure taken from every priced line → collected equals priced.
   const db = freshDb();
   const e = env(db);
@@ -891,19 +895,20 @@ test('#4713: the ledger names priced, billed, collected, written off and outstan
   db.prepare('UPDATE platform_settings SET value = ? WHERE key = ?').run('1000', 'advisor_take_rate_bps');
   const r = await call(e, 'GET', '/me/ledger', ada);
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  const f = r.body.figures;
+  // main's #4936 `states`: `billed` is billed and not yet settled (the PR's "outstanding").
+  const f = r.body.states;
   const g = (k: string) => [f[k].sessions, f[k].gross_cents, f[k].cut_cents, f[k].net_cents];
-  assert.deepEqual(g('priced'), [4, 100_000, 15_000, 85_000]);
-  assert.deepEqual(g('billed'), [4, 100_000, 15_000, 85_000]);
+  const t = r.body.totals;
+  assert.deepEqual([t.priced_sessions, t.gross_cents, t.cut_cents, t.net_cents], [4, 100_000, 15_000, 85_000], 'each line at its own stored 15%, not today\'s 10%');
   assert.deepEqual(g('collected'), [1, 10_000, 1_500, 8_500]);
   assert.deepEqual(g('written_off'), [1, 30_000, 4_500, 25_500]);
-  assert.deepEqual(g('outstanding'), [2, 60_000, 9_000, 51_000]);
-  assert.equal(f.billed.net_cents, f.collected.net_cents + f.written_off.net_cents + f.outstanding.net_cents, 'billed = collected + written off + outstanding');
-  assert.equal(r.body.totals.net_cents, 85_000, 'the priced total is unchanged');
-  assert.notEqual(f.collected.net_cents, r.body.totals.net_cents, 'priced work is not what was received');
+  assert.deepEqual(g('billed'), [2, 60_000, 9_000, 51_000]);
+  assert.equal(t.net_cents, f.collected.net_cents + f.written_off.net_cents + f.billed.net_cents, 'priced = collected + written off + unpaid');
+  assert.equal(t.received_cents, 8_500, 'received is the collected net');
+  assert.notEqual(t.received_cents, t.net_cents, 'priced work is not what was received');
 });
 
-test('#4713: recorded payouts count only paid ones inside the window; an unreadable payout ledger is { available: false }', async () => {
+test('#4713: paid out counts only paid payouts inside the window; an unreadable payout ledger is null, never 0', async () => {
   const db = freshDb();
   const e = env(db);
   const ins = db.prepare(`INSERT INTO advisor_payouts (uid, advisor_id, amount_cents, state, paid_at) VALUES (?, 1, ?, ?, ?)`);
@@ -911,13 +916,13 @@ test('#4713: recorded payouts count only paid ones inside the window; an unreada
   ins.run('po2', 7_000, 'scheduled', null);
   ins.run('po3', 9_000, 'paid', '2026-02-01T10:00:00.000Z');
   const win = await call(e, 'GET', '/me/ledger?from=2026-07-01T00:00:00.000Z&until=2026-10-01T00:00:00.000Z', ada);
-  assert.deepEqual(win.body.recorded_payouts, { available: true, paid_cents: 5_000, payouts: 1 });
+  assert.equal(win.body.states.paid_out_cents, 5_000);
   const all = await call(e, 'GET', '/me/ledger', ada);
-  assert.deepEqual(all.body.recorded_payouts, { available: true, paid_cents: 14_000, payouts: 2 });
+  assert.equal(all.body.states.paid_out_cents, 14_000);
   db.exec('DROP TABLE advisor_payouts');
   const gone = await call(e, 'GET', '/me/ledger', ada);
   assert.equal(gone.status, 200);
-  assert.deepEqual(gone.body.recorded_payouts, { available: false });
+  assert.equal(gone.body.states.paid_out_cents, null);
 });
 
 test('#4713: availability replacement with a stale revision is refused and overwrites nothing', async () => {

@@ -191,6 +191,8 @@ export function scheduleOf(p) {
   if (!p.grant) return null;
   if (s?.status === 'signed') return { text: `Signed ${longDate(s.signed_at)}`, muted: false };
   if (s?.status === 'sent') return { text: 'Sent, not signed', muted: false };
+  // D4805 (#4805): the schedule the studio signed was for earlier terms.
+  if (s?.status === 'amendment_needed') return { text: 'Terms changed, new signature needed', muted: false };
   if (s?.status === 'not_sent') return { text: 'Not sent', muted: true };
   return { text: NOT_RECORDED, muted: true };
 }
@@ -294,6 +296,7 @@ export function scheduleChip(grant) {
   const s = grant?.schedule?.status;
   if (s === 'signed') return 'Program schedule · signed';
   if (s === 'sent') return 'Program schedule · sent';
+  if (s === 'amendment_needed') return 'Program schedule · amendment needed';
   return 'No schedule sent yet';
 }
 
@@ -347,12 +350,15 @@ export function termRows(p) {
   const s = g.schedule || {};
   const contract = s.status === 'signed' ? `Program schedule: ${nameOf(p.program_key)} · Signed ${longDate(s.signed_at)}`
     : s.status === 'sent' ? `Program schedule: ${nameOf(p.program_key)} · Sent, not signed`
-      : 'Not sent';
+      : s.status === 'amendment_needed' ? `Program schedule: ${nameOf(p.program_key)} · Terms changed, new signature needed`
+        : 'Not sent';
   out.push({
     eye: 'CONTRACT', text: contract, unset: s.status !== 'signed' && s.status !== 'sent', chip: null,
     sub: t.requires_signed_schedule === 0
       ? 'HQ does not wait on a signed schedule for this program.'
-      : s.status === 'signed' ? 'It states the terms as they stood the day HQ sent it.' : 'This program is in force only once the schedule is signed.',
+      : s.status === 'signed' ? 'It states the terms as they stood the day HQ sent it.'
+        : s.status === 'amendment_needed' ? 'The schedule you signed was for earlier terms. This program is in force only once the amended schedule is signed.'
+          : 'This program is in force only once the schedule is signed.',
   });
   out.push(g.note
     ? { eye: 'NOTE TO THE STUDIO', text: g.note, sub: null, unset: false, chip: null }

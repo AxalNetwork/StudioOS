@@ -117,6 +117,9 @@ function freshDb() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  // The visibility read counts invoiced and paid work (#4696), so it joins the
+  // real invoice table; the migration is applied, not mirrored.
+  db.exec(migration('188_engagement_invoices'));
   db.exec(migration('209_partner_offers_stores'));
   // APPLIED, NOT MIRRORED. Every later migration that touches these tables is
   // run here in order, so a route reading a column added after 209 is tested
@@ -517,7 +520,7 @@ test('a rule with no sentence is counted, because a pass citing it says nothing'
   assert.equal(r.unstated_count, 1);
 });
 
-test('the response says nothing enforces these rules', async () => {
+test('the response says what reads these rules: scoring and ranking, never auto-decline', async () => {
   const e = env(freshDb());
   await call(e, 'POST', '/fit-rules', ours, {
     kind: 'capability_absent', value: 'mobile', statement: 'We do not build mobile apps.',
@@ -526,8 +529,9 @@ test('the response says nothing enforces these rules', async () => {
   // In the RESPONSE rather than only in page copy: a page can drift away from
   // what the API does, and the rail promises no lead is passed except on a
   // click. This is where that promise is kept.
-  assert.equal(r.enforcement, 'none');
-  assert.match(r.enforcement_note, /nothing scores, filters or auto-declines/i);
+  assert.equal(r.enforcement, 'score_and_rank');
+  assert.equal(r.auto_decline, false);
+  assert.match(r.enforcement_note, /nothing is auto-declined/i);
 });
 
 test('a rule that is not a floor needs something to be about', async () => {

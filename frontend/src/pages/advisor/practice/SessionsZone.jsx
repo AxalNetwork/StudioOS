@@ -21,6 +21,7 @@ import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import useScrollToHash from '../../../hooks/useScrollToHash';
 import SessionTypesPanel from './SessionTypesPanel';
 import BookingLinksPanel from './BookingLinksPanel';
+import { PublishAvailabilityCard, SessionLifecyclePanel } from './SessionActions';
 
 /**
  * Practice · Sessions — canvas PR4, `/practice/sessions`, tagged **FEED**.
@@ -138,6 +139,7 @@ export default function SessionsZone() {
   const [editing, setEditing] = useState(null);
   const [blocking, setBlocking] = useState(false);
   const [blockNote, setBlockNote] = useState(null);
+  const [publishOpen, setPublishOpen] = useState(false);
 
   const loadSlots = useCallback(async (forView) => {
     setSlots((c) => ({ ...c, loading: true, error: '' }));
@@ -256,7 +258,7 @@ export default function SessionsZone() {
       // and got eleven days needs to know which request was not honoured.
       const done = res.skipped_booked
         ? `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}. ${res.skipped_booked} `
-          + `already booked and left alone — cancel those from Engagements if you mean to.`
+          + `already booked and left alone — cancel those under Run your sessions if you mean to.`
         : `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}.`;
       // D1596 §4 step 3: the card is decided only now that Block has written. A
       // decide that fails leaves the block in place, says so, and leaves the
@@ -365,12 +367,15 @@ export default function SessionsZone() {
               : 'your rules could not be read'} />
       </div>
 
+      <PublishAvailabilityCard open={publishOpen} onToggle={() => setPublishOpen((v) => !v)}
+        onPublished={() => loadSlots(view)} />
+
       <ZoneBody loading={slots.loading} error={slots.error} onRetry={() => loadSlots(view)}
         isEmpty={!slots.loading && !slots.error && days.length === 0}
         empty={<NothingYet
           title="No slots in this window"
-          body="This grid shows the hours you have published. Availability is created under Opportunities; the rules below decide how many hours exist to begin with."
-          action={<Link to="/practice/opportunities" className="text-emerald-700 underline">Publish availability →</Link>}
+          body="This grid shows the hours you have published. Publish availability above; the rules below decide how many hours exist to begin with."
+          action={<button type="button" className={`${buttonClass} min-h-[44px] sm:min-h-0`} onClick={() => setPublishOpen(true)}>Publish availability</button>}
         />}>
         <Card padding="md">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -407,6 +412,8 @@ export default function SessionsZone() {
           migration 240's stores; each body is now the canvas's editor, so the
           two addresses and this page answer from one place. The session types
           table needs the width, so it is no longer one of three columns. */}
+      <SessionLifecyclePanel bookings={bookings.items} loading={bookings.loading} onChanged={loadBookings} />
+
       <Card padding="md" id="session-types" className="scroll-mt-24">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-[13px] font-extrabold tracking-tight">Session types</h3>
@@ -453,8 +460,8 @@ export default function SessionsZone() {
           isEmpty={billable.length === 0}
           empty={<NothingYet
             title="No sessions to price yet"
-            body="Sessions appear here once a booking is confirmed. The lifecycle — complete, no-show, cancel — is run from Engagements. This records only what each session was worth."
-            action={<Link to="/practice/engagements" className="text-emerald-700 underline">Run the lifecycle →</Link>}
+            body="Sessions appear here once a booking is confirmed. The lifecycle — held, no-show, cancel — is run in Run your sessions above. This records only what each session was worth."
+            action={<Link to="/practice/opportunities" className="text-emerald-700 underline">Accept a request →</Link>}
           />}>
           <div className="mt-3 space-y-3">
             {billable.map((b) => (
@@ -491,8 +498,8 @@ export default function SessionsZone() {
             <p className="text-[11px] leading-relaxed text-axal-faint">
               Only confirmed and completed sessions are listed. A request you have not answered yet
               has no agreed session to price, and a cancelled or no-show session has no amount to
-              record. The full booking history, including all three, is under{' '}
-              <Link to="/practice/engagements" className="text-emerald-700 underline">Engagements</Link>.
+              record. The full booking history, including all three, is in{' '}
+              <a href="#session-lifecycle" className="text-emerald-700 underline">Run your sessions</a>.
             </p>
           </div>
         </ZoneBody>

@@ -35,6 +35,8 @@ import { d1Over } from './_d1_sqlite.mjs';
 const ROOT = process.cwd();
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const M564 = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/564_investor_cohort_access.sql'), 'utf8');
+// D4809: how each NDA send went.
+const MDELIVERY = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611071835_investor_cohort_nda_delivery.sql'), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const ADMIN = 1, INV = 10, INV2 = 11, UNVERIFIED = 12, F1 = 20, F2 = 21, F3 = 22, OTHER_FOUNDER = 30;
@@ -43,8 +45,9 @@ const FAR = '2099-12-31';
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'cohort_cycles', 'company_week_status', 'investor_profiles', 'projects', 'activity_logs']) db.exec(tableFromBaseline(BASELINE, t));
+  for (const t of ['users', 'cohort_cycles', 'company_week_status', 'investor_profiles', 'projects', 'activity_logs', 'esign_envelopes']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M564);
+  db.exec(MDELIVERY);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, kyc_status, founder_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test', 1, 'approved', null);
   u.run(INV, 'investor', 'Ivy Investor', 'ivy@example.test', 1, 'approved', null);
@@ -96,6 +99,23 @@ const inbox = (db: DatabaseSync, userId?: number) =>
   (db.prepare(`SELECT user_id, title, body, payload FROM notifications_inbox ${userId ? 'WHERE user_id = ?' : ''} ORDER BY id`)
     .all(...(userId ? [userId] : [])) as any[]);
 const signNda = (db: DatabaseSync, uid: string) => db.prepare("UPDATE investor_cohort_access SET nda_signed_at = datetime('now') WHERE uid = ?").run(uid);
+
+/** D4809: mail that goes. Gmail's token and send answer 200; anything else fails the test. */
+const MAIL = { GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'secret', GMAIL_REFRESH_TOKEN: 'refresh' };
+function mailer() {
+  let sent = 0;
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: any) => {
+    const u = String(url);
+    if (u.startsWith('https://oauth2.googleapis.com/')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
+    if (u.startsWith('https://gmail.googleapis.com/')) { sent += 1; return new Response('{}', { status: 200 }); }
+    throw new Error('unexpected fetch ' + u);
+  }) as typeof fetch;
+  return { count: () => sent, restore: () => { globalThis.fetch = saved; } };
+}
+/** The template store creates its table on first read (the summary reads it), then HQ publishes the stand-in. */
+const publishNda = async (db: DatabaseSync) => { await call(db, ADMIN, 'GET', `${A}/summary`); db.prepare(`INSERT INTO legal_templates (slug, title, body_md, category, is_active, is_stub) VALUES (?, ?, ?, 'compliance', 1, 0)`)
+  .run('investor_cohort_nda_v1', 'Cohort NDA', 'TEST STAND-IN. {{investor_name}} of {{firm_name}} reads the {{cohort}} until {{ends_at}}.'); };
 
 // ---------------------------------------------------------------------------
 // The rule and the helpers, alone
@@ -310,7 +330,8 @@ test('the cohort NDA: refused while no template is published; sent from it once 
     // HQ publishes the template (its wording here is a test stand-in, not the NDA).
     db.prepare(`INSERT INTO legal_templates (slug, title, body_md, category, is_active, is_stub) VALUES (?, ?, ?, 'compliance', 1, 0)`)
       .run('investor_cohort_nda_v1', 'Cohort NDA', 'TEST STAND-IN. {{investor_name}} of {{firm_name}} reads the {{cohort}} until {{ends_at}}.');
-    r = await call(db, ADMIN, 'POST', `${A}/${uid}/nda`);
+    const mail = mailer();
+    try { r = await call(db, ADMIN, 'POST', `${A}/${uid}/nda`, undefined, MAIL); } finally { mail.restore(); }
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.grant.nda_state, 'sent');
     const env = db.prepare('SELECT envelope_uuid, document_type, document_body FROM esign_envelopes').get() as any;
@@ -524,7 +545,7 @@ test('the founder list says who can see them, with the investor and fund', async
 test("Programs' Activity lists the three writes under Investor cohorts, naming the cohort and never the investor", async () => {
   const db = fixture();
   try {
-    assert.deepEqual([...PROGRAM_ACTIVITY_ACTIONS['investor-cohorts']], ['investor_cohort.granted', 'investor_cohort.ended', 'investor_cohort.nda_sent']);
+    assert.deepEqual([...PROGRAM_ACTIVITY_ACTIONS['investor-cohorts']], ['investor_cohort.granted', 'investor_cohort.ended', 'investor_cohort.nda_sent', 'investor_cohort.nda_send_failed', 'investor_cohort.nda_voided']);
     db.exec('CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY)');
     const uid = (await give(db)).body.grant.uid;
     await call(db, ADMIN, 'POST', `${A}/${uid}/end`);
@@ -533,5 +554,110 @@ test("Programs' Activity lists the three writes under Investor cohorts, naming t
       ['investor_cohort.ended', 'admin', { cohort_cycle_id: CYCLE }],
       ['investor_cohort.granted', 'admin', { cohort_cycle_id: CYCLE }],
     ]);
+  } finally { db.close(); }
+});
+
+// ---------------------------------------------------------------------------
+// D4809: grant → send → retry → sign → active, from Programs
+// ---------------------------------------------------------------------------
+
+const grantOf = async (db: DatabaseSync, uid: string) => (await call(db, ADMIN, 'GET', `${A}?q=Ivy`)).body.items.find((x: any) => x.uid === uid);
+const envelopes = (db: DatabaseSync) => db.prepare('SELECT envelope_uuid, status FROM esign_envelopes ORDER BY id').all() as any[];
+const audits = (db: DatabaseSync) => db.prepare("SELECT action FROM admin_audit_log WHERE action LIKE 'investor_cohort.%' ORDER BY id").all().map((a: any) => a.action);
+const sendNda = async (db: DatabaseSync, uid: string, body?: unknown, mail = true) => {
+  const m = mail ? mailer() : null;
+  try { return await call(db, ADMIN, 'POST', `${A}/${uid}/nda`, body, mail ? MAIL : {}); } finally { m?.restore(); }
+};
+
+test('D4809: giving access sends nothing; Send NDA delivers it; access stays closed until the envelope completes, then opens; each step is recorded', async () => {
+  const db = fixture();
+  try {
+    await publishNda(db);
+    const given = await give(db);
+    assert.deepEqual([given.body.grant.state, given.body.grant.nda_state], ['waits_for_nda', 'not_sent']);
+    assert.equal(envelopes(db).length, 0, 'giving access sends no NDA');
+    const r = await sendNda(db, given.body.grant.uid);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual([r.body.grant.nda_state, r.body.grant.state, r.body.grant.nda.delivery, r.body.envelope.email_sent], ['sent', 'waits_for_nda', 'delivered', true]);
+    assert.ok(r.body.grant.nda.sent_at);
+    const uuid = envelopes(db)[0].envelope_uuid;
+    assert.deepEqual(await onCohortNdaEnvelopeCompleted({ DB: d1Over(db) } as any, uuid), { changed: true });
+    const after = await grantOf(db, given.body.grant.uid);
+    assert.deepEqual([after.nda_state, after.state], ['signed', 'active']);
+    assert.ok(after.nda.signed_at);
+    // The signature's history row, once.
+    await onCohortNdaEnvelopeCompleted({ DB: d1Over(db) } as any, uuid);
+    const signed = db.prepare("SELECT user_id, entity_id FROM activity_logs WHERE action = 'investor_cohort.nda_signed'").all() as any[];
+    assert.deepEqual(signed.map((x) => [x.user_id, x.entity_id]), [[INV, given.body.grant.uid]]);
+    assert.deepEqual(audits(db), ['investor_cohort.granted', 'investor_cohort.nda_sent']);
+  } finally { db.close(); }
+});
+
+test('D4809: a send whose email fails is recorded as failed on the grant; Send NDA again voids that envelope and delivers a new one', async () => {
+  const db = fixture();
+  try {
+    await publishNda(db);
+    const uid = (await give(db)).body.grant.uid;
+    const failed = await sendNda(db, uid, undefined, false);
+    assert.equal(failed.status, 200, 'the envelope exists; only its email failed');
+    assert.deepEqual([failed.body.grant.nda_state, failed.body.grant.nda.delivery, failed.body.envelope.email_sent], ['delivery_failed', 'failed', false]);
+    assert.equal((await call(db, ADMIN, 'GET', `${A}?nda=delivery_failed`)).body.items.length, 1, 'the list filters by it');
+    const retry = await sendNda(db, uid);
+    assert.equal(retry.status, 200, JSON.stringify(retry.body));
+    assert.deepEqual([retry.body.grant.nda_state, retry.body.grant.nda.delivery], ['sent', 'delivered']);
+    assert.deepEqual(envelopes(db).map((e) => e.status), ['void', 'sent'], 'the failed envelope is voided, never left out beside the new one');
+    assert.notEqual(retry.body.envelope.uuid, failed.body.envelope.uuid);
+    assert.deepEqual(audits(db), ['investor_cohort.granted', 'investor_cohort.nda_send_failed', 'investor_cohort.nda_voided', 'investor_cohort.nda_sent']);
+  } finally { db.close(); }
+});
+
+test('D4809: a send that cannot create the envelope records the failure on the same grant, and the retry recovers it', async () => {
+  const db = fixture();
+  try {
+    await publishNda(db);
+    const uid = (await give(db)).body.grant.uid;
+    // Make the envelope store refuse the insert, once the table exists.
+    await sendNda(db, uid, undefined, false);
+    db.exec("UPDATE esign_envelopes SET status = 'void'"); db.exec("UPDATE investor_cohort_access SET nda_delivery = NULL, nda_envelope_uuid = NULL");
+    db.exec(`CREATE TRIGGER no_envelopes BEFORE INSERT ON esign_envelopes BEGIN SELECT RAISE(ABORT, 'store down'); END`);
+    const r = await sendNda(db, uid);
+    assert.deepEqual([r.status, r.body.error], [502, 'envelope_send_failed']);
+    const g = await grantOf(db, uid);
+    assert.deepEqual([g.nda_state, g.nda.delivery, g.state], ['delivery_failed', 'failed', 'waits_for_nda']);
+    db.exec('DROP TRIGGER no_envelopes');
+    const ok = await sendNda(db, uid);
+    assert.deepEqual([ok.status, ok.body.grant.nda_state], [200, 'sent']);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM investor_cohort_access').get()?.n, 1, 'never a second grant');
+  } finally { db.close(); }
+});
+
+test('D4809: a declined or voided envelope is sent again from the same grant; a delivered one only with Void and resend; never once signing has started', async () => {
+  const db = fixture();
+  try {
+    await publishNda(db);
+    const uid = (await give(db)).body.grant.uid;
+    await sendNda(db, uid);
+    // Out and delivered: a plain send is refused, Void and resend replaces it.
+    const plain = await sendNda(db, uid);
+    assert.deepEqual([plain.status, plain.body.error], [409, 'already_sent']);
+    // Signing started: nothing is voided or sent.
+    db.exec("UPDATE esign_recipients SET status = 'signing'");
+    const busy = await sendNda(db, uid, { void_previous: true });
+    assert.deepEqual([busy.status, busy.body.error], [409, 'signature_in_progress']);
+    assert.deepEqual(envelopes(db).map((e) => e.status), ['sent']);
+    db.exec("UPDATE esign_recipients SET status = 'pending'");
+    const replaced = await sendNda(db, uid, { void_previous: true });
+    assert.equal(replaced.status, 200, JSON.stringify(replaced.body));
+    assert.deepEqual(envelopes(db).map((e) => e.status), ['void', 'sent']);
+    // The investor declines: the grant says so, and Send NDA sends a new one.
+    db.exec("UPDATE esign_envelopes SET status = 'rejected' WHERE status = 'sent'");
+    assert.equal((await grantOf(db, uid)).nda_state, 'declined');
+    const again = await sendNda(db, uid);
+    assert.deepEqual([again.status, again.body.grant.nda_state], [200, 'sent']);
+    // Voided elsewhere: the same.
+    db.exec("UPDATE esign_envelopes SET status = 'void' WHERE status = 'sent'");
+    assert.equal((await grantOf(db, uid)).nda_state, 'voided');
+    assert.equal((await sendNda(db, uid)).status, 200);
+    assert.equal((await grantOf(db, uid)).state, 'waits_for_nda', 'access stays closed until a signature exists');
   } finally { db.close(); }
 });

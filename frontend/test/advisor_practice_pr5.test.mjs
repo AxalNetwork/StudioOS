@@ -274,14 +274,13 @@ test('a note with no stamped figures is not reported as current', () => {
 
 // ── The page against the artboard ──────────────────────────────────────────
 
-test('the four stat tiles and the six table columns follow the artboard, relabelled where it called priced work "received"', () => {
+test('the four stat tiles and the six table columns are the artboard’s', () => {
   const drawn = [...DATA.matchAll(/label:'([^']+)', value/g)].map((m) => m[1]);
   assert.deepEqual(drawn, ['Q3 gross', 'Platform cut', 'You received', 'Concentration']);
-  // #4713 (D4713): the artboard's "gross" and "You received" labels name priced
-  // work as money; the page does not. The window label still comes from the chip.
-  assert.match(P, /\$\{window_\.label\} priced/);
-  assert.equal(/label="You received"/.test(P), false, 'priced work is never labelled "received"');
-  for (const label of ['Recorded as received', 'Concentration']) {
+  // The first is relabelled because the window moves — the page's tile reads
+  // "Q3 2026 gross" from the chip a reader chose, not from the fixture.
+  assert.match(P, /\$\{window_\.label\} gross/);
+  for (const label of ['You received', 'Concentration']) {
     assert.ok(P.includes(`label="${label}"`), `no tile labelled ${label}`);
   }
   assert.ok(P.includes('label="Platform rate"'),
@@ -290,7 +289,7 @@ test('the four stat tiles and the six table columns follow the artboard, relabel
   for (const th of ['Client', 'Sessions', 'Retainer', 'Gross', 'Cut', 'You receive']) {
     assert.ok(ART.includes(`<span class="th">${th}</span>`), `the canvas no longer draws ${th}`);
   }
-  assert.match(P, /\['Client', 'Sessions', 'Retainer', 'Priced', 'Cut', 'Net of cut'\]/);
+  assert.match(P, /\['Client', 'Sessions', 'Retainer', 'Gross', 'Cut', 'You receive'\]/);
 });
 
 test('the two cards and the AI band the artboard draws are all present', () => {

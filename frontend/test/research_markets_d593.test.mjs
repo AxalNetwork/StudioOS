@@ -194,7 +194,8 @@ test('M2: an unmapped market\'s fallback page sits in the Research shell, both w
   // wrapped here. Its body is rendered in research_legacy_market_1077.test.mjs.
   const src = codeOnly(read('frontend/src/pages/research/MarketSectorProfile.jsx'));
   const legacy = src.slice(src.indexOf('function LegacyMarketProfile'), src.indexOf('export default function MarketSectorProfile'));
-  assert.match(legacy, /return <WorkspaceShell role=\{role\} title=\{market\?\.item\?\.name \|\| 'Market'\} activeSlug="markets"><LegacyMarketView market=\{market\} \/><\/WorkspaceShell>/);
+  // D4612: with the links this reader may follow.
+  assert.match(legacy, /return <WorkspaceShell role=\{role\} title=\{market\?\.item\?\.name \|\| 'Market'\} activeSlug="markets"><LegacyMarketView market=\{market\} links=\{links\} \/><\/WorkspaceShell>/);
   const sector = codeOnly(read('frontend/src/pages/research/SectorProfile.jsx'));
   assert.match(sector, /if \(!data\) return <Card variant="dashed"><p>Sector or market not found\.<\/p>/);
   assert.match(sector, /return <WorkspaceShell role=\{role\} title=\{state\.data\?\.name \|\| 'Sector'\} activeSlug="markets">/);

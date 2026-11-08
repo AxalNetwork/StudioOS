@@ -29,6 +29,7 @@
  * for PG16a. A failed grant read is every row's `grant` unreadable, never a
  * state. HQ's fan-out to a branch names no viewer, so it carries no grant.
  */
+import { withMentorEligible } from './mentorEligibility';
 import type { Env } from '../types';
 import { perkClaimsCounts } from './perkClaims';
 import { listStrategicAccess } from './referralSubmissions';
@@ -37,7 +38,7 @@ import { ownScope, previousAxis, scopeLabel } from './adminInsights';
 import { SLA_PAST_HOURS, SLA_DUE_SOON_HOURS } from './approvalSources';
 import { branchRead } from './branches';
 import { countsOnly, insightsScopes } from './insightsScope';
-import { listPrograms, type ProgramKey, type ProgramRow, PROGRAM_KEYS, PROGRAM_STATUSES } from './programRegistry';
+import { listPrograms, isRegistryKey, type ProgramKey, type ProgramRow, PROGRAM_STATUSES } from './programRegistry';
 import { grantFieldOf, grantStates, type GrantViewer } from './programGrantStates';
 
 export const PROGRAM_WEEKS = [4, 12, 52] as const;
@@ -47,7 +48,7 @@ export const DEFAULT_PROGRAM_WEEKS: ProgramWeeks = 12;
 
 export const HQ_READS_REASON = 'HQ reads these figures.';
 export const LAB_PEOPLE_REASON =
-  'The Lab is left out until O-FND and #2374 say who a cohort\'s founders are.';
+  'The Lab is left out until a cohort\'s founders are defined.';
 export const REFERRAL_REWARDS_REASON = 'Referral rewards are not paid in perk credits yet.';
 export const PRODUCT_TESTING_HQ_ONLY = 'Runs at HQ. Its figures are for HQ only.';
 
@@ -183,41 +184,46 @@ export const WAITING_COVERED = ['cohort', 'referrals', 'perks', 'hosts'] as cons
 // ---------------------------------------------------------------------------
 
 /**
- * S-CNT: distinct people holding an active row whose current role is Advisor
- * and whose account is active. D960's one account rule (`users.is_active = 1`,
- * what `getCurrentUser` lets through) leaves a deactivated holder out.
+ * S-CNT: distinct people holding an active row whose account is an eligible
+ * mentor today: the Advisor licence (primary or an additional one, not
+ * revoked) on an active account (`services/mentorEligibility.ts`, D4807). A
+ * deactivated holder, or one whose licence was revoked, leaves the count.
  */
 async function activeMentors(env: Env) {
-  const r = await env.DB.prepare(
+  const r = await env.DB.prepare(await withMentorEligible(env,
     `SELECT COUNT(DISTINCT a.advisor_user_id) AS n
        FROM advisor_cohort_assignments a JOIN users u ON u.id = a.advisor_user_id
-      WHERE a.is_active = 1 AND lower(COALESCE(u.role, '')) = 'advisor' AND u.is_active = 1`,
-  ).first<{ n: number }>();
+      WHERE a.is_active = 1 AND {ELIGIBLE}`,
+  )).first<{ n: number }>();
   return { count: n(r?.n) };
 }
 
-/** S-COV, over every cycle the rule takes (no cap): scheduled or running, not postponed. A deactivated holder covers nothing (D960). */
+/** S-COV, over every cycle the rule takes (no cap): scheduled or running, not postponed. An ineligible holder covers nothing (D960, D4807). */
 async function mentorCoverage(env: Env) {
-  const r = await env.DB.prepare(
+  const r = await env.DB.prepare(await withMentorEligible(env,
     `SELECT COUNT(*) AS cohorts,
             SUM(CASE WHEN EXISTS (
               SELECT 1 FROM advisor_cohort_assignments a JOIN users u ON u.id = a.advisor_user_id
-               WHERE a.cohort_cycle_id = c.id AND a.is_active = 1 AND lower(COALESCE(u.role, '')) = 'advisor' AND u.is_active = 1
+               WHERE a.cohort_cycle_id = c.id AND a.is_active = 1 AND {ELIGIBLE}
             ) THEN 1 ELSE 0 END) AS covered
        FROM cohort_cycles c
       WHERE c.status IN ('scheduled', 'active') AND COALESCE(c.app_status, '') <> 'postponed'`,
-  ).first<{ cohorts: number; covered: number }>();
+  )).first<{ cohorts: number; covered: number }>();
   const cohorts = n(r?.cohorts);
   const covered = n(r?.covered);
   return { cohorts, covered, uncovered: cohorts - covered };
 }
 
-/** Open rows whose holder is no longer an Advisor (a missing account counts as no longer one). */
+/**
+ * Open rows whose holder is no longer an eligible mentor (a missing account counts as no longer one):
+ * the role changed away from Advisor with no additional Advisor licence, the licence was revoked, or the
+ * account was deactivated. The key `holders_not_advisor` is the read's name for it.
+ */
 async function openRowsNotAdvisor(env: Env) {
-  const r = await env.DB.prepare(
+  const r = await env.DB.prepare(await withMentorEligible(env,
     `SELECT COUNT(*) AS n FROM advisor_cohort_assignments a LEFT JOIN users u ON u.id = a.advisor_user_id
-      WHERE a.is_active = 1 AND lower(COALESCE(u.role, '')) <> 'advisor'`,
-  ).first<{ n: number }>();
+      WHERE a.is_active = 1 AND NOT COALESCE({ELIGIBLE}, 0)`,
+  )).first<{ n: number }>();
   return n(r?.n);
 }
 
@@ -719,6 +725,14 @@ export function unreadablePrograms(scope: Record<string, unknown>, reason: strin
 }
 
 /**
+ * D4808: the rows of a branch's answer HQ keeps. A program an approval or New program made carries a registry key and is
+ * kept with the nine; only a row with no valid key (a malformed answer) is dropped.
+ */
+export function keepRegistryRows(rows: unknown[]): any[] {
+  return rows.filter((x: any) => isRegistryKey(x?.key));
+}
+
+/**
  * HQ's read of one subsidiary: the branch's own answer, counts only, with
  * HQ's label on its scope and HQ's registry names on its rows (`countsOnly`
  * drops `name`, so a branch answers program keys and counts). Never throws.
@@ -740,8 +754,7 @@ export async function branchScopedPrograms(env: Env, code: string, params: Progr
   const clean = countsOnly(read) as Record<string, any>;
   const names = await listPrograms(env).then((rows) => new Map(rows.map((x) => [x.key, x.name])), () => new Map<string, string>());
   if (clean.programs?.available && Array.isArray(clean.programs.rows)) {
-    clean.programs.rows = clean.programs.rows
-      .filter((x: any) => (PROGRAM_KEYS as readonly string[]).includes(x?.key))
+    clean.programs.rows = keepRegistryRows(clean.programs.rows)
       .map((x: any) => ({ ...x, name: names.get(x.key) ?? null }));
   }
   return { ...clean, scope, as_of: r.as_of ?? clean.as_of ?? null, branch: { status: 'ok' } };

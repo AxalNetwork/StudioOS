@@ -8,12 +8,13 @@
  * leaves the rest of the tab standing. Every change opens an in-page dialog
  * that says what it changes, and its refusal stays inside the dialog.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Unreadable, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { api, dd } from '../../lib/api';
 import { dealWorkroomApi } from '../../lib/api/dealWorkroom';
 import { reportError } from '../../lib/log';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import DealReferencesTab from '../../components/deals/DealReferencesTab';
 import DealSyndicates from '../../components/deals/DealSyndicates';
 import FromMercury from '../investor/FromMercury';
@@ -55,9 +56,15 @@ const Err = ({ text }) => (text ? <p role="alert" className="m-0 text-[12.5px] t
 /** A read with its own state: loading, ready or unreadable. */
 function useRead(load, deps) {
   const [read, setRead] = useState({ status: 'loading' });
+  // D4633: each read carries a serial. An answer from a superseded read (the
+  // deal changed, or a retry started) lands nowhere, and none lands after unmount.
+  const serial = useRef(0);
+  useEffect(() => () => { serial.current += 1; }, []);
   const run = () => {
+    const mine = ++serial.current;
     setRead({ status: 'loading' });
-    load().then((data) => setRead({ status: 'ready', data })).catch((e) => { reportError('DealWork:read', e); setRead({ status: 'unreadable', error: e }); });
+    load().then((data) => { if (serial.current === mine) setRead({ status: 'ready', data }); })
+      .catch((e) => { reportError('DealWork:read', e); if (serial.current === mine) setRead({ status: 'unreadable', error: e }); });
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(run, deps);
@@ -337,14 +344,21 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
   // D752 (#1891): an investor on HQ shares a proof of funds from their own commitment.
   const own = useProofTargets({ enabled: showsProof(user) });
   const [mine, setMine] = useState({ status: 'loading' });
+  // D4633: the read is for this deal under the firm selected now. A switch of
+  // either reads again; an answer for an earlier deal or firm lands nowhere.
+  const firmId = useActiveCompany()?.company?.id ?? null;
+  const mineSerial = useRef(0);
+  useEffect(() => () => { mineSerial.current += 1; }, []);
   const loadMine = () => {
+    const serial = ++mineSerial.current;
+    const dealId = deal.id;
     setMine({ status: 'loading' });
-    api.dealCommitments(deal.id).then((d) => setMine({ status: 'ready', items: Array.isArray(d) ? d : [] }))
-      .catch((e) => { reportError('DealWork:commitments', e); setMine({ status: 'unreadable' }); });
+    api.dealCommitments(dealId).then((d) => { if (mineSerial.current === serial) setMine({ status: 'ready', dealId, items: Array.isArray(d) ? d : [] }); })
+      .catch((e) => { reportError('DealWork:commitments', e); if (mineSerial.current === serial) setMine({ status: 'unreadable', dealId }); });
   };
-  useEffect(loadMine, [deal.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(loadMine, [deal.id, firmId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [round, reloadRound] = useRead(() => dealWorkroomApi.round(deal.id), [deal.id]);
-  const c = myCommitment(mine, currency);
+  const c = myCommitment(mine, currency, deal.id);
   const r = roundLines(round, deal);
   const [withdrawing, setWithdrawing] = useState(false);
   const [reason, setReason] = useState('');
@@ -366,6 +380,7 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
               <Pill tone={c.confirmed ? 'done' : 'wait'}>{c.status}</Pill>
               <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{c.recorded}</span>
             </div>
+            {c.firm && <p className={`m-0 ${SUB}`} data-testid="deal-my-firm">{c.firm}</p>}
             <div className="flex flex-col gap-0.5">
               <span className={EYE}>Your note</span>
               <p className="m-0 whitespace-pre-line text-[13px] text-axal-ink dark:text-gray-100">{c.note || 'No note recorded.'}</p>
@@ -378,6 +393,13 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
             {c.confirmed && <p className={`m-0 ${SUB}`}>A confirmed commitment changes only by withdrawing it and committing again.</p>}
             {own.status === 'ready' && <ProofDoor target={ownDealTarget(own.read, c.row, user)} onShare={(t) => onShare?.(t, own.read)} />}
           </>
+        )}
+        {c.legacy?.length > 0 && (
+          <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-700" data-testid="deal-my-legacy">
+            <span className={EYE}>No firm recorded</span>
+            {c.legacy.map((l) => <span key={l.uid} className="font-mono text-[12px] text-axal-ink dark:text-gray-100">{l.line}</span>)}
+            <span className={SUB}>{c.legacy[0].note}</span>
+          </div>
         )}
         {c.history?.length > 0 && (
           <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-700">

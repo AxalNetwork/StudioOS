@@ -287,7 +287,8 @@ test('every module\'s `/new` resolves to its cycle\'s adding route, and Customer
   for (const [cycle, modules] of Object.entries(MODULES)) {
     for (const { slug } of modules) {
       const url = `/${cycle}/${slug}/new`;
-      const want = `/${cycle}/:slug/new`;
+      // #4853: Pitch's module Add form was a second sharing flow. Its static `/new` route redirects to the Studio's Share tab.
+      const want = cycle === 'raise' && slug === 'pitch-deck' ? '/raise/pitch-deck/new' : `/${cycle}/:slug/new`;
       assert.equal(bestMatch(url), want, url);
       assert.equal(isCyclePath(url), true, `${url} has the cycle gutter`);
     }
