@@ -75,6 +75,9 @@ export function Tile({ t, onRetry }) {
       {t.state === 'ready' && t.overdue ? (
         <span className="self-start"><Pill tone="amber" testId={`programs-tile-${t.key}-overdue`}><span aria-hidden="true">!</span>Overdue</Pill></span>
       ) : null}
+      {t.state === 'ready' && t.partial ? (
+        <span className="self-start"><Pill tone="amber" testId={`programs-tile-${t.key}-partial`}><span aria-hidden="true">◐</span>{t.partial}</Pill></span>
+      ) : null}
       {t.state === 'ready' && t.cover ? <span className={SUB}>{t.cover}</span> : null}
       {t.state === 'unreadable' ? (
         <>
