@@ -38,9 +38,8 @@ test('the drafts are public but not for search', () => {
   assert.equal(isPublicPath('/terms/v2-draft'), true);
   assert.equal(isPublicPath('/privacy/v2-draft'), true);
   const headers = read('public/_headers');
-  for (const path of ['/terms/v2-draft', '/privacy/v2-draft']) {
-    assert.match(headers, new RegExp(`^${path.replace(/\//g, '\\/')}\\n  X-Robots-Tag: noindex, nofollow$`, 'm'), `${path} is noindex`);
-  }
+  assert.match(headers, /^\/terms\/v2-draft\n  X-Robots-Tag: noindex, nofollow$/m, '/terms/v2-draft is noindex');
+  assert.match(headers, /^\/privacy\/v2-draft\n  X-Robots-Tag: noindex, nofollow$/m, '/privacy/v2-draft is noindex');
 });
 
 test('the published pages are untouched: their own text and a dated "Last updated"', () => {
