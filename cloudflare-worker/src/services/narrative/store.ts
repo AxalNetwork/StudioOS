@@ -335,19 +335,19 @@ async function planSection(env: Env, a: { projectId: number; userId: number; ver
         'SELECT investor_type, deck_version FROM spinout_deck_overrides WHERE project_id = ? AND version = ? ORDER BY field_key = ? DESC LIMIT 1',
       ).bind(a.projectId, version, VERSION_MARKER_KEY).first<{ investor_type: string | null; deck_version: number | null }>();
       // The words of a deck-keyed section: replace the version's row (`setWords`), under the guard.
-      stmts.push(env.DB.prepare(`DELETE FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND field_key = ? AND ${guard.sql}`)
+      stmts.push(env.DB.prepare(`DELETE FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND field_key = ? AND EXISTS (SELECT 1 FROM narrative_version_meta g WHERE g.project_id = ? AND g.version = ? AND g.revision = ? AND g.claim = ?)`)
         .bind(a.projectId, version, spec.deckKey, ...guard.args));
       if (words !== null) {
         stmts.push(env.DB.prepare(
           `INSERT INTO spinout_deck_overrides (project_id, field_key, value, updated_by, updated_at, version, investor_type, deck_version)
-           SELECT ?, ?, ?, ?, datetime('now'), ?, ?, ? WHERE ${guard.sql}`,
+           SELECT ?, ?, ?, ?, datetime('now'), ?, ?, ? WHERE EXISTS (SELECT 1 FROM narrative_version_meta g WHERE g.project_id = ? AND g.version = ? AND g.revision = ? AND g.claim = ?)`,
         ).bind(a.projectId, spec.deckKey, words, a.userId, version, marker?.investor_type ?? null, marker?.deck_version ?? null, ...guard.args));
       }
     } else if (spec.store === 'meta') {
       const m = await env.DB.prepare('SELECT why_now FROM narrative_version_meta WHERE project_id = ? AND version = ?')
         .bind(a.projectId, version).first<{ why_now: string | null }>();
       prior = m?.why_now ?? null;
-      stmts.push(env.DB.prepare(`UPDATE narrative_version_meta SET why_now = ?, updated_at = datetime('now') WHERE project_id = ? AND version = ? AND ${guard.sql}`)
+      stmts.push(env.DB.prepare(`UPDATE narrative_version_meta SET why_now = ?, updated_at = datetime('now') WHERE project_id = ? AND version = ? AND EXISTS (SELECT 1 FROM narrative_version_meta g WHERE g.project_id = ? AND g.version = ? AND g.revision = ? AND g.claim = ?)`)
         .bind(words, a.projectId, version, ...guard.args));
     } else {
       prior = current?.body ?? null;
@@ -363,7 +363,7 @@ async function planSection(env: Env, a: { projectId: number; userId: number; ver
   // The section's own row: its words (when it keeps them), place, note and provenance.
   stmts.push(env.DB.prepare(
     `INSERT INTO narrative_sections (project_id, version, section, position, body, audience_note, source_kind, source_ref, source_label, prior_value, updated_by, updated_at)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now') WHERE ${guard.sql}
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now') WHERE EXISTS (SELECT 1 FROM narrative_version_meta g WHERE g.project_id = ? AND g.version = ? AND g.revision = ? AND g.claim = ?)
      ON CONFLICT (project_id, version, section) DO UPDATE SET
        position = excluded.position, body = excluded.body, audience_note = excluded.audience_note,
        source_kind = excluded.source_kind, source_ref = excluded.source_ref, source_label = excluded.source_label,
@@ -381,11 +381,11 @@ async function planSection(env: Env, a: { projectId: number; userId: number; ver
   ));
 
   if (bindings !== undefined) {
-    stmts.push(env.DB.prepare(`DELETE FROM narrative_bindings WHERE project_id = ? AND version = ? AND section = ? AND ${guard.sql}`)
+    stmts.push(env.DB.prepare(`DELETE FROM narrative_bindings WHERE project_id = ? AND version = ? AND section = ? AND EXISTS (SELECT 1 FROM narrative_version_meta g WHERE g.project_id = ? AND g.version = ? AND g.revision = ? AND g.claim = ?)`)
       .bind(a.projectId, version, spec.key, ...guard.args));
     bindings.forEach((x, i) => stmts.push(env.DB.prepare(
       `INSERT INTO narrative_bindings (project_id, version, section, position, source_key, record_ref, as_of, grade, snapshot_hash, created_by)
-       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}`,
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM narrative_version_meta g WHERE g.project_id = ? AND g.version = ? AND g.revision = ? AND g.claim = ?)`,
     ).bind(a.projectId, version, spec.key, i, x.source_key, x.record_ref, x.as_of, x.grade, x.snapshot_hash, a.userId, ...guard.args)));
     changed.push(`${bindings.length} bound ${bindings.length === 1 ? 'figure' : 'figures'}`);
   }
@@ -489,7 +489,7 @@ export async function saveNarrativeEdits(env: Env, a: {
       const spec = sectionSpec(ans.section);
       stmts.push(env.DB.prepare(
         `INSERT INTO narrative_objection_answers (project_id, objection_key, version, section_key, how, answered_by)
-         SELECT ?, ?, ?, ?, ?, ? WHERE ${guard.sql}
+         SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM narrative_version_meta g WHERE g.project_id = ? AND g.version = ? AND g.revision = ? AND g.claim = ?)
          ON CONFLICT (project_id, objection_key) DO UPDATE SET
            version = excluded.version, section_key = excluded.section_key, how = excluded.how,
            answered_by = excluded.answered_by, answered_at = datetime('now')`,

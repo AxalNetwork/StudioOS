@@ -54,7 +54,6 @@
     "fph @ services/introductions.ts": 1,
     "gp.sql @ routes/capital.ts": 1,
     "gp.sql @ routes/legalcap.ts": 1,
-    "guard.sql @ services/narrative/store.ts": 7,
     "ids @ services/notify.ts": 1,
     "ids(interviewIds.length) @ services/interviewSuggestions.ts": 1,
     "ids(kinds.length) @ services/interviewSuggestions.ts": 1,
