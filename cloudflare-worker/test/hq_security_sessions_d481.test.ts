@@ -235,10 +235,12 @@ test('the write bar holds: a super admin on a session without the authenticator 
 
 test('an unreadable session table is a 503 saying so — never an empty list', async () => {
   const db = freshDb();
-  // auth.ts reads user_sessions by jti and, when the table is absent, falls
-  // back to the iat floor alone — so the gate still answers and the LIST is
-  // what fails, which is the state under test.
-  db.exec('DROP TABLE user_sessions');
+  // D4669 — auth.ts now REFUSES a token whose session table cannot be read
+  // (it used to fall back to the iat floor alone), so dropping the table
+  // would turn the gate away before the list is asked. The list's own read
+  // is broken instead: it selects `last_seen_at`, which the gate's read does
+  // not, so the gate answers and the LIST is what fails — the state under test.
+  db.exec('ALTER TABLE user_sessions DROP COLUMN last_seen_at');
   const r = await call(db, AS_SUPER, 'GET', '/sessions');
   assert.equal(r.status, 503, 'a failed read came back as a list');
   assert.equal(r.body.code, 'sessions_unreadable');
@@ -397,7 +399,10 @@ test('ending a support session sets ended_at ONLY — the row, its admin and its
     assert.equal(after.admin_user_id, before.admin_user_id, 'admin_user_id was rewritten');
     assert.equal(after.context, before.context, 'context was rewritten');
     assert.equal(after.started_at, before.started_at);
-    assert.match(r.body.message, /stays valid until it expires/, 'the response claims the access stopped now');
+    // D4669 — the support token names its record, so ending it ends the
+    // access; the response says so instead of the old "stays valid" caveat.
+    assert.match(r.body.message, /refused from its next request/, 'the response does not say the access stopped');
+    assert.doesNotMatch(r.body.message, /stays valid until it expires/);
   }
   // routes/branch_support_sessions.ts's own selection, verbatim.
   const seen = db.prepare(
