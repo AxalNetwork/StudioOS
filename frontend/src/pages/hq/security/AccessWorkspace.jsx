@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Unreadable } from '../../../ui';
 import StatusBadge, { ReadValue } from './StatusBadge.jsx';
 import AccessActionDialog from './AccessActions.jsx';
+import { scopeSentence } from './deploymentScope.jsx';
 import { BTN_DANGER, NotInstrumented as NI } from './ActionDialog.jsx';
 import {
   MIN_REASON, SESSION_BULK_LIMIT, SESSION_STATUS, accountName, describeSession, formatInZone, formatUtc, isoOf,
@@ -81,11 +82,11 @@ function SessionDetails({ row, s, tokenHours, zone }) {
   );
 }
 
-function ReachCard({ expiryMinutes }) {
+function ReachCard({ scope }) {
   const rows = [
     ['Revoke this session', 'One session row. Its token is refused from its next request; the account\'s other sessions stay signed in. Your own current session is not revoked from here: use Sign out account.'],
     ['Sign out account', 'Every session that account holds, on every device: its sign-in floor is raised. Which devices that reached is not listed.'],
-    ['End support session', `Closes the support-session record so it can't be extended. Its token carries no session id and stays valid until it expires, at most ${expiryMinutes} minutes after it was minted. To cut it now, sign that account out.`],
+    ['End support session', 'Ends the support session: its token is refused from its next request, and the record is closed so it can\'t be extended (D4669).'],
     ['Emergency re-authentication', 'Every HQ-held account; branch databases are not touched; you will be signed out too.'],
   ];
   return (
@@ -103,6 +104,7 @@ function ReachCard({ expiryMinutes }) {
         Every act needs a session signed in with your authenticator (TOTP) and a recent step-up, takes its own reason of
         at least {MIN_REASON} characters, and is recorded in the admin audit log.
       </p>
+      <p className="mt-1 text-[11.5px] text-axal-faint dark:text-gray-400" data-testid="hq-sessions-scope">{scopeSentence(scope)}</p>
     </section>
   );
 }
@@ -164,7 +166,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
         for (const r of out.rows || []) if (r.outcome === 'revoked' || r.outcome === 'already_revoked') next.sessions[r.id] = true;
       }
       if (action.kind === 'sign_out' && out.result === 'done') next.accounts[arg] = true;
-      if (action.kind === 'end') next.ended[arg] = out.result === 'done' ? out.receivedAt + expiryMinutes * 60000 : null;
+      if (action.kind === 'end') next.ended[arg] = true;
       if (action.kind === 'emergency' && out.result === 'done') next.all = true;
       return next;
     });
@@ -425,7 +427,6 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
                 const admin = accountName(i.admin_name, i.admin_email, i.admin_user_id);
                 const target = accountName(i.target_name, i.target_email, i.target_user_id);
                 const ended = Object.prototype.hasOwnProperty.call(changed.ended, i.id);
-                const until = changed.ended[i.id];
                 return (
                   <tr key={i.id} className="block border-b border-axal-hairline px-4 py-3 md:table-row md:p-0 dark:border-gray-800" data-testid={`hq-live-impersonation-${i.id}`}>
                     <td className={CELL}><b className="text-axal-ink dark:text-white">{admin}</b></td>
@@ -434,7 +435,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
                     <td className={CELL}>{i.context || <span className="text-axal-faint dark:text-gray-400">None given</span>}</td>
                     <td className={CELL}>
                       {ended
-                        ? <span className="flex flex-col gap-0.5"><StatusBadge state="verified" label="Record closed" />{until && <small className="text-axal-muted dark:text-gray-400">Token still valid until no later than {formatUtc(until, { seconds: false })}</small>}</span>
+                        ? <StatusBadge state="verified" label="Ended" />
                         : <StatusBadge state="pending" label="Open" />}
                     </td>
                     <td className={CELL}>
@@ -466,7 +467,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
       </section>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-        <ReachCard expiryMinutes={expiryMinutes} />
+        <ReachCard scope={loaded ? list.scope : undefined} />
         {emergencyCard}
       </div>
 
@@ -478,7 +479,6 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
           onConfirmed={onConfirmed}
           onClose={() => setDialog(null)}
           onReread={onRefresh || onRetry}
-          onSignOutAccount={(a) => setDialog((cur) => ({ ...cur, action: signOutAction(a.targetUserId, a.target), key: `sign_out-${Date.now()}` }))}
           expiryMinutes={expiryMinutes}
           now={() => (nowProp ?? Date.now())}
           returnFocus={dialog.opener}

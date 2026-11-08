@@ -39,6 +39,7 @@ import { getTemplate } from './legalTemplateStore';
 import { bracketLabel } from './legalMergeSchema';
 import type { NoticeKeyFigure, NoticePayment, NoticeTable, PaperInput } from './legalPaper';
 import { RECEIVING_BRACKET } from './fundStructure';
+import { toMajorString } from '../../../frontend/src/lib/money.js';
 
 export type NoticeType =
   | 'capital_call_notice' | 'distribution_notice' | 'default_notice'
@@ -521,7 +522,23 @@ async function licenceInvoice(env: Env, req: NoticeRequest, today: string): Prom
 
 const CURRENCY_SIGN: Readonly<Record<string, string>> = Object.freeze({ USD: '$', EUR: '\u20ac', GBP: '\u00a3' });
 
-/** "€12,000.00" in the row's own currency; a currency with no sign here is written "CHF 12,000.00". */
+/**
+ * D5029 — an amount of the currency's own minor units, at the currency's own decimals: "€12,000.00", "¥12,000",
+ * "KWD 12.345". For records held in OUR minor units (a licence fee invoice). Throws on a currency that is not a
+ * listed ISO 4217 code rather than printing a figure in a guessed one. `formatMoney` below is two-decimal only; it is
+ * kept for the alerts that format Stripe's own amounts, where ISK and UGX arrive as two-decimal values.
+ */
+export function formatMinorMoney(minor: number, currency: string): string {
+  const code = String(currency || '').toUpperCase();
+  const major = toMajorString(minor, code);
+  if (major === null) throw new TypeError(`cannot format ${String(minor)} in "${code}": not a whole amount of a listed currency`);
+  const neg = major.startsWith('-');
+  const [whole, frac] = (neg ? major.slice(1) : major).split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${neg ? '-' : ''}${CURRENCY_SIGN[code] ?? `${code} `}${frac === undefined ? grouped : `${grouped}.${frac}`}`;
+}
+
+/** "€12,000.00" in the row's own currency; a currency with no sign here is written "CHF 12,000.00". Two decimals always: see `formatMinorMoney`. */
 export function formatMoney(cents: number, currency: string): string {
   if (!Number.isSafeInteger(cents)) throw new TypeError('cents must be a whole number');
   const code = String(currency || '').toUpperCase();
@@ -555,7 +572,7 @@ export interface TerritoryInvoiceInput {
  */
 export async function territoryLicenceInvoice(env: Env, i: TerritoryInvoiceInput, today: string): Promise<BuiltNotice> {
   const pay = await paymentBlock(env, 'holdings', 'territory_licence_fee', i.reference, false);
-  const amount = formatMoney(i.amount_cents, i.currency);
+  const amount = formatMinorMoney(i.amount_cents, i.currency);
   const period = `${i.period_start} to ${i.period_end}`;
   const figures: NoticeFigures = {
     type: 'territory_licence_fee_invoice', title: 'Territory Licence Fee Invoice', notice_date: today, sender: 'holdings', payee: 'holdings',

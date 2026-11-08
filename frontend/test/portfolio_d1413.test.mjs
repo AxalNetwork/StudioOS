@@ -647,7 +647,14 @@ test('#4736: formOf and changes carry default_currency; an unchanged one is not 
   assert.deepEqual(changes({ ...formOf(row), default_currency: 'usd' }, row), { default_currency: 'USD' });
   assert.deepEqual(changes({ ...formOf(row), default_currency: '' }, row), { default_currency: null }, 'cleared means null, never a guessed code');
   assert.deepEqual(changes(formOf({ company_name: 'A' }), { company_name: 'A' }), {}, 'not recorded stays not recorded');
+  // D5029: the Worker's list is `lib/money.js`'s, which the Worker imports (services/currencies.ts builds its set from
+  // it), so the form's list is held to that one source and the Worker is held to taking it from there.
   const worker = readFileSync('cloudflare-worker/src/services/currencies.ts', 'utf8');
-  const codes = [...worker.slice(worker.indexOf('new Set(['), worker.indexOf(']);')).matchAll(/'([A-Z]{3})'/g)].map((m) => m[1]);
+  assert.match(worker, /import \{ CURRENCY_CODES \} from '\.\.\/\.\.\/\.\.\/frontend\/src\/lib\/money\.js';/);
+  assert.match(worker, /ISO_4217_CODES: ReadonlySet<string> = new Set\(CURRENCY_CODES\)/);
+  const money = readFileSync('frontend/src/lib/money.js', 'utf8');
+  const listed = money.slice(money.indexOf('CURRENCY_CODES = Object.freeze(['), money.indexOf(']);'));
+  const codes = [...listed.matchAll(/'([A-Z]{3})'/g)].map((m) => m[1]);
+  assert.ok(codes.length > 100);
   assert.deepEqual([...CURRENCY_CODES], codes);
 });

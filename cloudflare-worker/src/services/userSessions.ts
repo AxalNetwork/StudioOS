@@ -18,12 +18,11 @@
  * exactly those two columns, and `routes/admin.ts` and
  * `util/supportSessionSweep.ts` close a session the same way.
  *
- * WHAT ENDING CANNOT DO, stated where it is done: an impersonation token
- * carries no `jti`, so no `user_sessions` row answers for it. Closing the
- * record stops Extend (which requires `ended_at IS NULL`) and the token dies
- * at its own expiry, at most IMPERSONATION_EXPIRY_MINUTES after it was
- * minted. To cut it sooner, sign the target account out — which ends that
- * account holder's own sessions too, and the route's message says so.
+ * ENDING ENDS THE ACCESS (D4669). A support token carries its record's id
+ * (`sid`), and `getCurrentUser` re-reads that row on every request
+ * (auth.ts `sessionStanding`), so stamping `ended_at` refuses the token from
+ * its next request. Before D4669 the token named no record and outlived the
+ * end by up to IMPERSONATION_EXPIRY_MINUTES.
  *
  * Every statement below is a complete literal (scripts/check-sql-prepare.mjs).
  */

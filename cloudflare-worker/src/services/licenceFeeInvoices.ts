@@ -29,6 +29,7 @@ import { licenceFeeReference, licensorRefusal } from './licenceAccount';
 import { paperModel } from './legalPaper';
 import { renderLegalPdf } from './legalPaperRender';
 import { parseExpectedRevision } from './licenceTerms';
+import { currencyCode } from './currencies';
 
 /** Days from issue to due when D797's `payment_terms_days` is not recorded. */
 export const DEFAULT_PAYMENT_TERMS_DAYS = 30;
@@ -150,6 +151,10 @@ export async function issueFeeInvoice(
   if (!Number.isSafeInteger(amount) || (amount as number) <= 0) {
     throw new FeeInvoiceRefusal(409, 'no_annual_fee', 'This licence records no annual fee, so there is nothing to invoice. Set the fee on its terms first.');
   }
+  if (!currencyCode(licence.currency)) {
+    // D5029: the invoice freezes the licence's currency, and the amount is a count of THAT currency's minor units.
+    throw new FeeInvoiceRefusal(409, 'currency_unknown', `This licence's currency ("${licence.currency ?? ''}") is not one StudioOS can price in, so its fee cannot be invoiced. Set the licence currency first.`);
+  }
   if (!licence.starts_on || !DAY.test(licence.starts_on)) {
     throw new FeeInvoiceRefusal(409, 'no_start_date', 'This licence records no start date, so its licence year cannot be told. Set the start date first.');
   }
@@ -215,7 +220,7 @@ export function parseFeeInvoiceUpdate(body: unknown, inv: FeeInvoiceRow):
   }
   const paid = b.paid_cents;
   if (typeof paid !== 'number' || !Number.isSafeInteger(paid) || paid < 0) {
-    return { ok: false, status: 400, code: 'bad_amount', field: 'paid_cents', message: 'Give the total received so far as a whole number of cents, zero or more.' };
+    return { ok: false, status: 400, code: 'bad_amount', field: 'paid_cents', message: 'Give the total received so far as a whole number of minor units of the invoice currency, zero or more.' };
   }
   if (paid > Number(inv.amount_cents)) {
     return { ok: false, status: 409, code: 'over_amount', field: 'paid_cents', message: 'The total received cannot be more than the invoice amount.' };

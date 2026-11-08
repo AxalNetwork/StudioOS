@@ -16,14 +16,14 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  CeilingEditor, ceilingPayload, CEILING_NOT_ENFORCED, UNAVAILABLE,
+  CeilingEditor, ceilingPayload, CEILING_ENFORCEMENT, UNAVAILABLE,
 } from '../src/pages/hq/RevenuePage.jsx';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = codeOnly(raw('frontend/src/pages/hq/RevenuePage.jsx'));
 const PLATFORM = raw('frontend/src/pages/hq/PlatformPage.jsx');
 const API = raw('frontend/src/lib/api.js');
-const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ');
+const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ');
 const render = (props) => renderToStaticMarkup(
   React.createElement(CeilingEditor, { currentPeriod: '2026-Q3', onSave: async () => ({}), ...props }),
 );
@@ -63,12 +63,12 @@ test('no licence, a bad period or a bad currency is refused before any call', ()
   assert.ok(ceilingPayload({ licenceUid: 'lic_fr', period: '2026-Q3', amount: '1', currency: 'EU' }).error);
 });
 
-test('the editor says, in every state, that checkout does not enforce a ceiling', () => {
+test('the editor states, in every state, the enforcement D4855 built (see revenue_ceiling_enforcement_5028)', () => {
   for (const licences of [LICENCES, [], null, UNAVAILABLE]) {
     const t = text(render({ licences }));
-    assert.ok(t.includes(CEILING_NOT_ENFORCED), 'the enforcement sentence is missing');
+    for (const line of CEILING_ENFORCEMENT) assert.ok(t.includes(text(line).trim()), `missing: ${line.slice(0, 50)}`);
+    assert.doesNotMatch(t, /Nothing at checkout checks a code against it/);
   }
-  assert.match(CEILING_NOT_ENFORCED, /Nothing at checkout checks a code against it/);
 });
 
 test('with licences, the form offers each one; empty and unreadable say so instead', () => {

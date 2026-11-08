@@ -34,6 +34,7 @@ import {
   drawStatement, quarterKey, PERIOD_RE, STATEMENT_STREAMS, type StreamFigure,
 } from '../services/statements';
 import { branchByCode } from '../services/branches';
+import { currencyCode } from '../services/currencies';
 import { mirrorBranchAction } from '../services/auditMirror';
 import { logAdminAction } from '../services/adminAudit';
 
@@ -48,7 +49,14 @@ const str = (v: unknown, max = 500): string => String(v ?? '').trim().slice(0, m
  * anybody asking for either (D228 applied the same rule to the ceiling).
  */
 const typedCents = (v: unknown): number | null =>
-  (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
+  (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null);
+
+/**
+ * D5029 — a statement's or ceiling's currency is one StudioOS can price in, or the write is refused. The old
+ * `currency || 'EUR'` read an unrecorded currency as euros, which makes every figure beside it wrong by the
+ * currency's exponent when it is not. The `*_cents` columns stay integer minor units; what a unit is depends on this.
+ */
+const UNRECORDED_CURRENCY = 'UNRECORDED';
 
 /** One sentence for every place that used to promise a re-draw after a void. */
 export const NO_REDRAW_AFTER_VOID =
@@ -136,7 +144,7 @@ r.get('/statements', async (c) => {
       // them would be wrong by whatever the rate happens to be, quoted to the
       // cent — the same refusal `admin_revenue.ts` makes for the same reason.
       totals_by_currency: rows.reduce((m: Record<string, { owed: number; paid: number }>, s) => {
-        const k = s.currency || 'EUR';
+        const k = currencyCode(s.currency) ?? UNRECORDED_CURRENCY;
         m[k] = m[k] || { owed: 0, paid: 0 };
         m[k].owed += Number(s.owed_cents) || 0;
         m[k].paid += Number(s.paid_cents) || 0;
@@ -164,6 +172,14 @@ r.post('/statements/draw', async (c) => {
       revenue_share_bps: number | null; currency: string; status: string;
     }>();
     if (!licence) return c.json({ error: 'not_found' }, 404);
+    const licenceCurrency = currencyCode(licence.currency);
+    if (!licenceCurrency) {
+      return c.json({
+        error: 'currency_unknown',
+        message: `${licence.licence_ref} has no currency StudioOS can price in ("${licence.currency ?? ''}"), so a statement cannot be drawn in it. `
+          + 'Record the licence currency first; nothing was drawn.',
+      }, 409);
+    }
 
     // A HELD OR INACTIVE LICENCE DOES NOT GET A NEW CLAIM. Suspension freezes
     // the subsidiary's obligations; drawing while it is held would bill against
@@ -217,7 +233,7 @@ r.post('/statements/draw', async (c) => {
         return {
           stream: s,
           gross_cents: null,
-          currency: licence.currency || 'EUR',
+          currency: licenceCurrency,
           available: false,
           reason: `The branch has not reported ${s.replace('_', ' ')} for ${period}.`,
         };
@@ -225,7 +241,7 @@ r.post('/statements/draw', async (c) => {
       return {
         stream: s,
         gross_cents: got.gross_cents === null ? null : Number(got.gross_cents),
-        currency: got.currency || licence.currency || 'EUR',
+        currency: got.currency || licenceCurrency,
         available: got.gross_cents !== null,
         is_estimate: !!got.is_estimate,
         reason: got.gross_cents === null
@@ -259,7 +275,7 @@ r.post('/statements/draw', async (c) => {
       licence_fees: share('share_licence_fees_bps'),
       token_margin: share('share_token_margin_bps'),
       royalty_bps: share('royalty_platform_licence_bps'),
-    }, licence.currency || 'EUR');
+    }, licenceCurrency);
 
     // D514 — A RE-DRAW KEEPS WHAT WAS PAID AND DISPUTED (the upsert below leaves
     // both alone), so a re-draw to a smaller owed figure would leave more paid
@@ -540,16 +556,17 @@ r.put('/promo-ceilings/:uid', async (c) => {
     // nothing — and the route answered 200. Integer minor units, 0 or more;
     // zero stays expressible, because "no promotions this quarter" is a ceiling.
     const rawCeiling = b?.ceiling_cents;
-    if (typeof rawCeiling !== 'number' || !Number.isInteger(rawCeiling) || rawCeiling < 0) {
+    if (typeof rawCeiling !== 'number' || !Number.isSafeInteger(rawCeiling) || rawCeiling < 0) {
       return c.json({
         error: 'bad_ceiling',
         message: 'ceiling_cents must be a whole number of minor units, 0 or more.',
       }, 400);
     }
     const ceiling = rawCeiling;
-    const currency = (str(b?.currency, 3) || licence.currency || 'EUR').toUpperCase();
-    if (!/^[A-Z]{3}$/.test(currency)) {
-      return c.json({ error: 'bad_currency', message: 'currency must be a three-letter ISO code.' }, 400);
+    // D5029: the ceiling's currency is named or the licence's own, and it must be a listed ISO 4217 code. Never a default.
+    const currency = currencyCode((str(b?.currency, 3) || licence.currency || '').toUpperCase());
+    if (!currency) {
+      return c.json({ error: 'bad_currency', message: 'currency must be a listed three-letter ISO 4217 code, such as EUR.' }, 400);
     }
 
     const now = nowIso();

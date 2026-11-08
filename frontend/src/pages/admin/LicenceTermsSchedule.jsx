@@ -65,14 +65,14 @@ function TermInput({ field, value, onChange, currency }) {
 
 /** The editor, given the stored schedule. Separate from the loader so a test can draw it. */
 export function TermsScheduleForm({ licence, stored, highlight, onSave }) {
-  const [form, setForm] = useState(() => initialForm(stored));
+  const [form, setForm] = useState(() => initialForm(stored, undefined, licence.currency));
   const [reason, setReason] = useState('');
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => { setForm(initialForm(stored)); }, [stored]);
+  useEffect(() => { setForm(initialForm(stored, undefined, licence.currency)); }, [stored, licence.currency]);
   useEffect(() => {
     if (!highlight) return;
     const el = typeof document !== 'undefined' ? document.getElementById(termRowId(highlight)) : null;
@@ -85,7 +85,7 @@ export function TermsScheduleForm({ licence, stored, highlight, onSave }) {
   async function save(e) {
     e?.preventDefault?.();
     setServerError('');
-    const built = buildSave(stored, form, reason);
+    const built = buildSave(stored, form, reason, undefined, licence.currency);
     if (!built.ok) { setErrors(built.errors); return; }
     setErrors({});
     setBusy(true);
