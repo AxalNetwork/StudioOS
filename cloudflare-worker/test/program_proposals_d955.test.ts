@@ -376,7 +376,8 @@ test('D4808: a synthetic custom program, end to end: create → open → edit �
   // Edit the draft, then publish it.
   const edited = await call(db, SUPER, 'PUT', `/${key}/playbook/sections/purpose`, { body: 'Edited by HQ.' });
   assert.equal(edited.status, 200, JSON.stringify(edited.body));
-  const published = await call(db, SUPER, 'POST', `/${key}/playbook/publish`, {});
+  const hash = (await call(db, SUPER, 'GET', `/${key}`)).body.draft.hash;
+  const published = await call(db, SUPER, 'POST', `/${key}/playbook/publish`, { expected_hash: hash });
   assert.equal(published.status, 200, JSON.stringify(published.body));
   // Revisit: the published playbook is what an Admin reads, and the registry row is still there.
   const revisit = await call(db, LIS1, 'GET', `/${key}`);
