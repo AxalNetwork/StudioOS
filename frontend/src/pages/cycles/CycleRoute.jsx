@@ -1123,7 +1123,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
         loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(formWrites, projectId) : null}
         onSearch={formOpen.search ? (_field, q) => formOpen.search(formWrites, projectId, q) : null}
-        onSubmit={(values) => formOpen.submit(formWrites, projectId, values)}
+        onSubmit={(values, memory) => formOpen.submit(formWrites, projectId, values, memory)}
         onSaved={saved}
         onClose={closeAdd} />
     ) : editing && edit.idOf(editing) != null && edit.readsRecord ? (

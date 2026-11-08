@@ -160,3 +160,12 @@ test('the wiring: the tab route beside the deal route, tabs as links, and the ca
   assert.ok(existsSync('documentation/architecture/decisions/D1148.md'));
   assert.ok(existsSync('documentation/audits/DEAL_PAGE_MAP_2026-10-25.md'));
 });
+
+// D4631 (#4631): the documents list is behind the venture's NDA for an investor; the tab says so, it is not "unreadable".
+test('D4631: the Documents tab tells an investor without the NDA why, and keeps a failed read unreadable', () => {
+  const src = readFileSync(new URL('../src/pages/DealRoomPage.jsx', import.meta.url), 'utf8');
+  const tab = src.slice(src.indexOf('function DocumentsTab'), src.indexOf('function DocumentsTab') + 1600);
+  assert.match(tab, /e\?\.code === 'nda_required' \? setNdaNeeded\(true\) : setFailed\(true\)/);
+  assert.match(tab, /data-testid="deal-documents-nda"/);
+  assert.ok(tab.indexOf('if (ndaNeeded)') < tab.indexOf('if (failed)'), 'the NDA reason is checked before the failure');
+});
