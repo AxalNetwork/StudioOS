@@ -65,7 +65,9 @@ import { pushLicenceToBranch, queuePushStatement } from '../services/licencePush
 import { clearGuard, decisionGuard, runDecision } from '../services/decisionBatch';
 import { offerRefusal } from '../services/programGrantStates';
 import { createAndSendEnvelope } from './esign';
+import { sha256Hex } from '../services/pdf';
 import { PROGRAM_SCHEDULE_DOC_TYPE, scheduleDocument, voidSupersededSchedules } from '../services/programSchedule';
+import { scheduleAgreementSentStatements, scheduleAgreementsSupersededStatements } from '../services/programAgreements';
 import {
   DEFAULT_KEYS, TERM_KEYS, presentGrant, programNamed, programOf, readDefaults, readGrid, readHistory, readinessRefusal,
   termsDiff, termsHashOf, termsOf, validateTerms, type LicenceLite, type Terms,
@@ -352,6 +354,8 @@ r.post('/licences/:uid/:program', async (c) => {
         history,
         ...voidSupersededSchedules(c.env, existing.id),
         supersedeSchedules(c.env, existing.id),
+        // D5048: the grant's canonical schedule agreements stop being current with it.
+        ...scheduleAgreementsSupersededStatements(c.env, existing.id, at, admin.id),
         queuePushStatement(c.env, licence.id),
         clearGuard(c.env),
       ]);
@@ -407,6 +411,8 @@ r.patch('/licences/:uid/:program', async (c) => {
       programEvent(c.env, licence.id, admin.id, { action: 'terms_changed', program_key: programKey, changed, note_changed: noteChanged, reason }, reason),
       ...voidSupersededSchedules(c.env, existing.id),
       supersedeSchedules(c.env, existing.id),
+      // D5048: the grant's canonical schedule agreements stop being current with it.
+      ...scheduleAgreementsSupersededStatements(c.env, existing.id, nowIso(), admin.id),
       queuePushStatement(c.env, licence.id),
       clearGuard(c.env),
     ]);
@@ -525,10 +531,18 @@ r.post('/licences/:uid/:program/schedule/send', async (c) => {
     // The envelope is named on the grant, recorded against the revision it carries, and its history and owed
     // push commit with it. If the terms moved or the schedule was signed meanwhile this writes nothing, and the
     // envelope that was sent has no record, so it can sign nothing.
+    // D5048: the canonical agreement version is written in the same batch, with the hash the envelope carries.
+    const sentAt = nowIso();
+    const envelopeSha = (await c.env.DB.prepare('SELECT body_sha256 FROM esign_envelopes WHERE envelope_uuid = ?')
+      .bind(sent.envelope_uuid).first<{ body_sha256: string | null }>())?.body_sha256 ?? null;
     const recorded = await runDecision(c.env, [
       c.env.DB.prepare(RECORD_SCHEDULE).bind(sent.envelope_uuid, existing.id, revision),
       decisionGuard(c.env),
-      c.env.DB.prepare(INSERT_SCHEDULE).bind(existing.id, revision, hash, sent.envelope_uuid, nowIso()),
+      c.env.DB.prepare(INSERT_SCHEDULE).bind(existing.id, revision, hash, sent.envelope_uuid, sentAt),
+      ...scheduleAgreementSentStatements(c.env, {
+        uid: newUid(), licenceUid: licence.uid, grantId: existing.id, programKey, envelopeUuid: sent.envelope_uuid,
+        bodySha256: envelopeSha && envelopeSha.length === 64 ? envelopeSha : await sha256Hex(doc.body), actorId: admin.id, at: sentAt,
+      }),
       programEvent(c.env, licence.id, admin.id, {
         action: 'schedule_sent', program_key: programKey, revision,
         changed: [{ key: 'schedule_contract_uid', before: existing.schedule_contract_uid ?? null, after: sent.envelope_uuid }], reason,

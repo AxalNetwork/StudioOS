@@ -58,6 +58,9 @@ export const SKILL_REFUSALS = {
   golden_cases_failing: (d) => (Number.isFinite(d?.pass) && Number.isFinite(d?.total)
     ? `The golden cases pass ${d.pass} of ${d.total}, below the bar. Fix the skill or its cases, then re-run the evals.`
     : 'The golden cases pass below the bar. Fix the skill or its cases, then re-run the evals.'),
+  evaluation_incomplete: (d) => (Number.isFinite(d?.not_evaluated) && Number.isFinite(d?.total)
+    ? `${d.not_evaluated} of ${d.total} required golden-case runs are not evaluated. Run the evals on every required model.`
+    : 'Some required golden-case runs are not evaluated. Run the evals on every required model.'),
   tool_not_read_only: (d) => (d?.tool ? `Skills may only use read tools. ${d.tool} can write.` : 'Skills may only use read tools.'),
   version_unknown: 'Compare a published version (v1, v2, …) or the draft.',
   action_invalid: 'Choose Publish, Retire or Re-run evals.',
