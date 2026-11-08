@@ -33,7 +33,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { raiseEvidenceContext, RaiseEvidenceError } from '../services/raiseEvidence';
@@ -58,7 +58,8 @@ async function deckRow(c: any, id: number): Promise<Row | null> {
 
 /** May this reader read the deck at all; and is it the venture's founder, who alone runs the check (and reads D1559's questions). */
 export async function reader(c: any, user: User, projectId: number): Promise<{ founder: boolean } | Response> {
-  try { await projectOwned(c, user, projectId); } catch (e: any) {
+  // #4720 owner decision: accepted advisor members keep their read (D1511).
+  try { await projectOwned(c, user, projectId, { advisorRead: true }); } catch (e: any) {
     return e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403);
   }
   if (await isSupportSession(c)) return { founder: false };
