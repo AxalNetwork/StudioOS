@@ -61,6 +61,9 @@ import {
 import { advisorVisibility } from '../services/advisorVisibility';
 import { canonicalInstant, isBlocked, isPaidType, ruleRefusal, rulesFromRow, weekBounds } from '../services/advisorBookingRules';
 import { pageFacts, pageWindow } from '../services/listPage';
+/** #4714 (D4714): a Practice list page. Totals are always over the whole set. */
+const PRACTICE_PAGE = 400;
+const BOOKINGS_PAGE = 200;
 
 /** #4689: the most rows one page of each Expertise list returns (the caps they had). */
 const SERVICES_PAGE = 200;
@@ -1229,24 +1232,29 @@ advisors.get('/me/bookings', async (c) => {
            FROM advisor_bookings b
            LEFT JOIN users u ON u.id = b.founder_user_id
            LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
-          WHERE b.advisor_id = ? AND b.status = ? ORDER BY b.created_at DESC LIMIT 200`
+          WHERE b.advisor_id = ? AND b.status = ? ORDER BY b.created_at DESC, b.id DESC LIMIT ? OFFSET ?`
       : `SELECT b.*, u.name AS founder_name, u.email AS founder_email,
                 s.starts_at AS slot_starts_at, s.ends_at AS slot_ends_at
            FROM advisor_bookings b
            LEFT JOIN users u ON u.id = b.founder_user_id
            LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
-          WHERE b.advisor_id = ? ORDER BY b.created_at DESC LIMIT 200`;
+          WHERE b.advisor_id = ? ORDER BY b.created_at DESC, b.id DESC LIMIT ? OFFSET ?`;
+    // #4714 (D4714): a page (`?limit=&offset=`, default and most 200), with
+    // `page.next_offset`, so a booking past the 200 newest can be reached.
+    const w = pageWindow(c.req.query(), BOOKINGS_PAGE);
     const rows = status
-      ? await c.env.DB.prepare(sql).bind(m.id, status).all<BookingRow>()
-      : await c.env.DB.prepare(sql).bind(m.id).all<BookingRow>();
+      ? await c.env.DB.prepare(sql).bind(m.id, status, w.limit, w.offset).all<BookingRow>()
+      : await c.env.DB.prepare(sql).bind(m.id, w.limit, w.offset).all<BookingRow>();
     // #4702: the list is the 200 newest; `total` is how many there are, so a
     // page can say "200 of 340" instead of presenting the window as the whole.
     const all = status
       ? await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_bookings WHERE advisor_id = ? AND status = ?').bind(m.id, status).first<{ n: number }>()
       : await c.env.DB.prepare('SELECT COUNT(*) AS n FROM advisor_bookings WHERE advisor_id = ?').bind(m.id).first<{ n: number }>();
+    const totalN = Number(all?.n ?? (rows.results || []).length);
     return c.json({
-      total: Number(all?.n ?? (rows.results || []).length),
-      limit: 200,
+      total: totalN,
+      limit: w.limit,
+      page: pageFacts(w, totalN, (rows.results || []).length),
       items: (rows.results || []).map((r: any) => bookingDto(r, {
         ...advisorMoney(r),
         founder_name: r.founder_name ?? null,
@@ -4468,11 +4476,16 @@ advisors.get('/me/engagements', async (c) => {
   try {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
+    // #4714 (D4714): the totals are over EVERY engagement, and the list is a
+    // page of them (`?limit=&offset=`, `page.next_offset`). The old LIMIT 400
+    // hid row 401 and computed the totals over the 400 it kept.
+    const w = pageWindow(c.req.query(), PRACTICE_PAGE);
     const rows = await c.env.DB.prepare(
       `SELECT * FROM advisor_engagements WHERE advisor_id = ?
-        ORDER BY updated_at DESC LIMIT 400`
+        ORDER BY updated_at DESC, id DESC`
     ).bind(m.id).all<EngagementRow>();
     const items = (rows.results || []).map(engagementDto);
+    const shown = items.slice(w.offset, w.offset + w.limit);
 
     // THE RATE IS COMPUTED HERE RATHER THAN ON THE PAGE, because its
     // denominator is the whole argument. `decided` counts renewals that went
@@ -4482,7 +4495,8 @@ advisors.get('/me/engagements', async (c) => {
     const ended = items.filter((e) => e.outcome === 'ended').length;
     const decided = renewed + ended;
     return c.json({
-      items,
+      items: shown,
+      page: pageFacts(w, items.length, shown.length),
       totals: {
         // Lanes, not outcomes — the canvas is explicit that a draft never sent
         // and a proposal awaiting an answer are not engagements.
@@ -4902,8 +4916,7 @@ advisors.get('/me/deliverables', async (c) => {
            LEFT JOIN advisor_engagements e ON e.id = d.engagement_id
            LEFT JOIN users u ON u.id = e.founder_user_id
           WHERE d.advisor_id = ?
-          ORDER BY d.updated_at DESC
-          LIMIT 400`
+          ORDER BY d.updated_at DESC, d.id DESC`
       ).bind(m.id).all<DeliverableRow & {
         client_user_id: number | null; client_user_name: string | null; client_user_email: string | null;
       }>(),
@@ -4969,8 +4982,13 @@ advisors.get('/me/deliverables', async (c) => {
       .map((i) => ({ title: i.title, client_name: i.client_name, sent_at: i.latest_version?.sent_at || null }))
       .sort((a, b) => String(a.sent_at || '').localeCompare(String(b.sent_at || '')));
 
+    // #4714 (D4714): the totals are over every work product; the list is a
+    // page of them.
+    const w = pageWindow(c.req.query(), PRACTICE_PAGE);
+    const shown = items.slice(w.offset, w.offset + w.limit);
     return c.json({
-      items,
+      items: shown,
+      page: pageFacts(w, items.length, shown.length),
       totals: {
         work_products: items.length,
         clients: new Set(items.map((i) => i.client_name)).size,

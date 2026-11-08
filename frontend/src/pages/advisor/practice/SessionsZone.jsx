@@ -22,6 +22,7 @@ import useScrollToHash from '../../../hooks/useScrollToHash';
 import SessionTypesPanel from './SessionTypesPanel';
 import BookingLinksPanel from './BookingLinksPanel';
 import { PublishAvailabilityCard, SessionLifecyclePanel } from './SessionActions';
+import { readEveryPage } from './everyPage';
 
 /**
  * Practice · Sessions — canvas PR4, `/practice/sessions`, tagged **FEED**.
@@ -184,7 +185,8 @@ export default function SessionsZone() {
   const loadBookings = useCallback(async () => {
     setBookings((c) => ({ ...c, loading: true, error: '' }));
     try {
-      const res = await api.listMyAdvisorBookings();
+      // #4714 (D4714): every page of the bookings, not the 200 newest.
+      const res = await readEveryPage((page) => api.listMyAdvisorBookings(undefined, page));
       setBookings({
         loading: false, error: '',
         items: (Array.isArray(res?.items) ? res.items : []).map(bookingView),
