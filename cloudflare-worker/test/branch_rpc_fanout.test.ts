@@ -89,7 +89,7 @@ const HQ_SCHEMA = `
   -- and FAILS CLOSED when it cannot: a fixture without this table would have
   -- every content escalation refused as unreadable. Migration 279's column,
   -- constraint and default, copied rather than relaxed.
-  CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+  CREATE TABLE territory_licences ( revision INTEGER NOT NULL DEFAULT 0,id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
     kind TEXT NOT NULL DEFAULT 'subsidiary' CHECK (kind IN ('subsidiary', 'white_label')));
 `;
 

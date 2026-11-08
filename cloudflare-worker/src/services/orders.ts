@@ -18,11 +18,11 @@
 import type { Env } from '../types';
 import { getCatalog, type CatalogProduct, type CatalogPrice } from './catalog';
 import {
-  validatePromoForProduct,
   computeDiscount,
   recordPaidRedemption,
   type PromoRow,
 } from './promos';
+import { canRedeemPromo, reservePromo, type Refusal } from './promoRedemption';
 import { sendBrandedInvoiceEmail } from './email';
 import { AXAL_ENTITIES } from './legalDocFormat';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -237,14 +237,21 @@ export async function priceCart(
 export interface CartPromo {
   promo: PromoRow;
   discountCents: number;
+  /** D4855: the ledger row holding this discount against the licence's ceiling, or null where none applies. */
+  reservationRef: string | null;
 }
+
+/** D4855: a refused cart code carries the rule's refusal, so the route can say what is left. */
+export type CartPromoRefusal = { error: string; refusal: Refusal };
 
 export async function resolveCartPromo(
   env: Env,
   code: string,
   cart: PricedCart,
   userId: number,
-): Promise<CartPromo | PriceError> {
+  /** D4855: the cart's order id. Given, the discount is reserved against the ceiling; omitted, the cart is only checked. */
+  reference?: string,
+): Promise<CartPromo | CartPromoRefusal | PriceError> {
   // Validate against EVERY distinct product in the cart. A promo restricted to
   // a subset of products must not discount the whole subtotal — otherwise an
   // attacker could add one eligible SKU to discount ineligible ones. The promo
@@ -253,13 +260,21 @@ export async function resolveCartPromo(
   let promoRow: PromoRow | null = null;
   for (const productId of productIds) {
     // D1273: the member, for a code's per-member limits. A cart is one-time, so no interval.
-    const v = await validatePromoForProduct(env, code, productId, cart.subtotal, cart.currency, { userId, interval: null });
-    if (!v.ok || !v.promo) return { error: v.reason || 'promo_invalid' };
+    // D4855: the same rule every checkout asks, ceiling included.
+    const v = await canRedeemPromo(env, { code, productId, amountCents: cart.subtotal, currency: cart.currency, buyer: { userId, interval: null }, reference });
+    if (!v.ok) return { error: v.reason, refusal: v };
     promoRow = v.promo;
   }
   if (!promoRow) return { error: 'promo_invalid' };
   const { discountCents } = computeDiscount(promoRow, cart.subtotal);
-  return { promo: promoRow, discountCents };
+  let reservationRef: string | null = null;
+  if (reference) {
+    // One reservation for the whole cart, however many products it holds.
+    const taken = await reservePromo(env, { code, productId: productIds[0], amountCents: cart.subtotal, currency: cart.currency, buyer: { userId, interval: null }, reference });
+    if (!taken.ok) return { error: taken.reason, refusal: taken };
+    reservationRef = taken.reservation?.ref ?? null;
+  }
+  return { promo: promoRow, discountCents, reservationRef };
 }
 
 // ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@
  * test after the first run against tables nobody created.
  */
 import type { Env } from '../types';
+import { tableColumns } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
@@ -241,18 +242,23 @@ const CONSENT_COLUMNS: Array<[string, string]> = [
 ];
 
 async function addMissingColumns(
-  env: Env, pragma: string, wanted: Array<[string, string]>,
+  env: Env, table: string, wanted: Array<[string, string]>,
 ): Promise<void> {
   // A table this bootstrap does not create — `advisors` and `advisor_bookings`
-  // both come from `sql/t13_t14_t15.sql`. An empty PRAGMA means the table is
-  // absent, and inventing a shape for a table that already has two definitions
-  // in this repository is exactly the hazard migration 201 declines to add to.
-  const info = await env.DB.prepare(pragma).all<{ name: string }>();
-  const have = new Set((info.results || []).map((r) => r.name));
+  // both come from `sql/t13_t14_t15.sql`. An empty column set means the table
+  // is absent, and inventing a shape for a table that already has two
+  // definitions in this repository is exactly the hazard migration 201
+  // declines to add to.
+  //
+  // Asks first through `tableColumns` (#4568 R2-04), the shared per-binding
+  // read in util/schemaBootstrap.ts, so a database that already has a column
+  // issues no ALTER for it. The set is the cached one, so a column added here
+  // is recorded in it and a later call on the same table does not ask again.
+  const have = await tableColumns(env, table);
   if (!have.size) return;
   for (const [name, alter] of wanted) {
     if (have.has(name)) continue;
-    try { await env.DB.prepare(alter).run(); }
+    try { await env.DB.prepare(alter).run(); have.add(name); }
     catch (e) { console.warn('[advisorStoresSchema] ALTER failed (likely a race):', alter, e); }
   }
 }
@@ -365,28 +371,28 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     // Before the column adds below: those read `PRAGMA table_info` too, and a
     // half-renamed table would make them reason about the wrong shape.
     await renameLegacySlotOwnerColumn(env);
-    await addMissingColumns(env, 'PRAGMA table_info(advisors)', PROFILE_COLUMNS);
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_bookings)', BOOKING_COLUMNS);
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_proof_consents)', CONSENT_COLUMNS);
+    await addMissingColumns(env, 'advisors', PROFILE_COLUMNS);
+    await addMissingColumns(env, 'advisor_bookings', BOOKING_COLUMNS);
+    await addMissingColumns(env, 'advisor_proof_consents', CONSENT_COLUMNS);
     // D573 / migration 394: nullable facts, including databases adopted by baseline.
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_deliverables)', [
+    await addMissingColumns(env, 'advisor_deliverables', [
       ['due_date', 'ALTER TABLE advisor_deliverables ADD COLUMN due_date TEXT'],
       ['manual_status', 'ALTER TABLE advisor_deliverables ADD COLUMN manual_status TEXT'],
     ]);
     // #4684 / migration 202611062152: who a version went to and who recorded its receipts.
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_deliverable_versions)', [
+    await addMissingColumns(env, 'advisor_deliverable_versions', [
       ['recipient_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN recipient_user_id INTEGER'],
       ['opened_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN opened_by_user_id INTEGER'],
       ['signed_off_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN signed_off_by_user_id INTEGER'],
     ]);
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_session_types)', [
+    await addMissingColumns(env, 'advisor_session_types', [
       ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
     ]);
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_bookings)', [
+    await addMissingColumns(env, 'advisor_bookings', [
       ['session_type_id', 'ALTER TABLE advisor_bookings ADD COLUMN session_type_id INTEGER'],
       ['booking_link_id', 'ALTER TABLE advisor_bookings ADD COLUMN booking_link_id INTEGER'],
     ]);
-    await addMissingColumns(env, 'PRAGMA table_info(advisor_booking_links)', [
+    await addMissingColumns(env, 'advisor_booking_links', [
       ['opens_count', 'ALTER TABLE advisor_booking_links ADD COLUMN opens_count INTEGER'],
     ]);
     READY.set(key, true);

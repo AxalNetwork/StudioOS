@@ -1,6 +1,7 @@
 import { count, summary, title, top, usd, usdCents, total } from './format.js';
 import { partnerTestingApi } from '../../lib/api/productTesting.js';
 import { placesLine, statusLabel } from '../../pages/testing/programmeModel.js';
+import { perkListingCounts, perkListingRows } from '../../lib/perkListings.js';
 
 /*
  * `/offers` — Partner Operator Canvas P5, "Package what we sell".
@@ -28,7 +29,10 @@ export default function partnerOffersBoard(role, api) {
   return {
     sources: {
       catalog: () => api.listServiceOfferings({ mine: 1 }),
-      perks: () => api.perksMine(),
+      // The firm's OWN submissions (`GET /perks/partner`), the dataset the Perk
+      // deals zone reads. This was `perksMine()`: the viewer's claims on other
+      // firms' perks, drawn here as if the firm had listed them (#4696).
+      perks: () => api.perkSubmissions(),
       visibility: () => api.getPartnerVisibility(),
       proof: () => api.listPartnerProof(),
       fit: () => api.listPartnerFitRules(),
@@ -44,7 +48,12 @@ export default function partnerOffersBoard(role, api) {
         cols: '1.8fr 1.2fr 1fr',
         columns: ['Offering', 'Category', 'Price'],
         empty: 'Nothing is listed in this firm’s catalog yet.',
-        summary: (d) => summary(count(Array.isArray(d?.items) ? d.items.length : null, 'offering')),
+        // Requests are counted, not priced: the worker serves counts by status
+        // and no booked value (#4696), and the zone prints the same figure.
+        summary: (d) => summary(
+          count(Array.isArray(d?.items) ? d.items.length : null, 'offering'),
+          count(d?.measures?.requested, 'request'),
+        ),
         // THE FIELD NAMES ARE THE PAYLOAD'S. `o.name` and `o.price` are neither:
         // `GET /services/offerings` serializes `title`, `category`, `price_usd`
         // and `price_cents` and has never sent either of those two, so the
@@ -67,17 +76,24 @@ export default function partnerOffersBoard(role, api) {
         title: 'Perk deals',
         span: 'half',
         source: 'perks',
-        cols: '1.7fr 1fr',
-        columns: ['Perk', 'State'],
+        cols: '1.6fr 1fr 1fr',
+        columns: ['Perk', 'Review', 'Lifecycle'],
         empty: 'This firm has submitted no perk yet.',
-        summary: (d) => summary(
-          count((d?.items || []).filter((p) => p.status === 'live').length, 'live', 'live'),
-        ),
-        rows: (d) => top(d?.items).map((p) => [p.title || p.name, title(p.status)]),
+        // The same counts the zone's strip prints, from the same functions:
+        // Live means approved AND not ended.
+        summary: (d) => {
+          const c = perkListingCounts(d?.items);
+          return Array.isArray(d?.items)
+            ? summary(count(c.total, 'listing'), count(c.live, 'live', 'live'))
+            : null;
+        },
+        // The worker reads submissions with LIMIT 200.
+        total: (d) => total(d?.items, 200),
+        rows: (d) => top(perkListingRows(d?.items)).map((r) => [r.name, r.reviewLabel, r.stateLabel]),
         footnote: () =>
-          'A perk is submitted here and reviewed before it appears. The canvas also counts '
-          + 'expired deals whose grants were revoked; expiry is not a state a perk record carries, '
-          + 'so a perk reads by the state it actually has.',
+          'These are the listings this firm submitted, the same rows as Perk deals. A perk is reviewed '
+          + 'before it appears; Review is that decision and Lifecycle is whether an approved offer '
+          + 'is still running, ending soon or ended.',
       },
       {
         slug: 'visibility',
@@ -86,13 +102,14 @@ export default function partnerOffersBoard(role, api) {
         span: 'half',
         source: 'visibility',
         cols: '1.5fr 1fr 1fr',
-        columns: ['Surface', 'Engagements', 'Won'],
+        columns: ['Surface', 'Engagements', 'Won (not cancelled)'],
         empty: 'No surface is recorded for this firm yet.',
         summary: (d) => summary(count(d?.engagement_total, 'engagement')),
         rows: (d) => top(d?.items).map((s) => [s.name, s.engagement_count, usd(s.won_value)]),
         // Both refusals, in the worker's own words, plus the attribution gap
-        // that stops the column adding up to the total.
-        footnote: (d) => summary(d?.unattributed_note, d?.lead_ratio_note),
+        // that stops the column adding up to the total, and what Won means:
+        // cancelled work is in Engagements and never in Won (#4696).
+        footnote: (d) => summary(d?.won_note, d?.unattributed_note, d?.lead_ratio_note),
       },
       {
         slug: 'proof',

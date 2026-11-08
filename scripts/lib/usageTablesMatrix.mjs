@@ -37,8 +37,20 @@ export const CONSUMERS = Object.freeze([
 ]);
 
 const SQL_START = /^\s*(SELECT|INSERT|UPDATE|DELETE|WITH|REPLACE)\b/i;
-const tableRe = (t) => new RegExp(`\\b${t}\\b`);
-const WRITE_OF = (t) => new RegExp(`\\b(?:INSERT(?:\\s+OR\\s+\\w+)?\\s+INTO|UPDATE(?:\\s+OR\\s+\\w+)?|DELETE\\s+FROM|REPLACE\\s+INTO)\\s+${t}\\b`, 'i');
+/**
+ * Each table's patterns, written out literally (no `new RegExp` from a string): the name as a word,
+ * a write into it, and the alias after it (`FROM ai_usage_logs l`). One entry per `TABLES` name.
+ */
+const TABLE_RE = Object.freeze({
+  ai_usage_logs: { name: /\bai_usage_logs\b/, write: /\b(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM|REPLACE\s+INTO)\s+ai_usage_logs\b/i, alias: /\bai_usage_logs\s+(?:AS\s+)?(\w+)/gi },
+  ai_budget_reservations: { name: /\bai_budget_reservations\b/, write: /\b(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM|REPLACE\s+INTO)\s+ai_budget_reservations\b/i, alias: /\bai_budget_reservations\s+(?:AS\s+)?(\w+)/gi },
+  ai_credit_ledger: { name: /\bai_credit_ledger\b/, write: /\b(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM|REPLACE\s+INTO)\s+ai_credit_ledger\b/i, alias: /\bai_credit_ledger\s+(?:AS\s+)?(\w+)/gi },
+  agent_task_runs: { name: /\bagent_task_runs\b/, write: /\b(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM|REPLACE\s+INTO)\s+agent_task_runs\b/i, alias: /\bagent_task_runs\s+(?:AS\s+)?(\w+)/gi },
+  ai_rail_proposals: { name: /\bai_rail_proposals\b/, write: /\b(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM|REPLACE\s+INTO)\s+ai_rail_proposals\b/i, alias: /\bai_rail_proposals\s+(?:AS\s+)?(\w+)/gi },
+});
+const tableRe = (t) => TABLE_RE[t].name;
+const WRITE_OF = (t) => TABLE_RE[t].write;
+if (TABLES.join() !== Object.keys(TABLE_RE).join()) throw new Error('usageTablesMatrix: TABLE_RE must have one entry per TABLES name, in order');
 
 function filesUnder(dir) {
   const out = [];
@@ -101,7 +113,7 @@ function access(lines, table, aliases) {
   });
 }
 
-const aliasesOf = (sql, table) => [...sql.matchAll(new RegExp(`\\b${table}\\s+(?:AS\\s+)?(\\w+)`, 'gi'))].map((m) => m[1])
+const aliasesOf = (sql, table) => [...sql.matchAll(TABLE_RE[table].alias)].map((m) => m[1])
   .filter((a) => !/^(WHERE|SET|ON|JOIN|LEFT|INNER|GROUP|ORDER|LIMIT|VALUES|USING|AND|OR|SELECT)$/i.test(a));
 
 /** The statement's opening with every literal masked; a cut through a masked literal is closed, so no quote is left open. */

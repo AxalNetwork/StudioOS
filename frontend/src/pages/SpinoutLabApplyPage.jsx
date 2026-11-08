@@ -8,6 +8,7 @@ import {
   APPLY_STEPS, ORIGIN_OPTIONS, TTO_OPTIONS, IP_OPTIONS, CONFIDENTIAL_NOTE, FIELD_LABEL,
   emptyBasics, emptyAnswers, missingOnStep, missingBasics, missingAnswers, answersPayload,
   draftBody, fromDraft, consequenceFor, phaseOf, applicantFromLegacy, whenOf,
+  committedApplicant, recordedSince, submitFailureKind,
 } from "../lib/applicationLifecycle";
 import { ApplicationStatusScreen } from "../components/spinout/ApplicationStatus";
 import LabPageShell from "../components/spinout/LabPageShell";
@@ -241,6 +242,12 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
   const [submitting, setSubmitting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // #4661: the POST is the commitment; reading the status afterwards is separate.
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  // A submit that may or may not have committed (no answer, a timeout, a 5xx): no second press until it is settled.
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
 
   const places = useCohortPlaces();
   const fallbackCohort = useMemo(() => {
@@ -299,6 +306,39 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
     go(step + 1);
   };
 
+  const clearInputs = () => { setBasics(emptyBasics()); setAnswers(emptyAnswers()); setStep(1); setSavedAt(null); };
+
+  /** The status read after a commit. It never undoes the commit: a failure only offers a retry, and a read that shows nothing is not believed. */
+  const refreshStatus = async () => {
+    setRefreshing(true);
+    try {
+      const s = await spinoutLab.state();
+      const next = s?.applicant ?? applicantFromLegacy(s?.application);
+      if (phaseOf(next) === "none") { setRefreshFailed(true); return; }
+      adopt(s);
+      setRefreshFailed(false);
+    } catch {
+      setRefreshFailed(true);
+    } finally { setRefreshing(false); }
+  };
+
+  /** After a submit that may have committed: read the status and say which it was, without inviting another press until it is known. */
+  const reconcile = async (priorId) => {
+    setReconciling(true); setError("");
+    try {
+      const s = await spinoutLab.state();
+      const next = s?.applicant ?? applicantFromLegacy(s?.application);
+      if (recordedSince(next, priorId)) {
+        adopt(s); clearInputs(); setUnconfirmed(false); setRefreshFailed(false);
+        return;
+      }
+      setUnconfirmed(false);
+      setError("Your application was not received. Your answers are still on this page; try again.");
+    } catch {
+      setUnconfirmed(true);
+    } finally { setReconciling(false); }
+  };
+
   const submit = async () => {
     setError("");
     const missing = [...missingBasics(basics), ...missingAnswers(answers)];
@@ -308,10 +348,12 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
       if (onPreviewSubmitted) onPreviewSubmitted();
       return;
     }
+    const priorId = applicant?.application_id ?? null;
     setSubmitting(true);
+    let result;
     try {
       const juris = JURIS.find((j) => j.key === basics.jurisKey) || JURIS[0];
-      await spinoutLab.apply({
+      result = await spinoutLab.apply({
         company_name: basics.company.trim(),
         idea: basics.idea.trim(),
         incorporated: basics.incorporated,
@@ -321,11 +363,25 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
         ...(appWindow ? { target_cycle: { year: appWindow.year, month: appWindow.month } } : {}),
         answers: answersPayload(answers),
       });
-      setBasics(emptyBasics()); setAnswers(emptyAnswers()); setStep(1); setSavedAt(null);
-      adopt(await spinoutLab.state());
     } catch (err) {
-      setError(err?.message || "Your application was not submitted. Your answers are still on this page; try again.");
-    } finally { setSubmitting(false); }
+      const kind = submitFailureKind(err);
+      if (kind === "refused") {
+        setError(err?.message || "Your application was not submitted. Your answers are still on this page; try again.");
+      } else {
+        // A 409 says one is already held; no answer, a timeout or a 5xx says nothing. Either way, find out before another press.
+        await reconcile(priorId);
+      }
+      setSubmitting(false);
+      return;
+    }
+    // The POST committed. The page adopts its own answer first, and only then clears the form; the status read that follows is separate.
+    setApplicant(committedApplicant(result));
+    setCompany(result?.application?.company_name || basics.company.trim() || null);
+    setShowForm(false);
+    clearInputs();
+    setUnconfirmed(false);
+    setSubmitting(false);
+    refreshStatus();
   };
 
   const withdraw = async () => {
@@ -372,6 +428,16 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
       {loadError ? (
         <Unreadable what="Your application" claim="This is not a statement that you have no application." onRetry={() => { setLoading(true); load(); }} />
       ) : !showForm && applicant ? (
+        <>
+        {refreshFailed ? (
+          <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-[12px] border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3 text-[13px] text-amber-900 dark:text-amber-200" data-testid="apply-refresh-failed">
+            <span>Your application was received. Its latest status could not be read just now, so what you see may be behind.</span>
+            <button type="button" onClick={refreshStatus} disabled={refreshing} data-testid="apply-refresh-retry"
+              className="ml-auto h-[34px] px-3 rounded-[9px] border border-amber-300 dark:border-amber-500/40 font-semibold disabled:opacity-60">
+              {refreshing ? "Reading…" : "Read the status again"}
+            </button>
+          </div>
+        ) : null}
         <ApplicationStatusScreen
           applicant={applicant}
           company={company}
@@ -381,6 +447,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
           busy={busy}
           error={error}
         />
+        </>
       ) : (
         <div className="flex flex-wrap gap-6 items-start">
           {/* STEP RAIL */}
@@ -440,6 +507,15 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
             <ApplyStep step={step} basics={basics} answers={answers} setBasics={setBasics} setAnswers={setAnswers} />
 
             {error ? <div role="alert" className="mt-4 text-[13px] text-red-600 dark:text-red-400 font-medium" data-testid="apply-error">{error}</div> : null}
+            {unconfirmed ? (
+              <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 rounded-[12px] border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3 text-[13px] text-amber-900 dark:text-amber-200" data-testid="apply-unconfirmed">
+                <span>We could not confirm whether your application was received. Your answers are still on this page. Check before you submit again, so it is not sent twice.</span>
+                <button type="button" onClick={() => reconcile(applicant?.application_id ?? null)} disabled={reconciling} data-testid="apply-check"
+                  className="ml-auto h-[34px] px-3 rounded-[9px] border border-amber-300 dark:border-amber-500/40 font-semibold disabled:opacity-60">
+                  {reconciling ? "Checking…" : "Check whether it was received"}
+                </button>
+              </div>
+            ) : null}
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
               {step > 1 ? (
@@ -451,7 +527,7 @@ export default function SpinoutLabApplyPage({ previewMode = null, onPreviewSubmi
                   Continue to {nextStep.name}
                 </button>
               ) : (
-                <button type="button" onClick={submit} disabled={submitting} data-testid="apply-submit"
+                <button type="button" onClick={submit} disabled={submitting || unconfirmed || reconciling} data-testid="apply-submit"
                   className="h-[42px] px-5 rounded-[11px] bg-violet-600 hover:bg-violet-700 text-white text-[14px] font-bold flex items-center gap-2 disabled:opacity-60">
                   {submitting ? <Loader2 className="animate-spin" size={16} /> : "Submit application"}
                 </button>

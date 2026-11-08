@@ -15,10 +15,10 @@
  * never stops the engine or deletes anything, so an upgrade shows it at once.
  * The person's own answers, skills and values are never locked.
  */
-import { holdsLicence } from './accountLicences';
 import type { Env, User } from '../types';
-import { userMeetsTier, tierUpsell } from '../middleware/requireTier';
-import { effectiveInvestorTier, investorTierCovers, investorUpsell, type InvestorUser } from '../middleware/requireInvestorTier';
+import { tierUpsell } from '../middleware/requireTier';
+import { investorUpsell } from '../middleware/requireInvestorTier';
+import { licenceMeetsTier } from './licencePlans';
 
 /** D1050: the plan by its catalogue key; its price is the plans read's, never typed here. */
 export type RequiredPlan = { licence: 'founder' | 'investor'; tier: 'growth' | 'professional'; name?: string; plan_key: string };
@@ -30,42 +30,15 @@ const ALWAYS_UNLOCKED = new Set(['admin', 'partner', 'advisor']);
 const FOUNDER_PLAN: RequiredPlan = { licence: 'founder', tier: 'growth', name: tierUpsell('growth').plan.name, plan_key: tierUpsell('growth').plan.plan_key };
 const INVESTOR_PLAN: RequiredPlan = { licence: 'investor', tier: 'professional', name: investorUpsell('professional').plan.name, plan_key: investorUpsell('professional').plan.plan_key };
 
-/**
- * The investor's effective tier, read as `effectiveInvestorTier` does, plus the
- * trial end its docstring promises: a `trialing` row whose `investor_trial_ends_at`
- * has passed reads Free.
- */
-function investorTierNow(row: InvestorUser | null | undefined, now: number) {
-  if (!row) return 'free' as const;
-  const status = String(row.investor_subscription_status ?? '').toLowerCase();
-  if (status === 'trialing') {
-    const ends = row.investor_trial_ends_at ? Date.parse(String(row.investor_trial_ends_at)) : NaN;
-    if (!Number.isFinite(ends) || ends <= now) return 'free' as const;
-  }
-  return effectiveInvestorTier(row);
-}
-
 export async function archetypeAccess(env: Env, user: User | null | undefined, now = Date.now()): Promise<ArchetypeAccess> {
   if (!user) return { locked: true, required_plan: FOUNDER_PLAN };
   const role = String(user.role ?? '').toLowerCase();
   if (ALWAYS_UNLOCKED.has(role) || (user.licences || []).some(licence => ALWAYS_UNLOCKED.has(licence))) return { locked: false };
   if (Number((user as any).spinout_lab_active ?? 0) === 1) return { locked: false };
-  // A shared entitlement accepts either held licence's existing paid plan.
-  // Evaluate Founder as Founder: requireTier's primary Investor bypass must
-  // not manufacture a paid Founder entitlement for a mixed account.
-  if (holdsLicence(user, 'founder') && userMeetsTier({ ...user, role: 'founder' }, 'growth')) return { locked: false };
-  if (holdsLicence(user, 'investor')) {
-    let row = user as InvestorUser;
-    const primaryId = Number((user as InvestorUser).investor_seat_primary_user_id ?? 0);
-    if (primaryId) {
-      // A seat reads its primary's plan, not the copy made when it was accepted.
-      row = (await env.DB.prepare(
-        `SELECT id, role, investor_tier, investor_subscription_status, investor_subscription_renews_at, investor_trial_ends_at
-           FROM users WHERE id = ?`,
-      ).bind(primaryId).first<InvestorUser>()) as InvestorUser;
-    }
-    if (investorTierCovers(investorTierNow(row, now), 'professional')) return { locked: false };
-  }
+  // A shared entitlement accepts either held licence's own paid plan (D4729: `licencePlans.ts` reads each).
+  // Founder is evaluated as Founder and Investor as Investor, so one licence's bypass never manufactures the other's plan.
+  if (await licenceMeetsTier(env, user, 'founder', 'growth', now)) return { locked: false };
+  if (await licenceMeetsTier(env, user, 'investor', 'professional', now)) return { locked: false };
   return { locked: true, required_plan: role === 'investor' ? INVESTOR_PLAN : FOUNDER_PLAN };
 }
 

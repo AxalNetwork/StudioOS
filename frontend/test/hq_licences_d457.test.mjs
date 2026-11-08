@@ -10,12 +10,13 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import DeployVersion from '../src/components/DeployVersion.jsx';
 import { LicenceShellNotice } from '../src/pages/hq/HqBranchOverlay.jsx';
+import { licencePageSource } from './_licencePage.mjs';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
 
 test('Detail remounts when the selected licence changes so territory drafts do not leak', () => {
-  const page = codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx'));
+  const page = codeOnly(licencePageSource());
   assert.match(page, /<Detail\s+key=\{sel\} uid=\{sel\}/, 'territory draft state must reset on licence switch');
 });
 
@@ -27,7 +28,8 @@ test('deploy version renders Not recorded when no SHA is stamped', () => {
   assert.match(none, /title="No deploy version is stamped on this Worker yet\./);
   const live = renderToStaticMarkup(React.createElement(DeployVersion, { row: { live_state: 'ok', live: { deploy_version: 'abc123' }, last_version: 'old999' }, codeClassName: 'font-mono' }));
   assert.equal(live, '<code class="font-mono">abc123</code>');
-  for (const page of ['frontend/src/pages/hq/PlatformPage.jsx', 'frontend/src/pages/admin/AdminLicences.jsx']) {
+  // #4707: the licence page's Deploy step is its own file now.
+  for (const page of ['frontend/src/pages/hq/PlatformPage.jsx', 'frontend/src/pages/admin/licences/DeployStep.jsx']) {
     assert.match(codeOnly(read(page)), /<DeployVersion row=\{(d|mine)\}/, `${page} draws the version through DeployVersion`);
   }
   assert.match(read('.github/workflows/cloudflare-worker-deploy.yml'), /WORKER_DEPLOY_VERSION:\$\{GITHUB_SHA\}/);

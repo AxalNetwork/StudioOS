@@ -169,3 +169,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 - `network_relationships_fixes_4740.test.mjs` — #4740 (S1 audit): the RI3/RI4/RI6 "Ask Eadwyn to draft…" buttons quote before they run and open in the composer or the reason field, a refusal reads the mapped copy, IntroCompose's unreadable mailboxes get their own alert, `?intro=<uid>` highlights its row or says it left the desk, the D4464 summary reads "Not recorded" (never 0) and Unreadable, and a failed `RecordEmailSheet` shares read is Unreadable for a member.
 `distribution_ads_4490.test.mjs` checks the Ads banner, gaps without bars, budget sliders, unavailable platforms and Later copy.
+`platform_populations_4856.test.mjs` checks HQ › Platform › Storage's populations: the split in the total's note, the members tile's own denominator, and no zero when the plans cannot be read (D4856).

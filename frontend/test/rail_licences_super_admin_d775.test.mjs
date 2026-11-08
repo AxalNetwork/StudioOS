@@ -14,6 +14,7 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { pageKeyFor } from '../src/lib/railPages.js';
 import { SUPER_ADMIN_BOARDS, SUPER_ADMIN_RAIL_OPTIONS, boardPage } from '../src/lib/railOptions/superAdmin.js';
+import { licencePageSource } from './_licencePage.mjs';
 
 const read = (p) => codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src', p), 'utf8'));
 
@@ -26,7 +27,7 @@ test('H1 Licences is one board on its own route, with no option', () => {
 });
 
 test('the licence open in the detail pane is the rail\'s record, by brand name or reference', () => {
-  const code = read('pages/admin/AdminLicences.jsx');
+  const code = licencePageSource();
   // D4707: `sel` is the reconciled selection (never a row the filter hides).
   assert.match(code, /const open = allItems\.find\(\(l\) => l\.uid === sel\) \|\| null;/,
     'the record is no longer the licence the pane has open');

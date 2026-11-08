@@ -1,6 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { readAllPages } from '../../../lib/pagedRead';
+import PartialRead from './PartialRead';
+import { usePipelineZone } from './usePipelineZone';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -98,7 +101,10 @@ function StalledFor({ days }) {
 function TermRow({ term, onSave, onDelete, busy }) {
   const [edit, setEdit] = useState(false);
   const [draft, setDraft] = useState(term);
-  useEffect(() => { setDraft(term); }, [term]);
+  // By VALUE, not identity: a background refresh hands every term a new object, and
+  // resetting on that would discard a draft someone is still typing.
+  const termKey = JSON.stringify(term);
+  useEffect(() => { setDraft(term); }, [termKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!edit) {
     return (
@@ -144,7 +150,7 @@ function TermRow({ term, onSave, onDelete, busy }) {
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" className={buttonClass} disabled={busy}
-            onClick={async () => { await onSave(draft); setEdit(false); }}>Save term</button>
+            onClick={async () => { if (await onSave(draft)) setEdit(false); }}>Save term</button>
           <button type="button" className={ghostButtonClass} onClick={() => { setDraft(term); setEdit(false); }}>Cancel</button>
           <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
             disabled={busy} onClick={() => onDelete(term)}>Remove</button>
@@ -326,7 +332,8 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
             <button
               type="button" className={`${buttonClass} mt-3`} disabled={busy || !newTerm.label.trim()}
               onClick={async () => {
-                await onAddTerm(row, newTerm);
+                // Cleared and closed only once the server took it.
+                if (!(await onAddTerm(row, newTerm))) return;
                 setNewTerm({ label: '', our_position: '', their_position: '', landing: '', state: 'open' });
                 setAdding(false);
               }}
@@ -341,33 +348,15 @@ function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDele
 }
 
 export default function PartnerNegotiationsZone() {
-  const [state, setState] = useState({ loading: true, error: '', items: null, data: null });
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);
+  const { state, load, run, busy, note } = usePipelineZone(
+    () => readAllPages((cur) => api.listPartnerNegotiations(cur)), 'The negotiation record did not load.',
+  );
   const [view, setView] = useState('all');
 
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      const r = await api.listPartnerNegotiations();
-      // A bare array, a missing key or an object are all survivable here: the
-      // page renders an empty list rather than throwing on `.map` of undefined.
-      setState({
-        loading: false, error: '', data: r || {},
-        items: Array.isArray(r?.items) ? r.items : [],
-      });
-    } catch (e) {
-      setState({
-        loading: false,
-        error: e?.message || 'The negotiation record did not load.',
-        items: null, data: null,
-      });
-    }
-  }, []);
-  useEffect(() => { load(); }, [load]);
 
   /**
-   * One write, with its result reported ON THE CARD THAT MADE IT.
+   * `run` comes from `usePipelineZone`: one write, resolving true only when the
+   * server accepted it, with its result reported ON THE CARD THAT MADE IT.
    *
    * `scope` is why this takes a third argument. A single `note` in this
    * component is rendered by every open card, so saving a stage on one deal
@@ -375,22 +364,10 @@ export default function PartnerNegotiationsZone() {
    * of them a claim about a write that did not happen there. The card compares
    * `note.scope` to its own quote id and shows nothing otherwise.
    */
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
-    setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
-    }
-  }, [load]);
 
   const d = state.data;
-  const items = state.items || [];
+  // A bare array, a missing key or an object are all survivable: an empty list, never a throw on `.map`.
+  const items = Array.isArray(d?.items) ? d.items : [];
   const tracked = useMemo(() => items.filter((r) => r.negotiation), [items]);
   // ══ THE `p3` CHIP ROW ════════════════════════════════════════════════════
   // All four run off columns migration 208 stores. `quote_negotiations.ball` is
@@ -401,7 +378,8 @@ export default function PartnerNegotiationsZone() {
   //
   // A CLOSED NEGOTIATION IS IN NONE OF THEM. The board is what is in play.
   const open = useMemo(
-    () => tracked.filter((r) => r.negotiation.stage !== 'closed'),
+    // D4693: the Worker's own rule (`negotiation.open`): not closed AND the quote behind it still waiting.
+    () => tracked.filter((r) => r.negotiation.open ?? r.negotiation.stage !== 'closed'),
     [tracked],
   );
   /**
@@ -427,11 +405,11 @@ export default function PartnerNegotiationsZone() {
     return open;
   }, [view, open]);
   const stalled = useMemo(
-    () => tracked.filter((r) => (r.negotiation.days_stalled ?? 0) >= 7 && r.negotiation.stage !== 'closed'),
+    () => tracked.filter((r) => (r.negotiation.days_stalled ?? 0) >= 7 && (r.negotiation.open ?? r.negotiation.stage !== 'closed')),
     [tracked],
   );
   const ourCourt = useMemo(
-    () => tracked.filter((r) => r.negotiation.ball === 'us' && r.negotiation.stage !== 'closed'),
+    () => tracked.filter((r) => r.negotiation.ball === 'us' && (r.negotiation.open ?? r.negotiation.stage !== 'closed')),
     [tracked],
   );
 
@@ -507,6 +485,7 @@ export default function PartnerNegotiationsZone() {
       )}
     >
       <div className="space-y-6">
+        <PartialRead data={state.data} noun="negotiations" onRetry={load} />
         <ZoneHeading
           title="Negotiations"
           blurb={
@@ -638,9 +617,9 @@ export default function PartnerNegotiationsZone() {
           surface="pipeline/negotiations"
           railOption="draft:counter"
           label="Proposal · counter drafted"
-          accept="Send counter"
+          accept="Save counter draft"
           run="Draft the counter"
-          foot="Terms read from the clause record."
+          foot="Terms read from the clause record. Saving keeps the draft here; nothing is sent to the client."
           empty="For the negotiation that has been still longest: a counter built from the clauses already on the table — what each side asked, what has been conceded, and the one line that says why the two positions cannot both hold."
           nothingToDraft="No negotiation is open, so there is nothing to counter."
         />

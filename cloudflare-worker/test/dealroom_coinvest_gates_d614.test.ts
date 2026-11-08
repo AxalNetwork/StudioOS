@@ -216,8 +216,13 @@ test('create: an unknown status is a 400 naming the allowed ones, and writes not
   assert.ok(check, 'the deals table has no status CHECK');
   assert.deepEqual(r.body.allowed, check[1].match(/'([^']+)'/g)!.map((v) => v.slice(1, -1)));
   assert.equal(count(), before);
-  // An allowed status, and none at all, still create.
-  const ok = await call(deals, env, FOUNDER, '/', { method: 'POST', body: JSON.stringify({ project_id: 1, status: 'scored' }) });
+  // D4632: a founder's deal is born `applied`; a later stage is refused, and writes nothing.
+  const later = await call(deals, env, FOUNDER, '/', { method: 'POST', body: JSON.stringify({ project_id: 1, status: 'scored' }) });
+  assert.equal(later.status, 403);
+  assert.equal(later.body.error, 'initial_status_not_allowed');
+  assert.equal(count(), before);
+  // An admin may draft into a pipeline stage, and none at all still creates.
+  const ok = await call(deals, env, ADMIN, '/', { method: 'POST', body: JSON.stringify({ project_id: 1, status: 'scored' }) });
   assert.equal(ok.status, 201);
   assert.equal(ok.body.status, 'scored');
   const dflt = await call(deals, env, FOUNDER, '/', { method: 'POST', body: JSON.stringify({ project_id: 1 }) });
