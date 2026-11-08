@@ -150,13 +150,34 @@ defaults to `[]`; at least one phrase across all three lists is required. A
 phrase is a non-empty string up to 200 characters, with at most 20 per list.
 `output` is required and must match the skill output in source CI.
 
-Evaluation is deterministic phrase matching, case-insensitive:
-`must_include` must appear; `must_say_not_recorded` must appear and the output
-must also contain `Not recorded`; `must_not_include` must not appear. Missing
-expectation values are not a pass: omitted lists normalize to empty, but a
-case with all three empty is rejected; an absent/invalid output or records is
-rejected. A failed model run is `not_run`, which cannot satisfy the publish
-bar.
+Evaluation is deterministic and case-insensitive (judge version 2, #4531,
+`services/agents/skillAssertions.ts`):
+
+- `must_include` must appear and `must_not_include` must not (substrings).
+- `must_say_not_recorded`: each field must be named in a **statement** that
+  also says `Not recorded`. A statement is a line, or a sentence or clause
+  within it ended by `.`, `!`, `?` or `;` and a space; a decimal point never
+  ends one. So a sentence, a list item, a `Field: value` line and a table row
+  each count. It fails when no statement pairs the field with `Not recorded`
+  (an unrelated `Churn is Not recorded` does not cover runway), or when
+  another statement gives the field a figure without `Not recorded`. The
+  field is matched as a whole word. Version 1 accepted the field anywhere and
+  `Not recorded` anywhere.
+- `numbers` (optional): `[{ "metric": "DPI", "value": 0.2, "unit": "x",
+  "tolerance": 0.005 }]`. `unit` is required (`""` for none). A statement
+  supports it when the label is followed by the number, optionally after `:`,
+  `=`, `is`, `of`, `at`, `was` or a table cell boundary, with the unit written
+  against the number or after one space. `DPI 0.20x`, `DPI: 0.2x`,
+  `DPI = 0.20 x`, `DPI is 0.20x` and `| DPI | 0.20x |` are the same. It fails
+  on a missing metric, a value outside the tolerance, another unit, or a
+  second statement that gives the metric another value. A conditional
+  statement (`if`, `would`, `could`, `assume`, `suppose`, `hypothetical`)
+  neither supports nor contradicts. Nothing else is treated as equivalent.
+
+Missing expectation values are not a pass: omitted lists normalize to empty,
+but a case with no phrase and no number is rejected; an absent/invalid output
+or records is rejected. A failed model run is `not_run`, which cannot satisfy
+the publish bar. The draft and published evaluations share `judge()`.
 
 Cases are immutable evaluation identities in storage. Changing case text
 creates a new case row and removes the prior live row, so results cannot be
