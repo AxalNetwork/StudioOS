@@ -294,6 +294,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `raiseProspectWriters.ts` | D1191: narrow canonical legacy prospect create/edit/promotion writers, re-exported by the Raise writer and safe for Contacts imports. |
 | `stripeReadiness.ts` | D1433 (#3703): shared key-mode, signing-secret and per-interval plan readiness for checkout, public plans and HQ checks. |
 | `distribution/` | D4485 overview reads and provenance, invoked after the existing Grow project gate. |
+| `beehiiv/` | D2407 (#2407 parts 1–2): a founder's own Beehiiv newsletter, read only, through Beehiiv's MCP server. `mcp.ts` holds the two frozen tool lists (the draft list unreachable until part 3); `reads.ts` is the only file that opens a Beehiiv session, aggregates only, every rate a fraction; `grow.ts` links one publication per venture and lands Grow's figures and posts through the ledger. It never imports Axal VC's own newsletters. Its README has the rules. |
 
 ## Rules
 

@@ -13,7 +13,7 @@
  */
 import type { Env } from '../types';
 import { bindingKey } from '../util/schemaBootstrap';
-import { grantCredits, type GrantActor } from './creditGrants';
+import { planGrant, type GrantActor, type GrantPlan } from './creditGrants';
 
 export const CATEGORIES = ['startup', 'customer', 'strategic'] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -581,45 +581,58 @@ export async function appendEvent(
 /** D965: what a move paid. Null when the move pays no rule. */
 export type ReviewReward =
   | { rule_key: string; paid: true; credits: number | null; ledger_id: number | null }
-  | { rule_key: string; paid: false; code: 'rule_inactive' | 'not_eligible' };
+  | { rule_key: string; paid: false; code: 'rule_inactive' | 'not_eligible' | 'not_paid' };
 
 /**
- * D965 (#2798): pay the referrer the rule a move into `nextStatus` pays, if
- * one does. It runs after the allowed-move check and before the move, so a
- * referral whose reward is on never passes its paying status unpaid, and a
- * retry after a failed move reads `already_granted` and pays nothing twice.
+ * D965 (#2798), D4804 (#4804): the reward a move into `nextStatus` pays, planned before anything is
+ * written and committed WITH the move.
  *
- * Two refusals let the move through, unpaid: a rule HQ switched off
- * (`rule_inactive`), and a referrer who never earns credits, a partner or an
- * admin (`not_eligible`, O-CRD A: their referrals still move). Any other
- * refusal refuses the move with 409 `reward_not_paid`.
+ * `planReferralReward` does every read and refusal. The ledger INSERT it returns joins the move's
+ * batch after the guarded status UPDATE and the history row, and runs only if that UPDATE changed a
+ * row (`afterWin`). A decision that lost to a competing one therefore leaves no credits behind, and a
+ * retry reads `already_granted` and pays nothing twice.
+ *
+ * Two refusals let the move through, unpaid: a rule HQ switched off (`rule_inactive`), and a referrer
+ * who never earns credits, a partner or an admin (`not_eligible`, O-CRD A: their referrals still move).
+ * Any other refusal refuses the move with 409 `reward_not_paid`, before anything is written.
  */
-async function payReferralReward(env: Env, row: SubmissionRow, nextStatus: Status, actor: GrantActor): Promise<ReviewReward | null> {
+type RewardPlan =
+  | { kind: 'none' }
+  | { kind: 'settled'; reward: ReviewReward }
+  | { kind: 'write'; rule_key: string; plan: Extract<GrantPlan, { done: false }> };
+
+async function planReferralReward(env: Env, row: SubmissionRow, nextStatus: Status, actor: GrantActor): Promise<RewardPlan> {
   const rule = REFERRAL_REWARD_RULES.find((r) => r.category === row.category && r.pays_at === nextStatus);
-  if (!rule) return null;
-  const result = await grantCredits(env, {
-    userId: row.referrer_user_id, ruleKey: rule.key, sourceRef: `referral:${row.uid}:${rule.key}`, actor,
+  if (!rule) return { kind: 'none' };
+  const plan = await planGrant(env, {
+    userId: row.referrer_user_id, ruleKey: rule.key, sourceRef: `referral:${row.uid}:${rule.key}`, actor, afterWin: true,
   });
-  if (result.status === 'granted') {
-    return { rule_key: rule.key, paid: true, credits: result.credits, ledger_id: result.ledger_id };
+  if (!plan.done) return { kind: 'write', rule_key: rule.key, plan };
+  const result = plan.result;
+  if (result.status === 'already_granted') return { kind: 'settled', reward: await paidReward(env, rule.key, result.ledger_id) };
+  if (result.status === 'refused' && (result.code === 'rule_inactive' || result.code === 'not_eligible')) {
+    return { kind: 'settled', reward: { rule_key: rule.key, paid: false, code: result.code } };
   }
-  if (result.status === 'already_granted') {
-    const line = await env.DB.prepare('SELECT delta FROM perk_credit_ledger WHERE id = ?')
-      .bind(result.ledger_id).first<{ delta: number }>();
-    return { rule_key: rule.key, paid: true, credits: line ? Number(line.delta) : null, ledger_id: result.ledger_id };
-  }
-  if (result.code === 'rule_inactive' || result.code === 'not_eligible') {
-    return { rule_key: rule.key, paid: false, code: result.code };
-  }
+  const code = result.status === 'refused' ? result.code : result.status;
   throw new ReferralError('reward_not_paid',
-    `The ${rule.key} reward could not be paid (${result.code}), so the referral did not move.`, 409);
+    `The ${rule.key} reward could not be paid (${code}), so the referral did not move.`, 409);
+}
+
+/** A reward already on the ledger, read back for the answer. */
+async function paidReward(env: Env, ruleKey: string, ledgerId: number | null): Promise<ReviewReward> {
+  const line = ledgerId == null ? null : await env.DB.prepare('SELECT delta FROM perk_credit_ledger WHERE id = ?')
+    .bind(ledgerId).first<{ delta: number }>();
+  return { rule_key: ruleKey, paid: true, credits: line ? Number(line.delta) : null, ledger_id: ledgerId };
 }
 
 /**
  * Admin review action: move status and optionally set the reviewer-facing
  * fields. Appends to the timeline in the same call so a status can never
  * change without a history row. D965: a move into a paying status pays its
- * reward first (`payReferralReward`), and the answer carries `reward`.
+ * reward, and the answer carries `reward`. D4804: the move, its history row and
+ * its reward are ONE batch. The reward is conditional on the move having won, so a
+ * competing decision that got there first leaves no credits, history or other
+ * decision-dependent record; the audit line and the notice follow the commit.
  */
 export async function reviewSubmission(
   env: Env,
@@ -652,13 +665,14 @@ export async function reviewSubmission(
       binds.push(nextStatus);
     }
   }
-  const reward = nextStatus
-    ? await payReferralReward(env, row, nextStatus, { kind: 'admin', id: actorUserId, email: actorEmail })
-    : null;
+  const rewardPlan: RewardPlan = nextStatus
+    ? await planReferralReward(env, row, nextStatus, { kind: 'admin', id: actorUserId, email: actorEmail })
+    : { kind: 'none' };
   if (patch.rewardLabel !== undefined) { sets.push('reward_label = ?'); binds.push(clean(patch.rewardLabel, 120)); }
   if (patch.nextStep !== undefined) { sets.push('next_step = ?'); binds.push(clean(patch.nextStep, 240)); }
   if (patch.fitNotes !== undefined) { sets.push('fit_notes = ?'); binds.push(clean(patch.fitNotes, 2000)); }
 
+  let reward: ReviewReward | null = null;
   const statements: D1PreparedStatement[] = [];
   // Also guard annotation-only saves against a concurrent status decision.
   if (sets.length || patch.note) {
@@ -673,12 +687,28 @@ export async function reviewSubmission(
       ).bind(row.id, nextStatus ? STATUS_LABELS[nextStatus] : 'Updated', nextStatus,
         clean(patch.note, MAX_LEN.note), actorUserId));
     }
-    const result = await env.DB.batch(statements);
+    // The reward's INSERT follows the history row: it runs only if that row was written, which only the winning UPDATE does.
+    if (rewardPlan.kind === 'write') statements.push(rewardPlan.plan.statement);
+    let result: D1Result[];
+    try {
+      result = await env.DB.batch(statements);
+    } catch (e) {
+      console.error('[referral] decision not saved', e instanceof Error ? e.message : '');
+      throw new ReferralError('decision_not_saved', 'The decision could not be saved. Nothing was changed. Try again.', 503);
+    }
     if (Number(result[0].meta?.changes) !== 1) {
       const current = await getByUid(env, uid, null);
       throw new ReferralError('bad_transition', `The referral moved from ${row.status} to ${current?.status || 'another state'}. Read it again before saving.`, 409);
     }
+    if (rewardPlan.kind === 'write') {
+      const ins = result[result.length - 1];
+      const settled = await rewardPlan.plan.settle({ changes: Number(ins.meta?.changes ?? 0), lastRowId: Number(ins.meta?.last_row_id ?? 0) });
+      if (settled.status === 'granted') reward = { rule_key: rewardPlan.rule_key, paid: true, credits: settled.credits, ledger_id: settled.ledger_id };
+      else if (settled.status === 'already_granted') reward = await paidReward(env, rewardPlan.rule_key, settled.ledger_id);
+      else reward = { rule_key: rewardPlan.rule_key, paid: false, code: 'not_paid' };
+    }
   }
+  if (rewardPlan.kind === 'settled') reward = rewardPlan.reward;
 
   const fresh = await getByUid(env, uid, null);
   return { ...(fresh || row), reward };

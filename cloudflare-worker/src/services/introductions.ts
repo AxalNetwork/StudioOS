@@ -305,6 +305,96 @@ export async function getIntroCreditState(
   });
 }
 
+/** Attempts at one acceptance when a debit loses a race for its bucket (D4606). */
+export const ACCEPT_ATTEMPTS = 3;
+
+export type AcceptIntroOutcome =
+  | { ok: true; bucket: 'allowance' | 'referral' | 'purchased'; credits: IntroCreditState }
+  | { ok: false; status: 402; error: 'no_credits'; credits: IntroCreditState }
+  | { ok: false; status: 404; error: 'not_found' }
+  | { ok: false; status: 409; error: 'already_responded'; proposition_status: string }
+  // The debit lost a race and the retries ran out. Nothing was spent: try again.
+  | { ok: false; status: 409; error: 'credit_conflict'; retryable: true };
+
+/**
+ * D4606 (#4606): accept one proposition, spending one credit, atomically.
+ *
+ * The bucket is chosen from a read, so by the time the debit runs another
+ * acceptance may have used its last credit. The debit therefore carries the
+ * chosen bucket's own availability in its WHERE clause (the allowance bucket
+ * within the month it was chosen for), never only the total: a total guard let
+ * two requests both spend the last allowance credit while purchased credits
+ * stayed, leaving the allowance bucket at -1 and the shown balance above what
+ * could be spent. A debit that loses is re-read and retried with a fresh
+ * bucket, up to ACCEPT_ATTEMPTS; the proposition flips to accepted only in the
+ * same batch, and only when its own spend row exists.
+ *
+ * Why it failed is read back, not guessed: a proposition no longer pending is
+ * `already_responded`, an empty balance is `no_credits`, and a debit that lost
+ * every retry is `credit_conflict` (nothing was spent).
+ */
+export async function acceptIntroProposition(
+  env: Env,
+  user: { id: number } & AllowanceUser,
+  uid: string,
+): Promise<AcceptIntroOutcome & { target_user_id?: number }> {
+  await ensureIntroNetworkSchema(env);
+  const sourceRef = `intro:${uid}`;
+  for (let attempt = 0; attempt < ACCEPT_ATTEMPTS; attempt += 1) {
+    const prop = await env.DB.prepare(
+      `SELECT target_user_id, status FROM intro_propositions WHERE uid = ? AND user_id = ?`,
+    ).bind(uid, user.id).first<{ target_user_id: number; status: string }>();
+    if (!prop) return { ok: false, status: 404, error: 'not_found' };
+    if (prop.status !== 'pending') {
+      return { ok: false, status: 409, error: 'already_responded', proposition_status: prop.status };
+    }
+    const state = await getIntroCreditState(env, user);
+    if (state.balance <= 0) return { ok: false, status: 402, error: 'no_credits', credits: state };
+    const bucket = pickSpendBucket(state);
+
+    let changed = false;
+    try {
+      const batch = await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO intro_credit_ledger (user_id, delta, bucket, kind, source_ref, note)
+           SELECT ?1, -1, ?2, 'spend', ?3, 'Accepted introduction'
+            WHERE EXISTS (SELECT 1 FROM intro_propositions
+                           WHERE uid = ?4 AND user_id = ?1 AND status = 'pending')
+              AND NOT EXISTS (SELECT 1 FROM intro_credit_ledger
+                               WHERE user_id = ?1 AND kind = 'spend' AND source_ref = ?3)
+              AND (SELECT COALESCE(SUM(delta), 0) FROM intro_credit_ledger
+                    WHERE user_id = ?1 AND bucket = ?2
+                      AND (?2 <> 'allowance' OR strftime('%Y-%m', created_at) = ?5)) > 0
+              AND (?2 <> 'allowance' OR strftime('%Y-%m', 'now') = ?5)`,
+        ).bind(user.id, bucket, sourceRef, uid, state.month),
+        env.DB.prepare(
+          `UPDATE intro_propositions
+              SET status = 'accepted', responded_at = datetime('now')
+            WHERE uid = ? AND user_id = ? AND status = 'pending'
+              AND EXISTS (SELECT 1 FROM intro_credit_ledger
+                           WHERE user_id = ? AND kind = 'spend' AND source_ref = ?)`,
+        ).bind(uid, user.id, user.id, sourceRef),
+      ]);
+      changed = Number(batch[1]?.meta?.changes || 0) > 0;
+    } catch {
+      // A conflicting write (the unique spend key, a busy database): read it back below.
+      changed = false;
+    }
+    if (changed) {
+      return { ok: true, bucket, credits: await getIntroCreditState(env, user), target_user_id: Number(prop.target_user_id) };
+    }
+  }
+  const last = await env.DB.prepare(
+    `SELECT status FROM intro_propositions WHERE uid = ? AND user_id = ?`,
+  ).bind(uid, user.id).first<{ status: string }>();
+  if (last && last.status !== 'pending') {
+    return { ok: false, status: 409, error: 'already_responded', proposition_status: last.status };
+  }
+  const fresh = await getIntroCreditState(env, user);
+  if (fresh.balance <= 0) return { ok: false, status: 402, error: 'no_credits', credits: fresh };
+  return { ok: false, status: 409, error: 'credit_conflict', retryable: true };
+}
+
 /**
  * Webhook fulfilment for an intro-credit pack purchase. Idempotent on the
  * PaymentIntent id — a Stripe retry can never double-credit. Returns true

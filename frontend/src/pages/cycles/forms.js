@@ -1827,18 +1827,35 @@ const buildFiling = {
     for_holder_id: { options: readChips(read, 'for_holder_id') },
   })),
   // Proof is the new step's own Upload proof (D690 decision 13), sent once the filing exists.
-  async submit(w, projectId, v) {
-    const made = await w.build.formationStep(projectId, buildFiling.toBody(v));
+  // D4600: `memory` lives as long as the open form. Once the filing exists its id is kept there,
+  // so a failed upload is retried against that filing and never creates a second one.
+  async submit(w, projectId, v, memory = {}) {
     const file = v.proof;
-    if (made?.id && file && typeof file === 'object' && typeof file.name === 'string') {
+    const hasFile = !!file && typeof file === 'object' && typeof file.name === 'string';
+    if (memory.filing && !hasFile) {
+      throw partialFiling(memory.filing, 'Choose the proof file to upload, or close this form: the filing is already added.');
+    }
+    const made = memory.filing || await w.build.formationStep(projectId, buildFiling.toBody(v));
+    if (made?.id && hasFile) {
       const body = new FormData();
       body.append('file', file);
       try { await w.recordAction('build', projectId, 'company-creation', `step-${made.id}`, 'upload-proof', body); }
-      catch (error) { throw new Error(`The filing was added; its proof was not stored: ${error?.message || 'try Upload proof on the filing'}`); }
+      catch (error) {
+        memory.filing = made;
+        throw partialFiling(made, `The filing was added; its proof was not stored: ${error?.message || 'try Upload proof on the filing'}. Press ${PROOF_RETRY} to try the upload again. The filing is not added twice.`);
+      }
     }
     return made;
   },
 };
+
+/** D4600: the label the Add filing button takes once only the proof upload is left. */
+const PROOF_RETRY = 'Retry proof upload';
+/**
+ * A write that half succeeded: the record exists and one follow-up failed. The form reads
+ * `partial` to refresh its page, to freeze everything but `only`, and to relabel its button.
+ */
+const partialFiling = (made, message) => Object.assign(new Error(message), { partial: { result: made, cta: PROOF_RETRY, only: 'proof' } });
 
 const SYSTEM = [{ value: 'bank', label: 'Bank' }, { value: 'accounting', label: 'Accounting' }, { value: 'payroll', label: 'Payroll' }, { value: 'crm', label: 'CRM' }, { value: 'workspace', label: 'Workspace' }];
 const SYNC = [{ value: 'live', label: 'Live' }, { value: 'hourly', label: 'Hourly' }, { value: 'daily', label: 'Daily' }, { value: 'manual', label: 'Manual' }];

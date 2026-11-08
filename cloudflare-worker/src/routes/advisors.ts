@@ -180,6 +180,26 @@ function advisorDto(m: AdvisorRow): any {
     ...advisorProfileDto(m),
   };
 }
+/**
+ * #4715 — an advisor as the directory and the match list show them to another
+ * member. The account's email is the advisor's own; the public profile
+ * (`GET /:uid`) never carried it either. `id` and `user_id` stay: the pages key
+ * advisors by `id`, and the trust badge and booking button read `user_id`.
+ */
+function directoryAdvisorDto(m: AdvisorRow): any {
+  const { email: _email, ...listed } = advisorDto(m);
+  return listed;
+}
+/**
+ * #4715 — a slot as anyone but its advisor sees it. The meeting link and the
+ * advisor's slot notes are for the advisor and for a founder whose booking on
+ * the slot was confirmed; to everyone else a slot says only whether it has a
+ * link (`has_meeting_link`), which is all the booking page shows.
+ */
+function publicSlotDto(s: SlotRow, taken = 0): any {
+  const { meeting_url: _url, notes: _notes, ...shown } = slotDto(s, taken);
+  return { ...shown, has_meeting_link: !!s.meeting_url };
+}
 function slotDto(s: SlotRow, taken = 0): any {
   return {
     id: s.id, uid: s.uid, advisor_id: s.advisor_id,
@@ -309,7 +329,7 @@ advisors.get('/', async (c) => {
            AND (nms.paused_at IS NOT NULL OR nms.directory_hidden_at IS NOT NULL))
        ORDER BY display_name ASC`
     ).all<AdvisorRow>();
-    let items = (rows.results || []).map(advisorDto);
+    let items = (rows.results || []).map(directoryAdvisorDto);
     if (q) items = items.filter((m: any) =>
       (m.display_name || '').toLowerCase().includes(q) ||
       (m.bio || '').toLowerCase().includes(q));
@@ -542,7 +562,7 @@ advisors.get('/match', async (c) => {
       );
 
       return {
-        advisor: advisorDto(m),
+        advisor: directoryAdvisorDto(m),
         match_score: total,
         breakdown: { domain_overlap: domainScore, values_alignment: valScore, skill_complementarity: compScore },
         reasons: [
@@ -749,7 +769,7 @@ async function slotVerdicts(env: Env, advisorId: number, slots: SlotRow[]): Prom
 
 advisors.get('/:uid/slots', async (c) => {
   try {
-    await requireAuth(c);
+    const viewer = await requireAuth(c);
     const m = await loadAdvisorByUid(c.env, c.req.param('uid'));
     if (!m) return c.json({ detail: 'Advisor not found' }, 404);
     const upcoming = (c.req.query('upcoming_only') || 'true').toLowerCase() === 'true';
@@ -763,9 +783,23 @@ advisors.get('/:uid/slots', async (c) => {
       : await c.env.DB.prepare(sql).bind(m.id).all<SlotRow>();
     const slots = (rows.results || []) as SlotRow[];
     const verdicts = await slotVerdicts(c.env, m.id, slots);
+    // #4715: the advisor (and an admin) see their own slots whole; a founder
+    // sees the link and notes only on a slot they hold a confirmed booking on.
+    // The booking verdicts ride on either shape: they name no link and no note.
+    const whole = viewer.id === m.user_id || isAdmin(viewer);
+    const held = new Set<number>();
+    if (!whole) {
+      const mine = await c.env.DB.prepare(
+        `SELECT slot_id FROM advisor_bookings
+          WHERE advisor_id = ? AND founder_user_id = ? AND status IN ('confirmed', 'completed')`,
+      ).bind(m.id, viewer.id).all<{ slot_id: number }>();
+      for (const r of mine.results || []) held.add(Number(r.slot_id));
+    }
     const items: any[] = [];
     for (const s of slots) {
-      items.push({ ...slotDto(s, await takenForSlot(c.env, s.id)), ...verdicts.get(s.id) });
+      const taken = await takenForSlot(c.env, s.id);
+      const shown = whole || held.has(Number(s.id)) ? slotDto(s, taken) : publicSlotDto(s, taken);
+      items.push({ ...shown, ...verdicts.get(s.id) });
     }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
@@ -2127,7 +2161,14 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
 
     // COMPARE-AND-SWAP on the state this request read: an edit that lands
     // between the read and the write is a 409, not a silent overwrite.
-    const res = await c.env.DB.prepare(
+    //
+    // #4713 (D4713): a change of an amount already priced is written to
+    // `advisor_booking_price_events` with who did it (and the admin behind an
+    // impersonation) and the amount, rate and cut before and after. It runs in
+    // the same batch, after the guarded update, and inserts only if that update
+    // changed the row, so a refused or raced write leaves no event.
+    const audited = (pricing || repricing) && stored != null && amount_cents !== stored;
+    const update = c.env.DB.prepare(
       `UPDATE advisor_bookings
           SET amount_cents = ?, billing_state = ?,
               platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
@@ -2135,7 +2176,22 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
     ).bind(
       amount_cents, billing_state, cut, bps, nowIso(),
       row.id, row.billing_state, stored,
-    ).run();
+    );
+    const writes = [update];
+    if (audited) {
+      writes.push(c.env.DB.prepare(
+        `INSERT INTO advisor_booking_price_events
+           (booking_id, actor_user_id, impersonated_by, from_amount_cents, to_amount_cents, from_take_rate_bps, to_take_rate_bps, from_cut_cents, to_cut_cents)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE changes() = 1`
+      ).bind(
+        row.id, Number(user.id), (user as any).impersonated_by ? Number((user as any).impersonated_by) : null,
+        stored, amount_cents,
+        row.take_rate_bps == null ? null : Number(row.take_rate_bps), bps,
+        row.platform_cut_cents == null ? null : Number(row.platform_cut_cents), cut,
+      ));
+    }
+    const [res] = await c.env.DB.batch(writes);
     if (Number((res as any)?.meta?.changes ?? 0) !== 1) {
       return c.json({
         detail: 'This session changed while you were editing it. Reload and try again.',
@@ -5036,6 +5092,10 @@ function availabilityDto(r: AvailabilityRow | null): any {
     // Lets the page tell "no rules configured" from "rules configured to
     // nothing", which read identically in the four fields above.
     configured: Boolean(r),
+    // #4713 (D4713): the version of this rule set. A replacement that names the
+    // revision it was edited from is refused when the rules have changed since
+    // (another tab, another device). `''` is "no rules yet".
+    revision: r?.updated_at ?? '',
   };
 }
 
@@ -5119,6 +5179,40 @@ advisors.put('/me/availability', async (c) => {
     const buffer = parseOptionalCount(body.buffer_minutes, 'buffer_minutes', 24 * 60);
     const notice = parseOptionalCount(body.min_notice_hours, 'min_notice_hours', 24 * 365);
     const blackouts = parseBlackouts(body.blackouts);
+    // #4713 (D4713): optional compare-and-set. A caller that sends the
+    // `revision` it read replaces only that version of the rules: if another
+    // tab changed them since, the write is refused (409 `rules_changed`) with
+    // the current rules, and nothing is overwritten. Omitting it keeps the
+    // unconditional replace the route always had.
+    const expected = body.expected_revision !== undefined && body.expected_revision !== null ? String(body.expected_revision) : null;
+    const rulesChanged = async () => {
+      const row = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json({
+        detail: 'Your availability rules changed somewhere else since you opened them. Nothing was saved; reload to see the current rules.',
+        code: 'rules_changed', current: availabilityDto(row),
+      }, 409);
+    };
+    if (expected !== null) {
+      // The compare and the write are ONE statement, so two tabs saving from
+      // the same revision cannot both win: the loser's UPDATE matches no row.
+      const at = nowIso();
+      const res = expected === ''
+        ? await c.env.DB.prepare(
+          `INSERT INTO advisor_availability_rules
+             (advisor_id, weekly_paid_cap, buffer_minutes, min_notice_hours, blackouts_json, timezone, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(advisor_id) DO NOTHING`
+        ).bind(m.id, cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, at).run()
+        : await c.env.DB.prepare(
+          `UPDATE advisor_availability_rules
+              SET weekly_paid_cap = ?, buffer_minutes = ?, min_notice_hours = ?, blackouts_json = ?, timezone = ?, updated_at = ?
+            WHERE advisor_id = ? AND updated_at = ?`
+        ).bind(cap, buffer, notice, blackouts, trimOrNull(body.timezone, 64), at, m.id, expected).run();
+      if (!Number((res as any).meta?.changes ?? 0)) return rulesChanged();
+      const done = await c.env.DB.prepare('SELECT * FROM advisor_availability_rules WHERE advisor_id = ?')
+        .bind(m.id).first<AvailabilityRow>();
+      return c.json(availabilityDto(done));
+    }
     const now = nowIso();
     await c.env.DB.prepare(
       `INSERT INTO advisor_availability_rules
