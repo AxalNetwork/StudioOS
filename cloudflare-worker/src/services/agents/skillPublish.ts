@@ -5,9 +5,11 @@
  *
  * In order: a retired skill is refused (409 `retired`); the draft is checked
  * as every save is (`checkDraft`, 400 with its code); an HQ skill must pass
- * `publishRefusal` (409 `needs_approval`, `golden_cases_failing`); then the
- * version row and the pointer land together, guarded on `current_version`
- * (409 `publish_conflict`). A company publish also clears HQ's open flag or
+ * the release decision (409 `needs_approval`, `evaluation_incomplete`,
+ * `golden_cases_failing`, each with `freshness`, D4533); then the version row,
+ * with an HQ version's release-evidence manifest in its `evidence_json`, and
+ * the pointer land together, guarded on `current_version` (409
+ * `publish_conflict`). A company publish also clears HQ's open flag or
  * suspension in that same batch (D4161, `clearOnRepublish`). An HQ publish
  * writes the admin audit row.
  *
@@ -17,7 +19,7 @@
 import type { Env, User } from '../../types';
 import { ROLES } from './catalogue';
 import { checkDraft, toSkillMd, type OutputKind, type Tag } from './skills';
-import { publishRefusal, type DraftParts } from './skillLifecycle';
+import { manifestOf, publishRefusalOf, releaseEvidence, type DraftParts, type ReleaseDecision } from './skillLifecycle';
 import { clearOnRepublish } from './skillModeration';
 import type { SkillRow } from './skillLinks';
 import { contextTokensOf } from './runCost';
@@ -43,7 +45,7 @@ export async function liveTaxonomy(env: Env): Promise<Set<string>> {
 }
 
 export type PublishResult =
-  | { ok: true; version: number; skill_md: string }
+  | { ok: true; version: number; skill_md: string; manifest: ReturnType<typeof manifestOf> | null; freshness: ReleaseDecision | null }
   | { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
 
 export async function publishDraft(env: Env, s: SkillRow, user: User, reason: string | null = null): Promise<PublishResult> {
@@ -51,20 +53,26 @@ export async function publishDraft(env: Env, s: SkillRow, user: User, reason: st
   const d = await draftPartsOf(env, s);
   const checked = checkDraft({ ...d, slug: s.slug }, { taxonomy: await liveTaxonomy(env), roleKeys: ROLE_KEYS });
   if (!checked.ok) return { ok: false, status: 400, code: checked.code, message: checked.message, ...(checked.tool ? { extra: { tool: checked.tool } } : {}) };
-  if (s.scope === 'hq') {
-    const no = await publishRefusal(env, s.id, d);
-    if (no) return { ok: false, status: no.status, code: no.code, message: no.message, extra: no.extra };
-  }
   const version = s.current_version + 1;
+  // D4533: an HQ draft is published on its release evidence, and the version keeps it. A company skill has no HQ gate and no manifest.
+  let manifest: ReturnType<typeof manifestOf> | null = null;
+  let freshness: ReleaseDecision | null = null;
+  if (s.scope === 'hq') {
+    const evidence = await releaseEvidence(env, s, d);
+    freshness = evidence.decision;
+    const no = publishRefusalOf(evidence.decision);
+    if (no) return { ok: false, status: no.status, code: no.code, message: no.message, extra: no.extra };
+    manifest = manifestOf(evidence, version);
+  }
   const md = toSkillMd(checked.draft, version);
   // The version row and the pointer land together, or neither does; the
   // `current_version = ?` guard refuses a concurrent publish of the same number.
   const res = await env.DB.batch([
     env.DB.prepare(`UPDATE agent_skills SET status = 'published', current_version = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND current_version = ?`).bind(version, user.id, s.id, s.current_version),
-    env.DB.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(s.id, version, md, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind,
-      JSON.stringify(checked.draft.tags), JSON.stringify(checked.draft.roles), user.id),
+    env.DB.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by, evidence_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(s.id, version, md, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind,
+      JSON.stringify(checked.draft.tags), JSON.stringify(checked.draft.roles), user.id, manifest ? JSON.stringify(manifest) : null),
     // D4121: what the version adds to a run that uses it: its prompt, as the run path joins it.
     env.DB.prepare('INSERT OR REPLACE INTO agent_skill_version_costs (skill_id, version, context_tokens) VALUES (?, ?, ?)').bind(s.id, version, contextTokensOf({
       version, name: d.name, purpose: d.purpose, steps_json: JSON.stringify(d.steps), allowed_tools_json: JSON.stringify(d.tools),
@@ -78,6 +86,7 @@ export async function publishDraft(env: Env, s: SkillRow, user: User, reason: st
   await logAdminAction(env, user.id, user.email, s.scope === 'hq' ? 'agent_skill_published' : 'company_skill_published', {
     skill_uid: s.uid, skill_name: d.name, reason, ...(s.scope === 'company' ? { company_id: s.company_id } : {}),
     before: { status: s.status, version: s.current_version || null }, after: { status: 'published', version },
+    ...(manifest ? { evidence_hash: manifest.evidence_hash } : {}),
   });
-  return { ok: true, version, skill_md: md };
+  return { ok: true, version, skill_md: md, manifest, freshness };
 }
