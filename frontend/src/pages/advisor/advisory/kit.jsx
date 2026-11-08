@@ -221,6 +221,9 @@ export function slotView(slot) {
     // `is_cancelled` is the worker's word; `status` is the dev backend's.
     cancelled: s.status ? s.status === 'cancelled' : Boolean(s.is_cancelled),
     meetingUrl: s.meeting_url ?? s.location_uri ?? null,
+    // #4715: anyone but the slot's advisor, or a founder with a confirmed
+    // booking on it, is told only whether a link exists.
+    hasMeetingLink: Boolean(s.has_meeting_link ?? (s.meeting_url || s.location_uri)),
   };
 }
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
+import { ShieldCheck, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
@@ -8,6 +8,8 @@ import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import SecurityTabs from './security/SecurityTabs.jsx';
 import OverviewWorkspace from './security/OverviewWorkspace.jsx';
 import SourceAvailability from './security/SourceAvailability.jsx';
+import AccessWorkspace from './security/AccessWorkspace.jsx';
+import StatusBadge from './security/StatusBadge.jsx';
 import { buildOverview, clockOf } from './security/overviewModel.js';
 import { tabFromSearch, tabOf } from './security/securityTabs.js';
 
@@ -348,190 +350,30 @@ export function DsrKindsNotRecorded({ kinds }) {
 }
 
 /**
- * D481 — which route each of the Sessions zone's acts goes to. Sign out
+ * D481 — which route each of the Access workspace's acts goes to. Sign out
  * account is D165's per-account route, reached from a row rather than
- * duplicated; the other three are D481's.
+ * duplicated; the other three are D481's. D4801 — emergency
+ * re-authentication goes through here too, so every write the workspace
+ * makes leaves this page by one door (`security/README.md`: no request from
+ * the workspace files).
  */
 export async function runSessionAct(client, kind, arg, reason) {
   if (kind === 'revoke') return client.hqRevokeSession(arg, reason);
   if (kind === 'revoke_selected') return client.hqRevokeSessions(arg, reason);
   if (kind === 'end') return client.hqEndImpersonation(arg, reason);
   if (kind === 'sign_out') return client.hqForceReauthUser(arg, reason);
+  if (kind === 'emergency') return client.hqSecurityForceReauth(reason);
   throw new Error(`Unknown session act: ${kind}`);
 }
 
-/** The write bar's refusal, in words the operator can act on. */
-export function writeBarMessage(err) {
-  const msg = String(err?.message || err || 'Request failed');
-  return msg === 'TOTP required'
-    ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
-    : msg;
-}
-
-const MIN_REASON = 8;
-const ACT_BUTTON = 'rounded-md border border-red-200 bg-white px-2 py-0.5 text-[10.5px] font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30';
-
-/**
- * D481 — the Sessions zone's list, and the acts it said it had.
- *
- * The subtitle read "Revoke is recorded" over a zone with no revoke. Now:
- * live support sessions first (H23: "an impersonation is a session like any
- * other, which is why it sits in this list"), then every active session with
- * Revoke, Sign out account, and a checkbox for Revoke selected. The caller's
- * own session reads Current and offers nothing — the server refuses it too.
- *
- * ONE REASON FOR EVERY ACT, typed once above the list and stored with each
- * act. Every button is disabled until it is long enough, which is the same
- * rule the server enforces and the same length.
- *
- * A FAILED READ IS UNREADABLE, never an empty list and never "Not recorded":
- * "nobody is signed in" is the one answer a security desk must not give by
- * accident. `list` is null while loading, UNAVAILABLE after a failed read.
- */
-export function SessionsPanel({ list, onAct, onRetry }) {
-  const [reason, setReason] = useState('');
-  const [selected, setSelected] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
-
-  if (list === UNAVAILABLE) {
-    return (
-      <div data-testid="hq-sessions-unreadable">
-        <Unreadable what="The session list" claim="This is not a claim that nobody is signed in." onRetry={onRetry} />
-      </div>
-    );
-  }
-  if (!list) return <p className="text-[12px] text-axal-faint">Loading…</p>;
-
-  const ready = reason.trim().length >= MIN_REASON;
-  const act = async (kind, arg) => {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await onAct(kind, arg, reason.trim());
-      setNotice(res?.message || 'Done.');
-      if (kind === 'revoke_selected') setSelected([]);
-    } catch (err) {
-      setError(writeBarMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const toggle = (id) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
-  const imp = list.impersonations;
-
-  return (
-    <div className="mt-3" data-testid="hq-sessions">
-      <label className="block text-[11px] font-semibold text-axal-muted">
-        Reason · required for any act below, stored with it
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="e.g. device reported stolen, ticket SEC-212"
-          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] font-normal text-axal-ink dark:bg-gray-900"
-        />
-      </label>
-      {error && <p role="alert" className="mt-2 text-[12px] text-red-700 dark:text-red-300">{error}</p>}
-      {notice && <p role="status" className="mt-2 text-[12px] text-axal-muted">{notice}</p>}
-
-      {imp?.available === false ? (
-        <div className="mt-3" data-testid="hq-live-impersonations-unreadable">
-          <Unreadable what="The support-session list" claim="This is not a claim that no support session is live." />
-        </div>
-      ) : imp?.rows?.length > 0 && (
-        <ul className="mt-3 space-y-1.5" data-testid="hq-live-impersonations">
-          {imp.rows.map((i) => (
-            <li key={i.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/40 px-3 py-2 text-[11.5px] dark:border-red-900 dark:bg-red-950/20" data-testid={`hq-live-impersonation-${i.id}`}>
-              <span className="min-w-0">
-                <b>{i.admin_name || i.admin_email || `user ${i.admin_user_id}`}</b> · impersonating{' '}
-                <b>{i.target_name || i.target_email || `user ${i.target_user_id}`}</b>
-                <span className="block font-mono text-[10px] text-axal-faint">
-                  started {day(i.started_at)}{i.context ? ` · ${i.context}` : ''}
-                </span>
-              </span>
-              <button type="button" disabled={busy || !ready} onClick={() => act('end', i.id)} className={ACT_BUTTON}>
-                End
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-axal-faint">
-        <span data-testid="hq-sessions-count">
-          {num(list.total)} active · token under {list.token_hours}h old, not revoked, account not signed out
-          {list.rows.length < list.total ? ` · newest ${num(list.rows.length)} shown` : ''}
-        </span>
-        <button
-          type="button"
-          disabled={busy || !ready || selected.length === 0}
-          onClick={() => act('revoke_selected', selected)}
-          className={ACT_BUTTON}
-          data-testid="hq-sessions-revoke-selected"
-        >
-          Revoke selected ({num(selected.length)})
-        </button>
-      </div>
-      {list.rows.length === 0 ? (
-        <p className="mt-2 text-[12px] text-axal-faint" data-testid="hq-sessions-empty">
-          No session was seen in this window. The table was read; it held no active row.
-        </p>
-      ) : (
-        <ul className="mt-2 space-y-1.5">
-          {list.rows.map((s) => (
-            <li key={s.id} className="flex items-start justify-between gap-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]" data-testid={`hq-session-${s.id}`}>
-              <span className="flex min-w-0 items-start gap-2">
-                {s.is_current ? null : (
-                  <input
-                    type="checkbox"
-                    aria-label={`Select session ${s.id}`}
-                    checked={selected.includes(s.id)}
-                    onChange={() => toggle(s.id)}
-                    className="mt-0.5"
-                  />
-                )}
-                <span className="min-w-0">
-                  <b>{s.name || s.email || `user ${s.user_id}`}</b>
-                  {s.role ? <span className="ml-1 text-axal-faint">· {titleCase(s.role)}</span> : null}
-                  <span className="block truncate font-mono text-[10px] text-axal-faint">
-                    {s.user_agent ? s.user_agent.slice(0, 70) : 'no device recorded'} · {s.ip || 'no address recorded'}
-                    {' '}· since {day(s.created_at) || 'unstamped'} · seen {day(s.last_seen_at) || 'unstamped'}
-                  </span>
-                </span>
-              </span>
-              {s.is_current ? (
-                <span className="shrink-0 rounded-md border border-axal-hairline px-2 py-0.5 text-[10.5px] font-bold text-axal-muted">Current</span>
-              ) : (
-                <span className="flex shrink-0 gap-1">
-                  <button type="button" disabled={busy || !ready} onClick={() => act('revoke', s.id)} className={ACT_BUTTON}>
-                    Revoke
-                  </button>
-                  <button type="button" disabled={busy || !ready} onClick={() => act('sign_out', s.user_id)} className={ACT_BUTTON}>
-                    Sign out account
-                  </button>
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-        Revoke ends one session; its token is refused from its next request. Sign out account ends every session that
-        account holds. Ending a support session closes its record and stops it being extended — its token carries no
-        session id, so it lapses at its own expiry, within {list.expiry_minutes} minutes. Each act is recorded with its
-        reason and the account it touched.
-      </p>
-    </div>
-  );
-}
-
-function Stat({ label, value, note, tone = 'text-axal-ink dark:text-white' }) {
+// `unread` (D4801): an absent figure on the Access tiles is a store that could
+// not be read, so it draws the vocabulary's Unavailable, never "Not recorded"
+// and never 0. The other zones' tiles keep their words until their slice.
+function Stat({ label, value, note, tone = 'text-axal-ink dark:text-white', unread = false }) {
   return (
     <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
       <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
-      <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
+      <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? (unread ? <StatusBadge state="unavailable" /> : <Unrecorded />)}</div>
       {note && <div className="mt-0.5 text-[10px] text-axal-faint">{note}</div>}
     </div>
   );
@@ -688,64 +530,6 @@ export function BackupDr({ block, unreadable }) {
   );
 }
 
-function ForceReauth({ onDone }) {
-  const [reason, setReason] = useState('');
-  const [ack, setAck] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const [done, setDone] = useState(null);
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.hqSecurityForceReauth(reason.trim());
-      setDone(res);
-      onDone?.();
-    } catch (err) {
-      const msg = String(err?.message || err || 'Request failed');
-      setError(msg === 'TOTP required'
-        ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
-        : msg);
-    } finally {
-      setBusy(false);
-    }
-  };
-  if (done) {
-    return (
-      <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-        {done.message} {num(done.affected) !== null ? `${num(done.affected)} accounts affected.` : ''}{' '}
-        <a href="/login" className="underline">Sign in again →</a>
-      </p>
-    );
-  }
-  return (
-    <form onSubmit={submit} className="mt-3 space-y-2" data-testid="hq-force-reauth">
-      <label className="block text-[11px] font-semibold text-axal-muted">
-        Reason · required, stored with the action
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="e.g. credential stuffing observed against three admin accounts"
-          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] font-normal text-axal-ink dark:bg-gray-900"
-        />
-      </label>
-      <label className="flex items-start gap-2 text-[11.5px] text-axal-muted">
-        <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5" />
-        <span>I understand this signs out every active account on every tenant, including my own session.</span>
-      </label>
-      {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{error}</p>}
-      <button
-        type="submit"
-        disabled={busy || !ack || reason.trim().length < 8}
-        className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-red-700 bg-white px-3 py-1.5 text-[12px] font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-500 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30"
-      >
-        {busy ? <Loader2 size={13} className="animate-spin" /> : <AlertTriangle size={13} />} Force re-auth · all tenants
-      </button>
-    </form>
-  );
-}
-
 /**
  * D168 — one open erasure request, and the two outcomes HQ may record.
  *
@@ -886,13 +670,12 @@ export default function HqSecurityPage() {
     api.hqSecuritySessions().then(setSessionList, (e) => { reportError('hq-sessions', e); setSessionList(UNAVAILABLE); });
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
-  const onSessionAct = useCallback(async (kind, arg, reason) => {
-    const res = await runSessionAct(api, kind, arg, reason);
-    // Both reads move: the list loses the row, and the overview's counts change.
-    loadSessions();
-    load();
-    return res;
-  }, [load, loadSessions]);
+  // D4801 — the act alone; NOTHING IS RE-READ BEHIND IT. The workspace marks
+  // what the server confirmed (a revoked row reads Revoked, in the dialog's
+  // word) and offers Re-read. Re-reading on its own would also be wrong after
+  // the two acts that sign the operator out: the next request answers 401 and
+  // the page leaves for /login before the result could be read.
+  const onSessionAct = useCallback((kind, arg, reason) => runSessionAct(api, kind, arg, reason), []);
 
   // H23's ledger, its own request. The filter is applied SERVER-side because
   // the feed is a merged page of sixty rows across five stores: filtering
@@ -1215,22 +998,19 @@ export function SecurityConsole({
       <>
         <Zone title="Sessions and access" sub="each act recorded with its reason">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `token under ${sessions.token_hours}h old, not revoked or signed out` : (sessions?.reason || 'unreadable')} />
-            <Stat label="Impersonations live" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'no ended_at yet' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
-            <Stat label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+            <Stat unread label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `token under ${sessions.token_hours}h old, not revoked or signed out` : (sessions?.reason || 'unreadable')} />
+            <Stat unread label="Live support sessions" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'record open, not yet ended' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
+            <Stat unread label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
             {/* D200 — this tile was `value={null}` under "no security_events".
                 It reads the ledger now: refused sign-ins in the last 24
                 hours, and its reason when the ledger could not be read. */}
-            <Stat label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+            <Stat unread label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
           </div>
-          <SessionsPanel list={sessionList} onAct={onSessionAct} onRetry={loadSessions} />
-          <ForceReauth onDone={load} />
           <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-            An impersonation is a session like any other, which is why it sits in this list. Each account can
-            also revoke its own devices under Settings. The platform-wide action above bumps every
-            account&apos;s token floor.
+            Each account can also revoke its own devices under Settings.
           </p>
         </Zone>
+        <AccessWorkspace list={sessionList} unavailable={UNAVAILABLE} onAct={onSessionAct} onRetry={loadSessions} onRefresh={refreshAll} />
 
 
         {/* H7's own zone. Not "what changed" — who read rows they do not
