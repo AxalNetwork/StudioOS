@@ -17,6 +17,10 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
   const [err, setErr] = useState('');
   const [allocation, setAllocation] = useState({ studio_pct: 15, founders_pct: 70, option_pool_pct: 13, advisors_pct: 2 });
   const [aiRecommended, setAiRecommended] = useState(false);
+  // D4677: signing and incorporation are recorded from their evidence, never assumed.
+  const [ipDraft, setIpDraft] = useState(false);
+  const [sig, setSig] = useState({ signed_by_name: '', signed_on: '' });
+  const [inc, setInc] = useState({ atlas_id: '', ein: '', incorporation_date: '' });
 
   const reload = async () => {
     try {
@@ -32,14 +36,21 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
 
   const init = async () => {
     setBusy(true); setErr('');
-    try { await api.spinoutExecute({ deal_id: deal.id, force: true }); await reload(); }
+    try { await api.spinoutExecute({ deal_id: deal.id }); await reload(); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
 
   const stepIp = async () => {
     setBusy(true); setErr('');
-    try { await api.spinoutIpTransfer({ deal_id: deal.id }); await reload(); }
+    try { await api.spinoutIpTransfer({ deal_id: deal.id }); setIpDraft(true); await reload(); }
+    catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const stepIpSigned = async () => {
+    setBusy(true); setErr('');
+    try { await api.spinoutIpTransfer({ deal_id: deal.id, signed: sig }); setIpDraft(false); await reload(); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
@@ -61,7 +72,7 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
 
   const stepAtlas = async () => {
     setBusy(true); setErr('');
-    try { await api.spinoutAtlas({ deal_id: deal.id }); await reload(); }
+    try { await api.spinoutAtlas({ deal_id: deal.id, confirmation: inc }); await reload(); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
@@ -136,13 +147,20 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
               {/* Step 1: IP */}
               <StepCard title="IP Licensing & Transfer" done={!!sub.ip_license_doc_id} active={currentStep === 0}>
                 {sub.ip_license_doc_id ? (
-                  <p className="text-xs text-emerald-700">IP License generated and signed (doc #{sub.ip_license_doc_id}).</p>
+                  <p className="text-xs text-emerald-700">IP licence signed and recorded (doc #{sub.ip_license_doc_id}).</p>
                 ) : (
                   <>
-                    <p className="text-xs text-gray-700 mb-3 dark:text-gray-300">Generates the IP Assignment & License Agreement transferring the startup's IP from Axal VC Holdings LLC to the new subsidiary.</p>
+                    <p className="text-xs text-gray-700 mb-3 dark:text-gray-300">Generates the IP Assignment & License Agreement transferring the startup's IP from Axal VC Holdings LLC to the new subsidiary. It stays a draft until you record who signed it and when.</p>
                     <button onClick={stepIp} disabled={busy} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-3 py-2 rounded flex items-center gap-1">
-                      {busy ? <Loader2 className="animate-spin" size={12} /> : <FileText size={12} />} Execute IP Transfer
+                      {busy ? <Loader2 className="animate-spin" size={12} /> : <FileText size={12} />} Generate IP licence draft
                     </button>
+                    {ipDraft && (
+                      <div className="mt-3 grid grid-cols-2 gap-2" data-testid="spinout-ip-signature">
+                        <input value={sig.signed_by_name} onChange={e => setSig({ ...sig, signed_by_name: e.target.value })} placeholder="Signed by (name)" maxLength={200} className="border border-gray-300 rounded px-2 py-1 text-sm dark:border-gray-700" />
+                        <input type="date" value={sig.signed_on} onChange={e => setSig({ ...sig, signed_on: e.target.value })} className="border border-gray-300 rounded px-2 py-1 text-sm dark:border-gray-700" />
+                        <button onClick={stepIpSigned} disabled={busy || !sig.signed_by_name.trim() || !sig.signed_on} className="col-span-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm px-3 py-2 rounded">Record signature</button>
+                      </div>
+                    )}
                   </>
                 )}
               </StepCard>
@@ -184,14 +202,19 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
                 {sub.stripe_atlas_id ? (
                   <div className="text-xs text-gray-700 space-y-1 dark:text-gray-300">
                     <div>Atlas ID: <code className="bg-gray-100 px-1 rounded">{sub.stripe_atlas_id}</code></div>
-                    <div>EIN: <code className="bg-gray-100 px-1 rounded">{sub.ein || 'Pending'}</code></div>
+                    <div>EIN: <code className="bg-gray-100 px-1 rounded">{sub.ein || 'Not recorded'}</code></div>
                     <div className="text-emerald-600">✓ Incorporated</div>
                   </div>
                 ) : (
                   <>
-                    <p className="text-xs text-gray-700 mb-3 dark:text-gray-300">Initiates Delaware C-Corp incorporation through Stripe Atlas. Returns Atlas ID and assigns EIN.</p>
-                    <button onClick={stepAtlas} disabled={busy || currentStep < 2} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-3 py-2 rounded flex items-center gap-1">
-                      {busy ? <Loader2 className="animate-spin" size={12} /> : <Building2 size={12} />} Start Incorporation
+                    <p className="text-xs text-gray-700 mb-3 dark:text-gray-300">Incorporate the company through Stripe Atlas, then record it here with the Atlas company id, the EIN the IRS issued and the incorporation date. Nothing is marked incorporated without them.</p>
+                    <div className="grid grid-cols-3 gap-2 mb-3" data-testid="spinout-atlas-evidence">
+                      <input value={inc.atlas_id} onChange={e => setInc({ ...inc, atlas_id: e.target.value })} placeholder="Atlas company id" maxLength={120} className="border border-gray-300 rounded px-2 py-1 text-sm dark:border-gray-700" />
+                      <input value={inc.ein} onChange={e => setInc({ ...inc, ein: e.target.value })} placeholder="EIN 12-3456789" maxLength={10} className="border border-gray-300 rounded px-2 py-1 text-sm dark:border-gray-700" />
+                      <input type="date" value={inc.incorporation_date} onChange={e => setInc({ ...inc, incorporation_date: e.target.value })} className="border border-gray-300 rounded px-2 py-1 text-sm dark:border-gray-700" />
+                    </div>
+                    <button onClick={stepAtlas} disabled={busy || currentStep < 2 || !inc.atlas_id.trim() || !inc.ein.trim() || !inc.incorporation_date} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-3 py-2 rounded flex items-center gap-1">
+                      {busy ? <Loader2 className="animate-spin" size={12} /> : <Building2 size={12} />} Record incorporation
                     </button>
                   </>
                 )}

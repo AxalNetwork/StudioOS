@@ -1,4 +1,4 @@
-import { count, day, summary, title, top, usdCents } from './format.js';
+import { count, day, moneyCents, summary, title, top } from './format.js';
 
 /** A list's full-set total from its page facts (#4689), or null when the answer carries none. */
 const pageTotal = (page) => (Number.isInteger(page?.total) ? page.total : null);
@@ -81,7 +81,7 @@ export default function advisorExpertiseBoard(role, api) {
         summary: (d) => summary(count(d?.counts?.live ?? null, 'live', 'live')),
         total: (d) => pageTotal(d?.page),
         rows: (d) => top(d?.items).map((s) => [
-          s.title, usdCents(s.price_cents), s.is_active ? 'Live' : 'Draft',
+          s.title, moneyCents(s.price_cents, s.currency), s.is_active ? 'Live' : 'Draft',
         ]),
         footnote: () =>
           'A service with no price reads as unrecorded rather than free — not setting a price is '

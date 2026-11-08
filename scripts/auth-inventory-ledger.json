@@ -363,7 +363,9 @@
     "GET /api/captable/access/shared/:token": {
       "review": "no_gate_found",
       "kind": "link_token",
-      "state": "unreviewed"
+      "state": "verified",
+      "test": "cloudflare-worker/test/authz_share_links_d4570.test.ts",
+      "note": "A capability link: no sign-in by design; the signed token must agree with its stored row on venture and level, and its expiry, view limit and revocation hold. Forged, unstored, other-venture, cross-kind, spent and revoked tokens are refused 403/410 and log no open; only the owner mints or revokes."
     },
     "GET /api/captable/record/:projectId": {
       "review": "record_without_ownership_check",
@@ -393,7 +395,9 @@
     "GET /api/captable/share/:token": {
       "review": "record_without_ownership_check",
       "kind": "link_token",
-      "state": "unreviewed"
+      "state": "verified",
+      "test": "cloudflare-worker/test/authz_share_links_d4570.test.ts",
+      "note": "A capability link: no sign-in by design; the signed token, its stored hash, expiry, view limit and revocation are the gate. Forged, unstored, cross-kind, spent and revoked tokens are refused 403/410, count no view and name nothing; another founder or an admin cannot revoke it."
     },
     "GET /api/channels/whatsapp/webhook": {
       "review": "no_gate_found",
@@ -558,7 +562,9 @@
     "GET /api/lab-report-shares/open/:token": {
       "review": "record_without_ownership_check",
       "kind": "link_token",
-      "state": "unreviewed"
+      "state": "verified",
+      "test": "cloudflare-worker/test/authz_share_links_d4570.test.ts",
+      "note": "Opens only for the named account, signed in: the claim is bound to grantee_user_id, revoked_at, the open limit and expiry. The owner, another founder, an admin, an unstored or broken token get the one 404 and no open is counted; no credentials or a disabled grantee get 401."
     },
     "GET /api/learning/courses/:uid/cover/:filename": {
       "review": "optional_auth",
@@ -1627,16 +1633,6 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "POST /api/company/:uid/compliance/:task/comments": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "POST /api/company/:uid/compliance/:task/ready": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "POST /api/competitors/:id/candidates": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
@@ -1765,7 +1761,9 @@
     "POST /api/lab-report-shares/:id/revoke": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
-      "state": "unreviewed"
+      "state": "verified",
+      "test": "cloudflare-worker/test/authz_share_links_d4570.test.ts",
+      "note": "Only the report's owner revokes (owner_user_id = caller): another founder, the named reader and an admin get the one 404 and nothing changes; no credentials get 401."
     },
     "POST /api/learning/exams/:uid/attempts/:attempt/submit": {
       "review": "record_without_ownership_check",

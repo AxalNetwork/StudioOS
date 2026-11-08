@@ -5,11 +5,12 @@ import EventsLightbox from './EventsLightbox';
 import JobsLightbox from './JobsLightbox';
 import { AdminPageHeader, RailFrame, WorkerRail } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
-import { EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, PAGE_LINE, PAGE_UNREADABLE, PERIODS, SCOPE_LABEL, SCOPE_TITLE, asOfLabel, buildActivity, buildCircles, buildConsoles, buildEventsFunnel, buildJobs, buildNeeds, buildNextUp, buildTiles, buildWellbeing, buildWho, clockOf, isEmptyCommunity, pageFailed, searchWithWeeks, weeksFrom } from './communityModel';
+import { INSIGHTS_EMPTY_LEAD, KPI_KEYS, MANAGE_LINE, MANAGE_TITLE, MOVED_KEY, MOVED_NOTICE, PAGE_LINE, PAGE_UNREADABLE, PERIODS, SCOPE_LABEL, SCOPE_TITLE, asOfLabel, buildActivity, buildCircles, buildConsoles, buildEventsFunnel, buildJobs, buildNeeds, buildNextUp, buildTiles, buildWellbeing, buildWho, clockOf, isEmptyCommunity, pageFailed, searchWithWeeks, weeksFrom } from './communityModel';
 import { openFrom, searchWith } from './lightboxModel';
 import { RecentCard } from './page/RecentCard';
-import { ActivityCard, CirclesCard, EventsCard, JobsCard, NeedsCard, WellbeingCard, WhoCard } from './page/cards';
-import { Console, DANGER, EYE, GHOST, H2, LINK, PRIMARY, SUB, Tile } from './page/parts';
+import { ActivityCard, AttentionCard, EventsCard, JobsCard, NetworkCard, WellbeingCard, WhoCard } from './page/cards';
+import { CARD, DANGER, H2, LINK, ManageRow, SUB, Tile } from './page/parts';
+import { AdditionalInsights, BuildCommunity } from './page/sections';
 import { useCommunityReads } from './page/useCommunityReads';
 import { RefreshCw } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -31,10 +32,21 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
  * (CM10). Nothing on this page names a member, and nothing is decided here:
  * Review opens the console that decides.
  *
+ * D4820 (#4820), Community v2: four KPIs (Waiting on you, Upcoming events,
+ * Event registrations, Job applications), Needs your attention directly under
+ * them, cards that collapse to one line when they have nothing to draw, one
+ * View details and one Manage … → per domain, the figures no store records
+ * behind one Additional insights row, and Manage Community's six rows. A
+ * genuinely empty Community (`isEmptyCommunity`, never one it could not read)
+ * shows Build your community instead of the analytics.
+ *
  * D934 (#2718): the four lightboxes, CM3–CM6. `?open=events|jobs|circles|
  * activity` opens one, so a link can; Esc or Close takes it off the address,
  * and focus goes back to the opener. Below 1024px a lightbox is the page.
  */
+
+/** A Manage Community door's name for assistive tech: the visible "Open" and its destination. */
+const openLabel = (name) => `Open ${name}`;
 
 const BOXES = { events: EventsLightbox, jobs: JobsLightbox, circles: CirclesLightbox, activity: ActivityLightbox };
 
@@ -65,6 +77,8 @@ export default function AdminCommunity() {
   }, [loc.search, loc.pathname, loc.hash, navigate]);
 
   const tiles = useMemo(() => buildTiles(reads), [reads]);
+  // D4820: four of the eight figures are the KPI row; the rest are drawn in their domain's card.
+  const fig = useMemo(() => Object.fromEntries(tiles.map((t) => [t.key, t])), [tiles]);
   const next = useMemo(() => buildNextUp(reads), [reads]);
   const jobs = useMemo(() => buildJobs(reads), [reads]);
   const circ = useMemo(() => buildCircles(reads), [reads]);
@@ -109,13 +123,6 @@ export default function AdminCommunity() {
           notice={{ text: moved ? MOVED_NOTICE : null, onDismiss: dismissMoved }}
         />
         <div className="flex flex-col gap-[7px]" data-testid="community-toolbar">
-          {empty && (
-            <div className="flex flex-wrap items-center gap-3" data-testid="community-empty">
-              <span className="text-[13.5px] text-axal-ink dark:text-gray-100">{EMPTY_LINE}</span>
-              <Link to="/admin/circles" className={PRIMARY}>Create a circle</Link>
-              <Link to="/admin/events" className={GHOST}>See events</Link>
-            </div>
-          )}
           <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
             <span title={SCOPE_TITLE} className="cursor-help rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="community-scope-chip">{SCOPE_LABEL}</span>
             <div role="radiogroup" aria-label="Period" className="flex gap-[3px] rounded-[9px] bg-axal-ground p-[3px] dark:bg-gray-800" data-testid="community-period"
@@ -152,58 +159,63 @@ export default function AdminCommunity() {
           </div>
         )}
 
-        {!failed && (
+        {!failed && empty && (
+          // D4820 CM04a: a genuinely empty Community: no analytics wall, no zero series.
+          <>
+            <BuildCommunity />
+            <div className="grid grid-cols-12 gap-3.5"><AttentionCard needs={needs} onRetry={reload} /></div>
+          </>
+        )}
+
+        {!failed && !empty && (
           <>
             <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="community-tiles">
-              {tiles.map((t) => (t.key === 'waiting'
-                ? <Tile key={t.key} t={t} onRetry={reload}><Link to="/admin/approvals" className={`${LINK} self-start`}>Open Approvals</Link></Tile>
-                : <Tile key={t.key} t={t} onRetry={reload} />))}
+              {KPI_KEYS.map((k) => <Tile key={k} t={fig[k]} onRetry={reload} />)}
             </div>
             <div className="grid grid-cols-12 gap-3.5">
-              <ActivityCard activity={activity} onRetry={reload} onOpen={openBox} />
-              <EventsCard next={next} ev={ev} weeks={weeks} onRetry={reload} onOpen={openBox} />
+              <AttentionCard needs={needs} onRetry={reload} />
+              <ActivityCard activity={activity} span={needs.state === 'ready' && needs.clear ? 12 : 7} onRetry={reload} onOpen={openBox} />
+              <EventsCard next={next} ev={ev} showUp={fig['show-up']} weeks={weeks} onRetry={reload} onOpen={openBox} />
               <WhoCard who={who} onRetry={reload} />
               <JobsCard jobs={jobs} onRetry={reload} onOpen={openBox} />
-              <CirclesCard circles={circ.circles} roster={circ.roster} onRetry={reload} onOpen={openBox} />
-              <WellbeingCard wb={wb} onRetry={reload} />
-              <NeedsCard needs={needs} onRetry={reload} />
+              <NetworkCard circles={circ.circles} roster={circ.roster} figures={fig} onRetry={reload} onOpen={openBox} />
+              <WellbeingCard wb={wb} experts={fig.experts} weeks={weeks} onRetry={reload} />
               <RecentCard refresh={tick} onOpen={openBox} />
-              {NOT_RECORDED.map((n) => (
-                <section key={n.key} className="col-span-12 flex flex-col gap-2 rounded-[12px] border border-dashed border-axal-hairline px-[18px] py-4 dark:border-gray-700 lg:col-span-6" data-testid={`community-unrecorded-${n.key}`}>
-                  <span className="flex items-baseline justify-between gap-2">
-                    <h2 className={H2}>{n.title}</h2>
-                    <span className={EYE}>Not recorded</span>
-                  </span>
-                  <span className={SUB}>{n.reason}</span>
-                </section>
-              ))}
             </div>
           </>
         )}
 
-        <section aria-labelledby="community-h-consoles" className="flex flex-col gap-2.5">
-          <h2 id="community-h-consoles" className={H2}>Consoles</h2>
-          <ul className="m-0 grid list-none grid-cols-1 gap-3.5 p-0 sm:grid-cols-2 lg:grid-cols-3" data-testid="community-consoles">
-            <Console testId="community-console-events" name="Events" what="Review, publish and run events" figure={doors.events}>
-              <Link to="/admin/events" className={LINK}>Open events</Link>
-            </Console>
-            <Console testId="community-console-jobs" name="Job board" what="Approve or reject postings members write" figure={doors.jobs}>
-              <Link to="/admin/jobs" className={LINK}>Open job board</Link>
-            </Console>
-            <Console testId="community-console-circles" name="Circles" what="Create, publish and feature circles" figure={doors.circles}>
-              <Link to="/admin/circles" className={LINK}>Open circles</Link>
-            </Console>
-            <Console testId="community-console-roster" name="Advisors & Partners" what="The roster shown on decks and pages" figure={doors.roster}>
-              <Link to="/admin/advisors-partners" className={LINK}>Open advisors &amp; partners</Link>
-            </Console>
-            <Console testId="community-console-wellbeing" name="Wellbeing" what="Verify experts and keep the library" figure={doors.wellbeing}>
-              <Link to="/admin/wellbeing" className={LINK}>Open wellbeing</Link>
-            </Console>
-            <Console testId="community-console-partner-invitations" name="Partner invitations" what="Bring operating partners in and keep their deals healthy" figure={{ state: 'unrecorded', text: 'Not recorded · Partner invitations have no pending queue.' }}>
-              <Link to="/admin/partner-invitations" className={LINK}>Open partner invitations</Link>
-            </Console>
+        {/* CM01 puts Additional insights above Manage Community; CM04a, the empty Community, below it. */}
+        {!failed && !empty ? <AdditionalInsights /> : null}
+        {/* D4820 CM01: Manage Community, six destination rows, each a literal Link (the shell's reachability guards read this file). */}
+        <section aria-labelledby="community-h-manage" className={`${CARD} flex flex-col`}>
+          <span className="flex flex-wrap items-baseline justify-between gap-2 px-4 pb-1 pt-3.5">
+            <h2 id="community-h-manage" className={H2}>{MANAGE_TITLE}</h2>
+            <span className={SUB}>{MANAGE_LINE}</span>
+          </span>
+          <ul className="m-0 list-none p-0" data-testid="community-manage">
+            <ManageRow testId="community-manage-events" name="Events" what="Review, publish and run events" figure={doors.events}>
+              <Link to="/admin/events" className={LINK} aria-label={openLabel('Events')}>Open →</Link>
+            </ManageRow>
+            <ManageRow testId="community-manage-jobs" name="Job board" what="Review and manage opportunities" figure={doors.jobs}>
+              <Link to="/admin/jobs" className={LINK} aria-label={openLabel('Job board')}>Open →</Link>
+            </ManageRow>
+            <ManageRow testId="community-manage-circles" name="Circles" what="Create, publish and feature circles" figure={doors.circles}>
+              <Link to="/admin/circles" className={LINK} aria-label={openLabel('Circles')}>Open →</Link>
+            </ManageRow>
+            <ManageRow testId="community-manage-roster" name="Advisors & Partners" what="Manage the network roster">
+              <Link to="/admin/advisors-partners" className={LINK} aria-label={openLabel('Advisors & Partners')}>Open →</Link>
+            </ManageRow>
+            <ManageRow testId="community-manage-wellbeing" name="Wellbeing" what="Verify experts and manage the library" figure={doors.wellbeing}>
+              <Link to="/admin/wellbeing" className={LINK} aria-label={openLabel('Wellbeing')}>Open →</Link>
+            </ManageRow>
+            {/* D923: Partner invitations have no pending queue, so no figure is invented. */}
+            <ManageRow testId="community-manage-partner-invitations" name="Partner invitations" what="Invite and manage operating partners">
+              <Link to="/admin/partner-invitations" className={LINK} aria-label={openLabel('Partner invitations')}>Open →</Link>
+            </ManageRow>
           </ul>
         </section>
+        {!failed && empty ? <AdditionalInsights lead={INSIGHTS_EMPTY_LEAD} /> : null}
       </div>
       )}
       {Box && !phone ? <Box onClose={closeBox} now={now} /> : null}

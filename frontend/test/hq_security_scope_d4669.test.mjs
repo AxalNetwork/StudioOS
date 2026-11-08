@@ -4,7 +4,8 @@
  * session reads as ending it.
  *
  * Renders the components with payloads shaped like the Worker's and reads
- * the text a person would see. The Worker half is proved against a real
+ * the text a person would see. Security v2 (D4801) moved the session acts
+ * into the Access workspace; the scope sits under "What each action reaches". The Worker half is proved against a real
  * database in cloudflare-worker/test/session_containment_d4669.test.ts.
  */
 import test from 'node:test';
@@ -12,9 +13,8 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { renderedText } from './_renderedText.mjs';
-import {
-  SessionsPanel, DeploymentOutcomes, outcomeLines, scopeSentence,
-} from '../src/pages/hq/SecurityPage.jsx';
+import AccessWorkspace from '../src/pages/hq/security/AccessWorkspace.jsx';
+import { DeploymentOutcomes, outcomeLines, scopeSentence } from '../src/pages/hq/security/deploymentScope.jsx';
 
 const text = (C, props) => renderedText(renderToStaticMarkup(React.createElement(C, props)));
 
@@ -28,10 +28,10 @@ const LIST = {
   scope: SCOPE,
 };
 
-test('the Sessions zone states the scope the server reports, and ending a support session reads as ending it', () => {
-  const t = text(SessionsPanel, { list: LIST, onAct: async () => ({}) });
+test('the Access workspace states the scope the server reports, and ending a support session reads as ending it', () => {
+  const t = text(AccessWorkspace, { list: LIST, unavailable: Symbol('unavailable'), onAct: async () => ({}), onRetry: () => {}, now: Date.parse('2026-11-07T14:30:00Z') });
   assert.match(t, /Scope · Acts on HQ's accounts and sessions only\. 2 bound branches are not reached/);
-  assert.match(t, /Ending a support session ends it: its token is refused from its next request/);
+  assert.match(t, /Ends the support session: its token is refused from its next request/);
   assert.doesNotMatch(t, /lapses at its own expiry|carries no session id/, 'the old caveat is still shown');
 });
 

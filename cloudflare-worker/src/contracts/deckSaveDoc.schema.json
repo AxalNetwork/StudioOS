@@ -1,0 +1,24 @@
+{
+  "$id": "deckSaveDoc",
+  "title": "PUT /api/decks/:id/draft-doc (D4596, #4596)",
+  "description": "The reply the deck v2 adapter's `saveDoc` method passes through: ok, the deck, and the working copy's deck-level state with its new revision (`routes/deck_draft.ts`).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "deck_id", "doc"],
+  "properties": {
+    "ok": { "const": true },
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "doc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rev", "order", "theme", "audience", "updated_at"],
+      "properties": {
+        "rev": { "type": "integer", "minimum": 1 },
+        "order": { "type": "array", "maxItems": 60, "items": { "type": "string" } },
+        "theme": {},
+        "audience": {},
+        "updated_at": { "type": "string" }
+      }
+    }
+  }
+}

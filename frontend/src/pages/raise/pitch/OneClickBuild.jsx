@@ -15,8 +15,8 @@ import { ACCEPT_ALL, DISCARD, HOLD, NOT_ON } from './deckV2Model';
 import { THEME_LABELS, cardColours } from './editorModel';
 import { placeImage } from './imageModel';
 import {
-  DISCARD_SENTENCE, FAST_TITLE, KEEP_ONE, KEPT_LINE, NEW_PATH, NOT_ON_STUDIOOS, PROPOSAL_LINE, RELOAD_LATEST, STALE_GONE, TITLES_ONLY_LINE, aiTokens,
-  buildSentence, canRegenerate, cardQuoteBody, fastBrief, fastPathLine, isStale, refusalOf, regenerateSentence, regeneratedLine, withBase,
+  DISCARD_SENTENCE, FAST_TITLE, KEEP_ONE, KEPT_LINE, NEW_PATH, NOT_ON_STUDIOOS, PRICE_RETRY, PROPOSAL_LINE, RELOAD_LATEST, STALE_GONE, TITLES_ONLY_LINE, aiTokens,
+  buildSentence, canConfirm, canRegenerate, cardQuoteBody, fastBrief, fastPathLine, isStale, priceNote, priceState, quoteUidOf, refusalOf, regenerateSentence, regeneratedLine, withBase,
 } from './newDeckModel';
 import {
   ACCEPT_ALL_PRESENT, ACCEPT_LINE, ACCEPT_THEME_LINE, ALREADY_KEPT, FAST_LINE, FAST_UNREAD, KIT_UNREAD, LEFT_OUT, NOTHING_TICKED, PROPOSED, REVIEW_TITLE, SAVED_LINE,
@@ -133,7 +133,9 @@ export default function OneClickBuild({
 }) {
   const navigate = useNavigate();
   const [read, setRead] = useState(given ? { status: 'ok', data: given } : { status: 'loading', data: null });
-  const [quote, setQuote] = useState(null);
+  // D4597 (#4597): the price is a state (loading, unavailable, free, metered, stale), never a missing quote read as "free".
+  const [slot, setSlot] = useState({ status: 'loading' });
+  const price = priceState(slot);
   // D1540: a stale pinned quote (used, lapsed, or another run's) asks for the price again.
   const [requote, setRequote] = useState(0);
   const [open, setOpen] = useState(false);
@@ -162,8 +164,10 @@ export default function OneClickBuild({
   useEffect(() => {
     if (!brief || switchedOff) return undefined;
     let live = true;
+    // Any change to what the price depends on (audience, length, round, exclusions) drops the old quote at once.
+    setSlot({ status: 'loading' });
     newDeckApi.quote({ project_id: projectId, one_click: true, step: 'build', audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}) })
-      .then((qt) => { if (live) setQuote(qt); }, (e) => { if (live) setQuote(null); reportError('pitch-oneclick:quote', e); });
+      .then((qt) => { if (live) setSlot({ status: 'ok', quote: qt }); }, (e) => { if (live) setSlot({ status: 'failed', message: refusalOf(e)?.message || null }); reportError('pitch-oneclick:quote', e); });
     return () => { live = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, brief?.audience, brief?.length, roundRef, exKey, requote, switchedOff]);
@@ -174,17 +178,19 @@ export default function OneClickBuild({
   }, [ctx, brief?.length]);
 
   const build = async () => {
-    if (!brief) return;
+    // Nothing metered runs on a price that was not read, accepted and pinned.
+    if (!brief || !canConfirm(price)) return;
     setStartedAt(Date.now()); setRefusal(null);
     try {
       // D1540: the quote shown is pinned; the build settles at no more than it.
-      const r = await newDeckApi.build({ project_id: projectId, one_click: true, audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}), ...(quote?.quote_uid ? { quote_uid: quote.quote_uid } : {}) }, railPressHeaders('deck:build'));
+      const r = await newDeckApi.build({ project_id: projectId, one_click: true, audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}), ...(quoteUidOf(price) ? { quote_uid: quoteUidOf(price) } : {}) }, railPressHeaders('deck:build'));
       setOpen(false);
       setRequote((k) => k + 1);
       if (onBuilt) onBuilt(r); else navigate(reviewHref(q, r.proposal.id));
     } catch (e) {
       const why = refusalOf(e);
-      if (why?.code === 'quote_stale') { setQuote(null); setRequote((k) => k + 1); }
+      // A stale or missing quote: price it again, and ask again. The dialog is closed so the new price is read first.
+      if (why?.code === 'quote_stale' || why?.code === 'quote_required') { setSlot({ status: 'stale' }); setRequote((k) => k + 1); }
       setRefusal(why); setOpen(false); reportError('pitch-oneclick:build', e);
     } finally { setStartedAt(null); }
   };
@@ -197,7 +203,7 @@ export default function OneClickBuild({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className={`text-[13.5px] font-bold ${INK}`}>{title}</span>
         <span className={MUTED}>{line}</span>
-        <span className={SMALL} data-testid={`${testId}-line`}>{fastPathLine(quote, brief)}</span>
+        <span className={SMALL} data-testid={`${testId}-line`}>{fastPathLine(price, brief)}</span>
         {brief?.why ? <span className={SMALL} data-testid={`${testId}-why`}>{brief.why}</span> : null}
         {switchedOff ? <span className={SMALL} data-testid={`${testId}-off`}>{NOT_ON}</span> : null}
         {read.status === 'error' && !given ? <span className={SMALL} data-testid={`${testId}-unread`}>{FAST_UNREAD}</span> : null}
@@ -212,15 +218,18 @@ export default function OneClickBuild({
           footer={busy ? null : (
             <div className="flex justify-end gap-2">
               <button type="button" className={GHOST} onClick={() => setOpen(false)}>Cancel</button>
-              <button type="button" className={PRIMARY} onClick={build} data-testid={`${testId}-run`}>Build deck</button>
+              <button type="button" className={PRIMARY} onClick={build} disabled={!canConfirm(price)} data-testid={`${testId}-run`}>Build deck</button>
             </div>
           )}>
           {/* Mounted with the dialog and empty until the build starts, so the change is announced. */}
           <BuildAnnouncer text={busy ? buildingLine(brief?.cards ?? null) : ''} testId={`${testId}-announce`} />
           {busy ? <BuildProgress cards={brief?.cards ?? null} titles={titles} startedAt={startedAt} /> : (
             <div className="flex flex-col gap-2">
-              <p className={`m-0 ${MUTED}`}>{buildSentence(quote, brief?.cards ?? null)}</p>
-              {quote?.ai ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`${testId}-hold`}>{HOLD(aiTokens(quote.hold_microusd))}</span> : null}
+              <p className={`m-0 ${MUTED}`} data-testid={`${testId}-sentence`}>{buildSentence(price, brief?.cards ?? null)}</p>
+              {price.kind === 'metered' ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`${testId}-hold`}>{HOLD(aiTokens(price.hold))}</span> : null}
+              {priceNote(price) && price.kind !== 'loading' ? (
+                <button type="button" className={GHOST} onClick={() => setRequote((k) => k + 1)} data-testid={`${testId}-reprice`}>{PRICE_RETRY}</button>
+              ) : null}
             </div>
           )}
         </Lightbox>
@@ -491,7 +500,7 @@ export function ProposalReview({ projectId, q = '', proposal: given, items = [],
           footer={(
             <div className="flex justify-end gap-2">
               <button type="button" className={GHOST} onClick={() => setRegen(null)} disabled={busy === 'regenerate'}>Cancel</button>
-              <button type="button" className={PRIMARY} onClick={regenerate} disabled={busy === 'regenerate' || !regen.quote} data-testid="pitch-review-regenerate-confirm">
+              <button type="button" className={PRIMARY} onClick={regenerate} disabled={busy === 'regenerate' || !canConfirm(priceState(regen.quote ? { status: 'ok', quote: regen.quote } : { status: 'loading' }, { pinned: false }))} data-testid="pitch-review-regenerate-confirm">
                 {busy === 'regenerate' ? 'Working…' : regen.quote?.ai ? `Regenerate · ${aiTokens(regen.quote.hold_microusd)}` : 'Regenerate'}
               </button>
             </div>
@@ -499,6 +508,9 @@ export function ProposalReview({ projectId, q = '', proposal: given, items = [],
           <div className="flex flex-col gap-2">
             <p className={`m-0 ${MUTED}`} data-testid="pitch-review-regenerate-sentence">{regenerateSentence(regen.quote, regen.title)}</p>
             {regen.quote?.ai ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-review-regenerate-hold">{HOLD(aiTokens(regen.quote.hold_microusd))}</span> : null}
+            {regen.quote && !canConfirm(priceState({ status: 'ok', quote: regen.quote }, { pinned: false })) ? (
+              <button type="button" className={GHOST} onClick={() => askRegenerate({ index: regen.index, title: regen.title })} data-testid="pitch-review-regenerate-reprice">{PRICE_RETRY}</button>
+            ) : null}
           </div>
         </Lightbox>
       ) : null}

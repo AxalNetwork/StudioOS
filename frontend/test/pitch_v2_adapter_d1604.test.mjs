@@ -212,7 +212,7 @@ test('D1555 (#3802): consistency is swapped — the check read\'s `consistency`,
 
 test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
-    grid: 3749, saveCard: 3751, discardDraft: 3751, draft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
+    grid: 3749, saveCard: 3751, saveDoc: 4596, discardDraft: 3751, draft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
     areasQuote: 3764, areasGenerate: 3764, judge: 3783, history: 3767, narrativeOutline: 3768, instruct: 3773,
     stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, imageEditAi: 3778, imageVary: 3784, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,

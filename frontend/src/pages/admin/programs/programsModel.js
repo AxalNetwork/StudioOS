@@ -279,6 +279,50 @@ export function grantBadgeOf(field) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Five dimensions, never one status word (D4807)
+ * ------------------------------------------------------------------ */
+
+/**
+ * One word used to say all of: how built a program is, whether it is running,
+ * whether members can use it, whether studios may be offered it, and whether
+ * any studio holds it. A program can be Live yet not open to members, or open
+ * to an admin's assignment while Not built yet. These are the five, each its
+ * own row with its own label, from what the card and the grant field carry:
+ *
+ *   Build state      the registry's status in the build words, or Not recorded
+ *   Operation        Running, Running in part, Paused or Not running
+ *   Member access    how a member gets in, or "Not open to members yet"
+ *   Studio offering  the policy: held by HQ, HQ only, runs at HQ, not offered
+ *   Studio grants    the studios that hold it now (D956's grant field), or why not
+ */
+export const DIMENSIONS = Object.freeze([
+  { key: 'build', label: 'Build state' },
+  { key: 'operation', label: 'Operation' },
+  { key: 'access', label: 'Member access' },
+  { key: 'offering', label: 'Studio offering' },
+  { key: 'grants', label: 'Studio grants' },
+]);
+const OPERATION = Object.freeze({ Live: 'Running', 'Partly built': 'Running in part', Paused: 'Paused', 'Not built yet': 'Not running', Proposed: 'Not running' });
+const OFFERING = Object.freeze({
+  'HQ-held': 'Held by HQ', 'HQ only': 'HQ only', 'Runs at HQ': 'Runs at HQ only', 'Not offered yet': 'Not offered to studios yet',
+});
+export function programDimensions(card, { superAdmin = false, grantBadge = null, state = 'ready' } = {}) {
+  if (state !== 'ready') {
+    const word = state === 'loading' ? READING : state === 'pending' ? NOT_READ_YET : state === 'unrecorded' ? NOT_RECORDED : COULD_NOT_READ;
+    return DIMENSIONS.map((d) => ({ ...d, value: word, state }));
+  }
+  const built = STATUS_PILL[card?.status] ? card.status : null;
+  const values = {
+    build: built || NOT_RECORDED,
+    operation: OPERATION[card?.status] || NOT_RECORDED,
+    access: card?.who === 'Not open to members yet' ? 'Not open to members yet' : card?.join || NOT_RECORDED,
+    offering: OFFERING[superAdmin ? card?.hqGrant : card?.grant] || NOT_RECORDED,
+    grants: grantBadge ? (grantBadge.word === GRANT_UNREADABLE ? COULD_NOT_READ : grantBadge.word) : NOT_READ_YET,
+  };
+  return DIMENSIONS.map((d) => ({ ...d, value: values[d.key], state: 'ready' }));
+}
+
+/* ------------------------------------------------------------------ *
  * The program pages: header, facts and tabs (D953 §3)
  * ------------------------------------------------------------------ */
 
@@ -972,7 +1016,9 @@ export function learnersFrom(read) {
     return { state: 'unreadable' };
   }
   const learners = Array.isArray(read.data?.learners) ? read.data.learners : [];
-  return { state: 'ready', learners };
+  // D4810: a page carries how many there are in all; null when the read did not say.
+  const total = Number.isFinite(Number(read.data?.total)) && read.data?.total !== null && read.data?.total !== undefined ? Number(read.data.total) : null;
+  return { state: 'ready', learners, total };
 }
 
 /* ------------------------------------------------------------------ *
