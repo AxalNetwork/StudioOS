@@ -113,3 +113,96 @@ limit, is ignored as a set and the response says so.
 3. **Thresholds.** Approve the queue oldest-age thresholds (15 / 60 min,
    proposed) and the D1 critical size (7.5 GB, within #4559's 7–8 GB).
 4. **Canvas** for the capacity panel on HQ · Platform (`needs-design`).
+
+## 7. Detected incidents (D4854)
+
+HQ · Platform's **Health** zone shows one state (critical, degraded, unknown or
+healthy) and the incidents the platform detects for itself. They are derived
+on every read from the signal that raises them (`services/platformHealth.ts`):
+
+- **Keyed and deduplicated.** One failure is one incident however often the
+  page loads. It clears on the first read after the signal recovers.
+- **Not stored.** No table is written.
+- **Kept apart from published incidents.** Status-page incidents are entered
+  by hand. They are counted apart and never raise or clear the state.
+- **Never healthy with a gap.** A signal that could not be read is listed as
+  unknown, and the state is not `healthy` while one is.
+
+Thresholds are the constants at the top of `platformHealth.ts`. The response
+reports them under `health.thresholds`. Each section below is a runbook that
+an incident links to.
+
+### 7.1 A scheduled job is failing or late
+
+The incident names the trigger:
+
+- **medium:** the latest run failed;
+- **high:** `CRON_FAILURE_STREAK` runs in a row failed, or the expected run
+  never came.
+
+Steps:
+
+1. Read the trigger's latest error on the Monitoring zone's cron table.
+2. A missing run (stale) usually means the Worker deploy did not register its
+   cron triggers. The deploy log's "Deployed studioos triggers" lines say which
+   ones it did (`DEPLOY.md`).
+3. A repeated failure is a code or data fault. Fix it and deploy; the incident
+   clears at the first successful run.
+
+### 7.2 The Stripe webhook is refusing or silent
+
+The incident's severity depends on what the request log shows:
+
+- **high:** the webhook refused `WEBHOOK_FAILURE_STREAK` deliveries in a row;
+- **critical:** it refused `WEBHOOK_FAILURE_CRITICAL` in a row;
+- **low:** nothing has been delivered for `WEBHOOK_SILENCE_HOURS` while Stripe
+  is configured. A quiet store can be legitimate.
+
+Steps:
+
+1. Open **Payments › Stripe connection**. Check that the endpoint is
+   registered, and that its signing secret is the one the Worker holds.
+2. A 400 streak is almost always a signing-secret mismatch.
+3. A 5xx streak is a fault in the handler. Look at the Worker's logs for
+   `/api/billing/stripe/webhook`.
+4. Stripe retries refused events for up to three days. The incident clears on
+   the first 2xx.
+
+### 7.3 Dead letters are waiting
+
+Severity is **medium** from one dead letter and **high** from `DLQ_HIGH`.
+Growth over time is not stored, so the figure is the backlog now.
+
+Steps:
+
+1. Read the backlog on the Monitoring zone, split into the legacy table and
+   the queue mirror (`services/deadLetters.ts`).
+2. Fix the cause before replaying.
+
+### 7.4 Telemetry cannot be read
+
+This incident is **high** when Analytics Engine cannot be read:
+
+- `CLOUDFLARE_ACCOUNT_ID` or `CLOUDFLARE_AE_API_TOKEN` is not set on HQ, or
+- the SQL API did not answer.
+
+It is **medium** when Analytics Engine answered but holds no request row for
+`TELEMETRY_STALE_MINUTES`. Every metered request writes one
+(`middleware/observability.ts`), so that means the writes are failing.
+
+Missing telemetry is never drawn as zero traffic. The Health zone shows when
+telemetry last worked; the time is kept in KV under `health:telemetry:last_ok`.
+
+Steps:
+
+1. Open **Topology › This deployment** and check whether the read is
+   configured.
+2. Check the token's scope (owner item 1 above).
+3. Use Retry on the Health zone. The incident clears on the first good read.
+
+**Not detected here:**
+
+- **Branch Worker and database health.** Deployments reads it and shows it per
+  branch, because it asks every branch and must not hold up the summary
+  (D110).
+- **The meeting bot.** It is not deployed yet (D886).

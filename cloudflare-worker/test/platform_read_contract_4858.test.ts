@@ -89,6 +89,8 @@ test('laterOf compares SQL and ISO stamps as one format', () => {
 const stub = (over: Partial<Record<keyof PlatformSummaryReaders, () => Promise<unknown>>> = {}): PlatformSummaryReaders => {
   const base = Object.fromEntries(Object.keys(PLATFORM_SUMMARY_READERS).map((k) => [k, async () => ({ available: true })])) as any;
   base.github_sync = async () => ({ window: { available: true }, recent: { available: true } });
+  // D4854: telemetry reports a status, not `available`.
+  base.telemetry = async () => ({ status: 'healthy', last_event_at: '2026-11-07 11:59:00' });
   base.payments_catalog = async () => ({ publishable: {}, catalog: { available: true, complete: true, last_written_at: '2026-11-06 10:00:00' }, webhook: { available: true } });
   return { ...base, ...over };
 };
