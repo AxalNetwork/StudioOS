@@ -94,7 +94,7 @@ export const HQ_LANES = [
   { key: 'notices', label: 'Notice responses', door: 'Licences' },
   { key: 'support', label: 'Requests from studios', door: 'Support' },
   { key: 'proposals', label: 'Program proposals', door: null, waits: 'Programs › Proposals is not built yet (#2371).' },
-  { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program grants › Requests' },
+  { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program access by licence › Requests' },
 ];
 export const isHqLane = (key) => HQ_LANES.some((l) => l.key === key);
 export const HQ_ONLY_TITLE = 'This lane belongs to the Super Admin.';
