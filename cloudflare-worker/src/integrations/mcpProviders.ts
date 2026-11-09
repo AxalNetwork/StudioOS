@@ -12,10 +12,13 @@
  *
  * THREE LOCKS ON WRITES. `write_tools` is empty unless `publish_issue` names
  * the provider issue that asked for publishing (`mcp_client_d847.test.ts`
- * holds every record to that); a write tool is callable only with #2400's
- * ticket, which does not exist yet, so the session refuses every write tool
- * before any request; and a read tool the server annotates as not read-only
- * or destructive is refused. Annotations can only narrow the list.
+ * holds every record to that); a write tool is callable only with a live
+ * one-time publish ticket (`mintMcpPublishTicket`, D2407 part 3), minted only
+ * by the provider's publish call after the founder's confirm, so the session
+ * refuses every write tool without one before any request; and a read tool
+ * the server annotates as not read-only or destructive is refused (a write
+ * tool annotated destructive is refused too). Annotations can only narrow the
+ * list.
  *
  * A NARROWER LOCK FOR SETUP (D856, #2501). `setup_tools` is empty unless
  * `setup_issue` names the provider issue that asked for a guided setup. A
@@ -347,19 +350,19 @@ const LINEAR = mcpProvider({
 });
 
 /**
- * D2407 (#2407 parts 1–2): a founder's own Beehiiv newsletter, through
- * Beehiiv's hosted MCP server. READ ONLY IN THIS PART.
+ * D2407 (#2407 parts 1–3): a founder's own Beehiiv newsletter, through
+ * Beehiiv's hosted MCP server. Reads, plus ONE draft tool from part 3.
  *
  * - `read_tools` are the four reads `services/beehiiv/reads.ts` calls: the
  *   workspace's publications, one publication's audience figures, its sent
  *   posts and one post's figures. No subscriber tool is on the list
  *   (decision F1): a subscriber list is third-party personal data.
- * - `write_tools` is the one draft tool, under `publish_issue: 2407`, as #2407
- *   plans for its part 3. It is listed so the record says what part 3 will
- *   ask for; the session refuses every write tool before any request (no
- *   publish ticket exists yet), and no file calls it
- *   (`beehiiv_connection_2407.test.ts`). Beehiiv's MCP cannot publish,
- *   schedule or send, and nothing here asks it to.
+ * - `write_tools` is the one draft tool, under `publish_issue: 2407`. Part 3
+ *   calls it from one place, `services/beehiiv/drafts.ts`, with a one-time
+ *   publish ticket, reached only through the PUBLISH adapter's `publish`
+ *   after the founder's confirm (`beehiiv_publish_2407.test.ts`). It creates
+ *   a DRAFT: no `status` is ever sent. Beehiiv's MCP cannot publish, schedule
+ *   or send, and nothing here asks it to.
  * - CIMD first, DCR as the fallback (#2404's order); a client connects with
  *   the server URL alone, which suggests one of the two (UNVERIFIED).
  * - SCOPES: none asked for, none accepted, as Notion's record. No Beehiiv page

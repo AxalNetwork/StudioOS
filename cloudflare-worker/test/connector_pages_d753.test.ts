@@ -115,7 +115,8 @@ const SOURCES: Record<string, string[]> = {
   // D1385 (#3731): PostHog's typed reads and provider.
   posthog: ['services/posthog/reads.ts', 'integrations/providers/posthog.ts'],
   // D2407 (#2407): Beehiiv's typed reads and provider.
-  beehiiv: ['services/beehiiv/reads.ts', 'integrations/providers/beehiiv.ts'],
+  // D2407 part 3: the draft tool's one call site is drafts.ts.
+  beehiiv: ['services/beehiiv/reads.ts', 'services/beehiiv/drafts.ts', 'integrations/providers/beehiiv.ts'],
   // D1096: Vercel's only transport is its typed client; the provider calls it.
   vercel: ['services/vercel/api.ts', 'integrations/providers/vercel.ts'],
 };
@@ -130,6 +131,15 @@ const linesOf = (file: string) => {
 const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint', '/v2/oauth/access_token'];
 /** A read that is a POST. */
 const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
+/**
+ * D2407 part 3: a write made through an MCP tool, not an HTTP method in the
+ * connector's source (the shared client sends it). It counts as a write only
+ * at a `callTool(` site in a file that mints the one-time publish ticket the
+ * client demands for every write tool.
+ */
+const MCP_WRITE_CALLS: Record<string, string[]> = { beehiiv: ['session.callTool(DRAFT_TOOL'] };
+const mcpWriteNamed = (e: Entry, frag: string) => (MCP_WRITE_CALLS[e.key] ?? []).includes(frag)
+  && sourcesOf(e).some((f) => { const t = linesOf(f).join('\n'); return t.includes(frag) && /\bmintMcpPublishTicket\(/.test(t); });
 /** Connection plumbing: a revoke, a deauthorize, a webhook subscription or listener, a signing key. */
 const ACCOUNT_CALLS: Record<string, string[]> = {
   github: ['/grant`'],
@@ -220,7 +230,7 @@ test('3. every request that writes is named by a tool, and each tool\'s access m
     for (const t of e.page.tools) {
       const reqs = sourcesOf(e).flatMap((f) => requestsIn(f))
         .filter((r) => !isTokenExchange(r) && t.calls.some((f) => r.window.includes(f)));
-      if (t.access === 'write') assert.ok(reqs.length > 0, `${e.id}.${t.name} is a write tool but names no request that writes`);
+      if (t.access === 'write') assert.ok(reqs.length > 0 || t.calls.some((f) => mcpWriteNamed(e, f)), `${e.id}.${t.name} is a write tool but names no request that writes`);
       if (t.access === 'read') {
         for (const r of reqs) assert.ok((READ_BY_POST[e.key] ?? []).some((f) => r.window.includes(f)), `${e.id}.${t.name} reads, but names ${r.file}:${r.line}, which writes`);
       }

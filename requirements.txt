@@ -12,7 +12,7 @@ annotated-doc==0.0.5
     # via fastapi
 annotated-types==0.8.0
     # via pydantic
-anyio==4.15.1
+anyio==4.16.0
     # via
     #   httpx
     #   starlette
@@ -45,7 +45,7 @@ frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-google-api-core==2.43.0
+google-api-core==2.43.2
     # via google-api-python-client
 google-api-python-client==2.201.0
     # via repl-nix-workspace
@@ -72,7 +72,7 @@ http-ece==1.2.1
     # via pywebpush
 httpcore==1.0.9
     # via httpx
-httplib2==0.32.0
+httplib2==0.32.1
     # via
     #   google-api-python-client
     #   google-auth-httplib2
@@ -118,12 +118,12 @@ pyasn1-modules==0.4.2
     # via google-auth
 pycparser==3.12 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
-pydantic==2.14.1
+pydantic==2.14.2
     # via
     #   fastapi
     #   repl-nix-workspace
     #   sqlmodel
-pydantic-core==2.50.1
+pydantic-core==2.50.2
     # via pydantic
 pyjwt==2.15.1
     # via repl-nix-workspace
@@ -133,7 +133,7 @@ pyparsing==3.3.3
     # via httplib2
 python-dotenv==1.2.4
     # via repl-nix-workspace
-python-multipart==0.0.32
+python-multipart==0.0.33
     # via repl-nix-workspace
 pywebpush==2.5.0
     # via repl-nix-workspace
