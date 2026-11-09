@@ -25,7 +25,6 @@ const h = React.createElement;
 const find = (ui, id) => ui.nodes().filter((n) => ui.props(n)?.['data-testid'] === id);
 const txt = (n) => n.textContent || (n.childNodes ?? []).map(txt).join('');
 const settle = async (ui) => { await ui.flush(); await ui.flush(); };
-const type = async (ui, id, value) => { const [n] = find(ui, id); assert.ok(n, `no ${id}`); await act(async () => ui.props(n).onChange({ target: { value } })); };
 const press = async (ui, id) => { const [n] = find(ui, id); assert.ok(n, `no ${id}`); assert.ok(!ui.props(n).disabled, `${id} is disabled`); await act(async () => ui.props(n).onClick()); await settle(ui); };
 function stub(obj, fns) { const old = {}; for (const k of Object.keys(fns)) { old[k] = obj[k]; obj[k] = fns[k]; } return () => { for (const k of Object.keys(old)) obj[k] = old[k]; }; }
 
