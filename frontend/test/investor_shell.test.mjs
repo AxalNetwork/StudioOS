@@ -180,13 +180,16 @@ test('every investor row lands on its own workspace overview', () => {
   // checked the destination.
   const dealsShell = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
   assert.match(dealsShell, /function DealsRoot\(/, 'the /deals root has no overview component');
-  assert.match(dealsShell, /<BucketBoard bucket=\{bucket\} role="investor" board=\{board\} \/>/,
-    'the /deals root no longer renders its bucket board');
-  // `BucketBoard` answers a null board with `return null`, so the card-grid
-  // fall-through the registry documents only happens if the caller performs it.
-  // A caller that did not is how this route came to render nothing.
-  assert.match(dealsShell, /<BucketOverview bucket=\{bucket\} role="investor"/,
-    'an unregistered board would blank the root again rather than fall back to the cards');
+  // D4815 (canvas DX1): the root is My Deal Flow. It WAS the zones' bucket
+  // board, which read as three mini-apps under the flow; the zones are now one
+  // "Other deal activity" line inside DealFlow, each linking to its route.
+  assert.match(dealsShell, /<DealFlow view=\{view\} scope=\{scope\} more=\{more\} \/>/,
+    'the /deals root no longer renders Deal flow');
+  assert.doesNotMatch(dealsShell, /<BucketBoard|<BucketOverview/,
+    'the /deals root stacks the zone mini-boards under Deal flow again');
+  const flow = codeOnly(read('frontend/src/pages/investor/dealflow/DealFlow.jsx'));
+  assert.match(flow, /<OtherDealActivity surviving=\{flowUnreadable\}/,
+    'Deal flow no longer links the other zones, so the root would draw only the flow');
 });
 
 test('an investor pill navigates — it is not an anchor onto the page', () => {

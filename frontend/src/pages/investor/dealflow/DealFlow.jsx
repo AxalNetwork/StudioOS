@@ -42,6 +42,7 @@ import {
   AddToFlowDialog, CardScopesPopover, ColumnsPopover, DeleteViewDialog, FilterChips, FiltersDrawer, SaveViewDialog, SortPopover, TOOL, ViewsMenu,
 } from './FlowControls';
 import NewForYou from './NewForYou';
+import OtherDealActivity from './OtherDealActivity';
 import { ZonePrimary } from '../../../workspaces/ZoneActions';
 import PeekDrawer from './PeekDrawer';
 import { CommitDialog, MoveBackDialog, PassDialog } from './StageDialogs';
@@ -195,9 +196,11 @@ function EmptyFlow() {
 /**
  * The /deals root for an Investor (D1236, D1240): the toolbar, the controls,
  * then the Board on the firm's own stages or the Table, every setting in the
- * address. `board` is today's zone board, kept under the Board view.
+ * address. D4815 (canvas DX1): the root is My Deal Flow only. Screening, the
+ * committee and Closing are one "Other deal activity" line linking to their
+ * routes; `more` (the deal rooms and My tasks) sits collapsed under it.
  */
-export default function DealFlow({ view, scope, board }) {
+export default function DealFlow({ view, scope, more }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth() || {};
@@ -210,6 +213,7 @@ export default function DealFlow({ view, scope, board }) {
   const [dialog, setDialog] = useState(null);
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const pick = (id) => setPicked((p) => pickToggle(p, id));
 
   const lists = scope !== 'new';
@@ -296,12 +300,19 @@ export default function DealFlow({ view, scope, board }) {
     </div>
   );
 
+  const flowLoading = flow.kind === 'loading' || deals.kind === 'loading' || (entries == null && flow.kind === 'ok');
+  // DX13: when the personal flow is unreadable, what survives is said to be separate from it.
+  const flowUnreadable = scope !== 'new' && !flowLoading && (flow.kind === 'unreadable' || (scope === 'all' && deals.kind === 'unreadable'));
+  const openRooms = () => {
+    setMoreOpen(true);
+    if (typeof document !== 'undefined') setTimeout(() => document.getElementById('deal-rooms')?.scrollIntoView?.({ block: 'start' }), 0);
+  };
   let body;
   if (scope === 'new') {
     body = <NewForYou onToast={(text) => setToast({ kind: 'moved', text })} />;
-  } else if (flow.kind === 'loading' || deals.kind === 'loading' || (entries == null && flow.kind === 'ok')) {
+  } else if (flowLoading) {
     body = view === 'board' ? <FlowBoardLoading /> : <section className={box} aria-busy="true" data-testid="dealflow-table-loading"><p className="m-0 text-[13px] text-axal-muted">Reading…</p></section>;
-  } else if (flow.kind === 'unreadable' || (scope === 'all' && deals.kind === 'unreadable')) {
+  } else if (flowUnreadable) {
     body = (
       <section className={box} data-testid="dealflow-unreadable">
         <Unreadable what={flow.kind === 'unreadable' ? 'Your deal flow' : 'The deal list'} claim="That is not the same as having none." onRetry={() => { retryFlow(); retryDeals(); }} />
@@ -363,10 +374,11 @@ export default function DealFlow({ view, scope, board }) {
           <button type="button" className="text-[13px] underline" onClick={() => setPicked([])}>Clear</button>
         </div>
       )}
-      {view === 'board' && scope !== 'new' && board && (
-        <details className={box} data-testid="dealflow-today-board">
-          <summary className="cursor-pointer text-[13px] font-semibold">The studio’s rounds by status, and your deal rooms</summary>
-          {board}
+      <OtherDealActivity surviving={flowUnreadable} onRooms={more ? openRooms : undefined} />
+      {more && (
+        <details id="deal-rooms" className={box} open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)} data-testid="dealflow-more">
+          <summary className="cursor-pointer text-[13px] font-semibold">Your deal rooms and tasks</summary>
+          {more}
         </details>
       )}
       {dialog?.kind === 'filters' && (
