@@ -27,6 +27,9 @@ import { mintDownloadToken } from '../signedDownload';
 import { customKpis, KPI_KEYS, KPI_LABEL, CUSTOM_PREFIX } from '../growKpis';
 import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row, Store } from './types';
 import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
+import {
+  SYSTEM_ACTION_LABEL, SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, disconnectedReason, systemActionIntent, systemStateOf, type SystemState,
+} from '../systemsState';
 
 type Any = Record<string, any>;
 type Section = { rows: Row[]; empty?: string; action?: string };
@@ -1340,7 +1343,7 @@ async function systemOf(ctx: RecordContext, id: string): Promise<System> {
   if (companyId == null) return base;
   const row = await ctx.env.DB.prepare(
     `SELECT s.feeds_json, s.provider_key AS workspace_provider, s.updated_by,
-            i.id, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.created_at, i.config_json, i.scopes_json
+            i.id, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.last_error_at, i.created_at, i.config_json, i.scopes_json
        FROM project_core_systems s
        LEFT JOIN integrations i ON i.id = s.integration_id AND EXISTS (
          SELECT 1 FROM integration_companies ic JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
@@ -1366,12 +1369,38 @@ async function systemOf(ctx: RecordContext, id: string): Promise<System> {
   base.connection = row;
   return base;
 }
-function systemState(s: System): 'connected' | 'failing' | 'not_connected' {
-  return !s.connection ? 'not_connected' : s.connection.status === 'error' ? 'failing' : s.connection.status === 'active' ? 'connected' : 'not_connected';
+// D5065: the one derivation lives in services/systemsState.ts, so the row,
+// the tiles, this record, its subtitle and its actions cannot disagree.
+const systemState = (s: System): SystemState => systemStateOf(s.connection, s.connection?.status);
+/**
+ * D5065: a workspace connection is a personal OAuth token, not a synced
+ * connector. It records no sync time, has no sync frequency and keeps no
+ * sync log, so each says so in those words instead of "no connection row",
+ * which read as though the workspace were broken.
+ */
+const WORKSPACE_SYNC = 'Not applicable: a workspace connection records no sync time.';
+const WORKSPACE_FREQUENCY = 'Not applicable: a workspace connection has no sync frequency.';
+const WORKSPACE_LOG = 'Not applicable: a workspace connection keeps no sync log.';
+
+/**
+ * D5065: the subtitle is derived from the same state as the pill, never from
+ * the mere existence of a connection row. A system that is not connected is
+ * never described as connected, whatever its stored status.
+ */
+function systemSub(s: System, state: SystemState): string {
+  const c = s.connection;
+  if (state === 'not_connected') return 'Not connected yet';
+  const sync = dateText(c?.last_synced_at) ? `last good sync ${dateText(c?.last_synced_at)}` : 'no sync recorded';
+  if (s.workspace) return 'Connected · sync and sync log not applicable';
+  if (state === 'connected') {
+    return [dateText(c?.created_at) ? `Connected ${dateText(c?.created_at)}` : 'Connected', sync].join(' · ');
+  }
+  if (state === 'failing') {
+    const since = dateText(c?.last_error_at);
+    return [since ? `Failing since ${since}` : 'Failing', sync].join(' · ');
+  }
+  return [`Reconnect required · ${disconnectedReason(c?.status)}`, sync].join(' · ');
 }
-const STATE_LABEL = { connected: 'Connected', failing: 'Failing', not_connected: 'Not connected' } as const;
-const STATE_TONE = { connected: 'ok', failing: 'bad', not_connected: 'grey' } as const;
-const NO_ROW = 'Workspace has no connection row.';
 
 const operatingSystems: ModuleSpec = {
   read: 'read', write: 'write', store: 'build_systems',
@@ -1380,18 +1409,14 @@ const operatingSystems: ModuleSpec = {
     const s = await systemOf(ctx, id);
     const state = systemState(s);
     const c = s.connection;
-    const sub = !c ? 'Not connected yet'
-      : s.workspace ? 'Connected · sync not recorded'
-        : [dateText(c.created_at) ? `Connected ${dateText(c.created_at)}` : 'Connected',
-          dateText(c.last_synced_at) ? `last good sync ${dateText(c.last_synced_at)}` : 'no sync recorded'].join(' · ');
     return {
-      title: `${SYSTEM_LABEL[s.kind]} · ${s.provider ?? 'Not connected'}`, sub,
-      pills: [{ text: STATE_LABEL[state], tone: STATE_TONE[state] }],
+      title: `${SYSTEM_LABEL[s.kind]} · ${s.provider ?? 'Not connected'}`, sub: systemSub(s, state),
+      pills: [{ text: SYSTEM_STATE_LABEL[state], tone: SYSTEM_STATE_TONE[state] }],
       facts: [
-        fact('State', STATE_LABEL[state], ''),
-        s.workspace ? fact('Last sync', null, NO_ROW) : fact('Last sync', stampText(c?.last_synced_at), c ? 'No sync recorded.' : 'Not connected yet.'),
+        fact('State', SYSTEM_STATE_LABEL[state], ''),
+        s.workspace ? fact('Last sync', null, WORKSPACE_SYNC) : fact('Last sync', stampText(c?.last_synced_at), c ? 'No sync recorded.' : 'Not connected yet.'),
         // Decision 5: the mapped connection's sync_frequency, live when unset.
-        s.workspace ? fact('Sync', null, NO_ROW) : fact('Sync', c ? SYNC_LABEL[syncOf(c.config_json)] : null, 'Not connected yet.'),
+        s.workspace ? fact('Sync', null, WORKSPACE_FREQUENCY) : fact('Sync', c ? SYNC_LABEL[syncOf(c.config_json)] : null, 'Not connected yet.'),
         fact('Feeds', s.feeds.map(key => FEEDS_LABEL[key]).join(' · '), 'No feeds recorded.'),
       ],
     };
@@ -1399,7 +1424,7 @@ const operatingSystems: ModuleSpec = {
   sections: [
     { key: 'sync_log', title: 'Sync log', gate: 'write', async read(ctx, id) {
       const s = await systemOf(ctx, id);
-      if (s.workspace) return notRecorded(NO_ROW);
+      if (s.workspace) return notRecorded(WORKSPACE_LOG);
       if (!s.connection) return notRecorded('Not connected yet.');
       // Decision 11: date, event type and status only; never a summary or payload.
       const logs = rowsOf(await ctx.env.DB.prepare(
@@ -1413,7 +1438,7 @@ const operatingSystems: ModuleSpec = {
     } },
     { key: 'permissions', title: 'Permissions', gate: 'write', async read(ctx, id) {
       const s = await systemOf(ctx, id);
-      if (s.workspace) return notRecorded(NO_ROW);
+      if (s.workspace) return notRecorded('Not applicable: a workspace connection grants no connector scopes.');
       if (!s.connection) return notRecorded('Not connected yet.');
       const lines = CONNECTOR_METADATA[s.providerKey!]?.permissions ?? [];
       const requested = getDescriptor(s.providerKey!)?.oauth_scopes ?? [];
@@ -1442,18 +1467,25 @@ const operatingSystems: ModuleSpec = {
     } },
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
-    // Decision 10: Reconnect links to the tool's Connect a tool, else Connect a tool for the venture.
+    // Decision 10: the link goes to the tool's Connect a tool, else Connect a
+    // tool for the venture. D5065: which action is primary follows the state —
+    // a healthy system is managed, not repaired, and a kind that maps no
+    // connection chooses one rather than being told to reconnect.
     const s = await systemOf(ctx, id);
+    const state = systemState(s);
     const href = s.providerKey && /^[a-z0-9_]{1,80}$/.test(s.providerKey)
       ? connectHref(s.providerKey, ctx.projectId) : `/build/connect?project_id=${ctx.projectId}`;
-    const actions: RecordAction[] = [{ key: 'reconnect', label: 'Reconnect', kind: 'link', tone: 'primary', href }];
+    const intent = systemActionIntent(state, !!s.providerKey);
+    const actions: RecordAction[] = intent === 'choose' ? []
+      : [{ key: intent === 'manage' ? 'manage' : intent === 'connect' ? 'connect' : 'reconnect',
+        label: SYSTEM_ACTION_LABEL[intent], kind: 'link', tone: 'primary', href }];
     const stored = await storedSystem(ctx, id);
     const editable = syncEditable(id, stored, ctx.user.id);
     const project = await writeProject(ctx.env, ctx.projectId);
     const choices = project?.company_id == null ? [] : (await systemChoices(ctx.env, project, ctx.user)).find(k => k.kind === id)?.choices ?? [];
     // Decision 13: Choose connector starts empty, meaning keep the current one,
     // so an Edit sent back unchanged never re-maps or names another member's connection.
-    actions.push({ key: 'edit', label: 'Choose connector', kind: 'form',
+    actions.push({ key: 'edit', label: 'Choose connector', kind: 'form', ...(intent === 'choose' ? { tone: 'primary' as const } : {}),
       form: { title: `Choose your ${SYSTEM_LABEL[s.kind]}`, cta: 'Save', fields: [
         { key: 'connector', label: 'Connector', kind: 'CH', value: '',
           options: choices.map(ch => ch.uid ? { value: `uid:${ch.uid}`, label: ch.display_name } : { value: `provider:${ch.provider_key}`, label: ch.display_name }) },
