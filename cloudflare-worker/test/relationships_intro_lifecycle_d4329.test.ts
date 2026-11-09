@@ -104,7 +104,15 @@ test('the context note is the asker\'s, read by the two people on the request on
     assert.equal((await call(f, 4, 'GET', `${R}/intro-requests`)).body.sent[0].context_note, 'Ada is raising a seed fund; Acme is a fit.');
     for (const who of [3, 5, 6]) {
       const r = await call(f, who, 'GET', `${R}/intro-requests`);
-      assert.deepEqual(r.body, { sent: [], received: [], follow_ups_due: 0 }, `${who} reads nothing of it`);
+      // #4611: the log carries its page and whole-scope figures now. The claim
+      // this assertion makes is unchanged — a third party reads NOTHING of the
+      // request — so it still names every field, and every count is zero
+      // because the scope is empty for them, not because the page is.
+      assert.deepEqual(r.body, {
+        sent: [], received: [], follow_ups_due: 0,
+        totals: { sent: 0, received: 0, sent_pending: 0, received_pending: 0 },
+        page_size: 0, has_more: false, next_cursor: null, limit: 200,
+      }, `${who} reads nothing of it`);
       assert.ok(!r.text.includes('seed fund'));
     }
     assert.equal(received.uid, uid);
