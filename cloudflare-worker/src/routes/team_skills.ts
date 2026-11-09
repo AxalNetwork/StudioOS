@@ -70,6 +70,7 @@ import {
 } from '../services/agents/skills';
 import { teamAgentsEnabled } from './team_agents';
 import { publishDraft } from '../services/agents/skillPublish';
+import { draftHash } from '../services/agents/skillLifecycle';
 import { grantsOf } from '../services/agents/agentTools';
 import { agentByUid, canManage, canRead, effectiveBook, loadScope, scopeCols, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
 import { moduleOf } from '../services/agents/catalogue';
@@ -329,6 +330,18 @@ function writeDraftStatements(env: Env, skillId: number, d: SkillDraft) {
   ];
 }
 
+/**
+ * D4533 (finding F1): a draft save is audited, HQ's as `agent_skill_draft_*` and a company's as
+ * `company_skill_draft_*`. The draft is mutable and is not a history; the record is who saved which definition hash,
+ * before and after. A save that changes nothing writes no row.
+ */
+async function auditDraft(env: Env, user: User, s: { uid: string; name: string; scope: 'hq' | 'company'; company_id: number | null }, act: 'created' | 'saved', before: string | null, after: string) {
+  await logAdminAction(env, user.id, user.email, `${s.scope === 'hq' ? 'agent_skill' : 'company_skill'}_draft_${act}`, {
+    skill_uid: s.uid, skill_name: s.name, ...(s.scope === 'company' ? { company_id: s.company_id } : {}),
+    before: before ? { definition_hash: before } : null, after: { definition_hash: after },
+  });
+}
+
 router.post('/skills', async (c) => {
   const user = await requireAuth(c);
   const b = await readBody(c);
@@ -367,6 +380,7 @@ router.post('/skills', async (c) => {
   ).bind(uid, b.scope, companyId, d.slug, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, user.id, user.id).first<{ id: number }>();
   await c.env.DB.batch(writeDraftStatements(c.env, Number(inserted!.id), d));
   const s = (await skillByUid(c.env, uid))!;
+  await auditDraft(c.env, user, s, 'created', null, await draftHash(d));
   const tax = await taxonomy(c.env);
   return c.json({ skill: await cardOf(c.env, s, user, tax, '') }, 201);
 });
@@ -403,6 +417,8 @@ router.patch('/skills/:uid', async (c) => {
         .bind(d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, user.id, s.id),
       ...writeDraftStatements(c.env, s.id, d),
     ]);
+    const [before, after] = await Promise.all([draftHash(cur), draftHash(d)]);
+    if (before !== after) await auditDraft(c.env, user, s, 'saved', before, after);
   }
   const tax = await taxonomy(c.env);
   return c.json({ skill: await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '') });

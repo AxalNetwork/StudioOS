@@ -321,10 +321,24 @@ export async function openReview(env: Env, skillId: number): Promise<ReviewRow |
   return env.DB.prepare("SELECT * FROM agent_skill_reviews WHERE skill_id = ? AND status = 'requested'").bind(skillId).first<ReviewRow>();
 }
 
-/** The approval on exactly this evidence, if any. A review from before D4533 (no evidence) never matches. */
+/**
+ * The approval on exactly this evidence that has not released a version yet, if any. A review from before D4533 (no
+ * evidence) never matches. D4533 step 5: an approval releases ONE version. The version's manifest names the review it
+ * was published on (`$.review.review_id`), and that review never counts again, so publishing the same draft twice, or
+ * restoring an old version's definition (`skillRecovery.ts`), needs a new review by a second Super Admin.
+ */
 export async function approvalFor(env: Env, skillId: number, evidenceHash: string): Promise<ReviewRow | null> {
-  return env.DB.prepare("SELECT * FROM agent_skill_reviews WHERE skill_id = ? AND evidence_hash = ? AND status = 'approved' ORDER BY id DESC LIMIT 1")
-    .bind(skillId, evidenceHash).first<ReviewRow>();
+  return env.DB.prepare(`SELECT r.* FROM agent_skill_reviews r WHERE r.skill_id = ? AND r.evidence_hash = ? AND r.status = 'approved'
+      AND NOT EXISTS (SELECT 1 FROM agent_skill_versions v WHERE v.skill_id = r.skill_id AND json_extract(v.evidence_json, '$.review.review_id') = r.id)
+    ORDER BY r.id DESC LIMIT 1`).bind(skillId, evidenceHash).first<ReviewRow>();
+}
+
+/** D4533 step 5: the latest version an approval on exactly this evidence already released; null when none did. */
+export async function releasedOn(env: Env, skillId: number, evidenceHash: string): Promise<number | null> {
+  const r = await env.DB.prepare(`SELECT MAX(v.version) AS version FROM agent_skill_versions v JOIN agent_skill_reviews r
+      ON r.skill_id = v.skill_id AND r.id = json_extract(v.evidence_json, '$.review.review_id')
+    WHERE v.skill_id = ? AND r.evidence_hash = ? AND r.status = 'approved'`).bind(skillId, evidenceHash).first<{ version: number | null }>();
+  return r?.version ?? null;
 }
 
 /** The four states: a draft with an open review on its current evidence is `in_review`. */
@@ -346,8 +360,12 @@ export type ReleaseDecision = {
   ready: boolean;
   blocking: Blocking[];
   evidence: Evidence;
-  /** `changes`: what differs from the latest approval of this skill; null when it never had one. */
-  review: { approved: boolean; changes: Record<EvidencePart, boolean | null> | null };
+  /**
+   * `changes`: what differs from the latest approval of this skill; null when it never had one.
+   * `released_version` (D4533 step 5): the version an approval on this same evidence already released, so it is spent
+   * and a new review is needed; null when none did.
+   */
+  review: { approved: boolean; changes: Record<EvidencePart, boolean | null> | null; released_version: number | null };
   evaluation: { pass: number; total: number; not_evaluated: number; meets_bar: boolean; pass_bar: typeof PASS_BAR };
 };
 
@@ -363,7 +381,10 @@ export async function releaseEvidence(env: Env, s: { id: number; required_models
   if (!meetsBar(sum.pass, sum.total)) blocking.push('golden_cases_failing');
   const decision: ReleaseDecision = {
     ready: blocking.length === 0, blocking, evidence,
-    review: { approved: !!approval, changes: last ? evidenceChanges(last.draft_hash, parseEvidence(last.evidence_json), evidence) : null },
+    review: {
+      approved: !!approval, changes: last ? evidenceChanges(last.draft_hash, parseEvidence(last.evidence_json), evidence) : null,
+      released_version: approval ? null : await releasedOn(env, s.id, evidence.evidence_hash),
+    },
     evaluation: { pass: sum.pass, total: sum.total, not_evaluated: sum.not_evaluated, meets_bar: sum.meets_bar, pass_bar: PASS_BAR },
   };
   return { decision, approval, cells: sum.rows };
@@ -382,7 +403,10 @@ export function publishRefusalOf(d: ReleaseDecision): PublishRefusal | null {
   switch (d.blocking[0]) {
     case undefined: return null;
     case 'needs_approval':
-      return { status: 409, code: 'needs_approval', message: 'A second Super Admin approves this draft, its golden cases, the evaluator and the required models before it is published. Request a review.', extra: { freshness } };
+      return { status: 409, code: 'needs_approval', extra: { freshness },
+        message: d.review.released_version != null
+          ? `The approval of this draft already released v${d.review.released_version}. A new version needs a new review by a second Super Admin.`
+          : 'A second Super Admin approves this draft, its golden cases, the evaluator and the required models before it is published. Request a review.' };
     case 'evaluation_incomplete':
       // A case with no result on a required model is never a pass, and never left out.
       return { status: 409, code: 'evaluation_incomplete', message: `${e.not_evaluated} of ${e.total} required golden-case runs have no result for this draft, its cases, the evaluator and the required models. Run the evals on every required model.`,
