@@ -1,269 +1,257 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import {
-  ZoneBody, NothingYet, StatedLimit, ZoneHeading, NoPartnerProfile,
-  isNoPartnerProfile, moneyDollars,
-} from '../kit';
+import { ZoneBody, NoPartnerProfile, isNoPartnerProfile } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
-import { Eyebrow, Instrument, Legend, NotRecorded } from '../../../workspaces/canvasKit';
 import EngagementLifecycle from './EngagementLifecycle';
+import EngagementSheet from './EngagementSheet';
+import HealthPill from './HealthPill';
 import MyTasks from '../../work/MyTasks.jsx';
+import {
+  boardCounts, defaultView, matchesView, modeValue, needsAttention, nextAction, primaryAction, progressText,
+} from './boardAttention';
 
 /**
- * Delivery · Board — `/delivery/board`.
+ * Delivery · Board — `/delivery/board`, and since D4822 also `/delivery` itself: Board is Delivery's command
+ * centre, so the bucket root renders it rather than a directory of the five zones (`PartnerBucketRoutes`).
  *
- * WHAT THIS ROUTE USED TO RENDER. `EngagementsPage` with `view="engagements"` —
- * a proposals-and-invoices page shared with `/pipeline/proposals`, which reads
- * `engagements` and the quote ledger and nothing else. None of the five stores
- * migration 208 built for this bucket reached it: no milestone, no seat, no
- * hour, no blocker, no deliverable. So the zone the Delivery row lands on was
- * the one zone in the bucket that could not see the bucket.
+ * D4822 (#4822, canvas `Delivery v2`, boards DL01, DL01m, DL06, DL07) — ACTION FIRST. Each row answers, in this
+ * order: which client, what to do next and why, its health, its progress in its own mode's measure, who owns it,
+ * and its mode and value. The reasons are facts from the record (`boardAttention.js`): overdue milestones, open
+ * blockers, recorded scope drift, no owner, a health the firm's read rated badly. "Not rated" is drawn dashed and
+ * worded, never green, and an unrated row is not attention-worthy for that alone.
  *
- * THE TWO MODES ARE NOT VARIANTS, and that is the whole artboard: "a project
- * reports milestones, an embedded seat reports hours against a grant the
- * founder can revoke." They are read differently, they are measured
- * differently, and the Progress column carries two different measures rather
- * than one averaged one — a fraction of a scope and a fraction of a week are
- * not the same number.
+ * ONE EMPTY STATE. With no engagement, the five zones used to show five zeros. Board now says the one true
+ * thing — no active client work yet — and where it starts: Pipeline → Proposal → Engagement → Delivery.
  *
- * MODE IS DERIVED, NEVER STORED. An engagement that granted a seat IS embedded;
- * one that did not IS a project. `GET /partner-delivery/board` reads it off
- * `engagement_seats`, and a `mode` column would be a second place to say it that
- * could disagree with the seat the first time one was revoked.
+ * THE SHEET (PD6) opens from a row, keeps the selection in the URL (`?engagement=<uid>`) so a link lands on it,
+ * and is built from the same row: no second read, no second data model.
  *
- * A REVOKED SEAT STAYS ON THE BOARD, struck through. The artboard is explicit
- * that "a founder closing a seat is a normal event in this bucket, not an error
- * state" — and a board that dropped the row would disagree with the ledger about
- * how many engagements this firm has had.
- *
- * HEALTH IS NULLABLE AND NULL IS DRAWN. `healthFor` returns `null` when nothing
- * has been recorded against an engagement, and this page draws that as absent
- * rather than as green: "silence is not good news" is that helper's own reason
- * for existing, and a strip that read a mostly-empty book as a mostly-healthy
- * one would undo it.
+ * WHAT IS UNCHANGED: mode is derived from seats (D395's board), health is the Worker's one `healthFor`, progress is
+ * two measures never averaged, a revoked seat stays visible, and the lifecycle and invoice ledger stay below.
  */
 
-const MODE_LABEL = { project: 'Project', embedded: 'Embedded' };
-const HEALTH_LABEL = { on_track: 'On track', at_risk: 'At risk', blocked: 'Blocked' };
-const HEALTH_TONE = { on_track: 'ok', at_risk: 'warn', blocked: 'danger' };
-
-/**
- * Which chip a row answers to.
- *
- * `Needs attention` IS THE TWO RATED-BAD STATES, not "anything not green". An
- * unrated engagement is not attention-worthy on this evidence — it is
- * evidence-free, which the strip says separately — and sweeping it in here
- * would turn "we have not looked" into "something is wrong".
- */
-export function matchesBoardChip(row, chip) {
-  if (chip === 'project') return row.mode === 'project';
-  if (chip === 'embedded') return row.mode === 'embedded';
-  if (chip === 'attention') return row.health === 'at_risk' || row.health === 'blocked';
-  return true;
-}
-
-/** The strip tile, in the anatomy the artboards share. */
-function BoardTile({ label, value, note, nr = false }) {
+/** Board v2's upstream-aware empty state (DL07): one condition, one next step. */
+export function DeliveryEmpty() {
   return (
-    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-      <Eyebrow>{label}</Eyebrow>
-      <div className="mt-1.5">
-        {nr ? <NotRecorded /> : (
-          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
-        )}
-      </div>
-      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
-    </div>
+    <section className="rounded-xl border border-[#ececf1] bg-white p-6 dark:border-gray-800 dark:bg-[#111827]" data-testid="delivery-empty">
+      <h2 className="text-[18px] font-extrabold text-[#18181b] dark:text-gray-100">No active client work yet</h2>
+      <p className="mt-1 text-[14px] text-[#6b6577] dark:text-gray-400">Delivery begins when a proposal is accepted and becomes an engagement.</p>
+      <ol className="mt-3 flex flex-wrap items-center gap-2 text-[14px] font-semibold text-[#18181b] dark:text-gray-200" aria-label="How work reaches Delivery">
+        {['Pipeline', 'Proposal', 'Engagement', 'Delivery'].map((step, i) => (
+          <li key={step} className="flex items-center gap-2">
+            {i > 0 && <span aria-hidden="true" className="text-[#6b6577]">→</span>}
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+      <Link to="/pipeline/proposals"
+        className="mt-4 inline-flex min-h-[44px] items-center rounded-lg bg-[#7c3aed] px-4 text-[14px] font-bold text-white hover:bg-[#6d28d9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7c3aed]">
+        Open Pipeline →
+      </Link>
+      <dl className="mt-5 grid gap-2 text-[14px] sm:grid-cols-2">
+        {[
+          ['Deliverables', 'Work handed to clients'],
+          ['Capacity', 'Team commitments and room'],
+          ['Status reports', 'Recurring client updates'],
+          ['Health', 'Scope, milestones, blockers and renewal risk'],
+        ].map(([zone, what]) => (
+          <div key={zone}>
+            <dt className="font-semibold text-[#18181b] dark:text-gray-100">{zone}</dt>
+            <dd className="text-[#6b6577] dark:text-gray-400">{what}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
-export default function PartnerDeliveryBoardZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null });
-  const [view, setView] = useState('all');
+function NextCell({ row }) {
+  const next = nextAction(row);
+  return (
+    <span className={next?.quiet ? 'text-[#6b6577] dark:text-gray-400' : 'font-semibold text-[#18181b] dark:text-gray-100'}>
+      {next?.text}
+      {next?.why && <span className="block text-[13px] font-normal text-[#92400e] dark:text-amber-300">{next.why}</span>}
+    </span>
+  );
+}
 
+const notRecorded = <span className="text-[#6b6577] dark:text-gray-400">— Not recorded</span>;
+const PRIMARY_BUTTON = 'inline-flex min-h-[44px] items-center rounded-lg bg-[#7c3aed] px-4 text-[14px] font-bold text-white hover:bg-[#6d28d9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7c3aed]';
+// The filter table keeps the v1 artboard's labels (`profile_zone_filters` reads that canvas); Board v2 (DL01)
+// orders them Attention first and names them as the v2 canvas does, each with its count.
+const V2_CHIPS = [['Needs attention', 'attention', 'Attention'], ['All', 'all', 'All'], ['Project', 'project', 'Projects'], ['Embedded', 'embedded', 'Embedded']];
+
+export default function PartnerDeliveryBoardZone() {
+  const [state, setState] = useState({ loading: true, refreshing: false, error: '', data: null, readAt: null });
+  const [view, setView] = useState(null); // null until the first read decides Attention or All
+  const [query, setQuery] = useState('');
+  const [params, setParams] = useSearchParams();
+  const tableRef = useRef(null);
+
+  // The first read shows the loading state; a later one keeps the board on screen while it refreshes (D4698).
   const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
+    setState((s) => ({ ...s, loading: !s.data, refreshing: Boolean(s.data), error: '' }));
     try {
       const r = await api.getPartnerDeliveryBoard();
-      setState({ loading: false, error: '', data: r || {} });
+      setState({ loading: false, refreshing: false, error: '', data: r || {}, readAt: new Date() });
     } catch (e) {
-      setState({ loading: false, error: e?.message || 'The engagement board did not load.', data: null });
+      setState((s) => ({ ...s, loading: false, refreshing: false, error: e?.message || 'The engagement board did not load.' }));
     }
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const d = state.data;
-  const items = Array.isArray(d?.items) ? d.items : [];
-  const visible = items.filter((row) => matchesBoardChip(row, view));
-  const revoked = items.filter((row) => row.seat_revoked_at);
+  const items = useMemo(() => (Array.isArray(d?.items) ? d.items : []), [d]);
+  const current = view ?? defaultView(items);
+  const counts = boardCounts(items);
+  const visible = items.filter((row) => matchesView(row, current, query));
+  const primary = primaryAction(items);
+  const selectedKey = params.get('engagement');
+  const selected = selectedKey ? items.find((r) => String(r.engagement_uid || r.engagement_id) === selectedKey) : null;
+  const open = (row) => setParams((p) => { const n = new URLSearchParams(p); n.set('engagement', String(row.engagement_uid || row.engagement_id)); return n; });
+  const close = useCallback(() => setParams((p) => { const n = new URLSearchParams(p); n.delete('engagement'); return n; }), [setParams]);
 
-  // Hoisted so the gate branch below and the live row draw the SAME row.
-  // With nothing loaded the export renders disabled and says so itself.
-  const rowActions = partnerZoneActions('delivery/board', { view: { header: ['Client', 'Mode', 'Scope', 'Granted', 'Progress', 'Health', 'Value'], rows: visible, cells: (r) => [r.client, r.mode, r.scope, r.grant, r.mode === 'project' ? `${r.milestones_done}/${r.milestone_count}` : r.hours_this_period, r.health, r.price] } });
+  const rowActions = partnerZoneActions('delivery/board', { view: { header: ['Client', 'Next action', 'Health', 'Progress', 'Owner', 'Mode', 'Value'], rows: visible, cells: (r) => [r.client, nextAction(r)?.text, r.health || 'not rated', progressText(r), r.owner_name, r.mode, r.price] } });
 
-  // NOT AN EARLY RETURN ANY MORE. This was
-  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
-  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
-  // reading this workspace saw twelve copies of one card and never a page.
-  // `ZoneBody` takes the line as a `notice` above its states, and the zone
-  // renders underneath in its own empty state, which is also the state that
-  // says what this zone holds. The gate itself is untouched: the read still
-  // 400s, so `isEmpty` is forced rather than inferred from rows that never
-  // arrived, and `error` is cleared so the shared "This did not load" card —
-  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  // The gate (no partner profile) keeps the zone's own empty state underneath its notice rather than replacing it.
   const unlinked = isNoPartnerProfile(state.error);
+  const v1 = unlinked ? [] : partnerZoneFilters('delivery/board', { value: current, onChange: setView });
+  const chips = V2_CHIPS.flatMap(([from, key, label]) => {
+    const chip = v1.find((c) => c.label === from);
+    return chip ? [{ ...chip, label: `${label} · ${counts[key]}` }] : [];
+  });
+
+  const reviewAttention = () => {
+    setView('attention');
+    tableRef.current?.focus();
+  };
 
   return (
     <>
       {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
       <div className="mb-4"><MyTasks licence="partner" testId="delivery-my-tasks" /></div>
-      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
-          An action states what the zone DOES and an export over nothing
-          loaded renders disabled and says so; a filter chip is a claim about
-          ROWS, and a selectable `Published` over a store this account cannot
-          read is the "an empty set reads as an answer" failure
-          `zoneFilterBuilder.js` exists to prevent, reached from a new
-          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
-      <ZoneToolbar
-        className="mb-3"
-        role="partner"
-        filters={unlinked ? [] : partnerZoneFilters('delivery/board', { value: view, onChange: setView })}
-        actions={rowActions}
-      />
+
+      {/* D4822 — one contextual primary action, driven by the record's state. */}
+      {!unlinked && !state.loading && primary && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3" data-testid="delivery-primary">
+          <p className="text-[14px] text-[#6b6577] dark:text-gray-400">
+            {counts.all === 0
+              ? 'Delivery starts when work is won in Pipeline.'
+              : counts.attention
+                ? `${counts.attention} of ${counts.all} engagements need attention.`
+                : 'Nothing needs attention right now.'}
+          </p>
+          {primary.to ? (
+            <Link to={primary.to} className={PRIMARY_BUTTON}>{primary.label}{primary.key === 'pipeline' ? ' →' : ''}</Link>
+          ) : (
+            <button type="button" onClick={reviewAttention} className={PRIMARY_BUTTON}>{primary.label}</button>
+          )}
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <ZoneToolbar className="flex-1" role="partner" filters={chips} actions={rowActions} />
+          <label className="flex items-center gap-2 text-[14px] text-[#6b6577] dark:text-gray-400">
+            <span className="sr-only">Find a client</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Find a client"
+              className="min-h-[40px] rounded-lg border border-[#ececf1] bg-white px-3 text-[14px] text-[#18181b] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            />
+          </label>
+          <span className="text-[13px] text-[#6b6577] dark:text-gray-400" aria-live="polite">
+            {state.refreshing ? 'Refreshing…' : state.readAt ? `Read ${state.readAt.toTimeString().slice(0, 5)}` : ''}
+            {' '}<button type="button" onClick={load} disabled={state.refreshing} className="font-semibold text-[#7c3aed] underline-offset-2 hover:underline disabled:opacity-60 dark:text-[#a78bfa]">Refresh</button>
+          </span>
+        </div>
+      )}
+
       <ZoneBody
         loading={state.loading}
-        error={unlinked ? null : state.error}
+        error={unlinked || state.data ? null : state.error}
         onRetry={load}
-        notice={unlinked ? <NoPartnerProfile /> : null}
-        isEmpty={unlinked || (items.length === 0)}
-        empty={(
-          <NothingYet
-            title="No engagement is on the board yet"
-            body={
-              'An accepted proposal becomes an engagement, and an engagement appears '
-              + 'here in one of two modes: a project, which reports milestones, or an '
-              + 'embedded seat, which reports hours against a scope the founder '
-              + 'granted and can revoke.'
-            }
-          />
-        )}
+        notice={unlinked ? <NoPartnerProfile /> : (state.error && state.data ? (
+          <p role="alert" className="text-[14px] text-[#b91c1c] dark:text-red-300">The board could not be refreshed; this is the last read. <button type="button" onClick={load} className="font-semibold underline">Retry</button></p>
+        ) : null)}
+        isEmpty={unlinked || items.length === 0}
+        empty={<DeliveryEmpty />}
       >
-        <div className="space-y-6">
-          <ZoneHeading
-            title="Every live engagement, in the mode it is actually in"
-            blurb={
-              'A project reports milestones; an embedded seat reports hours against a '
-              + 'grant the founder can revoke. The two are not variants of one row — '
-              + 'they are read differently, and this board reads them differently.'
-            }
-          />
-
-          {/* ══ THE `pd1` STRIP ═══════════════════════════════════════════════
-              `Project value · Embedded / month · Need attention · Revoked
-              seats`, each counted over the whole board rather than the
-              chip-narrowed list. */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <BoardTile
-              label="Project value"
-              value={moneyDollars(d?.project_value ?? 0)}
-              note={`${items.filter((r) => r.mode === 'project' && !r.seat_revoked_at).length} scoped engagements`}
-            />
-            <BoardTile
-              label="Embedded / month"
-              value={moneyDollars(d?.embedded_monthly ?? 0)}
-              nr={d?.embedded_monthly == null}
-              note={d?.embedded_monthly == null
-                ? (d?.embedded_monthly_note || 'no recurring amount recorded')
-                : `${items.filter((r) => r.mode === 'embedded' && r.seat_state === 'active').length} engagements with a live seat · recorded recurring amount, per month${d?.embedded_monthly_note ? ` · ${d.embedded_monthly_note}` : ''}`}
-            />
-            <BoardTile
-              label="Need attention"
-              value={String(d?.needs_attention ?? 0)}
-              note={d?.unrated_count
-                ? `${d.unrated_count} more rated on nothing at all`
-                : 'rated at risk or blocked'}
-            />
-            <BoardTile
-              label="Revoked seats"
-              value={String(d?.revoked_seats ?? 0)}
-              note={revoked.length
-                ? `${revoked[0].client || 'a client'} · closed ${String(revoked[0].seat_revoked_at).slice(0, 10)}`
-                : (d?.revoked_seats > 0
-                  ? 'on engagements that still hold a live seat'
-                  : 'no founder has closed a seat')}
-            />
+        <div className="space-y-5">
+          {/* Desktop: a semantic table. */}
+          <div ref={tableRef} tabIndex={-1} className="hidden overflow-hidden rounded-xl border border-[#ececf1] bg-white outline-none dark:border-gray-800 dark:bg-[#111827] md:block" data-testid="delivery-board">
+            <table className="w-full text-left text-[14px]">
+              <caption className="sr-only">{current === 'attention' ? 'Engagements that need attention' : 'Engagements'}</caption>
+              <thead className="border-b border-[#ececf1] text-[12px] font-bold uppercase tracking-[0.06em] text-[#6b6577] dark:border-gray-800 dark:text-gray-400">
+                <tr>
+                  <th scope="col" className="px-4 py-2.5">Client</th>
+                  <th scope="col" className="px-4 py-2.5">Next action · why</th>
+                  <th scope="col" className="px-4 py-2.5">Health</th>
+                  <th scope="col" className="px-4 py-2.5">Progress</th>
+                  <th scope="col" className="px-4 py-2.5">Owner</th>
+                  <th scope="col" className="px-4 py-2.5">Mode · value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r) => (
+                  <tr key={r.engagement_id} className={`border-t border-[#ececf1] align-top dark:border-gray-800 ${r.seat_state === 'revoked' ? 'opacity-60' : ''} ${selected === r ? 'bg-[#f4f0fe] dark:bg-violet-950/30' : ''}`} data-attention={needsAttention(r) ? 'yes' : 'no'}>
+                    <th scope="row" className="px-4 py-3 font-bold">
+                      <button type="button" onClick={() => open(r)} className="text-left text-[#18181b] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#7c3aed] dark:text-gray-100">
+                        {r.client || 'Client not recorded'}
+                      </button>
+                    </th>
+                    <td className="px-4 py-3"><NextCell row={r} /></td>
+                    <td className="px-4 py-3"><HealthPill health={r.health} /></td>
+                    <td className="px-4 py-3 font-mono tabular-nums">{progressText(r) || notRecorded}</td>
+                    <td className="px-4 py-3">{r.owner_name || notRecorded}</td>
+                    <td className="px-4 py-3 text-[13px] text-[#6b6577] dark:text-gray-400">{modeValue(r)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {current === 'attention' && counts.all > counts.attention && (
+              <div className="flex items-center justify-between border-t border-[#ececf1] px-4 py-2.5 text-[13px] text-[#6b6577] dark:border-gray-800 dark:text-gray-400">
+                <span>{counts.attention} of {counts.all} engagements need attention</span>
+                <button type="button" onClick={() => setView('all')} className="font-semibold text-[#7c3aed] hover:underline dark:text-[#a78bfa]">Show all {counts.all}</button>
+              </div>
+            )}
           </div>
 
-          {/* THE ARTBOARD'S LEGEND, three entries rather than the two the
-              Research and Network artboards draw. Rendered only where the table
-              carries a grant at all: a legend explaining a violet mark nobody
-              can see is the same defect as a chip that selects everything. */}
-          {items.some((r) => r.grant) && (
-            <Legend
-              items={[
-                { chip: 'From client', tone: 'seam', note: 'founder-sourced object' },
-                { chip: 'Granted · scope', grant: true, note: 'scoped, revocable grant to a named operator' },
-                ...(revoked.length
-                  ? [{ chip: 'Granted · scope', grant: true, revoked: true, note: 'grant revoked by the founder' }]
-                  : []),
-              ]}
-            />
-          )}
+          {/* Phone: one card per engagement, next action before the metrics (DL01m). */}
+          <div className="grid gap-3 md:hidden" data-testid="delivery-board-cards">
+            {visible.map((r) => (
+              <article key={r.engagement_id} className="rounded-xl border border-[#ececf1] bg-white p-4 dark:border-gray-800 dark:bg-[#111827]">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[16px] font-bold text-[#18181b] dark:text-gray-100">{r.client || 'Client not recorded'}</h3>
+                  <HealthPill health={r.health} />
+                </div>
+                <p className="mt-1 text-[13px] text-[#6b6577] dark:text-gray-400">{modeValue(r)}</p>
+                <p className="mt-1 font-mono text-[14px] tabular-nums text-[#18181b] dark:text-gray-200">{progressText(r) || 'Progress not recorded'}</p>
+                <p className="mt-1 text-[14px]"><NextCell row={r} /></p>
+                <button type="button" onClick={() => open(r)} className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-[#ececf1] text-[14px] font-semibold text-[#18181b] dark:border-gray-700 dark:text-gray-100">
+                  Open engagement
+                </button>
+              </article>
+            ))}
+          </div>
 
-          <Instrument
-            testid="delivery-board"
-            title="Live engagements"
-            meta="Mode is structural, not a status"
-            cols="1fr .8fr 2.1fr 1.2fr .9fr"
-            head={['Client', 'Mode', 'Scope', 'Progress', 'Health']}
-            rows={visible.map((r) => ({
-              key: r.engagement_id,
-              rowClass: r.seat_revoked_at ? 'opacity-60' : '',
-              cells: [
-                r.client ? { text: r.client } : { nr: true },
-                { mode: MODE_LABEL[r.mode] },
-                {
-                  text: r.scope || undefined,
-                  ...(r.scope ? {} : { nr: true }),
-                  ...(r.grant
-                    ? { grant: `Granted · ${r.grant}`, grantRevoked: Boolean(r.seat_revoked_at) }
-                    : {}),
-                  sub: r.grant_holder ? `held by ${r.grant_holder}` : undefined,
-                },
-                // TWO MEASURES, NEVER AVERAGED. A project counts milestones; an
-                // embedded seat counts hours this period against the retainer's
-                // retained hours — and an embedded seat with no retainer has no
-                // cap to measure against, which is stated rather than invented.
-                r.mode === 'project'
-                  ? (r.milestone_count
-                    ? { text: `${r.milestones_done} of ${r.milestone_count} milestones` }
-                    : { nr: true })
-                  : (r.seat_revoked_at
-                    ? { nr: true }
-                    : (r.hours_cap != null
-                      ? { text: `${r.hours_this_period ?? 0} of ${r.hours_cap} h`, sub: r.hours_period ? `in ${r.hours_period}` : undefined }
-                      : { text: `${r.hours_this_period ?? 0} h`, sub: `${r.hours_period ? `in ${r.hours_period} · ` : ''}no retained-hours cap agreed` })),
-                r.health
-                  ? { pill: HEALTH_LABEL[r.health], pillTone: HEALTH_TONE[r.health] }
-                  : (r.seat_revoked_at ? { pill: 'Revoked', pillTone: 'neutral' } : { nr: true }),
-              ],
-            }))}
-            note={'A project row counts milestones; an embedded row counts hours against a granted seat and names what was granted — a scope held by an operator is a different relationship from a file handed over, which is why the grant is a mark on the row rather than a line in a note. A revoked grant is kept visible and struck through: a founder closing a seat is a normal event in this bucket, not an error state. And a row with no health is drawn absent rather than green — nothing has been recorded against it, no milestone, blocker, deliverable or retainer, and silence is not good news.'}
-          />
-
-          {items.length > 0 && visible.length === 0 && (
-            <p className="text-[12px] text-axal-muted">
-              No engagement is in this state. {items.length} on the board in total.
+          {visible.length === 0 && (
+            <p className="text-[14px] text-[#6b6577] dark:text-gray-400">
+              {current === 'attention' && !query ? 'Nothing needs attention.' : 'No engagement matches.'} {counts.all} on the board in total.
             </p>
           )}
 
-          {/* D395 — the lifecycle and the invoice ledger, moved here from the
-              retired `/partner/operations/engagements`. Over every row the
-              board read, not the chip-narrowed set: an invoice waiting is
-              waiting whichever chip is selected. */}
+          <p className="text-[13px] text-[#6b6577] dark:text-gray-400">
+            Not rated is not On track: an engagement with nothing recorded against it has no health yet. Rows open the engagement sheet.
+          </p>
+
+          {/* D395 — the lifecycle and the invoice ledger, over every row the board read. */}
           <EngagementLifecycle rows={items} onChanged={load} />
 
           <ZoneDraft
@@ -276,31 +264,10 @@ export default function PartnerDeliveryBoardZone() {
             empty="Which engagements carry risk and why — separating a client-facing problem from a capacity one, because the second is solved by adding people and the first is not."
             nothingToDraft="No engagement is on the board yet, so there is nothing to read."
           />
-
-          <StatedLimit title="What this board does not claim">
-            <p>
-              <strong>Health is computed, never stored.</strong> It is a read over
-              milestones, blockers, deliverables and retained hours, and an
-              engagement with none of those is not rated — it shows as absent
-              rather than on track. A green board that is really an empty one is
-              the one thing this zone must not show you.
-            </p>
-            <p className="mt-2">
-              <strong>Progress is two measures, not one.</strong> A project's is a
-              count of milestones; an embedded seat's is hours this period against
-              the retainer’s retained hours. Nothing averages them, because a
-              fraction of a scope and a fraction of a week are not the same number
-              — and a seat with no retainer has no cap, which the row says rather
-              than filling one in.
-            </p>
-            <p className="mt-2">
-              <strong>A grant is the founder’s to withdraw.</strong> Nothing here
-              revokes a seat or asks for one back; the row records what was granted
-              and, once it ends, that it ended.
-            </p>
-          </StatedLimit>
         </div>
       </ZoneBody>
+
+      {selected && <EngagementSheet row={selected} onClose={close} />}
     </>
   );
 }

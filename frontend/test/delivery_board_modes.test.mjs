@@ -73,35 +73,12 @@ function entriesIn(src, after) {
   return out;
 }
 
-/** The cells of the instrument row, split at TOP-LEVEL COMMAS (four are ternaries). */
-function cellsOf(src) {
-  const at = src.indexOf('cells: [');
-  assert.ok(at >= 0, 'the instrument row has no cells');
-  const out = [];
-  let depth = 0;
-  let start = at + 'cells: ['.length;
-  let quote = '';
-  for (let i = start; i < src.length; i += 1) {
-    const ch = src[i];
-    if (quote) {
-      if (ch === '\\') { i += 1; continue; }
-      if (ch === quote) quote = '';
-      continue;
-    }
-    if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue; }
-    if (ch === '{' || ch === '[' || ch === '(') { depth += 1; continue; }
-    if (ch === '}' || ch === ')') { depth -= 1; continue; }
-    if (ch === ']') {
-      if (depth === 0) { out.push(src.slice(start, i)); break; }
-      depth -= 1;
-      continue;
-    }
-    if (ch === ',' && depth === 0) { out.push(src.slice(start, i)); start = i + 1; }
-  }
-  return out.map((s) => s.trim()).filter(Boolean);
-}
-
-const INST = between(zone, '<Instrument', '/>');
+// D4822 (#4822): Board v2 replaced the v1 instrument with an action-first table (canvas `Delivery v2`). The
+// invariants this file guards are re-pointed at v2's helpers, which hold the rules the instrument's cells held.
+const attention = read('frontend/src/pages/partner/delivery/boardAttention.js');
+const pill = read('frontend/src/pages/partner/delivery/HealthPill.jsx');
+const sheet = read('frontend/src/pages/partner/delivery/EngagementSheet.jsx');
+const V2 = raw('design/incoming/Delivery v2 Page.dc.html');
 const BOARD = between(worker, "partnerDelivery.get('/board'", "partnerDelivery.get('/health'");
 
 test('the route the Delivery row lands on reads the Delivery stores', () => {
@@ -146,63 +123,49 @@ test('mode is derived from the seat, and a revoked seat stays embedded', () => {
   assert.match(BOARD, /ORDER BY s\.granted_at DESC/, 'the seats are no longer read newest first');
   // A revoked seat is still a seat: the row keeps its mode and stays on the
   // board, struck through.
-  assert.match(zone, /rowClass: r\.seat_revoked_at \? 'opacity-60' : '',/,
+  assert.match(zone, /r\.seat_state === 'revoked' \? 'opacity-60' : ''/,
     'a revoked seat’s row is no longer dimmed');
-  // ASSERTED POSITIVELY. A ban shaped `filter(… seat_revoked_at …).map` cannot
-  // cross the `)` of an arrow's parameter list, so `visible.filter((r) =>
-  // !r.seat_revoked_at).map(` slipped through it — another escape this suite's
-  // own mutation run caught. The instrument takes the narrowed list whole.
-  assert.match(zone, /rows=\{visible\.map\(\(r\) => \(\{/,
+  // ASSERTED POSITIVELY: the rows are the view's rows, and no view drops a revoked seat (`matchesView` reads mode,
+  // attention and the client search only; the attention rule itself treats a revoked seat as closed, not absent).
+  assert.match(zone, /const visible = items\.filter\(\(row\) => matchesView\(row, current, query\)\);/,
     'the board is narrowing the rows again — a revoked seat must stay visible');
+  assert.ok(!/seat_revoked_at|seat_state/.test(attention.slice(attention.indexOf('export function matchesView'), attention.indexOf('export function primaryAction'))),
+    'a view is filtering revoked seats out');
 });
 
 test('progress is two measures and is never averaged', () => {
-  const cells = cellsOf(INST);
-  assert.equal(cells.length, 5, 'the row no longer draws one cell per artboard column');
-  const progress = cells[3];
-  assert.match(progress, /r\.mode === 'project'/, 'the progress cell no longer branches on the mode');
-  assert.match(progress, /\$\{r\.milestones_done\} of \$\{r\.milestone_count\} milestones/,
-    'a project row no longer counts milestones');
-  assert.match(progress, /\$\{r\.hours_this_period \?\? 0\} of \$\{r\.hours_cap\} h/,
+  const fn = between(attention, 'export function progressText(', 'const dollars');
+  assert.match(fn, /if \(row\.mode === 'project'\) return row\.milestone_count \? `\$\{row\.milestones_done\} \/ \$\{row\.milestone_count\} milestones` : null;/,
+    'a project row no longer counts milestones, or shows a ratio over zero');
+  assert.match(fn, /row\.hours_cap != null \? `\$\{h\}h \/ \$\{row\.hours_cap\}h \$\{per\}`/,
     'an embedded row no longer counts hours against the retained-hours cap');
-  // An embedded seat with no retainer has NO cap, and the row says so rather
-  // than filling in a number nobody agreed to.
-  assert.match(progress, /no retained-hours cap agreed/,
-    'a seat with no retainer is being measured against an invented cap');
-  // A project with no milestone recorded reads absent, not 0 of 0.
-  assert.match(progress, /r\.milestone_count\s*\n?\s*\? \{ text:/,
-    'a project with no milestones is being shown a ratio over zero');
-  // Flattened: the sentence wraps, and it appears in both the docblock and the
-  // stated limit — so this asserts the PAGE says it, not only the file.
-  const flatBody = zoneRaw.slice(zoneRaw.indexOf('<StatedLimit')).replace(/\s+/g, ' ');
-  assert.ok(flatBody.includes('a fraction of a scope and a fraction of a week are not the same number'),
-    'the page no longer tells a reader why the two measures are not averaged');
+  // An embedded seat with no retainer has NO cap, and the row says so rather than filling in a number.
+  assert.match(fn, /no retained-hours cap/, 'a seat with no retainer is being measured against an invented cap');
+  assert.ok(!/\/ 2|average|\+ row\.milestones/.test(fn), 'the two measures are being combined');
+  assert.match(zone, /\{progressText\(r\) \|\| notRecorded\}/, 'a row with nothing to measure is drawn as a number');
 });
 
 test('health is the same computed rating, and null is drawn absent', () => {
   assert.match(BOARD, /const h = healthFor\(\{/, 'the board is no longer using the shared rating');
   assert.ok(!/health: '(on_track|at_risk|blocked)'/.test(BOARD),
     'the board is asserting a health rather than computing one');
-  const cells = cellsOf(INST);
-  assert.match(cells[4], /r\.health\s*\n?\s*\? \{ pill: HEALTH_LABEL\[r\.health\], pillTone: HEALTH_TONE\[r\.health\] \}/,
-    'the Health column no longer draws the computed rating');
-  assert.match(cells[4], /: \{ nr: true \}/, 'an unrated engagement is being drawn as something');
-  assert.ok(!/health.*'on_track'.*\|\|/.test(cells[4]), 'an unrated engagement is being defaulted to on track');
+  assert.match(zone, /<HealthPill health=\{r\.health\} \/>/, 'the Health column no longer draws the computed rating');
+  // Null is "Not rated", dashed and worded, never green and never a default.
+  assert.match(pill, /if \(!health \|\| !HEALTH_WORD\[health\]\) \{/, 'an unrated engagement is being drawn as a rating');
+  assert.match(pill, /border-dashed[^"]*"[^>]*data-health="not_rated"/, 'Not rated is no longer drawn distinctly');
+  assert.ok(!/health \|\| 'on_track'|\?\? 'on_track'/.test(pill + zone), 'an unrated engagement is being defaulted to on track');
   // And the strip says how much of the board could not be rated at all, so a
   // low `Need attention` cannot read as a healthy book.
   assert.match(BOARD, /unrated_count: items\.filter\(\(i: any\) => i\.health === null\)\.length,/,
     'the read no longer reports how much of the board is unrated');
-  assert.ok(zone.includes('more rated on nothing at all'),
-    'the strip no longer says how much of the board is unrated');
+  assert.ok(zone.includes('Not rated is not On track'),
+    'the board no longer says an unrated engagement is not an on-track one');
 });
 
-test('the strip is the artboard’s four tiles, counted over the whole board', () => {
-  const adds = PD1.slice(PD1.indexOf('adds:['), PD1.indexOf('legend:'));
-  const labels = [...adds.matchAll(/label: '([^']+)'|label:'([^']+)'/g)].map((m) => m[1] || m[2]);
-  assert.deepEqual(labels, ['Project value', 'Embedded / month', 'Need attention', 'Revoked seats']);
-  const strip = between(zone, '<div className="grid grid-cols-2 gap-3 md:grid-cols-4">', 'items.some((r) => r.grant)');
-  assert.deepEqual([...strip.matchAll(/label="([^"]+)"/g)].map((m) => m[1]), labels,
-    'the strip is no longer the artboard’s four tiles in its order');
+test('the board read still counts its totals over the whole board (v2 draws no tile strip, D4822)', () => {
+  // The v2 canvas (DL01) drops the four tiles: "do not display meaningless averages". The read still answers the
+  // totals, counted the same way, for the surfaces that print them (Home, D394).
+  assert.ok(!/BoardTile|Project value/.test(zone), 'the v1 tile strip is back on the v2 board');
   // COUNTED SERVER-SIDE OVER THE WHOLE BOARD, and the two money tiles exclude
   // revoked seats: a closed seat bills nothing this month.
   assert.match(BOARD, /const live = items\.filter\(\(i: any\) => i\.seat_state !== 'revoked'\);/,
@@ -219,35 +182,18 @@ test('the strip is the artboard’s four tiles, counted over the whole board', (
     'the revoked tile is no longer counted over the whole board');
 });
 
-test('the instrument draws the artboard’s five columns, in its order and at its widths', () => {
-  const head = JSON.parse(`[${PD1.match(/head:\[([^\]]+)\]/)[1].replace(/'/g, '"')}]`);
-  assert.deepEqual(head, ['Client', 'Mode', 'Scope', 'Progress', 'Health']);
-  assert.ok(INST.includes(`head={${JSON.stringify(head).replace(/"/g, "'").replace(/,/g, ', ')}}`),
-    'the instrument head is no longer the artboard’s five columns in its order');
-  assert.ok(INST.includes(`cols="${PD1.match(/cols:'([^']+)'/)[1]}"`),
-    'the instrument no longer uses the artboard’s column widths');
-  assert.ok(INST.includes(`meta="${PD1.match(/instMeta:'([^']+)'/)[1]}"`),
-    'the instrument’s meta line has left the artboard');
-  assert.ok(INST.includes(`title="${PD1.match(/instTitle:'([^']+)'/)[1]}"`),
-    'the instrument’s title has left the artboard');
+test('the board draws the v2 canvas’s six columns, in its order, as a semantic table (D4822)', () => {
+  const head = [...V2.slice(V2.indexOf('<thead><tr>'), V2.indexOf('</tr></thead>')).matchAll(/<th scope="col">([^<]+)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(head, ['Client', 'Next action · why', 'Health', 'Progress', 'Owner', 'Mode · value']);
+  const drawn = [...zone.matchAll(/<th scope="col" className="[^"]*">([^<]+)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(drawn, head, 'the board’s columns left the v2 canvas’s order');
+  assert.match(zone, /<th scope="row"/, 'each row is no longer headed by its client');
+  assert.match(zone, /<caption className="sr-only">/, 'the table lost its caption');
 });
 
-test('the grant is a mark on the row, and the legend explains only marks it draws', () => {
-  const cells = cellsOf(INST);
-  assert.match(cells[1], /\{ mode: MODE_LABEL\[r\.mode\] \}/, 'the Mode column no longer draws the mode chip');
-  assert.match(cells[2], /grant: `Granted · \$\{r\.grant\}`, grantRevoked: Boolean\(r\.seat_revoked_at\)/,
-    'the scope cell no longer marks what the founder granted, or whether it was revoked');
-  assert.match(cells[2], /sub: r\.grant_holder \? `held by \$\{r\.grant_holder\}` : undefined/,
-    'the row no longer names who holds the grant');
-  // RENDERED ONLY WHERE A GRANT EXISTS. A legend explaining a violet mark
-  // nobody can see is the same defect as a chip that selects everything — and
-  // its revoked entry appears only once a seat actually has been revoked.
-  assert.match(zone, /\{items\.some\(\(r\) => r\.grant\) && \(/,
-    'the legend is drawn over a table that carries no grant');
-  assert.match(zone, /\.\.\.\(revoked\.length\s*\n?\s*\? \[\{ chip: 'Granted · scope', grant: true, revoked: true/,
-    'the legend claims a revoked grant before one exists');
-  assert.match(CANVAS, /\{ cls:'grant rv', chip:'Granted · Repo', t:'grant revoked by the founder' \}/,
-    'the canvas’s legend has moved');
+test('the grant holder is named where a seat is described: the engagement sheet’s capacity line', () => {
+  assert.match(sheet, /row\.grant_holder \? `\$\{row\.grant_holder\} · ` : ''/,
+    'the sheet no longer names who holds the seat');
 });
 
 test('the two Delivery marks are named in the kit, not improvised', () => {
@@ -268,7 +214,7 @@ test('the two Delivery marks are named in the kit, not improvised', () => {
   assert.match(kit, /export function SourceLegend\(/, 'the two-entry legend was removed rather than kept beside it');
 });
 
-test('the chip row exists at all now, and Needs attention is the rated-bad states', () => {
+test('the chip row exists, and attention is facts from the record, never an unrated row', () => {
   const canvasChips = JSON.parse(`[${PD1.match(/filters: fil\(\[([^\]]+)\]/)[1].replace(/'/g, '"')}]`);
   assert.deepEqual(canvasChips, ['All', 'Project', 'Embedded', 'Needs attention']);
   const chips = entriesIn(filters, "'delivery/board': [");
@@ -277,11 +223,12 @@ test('the chip row exists at all now, and Needs attention is the rated-bad state
   for (const entry of chips) {
     assert.match(entry, /key: '[a-z]+'/, `${entry} is not a live chip`);
   }
-  const fn = between(zone, 'export function matchesBoardChip(', 'function BoardTile(');
-  assert.match(fn, /if \(chip === 'attention'\) return row\.health === 'at_risk' \|\| row\.health === 'blocked';/,
-    'Needs attention is no longer the two rated-bad states');
-  assert.ok(!/health === null|!row\.health/.test(fn),
-    'an unrated engagement is being swept into Needs attention, which turns “we have not looked” into “something is wrong”');
+  // D4822: the page orders them Attention first and names them as the v2 canvas does.
+  assert.match(zone, /\['Needs attention', 'attention', 'Attention'\], \['All', 'all', 'All'\], \['Project', 'project', 'Projects'\], \['Embedded', 'embedded', 'Embedded'\]/,
+    'the board’s views left the v2 canvas’s order');
+  const fn = between(attention, 'export function attentionReasons(', 'export const needsAttention');
+  assert.ok(!/health === null|!row\.health\b/.test(fn),
+    'an unrated engagement is being swept into attention, which turns “we have not looked” into “something is wrong”');
 });
 
 test('all five Delivery zones have their chip row, and the guard can see them', () => {
@@ -335,9 +282,9 @@ test('the ops row is the artboard’s three, and two are still prose', () => {
   // branch uses, and the gate is a line above the body.
   assert.match(zone, /actions=\{rowActions\}/,
     'the gate branch no longer draws the same header row as the live one');
-  assert.match(zone, /notice=\{unlinked \? <NoPartnerProfile \/> : null\}/,
+  assert.match(zone, /notice=\{unlinked \? <NoPartnerProfile \/> :/,
     'the gate stopped saying why the zone is empty');
-  assert.match(zone, /filters=\{unlinked \? \[\] :/,
+  assert.match(zone, /const v1 = unlinked \? \[\] : partnerZoneFilters\('delivery\/board'/,
     'a filter chip is drawn over rows this account cannot read');
 });
 
