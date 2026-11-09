@@ -30,6 +30,7 @@ import { renderLegalPdf } from '../services/legalPaperRender';
 import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { refuse } from '../util/refusal';
+import { SEARCH_LIMIT, rank, searchAgreements, searchGovernance, searchQuery, searchTemplates, type SearchResult } from '../services/contractSearch';
 import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON } from '../services/templateSafety';
 import {
   listTemplates as storeListTemplates,
@@ -1305,6 +1306,52 @@ adminContracts.get('/partner-deals', async (c) => {
 });
 
 // GET /api/admin/contracts/:uid — detail (UNION-aware).
+/**
+ * D4811 part 4 — GET /api/admin/contracts/search?q=&historical=true
+ * (`services/contractSearch.ts`, board CT-13). One ranked list across
+ * templates, agreements and governance records, current versions first and
+ * earlier versions only on request. A store that cannot be read is named in
+ * `unreadable`, never reported as no match. Governance is HQ's; a
+ * confidential record is the Super Admin's alone, and is not even counted
+ * for anyone else.
+ */
+adminContracts.get('/search', async (c) => {
+  const admin = await requireAdmin(c);
+  const q = searchQuery(c.req.query('q'));
+  if (!q) return c.json({ error: 'invalid_search', message: 'Type at least 2 characters (at most 200) to search.', field: 'q' }, 400);
+  const historical = c.req.query('historical') === 'true';
+  const superAdmin = isSuperAdmin(admin as any);
+  const unreadable: string[] = [];
+  const results: SearchResult[] = [];
+  let hidden = 0;
+  try {
+    const t = await searchTemplates(c.env, q);
+    results.push(...t.current.filter(r => r.score > 0));
+    const h = t.historical.filter(r => r.score > 0);
+    if (historical) results.push(...h); else hidden += h.length;
+  } catch { unreadable.push('template'); }
+  const governanceScope = c.env.BRANCH_CODE ? 'branch' : 'hq';
+  if (governanceScope === 'hq') {
+    try {
+      const g = await searchGovernance(c.env, q, superAdmin);
+      results.push(...g.current.filter(r => r.score > 0));
+      const h = g.historical.filter(r => r.score > 0);
+      if (historical) results.push(...h); else hidden += h.length;
+    } catch { unreadable.push('governance'); }
+  }
+  const sql = getSQL(c.env);
+  try { results.push(...searchAgreements(await loadAllContracts(sql, true), q)); }
+  catch { unreadable.push('agreement'); }
+  finally { await sql.end(); }
+  const ranked = rank(results);
+  const counts = { template: 0, agreement: 0, governance: 0 };
+  for (const r of ranked) counts[r.type] += 1;
+  return c.json({
+    q, historical, total: ranked.length, items: ranked.slice(0, SEARCH_LIMIT).map(({ score, ...r }) => r),
+    counts, hidden_historical: historical ? 0 : hidden, unreadable, governance_scope: governanceScope, limit: SEARCH_LIMIT,
+  });
+});
+
 adminContracts.get('/:uid/history', async (c) => {
   const admin = await requireAdmin(c);
   const sql = getSQL(c.env);
