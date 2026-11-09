@@ -564,7 +564,7 @@ async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
     { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
     { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
       kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null }));
-  return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items yet. Now, Next and Later appear here.', items.length ? next(p, 'product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null) : { text: 'Add item', href: `/build/roadmap?project_id=${p.id}` }),
+  return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items yet. Now, Next and Later appear here.', items.length ? next(p, 'product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null) : next(p, 'product-roadmap', 'Add item', true)),
     cols: [['item', 'Item'], ['column', 'Column'], ['moves', 'Moves'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
     rows: itemRows,
     list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
@@ -681,7 +681,7 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
   }, { role: h.founder_role ?? null, equity: h.ownership_pct == null ? null : number(h.ownership_pct) },
   { role: h.founder_role ?? null, ownership_pct: h.ownership_pct ?? null }));
   const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : equityTotal > 0 || withVesting.length ? 'ok' : 'too_little';
-  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: '/raise/cap-table' } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
+  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: `/raise/cap-table?project=${p.id}` } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
