@@ -268,6 +268,11 @@ test('subsidiaries: reporting health first, Not drawn for a missing statement, s
 });
 
 test('promotions: badge columns, Remaining only beside a reported Issued, and the compact no-ceiling state', () => {
+  // PromotionsSection reads Date.now() for the reporting age; hold it at the fixture's NOW so
+  // "23 d" is measured from the same instant the fixture was dated by, not from the real clock.
+  const realNow = Date.now;
+  Date.now = () => NOW;
+  try {
   // Even a Worker reply that carries a remaining figure is not drawn without a reported issued one.
   assert.equal(ceilingFacts(ceiling({ remaining_cents: 1_000_000 }), '2026-Q4').remaining.known, false);
   const coverage = { ...SUMMARY.usage_coverage };
@@ -286,6 +291,7 @@ test('promotions: badge columns, Remaining only beside a reported Issued, and th
   assert.match(none, /No ceiling configured · Discounts currently allowed/);
   const past = html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage, period: '2026-Q3', licences: null }));
   assert.doesNotMatch(text(past), /Discounts currently allowed/, 'a past quarter says nothing about checkout now');
+  } finally { Date.now = realNow; }
 });
 
 /* ── coverage ───────────────────────────────────────────────────────── */
