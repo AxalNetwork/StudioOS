@@ -76,7 +76,7 @@ function useActivity(projectUid, q, reload) {
   return state;
 }
 
-export default function DataRoomActivity({ projectUid, phone = false }) {
+export default function DataRoomActivity({ projectUid, phone = false, canExport = false }) {
   const [period, setPeriod] = useState(DEFAULT_PERIOD);
   const [investor, setInvestor] = useState('');
   const [action, setAction] = useState('');
@@ -116,7 +116,8 @@ export default function DataRoomActivity({ projectUid, phone = false }) {
           {readers.map((r) => <option key={r.grantUid} value={r.grantUid}>{r.who}</option>)}
         </select>
       ) : null}
-      {!phone ? (
+      {/* D5074: Export is drawn only when the room read's capabilities allow it (`export`). */}
+      {!phone && canExport ? (
         <button type="button" className={`${BTN} ml-auto`} onClick={exportCsv} disabled={exporting || status !== 'ready'} data-testid="dataroom-activity-export">
           {exporting ? 'Exporting…' : 'Export (CSV)'}
         </button>

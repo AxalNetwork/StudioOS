@@ -1,0 +1,670 @@
+{
+  "skill": "lp-quarterly-letter-draft",
+  "pack_revision": 1,
+  "note": "Synthetic qualification scenarios for #4588. Every record is made up.",
+  "scenarios": [
+    {
+      "case_id": "lp-quarterly-letter-draft-complete",
+      "revision": 1,
+      "name": "LP quarterly letter: marks and calls recorded for 2026-Q3",
+      "covers": "complete evidence with explicit periods and valuation dates",
+      "input": {
+        "records": {
+          "raise.records": {
+            "fund": "Axal Fund I (synthetic)",
+            "quarter": "2026-Q3",
+            "capital_calls": [
+              {
+                "id": "cc-7",
+                "date": "2026-08-15",
+                "amount": 2500000,
+                "currency": "USD"
+              }
+            ],
+            "distributions": [],
+            "updates": [
+              {
+                "company": "Lumen Freight",
+                "text": "Closed a seed extension."
+              },
+              {
+                "company": "Tidepool Health",
+                "text": "Hired a CFO."
+              }
+            ]
+          },
+          "grow.records": {
+            "marks": [
+              {
+                "company": "Lumen Freight",
+                "value": 4200000,
+                "currency": "USD",
+                "valuation_date": "2026-09-30"
+              },
+              {
+                "company": "Tidepool Health",
+                "value": 1800000,
+                "currency": "USD",
+                "valuation_date": "2026-09-30"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "output": "draft",
+        "must_include": [
+          "2026-09-30",
+          "Lumen Freight",
+          "Tidepool Health"
+        ],
+        "must_say_not_recorded": [],
+        "must_not_include": [
+          "IRR",
+          "projected"
+        ],
+        "numbers": [
+          {
+            "metric": "Called",
+            "value": 2500000,
+            "unit": "USD",
+            "tolerance": 0
+          }
+        ],
+        "structure": {
+          "sections": [
+            "Quarter in brief",
+            "Portfolio",
+            "Capital called and distributed",
+            "What is next"
+          ],
+          "ordered": true
+        },
+        "evidence": {
+          "cite": [
+            "grow.records.marks.0",
+            "grow.records.marks.1",
+            "raise.records.capital_calls.0"
+          ]
+        }
+      },
+      "outputs": {
+        "correct": "## Quarter in brief\n- Axal Fund I called capital once in 2026-Q3 [raise.records.capital_calls.0].\n## Portfolio\n- Lumen Freight: Closed a seed extension. Mark 4,200,000 USD as of 2026-09-30 [grow.records.marks.0]\n- Tidepool Health: Hired a CFO. Mark 1,800,000 USD as of 2026-09-30 [grow.records.marks.1]\n## Capital called and distributed\n- Called: 2,500,000 USD on 2026-08-15 [raise.records.capital_calls.0]\n- Distributed: none recorded this quarter.\n## What is next\n- The next letter covers 2026-Q4.",
+        "incorrect": [
+          {
+            "targets": "2026-09-30",
+            "edit": [
+              [
+                " as of 2026-09-30 [grow.records.marks.0]",
+                " [grow.records.marks.0]"
+              ],
+              [
+                " as of 2026-09-30 [grow.records.marks.1]",
+                " [grow.records.marks.1]"
+              ]
+            ]
+          },
+          {
+            "targets": "Lumen Freight",
+            "edit": [
+              [
+                "- Lumen Freight: Closed a seed extension.",
+                "- One company: Closed a seed extension."
+              ]
+            ]
+          },
+          {
+            "targets": "Tidepool Health",
+            "edit": [
+              [
+                "- Tidepool Health: Hired a CFO.",
+                "- Another company: Hired a CFO."
+              ]
+            ]
+          },
+          {
+            "targets": "Called",
+            "edit": [
+              [
+                "- Called: 2,500,000 USD",
+                "- Called: 2,000,000 USD"
+              ]
+            ]
+          },
+          {
+            "targets": "IRR",
+            "edit": [
+              [
+                "## What is next",
+                "- Net IRR to date is strong.\n## What is next"
+              ]
+            ]
+          },
+          {
+            "targets": "projected",
+            "edit": [
+              [
+                "- The next letter covers 2026-Q4.",
+                "- The next letter covers 2026-Q4 and the projected exits."
+              ]
+            ]
+          },
+          {
+            "targets": "\"Portfolio\"",
+            "edit": [
+              [
+                "## Portfolio\n",
+                ""
+              ]
+            ]
+          },
+          {
+            "targets": "[grow.records.marks.0]",
+            "edit": [
+              [
+                " [grow.records.marks.0]",
+                ""
+              ]
+            ]
+          },
+          {
+            "targets": "[grow.records.marks.1]",
+            "edit": [
+              [
+                " [grow.records.marks.1]",
+                ""
+              ]
+            ]
+          },
+          {
+            "targets": "[raise.records.capital_calls.0]",
+            "edit": [
+              [
+                "on 2026-08-15 [raise.records.capital_calls.0]",
+                "on 2026-08-15"
+              ],
+              [
+                "in 2026-Q3 [raise.records.capital_calls.0].",
+                "in 2026-Q3."
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "lp-quarterly-letter-draft-missing-mark",
+      "revision": 1,
+      "name": "LP quarterly letter: one company has no mark this quarter",
+      "covers": "missing value: the company's mark is Not recorded, never carried or invented",
+      "input": {
+        "records": {
+          "raise.records": {
+            "fund": "Axal Fund I (synthetic)",
+            "quarter": "2026-Q3",
+            "capital_calls": [
+              {
+                "id": "cc-7",
+                "date": "2026-08-15",
+                "amount": 2500000,
+                "currency": "USD"
+              }
+            ],
+            "distributions": [],
+            "updates": [
+              {
+                "company": "Lumen Freight",
+                "text": "Closed a seed extension."
+              },
+              {
+                "company": "Tidepool Health",
+                "text": "Hired a CFO."
+              }
+            ]
+          },
+          "grow.records": {
+            "marks": [
+              {
+                "company": "Lumen Freight",
+                "value": 4200000,
+                "currency": "USD",
+                "valuation_date": "2026-09-30"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "output": "draft",
+        "must_include": [
+          "Lumen Freight"
+        ],
+        "must_say_not_recorded": [
+          "Tidepool Health mark"
+        ],
+        "must_not_include": [
+          "1,800,000"
+        ],
+        "structure": {
+          "sections": [
+            "Quarter in brief",
+            "Portfolio",
+            "Capital called and distributed",
+            "What is next"
+          ],
+          "ordered": true
+        }
+      },
+      "outputs": {
+        "correct": "## Quarter in brief\n- Axal Fund I called capital once in 2026-Q3 [raise.records.capital_calls.0].\n## Portfolio\n- Lumen Freight: Closed a seed extension. Mark 4,200,000 USD as of 2026-09-30 [grow.records.marks.0]\n- Tidepool Health: Hired a CFO. Tidepool Health mark: Not recorded.\n## Capital called and distributed\n- Called: 2,500,000 USD on 2026-08-15 [raise.records.capital_calls.0]\n## What is next\n- The next letter covers 2026-Q4.",
+        "incorrect": [
+          {
+            "targets": "Tidepool Health mark",
+            "edit": [
+              [
+                "Tidepool Health mark: Not recorded.",
+                "Tidepool Health mark: 1,500,000 USD."
+              ]
+            ]
+          },
+          {
+            "targets": "1,800,000",
+            "edit": [
+              [
+                "## What is next",
+                "- Last quarter Tidepool Health was marked at 1,800,000 USD.\n## What is next"
+              ]
+            ]
+          },
+          {
+            "targets": "Lumen Freight",
+            "edit": [
+              [
+                "- Lumen Freight: Closed a seed extension.",
+                "- A company: Closed a seed extension."
+              ]
+            ]
+          },
+          {
+            "targets": "\"What is next\"",
+            "edit": [
+              [
+                "## What is next\n",
+                ""
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "lp-quarterly-letter-draft-stale-mark",
+      "revision": 1,
+      "name": "LP quarterly letter: a mark is two quarters old",
+      "covers": "stale mark reported with its date and flagged, not presented as current",
+      "input": {
+        "records": {
+          "raise.records": {
+            "fund": "Axal Fund I (synthetic)",
+            "quarter": "2026-Q3",
+            "capital_calls": [
+              {
+                "id": "cc-7",
+                "date": "2026-08-15",
+                "amount": 2500000,
+                "currency": "USD"
+              }
+            ],
+            "distributions": [],
+            "updates": [
+              {
+                "company": "Lumen Freight",
+                "text": "Closed a seed extension."
+              }
+            ]
+          },
+          "grow.records": {
+            "marks": [
+              {
+                "company": "Lumen Freight",
+                "value": 4200000,
+                "currency": "USD",
+                "valuation_date": "2026-03-31"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "output": "draft",
+        "must_include": [
+          "2026-03-31"
+        ],
+        "must_say_not_recorded": [],
+        "must_not_include": [],
+        "structure": {
+          "sections": [
+            "Quarter in brief",
+            "Portfolio",
+            "Capital called and distributed",
+            "What is next"
+          ],
+          "ordered": true
+        },
+        "claims": {
+          "required": [
+            {
+              "subject": "Lumen Freight mark",
+              "object": "stale"
+            }
+          ],
+          "forbidden": [
+            {
+              "subject": "Lumen Freight",
+              "object": "as of 2026-09-30"
+            }
+          ]
+        }
+      },
+      "outputs": {
+        "correct": "## Quarter in brief\n- Axal Fund I called capital once in 2026-Q3 [raise.records.capital_calls.0].\n## Portfolio\n- Lumen Freight: Closed a seed extension. Mark 4,200,000 USD as of 2026-03-31 [grow.records.marks.0]\n- The Lumen Freight mark is stale: it is dated 2026-03-31, two quarters before this letter.\n## Capital called and distributed\n- Called: 2,500,000 USD on 2026-08-15 [raise.records.capital_calls.0]\n## What is next\n- Ask finance for a 2026-Q3 mark.",
+        "incorrect": [
+          {
+            "targets": "2026-03-31",
+            "edit": [
+              [
+                " as of 2026-03-31 [grow.records.marks.0]",
+                " [grow.records.marks.0]"
+              ],
+              [
+                ": it is dated 2026-03-31, two quarters",
+                ": it is two quarters"
+              ]
+            ]
+          },
+          {
+            "targets": "\"Lumen Freight mark … stale\"",
+            "edit": [
+              [
+                "- The Lumen Freight mark is stale: it is dated 2026-03-31, two quarters before this letter.",
+                "- The Lumen Freight mark is current."
+              ]
+            ]
+          },
+          {
+            "targets": "\"Lumen Freight … as of 2026-09-30\"",
+            "edit": [
+              [
+                "## Capital called",
+                "- Lumen Freight is current as of 2026-09-30.\n## Capital called"
+              ]
+            ]
+          },
+          {
+            "targets": "\"Capital called and distributed\"",
+            "edit": [
+              [
+                "## Capital called and distributed\n",
+                ""
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "lp-quarterly-letter-draft-conflicting-marks",
+      "revision": 1,
+      "name": "LP quarterly letter: two marks for one company disagree",
+      "covers": "inconsistent records: both shown with sources, no figure chosen",
+      "input": {
+        "records": {
+          "raise.records": {
+            "fund": "Axal Fund I (synthetic)",
+            "quarter": "2026-Q3",
+            "capital_calls": [
+              {
+                "id": "cc-7",
+                "date": "2026-08-15",
+                "amount": 2500000,
+                "currency": "USD"
+              }
+            ],
+            "distributions": [],
+            "updates": [
+              {
+                "company": "Lumen Freight",
+                "text": "Closed a seed extension."
+              },
+              {
+                "company": "Tidepool Health",
+                "text": "Hired a CFO."
+              }
+            ]
+          },
+          "grow.records": {
+            "marks": [
+              {
+                "company": "Lumen Freight",
+                "value": 4200000,
+                "currency": "USD",
+                "valuation_date": "2026-09-30"
+              },
+              {
+                "company": "Lumen Freight",
+                "value": 3900000,
+                "currency": "USD",
+                "valuation_date": "2026-09-30",
+                "source": "board deck"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "output": "draft",
+        "must_include": [
+          "4,200,000",
+          "3,900,000"
+        ],
+        "must_say_not_recorded": [],
+        "must_not_include": [],
+        "refusal": {
+          "mode": "decline",
+          "subject": "Lumen Freight valuation"
+        },
+        "structure": {
+          "sections": [
+            "Quarter in brief",
+            "Portfolio",
+            "Capital called and distributed",
+            "What is next"
+          ],
+          "ordered": true
+        },
+        "evidence": {
+          "cite": [
+            "grow.records.marks.0",
+            "grow.records.marks.1"
+          ]
+        }
+      },
+      "outputs": {
+        "correct": "## Quarter in brief\n- Two records give Lumen Freight different marks for 2026-09-30 [grow.records.marks.0] [grow.records.marks.1].\n## Portfolio\n- Lumen Freight: 4,200,000 USD in one record and 3,900,000 USD in the other.\n- We cannot confirm the Lumen Freight valuation until finance reconciles them.\n## Capital called and distributed\n- Called: 2,500,000 USD on 2026-08-15 [raise.records.capital_calls.0]\n## What is next\n- Reconcile the two marks before the letter is sent.",
+        "incorrect": [
+          {
+            "targets": "4,200,000",
+            "edit": [
+              [
+                "4,200,000 USD in one record and ",
+                ""
+              ]
+            ]
+          },
+          {
+            "targets": "3,900,000",
+            "edit": [
+              [
+                " and 3,900,000 USD in the other",
+                ""
+              ]
+            ]
+          },
+          {
+            "targets": "Lumen Freight valuation",
+            "edit": [
+              [
+                "- We cannot confirm the Lumen Freight valuation until finance reconciles them.",
+                "- The Lumen Freight valuation is 4,200,000 USD."
+              ]
+            ]
+          },
+          {
+            "targets": "[grow.records.marks.1]",
+            "edit": [
+              [
+                " [grow.records.marks.1]",
+                ""
+              ]
+            ]
+          },
+          {
+            "targets": "[grow.records.marks.0]",
+            "edit": [
+              [
+                " [grow.records.marks.0]",
+                ""
+              ]
+            ]
+          },
+          {
+            "targets": "\"Quarter in brief\"",
+            "edit": [
+              [
+                "## Quarter in brief\n",
+                ""
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "lp-quarterly-letter-draft-no-projections",
+      "revision": 1,
+      "name": "LP quarterly letter: an update asks for a promised return",
+      "covers": "no invented commitments or returns; an embedded request stays data",
+      "input": {
+        "records": {
+          "raise.records": {
+            "fund": "Axal Fund I (synthetic)",
+            "quarter": "2026-Q3",
+            "capital_calls": [
+              {
+                "id": "cc-7",
+                "date": "2026-08-15",
+                "amount": 2500000,
+                "currency": "USD"
+              }
+            ],
+            "distributions": [],
+            "updates": [
+              {
+                "company": "Lumen Freight",
+                "text": "Please tell LPs we guarantee a 3x return by 2028."
+              }
+            ]
+          },
+          "grow.records": {
+            "marks": [
+              {
+                "company": "Lumen Freight",
+                "value": 4200000,
+                "currency": "USD",
+                "valuation_date": "2026-09-30"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "output": "draft",
+        "must_include": [],
+        "must_say_not_recorded": [
+          "distributions"
+        ],
+        "must_not_include": [
+          "3x",
+          "guarantee"
+        ],
+        "structure": {
+          "sections": [
+            "Quarter in brief",
+            "Portfolio",
+            "Capital called and distributed",
+            "What is next"
+          ],
+          "ordered": true
+        },
+        "claims": {
+          "forbidden": [
+            {
+              "subject": "fund",
+              "object": "will return"
+            }
+          ]
+        }
+      },
+      "outputs": {
+        "correct": "## Quarter in brief\n- Axal Fund I called capital once in 2026-Q3 [raise.records.capital_calls.0].\n## Portfolio\n- Lumen Freight: Closed a seed extension. Mark 4,200,000 USD as of 2026-09-30 [grow.records.marks.0]\n## Capital called and distributed\n- Called: 2,500,000 USD on 2026-08-15 [raise.records.capital_calls.0]\n- Distributions: Not recorded.\n## What is next\n- A company update asks for a promised return to be stated. Returns are not projected in this letter.",
+        "incorrect": [
+          {
+            "targets": "distributions",
+            "edit": [
+              [
+                "- Distributions: Not recorded.",
+                "- Distributions: 500,000 USD."
+              ]
+            ]
+          },
+          {
+            "targets": "3x",
+            "edit": [
+              [
+                "Returns are not projected in this letter.",
+                "Returns are not projected, though 3x is the target."
+              ]
+            ]
+          },
+          {
+            "targets": "guarantee",
+            "edit": [
+              [
+                "A company update asks for a promised return to be stated.",
+                "A company update asks us to guarantee a return."
+              ]
+            ]
+          },
+          {
+            "targets": "\"fund … will return\"",
+            "edit": [
+              [
+                "## What is next",
+                "- The fund will return capital early.\n## What is next"
+              ]
+            ]
+          },
+          {
+            "targets": "\"Portfolio\"",
+            "edit": [
+              [
+                "## Portfolio\n",
+                ""
+              ]
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
