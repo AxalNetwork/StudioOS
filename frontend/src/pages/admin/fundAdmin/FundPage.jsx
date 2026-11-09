@@ -7,6 +7,8 @@ import { actRow, refusalText } from './fundAdminModel';
 import { withQuery } from './lpsModel';
 import { Line, NUM, Note, Panel, ReadFailure, Section, TH } from './parts';
 import { PersonPicker } from './PersonPicker';
+import { ActFlow } from './MoneyFlow';
+import { economicsEffects } from './moneyFlowModel';
 import { fundNav, identityLine, keyFigures } from './fundPageModel';
 import { LABEL } from './FundTabs';
 import { useRead } from './useRead';
@@ -200,7 +202,8 @@ export function FundPage({ apis, access, overview, fundId }) {
       </details>
       {open === 'pick-gp' && <PersonPicker apis={apis} access={access} fund={fund} role="gp" current={holder(gp)} onClose={close} onDone={done} />}
       {open === 'pick-ledger' && <PersonPicker apis={apis} access={access} fund={fund} role="ledger" current={holder(ledgerAdmin)} onClose={close} onDone={done} />}
-      {open === 'economics' && <EconomicsDialog apis={apis} access={access} fund={fund} onClose={close} onDone={() => done('The fund’s economics changed. The reason is kept on the audit record.')} />}
+      {open === 'economics' && <EconomicsDialog apis={apis} access={access} fund={fund} onClose={close}
+        onDone={async () => { setNotice('The fund’s economics changed. The reason is kept on the audit record.'); await read.reload(); }} />}
       {open === 'providers' && <ProvidersDialog apis={apis} fund={fund} onClose={close} onDone={() => done('The service providers were saved.')} />}
       {open === 'regenerate' && <RegenerateDialog apis={apis} fund={fund} onClose={close} onDone={() => done('A new LPA draft was asked for. It replaces the current draft when it is ready.')} />}
       {open === 'facts' && <FactsDialog apis={apis} access={access} fund={fund} onClose={close} onDone={() => { overview.reload?.(); return done('The fund’s facts were saved.'); }} />}
@@ -211,14 +214,26 @@ export function FundPage({ apis, access, overview, fundId }) {
 /** Economics' Change: both rates and a reason; the Worker asks the Super Admin's step-up. */
 export function EconomicsDialog({ apis, access, fund, onClose, onDone }) {
   const [form, setForm] = useState({ carry: rateInput(fund.carried_interest), fee: rateInput(fund.management_fee), reason: '' });
-  const { busy, error, setError, run } = useAct();
+  const [body, setBody] = useState(null);
+  const { busy, error, setError } = useAct();
   const set = (k) => (e) => { const v = e.target.value; setForm((f) => ({ ...f, [k]: v })); };
-  const submit = async (e) => {
+  // D4812 part 5: a checked change opens the money flow; the act runs only from its Confirm step.
+  const submit = (e) => {
     e.preventDefault();
     const out = checkEconomics(form, fund);
     if (out.error) { setError(out.error); return; }
-    await run(async () => { await apis.funds.update(fund.id, out.body); await onDone(); }, 'The economics could not be changed.');
+    setError(''); setBody(out.body);
   };
+  if (body) {
+    return (
+      <ActFlow apis={apis} access={access} act="fund.economics" testId="fund-economics-flow" title="Change economics"
+        sub={fund.name || `Fund #${fund.id}`} effects={economicsEffects(fund, body)} label="Change the fund’s economics"
+        consequences={['The distribution job withholds carry at the new rate from its next run.', 'The old and new rates and your reason are kept on the audit record.']}
+        run={() => apis.funds.update(fund.id, body)}
+        receipt={() => economicsEffects(fund, body).slice(1, 3).concat([['Audit', 'Recorded as fund.economics']])}
+        onClose={onClose} onBack={() => setBody(null)} onDone={() => onDone()} />
+    );
+  }
   return (
     <Lightbox label="Change economics" title={`Change economics · ${fund.name || `Fund #${fund.id}`}`}
       sub="The distribution job withholds carry at this rate. A change asks a reason, then your authenticator code." testId="fund-economics-dialog" onClose={onClose} width={480}>
@@ -235,7 +250,7 @@ export function EconomicsDialog({ apis, access, fund, onClose, onDone }) {
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN.ghost} onClick={onClose} disabled={busy}>Cancel</button>
           <FundActControl access={access} act="fund.economics" testId="fund-economics-submit-refused" className={MUTED}>
-            <button type="submit" className={BTN.primary} disabled={busy} data-testid="fund-economics-submit">Change economics</button>
+            <button type="submit" className={BTN.primary} disabled={busy} data-testid="fund-economics-submit">Review the change</button>
           </FundActControl>
         </div>
       </form>

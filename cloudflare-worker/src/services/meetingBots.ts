@@ -12,6 +12,7 @@ import { userMeetsTier } from '../middleware/requireTier';
 import { AUDIO_CHANNELS, type SessionRow } from './interviewSessions';
 import { writableSession } from './interviewIntake';
 import { runtimeOrigin } from './meetingBotRuntime';
+import { botFailureCategory } from './meetingBotStartup';
 
 export const BOT_COMMISSION_MULTIPLIER = AI_MARKUP;
 export const BOT_SCHEDULE_MAX_MS = 7 * 86400_000;
@@ -30,7 +31,8 @@ export interface BotRun {
 }
 /** B2/B8 provide an idempotent runtime: start/stop use uid as their idempotency key. Never log the input. */
 export interface BotRuntime {
-  start(run: { uid: string; platform: BotPlatform; meeting_url: string; limit_minutes: number; deadline_at: number; budget_deadline_at: number; notice: string; venture_name: string | null }): Promise<void>;
+  /** D5153: a current host answers with the stage it reached and its version; a fixture may answer nothing. */
+  start(run: { uid: string; platform: BotPlatform; meeting_url: string; limit_minutes: number; deadline_at: number; budget_deadline_at: number; notice: string; venture_name: string | null }): Promise<void | { stage: string; runtime_version: string | null }>;
   stop(run: { uid: string }): Promise<void>;
   heartbeat?(run: {uid:string;deadline_at:number;budget_deadline_at:number}): Promise<void>;
 }
@@ -75,7 +77,9 @@ export function botView(run: BotRun) {
   return { uid: run.uid, platform: run.platform, status: run.status, failure_code: run.failure_code,
     scheduled_at: run.scheduled_at, started_at: run.started_at, ended_at: run.ended_at,
     minutes: run.minutes, participant_count: run.participant_count, limit_minutes: run.limit_minutes,
-    rate_per_minute_microusd: run.rate_per_minute_microusd };
+    rate_per_minute_microusd: run.rate_per_minute_microusd,
+    // D5153: `infrastructure` when the runtime never reported, so no provider cause applies. No operator code.
+    failure_category: botFailureCategory(run as unknown as BotRun & Record<string, unknown>) };
 }
 export function botEnabled(env: Env) { return env.MEETING_BOT === 'on' || env.MEETING_BOT === 'canary'; }
 export function botConfigured(env: Env, platform?: BotPlatform) {

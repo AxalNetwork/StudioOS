@@ -4,7 +4,9 @@ import { PairBars, QuarterLines, ChartTable } from '../../../ui/Charts';
 import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { reportError } from '../../../lib/log';
-import { refusalText } from './fundAdminModel';
+import { money, refusalText } from './fundAdminModel';
+import { ActFlow } from './MoneyFlow';
+import { actButton, markEffects } from './moneyFlowModel';
 import { Note, NUM, Panel, Section, TH, Table, Tiles } from './parts';
 import { useRead } from './useRead';
 import {
@@ -72,7 +74,7 @@ export function PerformanceTab({ apis, access, funds, fundId, onChanged }) {
         {!one && <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="fund-performance-pick">{PICK_FUND}</p>}
         <SideBySide list={list} />
       </Section>
-      {dialog?.kind === 'mark' && <MarkDialog apis={apis} position={dialog.position} fund={fund} onClose={() => setDialog(null)} onDone={() => { setDialog(null); reloadAll(); }} />}
+      {dialog?.kind === 'mark' && <MarkDialog apis={apis} access={access} position={dialog.position} fund={fund} onClose={() => setDialog(null)} onDone={() => reloadAll()} />}
       {dialog?.kind === 'move' && <MoveDialog apis={apis} position={dialog.position} funds={funds} fundId={fundId} onClose={() => setDialog(null)} onDone={() => { setDialog(null); reloadAll(); }} />}
     </div>
   );
@@ -179,27 +181,34 @@ function SideBySide({ list }) {
 const LABEL = `block ${TH}`;
 
 /** FND12: Record a mark — a dated value for one position, checked before the call. */
-function MarkDialog({ apis, position, fund, onClose, onDone }) {
+function MarkDialog({ apis, access, position, fund, onClose, onDone }) {
   const [form, setForm] = useState({ date: today(), value: '', source: '' });
   const [errors, setErrors] = useState({});
-  const [failed, setFailed] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const save = async (e) => {
+  const [body, setBody] = useState(null);
+  // D4812 part 5: a checked mark opens the money flow; the act runs only from its Confirm step.
+  const save = (e) => {
     e?.preventDefault?.();
     const c = checkMark(form, today());
     setErrors(c.ok ? {} : c.errors);
-    if (!c.ok) return;
-    setBusy(true); setFailed(null);
-    try { await apis.performance.recordValuation(position.id, c.body); onDone(); } catch (err) {
-      reportError('fund-admin:record-mark', err);
-      setFailed(refusalText(err, 'The mark could not be recorded. Nothing was saved.'));
-    } finally { setBusy(false); }
+    if (c.ok) setBody(c.body);
   };
   const name = position.company_name || position.round_name || `Position ${position.id}`;
+  if (body) {
+    return (
+      <ActFlow apis={apis} access={access} act="fund.valuation" testId="fund-mark-flow" title="Record a mark"
+        sub={`${name}${fund ? ` · ${fund.name}` : ''}`} effects={markEffects(position, body)} label={actButton('Record', body.value_cents, 'mark')}
+        consequences={[`${name}'s latest mark becomes ${money(body.value_cents) ?? 'this value'} as of ${body.valuation_date}.`, 'NAV counts it from that date; earlier marks stay on record.']}
+        run={async () => {
+          try { return await apis.performance.recordValuation(position.id, body); } catch (err) { reportError('fund-admin:record-mark', err); throw err; }
+        }}
+        receipt={() => [['Position', name], ['Mark', `${money(body.value_cents) ?? 'Not recorded'} as of ${body.valuation_date}`], ['Audit', 'Recorded as fund.valuation']]}
+        onClose={onClose} onBack={() => setBody(null)} onDone={() => onDone()} />
+    );
+  }
   return (
     <Lightbox label="Record a mark" title="Record a mark" sub="A dated value for one position." width={520} onClose={onClose} testId="fund-mark-dialog"
       footer={<div className="flex justify-end gap-2"><button type="button" className={BTN.ghost} onClick={onClose}>Cancel</button>
-        <button type="button" className={BTN.primary} onClick={save} disabled={busy} data-testid="fund-mark-save">Record mark</button></div>}>
+        <button type="button" className={BTN.primary} onClick={save} data-testid="fund-mark-save">Review the mark</button></div>}>
       <form onSubmit={save} className="flex flex-col gap-3 px-5 py-4" noValidate>
         <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{name} · {position.round_name || NOT_RECORDED}{fund ? ` · ${fund.name}` : ''}</p>
         <label className="flex flex-col gap-1"><span className={LABEL}>Valuation date · not in the future</span>
@@ -215,7 +224,6 @@ function MarkDialog({ apis, position, fund, onClose, onDone }) {
           {errors.source && <span role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="fund-mark-error-source">{errors.source}</span>}
         </label>
         <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">{MARK_INFO}</p>
-        {failed && <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="fund-mark-failed">{failed}</p>}
       </form>
     </Lightbox>
   );

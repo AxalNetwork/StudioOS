@@ -310,3 +310,28 @@ test('a message draft: one run for the founder to send; a draft naming a figure 
   assert.equal((await call(f, OWNER, cr('drafts'), 'POST', { prospect_id: 9, purpose: 'follow_up' })).status, 404);
   assert.deepEqual(logs(f).map((l) => l[2]), ['Drafted a follow-up for Lumen Ventures']);
 });
+
+// D5073 — accept a note's proposals in one request: one result per proposal, each checked as a single press is.
+test('accept-batch: one request, one result per proposal; a closed or foreign one is its own refusal and the rest are written', async () => {
+  const f = fresh({ answer: GOOD });
+  const run = await call(f, OWNER, cr('proposals'), 'POST', { prospect_id: 1, event_id: 1 });
+  const [step, move] = run.body.proposals;
+  const foreign = '00000000-0000-4000-8000-000000000009';
+  f.db.prepare("INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json) VALUES (?, ?, ?, ?, ?, 'proposal', ?)")
+    .run(foreign, OWNER, 'Founder · Raise · Capital relationships', 'propose:raise/investor-next-steps', 'raise_prospects:9', JSON.stringify({ type: 'next_step', text: 'Elsewhere', prospect_id: 9 }));
+  // The step is accepted by hand first, so it is already decided when the batch reaches it.
+  assert.equal((await call(f, OWNER, cr(`proposals/${step.uid}/accept`), 'POST', {})).status, 200);
+  const r = await call(f, OWNER, cr('proposals/accept-batch'), 'POST', { uids: [step.uid, move.uid, foreign, 'not-a-uid', move.uid] });
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual([r.body.requested, r.body.applied, r.body.failed], [5, 1, 4]);
+  assert.deepEqual(r.body.results.map((x: any) => [x.ok, x.code ?? null]), [
+    [false, 'unknown_proposal'], [true, null], [false, 'unknown_investor'], [false, 'unknown_proposal'], [false, 'unknown_proposal'],
+  ], 'in the order sent: decided, accepted, another venture\'s, not a uid, a repeat');
+  assert.equal(one(f, 'SELECT stage FROM raise_prospects WHERE id = 1').stage, 'diligence', 'the stage move was written, through the one writer');
+  assert.equal(one(f, 'SELECT status FROM ai_rail_proposals WHERE uid = ?', move.uid).status, 'accepted');
+  assert.equal(one(f, 'SELECT status FROM ai_rail_proposals WHERE uid = ?', foreign).status, 'proposed', 'the foreign one was not touched');
+  // Shape and cap.
+  for (const bad of [undefined, [], 'x', Array.from({ length: 51 }, () => step.uid)]) assert.equal((await call(f, OWNER, cr('proposals/accept-batch'), 'POST', { uids: bad })).status, 400);
+  // Another member of this venture's founder-less side cannot accept the owner's proposals.
+  assert.notEqual((await call(f, OTHER, cr('proposals/accept-batch', 20), 'POST', { uids: [move.uid] })).body?.applied, 1);
+});
