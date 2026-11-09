@@ -1,6 +1,6 @@
 /**
  * The Spin-Out Lab's length, one number everywhere: 28 days, the Worker's
- * `SPRINT_DAYS` in cloudflare-worker/src/routes/spinout_lab.ts and the Lab's
+ * `SPRINT_DAYS` in cloudflare-worker/src/services/spinoutLabCatalog.ts (D4663) and the Lab's
  * 4-week milestone catalog (spinoutLabCatalog.ts).
  *
  * This test once pinned `/lp/founder` (FounderHomePage.jsx), a campaign page
@@ -19,12 +19,12 @@ import { fileURLToPath } from 'node:url';
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
 const LANDING = read('../src/pages/LandingPage.jsx');
-const WORKER = read('../../cloudflare-worker/src/routes/spinout_lab.ts');
+const WORKER = read('../../cloudflare-worker/src/services/spinoutLabCatalog.ts');
 
 test('the worker still defines a 28-day sprint — the number this test pins', () => {
   // If this ever changes, every "28" below needs to change with it, not just
   // this one line.
-  assert.match(WORKER, /const SPRINT_DAYS = 28;/);
+  assert.match(WORKER, /export const SPRINT_DAYS = 28;/);
 });
 
 test('the public LandingPage says 28 days, as the Worker does', () => {
