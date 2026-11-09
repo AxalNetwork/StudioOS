@@ -25,6 +25,7 @@
 import type { Env, User } from '../types';
 import { normaliseEmail, normaliseProfileUrl } from './linkedinCsvImport';
 import { notify } from './notify';
+import { opByUid, PENDING_STALE_SECONDS, type OpState } from './mail/sendOps';
 
 export class RelationshipRefusal extends Error {
   readonly status: number;
@@ -245,7 +246,10 @@ export type Interaction = {
   person_company: string | null; note: string | null; context_note: string | null; decision_note: string | null; status: string;
   parent_uid: string | null; decided_at: string | null; accepted_at: string | null; made_at: string | null; withdrawn_at: string | null;
   mail_sent_uid: string | null; created_at: string; contact_id: number | null; person_key: string | null;
+  delivery_op_uid?: string | null;
 };
+/** D4604: the send operation that holds an intro's delivery, as the teammate's own mail_send_ops row reads. */
+type DeliveryOp = { uid: string; state: OpState; updated_at: string };
 export type Outcome = { parent_uid: string; outcome: string; outcome_note: string | null; recorded_by_user_id: number | null; created_at: string };
 type FollowUp = { request_uid: string; due_on: string; done_at: string | null; snoozed_until: string | null };
 
@@ -290,8 +294,30 @@ async function namesOf(env: Env, ids: number[]): Promise<Map<number, string | nu
   return new Map(rows.map((r) => [Number(r.id), r.name ?? null]));
 }
 
-function interactionView(r: Interaction, caller: number, outcome: Outcome | null, followUp: FollowUp | null, names: Names = new Map()) {
+/**
+ * D4604: what became of the intro's delivery attempt, to the teammate who sends it only. Null when nothing
+ * was attempted (or the request is made: its status says so).
+ *   sending        the operation is admitted and the provider has not answered yet
+ *   unconfirmed    the provider may or may not have it; the teammate says whether it arrived
+ *   record_pending the provider accepted it, and the request's record is not yet made; reconciled without sending
+ *   not_sent       the provider refused it (or it never left); the intro can be sent again
+ */
+export type DeliveryState = 'sending' | 'unconfirmed' | 'record_pending' | 'not_sent';
+export function deliveryState(status: string, op: DeliveryOp | null | undefined, hadAttempt: boolean, nowMs = Date.now()): DeliveryState | null {
+  if (status !== 'accepted' || !hadAttempt) return null;
+  if (!op) return 'not_sent';
+  if (op.state === 'accepted') return 'record_pending';
+  if (op.state === 'uncertain') return 'unconfirmed';
+  if (op.state === 'pending') {
+    const at = Date.parse(`${String(op.updated_at).replace(' ', 'T')}Z`);
+    return Number.isFinite(at) && at <= nowMs - PENDING_STALE_SECONDS * 1000 ? 'unconfirmed' : 'sending';
+  }
+  return 'not_sent';
+}
+
+function interactionView(r: Interaction, caller: number, outcome: Outcome | null, followUp: FollowUp | null, names: Names = new Map(), op: DeliveryOp | null = null) {
   const asker = r.requester_user_id === caller;
+  const delivery = asker ? null : deliveryState(r.status, op, !!r.delivery_op_uid);
   return {
     uid: r.uid, kind: r.kind, requester_user_id: r.requester_user_id, teammate_user_id: r.teammate_user_id, team_key: r.team_key,
     // D1357 (#3572): the asker and the teammate by name (only the two of them read a request).
@@ -307,6 +333,8 @@ function interactionView(r: Interaction, caller: number, outcome: Outcome | null
     follow_up: followUpState(followUp),
     // The send that made it, to the introducer who sent it only: the asker never reads the introducer's mailbox.
     mail_sent_uid: asker ? null : r.mail_sent_uid,
+    // D4604: the teammate's own delivery attempt; the asker never reads the introducer's mailbox.
+    delivery: delivery ? { state: delivery, operation_uid: r.delivery_op_uid ?? null } : null,
     created_at: r.created_at,
   };
 }
@@ -331,7 +359,17 @@ async function viewOf(env: Env, user: User, requestUid: string) {
   ).bind(requestUid).first<Outcome>();
   const fu = await env.DB.prepare('SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE request_uid = ? AND user_id = ?')
     .bind(requestUid, user.id).first<FollowUp>();
-  return interactionView(row, user.id, outcome ?? null, fu ?? null, await namesOf(env, [row.requester_user_id, row.teammate_user_id]));
+  const ops = await deliveryOps(env, user, [row]);
+  return interactionView(row, user.id, outcome ?? null, fu ?? null, await namesOf(env, [row.requester_user_id, row.teammate_user_id]), ops.get(row.delivery_op_uid ?? '') ?? null);
+}
+
+/** D4604: the caller's own send operations that hold the delivery of requests they were asked, by uid. */
+async function deliveryOps(env: Env, user: User, rows: Interaction[]): Promise<Map<string, DeliveryOp>> {
+  const uids = rows.filter((r) => r.teammate_user_id === user.id && r.delivery_op_uid).map((r) => String(r.delivery_op_uid));
+  if (!uids.length) return new Map();
+  const found = (await env.DB.prepare('SELECT uid, state, updated_at FROM mail_send_ops WHERE user_id = ? AND uid IN (SELECT value FROM json_each(?))')
+    .bind(user.id, JSON.stringify(uids)).all<DeliveryOp>()).results || [];
+  return new Map(found.map((o) => [o.uid, o]));
 }
 
 /** The event row a step writes under its request (653's intro_made/intro_declined shape). */
@@ -409,7 +447,8 @@ export async function introRequests(env: Env, user: User, filter: LogFilter = {}
     ).bind(user.id, list).all<FollowUp>()).results || []) followUps.set(f.request_uid, f);
   }
   const names = await namesOf(env, rows.flatMap((r) => [r.requester_user_id, r.teammate_user_id]));
-  const view = (r: Interaction) => interactionView(r, user.id, outcomes.get(r.uid) ?? null, followUps.get(r.uid) ?? null, names);
+  const ops = await deliveryOps(env, user, rows);
+  const view = (r: Interaction) => interactionView(r, user.id, outcomes.get(r.uid) ?? null, followUps.get(r.uid) ?? null, names, ops.get(r.delivery_op_uid ?? '') ?? null);
   return {
     sent: rows.filter((r) => r.requester_user_id === user.id).map(view),
     received: rows.filter((r) => r.teammate_user_id === user.id).map(view),
@@ -485,16 +524,26 @@ export async function introForSend(env: Env, user: User, requestUid: unknown) {
   return ask;
 }
 
-/** The intro left the introducer's own mailbox (`mail_sent.uid`): the request is made. */
+/**
+ * The intro left the introducer's own mailbox: the request is made. The proof is the sent-log row
+ * (`mail_sent.uid`), or the send operation the provider accepted (D4665: its uid is the sent-log row's uid,
+ * so a sent-log write that failed alone does not leave a delivered intro unrecorded). D4604: only the
+ * operation that holds the delivery (or, for a request sent before migration 202611090834, any) makes it.
+ * The event and the notice follow only a write that changed the row.
+ */
 export async function markMadeOnSend(env: Env, user: User, requestUid: string, sentUid: string) {
-  const sent = await env.DB.prepare('SELECT 1 FROM mail_sent WHERE uid = ? AND user_id = ? AND sent_at IS NOT NULL AND error IS NULL').bind(sentUid, user.id).first();
+  const sent = await env.DB.prepare(
+    `SELECT 1 FROM mail_sent WHERE uid = ?1 AND user_id = ?2 AND sent_at IS NOT NULL AND error IS NULL
+     UNION ALL SELECT 1 FROM mail_send_ops WHERE uid = ?1 AND user_id = ?2 AND state = 'accepted' LIMIT 1`,
+  ).bind(sentUid, user.id).first();
   if (!sent) throw new RelationshipRefusal(409, 'intro_not_sent', 'The intro was not sent, so it is not recorded as made.');
   const ask = await requestOf(env, user, requestUid, 'teammate');
   const at = now();
   const r = await env.DB.prepare(
-    `UPDATE relationship_interactions SET status = 'made', made_at = ?, mail_sent_uid = ?
-      WHERE uid = ? AND teammate_user_id = ? AND kind = 'intro_requested' AND status = 'accepted'`,
-  ).bind(at, sentUid, requestUid, user.id).run();
+    `UPDATE relationship_interactions SET status = 'made', made_at = ?, mail_sent_uid = ?, delivery_op_uid = COALESCE(delivery_op_uid, ?)
+      WHERE uid = ? AND teammate_user_id = ? AND kind = 'intro_requested' AND status = 'accepted'
+        AND (delivery_op_uid IS NULL OR delivery_op_uid = ?)`,
+  ).bind(at, sentUid, sentUid, requestUid, user.id, sentUid).run();
   if (!(r.meta?.changes ?? 0)) return null;
   await event(env, ask, 'intro_made', 'made', at, { mail_sent_uid: sentUid });
   await audit(env, user.id, ask.requester_user_id, 'access', `intro_made:${requestUid}`);
@@ -503,6 +552,60 @@ export async function markMadeOnSend(env: Env, user: User, requestUid: string, s
     title: 'Your introduction was made', body: `${personLine(ask)}.`, link: introLink(requestUid), payload: { uid: requestUid },
   }).catch(() => null);
   return viewOf(env, user, requestUid);
+}
+
+const UNCONFIRMED = 'An earlier send of this introduction is not confirmed yet. On Network › Introductions, say whether it arrived before sending it again.';
+
+/**
+ * D4604: the send operation `opUid` claims the delivery of an accepted intro, before the nonce is spent and before any
+ * provider I/O. One conditional UPDATE: the request is still accepted, and no other operation that is pending, accepted or
+ * uncertain holds it (a refused one, or one discarded before it was admitted, releases it). When another holds it, nothing
+ * is sent: an accepted holder is reconciled to made instead, an unconfirmed one is the teammate's to answer first.
+ */
+export async function claimIntroDelivery(env: Env, user: User, requestUid: string, opUid: string): Promise<void> {
+  const r = await env.DB.prepare(
+    `UPDATE relationship_interactions SET delivery_op_uid = ?1
+      WHERE uid = ?2 AND teammate_user_id = ?3 AND kind = 'intro_requested' AND status = 'accepted'
+        AND (delivery_op_uid IS NULL OR delivery_op_uid = ?1 OR NOT EXISTS (
+          SELECT 1 FROM mail_send_ops o WHERE o.uid = relationship_interactions.delivery_op_uid AND o.user_id = ?3
+             AND o.state IN ('pending', 'accepted', 'uncertain')))`,
+  ).bind(opUid, requestUid, user.id).run();
+  if ((r.meta?.changes ?? 0) === 1) return;
+  const ask = await requestOf(env, user, requestUid, 'teammate');
+  if (ask.status === 'made') throw new RelationshipRefusal(409, 'intro_already_made', 'This introduction has already been made.');
+  if (ask.status !== 'accepted' || !ask.delivery_op_uid) throw new RelationshipRefusal(409, 'intro_not_accepted', 'Accept the request before writing the intro.');
+  const holder = await opByUid(env, user, ask.delivery_op_uid);
+  if (holder?.state === 'accepted') {
+    await markMadeOnSend(env, user, requestUid, holder.uid).catch(() => null);
+    throw new RelationshipRefusal(409, 'intro_already_sent', 'This introduction was already sent, so it was not sent again. Its record is brought up to date.');
+  }
+  throw new RelationshipRefusal(409, 'intro_delivery_unconfirmed', UNCONFIRMED);
+}
+
+/**
+ * D4604: the teammate's recovery of an intro whose delivery attempt is recorded but whose request is not made. A delivery the
+ * provider accepted is recorded as made from that operation; nothing is sent. An unconfirmed one waits for the teammate's
+ * word on the send (`POST /api/mail/send/operations/:uid/resolve`), and one that did not go out is sent again from the composer.
+ */
+export async function reconcileIntroDelivery(env: Env, user: User, requestUid: string) {
+  const ask = await requestOf(env, user, requestUid, 'teammate');
+  if (ask.status === 'made') return viewOf(env, user, requestUid);
+  if (ask.status !== 'accepted') throw new RelationshipRefusal(409, 'intro_not_accepted', 'Accept the request before writing the intro.');
+  const op = ask.delivery_op_uid ? await opByUid(env, user, ask.delivery_op_uid) : null;
+  if (op?.state === 'accepted') {
+    await markMadeOnSend(env, user, requestUid, op.uid);
+    return viewOf(env, user, requestUid);
+  }
+  if (op && (op.state === 'pending' || op.state === 'uncertain')) throw new RelationshipRefusal(409, 'intro_delivery_unconfirmed', UNCONFIRMED);
+  throw new RelationshipRefusal(409, 'intro_not_sent', 'This introduction has not been sent. Write it again from the Email composer.');
+}
+
+/** D4604: the intro whose delivery the caller's operation holds, if any — for the member's word on an unconfirmed send. */
+export async function introHeldBy(env: Env, user: User, opUid: string): Promise<string | null> {
+  const row = await env.DB.prepare(
+    "SELECT uid FROM relationship_interactions WHERE delivery_op_uid = ? AND teammate_user_id = ? AND kind = 'intro_requested' LIMIT 1",
+  ).bind(opUid, user.id).first<{ uid: string }>();
+  return row?.uid ?? null;
 }
 
 /** Either side records what came of a made introduction. The latest recorded outcome is the one the log reads. */

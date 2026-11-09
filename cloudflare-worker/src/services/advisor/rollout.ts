@@ -31,6 +31,7 @@
  */
 import type { Env } from '../../types';
 import { readOperatorSwitches, type OperatorSwitchRead } from '../operatorSwitches';
+import { emergencyThrown, readEmergencySwitch, type EmergencyRead } from '../emergencySwitches';
 
 /**
  * What a refused request is told. True for both halves — a deploy and an
@@ -65,6 +66,12 @@ export interface AdvisorKillState {
    * store was never asked.
    */
   operator: OperatorSwitchRead | null;
+  /**
+   * D4860 part 3: the KV mirror of the operator half, read before D1. Null
+   * when the deploy half decided. `{ bound: false }` on a deployment with no
+   * mirror.
+   */
+  emergency: EmergencyRead | null;
 }
 
 /**
@@ -80,6 +87,11 @@ export interface AdvisorKillState {
  * to. A store that has been read once keeps its last good reading through a
  * failure, so a kill that was thrown stays thrown.
  *
+ * D4860 PART 3: THE KV MIRROR IS READ BEFORE D1. A throw writes the mirror
+ * first, so a kill thrown while D1 is down still holds, and a thrown mirror
+ * decides here without touching D1. The operator half is thrown when either
+ * the mirror or the D1 row says so; neither can release the other.
+ *
  * `inspect` is the console's mode and nobody else's: it reads the store even
  * when the deploy half already decided, and reads it now rather than from the
  * isolate's reading, so an operator sees both halves as stored. The verdict it
@@ -90,14 +102,19 @@ export async function advisorKillState(
   opts: { now?: number; inspect?: boolean } = {},
 ): Promise<AdvisorKillState> {
   const deploy = isAdvisorDisabled(env);
-  if (deploy && !opts.inspect) return { off: true, by: 'deploy', deploy, operator: null };
+  if (deploy && !opts.inspect) return { off: true, by: 'deploy', deploy, operator: null, emergency: null };
+
+  const emergency = await readEmergencySwitch(env, 'eadwyn_off', { now: opts.now, fresh: opts.inspect });
+  const mirrored = emergencyThrown(emergency);
+  if (mirrored && !opts.inspect) return { off: true, by: 'operator', deploy, operator: null, emergency };
 
   const operator = await readOperatorSwitches(env, { now: opts.now, fresh: opts.inspect });
-  const thrown = operator.readable && operator.rows.get('eadwyn_off')?.thrown === true;
+  const thrown = mirrored || (operator.readable && operator.rows.get('eadwyn_off')?.thrown === true);
   return {
     off: deploy || thrown,
     by: deploy ? 'deploy' : thrown ? 'operator' : null,
     deploy,
     operator,
+    emergency,
   };
 }

@@ -181,7 +181,7 @@ export const PITCH_TABS = [
 
 /** Wellbeing's tabs. D1046: part 5's declined state is its own tab. */
 export const EXPERT_TABS = [
-  { key: 'verify', label: 'To verify', path: '' },
+  { key: 'verify', label: 'Needs verification', path: '' },
   { key: 'incomplete', label: 'Profile incomplete', path: '/incomplete' },
   { key: 'verified', label: 'Verified', path: '/verified' },
   { key: 'declined', label: 'Declined', path: '/declined' },
@@ -190,7 +190,7 @@ export const EXPERT_TABS = [
 
 /** D1046: Product testers' tabs, one per stored status (D1042), `applied` drawn as Waiting. */
 export const TESTER_TABS = [
-  { key: 'waiting', status: 'applied', label: 'Waiting', path: '' },
+  { key: 'waiting', status: 'applied', label: 'Pending', path: '' },
   { key: 'active', status: 'active', label: 'Active', path: '/active' },
   { key: 'paused', status: 'paused', label: 'Paused', path: '/paused' },
   { key: 'declined', status: 'declined', label: 'Declined', path: '/declined' },
@@ -251,7 +251,7 @@ export function pitchRows(items, now = Date.now()) {
   return (Array.isArray(items) ? items : []).map((p) => {
     const h = hoursSince(p.created_at, now);
     return {
-      key: p.uid || p.id, title: p.title || 'Untitled pitch', type: assetWord(p.asset_type),
+      key: p.uid || p.id, id: p.id ?? null, title: p.title || 'Untitled pitch', type: assetWord(p.asset_type),
       partner: p.partner_company || p.partner_name || 'Not recorded', submitter: p.partner_company && p.partner_name ? p.partner_name : null,
       date: dayText(p.proposed_date) || 'No date', audience: p.target_audience || 'Not given',
       ageHours: h, age: ageText(h), band: bandOf(h), code: p.attribution_code || null,
@@ -303,7 +303,7 @@ export function expertBoard(reply, tab, now = Date.now()) {
   const rows = list.filter((e) => expertState(e) === tab).map((e) => {
     const hrs = hoursSince(e.created_at, now);
     return {
-      key: e.uid, name: e.name || 'Not recorded', headline: e.headline || null,
+      key: e.uid, id: e.id ?? null, name: e.name || 'Not recorded', headline: e.headline || null,
       pct: e.profile_completion_pct == null ? null : Math.round(Number(e.profile_completion_pct)),
       ageHours: hrs, age: ageText(hrs), band: bandOf(hrs),
       credentials: credentialsText(e.credentials), decidedOn: dayText(e.decided_at),

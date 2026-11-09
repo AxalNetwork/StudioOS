@@ -45,6 +45,8 @@ function world(skills: number) {
   const { DB, db } = makeD1(['users', 'company_profiles', 'projects', 'activity_logs'].map((t) => stripForeignKeys(tableFromBaseline(BASELINE, t))).join('\n') + AI_LOG_SCHEMA);
   for (const m of ['759_agent_skills.sql', '202611022326_agent_skill_context_tokens.sql', '202611022055_agent_skill_moderation.sql',
     '202611022140_hq_skill_lifecycle.sql', '202611022313_agent_skill_runs.sql', '202611062149_skill_eval_campaigns.sql']) db.exec(sql(`migrations/${m}`));
+    db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
+    db.exec(sql('migrations/202611090905_skill_version_eval_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(sql('migrations/199_super_admin.sql'));
   db.prepare("INSERT INTO users (id, uid, email, name, role, subscription_tier, subscription_status) VALUES (?, 'u-super', 'super@example.test', 'Sue Super', 'admin', 'growth', 'active')").run(SUPER);
   db.prepare("INSERT INTO users (id, uid, email, name, role, subscription_tier, subscription_status) VALUES (2, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', 'growth', 'active')").run();

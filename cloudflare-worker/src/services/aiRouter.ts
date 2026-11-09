@@ -3187,6 +3187,60 @@ export interface GuardCounts {
   unavailable: number;
 }
 
+/**
+ * D4803 (Security v2 AI Safety, SE08) — the newest guard verdicts, for the
+ * "Recent guard verdicts" table. Each guard row (`guard_for` names its run) is
+ * read with its run's refusal, so the table can say whether the run was
+ * delivered, blocked before the model or withheld after it. Only the time, the
+ * rail page, the score and the refusal are read: never a prompt, an output or
+ * an account.
+ *
+ * `available: false` when the store could not be read, never an empty list.
+ */
+export type RecentGuardVerdict = {
+  at: string | null;
+  page: string | null;
+  verdict: 'safe' | 'unsafe' | 'no_verdict';
+  delivery: 'delivered' | 'blocked_input' | 'withheld_output' | 'guard_unavailable' | 'unknown';
+};
+export const RECENT_GUARD_LIMIT = 10;
+export async function loadRecentGuardVerdicts(env: Env, days = 7):
+  Promise<{ available: true; window_days: number; rows: RecentGuardVerdict[] } | { available: false; reason: string }> {
+  const win = Math.max(1, Math.min(90, Math.round(days)));
+  const since = new Date(Date.now() - win * 86400_000).toISOString().slice(0, 19).replace('T', ' ');
+  try {
+    await ensureLogSchema(env);
+    const res = await env.DB.prepare(
+      `SELECT g.created_at AS at, g.rail_page AS page, g.safety_score AS score, run.id AS run_id, run.refusal AS run_refusal
+         FROM ai_usage_logs g
+         LEFT JOIN ai_usage_logs run ON run.id = g.guard_for
+        WHERE g.guard_for IS NOT NULL AND datetime(g.created_at) >= datetime(?)
+        ORDER BY datetime(g.created_at) DESC, g.id DESC LIMIT ?`,
+    ).bind(since, RECENT_GUARD_LIMIT).all<Record<string, unknown>>();
+    const rows = (res.results || []).map((r): RecentGuardVerdict => {
+      const score = r.score === null || r.score === undefined ? null : Number(r.score);
+      // The run's own refusal says what reached the person. A run row that is
+      // gone (or never written) cannot say, so the row reads unknown.
+      const refusal = r.run_refusal === null || r.run_refusal === undefined ? null : String(r.run_refusal);
+      const delivery: RecentGuardVerdict['delivery'] = r.run_id === null || r.run_id === undefined ? 'unknown'
+        : refusal === null ? 'delivered'
+          : refusal === 'guard_blocked_output' ? 'withheld_output'
+            : refusal === 'guard_blocked' ? 'blocked_input'
+              : refusal === 'guard_unavailable' ? 'guard_unavailable'
+                : 'unknown';
+      return {
+        at: r.at ? String(r.at) : null,
+        page: r.page ? String(r.page) : null,
+        verdict: score === null || Number.isNaN(score) ? 'no_verdict' : score >= 0.5 ? 'safe' : 'unsafe',
+        delivery,
+      };
+    });
+    return { available: true, window_days: win, rows };
+  } catch {
+    return { available: false, reason: 'The guard verdicts could not be read on this database. That is not a claim that none ran.' };
+  }
+}
+
 export async function loadGuardrailCounters(env: Env, days = 7): Promise<GuardrailCounters> {
   await ensureLogSchema(env);
   const win = Math.max(1, Math.min(90, Math.round(days)));
