@@ -255,6 +255,9 @@ export function gainWords(gain) {
  * Product-market fit, in its order, then each raise kit item's "Missing" from
  * the checklist below. Scope is 'pmf' or 'kit', for the chips.
  */
+/** An address inside the app, or null: never a protocol-relative or absolute URL. */
+const appPath = (v) => (typeof v === 'string' && /^\/[^/\\]/.test(v) ? v : null);
+
 export function gapRows(part, records, search = '') {
   const pmf = (Array.isArray(part?.steps) ? part.steps : []).map((s) => ({
     scope: 'pmf', scopeLabel: 'Product-market fit', text: s.text, gains: gainWords(s.gain),
@@ -262,7 +265,9 @@ export function gapRows(part, records, search = '') {
   }));
   const kit = (Array.isArray(records?.rows) ? records.rows : [])
     .filter((r) => r?.id !== 'pmf' && String(r?.cells?.missing ?? '').trim())
-    .map((r) => ({ scope: 'kit', scopeLabel: 'Raise kit', text: String(r.cells.missing).trim(), gains: [], href: null, moduleLabel: r.cells.item || null }));
+    // D5071: the link is the one the Worker names for that item (`cells.fix_href`), an address inside the app. It
+    // is never worked out here, so a Narrative gap opens Narrative and a Pitch gap opens the Pitch Studio.
+    .map((r) => ({ scope: 'kit', scopeLabel: 'Raise kit', text: String(r.cells.missing).trim(), gains: [], href: appPath(r.cells.fix_href), moduleLabel: r.cells.item || null }));
   return [...pmf, ...kit];
 }
 

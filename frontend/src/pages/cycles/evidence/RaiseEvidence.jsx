@@ -12,7 +12,7 @@
  * The investor block (VR8–VR10) is `InvestorEvidence.jsx` (D1268), placed by
  * the deal page's Evidence tab, an investor's round call and the diligence room.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { WorkerRail } from '../../../ui';
 import RailFrame from '../../../ui/RailFrame';
@@ -54,20 +54,35 @@ export function EvidenceBody({ state, view, search = '', projectId, reload }) {
   );
 }
 
-/** One read of the venture's evidence; `reload({ refresh })` is Look again. */
+/**
+ * One read of the venture's evidence; `reload({ refresh })` is Look again.
+ *
+ * D5073: a read belongs to the venture that started it. Every read takes a sequence number, and an answer is
+ * applied only if it is still the newest read AND the page is still on the venture that asked. The state names
+ * its venture, so switching ventures never draws the old venture's evidence while the new one loads, and a slow
+ * answer for venture A that lands after B's can never replace B.
+ */
 export function useEvidence(projectId) {
   const [state, setState] = useState({ status: 'loading' });
+  const seq = useRef(0);
+  const current = useRef(projectId);
+  current.current = projectId;
   const load = useCallback(async ({ refresh = false } = {}) => {
     if (!projectId) return;
-    setState((s) => (s.read ? { ...s, busy: true } : { status: 'loading' }));
+    const mine = seq.current + 1;
+    seq.current = mine;
+    setState((s) => (s.read && s.projectId === projectId ? { ...s, busy: true } : { status: 'loading', projectId }));
+    const live = () => seq.current === mine && current.current === projectId;
     try {
       const read = refresh ? await raiseEvidenceApi.refresh(projectId, PAGE) : await raiseEvidenceApi.read(projectId, PAGE);
-      setState({ status: 'ready', read });
+      if (live()) setState({ status: 'ready', read, projectId });
     } catch (e) {
-      setState(e?.status === 403 ? { status: 'forbidden' } : { status: 'error', message: userFacingRaiseError(e, { fallback: '' }) });
+      if (live()) setState(e?.status === 403
+        ? { status: 'forbidden', projectId }
+        : { status: 'error', message: userFacingRaiseError(e, { fallback: '' }), projectId });
     }
   }, [projectId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return () => { seq.current += 1; }; }, [load]);
   return { state, reload: load };
 }
 
@@ -75,7 +90,9 @@ export default function RaiseEvidence() {
   const { pathname, search } = useLocation();
   const view = viewOf(pathname);
   const { projectId, status } = useProject();
-  const { state, reload } = useEvidence(projectId);
+  const { state: read, reload } = useEvidence(projectId);
+  // D5073: another venture's answer is never drawn, not even for the frame before the new read starts.
+  const state = read.projectId === projectId ? read : { status: 'loading' };
   const cards = MODULES.raise.map((m) => ({ slug: m.slug, name: m.name }));
   const founder = !!state.read?.permissions?.can_decide;
   const rail = <WorkerRail workspace="Raise" role="founder" stance="Evidence-led view" coverage={[state.read ? 'Evidence pack: read from your records' : 'Evidence pack: reading']} footer="Traceable surface · no unsupported automated actions" />;

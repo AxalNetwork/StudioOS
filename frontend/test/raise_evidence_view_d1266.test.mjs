@@ -183,7 +183,7 @@ test('VR4: the queue — filters, Accept all from one source, per-row Accept and
   const out = body({ state: ready() }, '/raise/evidence/review');
   assert.ok(out.includes('data-testid="evidence-review"'));
   assert.ok(out.includes('Accept all from Connector · Mercury [1]'));
-  assert.ok(out.includes('At most 50 per press. Each outcome is listed after.'));
+  assert.ok(out.includes('Applies to the 1 loaded proposal from this source, at most 50 per press. Each outcome is listed after.'), 'D5073: the scope says it is the loaded page');
   assert.equal(count(out, 'data-testid="evidence-proposal"'), 3);
   assert.match(out, /disabled=""[^>]*data-testid="proposal-accept"/, 'a changed proposal’s Accept is disabled');
   assert.ok(out.includes('Look again to accept the current record'));
