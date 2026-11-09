@@ -14,6 +14,7 @@ import InvestorQuotaBars from '../../../components/InvestorQuotaBars';
 import { Unreadable, Unrecorded } from '../../../ui';
 import { Row, StatGroup, number } from '../../investor/investorStudioParts';
 import { TILE } from '../studioLayoutModel';
+import { formatRate } from '../../../lib/rate';
 
 const readable = (value) => String(value || '').replace(/[_-]/g, ' ').trim() || 'Not recorded';
 const score = (item) => number(item?.score ?? item?.ai_score ?? item?.match_score);
@@ -41,7 +42,8 @@ export function PortfolioRows({ data }) {
   const source = data?.analytics || data || {};
   return (
     <>
-      <Row label="IRR" value={source.irr != null ? `${source.irr}%` : null} reason="Needs a dated mark for every position." />
+      {/* D4619 (#4619): IRR is a fraction from the Worker (0.1 is 10%); a missing one stays Not recorded. */}
+      <Row label="IRR" value={formatRate(source.irr)} reason="Needs a dated mark for every position." />
       <Row label="TVPI" value={source.tvpi != null ? `${source.tvpi}×` : null} />
       <Row label="MOIC" value={source.moic != null ? `${source.moic}×` : null} />
     </>
