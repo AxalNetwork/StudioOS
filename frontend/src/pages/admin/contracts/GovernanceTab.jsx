@@ -23,7 +23,7 @@ import GovernanceWorkspace from './GovernanceWorkspace';
  * the Super Admin's alone: another admin sees only how many are withheld. The
  * ownership metadata is the Super Admin's alone too.
  */
-export default function GovernanceTab() {
+export default function GovernanceTab({ workspaceLink = null }) {
   const [revision, setRevision] = useState(0);
   const [panel, setPanel] = useState(null); // { kind: 'new', entity, category? } | { kind: 'doc', uid } | { kind: 'ownership' }
   const read = useRead(() => adminGovernanceApi.list(), [revision]);
@@ -58,7 +58,7 @@ export default function GovernanceTab() {
     </ReadState>
     {panel?.kind === 'new' && data && <NewDocument entity={panel.entity} category={panel.category} categories={data.categories} superAdmin={data.super_admin}
       onClose={() => setPanel(null)} onCreated={(uid) => { changed(); setPanel({ kind: 'doc', uid }); }} />}
-    {panel?.kind === 'doc' && data && <DocumentPanel uid={panel.uid} categories={data.categories} superAdmin={data.super_admin} onClose={() => setPanel(null)} onChanged={changed} />}
+    {panel?.kind === 'doc' && data && <DocumentPanel uid={panel.uid} categories={data.categories} superAdmin={data.super_admin} onClose={() => setPanel(null)} onChanged={changed} workspaceLink={workspaceLink} />}
     {panel?.kind === 'ownership' && <OwnershipPanel onClose={() => { setPanel(null); changed(); }} />}
   </section>;
 }
@@ -131,14 +131,15 @@ function saveBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function DocumentPanel({ uid, categories, superAdmin, onClose, onChanged }) {
+function DocumentPanel({ uid, categories, superAdmin, onClose, onChanged, workspaceLink }) {
   const [revision, setRevision] = useState(0);
   const read = useRead(() => adminGovernanceApi.read(uid), [uid, revision]);
   const refresh = () => { setRevision((n) => n + 1); onChanged(); };
   const d = read.data?.document;
   return <SidePanel title={d ? d.title : 'Governance document'} onClose={onClose} testId="governance-document-panel">
     <ReadState read={read} what="This document">{d && <>
-      <Link to={`/admin/contracts/governance/doc/${encodeURIComponent(d.uid)}`} className="text-xs font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>
+      {/* D4811 part 5: the desk draws the door (its doors are the Contracts page's); the panel only places it. */}
+      {workspaceLink?.(d.uid)}
       <div className="flex flex-wrap items-center gap-2 text-xs"><StatusPill status={d.status} /><span className="text-axal-muted">{categories.find((c) => c.key === d.category)?.label}</span>{d.confidential && <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[11px]">Confidential</span>}</div>
       <StatusMoves document={d} versions={read.data.versions} onDone={refresh} />
       <Details document={d} superAdmin={superAdmin} onDone={refresh} />
