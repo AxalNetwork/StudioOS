@@ -32,6 +32,12 @@ export const fundAdminApi = {
     const s = qs.toString();
     return request(`/fund-admin/activity${s ? `?${s}` : ''}`);
   },
+  /**
+   * D4812 part 3: the person picker's read — who holds `role` ('gp' or
+   * 'ledger') on a fund, by name; for the Super Admin, the accounts matching
+   * `q` with their eligibility. Never an email.
+   */
+  people: (fundId, role, q = '') => request(`/fund-admin/funds/${fundId}/people?role=${encodeURIComponent(role)}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
   lps: (params = {}) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {

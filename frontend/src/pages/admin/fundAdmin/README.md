@@ -38,6 +38,8 @@ an admin's `/funds` and `/funds/performance` forward here.
 | `workspaceModel.js` | D4812: v2's rules, pure — the six workspaces over D1157's addresses, the amber flags, the context-aware primary, Needs attention, Fund position, the Funds rows and the activity rows. |
 | `MoneyFlow.jsx` | D4812 part 2 (FA-03, FA-08): the money-action flow's parts — `FlowSteps`, `Effects`, `NotOffered` (refused or unverified, a sentence), `ConfirmAct` (the named act and, for a Super Admin act, the authenticator code first) and `FlowReceipt`. |
 | `moneyFlowModel.js` | D4812 part 2: the flow's rules, pure — the five steps, `actGate`, `actButton`, `checkCode`, and each act's exact effect (call, receipt, distribution). |
+| `PersonPicker.jsx` | D4812 part 3 (FA-04 B): the reusable person/entity picker — search, each account by name and kind with the Worker's eligibility (an ineligible one says why and cannot be chosen), then a confirmation that names the change and asks the authenticator code. Used for the GP of record and the ledger administrator. |
+| `fundPageModel.js` | D4812 part 3: the fund page's identity line, its six key figures, its local navigation, and the picker's roles, effects and `checkChange`, pure. |
 
 ## Rules
 

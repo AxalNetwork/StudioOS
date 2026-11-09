@@ -19,6 +19,11 @@
  * `GET /activity` (D4812) is the Overview's Recent activity: the fund acts HQ
  * admins took, newest first, from `admin_audit_log` (`services/fundAdminActivity.ts`),
  * behind the same gate. `?fund=` keeps one fund; `?before=` pages back.
+ *
+ * `GET /funds/:id/people?role=gp|ledger&q=` (D4812 part 3) is the person
+ * picker's read: who holds the role, by name, for any HQ admin; the
+ * candidates with their eligibility for the Super Admin only
+ * (`services/fundAdminPeople.ts`). The writes stay where they are.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -26,6 +31,8 @@ import { fundAdminAccess, requireFundAdminReader } from '../services/fundAdminAc
 import { AUDIT_UNAVAILABLE, fundAdminOverview } from '../services/fundAdminOverview';
 import { fundAdminLps, parseLpQuery } from '../services/fundAdminLps';
 import { fundAdminActivity, parseActivityQuery } from '../services/fundAdminActivity';
+import { fundPeople, parsePeopleQuery } from '../services/fundAdminPeople';
+import { isSuperAdmin } from '../auth';
 
 const fundAdmin = new Hono<{ Bindings: Env }>();
 
@@ -57,6 +64,22 @@ fundAdmin.get('/activity', async (c) => {
   } catch (e) {
     console.warn('[fund_admin] activity unreadable', (e as Error).message);
     return c.json({ code: 'fund_activity_unreadable', detail: 'Recent activity could not be read.' }, 503);
+  }
+});
+
+fundAdmin.get('/funds/:id/people', async (c) => {
+  const user = await requireFundAdminReader(c);
+  const raw = c.req.param('id');
+  if (!/^[1-9]\d{0,9}$/.test(raw)) return c.json({ code: 'invalid_people_query', detail: 'The fund id is not valid.' }, 400);
+  const query = parsePeopleQuery((k) => c.req.query(k));
+  if (typeof query === 'string') return c.json({ code: 'invalid_people_query', detail: `The ${query} parameter is not valid.` }, 400);
+  try {
+    const out = await fundPeople(c.env, Number(raw), query.role, query.q, isSuperAdmin(user as any));
+    if (out === 'not_found') return c.json({ code: 'fund_not_administered', detail: 'This fund is not administered here.' }, 404);
+    return c.json(out);
+  } catch (e) {
+    console.warn('[fund_admin] people unreadable', (e as Error).message);
+    return c.json({ code: 'fund_people_unreadable', detail: 'The people could not be read.' }, 503);
   }
 });
 
