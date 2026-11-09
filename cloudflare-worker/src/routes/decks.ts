@@ -1094,6 +1094,18 @@ decks.post('/share/:token/heartbeat', async (c) => {
   return c.json({ ok: true });
 });
 
+/** The slide order a variant names (D1565), by its row id or its uid; null with none, or one that cannot be read. */
+async function variantOrderOf(env: Env, cards: any[], deckId: number, by: { id?: number | null; uid?: string | null }): Promise<number[] | null> {
+  try {
+    const v = by.id
+      ? await env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE id = ? AND deck_id = ?').bind(Number(by.id), deckId).first<{ slide_order_json: string }>()
+      : by.uid
+        ? await env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE uid = ? AND deck_id = ?').bind(String(by.uid), deckId).first<{ slide_order_json: string }>()
+        : null;
+    return v ? cleanOrder(cards, JSON.parse(v.slide_order_json || '[]')) : null;
+  } catch { return null; /* an unreadable variant opens the master as it is */ }
+}
+
 /**
  * D1573 (#3820): the cards a link sends, in the order its reader sees them: the
  * version's cards with their uids, in the link's variant order (D1565), less the
@@ -1101,15 +1113,25 @@ decks.post('/share/:token/heartbeat', async (c) => {
  * reader's slide place maps to one card here.
  */
 export async function linkSentCards(env: Env, deckRow: any, link: { variant_id?: number | null; include_json?: string | null } | null): Promise<any[]> {
-  let cards = rowToDeck(deckRow).slides || [];
-  if (link?.variant_id) {
-    try {
-      const v = await env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE id = ? AND deck_id = ?').bind(Number(link.variant_id), Number(deckRow.id)).first<{ slide_order_json: string }>();
-      const order = v ? cleanOrder(cards, JSON.parse(v.slide_order_json || '[]')) : null;
-      if (order) cards = variantSlides(cards, order);
-    } catch { /* an unreadable variant opens the master as it is */ }
-  }
-  return shareSlides(cards, parseShareInclude(link?.include_json));
+  const cards = rowToDeck(deckRow).slides || [];
+  const order = link?.variant_id ? await variantOrderOf(env, cards, Number(deckRow.id), { id: Number(link.variant_id) }) : null;
+  return shareSlides(order ? variantSlides(cards, order) : cards, parseShareInclude(link?.include_json));
+}
+
+/**
+ * D4598 (#4598) part 2 — the effective content Share or Export is about to send, for the
+ * check before it sends it: for a proposed link (not yet made), the SAME selection
+ * `linkSentCards` computes for a persisted one — a variant and "what is included" — so
+ * the check the dialog runs and the card a reaction later attributes to never drift
+ * apart; for Export, the cards a hidden-card-dropping export carries (`exportDeckOf`'s
+ * own rule — only a hidden card is ever left out; the two "include" options add text
+ * elsewhere, never drop a card).
+ */
+export async function effectiveSlidesFor(env: Env, deckRow: any, opts: { kind: 'share' | 'export'; variantUid?: string | null; include?: Partial<ShareInclude> }): Promise<any[]> {
+  const cards = rowToDeck(deckRow).slides || [];
+  if (opts.kind === 'export') return visibleCards(cards);
+  const order = opts.variantUid ? await variantOrderOf(env, cards, Number(deckRow.id), { uid: opts.variantUid }) : null;
+  return shareSlides(order ? variantSlides(cards, order) : cards, parseShareInclude(opts.include));
 }
 
 /** D895: unknown counts and an unlimited cap are distinct from measured zero. One rule, shared with the link records (D1111). */

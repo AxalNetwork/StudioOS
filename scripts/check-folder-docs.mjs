@@ -182,6 +182,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/advisor/expertise',     'one file per Expertise zone, the kit they share, and the pure modules they read'],
   ['frontend/src/pages/advisor/practice',      'one file per Practice artboard, plus the pure module each keeps its derivations in'],
   ['frontend/src/pages/advisor/advisory',      'the retained Clients and Contracts tabs, including private client notes'],
+  ['frontend/src/pages/advisor/cohorts',       'the Cohorts workspace: the selected-cohort provider, its model, and one file per section'],
   ['frontend/src/templates/components',       'landing-page section blocks'],
   ['cloudflare-worker/src/middleware',        'the gates every request passes'],
   ['cloudflare-worker/src/util',              'small shared helpers'],

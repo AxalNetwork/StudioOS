@@ -88,7 +88,7 @@ export default function DealRoomPage() {
     setLoading(true); setError(null);
     setDeal((d) => (d && String(d.id) === String(dealId) ? d : null));
     api.getDeal(dealId)
-      .then(d => { if (!current()) return; setDeal(d); document.title = `${d.project_name || 'Deal Room'} — axal`; })
+      .then(d => { if (!current()) return; setDeal(d); document.title = `${d.project_name || 'Deal'} · Deal · Axal VC`; })
       .catch(e => { reportError('DealRoom:getDeal', e); if (current()) setError(e || { status: 0 }); })
       .finally(() => { if (current()) setLoading(false); });
   };

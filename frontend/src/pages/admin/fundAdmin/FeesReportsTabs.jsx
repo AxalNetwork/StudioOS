@@ -1,5 +1,5 @@
 import { ReadFailure as Unreadable } from './parts';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Lightbox, Pill, Unrecorded } from '../../../ui';
 import Sheet from '../../../ui/Sheet.jsx';
@@ -9,6 +9,8 @@ import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { Banner } from '../../account/ConnectorSheet';
 import { NO_FUND, QUARTER_RE, REJECT_REASON_MIN, money, refusalText, keepFund } from './fundAdminModel';
 import { Line, NUM, Note, Panel, Section, Table } from './parts';
+import { ActFlow } from './MoneyFlow';
+import { actButton, feePeriodEffects, feeTermsEffects, reportIssueEffects } from './moneyFlowModel';
 import { useRead } from './useRead';
 
 // D1165: the remaining fund tabs, drawn from the approved FND13/FND14 boards.
@@ -114,19 +116,28 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
               </Panel>
               </div>
             </div>}
-        {confirmation && <Lightbox phone="sheet" title={confirmation.terms ? 'Confirm fee terms?' : 'Issue fee period?'} label="Confirm fee change" testId="fee-confirmation" onClose={() => { if (!busy) setConfirmation(null); }}>
-          <Note>{confirmation.terms ? 'Confirms these terms for the fund. Your authenticator check follows if needed.' : `Issues ${confirmation.preview.quarter} from the preview above, recording the amounts and reference codes. Nothing moves money. Your authenticator check follows if needed.`}</Note>
-          <Alert text={error} />
-          <div className="flex justify-end gap-2 p-4"><button type="button" className={BTN.ghost} disabled={busy} onClick={() => setConfirmation(null)}>Back</button>
-            <FundActControl access={access} act={confirmation.terms ? 'fee_terms.confirm' : 'fee_period.issue'}>
-              <button type="button" className={BTN.primary} disabled={busy} data-testid="fee-confirm-submit" onClick={() => run(async () => {
-                if (confirmation.terms) await apis.fees.confirmTerms(fund.id, confirmation.terms);
-                else { await apis.fees.issuePeriod(fund.id, confirmation.preview.quarter, confirmation.preview.digest); setPreview(null); }
-                setConfirmation(null); await read.reload();
-              }, 'The fee change could not be recorded.')}>{busy ? 'Recording…' : 'Confirm'}</button>
-            </FundActControl>
-          </div>
-        </Lightbox>}
+        {/* D4812 part 5: confirming terms and issuing a period go through the money flow. */}
+        {confirmation && (() => {
+          const terms = confirmation.terms ? (s?.terms || []).find((t) => t.uid === confirmation.terms) : null;
+          const p = confirmation.preview;
+          return confirmation.terms ? (
+            <ActFlow apis={apis} access={access} act="fee_terms.confirm" testId="fee-flow" title="Confirm fee terms"
+              sub={`${fund.name}. Confirms these terms for the fund.`}
+              effects={feeTermsEffects(fund, terms)} label={`Confirm ${bpsPercent(terms?.annual_bps) || 'these'} fee terms`}
+              consequences={['These become the fund’s confirmed fee terms.', 'Fee periods are computed from them from the date they take effect.']}
+              run={() => apis.fees.confirmTerms(fund.id, confirmation.terms)}
+              receipt={() => [['Terms', `${bpsPercent(terms?.annual_bps) || 'Rate not recorded'} from ${terms?.effective_from || 'date not recorded'}`], ['Status', 'Confirmed'], ['Audit', 'Recorded as fee_terms.confirm']]}
+              onClose={() => setConfirmation(null)} onDone={() => read.reload()} />
+          ) : (
+            <ActFlow apis={apis} access={access} act="fee_period.issue" testId="fee-flow" title={`Issue ${p.quarter} fee period`}
+              sub={`${fund.name}. From the preview above.`}
+              effects={feePeriodEffects(fund, p)} label={actButton('Issue', p.totals?.net_cents, `${p.quarter} fee period`)}
+              consequences={[`Issues ${p.quarter} from the preview, by its digest: the figures cannot change between review and issue.`, 'It records the amounts and reference codes. Nothing moves money.']}
+              run={() => apis.fees.issuePeriod(fund.id, p.quarter, p.digest)}
+              receipt={() => [['Period', p.quarter], ['Net fee', money(p.totals?.net_cents) ?? 'Not recorded'], ['Audit', 'Recorded as fee_period.issue']]}
+              onClose={() => setConfirmation(null)} onDone={async () => { setPreview(null); await read.reload(); }} />
+          );
+        })()}
       </div>}
     </FundFrame>
   );
@@ -136,6 +147,9 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
   const [opened, setOpened] = useState(null);
   const [text, setText] = useState('');
   const [mode, setMode] = useState(null);
+  const [issuing, setIssuing] = useState(null);
+  // D4812 part 5: the drafts are read again when the receipt closes, so a reload never unmounts the receipt.
+  const issuedRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const run = async (fn, fallback) => {
@@ -175,7 +189,8 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
               const t = text.trim();
               if (mode === 'prepare') run(async () => { await apis.reporting.prepare(d.uid, { figures_sha256: sha, note: t || undefined }); await done(); }, 'The draft could not be prepared.');
               if (mode === 'return') run(async () => { await apis.reporting.returnDraft(d.uid, t); await done(); }, 'The draft could not be returned.');
-              if (mode === 'issue') run(async () => { await apis.reporting.issue(d.uid, { figures_sha256: sha, acknowledgement: t || undefined }); await done(); }, 'The draft could not be issued.');
+              // D4812 part 5: Issue opens the money flow; the act runs only from its Confirm step.
+              if (mode === 'issue') setIssuing({ acknowledgement: t || undefined });
             }}>
               <p className="text-xs text-axal-muted dark:text-gray-400">{mode === 'issue' ? 'Issuing freezes these figures for the LPs. Your authenticator check follows if needed; a correction needs a new issue.' : mode === 'return' ? 'Returns this prepared pack to draft with your reason.' : 'Marks these figures prepared for a different reviewer to issue.'}</p>
               <label className={LABEL}>
@@ -193,6 +208,14 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
           )}
           <Alert text={error} />
         </div></Sheet>
+      )}
+      {issuing && opened && (
+        <ActFlow apis={apis} access={access} act="fund_report.issue" testId={`draft-flow-${d.uid}`} title="Issue report pack"
+          sub={d.period_label || 'Report pack'} effects={reportIssueEffects(d, sha)} label={`Issue ${d.period_label || 'this'} report pack`}
+          consequences={['Freezes these figures for the LPs.', 'A correction needs a new issue.', ...(issuing.acknowledgement ? [`Your check: ${issuing.acknowledgement}`] : [])]}
+          run={() => apis.reporting.issue(d.uid, { figures_sha256: sha, acknowledgement: issuing.acknowledgement })}
+          receipt={() => [['Pack', d.period_label || 'Report pack'], ['Figures', `${String(sha || '').slice(0, 12)}…`], ['Audit', 'Recorded as fund_report.issue']]}
+          onClose={() => { const was = issuedRef.current; issuedRef.current = false; setIssuing(null); setMode(null); setText(''); setOpened(null); if (was) onChanged(); }} onBack={() => setIssuing(null)} onDone={() => { issuedRef.current = true; }} />
       )}
       {!opened && <Alert text={error} />}
     </div>

@@ -30,9 +30,12 @@
  * The MILESTONES catalog is the single source of truth for what counts
  * toward week advancement and what features the sidebar/dashboard unlocks.
  *
- * Pure-logic functions (`getLabState`, `startLab`, `recordMilestone`,
- * `exitLab`) are exported so the smoke test can drive the full flow
- * against a mocked sql() helper without standing up Hono + JWT.
+ * D4663: the handlers parse requests and return service outcomes. The
+ * sprint's transitions (`getLabState`, `startLab`, `recordMilestone`,
+ * `exitLab`, and `/start` and `/exit` whole) are `services/labLifecycle.ts`;
+ * a milestone's completion is `services/labProgress.ts`; graduation is
+ * `services/labGraduation.ts`; the public outcome reads are
+ * `services/labReporting.ts`, bounded in SQL. Tests import those modules.
  */
 import { holdsLicence } from '../services/accountLicences';
 import { Hono, type Context } from 'hono';
@@ -47,30 +50,19 @@ import { claimLpRowsByEmail } from '../services/lpClaim';
 // The route's original public surface is preserved by re-export.
 import {
   MILESTONES,
+  SPRINT_DAYS,
   VALID_MILESTONE_KEYS,
-  weekForKey,
   weekMet,
   weekClearsFor,
   unlockedFeaturesThrough,
 } from '../services/spinoutLabCatalog';
+import { beginLab, getLabState, leaveLab } from '../services/labLifecycle';
 import { bindingKey } from '../util/schemaBootstrap';
 // Re-export so existing external imports of these names from this
 // module keep working unchanged.
 export { MILESTONES, VALID_MILESTONE_KEYS, weekMet, unlockedFeaturesThrough };
 
 const spinoutLab = new Hono<{ Bindings: Env }>();
-
-/** Days elapsed since `started_at` (UTC). Returns 0 when started_at is null. */
-function daysSince(startedAt: string | null | undefined, nowMs = Date.now()): number {
-  if (!startedAt) return 0;
-  const startMs = Date.parse(
-    startedAt.replace(' ', 'T') + (startedAt.includes('Z') ? '' : 'Z'),
-  );
-  if (!Number.isFinite(startMs)) return 0;
-  return Math.max(0, Math.floor((nowMs - startMs) / 86_400_000));
-}
-
-const SPRINT_DAYS = 28;
 
 /**
  * Milliseconds for a SQLite `datetime('now')` string, which is UTC but carries
@@ -86,186 +78,10 @@ function parseTsUtc(s: string | null | undefined): number | null {
 }
 
 // ---------------------------------------------------------------------------
-// Pure logic — exported so the test harness can drive the full flow against
-// a mocked sql() helper. The wire handlers below are thin wrappers.
-// ---------------------------------------------------------------------------
-
-export type LabState = {
-  active: boolean;
-  week: number;
-  days_remaining: number;
-  started_at: string | null;
-  is_incorporated: boolean;
-  milestones: Array<{ key: string; week: number; completed_at: string }>;
-  unlocked_features: string[];
-};
-
-// Concrete row shapes for every SELECT this module issues. Keeps the Sql
-// helper's call sites typed without falling back to `any`.
-type UserStateRow = {
-  spinout_lab_active: number | null;
-  spinout_lab_week: number | null;
-  spinout_lab_started_at: string | null;
-  is_incorporated: number | null;
-};
-type UserActiveWeekRow = {
-  spinout_lab_active: number | null;
-  spinout_lab_week: number | null;
-};
-type IsIncorporatedRow = { is_incorporated: number | null };
-type MilestoneRow = { key: string; week: number; completed_at: string };
-type MilestoneKeyRow = { milestone_key: string };
-
-// Generic-tagged sql helper: each call site chooses the row type it expects.
-// Mirrors the shape of `getSQL(c.env)` from `db.ts` (postgres-style template
-// literal) without leaking `any` into the rest of the module.
-type SqlValue = string | number | boolean | null;
-type Sql = <T = unknown>(
-  strings: TemplateStringsArray,
-  ...values: SqlValue[]
-) => Promise<T[]>;
-
-// Named union return types — keep these as type aliases (not inline in the
-// function signature) so the test harness's brace balancer can slice each
-// logic function cleanly. See `cloudflare-worker/test/spinout_lab.test.mjs`.
-export type StartResult =
-  | { ok: true; state: LabState }
-  | { ok: false; status: 409; error: string };
-
-export type MilestoneResult =
-  | { ok: true; state: LabState }
-  | { ok: false; status: 400 | 409; error: string };
-
-export async function getLabState(sql: Sql, userId: number): Promise<LabState> {
-  const rows = await sql<UserStateRow>`
-    SELECT spinout_lab_active, spinout_lab_week, spinout_lab_started_at, is_incorporated
-    FROM users WHERE id = ${userId}
-  `;
-  const row: Partial<UserStateRow> = rows[0] ?? {};
-  const milestones = await sql<MilestoneRow>`
-    SELECT milestone_key AS key, week, completed_at
-    FROM spinout_lab_milestones
-    WHERE user_id = ${userId}
-    ORDER BY week ASC, completed_at ASC
-  `;
-
-  const week = Number(row.spinout_lab_week ?? 1);
-  return {
-    active: Number(row.spinout_lab_active ?? 0) === 1,
-    week,
-    days_remaining: Math.max(0, SPRINT_DAYS - daysSince(row.spinout_lab_started_at ?? null)),
-    started_at: row.spinout_lab_started_at ?? null,
-    is_incorporated: Number(row.is_incorporated ?? 0) === 1,
-    milestones,
-    unlocked_features: unlockedFeaturesThrough(week),
-  };
-}
-
-export async function startLab(sql: Sql, userId: number): Promise<StartResult> {
-  // RE-ENTRY GUARD, not an eligibility rule. `users.is_incorporated` is set in
-  // exactly two places — completing the week-4 milestone (recordMilestone
-  // below) and `exitLab` — so a 1 here means "has already been through the
-  // Lab", never "arrived with a company". Founders who incorporated elsewhere
-  // have is_incorporated = 0 and are welcome: the Lab is not restricted to
-  // pre-incorporation founders, and this check has never made it so. It only
-  // stops a graduate re-opening a sprint whose week is already 4 and whose
-  // workspace `spinout_lab_active = 0` deliberately closed.
-  const probe = await sql<IsIncorporatedRow>`
-    SELECT is_incorporated FROM users WHERE id = ${userId}
-  `;
-  if (probe[0] && Number(probe[0].is_incorporated) === 1) {
-    return { ok: false, status: 409, error: 'This account has already been through the Lab' };
-  }
-  // Idempotent: COALESCE preserves an existing started_at and a non-zero
-  // week so re-calling start() doesn't reset progress. D4658: the write
-  // itself refuses a graduate, so an exit that lands between the probe above
-  // and this statement cannot be reopened by a start that read before it.
-  const started: Array<{ id: number }> = await sql`
-    UPDATE users
-    SET spinout_lab_active = 1,
-        spinout_lab_week = COALESCE(NULLIF(spinout_lab_week, 0), 1),
-        spinout_lab_started_at = COALESCE(spinout_lab_started_at, datetime('now'))
-    WHERE id = ${userId} AND COALESCE(is_incorporated, 0) = 0
-    RETURNING id
-  `;
-  if (started.length === 0) {
-    return { ok: false, status: 409, error: 'This account has already been through the Lab' };
-  }
-  return { ok: true, state: await getLabState(sql, userId) };
-}
-
-export async function recordMilestone(
-  sql: Sql,
-  userId: number,
-  rawKey: string,
-): Promise<MilestoneResult> {
-  const key = (rawKey ?? '').trim();
-  if (!key) return { ok: false, status: 400, error: 'milestone_key is required' };
-  if (!VALID_MILESTONE_KEYS.has(key)) {
-    return { ok: false, status: 400, error: `Unknown milestone_key: ${key}` };
-  }
-  const week = weekForKey(key);
-  if (!week) return { ok: false, status: 400, error: 'milestone_key has no week' };
-
-  // Refuse to record milestones when the lab is off — prevents accidental
-  // pollution from a feature page calling complete() after exit().
-  const userRows = await sql<UserActiveWeekRow>`
-    SELECT spinout_lab_active, spinout_lab_week FROM users WHERE id = ${userId}
-  `;
-  const u = userRows[0];
-  if (!u || Number(u.spinout_lab_active) !== 1) {
-    return { ok: false, status: 409, error: 'Spin-Out Lab is not active' };
-  }
-
-  // Idempotent — UNIQUE(user_id, milestone_key) prevents duplicates.
-  await sql`
-    INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
-    VALUES (${userId}, ${week}, ${key})
-  `;
-
-  // Auto-advance loop. Re-read the milestone set, then walk weeks from the
-  // user's current week upward as long as each week is fully met. Cap at
-  // week 4. When week 4 is met, also flip `is_incorporated=1` and turn
-  // the lab off so the sidebar swaps without an extra round-trip.
-  const completedRows = await sql<MilestoneKeyRow>`
-    SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ${userId}
-  `;
-  const completed = new Set<string>(completedRows.map((r) => r.milestone_key));
-
-  let newWeek = Number(u.spinout_lab_week ?? 1);
-  while (newWeek < 4 && weekMet(newWeek, completed)) {
-    newWeek += 1;
-  }
-  // D4658: the week only moves forward, and only while the Lab is on. Two
-  // requests that each computed a week from their own read cannot write the
-  // lower one over the higher, and a sprint that closed meanwhile stays closed.
-  if (newWeek !== Number(u.spinout_lab_week)) {
-    await sql`UPDATE users SET spinout_lab_week = MAX(COALESCE(spinout_lab_week, 1), ${newWeek}) WHERE id = ${userId} AND spinout_lab_active = 1`;
-  }
-  if (newWeek === 4 && weekMet(4, completed)) {
-    // Single statement so a partial failure can't half-incorporate the user.
-    // SQLite/D1 statement execution is atomic; either both columns flip or
-    // neither does. Mirrors the explicit /exit route's effect.
-    await sql`
-      UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ${userId} AND spinout_lab_active = 1
-    `;
-  }
-
-  return { ok: true, state: await getLabState(sql, userId) };
-}
-
-export async function exitLab(sql: Sql, userId: number): Promise<LabState> {
-  // Single statement so a partial failure can't half-incorporate the user.
-  await sql`
-    UPDATE users
-    SET spinout_lab_active = 0, is_incorporated = 1
-    WHERE id = ${userId}
-  `;
-  return getLabState(sql, userId);
-}
-
-// ---------------------------------------------------------------------------
-// Wire handlers — thin wrappers around the pure logic above.
+// Wire handlers. Each parses its request and returns a service outcome: the
+// lifecycle (`services/labLifecycle.ts`), milestone completion
+// (`services/labProgress.ts`), graduation (`services/labGraduation.ts`) and
+// the public reports (`services/labReporting.ts`), D4663.
 // ---------------------------------------------------------------------------
 
 // Cohort applications — lazy table ensure (mirrors migration 155) so
@@ -386,10 +202,8 @@ spinoutLab.get('/state', async (c) => {
   } catch { /* the state read never fails on this */ }
   const sql = getSQL(c.env);
   const state = await getLabState(sql, user.id);
-  // Task #7 — admission fields. Queried at the wire layer (not inside
-  // getLabState) so the pure-logic test harness's exact-SELECT mocks stay
-  // untouched, and try/caught so databases predating migration 154 still
-  // answer (admitted=false).
+  // Task #7 — admission fields, try/caught so databases predating migration
+  // 154 still answer (admitted=false).
   let admitted = false;
   let cohort: string | null = null;
   try {
@@ -401,10 +215,8 @@ spinoutLab.get('/state', async (c) => {
   } catch { /* columns not yet migrated */ }
   await sql.end();
   const application = await latestApplication(c.env, user.id);
-  // Cohort timing gate — added at the wire layer (same rule as the
-  // admission fields above: never inside getLabState, so the exact-slice
-  // test harness stays intact). Null for legacy founders whose sprint
-  // predates the calendar system. `unlocked_features` is re-capped by the
+  // Cohort timing gate. Null for legacy founders whose sprint predates the
+  // calendar system. `unlocked_features` is re-capped by the
   // gate's max_week so calendar/freeze enforcement is server-side.
   let cohortTiming: import('../services/cohortTiming').CohortGate | null = null;
   try {
@@ -459,9 +271,9 @@ spinoutLab.get('/state', async (c) => {
   let graduated: boolean | null = null;
   try {
     const { resolveVenture } = await import('../services/labVenture');
+    const { graduationOf } = await import('../services/labGraduation');
     venture = await resolveVenture(c.env, user.id);
-    const g = await c.env.DB.prepare('SELECT 1 AS x FROM spinout_lab_graduates WHERE user_id = ?').bind(user.id).first();
-    graduated = !!g;
+    graduated = (await graduationOf(c.env, user.id)).graduated;
   } catch {
     console.warn('[spinout-lab] venture unreadable');
     ventureUnreadable = true;
@@ -819,38 +631,8 @@ spinoutLab.post('/apply/interview/reschedule', async (c) => {
 
 spinoutLab.post('/start', async (c) => {
   const user = await requireAuth(c);
-  // D4657: starting follows the recorded enrollment, not the button. An
-  // account never admitted, one under a moderation sanction, or one whose
-  // cohort opens later is refused; a read that fails is a retryable 503,
-  // never a start. A cohort member starts on their cycle's own instant.
-  const { resolveLabEligibility, mayParticipate, refusal } = await import('../services/labEnrollment');
-  const elig = await resolveLabEligibility(c.env, user.id);
-  if (!mayParticipate(elig)) {
-    const no = refusal(elig);
-    return c.json(no.body, no.status);
-  }
-  if (elig.status === 'eligible' && elig.enrollment.cycle_start_at) {
-    try {
-      await c.env.DB.prepare(
-        `UPDATE users SET spinout_lab_started_at = ? WHERE id = ? AND spinout_lab_started_at IS NULL`,
-      ).bind(elig.enrollment.cycle_start_at, user.id).run();
-    } catch {
-      return c.json({ error: 'Your Lab could not be started just now. Try again in a moment.', code: 'lab_start_unavailable', retryable: true }, 503);
-    }
-  }
-  const sql = getSQL(c.env);
-  const r = await startLab(sql, user.id);
-  await sql.end();
-  if (!r.ok) return c.json({ error: r.error }, r.status);
-  // D576 — Week 1 begins with a plan: the one written when the member
-  // applied, or one computed now from their latest application.
-  try {
-    const { ensureWeek1Plan } = await import('../services/week1PlanStore');
-    await ensureWeek1Plan(c.env, user.id, `user:${user.id}`);
-  } catch (e) {
-    console.warn('[spinout-lab/start] week 1 plan not written', (e as Error)?.message);
-  }
-  return c.json(r.state);
+  const out = await beginLab(c.env, user.id);
+  return c.json(out.body, out.status);
 });
 
 type MilestoneBody = { milestone_key?: unknown };
@@ -858,35 +640,9 @@ type MilestoneBody = { milestone_key?: unknown };
 spinoutLab.post('/milestone', async (c) => {
   const user = await requireAuth(c);
   const body = (await c.req.json().catch(() => ({}))) as MilestoneBody;
-  const key = typeof body.milestone_key === 'string' ? body.milestone_key.trim() : '';
-  // D585 (#1212): graduation's formation milestone comes only from the
-  // server's order status, at payment. A client call asks the server to sync,
-  // which records it only behind a paid order.
-  if (key === 'incorporation_completed') {
-    const { syncIncorporationMilestone } = await import('../services/labIncorporationMilestone');
-    const out = await syncIncorporationMilestone(c.env, user.id);
-    if (!out.recorded && out.reason === 'not_paid') {
-      return c.json({ error: 'incorporation_not_paid', message: 'This milestone is recorded when your incorporation order is paid.' }, 409);
-    }
-    if (!out.recorded && out.reason === 'unavailable') {
-      return c.json({ error: 'This step could not be checked just now. Try again in a moment.', code: 'lab_evidence_unavailable', retryable: true }, 503);
-    }
-    const sqlS = getSQL(c.env);
-    const state = await getLabState(sqlS, user.id);
-    await sqlS.end();
-    return c.json({
-      ...state,
-      milestone_credit: out.recorded ? out.milestone_credit : null,
-      graduation_credit: out.recorded ? out.graduation_credit : null,
-    });
-  }
-  // D4657: the browser asks; the server records only what the policy, the
-  // cohort calendar and the saved work allow (services/labProgress.ts). A
-  // milestone pays only from the request whose insert recorded it.
-  const { recordLabMilestone } = await import('../services/labProgress');
-  const r = await recordLabMilestone(c.env, user.id, key, 'member');
-  if (!r.ok) return c.json(r.body, r.status);
-  return c.json({ ...(r.state as Record<string, unknown>), milestone_credit: r.milestone_credit, graduation_credit: r.graduation_credit });
+  const { completeLabMilestone } = await import('../services/labProgress');
+  const out = await completeLabMilestone(c.env, user.id, body.milestone_key);
+  return c.json(out.body, out.status);
 });
 
 // POST /venture { project_id } — D4659: name which of your own projects is the
@@ -907,34 +663,8 @@ spinoutLab.post('/venture', async (c) => {
 
 spinoutLab.post('/exit', async (c) => {
   const user = await requireAuth(c);
-  const sql = getSQL(c.env);
-  const state = await exitLab(sql, user.id);
-  await sql.end();
-  return c.json(state);
+  return c.json(await leaveLab(c.env, user.id));
 });
-
-// GET /graduates — PUBLIC (deliberately no requireAuth): powers the
-// "Graduate companies." section, which also renders on the logged-out
-// marketing page. A graduate is a user with the week-4
-// `incorporation_completed` milestone on record — the strongest completion
-// signal (the /exit escape hatch flips is_incorporated without finishing
-// the sprint, so it does NOT count). Company facts come from the founder's
-// project; the cohort application's working name is the fallback. D4661: a
-// read that fails is a 503 (see `outcomesUnreadable`), never []; [] means the
-// read worked and no one has graduated. Exposes only company-level facts (no
-// founder emails/ids).
-type GraduateRow = {
-  user_id: number;
-  completed_at: string | null;
-  cohort: string | null;
-  uid: string | null;
-  name: string | null;
-  sector: string | null;
-  stage: string | null;
-  status: string | null;
-  total_funding: number | null;
-  last_funding_round: string | null;
-};
 
 // D4661 — A PUBLIC OUTCOME READ THAT COULD NOT BE READ SAYS SO. `/graduates`, `/stats`,
 // `/cohort` and `/shipped` used to answer `[]` or zeros when D1 failed, which a page
@@ -951,9 +681,10 @@ function outcomesUnreadable(c: Context<any>, what: string, raw: unknown): Respon
   });
 }
 
-// A company's name falls back to its application. A failed fallback read is not "no name":
-// the row would be dropped and the list would read as complete. It is recorded, and the
-// handler answers unreadable instead of a shorter list.
+// A company's name falls back to its application (`/shipped`; the other public reads do
+// this in SQL, D4663). A failed fallback read is not "no name": the row would be dropped
+// and the list would read as complete. It is recorded, and the handler answers
+// unreadable instead of a shorter list.
 function applicationNames(env: Env) {
   let failure: unknown = null;
   return {
@@ -973,138 +704,32 @@ function applicationNames(env: Env) {
   };
 }
 
+// GET /graduates — PUBLIC (deliberately no requireAuth): powers the
+// "Graduate companies." section, which also renders on the logged-out
+// marketing page. A graduate is D4659's one rule (the view
+// `spinout_lab_graduates`); the /exit escape hatch flips is_incorporated
+// without finishing the sprint, so it does NOT count. Company facts come from
+// the enrolled venture; the latest application's working name is the
+// fallback. D4661: a read that fails is a 503 (see `outcomesUnreadable`),
+// never []; [] means the read worked and no one has graduated. Exposes only
+// company-level facts (no founder emails/ids). D4663: bounded in SQL
+// (`services/labReporting.ts`).
 spinoutLab.get('/graduates', async (c) => {
-  let rows: GraduateRow[] = [];
-  try {
-    const res = await c.env.DB.prepare(
-      `SELECT m.user_id, m.graduated_at AS completed_at, usf.spinout_lab_cohort AS cohort,
-              p.uid, p.name, p.sector, p.stage, p.status, p.total_funding, p.last_funding_round
-       FROM spinout_lab_graduates m
-       JOIN users u ON u.id = m.user_id
-       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
-       LEFT JOIN spinout_lab_enrollments le ON le.id = (SELECT MAX(x.id) FROM spinout_lab_enrollments x WHERE x.user_id = m.user_id)
-       LEFT JOIN projects p ON p.id = le.project_id AND p.deleted_at IS NULL
-       ORDER BY m.graduated_at DESC, p.id ASC`,
-    ).all<GraduateRow>();
-    rows = res.results ?? [];
-  } catch (e) {
-    return outcomesUnreadable(c, 'The Lab’s graduates', e);
-  }
-  type GraduateCard = {
-    name: string | null;
-    sector: string | null;
-    stage: string | null;
-    cohort: string | null;
-    uid: string | null;
-    graduated_at: string | null;
-    raised: number | null;
-    last_round: string | null;
-  };
-  // One card per graduate. Founders can have several projects — prefer the
-  // first one whose public profile will actually resolve
-  // (public.ts GET /startup/:handle 404s archived/rejected/intake projects).
-  const byUser = new Map<number, GraduateCard>();
-  const order: number[] = [];
-  for (const r of rows) {
-    const linkable =
-      !!r.uid && !['archived', 'rejected', 'intake'].includes(String(r.status || '').toLowerCase());
-    const entry: GraduateCard = {
-      name: r.name ?? null,
-      sector: r.sector ?? null,
-      stage: r.stage ?? null,
-      cohort: r.cohort ?? null,
-      uid: linkable ? r.uid : null,
-      graduated_at: r.completed_at ?? null,
-      raised: r.total_funding ?? null,
-      last_round: r.last_funding_round ?? null,
-    };
-    const existing = byUser.get(r.user_id);
-    if (!existing) {
-      byUser.set(r.user_id, entry);
-      order.push(r.user_id);
-    } else if (existing.uid === null && entry.uid) {
-      byUser.set(r.user_id, entry); // upgrade to the publicly linkable project
-    }
-  }
-  const out: GraduateCard[] = [];
-  const names = applicationNames(c.env);
-  for (const userId of order) {
-    const entry = byUser.get(userId)!;
-    entry.name = await names.of(entry.name, userId);
-    if (!entry.name) continue; // nothing real to show for this graduate
-    out.push(entry);
-    if (out.length >= 12) break;
-  }
-  if (names.failure) return outcomesUnreadable(c, 'The Lab’s graduates', names.failure);
-  return c.json(out);
+  const { graduateCards } = await import('../services/labReporting');
+  const r = await graduateCards(c.env);
+  return r.ok ? c.json(r.value) : outcomesUnreadable(c, r.what, r.raw);
 });
-
-// GET /cohort — PUBLIC (deliberately no requireAuth): powers the "Active
-// cohort." live tracker, which also renders on the logged-out marketing
-// page. Returns company-level facts only (working name, sector, week, day)
-// — never founder names, emails, or ids. Members are users currently in
-// the sprint (`spinout_lab_active = 1`); recent graduates (week-4
-// `incorporation_completed` within the last 45 days) fill the final
-// column. D4661: a read that fails is a 503, never [] — an empty directory
-// means no company is in the sprint, a failed one means we do not know.
-type CohortActiveRow = {
-  user_id: number;
-  week: number | null;
-  started_at: string | null;
-  cohort: string | null;
-  name: string | null;
-  sector: string | null;
-};
-
-type CohortGradRow = {
-  user_id: number;
-  completed_at: string | null;
-  started_at: string | null;
-  cohort: string | null;
-  name: string | null;
-  sector: string | null;
-};
-
-type CohortMember = {
-  name: string;
-  sector: string | null;
-  cohort: string | null;
-  status: 'active' | 'graduated';
-  week: number;
-  day: number | null;
-  started_at: string | null;
-};
 
 // GET /stats — PUBLIC (deliberately no requireAuth): real numbers for the
 // hero stats panel (also on the logged-out marketing page). Companies
-// built = distinct founders who completed the week-4 incorporation
-// milestone; total_raised sums each graduate's first (non-deleted)
-// project's total_funding. D4661: a read that fails is a 503, not zeros — a
-// measured zero (the read worked and no one has graduated) is a different fact.
+// built = every graduate (D4659's rule), once; total_raised sums each
+// graduate's enrolled venture's positive total_funding. D4661: a read that
+// fails is a 503, not zeros — a measured zero (the read worked and no one has
+// graduated) is a different fact. D4663: counted and summed in SQL.
 spinoutLab.get('/stats', async (c) => {
-  try {
-    const res = await c.env.DB.prepare(
-      `SELECT m.user_id, p.total_funding
-       FROM spinout_lab_graduates m
-       LEFT JOIN spinout_lab_enrollments le ON le.id = (SELECT MAX(x.id) FROM spinout_lab_enrollments x WHERE x.user_id = m.user_id)
-       LEFT JOIN projects p ON p.id = le.project_id AND p.deleted_at IS NULL
-       ORDER BY m.user_id ASC, p.id ASC`,
-    ).all<{ user_id: number; total_funding: number | null }>();
-    const rows = res.results ?? [];
-    const seen = new Set<number>();
-    let companies = 0;
-    let totalRaised = 0;
-    for (const r of rows) {
-      if (seen.has(r.user_id)) continue; // several projects: count the first
-      seen.add(r.user_id);
-      companies += 1;
-      const funding = Number(r.total_funding ?? 0);
-      if (Number.isFinite(funding) && funding > 0) totalRaised += funding;
-    }
-    return c.json({ companies, total_raised: totalRaised > 0 ? totalRaised : null });
-  } catch (e) {
-    return outcomesUnreadable(c, 'The Lab’s programme figures', e);
-  }
+  const { programmeFigures } = await import('../services/labReporting');
+  const r = await programmeFigures(c.env);
+  return r.ok ? c.json(r.value) : outcomesUnreadable(c, r.what, r.raw);
 });
 
 // GET /brief — PUBLIC (deliberately no requireAuth, the `/stats` precedent
@@ -1169,95 +794,19 @@ spinoutLab.get('/brief', async (c) => {
   });
 });
 
+// GET /cohort — PUBLIC (deliberately no requireAuth): powers the "Active
+// cohort." live tracker, which also renders on the logged-out marketing
+// page. Returns company-level facts only (working name, sector, week, day)
+// — never founder names, emails, or ids. Members are users currently in
+// the sprint (`spinout_lab_active = 1`), named by their enrolled venture;
+// recent graduates (D4659's rule, within the last 45 days) fill the final
+// column. D4661: a read that fails is a 503, never [] — an empty directory
+// means no company is in the sprint, a failed one means we do not know.
+// D4663: bounded in SQL (`services/labReporting.ts`).
 spinoutLab.get('/cohort', async (c) => {
-  const parseTs = (s: string | null | undefined): number | null => {
-    if (!s) return null;
-    const ms = Date.parse(s.replace(' ', 'T') + (s.includes('Z') ? '' : 'Z'));
-    return Number.isFinite(ms) ? ms : null;
-  };
-  const names = applicationNames(c.env);
-  const companyName = (rowName: string | null, userId: number): Promise<string | null> => names.of(rowName, userId);
-
-  const members: CohortMember[] = [];
-  const seen = new Set<number>();
-
-  let activeRows: CohortActiveRow[] = [];
-  try {
-    const res = await c.env.DB.prepare(
-      `SELECT u.id AS user_id, u.spinout_lab_week AS week,
-              u.spinout_lab_started_at AS started_at, usf.spinout_lab_cohort AS cohort,
-              p.name, p.sector
-       FROM users u
-       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
-       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
-       WHERE u.spinout_lab_active = 1
-       ORDER BY u.spinout_lab_started_at ASC, p.id ASC`,
-    ).all<CohortActiveRow>();
-    activeRows = res.results ?? [];
-  } catch (e) {
-    return outcomesUnreadable(c, 'The Lab’s cohort', e);
-  }
-  for (const r of activeRows) {
-    if (seen.has(r.user_id)) continue; // several projects: keep the first
-    seen.add(r.user_id);
-    const name = await companyName(r.name, r.user_id);
-    if (!name) continue;
-    const week = Math.max(1, Math.min(4, Number(r.week ?? 1) || 1));
-    members.push({
-      name,
-      sector: r.sector ?? null,
-      cohort: r.cohort ?? null,
-      status: 'active',
-      week,
-      day: Math.min(SPRINT_DAYS, daysSince(r.started_at) + 1),
-      started_at: r.started_at ?? null,
-    });
-    if (members.length >= 24) break;
-  }
-
-  // Recent graduates fill the final ("Incorporated") column.
-  let gradRows: CohortGradRow[] = [];
-  try {
-    const res = await c.env.DB.prepare(
-      `SELECT m.user_id, m.graduated_at AS completed_at, u.spinout_lab_started_at AS started_at,
-              usf.spinout_lab_cohort AS cohort, p.name, p.sector
-       FROM spinout_lab_graduates m
-       JOIN users u ON u.id = m.user_id
-       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
-       LEFT JOIN spinout_lab_enrollments le ON le.id = (SELECT MAX(x.id) FROM spinout_lab_enrollments x WHERE x.user_id = m.user_id)
-       LEFT JOIN projects p ON p.id = le.project_id AND p.deleted_at IS NULL
-       WHERE datetime(m.graduated_at) >= datetime('now', '-45 days')
-       ORDER BY m.graduated_at DESC, p.id ASC`,
-    ).all<CohortGradRow>();
-    gradRows = res.results ?? [];
-  } catch (e) {
-    return outcomesUnreadable(c, 'The Lab’s cohort', e);
-  }
-  const gradSeen = new Set<number>();
-  for (const r of gradRows) {
-    if (gradSeen.has(r.user_id) || seen.has(r.user_id)) continue;
-    gradSeen.add(r.user_id);
-    const name = await companyName(r.name, r.user_id);
-    if (!name) continue;
-    const startMs = parseTs(r.started_at);
-    const doneMs = parseTs(r.completed_at);
-    const day =
-      startMs !== null && doneMs !== null && doneMs >= startMs
-        ? Math.max(1, Math.floor((doneMs - startMs) / 86_400_000) + 1)
-        : null;
-    members.push({
-      name,
-      sector: r.sector ?? null,
-      cohort: r.cohort ?? null,
-      status: 'graduated',
-      week: 5,
-      day,
-      started_at: r.started_at ?? null,
-    });
-    if (gradSeen.size >= 8) break;
-  }
-  if (names.failure) return outcomesUnreadable(c, 'The Lab’s cohort', names.failure);
-  return c.json(members);
+  const { cohortBoard } = await import('../services/labReporting');
+  const r = await cohortBoard(c.env);
+  return r.ok ? c.json(r.value) : outcomesUnreadable(c, r.what, r.raw);
 });
 
 // GET /shipped — which cohort companies cleared which gate, and when.

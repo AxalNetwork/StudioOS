@@ -133,15 +133,20 @@ function stubStripe(currency: string | null) {
   return { refunds, restore: () => { globalThis.fetch = real; } };
 }
 
+/**
+ * D5037: a refund is a review, then a confirmation. The target and the amount go to `/refund/review`; the reason and
+ * the review's token go to `/refund`. A review that refuses is the answer, and nothing is confirmed.
+ */
 async function refund(e: any, body: Record<string, unknown>) {
-  const res = await app.request('/refund', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${await token(SUPER)}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ payment_intent: 'pi_1', reason: REASON, ...body }),
-  }, e);
-  let json: any = null;
-  try { json = await res.json(); } catch { /* empty */ }
-  return { status: res.status, body: json };
+  const auth = { Authorization: `Bearer ${await token(SUPER)}`, 'Content-Type': 'application/json' };
+  const read = async (res: Response) => { let json: any = null; try { json = await res.json(); } catch { /* empty */ } return { status: res.status, body: json }; };
+  const reviewBody: Record<string, unknown> = { payment_intent: 'pi_1' };
+  for (const k of ['amount', 'amount_major']) if (k in body) reviewBody[k] = body[k];
+  const review = await read(await app.request('/refund/review', { method: 'POST', headers: auth, body: JSON.stringify(reviewBody) }, e));
+  if (review.status !== 200) return review;
+  return read(await app.request('/refund', {
+    method: 'POST', headers: auth, body: JSON.stringify({ reason: REASON, review_token: review.body.review_token }),
+  }, e));
 }
 
 /** One refund of `amount_major` against a charge in `currency`: the status, the body and what Stripe was sent. */
@@ -204,7 +209,7 @@ test('a charge whose currency Stripe did not name, or that is not a listed curre
   }
 });
 
-test('amount (Stripe minor units, as before) still passes through; both forms at once is refused; a full refund sends no amount', async () => {
+test('amount (Stripe minor units, as before) still passes through; both forms at once is refused; a full refund sends what is left', async () => {
   const legacy = await attempt('eur', { amount: 4900 });
   assert.equal(legacy.status, 200, JSON.stringify(legacy.body));
   assert.equal(legacy.sent[0].amount, '4900');
@@ -213,7 +218,8 @@ test('amount (Stripe minor units, as before) still passes through; both forms at
   assert.equal(both.sent.length, 0);
   const full = await attempt('eur', {});
   assert.equal(full.status, 200, JSON.stringify(full.body));
-  assert.equal('amount' in full.sent[0], false);
+  // D5037: the reviewed remaining is sent, never "whatever is left when Stripe gets to it".
+  assert.equal(full.sent[0].amount, '999999');
   const unsafe = await attempt('eur', { amount: 9007199254740993 });
   assert.equal(unsafe.status, 400);
   assert.ok(REFUND_REASON_MIN > 0);
