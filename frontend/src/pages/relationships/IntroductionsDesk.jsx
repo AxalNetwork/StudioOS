@@ -4,10 +4,11 @@ import { relationshipsApi } from '../../lib/api/relationships.js';
 import { mailApi } from '../../lib/api/mail.js';
 import { reportError } from '../../lib/log';
 import RecordCompose from '../email/RecordCompose.jsx';
+import SendUncertain from '../email/SendUncertain.jsx';
 import DraftFlow, { useDraftFlow } from './DraftFlow.jsx';
 import {
-  ASK_DRAFT_FOLLOW_UP, ASK_DRAFT_INTRO, INBOX_EMPTY, INTRO_GONE, LOG_EMPTY, LOG_UNREAD, NOT_NOW, OUTCOMES, SENDS_NOTHING, STATUS_FILTERS, STATUS_LABEL, SUMMARY_TITLE, SUMMARY_UNREAD, WRITE_INTRO,
-  dayAfter, followUps, introSubject, isOpenForMe, logRows, personOf, summaryField,
+  ASK_DRAFT_FOLLOW_UP, ASK_DRAFT_INTRO, INBOX_EMPTY, INTRO_GONE, LOG_EMPTY, LOG_UNREAD, NOT_NOW, OUTCOMES, SENDS_NOTHING, STATUS_FILTERS, STATUS_LABEL, SUMMARY_TITLE, SUMMARY_UNREAD,
+  UPDATE_RECORD, WRITE_INTRO, dayAfter, deliveryOf, followUps, introSubject, isOpenForMe, logRows, personOf, summaryField,
 } from './relationshipsModel';
 
 /**
@@ -28,6 +29,13 @@ import {
  *        filtered by the member's own teams and by status; "Follow-ups due".
  *        A made request takes an outcome from either side; the asker
  *        withdraws a pending one.
+ *
+ * D4604: an accepted request's delivery attempt (`delivery`, the teammate's
+ * own) says what became of the last send. While it is in flight, unconfirmed
+ * or delivered, "Write the intro" is held back: an unconfirmed one takes the
+ * teammate's word (the Email composer's own "It arrived" / "It did not
+ * arrive"), and one the mail server took but whose record lags is updated
+ * with "Update the record", which sends nothing.
  *
  * D4464: a summary card over `relationshipsApi.summary()` — the caller's own
  * sharing, how many teammates share with them, and introductions made in the
@@ -263,15 +271,43 @@ function AskCard({ r, highlighted, setHighlightRef, busy, notice, declining, set
         )
       ) : (
         <div className="flex flex-col gap-1.5">
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={PRIMARY} onClick={() => setWriting({ request: r, draft: null })} data-testid={`${testId}-write-${r.uid}`}>{WRITE_INTRO}</button>
-            <button type="button" className={GHOST} disabled={state.status === 'estimating' || state.status === 'running'} onClick={ask} data-testid={`${testId}-draft-intro-${r.uid}`}>{ASK_DRAFT_INTRO}</button>
-          </div>
-          <DraftFlow state={state} onConfirm={onConfirm} onCancel={cancel} testId={`${testId}-draft-intro-${r.uid}`} confirmLabel="Draft the intro" />
-          <span className={MUTED}>{SENDS_NOTHING}</span>
+          <Delivery r={r} busy={busy === r.uid} act={act} testId={`${testId}-delivery-${r.uid}`} />
+          {deliveryOf(r).canWrite ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={PRIMARY} onClick={() => setWriting({ request: r, draft: null })} data-testid={`${testId}-write-${r.uid}`}>{WRITE_INTRO}</button>
+                <button type="button" className={GHOST} disabled={state.status === 'estimating' || state.status === 'running'} onClick={ask} data-testid={`${testId}-draft-intro-${r.uid}`}>{ASK_DRAFT_INTRO}</button>
+              </div>
+              <DraftFlow state={state} onConfirm={onConfirm} onCancel={cancel} testId={`${testId}-draft-intro-${r.uid}`} confirmLabel="Draft the intro" />
+              <span className={MUTED}>{SENDS_NOTHING}</span>
+            </>
+          ) : null}
         </div>
       )}
     </article>
+  );
+}
+
+/** D4604: what became of the last send of an accepted intro, and the one recovery step that fits it. */
+function Delivery({ r, busy, act, testId }) {
+  const d = deliveryOf(r);
+  if (!d.state) return null;
+  if (d.state === 'unconfirmed' && d.operationUid) {
+    return (
+      <div className="flex flex-col gap-1.5" data-testid={testId} data-state={d.state}>
+        <SendUncertain busy={busy} testId={`${testId}-unsure`}
+          onArrived={() => act(r.uid, () => mailApi.resolveSend(d.operationUid, 'arrived'))}
+          onNotArrived={() => act(r.uid, () => mailApi.resolveSend(d.operationUid, 'not_arrived'))} />
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-start gap-1.5" data-testid={testId} data-state={d.state}>
+      <p className={`m-0 ${MUTED}`} role="status" data-testid={`${testId}-line`}>{d.line}</p>
+      {d.state === 'record_pending' ? (
+        <button type="button" className={GHOST} disabled={busy} onClick={() => act(r.uid, () => relationshipsApi.reconcileIntroDelivery(r.uid))} data-testid={`${testId}-reconcile`}>{UPDATE_RECORD}</button>
+      ) : null}
+    </div>
   );
 }
 
