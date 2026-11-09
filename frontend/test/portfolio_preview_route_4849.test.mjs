@@ -80,6 +80,9 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
   const root = createRoot(host);
   const { error, warn } = console; console.error = () => {}; console.warn = () => {};
   const tick = async (n = 40) => { for (let i = 0; i < n; i += 1) await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5)))); };
+  // #4574 (H4): a page's lazy chunk now carries modules the shell used to hold, so its first draw can take longer than a
+  // fixed 40 ticks on a busy machine. Wait until a heading is drawn, bounded: a page that never draws still fails below.
+  const settle = async () => { await tick(); for (let i = 0; i < 40 && read().h1.length === 0; i += 1) await tick(10); };
   const read = () => ({
     path: at?.pathname,
     studio: select(dom.document, STUDIO).length,
@@ -92,10 +95,10 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
       /** A direct load, as a refresh is. */
       async load(route) {
         await act(async () => { root.render(h(MemoryRouter, { initialEntries: [route], key: `${route}:${Math.random()}` }, h(App), h(Landed))); });
-        await tick(); return read();
+        await settle(); return read();
       },
       /** A client-side move, as a click in the shell is. */
-      async go(route) { await act(async () => { navigate(route); }); await tick(); return read(); },
+      async go(route) { await act(async () => { navigate(route); }); await settle(); return read(); },
       read,
     });
   } finally {
