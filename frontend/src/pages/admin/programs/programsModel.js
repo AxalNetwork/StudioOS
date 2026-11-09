@@ -278,6 +278,30 @@ export function grantBadgeOf(field) {
   return { ...w, reason };
 }
 
+/**
+ * D4873 (#4873, part 2): member access, the registry's own field (migration 202611082300), in the canvas's
+ * words. A row whose read failed says so; a row with no field (an older branch's read) is "Not read here
+ * yet"; null is "Not recorded".
+ */
+export const ACCESS_WORDS = Object.freeze({
+  open: 'Open to all',
+  apply: 'Apply',
+  request: 'Request',
+  invite: 'By invite',
+  assigned: 'Assigned by an admin',
+  not_open: 'Not open to members yet',
+  closed: 'Closed',
+});
+export function memberAccessOf(row) {
+  if (!row || typeof row !== 'object') return { state: 'loading', value: READING };
+  if (row.extras && row.extras.available === false) return { state: 'unreadable', value: COULD_NOT_READ, reason: row.extras.reason || null };
+  if (!('member_access' in row)) return { state: 'pending', value: NOT_READ_YET };
+  if (row.member_access === null) return { state: 'unrecorded', value: NOT_RECORDED };
+  return ACCESS_WORDS[row.member_access]
+    ? { state: 'ready', value: ACCESS_WORDS[row.member_access], key: row.member_access }
+    : { state: 'unreadable', value: COULD_NOT_READ, reason: 'The member access is a word this page does not know.' };
+}
+
 /* ------------------------------------------------------------------ *
  * Five dimensions, never one status word (D4807)
  * ------------------------------------------------------------------ */
@@ -302,7 +326,7 @@ export const DIMENSIONS = Object.freeze([
   { key: 'offering', label: 'Studio offering' },
   { key: 'grants', label: 'Studio grants' },
 ]);
-const OPERATION = Object.freeze({ Live: 'Running', 'Partly built': 'Running in part', Paused: 'Paused', 'Not built yet': 'Not running', Proposed: 'Not running' });
+const OPERATION = Object.freeze({ Live: 'Operational', 'Partly built': 'Running in part', Paused: 'Paused', 'Not built yet': 'Not running', Proposed: 'Not running' });
 const OFFERING = Object.freeze({
   'HQ-held': 'Held by HQ', 'HQ only': 'HQ only', 'Runs at HQ': 'Runs at HQ only', 'Not offered yet': 'Not offered to studios yet',
 });
@@ -312,12 +336,19 @@ export function programDimensions(card, { superAdmin = false, grantBadge = null,
     return DIMENSIONS.map((d) => ({ ...d, value: word, state }));
   }
   const built = STATUS_PILL[card?.status] ? card.status : null;
+  // D4873: a card read from the registry carries member access as its own field, and a Super Admin's grant
+  // field says the offering policy: `hq_only` is not offered to studios, `granted_to` is offered.
+  const row = card?.row && typeof card.row === 'object' ? card.row : null;
+  const field = superAdmin && row?.grant && row.grant.available !== false ? row.grant : null;
   const values = {
     build: built || NOT_RECORDED,
     operation: OPERATION[card?.status] || NOT_RECORDED,
-    access: card?.who === 'Not open to members yet' ? 'Not open to members yet' : card?.join || NOT_RECORDED,
-    offering: OFFERING[superAdmin ? card?.hqGrant : card?.grant] || NOT_RECORDED,
-    grants: grantBadge ? (grantBadge.word === GRANT_UNREADABLE ? COULD_NOT_READ : grantBadge.word) : NOT_READ_YET,
+    access: row ? memberAccessOf(row).value
+      : card?.who === 'Not open to members yet' ? 'Not open to members yet' : card?.join || NOT_RECORDED,
+    offering: field?.state === 'hq_only' ? 'HQ only' : field?.state === 'granted_to' ? 'Offered to studios'
+      : OFFERING[superAdmin ? card?.hqGrant : card?.grant] || NOT_RECORDED,
+    grants: field?.state === 'hq_only' ? 'None: not offered'
+      : grantBadge ? (grantBadge.word === GRANT_UNREADABLE ? COULD_NOT_READ : grantBadge.word) : NOT_READ_YET,
   };
   return DIMENSIONS.map((d) => ({ ...d, value: values[d.key], state: 'ready' }));
 }

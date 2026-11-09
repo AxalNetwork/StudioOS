@@ -28,7 +28,7 @@ r.use('*',async(c,next)=>{
   c.set('mercury',user.role==='founder'&&Number(user.founder_id)===Number(project.founder_id)&&!support);
   await next();
 });
-r.onError((e,c)=> e instanceof PlanError ? c.json({code:e.code,detail:e.sentence,...(e.recovery?{recovery:e.recovery}:{})},e.status as any)
+r.onError((e,c)=> e instanceof PlanError ? c.json({code:e.code,error:e.code,detail:e.sentence,...(e.recovery?{recovery:e.recovery}:{}),...(e.currentRevision!==undefined?{current_revision:e.currentRevision}:{})},e.status as any)
   : c.json({code:'unreadable',detail:'Use of funds is Unreadable. Read the plan before retrying this change.'},503));
 const body=async(c:any)=>{
   const b=await c.req.json().catch(()=>null);
@@ -70,11 +70,13 @@ r.get('/milestones/:id',async c=>{
 });
 r.post('/milestones',async c=>c.json(await saveMilestone(c.env,c.get('uof'),null,await body(c)),201));
 r.patch('/milestones/:id',async c=>c.json(await saveMilestone(c.env,c.get('uof'),idOf(c.req.param('id')),await body(c))));
-r.delete('/milestones/:id',async c=>c.json(await saveMilestone(c.env,c.get('uof'),idOf(c.req.param('id')),{},true)));
+// D5069: a DELETE has no body, so the revision it read travels as `?expected_revision=`.
+const queryRevision=(c:any)=>{const v=c.req.query('expected_revision');return v!==undefined&&/^[0-9]{1,15}$/.test(v)?{expected_revision:Number(v)}:v===undefined?{}:{expected_revision:-1};};
+r.delete('/milestones/:id',async c=>c.json(await saveMilestone(c.env,c.get('uof'),idOf(c.req.param('id')),queryRevision(c),true)));
 r.get('/hires',async c=>c.json({items:(await hires(c.env,c.get('uof'))).map(h=>({...h,source:'Typed'}))}));
 r.patch('/hires/:id',async c=>c.json(await saveHire(c.env,c.get('uof'),idOf(c.req.param('id')),await body(c))));
 r.delete('/hires/:id',async c=>c.json(await saveHire(c.env,c.get('uof'),idOf(c.req.param('id')),{},true)));
-r.put('/',async c=>c.json(await saveSplit(c.env,c.get('uof'),await body(c))));
+r.put('/',async c=>c.json(await saveSplit(c.env,c.get('uof'),await body(c),true)));
 /** D1177 (#3104): the plan's history (UF15), newest first, 20 a page. Mercury rows are the founder's alone. */
 r.get('/history',async c=>{
   const s=c.get('uof'); const mercury=c.get('mercury');

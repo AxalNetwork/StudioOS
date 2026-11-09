@@ -70,7 +70,10 @@ test('the taxonomy lists the eight categories and counts the uncategorised apart
   assert.doesNotMatch(none, /no category recorded/, 'a zero uncategorised count was drawn as a line');
 });
 
-test('the rail no longer says the categories are not stored, and says the branch copy is held', () => {
+test('the rail no longer says the categories are not stored, nor that the branch copy is held (D5032)', () => {
   assert.ok(!SUPPORT_UNAVAILABLE.some(([t]) => /Eight canvas support categories/.test(t)));
-  assert.ok(SUPPORT_UNAVAILABLE.some(([t, d]) => /SLA hours/.test(t) && /slot S05/.test(d)));
+  // D5032 (#5032) — the licence copy carries the hours now; what stays
+  // unavailable is the version of a branch on a deploy older than the report.
+  assert.ok(!SUPPORT_UNAVAILABLE.some(([, d]) => /slot S05/.test(d)), 'the rail still says the branch copy is held');
+  assert.ok(SUPPORT_UNAVAILABLE.some(([t, d]) => /SLA version/.test(t) && /unreported, never as current/.test(d)));
 });

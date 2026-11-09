@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { communityApi } from '../../../lib/api/community';
-import { BoxShell, CTRL, Failed, LINK, MONO, Pager, Reading, SUB, TAG, useBoxRead } from './CommunityLightbox';
+import { BoxShell, CTRL, Failed, LINK, MONO, Pager, Reading, SUB, TAG, useBoxRead, MANAGE } from './CommunityLightbox';
 import { ACTIVITY_KINDS, ACTIVITY_LINE, activityPage, activityQuery } from './lightboxModel';
 
 /**
@@ -28,7 +28,7 @@ export default function ActivityLightbox({ onClose }) {
   const id = 'community-box-activity';
 
   return (
-    <BoxShell id={id} title="Recent activity" sub={ACTIVITY_LINE} onClose={onClose}>
+    <BoxShell id={id} title="Recent activity" sub={ACTIVITY_LINE} onClose={onClose} manage={<Link to="/admin/approvals" className={MANAGE}>Open Approvals →</Link>}>
       {(phone) => (
         <>
           <div className="flex flex-wrap items-center gap-2 px-5 pt-4" data-testid={`${id}-controls`}>

@@ -585,7 +585,8 @@ test('both service refusals are still mapped, including the unreachable one', ()
   // the text this reads, and it escaped on the first attempt. Nobody writes that
   // on purpose, so the residual risk is accepted rather than papered over with a
   // `false &&` ban that would only fit the one mutation that found it.
-  const src = readFileSync(resolve(HERE, '../src/routes/advisors.ts'), 'utf8');
+  // #4715: the advisor routes split into routes/advisors_*.ts; this code lives in advisors_money.ts.
+  const src = readFileSync(resolve(HERE, '../src/routes/advisors_money.ts'), 'utf8');
   const handler = src.slice(src.indexOf("advisors.post('/bookings/:id/pay'"));
   const body = handler.slice(0, handler.indexOf('\nadvisors.'));
   assert.match(body, /e instanceof SettlementDisabled/,

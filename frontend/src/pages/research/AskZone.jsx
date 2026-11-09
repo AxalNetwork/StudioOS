@@ -12,7 +12,10 @@ import { Eyebrow, Instrument, MeteredNote } from '../../workspaces/canvasKit';
 import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
 import { railPressHeaders } from '../../lib/railPage.js';
-import { RETRIEVAL_UNAVAILABLE, isAnswerable } from './askOutcome.js';
+import { RETRIEVAL_UNAVAILABLE } from './askOutcome.js';
+import { ASK_STATES, answerabilityOf, askStateOf, indexStateOf } from './researchStates.js';
+
+const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
 
 /**
  * Research · Ask — answers drawn only from your own library, or no answer.
@@ -232,6 +235,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const payload = lib.payload;
   const indexed = payload?.indexed ?? 0;
   const items = Array.isArray(payload?.items) ? payload.items : [];
+  // D3701 RS-07C: only a library read that succeeded can show that a cited
+  // document is gone. Null while it loads or when it failed.
+  const libraryUids = useMemo(() => (payload ? new Set(items.map((d) => d.uid)) : null), [payload, items]);
 
   const all = useMemo(() => thread.payload?.items || [], [thread.payload]);
   const visible = useMemo(() => (NARROW[view] ? all.filter(NARROW[view]) : all), [all, view]);
@@ -247,32 +253,27 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const ready = Boolean(payload && thread.payload);
   const ctx = { indexed, docs: items.length, totals, rows: all };
 
-  const libRows = items.map((d) => ({
-    key: d.uid,
-    rowClass: isAnswerable(d.index_state) ? '' : 'bg-amber-50/40 dark:bg-amber-950/20',
-    cells: [
-      { text: d.title || '', nr: !d.title },
-      { text: d.kind || '', nr: !d.kind },
-      // `Added`, not the artboard's own column name for this slot. It means
-      // when the file arrived here, which is what `created_at` holds — the same
-      // relabel `LibraryZone` made for the same reason.
-      { text: String(d.created_at || '').slice(0, 10), nr: !d.created_at },
-      d.index_state === 'indexed'
-        ? { pill: 'Indexed', pillTone: 'ok' }
-        : d.index_state === 'partial'
-          ? { pill: 'Partly indexed', pillTone: 'warn' }
-          : { pill: d.index_state || 'Not indexed', pillTone: 'warn' },
-      // The question this zone exists to answer, per row. `index_state`, not
-      // `chunk_count`: a document that indexed once and later failed a re-index
-      // keeps its old count, and the failure path updates the state and leaves
-      // the number alone.
-      d.index_state === 'indexed'
-        ? { text: 'Answerable in Ask' }
-        : d.index_state === 'partial'
-          ? { text: d.index_note || 'Answerable in Ask from the passages that were indexed' }
-          : { text: 'Not answerable until indexed' },
-    ],
-  }));
+  const libRows = items.map((d) => {
+    const ix = indexStateOf(d);
+    const an = answerabilityOf(d);
+    return {
+      key: d.uid,
+      cells: [
+        { text: d.title || '', nr: !d.title },
+        { text: d.kind || '', nr: !d.kind },
+        // `Added`, not the artboard's own column name for this slot. It means
+        // when the file arrived here, which is what `created_at` holds — the same
+        // relabel `LibraryZone` made for the same reason.
+        { text: String(d.created_at || '').slice(0, 10), nr: !d.created_at },
+        { pill: mark(ix), pillTone: ix.tone },
+        // The question this zone exists to answer, per row. `in_ask` and
+        // `index_state`, never `chunk_count`: a document that indexed once and
+        // later failed a re-index keeps its old count, and the failure path
+        // updates the state and leaves the number alone (D3701, `answerabilityOf`).
+        { pill: mark(an), pillTone: an.tone, sub: an.why },
+      ],
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -390,11 +391,25 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
         ) : null}
 
         <div className="grid gap-2.5">
-          {visible.map((t) => (
-            <Card
-              key={t.uid}
-              className={`p-3.5 ${t.reason === 'answered' ? '' : 'bg-amber-50/40 dark:bg-amber-950/20'}`}
-            >
+          {visible.map((t) => {
+            // D3701 RS-07C: each exchange names its own response state; none is
+            // folded into another. Tinting every non-answer amber said they were
+            // all one kind of warning, and amber is the canvas's Insufficient
+            // evidence colour, a state the Worker does not record.
+            const st = ASK_STATES[askStateOf(t, { libraryUids })];
+            return (
+            <Card key={t.uid} className="p-3.5" data-testid={`ask-exchange-${t.uid}`}>
+              {st ? (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Pill tone={st.tone} className="!text-[10px]" data-testid={`ask-state-${t.uid}`}>{mark(st)}</Pill>
+                  {st.action === 'library' ? (
+                    <Link to="/research/library" className="text-[11px] font-bold text-violet-700 underline dark:text-violet-300">{st.actionLabel}</Link>
+                  ) : null}
+                  {askStateOf(t, { libraryUids }) === 'source_unavailable' ? (
+                    <span className="text-[11px] text-gray-600 dark:text-gray-400">{st.body}</span>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-baseline gap-2.5">
                 <Eyebrow className="!text-[9px] text-axal-amber-deep dark:text-amber-300">Asked</Eyebrow>
                 <span className="min-w-0 flex-1 text-[12.5px] font-bold tracking-tight text-axal-ink dark:text-gray-100">
@@ -421,11 +436,11 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                   </Pill>
                 ))}
                 {t.reason === 'no_source' ? <Unrecorded>No retrievable source</Unrecorded> : null}
-                {t.reason === 'retrieval_unavailable' ? (
+                {st?.action === 'retry' ? (
                   <button type="button" data-testid={`button-ask-retry-${t.uid}`} disabled={busy}
                     onClick={() => setQuestion(t.question)}
                     className="whitespace-nowrap rounded-[6px] border border-gray-200 px-2 py-0.5 text-[10px] font-bold text-gray-700 hover:border-gray-300 disabled:opacity-60 dark:border-gray-700 dark:text-gray-300">
-                    Ask again
+                    {t.reason === 'retrieval_unavailable' ? 'Ask again' : st.actionLabel}
                   </button>
                 ) : null}
                 <button
@@ -453,7 +468,8 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                 </p>
               ) : null}
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {/* THE ARTBOARD'S INSTRUMENT CARD. Every column is a field

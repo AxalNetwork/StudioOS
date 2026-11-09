@@ -39,6 +39,9 @@ import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
 import { rollUpFundRow, ratioOrNull } from '../services/fundRollup';
 import { DECISION_WINDOW_DAYS, referralAges, type ReferralAges } from '../services/approvalAge';
 import { readBranchAdminTickets, type BranchTicketsRead } from '../services/supportQueues';
+import {
+  readSlaPolicyVersion, parseSlaPolicyCopy, applySlaPolicyCopy, type SlaPolicyVersionRead,
+} from '../services/supportSlaPolicy';
 import { activationFunnel, type ActivationRead } from '../services/activationFunnel';
 import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from '../services/gameLibrary';
 import { notifyRequestAnswer } from '../services/escalationAnswerNotice';
@@ -350,6 +353,9 @@ const COPY_SECTIONS = [
   { key: 'terms_json', name: 'terms' },
   { key: 'program_grants_json', name: 'program_grants' },
   { key: 'partner_deal_types_json', name: 'partner_deal_types' },
+  // D5032 (#5032) — HQ's ticket SLA policy, written to this branch's own
+  // `hq_support_sla_tiers` with its version, ordered by that version.
+  { key: 'support_sla_json', name: 'support_sla' },
 ] as const;
 
 /**
@@ -509,6 +515,15 @@ export async function applyLicenceCopy(
     try {
       // One literal statement per section — the column name never reaches SQL text.
       let res: { meta?: { changes?: number } } | undefined;
+      if (sec.key === 'support_sla_json') {
+        // Ordered by the policy's own version, not the copy's revision: an
+        // older policy never replaces a newer one, and a stale copy is not a
+        // failure (the branch already holds a later policy).
+        const parsed = parseSlaPolicyCopy(record[sec.key]);
+        if (!parsed.ok) throw new Error(parsed.error);
+        await applySlaPolicyCopy(env, parsed.value);
+        continue;
+      }
       if (sec.key === 'terms_json') {
         res = revision !== null
           ? await env.DB.prepare('UPDATE branch_licence SET terms_json = ? WHERE id = 1 AND hq_revision = ?').bind(s(sec.key), revision).run()
@@ -1418,9 +1433,15 @@ export async function branchGameHoldings(env: Env): Promise<BranchAnswer<{ holdi
  * A read, so no secret, on `rpc/index.ts`'s rule: HQ's Super Admin page is
  * the reader, and the class's accepted exposure is a read of branch data.
  */
-export async function branchOpenTickets(env: Env): Promise<BranchAnswer<{ tickets: BranchTicketsRead }>> {
+export async function branchOpenTickets(
+  env: Env,
+): Promise<BranchAnswer<{ tickets: BranchTicketsRead; sla_policy: SlaPolicyVersionRead }>> {
   const branch = requireBranch(env);
-  return { branch, as_of: nowIso(), tickets: await readBranchAdminTickets(env) };
+  // D5032 (#5032) — and which version of HQ's SLA policy this branch bands its
+  // tickets with, so HQ · Support can say which branches are current. A
+  // branch on an older deploy omits the key, and HQ reads that as unreported.
+  const [tickets, slaPolicy] = await Promise.all([readBranchAdminTickets(env), readSlaPolicyVersion(env)]);
+  return { branch, as_of: nowIso(), tickets, sla_policy: slaPolicy };
 }
 
 /* ------------------------------------------------------------------ *

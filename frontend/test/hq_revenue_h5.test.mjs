@@ -26,9 +26,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { bpsPercent } from '../src/lib/bps.js';
+import { revenuePageSource } from './_revenuePage.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = raw('frontend/src/pages/hq/RevenuePage.jsx');
+// D5039: the page is split into `pages/hq/revenue/`; its source is read whole.
+const PAGE = revenuePageSource();
 const SRC = codeOnly(PAGE);
 const APP = codeOnly(raw('frontend/src/App.jsx'));
 const API = codeOnly(raw('frontend/src/lib/api.js'));
@@ -50,24 +52,32 @@ function h5() {
 }
 
 test('every zone the artboard draws is on the page', () => {
+  // H5 still draws its four zones, and the page still answers each: the stream table, open disputes, and the
+  // statements and the token P&L, which Revenue v2 (D5039) split into its own sections.
   const board = h5();
   for (const zone of ['By stream', 'Token P&L by subsidiary', 'Statements and Stripe', 'Open disputes']) {
     assert.ok(board.includes(zone), `the artboard no longer draws ${zone}`);
+  }
+  // D5039: the v2 canvas (design/incoming/Revenue v2 Page.dc.html) supersedes H5's zone names. Each of its
+  // sections is on the page by its own heading.
+  const V2 = raw('design/incoming/Revenue v2 Page.dc.html');
+  for (const zone of ['Revenue streams', 'Needs attention', 'AI economics', 'Receivables', 'Subsidiaries', 'Billing exceptions', 'Promotions', 'Data coverage']) {
+    assert.ok(V2.includes(zone), `the v2 canvas no longer draws ${zone}`);
     assert.ok(PAGE.includes(zone), `the page dropped the ${zone} zone`);
   }
-  // The artboard's four stream columns.
-  for (const col of ['Stream', 'Gross', 'Cost', 'Net']) {
-    assert.ok(board.includes(col), `the artboard no longer draws the ${col} column`);
+  for (const col of ['Stream', 'Cost', 'Margin', 'Coverage']) {
+    assert.ok(PAGE.includes(`>${col}</th>`), `the stream table lost its ${col} column`);
   }
-  assert.match(PAGE, /Stream/, 'the stream table lost its header');
+  assert.ok(!PAGE.includes('>Read</th>'), 'D5039: the stream table\'s Read column is replaced by Coverage');
 });
 
 test('the figures with no source render absent, each with its own reason', () => {
   // A blanket apology is not an explanation. Each absent figure carries the
   // server's reason for THAT figure, so the page can be read without
   // knowing the schema.
-  assert.match(SRC, /data\.subscriptions_reason/, 'the subscriptions row does not say why it is blank');
-  assert.match(SRC, /data\.token_pl_per_subsidiary_reason/, 'the token P&L zone names why spend is not split');
+  // D5039: said once, in the Data coverage drawer, from the summary's own reason.
+  assert.match(SRC, /summary\.subscriptions_reason/, 'the subscriptions row does not say why it is blank');
+  assert.match(SRC, /summary\.token_pl_per_subsidiary_reason/, 'the token P&L zone names why spend is not split');
   assert.match(SRC, /Revenue per subsidiary/, 'the revenue-per-subsidiary zone is drawn');
   // Still shown, and still true, but narrower than it was: what cannot be
   // derived is a branch's SPEND, because a code names no subsidiary.
@@ -90,11 +100,12 @@ test('no absent figure is defaulted to a number', () => {
   // D5027: the margin is no longer permanently blank. The Worker computes it (D762, routes/admin_revenue.ts) and the
   // page draws THAT figure through `tokenMarginView`; what must stay true is that an unknown margin is Not recorded
   // and never a number (revenue_token_margin_5027 holds each state).
-  const at = SRC.indexOf('label="Token margin"');
-  assert.ok(at >= 0, 'the Token margin stat is gone');
-  const end = SRC.indexOf('/>', SRC.indexOf('note=', at));
-  assert.match(SRC.slice(at, end), /value=\{v\.margin\}/, 'the margin is not the Worker\'s figure, as tokenMarginView draws it');
-  assert.doesNotMatch(SRC.slice(at, end), /value=\{(?!v\.margin)/, 'the margin stat takes a value from somewhere else');
+  // D5039 (canvas RV07): the AI margin leads AI economics, built from the Worker's figure and nothing else.
+  const at = SRC.indexOf('const marginFigure = v.state === \'ok\'');
+  assert.ok(at >= 0, 'the AI margin figure is gone');
+  const end = SRC.indexOf(';', at);
+  assert.match(SRC.slice(at, end), /text: v\.margin \}/, 'the margin is not the Worker\'s figure, as tokenMarginView draws it');
+  assert.doesNotMatch(SRC.slice(at, end), /text: (?!v\.margin|null)/, 'the margin takes a value from somewhere else');
 });
 
 test('the statement ledger is read from its own endpoint, with its own failure', () => {
@@ -115,13 +126,14 @@ test('an owed figure is never one number across currencies, and an incomplete on
   // The same refusal the stream table makes, one zone down. `totals_by_currency`
   // is keyed BY currency, so rendering it is per-currency by construction; a
   // page that reduced it to a single figure is what this catches.
-  assert.match(SRC, /totals_by_currency/, 'the owed totals are gone');
-  assert.match(SRC, /Object\.entries\(ledger\.totals_by_currency\)/,
-    'the owed total is not rendered one line per currency');
+  // D5039: the per-currency lines are built per currency (`outstandingByCurrency`, `statementTotals`), each a Map
+  // keyed by the currency code, so rendering them is per-currency by construction.
+  assert.match(SRC, /export function outstandingByCurrency\(rows\) \{\s*const by = new Map\(\);/, 'the outstanding totals are gone');
+  assert.match(SRC, /export function statementTotals\(periodStatements\) \{[\s\S]{0,160}const by = new Map\(\);/, 'the owed totals are not one line per currency');
   assert.doesNotMatch(SRC, /owed_total|total_owed/, 'a single cross-currency owed figure appeared');
   assert.match(PAGE, /not summed across them/, 'the page does not tell the reader owed is per currency');
   // A FLOOR IS NOT A TOTAL, said on the row that carries the figure.
-  assert.match(SRC, /!s\.complete/, 'an incomplete statement renders identically to a complete one');
+  assert.match(SRC, /const floor = !statementAllowsPaidInFull\(s\);/, 'an incomplete statement renders identically to a complete one');
   assert.match(PAGE, /floor, not a total/, 'the page does not say an incomplete owed figure is a floor');
 });
 
@@ -140,7 +152,8 @@ test('an owed figure renders beside the rate it was derived from', () => {
   // which is the whole point of copying it onto the row. So this renders a
   // field the page already fetched and threw away.
   assert.match(SRC, /bpsPercent\(s\.revenue_share_bps\)/);
-  assert.match(SRC, /owed \{money\(s\.owed_cents, s\.currency\)\}/);
+  // D5039 (canvas RV05): the statement drawer lists the share beside what is owed.
+  assert.match(SRC, /row\('Revenue share on the statement', f\.share[\s\S]{0,80}row\('Owed to HQ', <Figure figure=\{f\.owed\} \/>\)/);
   const STATEMENTS = raw('cloudflare-worker/src/routes/admin_statements.ts');
   assert.match(STATEMENTS, /revenue_share_bps/, 'the rate must be on the row the page reads');
 });
@@ -150,7 +163,9 @@ test('a statement with no rate recorded prints no rate, never 0%', () => {
   // counts, one surface over. "× 0%" beside an owed figure says HQ is owed
   // nothing, which is a claim about money that nothing measured; the D141 trap
   // and the reason `bpsPercent` returns null.
-  assert.match(SRC, /\{bpsPercent\(s\.revenue_share_bps\) && /);
+  // D5039: the drawer and the subsidiaries table draw an absent rate as Not recorded.
+  assert.match(SRC, /f\.share \|\| <StateMark state="not_recorded" \/>/);
+  assert.match(SRC, /r\.share \|\| <StateMark state="not_recorded" \/>/);
   assert.ok(
     !/revenue_share_bps \|\| 0/.test(SRC),
     'an absent rate is absent, not zero',
@@ -172,7 +187,8 @@ test('an unreported issued figure renders Unrecorded, never a zero or a full cei
   // Bounded to the two cells that render it, so the assertion cannot be
   // satisfied by a `facts.issued` used somewhere else on the page.
   const cells = SRC.slice(at, at + 520);
-  assert.match(cells, /<Unrecorded \/>/, 'an unreported issued figure renders as something other than Unrecorded');
+  // D5039: Not reported, as a value state (a word and a shape).
+  assert.match(cells, /<StateMark state="not_reported" \/>/, 'an unreported issued figure renders as something other than Not reported');
   assert.match(cells, /facts\.remaining\.known \? money\(x\.remaining_cents/, 'remaining is not gated on whether issued was reported');
   assert.match(PAGE, /not the same as having issued nothing/,
     'the page does not tell the reader what an absent issued figure means');
@@ -199,11 +215,12 @@ test('disputes are read from their own endpoint, so Stripe cannot blank the page
     'the summary endpoint calls Stripe — one outage would blank four D1 zones');
   assert.match(ROUTE, /disputes_endpoint/, 'the route no longer points at where disputes live');
   // Its own failure has its own retry, not the page's.
-  assert.match(SRC, /onRetry=\{loadDisputes\}/, 'an unreadable disputes zone cannot be retried on its own');
+  assert.match(SRC, /onRetryDisputes=\{loadDisputes\}/, 'an unreadable disputes zone cannot be retried on its own');
 });
 
 test('the page is wired: api method, route, and a super-admin gate', () => {
-  assert.match(API, /hqRevenue: \(\) => request\('\/admin\/revenue\/summary'\)/,
+  // D5039: the method takes the period, and sends it only when there is one.
+  assert.match(API, /hqRevenue: \(period\) => request\(`\/admin\/revenue\/summary\$\{period \? `\?period=\$\{encodeURIComponent\(period\)\}` : ''\}`\)/,
     'the api method is gone or points elsewhere');
   assert.match(APP, /path="\/admin\/revenue"/, 'the route is not registered');
   assert.match(APP, /HqRevenuePage/, 'the page is not mounted');
@@ -240,7 +257,8 @@ test('the honesty pair is imported, not declared again', () => {
   // The plan's cross-cutting item: `Unrecorded`/`Unreadable` were written
   // four times over and had already drifted in wording. This page would
   // have made five.
-  assert.match(SRC, /import \{[^}]*Unrecorded[^}]*Unreadable[^}]*\} from '\.\.\/\.\.\/ui'/,
+  // D5039: the page and its parts import Unreadable from the shared ui; absent figures use the value states.
+  assert.match(SRC, /import \{[^}]*Unreadable[^}]*\} from '\.\.\/\.\.\/ui'/,
     'the page does not import the shared honesty pair');
   assert.doesNotMatch(SRC, /function Unrecorded\(|function Unreadable\(/,
     'the page declares its own copy of a shared component');

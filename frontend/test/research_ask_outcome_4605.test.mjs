@@ -24,6 +24,8 @@ test('Ask, the founder desk and the investor workspace each branch on retrieval_
     assert.match(src, /reason === 'retrieval_unavailable' \? RETRIEVAL_UNAVAILABLE/, file);
   }
   assert.match(read('../src/pages/research/AskZone.jsx'), /Ask again/);
-  const lib = read('../src/pages/research/LibraryZone.jsx');
-  assert.match(lib, /partial: 'Partly answerable'/);
+  // D3701: the Library's words live in `researchStates.js`.
+  const states = read('../src/pages/research/researchStates.js');
+  assert.match(states, /label: 'Partly answerable'/);
+  assert.match(states, /partial: \{ label: 'Partly indexed'/);
 });
