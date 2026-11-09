@@ -64,6 +64,8 @@ import TotpEnrollment from '../components/TotpEnrollment';
 import { appOrigin } from '../lib/branchHost';
 import { toUtcInstant } from '../lib/notices';
 import { isSuperAdminUser } from '../lib/shellRole';
+import { sessionRowState } from '../lib/sessionRows';
+import { effectiveDisplayName } from '../lib/displayName';
 import DsrOutcomeNotice from '../components/DsrOutcomeNotice';
 
 // D433 — THE COMPLIANCE BRIDGE. The Account canvas puts a trust-score strip
@@ -951,7 +953,25 @@ function CorporateEntityCard({ flash }) {
 
 
 function ProfileSection({ data, onSaved, flash, patch }) {
-  const [name, setName] = useState(data.name || '');
+  // D4616 — "Display name" is the identity contract's `display_name`, the name
+  // other members see. The account's full name is a different field, edited
+  // under Account · Profile; it shows here only as what an unset display name
+  // falls back to.
+  const [displayName, setDisplayName] = useState(data.display_name || '');
+  const name = effectiveDisplayName(displayName, data.name) || '';
+  const saveDisplayName = async () => {
+    const next = displayName.trim();
+    if (next === (data.display_name || '')) return;
+    try {
+      const res = await api.updateIdentitySettings({ display_name: next || null });
+      const stored = res?.display_name ?? null;
+      setDisplayName(stored || '');
+      onSaved({ display_name: stored, public_name: effectiveDisplayName(stored, data.name) });
+      flash('Display name saved');
+    } catch (e) {
+      flash(e?.message || 'Your display name was not saved.', 'error');
+    }
+  };
   const [bio, setBio] = useState(data.profile?.bio || '');
   const [headline, setHeadline] = useState(data.profile?.headline || '');
   const [socials, setSocials] = useState(data.profile?.socials || {});
@@ -1008,9 +1028,9 @@ function ProfileSection({ data, onSaved, flash, patch }) {
               className="hidden" onChange={e => onFile(e.target.files?.[0])} />
           </div>
           <div className="flex-1 space-y-3">
-            <Field label="Display name">
-              <input value={name} onChange={e => setName(e.target.value)}
-                onBlur={() => name !== data.name && patch({ name })} className={inputCls} />
+            <Field label="Display name" hint={`How you appear to other members. Left blank, they see your account name${data.name ? ` (${data.name})` : ''}, which you change under Account · Profile.`}>
+              <input value={displayName} onChange={e => setDisplayName(e.target.value)} maxLength={100}
+                onBlur={saveDisplayName} placeholder={data.name || ''} className={inputCls} />
             </Field>
             <Field label="Bio" hint="Up to 2,000 characters. Markdown is not rendered.">
               <textarea value={bio} onChange={e => setBio(e.target.value)} rows={4}
@@ -2833,7 +2853,7 @@ function AuthSection({ data, flash, reload }) {
 
       <RecoveryActivityPanel />
 
-      <Card title="Active sessions" description="Every device with an active session. Revoke one here; Sign out everywhere is in Sessions and alerts above.">
+      <Card title="Active sessions" description="Every device signed in to this account, newest first. Revoke an active one here; a past session says why it ended. Sign out everywhere is in Sessions and alerts above.">
         {sessionsErr && <div className="text-sm text-red-600 mb-3">{sessionsErr}</div>}
         {sessions === null ? (
           <div className="text-sm text-gray-500 dark:text-gray-400">Loading sessions…</div>
@@ -2853,9 +2873,9 @@ function AuthSection({ data, flash, reload }) {
               </thead>
               <tbody>
                 {sessions.map(s => {
-                  const isRevoked = !!s.revoked_at;
+                  const row = sessionRowState(s);
                   return (
-                    <tr key={s.id} className={`border-b border-gray-100 dark:border-gray-800 ${isRevoked ? 'text-gray-400' : 'text-gray-800 dark:text-gray-200'}`}>
+                    <tr key={s.id} className={`border-b border-gray-100 dark:border-gray-800 ${row.live ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}`}>
                       <td className="px-2 py-2 max-w-xs truncate" title={s.user_agent || ''}>
                         {s.user_agent || 'Unknown device'}
                         {s.is_current && (
@@ -2868,8 +2888,8 @@ function AuthSection({ data, flash, reload }) {
                       <td className="px-2 py-2 text-xs">{s.created_at ? new Date(s.created_at).toLocaleString() : '—'}</td>
                       <td className="px-2 py-2 text-xs">{s.last_seen_at ? new Date(s.last_seen_at).toLocaleString() : '—'}</td>
                       <td className="px-2 py-2 text-right">
-                        {isRevoked ? (
-                          <span className="text-xs text-gray-400">Revoked</span>
+                        {!row.live ? (
+                          <span className="text-xs text-gray-400">{row.label}</span>
                         ) : (
                           <button onClick={() => revokeOne(s)} disabled={sessionBusyId === s.id}
                             className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
