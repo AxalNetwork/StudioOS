@@ -18,7 +18,7 @@ import {
   draftFromScenario, engineNotes, exitPanels, founderPanels, fromToday, inputsFromDraft, nameError,
   newScenarioInputs, nextName, notModelled, paymentReadBack, roundEvents, roundReadBack, runRequest,
   sameInputs, scenarioCards, scenarioHref, scenariosHead, shareSteps, short, shortName, swipeCards, todayBody, todayDraft,
-  toggleCompare, variantSaveErrors, waterfallTable, waterfallsOf, withNotes,
+  isChangedSinceOpen, toggleCompare, variantSaveErrors, waterfallTable, waterfallsOf, withNotes,
 } from './scenariosModel';
 
 /**
@@ -468,6 +468,7 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
   const [saved, setSaved] = useState(false);
   const [saveErrors, setSaveErrors] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [conflict, setConflict] = useState(null);
   const [dialog, setDialog] = useState(null);
   useEffect(() => { if (scenario) { setDraft(today_ ? todayDraft(scenario) : draftFromScenario(scenario)); setSaveErrors([]); } }, [scenario, today_]);
   const instruments = today.status === 'ready' && today.data?.today?.available ? today.data.today.inputs?.safes || [] : [];
@@ -499,11 +500,17 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
     }
     setSaving(true);
     try {
-      await capTableScenariosApi.update(uid, { name: scenario.name, inputs: withNotes(inputs, scenario.inputs, { keep: sameInputs(inputs, scenario.inputs) }) });
+      await capTableScenariosApi.update(uid, { name: scenario.name, inputs: withNotes(inputs, scenario.inputs, { keep: sameInputs(inputs, scenario.inputs) }), expected_revision: scenario.revision });
       setSaved(true);
       setOwn((n) => n + 1);
-    } catch (e) { setSaveErrors(variantSaveErrors(e)); } finally { setSaving(false); }
+    } catch (e) {
+      setSaveErrors(variantSaveErrors(e));
+      setConflict(isChangedSinceOpen(e) ? { inputs } : null);
+    } finally { setSaving(false); }
   };
+  // D5069: after a conflict, the person's own inputs stay on the page until they choose.
+  const reviewLatest = () => { setConflict(null); setSaveErrors([]); setOwn((n) => n + 1); };
+  const copyMine = () => { try { navigator.clipboard?.writeText(JSON.stringify(conflict?.inputs ?? {}, null, 2)); } catch { /* the inputs are still on screen */ } };
   const attach = (r) => setDialog({ kind: 'attach', read: r });
   const done = () => { setDialog(null); setOwn((n) => n + 1); };
 
@@ -550,6 +557,12 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
                     </span>
                   </div>
                 ) : null}
+                {conflict ? (
+                  <div className="flex flex-wrap gap-2" data-testid="captable-scenario-conflict">
+                    <button type="button" className={BTN} onClick={reviewLatest} data-testid="captable-scenario-review-latest">Review latest</button>
+                    <button type="button" className={BTN} onClick={copyMine} data-testid="captable-scenario-copy-mine">Copy my inputs</button>
+                  </div>
+                ) : null}
               </Block>
               <div className="flex min-w-0 flex-col gap-3.5">
                 <ResultsBlocks run={run} onRecord={today_} today={today} />
@@ -571,7 +584,7 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
       ) : null}
       {dialog?.kind === 'rename' ? (
         <NameDialog copy={dialogCopy('rename', scenario)} initial={scenario.name} testId="captable-scenario-rename-dialog"
-          onClose={() => setDialog(null)} onSave={async (name) => { const out = await capTableScenariosApi.update(uid, { name, inputs: scenario.inputs }); done(); return out; }} />
+          onClose={() => setDialog(null)} onSave={async (name) => { const out = await capTableScenariosApi.update(uid, { name, inputs: scenario.inputs, expected_revision: scenario.revision }); done(); return out; }} />
       ) : null}
       {dialog?.kind === 'delete' ? (
         <ConfirmDialog copy={dialogCopy('delete', scenario)} tone="danger" testId="captable-scenario-delete-dialog"
@@ -579,7 +592,7 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
       ) : null}
       {dialog?.kind === 'attach' ? (
         <ConfirmDialog copy={dialogCopy('attach', scenario)} testId="captable-scenario-attach-dialog"
-          onClose={() => setDialog(null)} onGo={async () => { const out = await capTableScenariosApi.update(uid, { name: scenario.name, inputs: attachRead(scenario.inputs, dialog.read) }); done(); return out; }} />
+          onClose={() => setDialog(null)} onGo={async () => { const out = await capTableScenariosApi.update(uid, { name: scenario.name, inputs: attachRead(scenario.inputs, dialog.read), expected_revision: scenario.revision }); done(); return out; }} />
       ) : null}
     </div>
   );
@@ -697,7 +710,7 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
       ) : null}
       {attaching ? (
         <ConfirmDialog copy={dialogCopy('attach', first)} testId="captable-compare-attach-dialog" onClose={() => setAttaching(null)}
-          onGo={async () => { const out = await capTableScenariosApi.update(first.uid, { name: first.name, inputs: attachRead(first.inputs, attaching) }); setAttaching(null); onAttached(); return out; }} />
+          onGo={async () => { const out = await capTableScenariosApi.update(first.uid, { name: first.name, inputs: attachRead(first.inputs, attaching), expected_revision: first.revision }); setAttaching(null); onAttached(); return out; }} />
       ) : null}
     </>
   );

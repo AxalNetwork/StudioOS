@@ -44,12 +44,13 @@ export function ForecastMovedNotice({ search }) {
   );
 }
 
-function Dialog({ label, title, sub, onClose, children, busy, error, go, goLabel, disabled, testId }) {
+function Dialog({ label, title, sub, onClose, children, busy, error, go, goLabel, disabled, testId, onReview }) {
   return (
     <Sheet label={label} title={title} sub={sub} onClose={onClose} testId={testId} width={560} phone="sheet"
       footer={(
         <div className="flex flex-col gap-2">
           {error ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid={`${testId}-error`}>{error}</p> : null}
+          {onReview ? <button type="button" className={BTN_GHOST} onClick={onReview} data-testid="uof-review-latest">Review latest</button> : null}
           <div className="flex justify-end gap-2 max-md:[&>*]:flex-1">
             <button type="button" className={BTN_GHOST} onClick={onClose} disabled={busy}>Cancel</button>
             <button type="button" className={BTN} onClick={go} disabled={busy || disabled} data-testid={`${testId}-go`}>{busy ? 'Saving…' : goLabel}</button>
@@ -65,11 +66,12 @@ function Dialog({ label, title, sub, onClose, children, busy, error, go, goLabel
 function useWrite(onDone) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
   const run = async (fn) => {
-    setBusy(true); setError('');
-    try { const out = await fn(); setBusy(false); onDone?.(out); } catch (e) { setBusy(false); setError(e?.message || 'It was not saved. Read the plan again before retrying.'); }
+    setBusy(true); setError(''); setStale(false);
+    try { const out = await fn(); setBusy(false); onDone?.(out); } catch (e) { setBusy(false); setError(e?.message || 'It was not saved. Read the plan again before retrying.'); setStale(e?.status === 409 && (e?.code === 'changed_since_open' || e?.data?.code === 'changed_since_open')); }
   };
-  return { busy, error, run };
+  return { busy, error, stale, run, reviewLatest: () => onDone?.(null) };
 }
 
 /* ------------------------------------------------------------------ *
@@ -266,9 +268,9 @@ function EditScenarioDialog({ projectId, scenario, onClose, onDone, api }) {
   const out = scenarioBody(f);
   const w = useWrite(onDone);
   return (
-    <Dialog label="Edit scenario" title={`Edit ${scenario.name}`} testId="uof-edit-scenario" onClose={onClose} busy={w.busy} error={w.error || out.error || ''} goLabel="Save scenario" disabled={!!out.error}
+    <Dialog label="Edit scenario" title={`Edit ${scenario.name}`} testId="uof-edit-scenario" onClose={onClose} busy={w.busy} error={w.error || out.error || ''} goLabel="Save scenario" disabled={!!out.error} onReview={w.stale ? w.reviewLatest : undefined}
       sub={scenario.is_base ? 'This is the base: the deck and readiness read it, and its split is projected to the plan.' : 'Only this scenario changes. The base does not.'}
-      go={() => w.run(() => api.updateScenario(projectId, scenario.id, out.body))}>
+      go={() => w.run(() => api.updateScenario(projectId, scenario.id, { ...out.body, expected_revision: scenario.revision }))}>
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200">Name<input className={FIELD} value={f.name} maxLength={120} onChange={(e) => setF((x) => ({ ...x, name: e.target.value }))} data-testid="uof-edit-scenario-name" /></label>
         <div className="grid grid-cols-2 gap-2">
