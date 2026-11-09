@@ -1140,6 +1140,7 @@ export default function PlatformPage() {
     <WorkerRail
       workspace="Platform"
       role="super_admin"
+      operations
       stance="Read-only summary"
       note="This rail summarises connection counts, where each platform key lives, the ticket mirror, the payments catalog, the promo codes, scheduled-job health, the dead-letter backlog, the broadcast channels, the platform switches and the branch deployment registry. It reads no key material, throws no switch and rolls nothing back."
       coverage={coverage}
