@@ -223,7 +223,7 @@ partnerDelivery.get('/board', async (c) => {
 
     // The same join-back-to-owner shape every read in this file uses: nothing
     // is interpolated, and no row can come back for another firm's engagement.
-    const [seats, milestones, blockers, deliverables, hours, usage] = await Promise.all([
+    const [seats, milestones, blockers, deliverables, hours, usage, stated, reports] = await Promise.all([
       c.env.DB.prepare(
         `SELECT s.id, s.engagement_id, s.scope, s.granted_at, s.revoked_at, u.name AS holder_name
            FROM engagement_seats s
@@ -244,7 +244,7 @@ partnerDelivery.get('/board', async (c) => {
           WHERE e.partner_id = ?`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
-        `SELECT d.engagement_id, d.sent_at, d.opened_at
+        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.signed_off_at
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
           WHERE e.partner_id = ?`,
@@ -262,7 +262,25 @@ partnerDelivery.get('/board', async (c) => {
            JOIN engagements e ON e.id = r.engagement_id
           WHERE e.partner_id = ?`,
       ).bind(partnerId).all<any>(),
+      // D4822 (#4822) — what Board v2 names on each row beside the work: the owner and the scope assessment
+      // the firm stated (migration 232, the same rows Health reads), and this period's status report. Each is
+      // absent until somebody records it, and the row says so rather than inventing one.
+      c.env.DB.prepare(
+        `SELECT h.engagement_id, h.owner_user_id, h.scope_state, o.name AS owner_name
+           FROM partner_engagement_health h
+           JOIN engagements e ON e.id = h.engagement_id
+           LEFT JOIN users o ON o.id = h.owner_user_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT r.engagement_id, r.sent_at
+           FROM engagement_status_reports r
+           JOIN engagements e ON e.id = r.engagement_id
+          WHERE e.partner_id = ? AND r.period = ?`,
+      ).bind(partnerId, period).all<any>(),
     ]);
+    const statedByEng = new Map<number, any>((stated.results || []).map((s: any) => [Number(s.engagement_id), s]));
+    const reportByEng = new Map<number, any>((reports.results || []).map((r: any) => [Number(r.engagement_id), r]));
 
     const group = groupByEngagement;
     const readTracking = readTrackingFor(deliverables.results || []);
@@ -355,6 +373,19 @@ partnerDelivery.get('/board', async (c) => {
         milestone_count: ms.length,
         milestones_done: ms.filter((m: any) => m.completed_at).length,
         milestones_due_7d: ms.filter(dueThisWeek).length,
+        // D4822 — the facts Board v2 derives its attention reasons and next action from. Each is counted from the
+        // rows this read already has; none is a score. Overdue is an open milestone whose date is before today.
+        milestones_overdue: ms.filter((m: any) => !m.completed_at && m.due_at && String(m.due_at).slice(0, 10) < weekStart).length,
+        open_blockers: bl.length,
+        open_blockers_client_side: bl.filter((b: any) => b.side === 'client').length,
+        deliverables_sent: dl.filter((d: any) => d.sent_at).length,
+        deliverables_signed_off: dl.filter((d: any) => d.signed_off_at).length,
+        owner_user_id: statedByEng.get(id)?.owner_user_id ? Number(statedByEng.get(id).owner_user_id) : null,
+        owner_name: statedByEng.get(id)?.owner_name ?? null,
+        scope_state: statedByEng.get(id)?.scope_state ?? null,
+        // This period's report: 'sent' (a person marked it sent), 'draft' (saved, not sent) or null (none).
+        report_period: period,
+        report_state: reportByEng.has(id) ? (reportByEng.get(id).sent_at ? 'sent' : 'draft') : null,
         hours_this_period: seats.mode === 'embedded' ? hrs : null,
         // THE PERIOD THE HOURS AND THE CAP BOTH COVER: `2026-11` or `2026-Q4`.
         hours_period: seats.mode === 'embedded' ? hoursPeriod : null,

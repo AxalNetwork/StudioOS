@@ -6,6 +6,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import DataRoomDeckSource, { extractionLabel } from '../src/pages/raise/dataroom/DataRoomDeckSource.jsx';
 import { dataRoomApi } from '../src/lib/api/dataRoom.js';
 import { setDeckSource, availability } from '../src/pages/raise/pitch/deckV2Adapter.js';
+import { ROOM_CAPS } from './_data_room_capabilities.mjs'; // D5074: the Worker's maps, pinned to it by its own test
 
 async function mount(room, file = {}, onChanged = () => {}) {
   const restore = installDocument();
@@ -25,9 +26,9 @@ async function mount(room, file = {}, onChanged = () => {}) {
 }
 
 test('owner opts in only on an available route; cofounder cannot change it, extraction states are explicit', async () => {
-  const hidden = await mount({ role: 'owner' });
+  const hidden = await mount({ role: 'owner', capabilities: ROOM_CAPS.owner });
   try { assert.equal(hidden.has('dataroom-deck-source'), false); } finally { await hidden.close(); }
-  const co = await mount({ role: 'cofounder', deck_sources_available: true }, { deck_source: true, extraction: { state: 'done' } });
+  const co = await mount({ role: 'cofounder', capabilities: ROOM_CAPS.cofounder, deck_sources_available: true }, { deck_source: true, extraction: { state: 'done' } });
   try { assert.equal(co.prop('dataroom-deck-source-toggle', 'disabled'), true); assert.ok(co.text().includes('Document · Sourced')); } finally { await co.close(); }
   assert.deepEqual(['queued', 'done', 'no_values', 'unreadable'].map(extractionLabel), ['Queued for extraction', 'Document · Sourced', 'No supported values found', 'Extraction unreadable — try again']);
 });
@@ -36,7 +37,7 @@ test('polling stops as soon as the server reports a recoverable unreadable extra
   const real = { set: globalThis.setInterval, clear: globalThis.clearInterval }, timers = [], cleared = [];
   globalThis.setInterval = (fn, delay) => { timers.push({ fn, delay }); return 42; };
   globalThis.clearInterval = id => cleared.push(id);
-  const ui = await mount({ role: 'owner', deck_sources_available: true }, { deck_source: true, extraction: { state: 'queued' } });
+  const ui = await mount({ role: 'owner', capabilities: ROOM_CAPS.owner, deck_sources_available: true }, { deck_source: true, extraction: { state: 'queued' } });
   try {
     assert.equal(timers.length, 1); assert.equal(timers[0].delay, 5000);
     await ui.update({ deck_source: true, extraction: { state: 'unreadable' } });
@@ -47,20 +48,20 @@ test('polling stops as soon as the server reports a recoverable unreadable extra
 
 test('a collaborator update asks the owner to confirm extraction, with no spending control for a cofounder', async () => {
   const file = { deck_source: true, extraction: { state: 'unreadable', reason: 'owner_confirmation_required' } };
-  const owner = await mount({ role: 'owner', deck_sources_available: true }, file);
+  const owner = await mount({ role: 'owner', capabilities: ROOM_CAPS.owner, deck_sources_available: true }, file);
   try {
     assert.ok(owner.text().includes('Owner confirmation needed')); assert.ok(owner.text().includes('Confirm extraction'));
     await owner.do('dataroom-deck-source-retry');
     assert.ok(owner.has('dataroom-deck-source-dialog')); assert.ok(owner.text().includes('updates by cofounders need the owner'));
   } finally { await owner.close(); }
-  const co = await mount({ role: 'cofounder', deck_sources_available: true }, file);
+  const co = await mount({ role: 'cofounder', capabilities: ROOM_CAPS.cofounder, deck_sources_available: true }, file);
   try { assert.equal(co.has('dataroom-deck-source-retry'), false); assert.equal(co.prop('dataroom-deck-source-toggle', 'disabled'), true); } finally { await co.close(); }
 });
 
 test('typed quote remains in the dialog, holds are shown before confirmation, and only confirmed quote is resent', async () => {
   const real = dataRoomApi.setDeckSource; const calls = []; let changed = 0;
   dataRoomApi.setDeckSource = async (...args) => { calls.push(args); if (calls.length === 1) throw Object.assign(new Error('quote'), { status: 402, data: { quote: { hold_microusd: 1234, confirm_quote: 'confirmed' } } }); return { deck_source: true, extraction: { state: 'queued' } }; };
-  const ui = await mount({ role: 'owner', deck_sources_available: true }, {}, () => changed++);
+  const ui = await mount({ role: 'owner', capabilities: ROOM_CAPS.owner, deck_sources_available: true }, {}, () => changed++);
   try {
     await ui.do('dataroom-deck-source-toggle', 'onChange');
     assert.equal(calls.length, 0, 'opening the confirmation does not write');
@@ -76,7 +77,7 @@ test('typed quote remains in the dialog, holds are shown before confirmation, an
 test('withdraw confirms first; failed save stays in the dialog and the deck seam uses the real client', async () => {
   const real = dataRoomApi.setDeckSource; const calls = [];
   dataRoomApi.setDeckSource = async (...args) => { calls.push(args); throw Object.assign(new Error('Try this again.'), { status: 409, code: 'deck_source_busy' }); };
-  const ui = await mount({ role: 'owner', deck_sources_available: true }, { deck_source: true, extraction: { state: 'done' } });
+  const ui = await mount({ role: 'owner', capabilities: ROOM_CAPS.owner, deck_sources_available: true }, { deck_source: true, extraction: { state: 'done' } });
   try {
     await ui.do('dataroom-deck-source-toggle', 'onChange');
     assert.ok(ui.text().includes('Withdraw this deck source?')); assert.equal(calls.length, 0);

@@ -102,6 +102,8 @@ export default function AdvisorStudioHome({
   previewing = false,
   dashboardUnavailable = '',
   onRetryDashboard,
+  // D4474 (#4474): a block on a multi-licence Studio. The page owns the "Studio" h1, so the home leaves out its own.
+  embedded = false,
 }) {
   const [advisor, setAdvisor] = useState(loading);
   const [slots, setSlots] = useState(loading);
@@ -232,7 +234,7 @@ export default function AdvisorStudioHome({
 
       <header className="advisor-studio__masthead">
         <div>
-          <div className="advisor-studio__title"><h1>Studio</h1><Status tone="violet">Advisor</Status><span>Good to see you, {firstName(profile?.name || user?.name)}.</span></div>
+          <div className="advisor-studio__title">{!embedded && <h1>Studio</h1>}<Status tone="violet">Advisor</Status><span>Good to see you, {firstName(profile?.name || user?.name)}.</span></div>
           <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{PURPOSE.advisor}</p>
         </div>
         <div className="flex items-center gap-3">
