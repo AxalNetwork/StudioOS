@@ -497,8 +497,11 @@ export function PricingBody({ user = null }) {
   // or interval no longer sold, is said before the sheet, and nothing else is chosen instead.
   const wanted = new URLSearchParams(location.search).get('checkout');
   const [returned, setReturned] = useState(null);
+  // #4651: only a member's Pricing takes the ask. The Google return lands here signed out until its forced /me
+  // answers; taking it then read signed-out cards (none opens checkout), dropped the ask from the address, and the
+  // member's Pricing that mounts a moment later had nothing to open. A visitor's address keeps it untouched.
   useEffect(() => {
-    if (!wanted || !ready) return;
+    if (!wanted || !ready || !user) return;
     const q = new URLSearchParams(location.search);
     const iv = q.get('interval');
     const seen = Number(q.get('seen'));
@@ -515,7 +518,7 @@ export function PricingBody({ user = null }) {
     }
     setCheckout(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wanted, ready]);
+  }, [wanted, ready, !!user]);
 
   // D1288 (#3371): `ADD_TOKENS_PATH` (Models with `ADD_TOKENS_HASH`, and `&pack=<uid>` from an
   // old address) opens the sheet on Models for a member, once; the address then drops the ask so
