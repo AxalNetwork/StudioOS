@@ -143,11 +143,6 @@ export function proposalView(r: Row, studio: string | null = null) {
 // D4873 (#4873, part 3): revisions
 // ---------------------------------------------------------------------------
 
-/** The proposal's own columns, as one JSON object, in SQL: what a send freezes (`program_proposal_revisions.spec_json`). */
-const SPEC_JSON_SQL = `json_object('name', name, 'purpose', purpose, 'who_json', who_json, 'grp', grp, 'join_method', join_method,
-  'cycle', cycle, 'cohort_weeks', cohort_weeks, 'seats', seats, 'eligibility', eligibility, 'rewards_json', rewards_json,
-  'template_keys', template_keys, 'hq_receives', hq_receives, 'tools_json', tools_json)`;
-
 /** A decision's outcome as a revision records it. */
 const REVISION_OUTCOME: Record<Outcome, string> = {
   approve_studio: 'approved_studio', approve_catalogue: 'approved_catalogue', send_back: 'sent_back', decline: 'declined',
@@ -373,7 +368,8 @@ export async function sendProposal(
   if (!gate.open) throw new ProposalsClosed(gate.sentence);
   const t = new Date().toISOString();
   // D4873: a send is a new revision. The proposal takes the next number and, in the same batch, that revision's row
-  // freezes the fields exactly as the send left them (read in SQL from the row the UPDATE just locked), so what HQ
+  // freezes the proposal's own columns as one JSON object, exactly as the send left them (read in SQL from the row the
+  // UPDATE just locked; `program_proposal_revisions.spec_json`), so what HQ
   // reads and decides is what was sent, whatever the studio edits after a send-back.
   const [res] = await env.DB.batch([
     env.DB.prepare(
@@ -382,7 +378,12 @@ export async function sendProposal(
     ).bind(t, t, row.id),
     env.DB.prepare(
       `INSERT INTO program_proposal_revisions (proposal_id, revision, spec_json, sent_at, sent_by_user_id, created_at)
-       SELECT id, revision, ${SPEC_JSON_SQL}, sent_at, ?, ? FROM program_proposals WHERE id = ? AND status = 'sent' AND sent_at = ?`,
+       SELECT id, revision,
+              json_object('name', name, 'purpose', purpose, 'who_json', who_json, 'grp', grp, 'join_method', join_method,
+                'cycle', cycle, 'cohort_weeks', cohort_weeks, 'seats', seats, 'eligibility', eligibility, 'rewards_json', rewards_json,
+                'template_keys', template_keys, 'hq_receives', hq_receives, 'tools_json', tools_json),
+              sent_at, ?, ?
+         FROM program_proposals WHERE id = ? AND status = 'sent' AND sent_at = ?`,
     ).bind(actor.id, t, row.id, t),
   ]);
   if (!Number(res.meta?.changes)) throw new ProgramError(409, 'not_editable', 'This proposal changed. Reload it.');
