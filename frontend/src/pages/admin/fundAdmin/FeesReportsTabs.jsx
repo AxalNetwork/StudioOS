@@ -7,7 +7,7 @@ import { FundActControl } from '../../../lib/fundActs';
 import { bpsPercent } from '../../../lib/bps';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { Banner } from '../../account/ConnectorSheet';
-import { NO_FUND, QUARTER_RE, REJECT_REASON_MIN, money, refusalText, keepFund } from './fundAdminModel';
+import { NO_FUND, QUARTER_RE, REJECT_REASON_MIN, money, packRecipients, queueLine, refusalText, keepFund } from './fundAdminModel';
 import { Line, NUM, Note, Panel, Section, Table } from './parts';
 import { ActFlow } from './MoneyFlow';
 import { actButton, feePeriodEffects, feeTermsEffects, reportIssueEffects } from './moneyFlowModel';
@@ -143,7 +143,7 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
   );
 }
 
-function DraftRow({ d, apis, access, onChanged, compact = false }) {
+function DraftRow({ d, apis, access, onChanged, compact = false, items = [] }) {
   const [opened, setOpened] = useState(null);
   const [text, setText] = useState('');
   const [mode, setMode] = useState(null);
@@ -158,6 +158,8 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
   };
   const done = async () => { setMode(null); setText(''); setOpened(null); await onChanged(); };
   const sha = opened?.figures_sha256;
+  // D4812 part 6 (FA-06): who the pack reaches, counted from the queue's own rows.
+  const recipients = packRecipients(d, items);
   return (
     <div data-testid={compact ? undefined : `draft-${d.uid}`}>
       {!compact && <Line a={`${d.period_label || 'Period not recorded'} · ${String(d.kind || '').replace(/_/g, ' ')}`} chip={<Pill>{d.status}</Pill>} />}
@@ -211,7 +213,8 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
       )}
       {issuing && opened && (
         <ActFlow apis={apis} access={access} act="fund_report.issue" testId={`draft-flow-${d.uid}`} title="Issue report pack"
-          sub={d.period_label || 'Report pack'} effects={reportIssueEffects(d, sha)} label={`Issue ${d.period_label || 'this'} report pack`}
+          sub={d.period_label || 'Report pack'} effects={reportIssueEffects(d, sha, recipients)}
+          label={recipients ? `Issue ${d.period_label || 'this'} report to ${recipients} LP${recipients === 1 ? '' : 's'}` : `Issue ${d.period_label || 'this'} report pack`}
           consequences={['Freezes these figures for the LPs.', 'A correction needs a new issue.', ...(issuing.acknowledgement ? [`Your check: ${issuing.acknowledgement}`] : [])]}
           run={() => apis.reporting.issue(d.uid, { figures_sha256: sha, acknowledgement: issuing.acknowledgement })}
           receipt={() => [['Pack', d.period_label || 'Report pack'], ['Figures', `${String(sha || '').slice(0, 12)}…`], ['Audit', 'Recorded as fund_report.issue']]}
@@ -242,7 +245,7 @@ export function ReportsTab({ apis, access, funds, fund, overview, onFund }) {
       {fund && part === 'periods' && <ReportPeriods apis={apis} fund={fund} />}
       {fund && part === 'notices' && <Notices apis={apis} fund={fund} />}
       {part === 'packs' && <div data-testid="reports">
-        <Panel label="Packs · review queue" sub={read.status === 'ready' ? `${items.length} draft${items.length === 1 ? '' : 's'}` : null}>
+        <Panel label="Packs · review queue" sub={read.status === 'ready' ? <span data-testid="reports-queue-count">{queueLine(read.data.items, items)}</span> : null}>
           <div className="flex flex-wrap gap-2 p-4">
             <input className={INPUT} aria-label="Search packs" placeholder="Search packs" value={query} onChange={e => setQuery(e.target.value)} />
             <select className={INPUT} aria-label="Pack period" value={period} onChange={e => setPeriod(e.target.value)}><option value="">Every period</option>{[...new Set((read.data?.items || []).map(d => d.period_label).filter(Boolean))].map(v => <option key={v} value={v}>{v}</option>)}</select>
@@ -261,7 +264,7 @@ export function ReportsTab({ apis, access, funds, fund, overview, onFund }) {
                   { key: 'status', label: 'Status', cell: d => <Pill tone={d.status === 'issued' ? 'ok' : d.status === 'prepared' ? 'warn' : 'neutral'}>{d.status}</Pill> },
                   { key: 'prepared', label: 'Prepared by', cell: d => d.prepared_by == null ? 'Not recorded: no preparer.' : `Admin #${d.prepared_by}` },
                   { key: 'date', label: 'Date', mono: true, cell: d => d.prepared_at || d.created_at || 'Not recorded: no date.' },
-                  { key: 'actions', label: 'Actions', cell: d => <DraftRow compact d={d} apis={apis} access={access} onChanged={read.reload} /> },
+                  { key: 'actions', label: 'Actions', cell: d => <DraftRow compact d={d} apis={apis} access={access} onChanged={read.reload} items={read.data?.items || []} /> },
                 ]} rows={items} rowKey={d => d.uid} rowTestId={d => `draft-${d.uid}`} template="1.6fr 1fr .9fr .8fr 1fr 1.1fr 1.3fr" />}
         </Panel>
       </div>}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Lightbox, Unrecorded, Unreadable } from '../../../ui';
+import { Lightbox, Pill, Unrecorded, Unreadable } from '../../../ui';
 import { PairBars, QuarterLines, ChartTable } from '../../../ui/Charts';
 import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
@@ -84,7 +84,8 @@ function FundBlocks({ list, perf, history, positions, access, onMark, onMove }) 
   const tiles = useMemo(() => navTiles(perf, {
     positions: positions.status === 'ready' ? positions.data : null,
     history: history.status === 'ready' ? history.data : null,
-  }), [perf, positions, history]);
+    asOf: list.status === 'ready' ? list.data?.as_of : null,
+  }), [perf, positions, history, list]);
   const charts = useMemo(() => (history.status === 'ready' ? quarterCharts(history.data) : null), [history]);
   const posChart = useMemo(() => (positions.status === 'ready' ? positionsChart(positions.data) : null), [positions]);
   return (
@@ -140,6 +141,8 @@ function PositionsTable({ positions, access, onMark, onMove }) {
     { key: 'cost', label: 'Cost', align: 'right', mono: true, cell: (r) => r.cost },
     { key: 'mark', label: 'Latest mark', align: 'right', mono: true, cell: (r) => (r.mark == null ? <Unrecorded reason={r.markReason}>No mark</Unrecorded> : r.mark) },
     { key: 'date', label: 'Mark date', mono: true, cell: (r) => r.date ?? '—' },
+    // D4812 part 6 (FA-05): a mark older than a quarter is Stale, said in words beside the date.
+    { key: 'state', label: 'State', cell: (r) => (r.state == null ? '—' : <Pill tone={r.state === 'Stale' ? 'warn' : 'ok'} data-testid={`fund-position-state-${r.id}`}>{r.state === 'Stale' ? 'Stale · older than 1 quarter' : 'Current'}</Pill>) },
     { key: 'source', label: 'Source', cell: (r) => r.source ?? '—' },
     { key: 'by', label: 'Recorded by', cell: (r) => r.recordedBy ?? '—' },
     { key: 'acts', label: '', align: 'right', cell: (r) => (
@@ -155,7 +158,7 @@ function PositionsTable({ positions, access, onMark, onMove }) {
     <Panel label="Positions" sub={`${rows.length} of ${positions?.items?.length ?? 0}`} testId="fund-positions"
       aside={<input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search companies" aria-label="Search companies" className={`${INPUT} max-w-[220px]`} data-testid="fund-positions-search" />}>
       {rows.length === 0 ? <Note>No position matches. Clear the search.</Note>
-        : <Table cols={cols} rows={rows} rowKey={(r) => r.id} template="1fr .8fr .9fr .95fr .85fr 1.5fr 1fr 1.3fr" wide rowTestId={(r) => `fund-position-${r.id}`} />}
+        : <Table cols={cols} rows={rows} rowKey={(r) => r.id} template="1fr .8fr .9fr .95fr .85fr 1fr 1.4fr 1fr 1.3fr" wide rowTestId={(r) => `fund-position-${r.id}`} />}
       <Note>Cost is the amount invested. A position with no mark has only its cost, and cost is never shown as its value.</Note>
     </Panel>
   );

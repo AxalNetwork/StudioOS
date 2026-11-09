@@ -61,20 +61,42 @@ const figure = (row, field, format) => {
  * The seven tiles (FND10): NAV, Paid-in, Distributed, DPI, RVPI, TVPI, IRR,
  * from the fund's row of the list read. NAV's note counts the marked
  * positions when the positions read answered; IRR's names the first call.
+ *
+ * D4812 part 6 (FA-05): each figure as of its own date. NAV, RVPI and TVPI
+ * stand on the marks, so they are as of the newest mark; Paid-in,
+ * Distributed and DPI are cash, as of the read (`asOf`).
  */
-export function navTiles(perf, { positions = null, history = null } = {}) {
-  const marked = Array.isArray(positions?.items) ? positions.items.filter((p) => p.marked).length : null;
+export function navTiles(perf, { positions = null, history = null, asOf = null } = {}) {
+  const items = Array.isArray(positions?.items) ? positions.items : null;
+  const marked = items ? items.filter((p) => p.marked) : null;
+  const newest = marked ? marked.map((p) => String(p.valuation_date || '')).filter(Boolean).sort().pop() || null : null;
+  const marks = newest ? `marks to ${dayText(newest)}` : null;
+  const cash = asOf ? `as of ${dayText(asOf)}` : null;
+  const join = (...parts) => parts.filter(Boolean).join(' · ') || null;
   const since = history?.first_call ? `since ${dayText(history.first_call)}` : null;
   const tile = (key, label, field, format, note = null) => ({ key, label, ...figure(perf, field, format), note });
   return [
-    tile('nav', 'NAV', 'nav_cents', cents, marked == null ? 'investments only' : `latest marks of ${marked} position${marked === 1 ? '' : 's'}`),
-    tile('paid', 'Paid-in', 'paid_in_cents', cents, 'capital called'),
-    tile('dist', 'Distributed', 'distributed_cents', cents),
-    tile('dpi', 'DPI', 'dpi', multiple),
-    tile('rvpi', 'RVPI', 'rvpi', multiple),
-    tile('tvpi', 'TVPI', 'tvpi', multiple),
-    tile('irr', 'IRR', 'irr', rate, since),
+    tile('nav', 'NAV', 'nav_cents', cents, marked == null ? 'investments only' : join(`latest marks of ${marked.length} position${marked.length === 1 ? '' : 's'}`, marks)),
+    tile('paid', 'Paid-in', 'paid_in_cents', cents, join('capital called', cash)),
+    tile('dist', 'Distributed', 'distributed_cents', cents, cash),
+    tile('dpi', 'DPI', 'dpi', multiple, cash),
+    tile('rvpi', 'RVPI', 'rvpi', multiple, marks),
+    tile('tvpi', 'TVPI', 'tvpi', multiple, marks),
+    tile('irr', 'IRR', 'irr', rate, join(since, cash)),
   ];
+}
+
+/**
+ * D4812 part 6 (FA-05): a mark is Stale when it is older than one quarter
+ * (three calendar months) before `asOf`; Current otherwise. No mark has no
+ * state: it reads "No mark", never Stale.
+ */
+export function markState(valuationDate, asOf) {
+  const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(valuationDate || ''));
+  const a = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(asOf || ''));
+  if (!d || !a) return null;
+  const cut = new Date(Date.UTC(Number(a[1]), Number(a[2]) - 1 - 3, Number(a[3])));
+  return new Date(Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]))) < cut ? 'Stale' : 'Current';
 }
 
 const centsToDollars = (v) => (isNum(v) ? Number(v) / 100 : null);
@@ -178,6 +200,7 @@ export function positionRows(positions, { q = '' } = {}) {
       date: p.marked ? dayText(p.valuation_date) : null,
       source: p.marked ? p.source : null,
       recordedBy: p.marked ? (p.recorded_by?.name || NOT_RECORDED) : null,
+      state: p.marked ? markState(p.valuation_date, positions?.as_of) : null,
       raw: p,
     }))
     .sort((a, b) => String(b.raw.valuation_date || '').localeCompare(String(a.raw.valuation_date || '')) || a.id - b.id);
