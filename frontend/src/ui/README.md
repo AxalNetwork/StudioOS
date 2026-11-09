@@ -46,6 +46,7 @@ write a bordered white box with a title, it already exists here.
 | `linkedinBrand.js` | D1355: official LinkedIn asset provenance, hashes, approved theme variants and minimum dimensions. |
 | `LinkedInSignInButton.jsx` | D1355: unmodified official sign-in artwork at actual LinkedIn OAuth entry points. |
 | `AskProposal.jsx` | D4484: shared Ask proposal presentation; its host owns Accept, Edit and Discard. |
+| `RailSteps.jsx` | D4873 (#4873, part 2): `WorkerRail`'s next steps for a host that passes `steps` (Programs, through `AdminBoardFrame`): a numbered list of links to where the work is, one calm line when there is nothing, or "not available" with Try again. Drawn in place of the model block and All models, so the normal workflow shows no model list or price. Nothing here acts. |
 
 ## Rules
 

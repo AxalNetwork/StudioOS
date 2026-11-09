@@ -184,9 +184,10 @@ test('mounted Ask Eadwyn: one run names its option, writes nothing; Accept puts 
     assert.equal(m.requests.filter((r) => r.method === 'PUT').length, 0, 'accepting writes nothing either');
     await m.click('story-save-open');
     await m.click('story-save-confirm');
-    const put = m.requests.find((r) => r.method === 'PUT' && r.url.includes('/sections/traction'));
-    assert.deepEqual(put.body.source, { kind: 'eadwyn' });
-    assert.equal(put.body.body, DRAFT.text);
+    const put = m.requests.find((r) => r.method === 'PUT' && /\/narrative\/2\?/.test(r.url));
+    const traction = put.body.sections.find((x) => x.section === 'traction');
+    assert.deepEqual(traction.source, { kind: 'eadwyn' });
+    assert.equal(traction.body, DRAFT.text);
   } finally { await m.close(); }
 });
 
@@ -200,9 +201,10 @@ test('mounted: typing over Eadwyn\'s accepted words makes them the founder\'s, s
     await m.type('story-words', `${DRAFT.text} We add teams each week.`);
     await m.click('story-save-open');
     await m.click('story-save-confirm');
-    const put = m.requests.find((r) => r.method === 'PUT' && r.url.includes('/sections/traction'));
-    assert.equal(put.body.source, undefined);
-    assert.equal(put.body.body, `${DRAFT.text} We add teams each week.`);
+    const put = m.requests.find((r) => r.method === 'PUT' && /\/narrative\/2\?/.test(r.url));
+    const traction = put.body.sections.find((x) => x.section === 'traction');
+    assert.equal(traction.source, undefined);
+    assert.equal(traction.body, `${DRAFT.text} We add teams each week.`);
   } finally { await m.close(); }
 });
 
@@ -240,7 +242,7 @@ test('mounted Insert in Story: ?insert= opens Insert a figure on that one record
     await m.click('story-save-open');
     await m.click('story-save-confirm');
     const put = m.requests.find((r) => r.method === 'PUT');
-    assert.ok(put.body.bindings.some((b) => b.source_key === 'grow.mercury_revenue'), 'and it is bound');
+    assert.ok(put.body.sections.flatMap((x) => x.bindings || []).some((b) => b.source_key === 'grow.mercury_revenue'), 'and it is bound');
   } finally { await m.close(); }
 });
 

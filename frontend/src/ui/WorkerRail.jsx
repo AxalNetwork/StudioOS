@@ -25,6 +25,7 @@ import { activeSupportSession } from '../lib/supportSession.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
 import { RailGroups, RailUsageExtra } from './RailGroups';
+import RailSteps from './RailSteps.jsx';
 import { FOUNDER_RECORD_OFF } from './reasonGate';
 import { ACCENT } from '../workspaces/shellConfig';
 import { PHONE_QUERY } from '../workspaces/lens.jsx';
@@ -491,6 +492,12 @@ export default function WorkerRail({
    */
   groups = null,
   /**
+   * D4873 (#4873, part 2): a host's next steps (`ui/RailSteps.jsx`), drawn in place of the page's model
+   * block and the All models list, so the page's normal workflow shows what to do next and no model list or
+   * price. `{ title, ...state }`; `steps.title` names the block ("For Programs"). Without it, nothing changes.
+   */
+  steps = null,
+  /**
    * D1463 (#3713, Q1 A pending owner): 'founder-record' while an admin reads a
    * founder's private record behind a reason. The rail keeps who and where,
    * and draws no AI switch, no suggestions, no spend and no usage, no Ask and
@@ -815,7 +822,8 @@ export default function WorkerRail({
       {/* SUGGESTED FOR THIS PAGE (AIR:23-28). */}
       <section className="fwr-sug" data-ai={aiOn ? 'on' : 'off'} data-testid="worker-rail-suggestions">
         {aiOn && groups && <RailGroups groups={groups} page={pageKey} live={live} guardLine={rates.guardOn ? guardSentence(rates) : SAFETY_LINE} />}
-        {aiOn && (
+        {aiOn && !groups && steps && <RailSteps steps={steps} title={steps.title || workspace} />}
+        {aiOn && !steps && (
         <>
         {!groups && (
         <>

@@ -441,7 +441,7 @@ function Milestones({ projectId, search, api }) {
                   )}
               </Card>
             </div>
-            {adding ? <AddMilestoneDialog projectId={projectId} api={api} onClose={() => setAdding(false)} onSaved={(t) => { setAdding(false); setNotice(t); read.reload(); }} /> : null}
+            {adding ? <AddMilestoneDialog projectId={projectId} revision={base?.revision} api={api} onClose={() => setAdding(false)} onSaved={(t) => { setAdding(false); setNotice(t); read.reload(); }} /> : null}
           </>
         );
       }}

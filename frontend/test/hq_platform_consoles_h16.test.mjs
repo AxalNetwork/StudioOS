@@ -459,7 +459,8 @@ test('the rail names the five things H16 draws that nothing stores, one literal 
 });
 
 test('Revenue labels its active-code count by the rule it now counts with', () => {
-  const rev = raw('frontend/src/pages/hq/RevenuePage.jsx');
-  assert.ok(rev.includes('note="switched on, unexpired, under their recorded cap"'), 'Revenue\'s note says less than it counts');
+  // D5039: Revenue is split into `pages/hq/revenue/`; the count is drawn in Promotions.
+  const rev = raw('frontend/src/pages/hq/RevenuePage.jsx') + raw('frontend/src/pages/hq/revenue/Promotions.jsx');
+  assert.ok(rev.includes('switched on, unexpired, under their recorded cap'), 'Revenue\'s note says less than it counts');
   assert.ok(!rev.includes('redeemable now'), 'Revenue still says "redeemable now" of a count that is not');
 });

@@ -45,17 +45,34 @@
  *   · D5033 — Send again and the SLA save each say where they are: in flight,
  *     done, refused, or not known.
  *
+ * D5034 (#5034) — SUPPORT V2. The one long page is four workspaces at
+ * `?tab=` (Queue, the default; Branches; Delivery; Policy), built in
+ * `./support/`. The Queue leads with what needs a decision: All clear when
+ * every source answered with nothing open, otherwise Action required, HQ
+ * escalations in SLA bands, HQ-hosted tickets oldest risk first, and the
+ * subsidiaries in one line. Diagnostics (the matrix, the mirror) and the
+ * policy sit in their own workspaces. The pieces above stay exported and
+ * tested; the workspaces compose them.
+ *
  * Super Admin stays on axal.vc. This page configures nothing but the ticket SLA hours.
  */
 import React, { useCallback, useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Inbox, Loader2 } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import useRecordCrumb from '../admin/useRecordCrumb';
 import { escalationKindLabel, filterByKind, kindFilters } from '../../lib/escalationKinds';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import {
+  workspaceFromSearch, queueOverview, distributionState, workspaceMarks, escalationGroups, kindHoursOf,
+  hqTicketRows, hqTicketCount, branchCards, sourcesText,
+} from './support/supportWorkspaceModel.js';
+import {
+  SupportHeader, WorkspaceNav, ActionRequired, AllClear, QueueKindFilter, EscalationQueue, HqTicketsSection,
+  SubsidiariesLine, BranchesWorkspace, DeliveryWorkspace, DistributionBanner, LoadingNote,
+} from './support/SupportWorkspaces.jsx';
 
 /** A read that failed, as the page holds it. Exported so `mergeSupport` is tested with the page's own value. */
 export const UNAVAILABLE = Symbol('unavailable');
@@ -1271,7 +1288,7 @@ export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry, onSaved, 
             {tiersRead?.available && !draft && (
               <button
                 type="button"
-                className="text-[10.5px] font-semibold text-axal-ink underline-offset-2 hover:underline dark:text-white"
+                className="hidden text-[10.5px] font-semibold text-axal-ink underline-offset-2 hover:underline md:inline dark:text-white"
                 onClick={() => { setError(null); setProblems([]); setSaved(null); setPhase('idle'); setDraft(tierDraft(tiers)); }}
                 data-testid="hq-support-sla-edit"
               >
@@ -1279,6 +1296,9 @@ export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry, onSaved, 
               </button>
             )}
           </div>
+          {tiersRead?.available && !draft && (
+            <p className="mt-1 text-[11.5px] text-axal-faint md:hidden" data-testid="hq-support-sla-phone-note">Editing the policy is on a wider screen; on a phone it reads only.</p>
+          )}
           {tiersRead && !tiersRead.available && (
             <p className="mt-2 text-[11px] text-axal-muted" data-testid="hq-support-sla-unreadable">
               <Unrecorded reason={tiersRead.reason}>Unreadable</Unrecorded>
@@ -1518,8 +1538,14 @@ export default function HqSupportPage() {
       setFull((prev) => (isRead(prev) && !clear ? prev : UNAVAILABLE));
     }).finally(() => setBranchBusy(false));
   }, []);
-  const fetchSupport = useCallback((clear) => { fetchLocal(clear); fetchFull(clear); }, [fetchLocal, fetchFull]);
+  const fetchSupport = useCallback((clear) => Promise.allSettled([fetchLocal(clear), fetchFull(clear)]), [fetchLocal, fetchFull]);
   const load = useCallback(() => fetchSupport(true), [fetchSupport]);
+  // D5034 — Refresh is quiet: the last read stays drawn and the header says which one it shows.
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = useCallback(() => {
+    setRefreshing(true);
+    fetchSupport(false).finally(() => setRefreshing(false));
+  }, [fetchSupport]);
   const retryBranches = useCallback(() => {
     // A failed branch read goes back to "asking"; a good one stays drawn while it is asked again.
     setFull((prev) => (prev === UNAVAILABLE ? null : prev));
@@ -1568,6 +1594,103 @@ export default function HqSupportPage() {
   const coverage = supportCoverage(ready);
   const readAt = ready?.read_at ? String(ready.read_at).slice(11, 16) : null;
 
+  // D5034 — the workspace is the address (`?tab=`); a link pushes history.
+  const [params] = useSearchParams();
+  const workspace = workspaceFromSearch(params.get('tab'));
+  const overview = queueOverview(ready, { failed, branchState });
+  const distribution = distributionState(ready?.sla_policy, branchState);
+  const marks = workspaceMarks(overview, recorded, distribution);
+  const tiers = ready?.sla_policy?.tiers?.available ? ready.sla_policy.tiers.items : [];
+  const groups = escalationGroups(ready?.escalations, {
+    kind: kindFilter, readAt: ready?.read_at, kindHours: kindHoursOf(ready?.sla_policy),
+  });
+  const escCount = kindFilter
+    ? (escalationKindChoices(ready?.escalations).find((f) => f.kind === kindFilter)?.count ?? null)
+    : ready?.escalations?.count;
+  const recordedList = <RecordedList recorded={recorded} onResend={onResend} />;
+
+  let body;
+  if (failed) {
+    body = <Unreadable what="Support" claim="This is not a claim that nothing is waiting." onRetry={load} />;
+  } else if (workspace === 'branches') {
+    body = (
+      <BranchesWorkspace
+        data={ready}
+        cards={branchCards(ready)}
+        branchState={branchState}
+        busy={branchBusy}
+        onRetry={retryBranches}
+        matrix={<TenantMatrix matrix={ready?.matrix} failed={branchState === 'failed'} onRetry={retryBranches} />}
+        branchTickets={<BranchTicketsSection branchTickets={ready?.branch_tickets} state={branchState} busy={branchBusy} onRetry={retryBranches} />}
+      />
+    );
+  } else if (workspace === 'delivery') {
+    body = (
+      <DeliveryWorkspace
+        recorded={recorded}
+        renderRecorded={(rows) => (
+          <ul className="mt-3 grid gap-1.5">
+            {rows.map((r) => <RecordedOutcome key={`${r.uid}-${r.answered_at || 'unstamped'}`} rec={r} onResend={onResend} />)}
+          </ul>
+        )}
+        sync={ready?.sync}
+        mirror={<SyncStrip sync={ready?.sync} failed={false} onRetry={refresh} />}
+      />
+    );
+  } else if (workspace === 'policy') {
+    body = (
+      <div className="grid gap-4">
+        <DistributionBanner distribution={distribution} />
+        <SlaPolicyPanel
+          slaPolicy={ready?.sla_policy}
+          taxonomy={ready?.taxonomy}
+          failed={false}
+          branchState={branchState}
+          onRetry={() => fetchSupport(false)}
+          onSaved={() => fetchSupport(false)}
+        />
+      </div>
+    );
+  } else if (overview.state === 'loading') {
+    body = <LoadingNote>Loading support queues…</LoadingNote>;
+  } else if (overview.state === 'clear' || overview.state === 'hq_clear') {
+    body = (
+      <div className="grid gap-4">
+        <AllClear overview={overview} readAt={readAt} />
+        {recordedList}
+      </div>
+    );
+  } else {
+    body = (
+      <div className="grid gap-4">
+        <ActionRequired overview={overview} />
+        <EscalationQueue
+          escalations={ready?.escalations}
+          groups={groups}
+          count={escCount}
+          decide={decide}
+          onRetry={load}
+          kindFilter={(
+            <QueueKindFilter
+              choices={escalationKindChoices(ready?.escalations)}
+              value={kindFilter}
+              onChange={setKindFilter}
+            />
+          )}
+        />
+        {recordedList}
+        <HqTicketsSection
+          tickets={ready?.tickets}
+          rows={hqTicketRows(ready, { tiers })}
+          count={hqTicketCount(ready)}
+          footing={<FootingLine tickets={ready?.tickets} />}
+          onRetry={load}
+        />
+        <SubsidiariesLine line={overview.subsidiaries} />
+      </div>
+    );
+  }
+
   return (
     <RailFrame
       rail={(
@@ -1585,84 +1708,23 @@ export default function HqSupportPage() {
       data-testid="hq-support-page"
     >
       <div className="min-w-0">
-        {/* H22's bar. No switcher caret: there is no switcher here, and a caret
-            that opens nothing is a control that lies. */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#881337] px-4 py-2.5 text-white">
-          <span className="text-[12.5px] font-bold">All subsidiaries</span>
-          <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] opacity-80 tabular-nums">
-            <span data-testid="hq-support-band">{supportBandText(ready, failed)}</span>
-            {readAt && <span>read {readAt} UTC</span>}
-          </span>
-        </div>
-        {ready && ready.total?.value === null && (
-          <p className="mt-2 text-[11px] text-axal-muted" data-testid="hq-support-band-reason">
-            <Unrecorded /> — {ready.total.reason}
-          </p>
-        )}
-        {failed && (
-          <div className="mt-3">
-            <Unreadable what="Support" claim="This is not a claim that nothing is waiting." onRetry={load} />
-          </div>
-        )}
-
-        <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-            <Inbox size={13} /> HQ · Support
-          </div>
-          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Support</h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Three queues: what branches push up, the accounts HQ holds directly, and subsidiary administrators
-            filing about the Admin product. A ticket stays in the queue it was filed in; where its requester&apos;s
-            standing has changed since, the row says both. The two ticket queues and the tickets outside them add
-            up to HQ Home&apos;s Queue backlog. Open an escalation to answer it.
-          </p>
-          {/* D606 — the Super Admin's review queue sits under Support (the Eadwyn Tickets canvas lights this row). */}
-          <p className="mt-1.5 text-[12.5px]">
-            <Link to="/hq/review" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="hq-support-review-link">
-              Review queue: feature requests and suggested tasks →
-            </Link>
-          </p>
-          </div>
-          <HeaderAsk />
-        </header>
-
-        <EscalationKindFilter escalations={ready?.escalations} value={kindFilter} onChange={setKindFilter} />
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <QueueCard {...escalationCardProps(ready, failed, decide)} onRetry={load} />
-          <QueueCard {...ticketCardProps(ready, failed, 'hq_held')} onRetry={load} />
-          <QueueCard {...ticketCardProps(ready, failed, 'admin_product')} onRetry={load} />
-        </div>
-        <FootingLine tickets={ready?.tickets} />
-        {!failed && (
-          <BranchTicketsSection
-            branchTickets={ready?.branch_tickets}
-            state={branchState}
-            busy={branchBusy}
-            onRetry={retryBranches}
-          />
-        )}
-        <RecordedList recorded={recorded} onResend={onResend} />
-
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_1fr]">
-          <TenantMatrix
-            matrix={ready?.matrix}
-            failed={failed || branchState === 'failed'}
-            onRetry={failed ? load : retryBranches}
-          />
-          <SyncStrip sync={ready?.sync} failed={failed} onRetry={load} />
-        </div>
-
-        <div className="mt-4">
-          <SlaPolicyPanel
-            slaPolicy={ready?.sla_policy}
-            taxonomy={ready?.taxonomy}
-            failed={failed}
-            branchState={branchState}
-            onRetry={() => fetchSupport(false)}
-            onSaved={() => fetchSupport(false)}
-          />
-        </div>
+        <SupportHeader
+          readAt={readAt}
+          refreshing={refreshing}
+          onRefresh={failed ? load : refresh}
+          sources={sourcesText(ready, branchState)}
+          actions={(
+            <>
+              {/* D606 — the Super Admin's review queue, a secondary header action, not part of the task's copy. */}
+              <Link to="/hq/review" className="text-[13px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="hq-support-review-link">
+                Review feature requests →
+              </Link>
+              <HeaderAsk />
+            </>
+          )}
+        />
+        <WorkspaceNav current={workspace} marks={marks} />
+        <div className="mt-4" data-testid="hq-support-workspace" data-workspace={workspace}>{body}</div>
       </div>
     </RailFrame>
   );

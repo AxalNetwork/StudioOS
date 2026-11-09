@@ -116,12 +116,17 @@ test('the matrix has H22’s four columns, in order, and HQ is the first row', (
   assert.match(firstRow, /^<tbody><tr[^>]*data-kind="hq"/, 'HQ is not the first row — the table would total more than its rows');
 });
 
-test('the band has no switcher caret, because there is no switcher', () => {
-  const at = CODE.indexOf('bg-[#881337]');
-  assert.ok(at > 0, 'the band is gone');
-  const band = CODE.slice(at, CODE.indexOf('</div>', at));
-  assert.match(band, />All subsidiaries</);
-  assert.doesNotMatch(band, /▾/);
+test('the scope is stated, never drawn as a switcher, because there is no switcher', () => {
+  // D5034 (#5034) — H22's "All subsidiaries" bar read as a selector with no
+  // selector behind it; Support v2 states the scope in words under the title.
+  const SRC = codeOnly(read('frontend/src/pages/hq/support/SupportWorkspaces.jsx'));
+  const at = SRC.indexOf('data-testid="hq-support-scope"');
+  assert.ok(at > 0, 'the scope line is gone');
+  const scope = SRC.slice(at, SRC.indexOf('</p>', at));
+  assert.match(scope, />Platform-wide support</);
+  assert.match(scope, />HQ \+ all available subsidiaries</);
+  assert.doesNotMatch(scope, /▾|<select|aria-haspopup/);
+  assert.doesNotMatch(CODE, />All subsidiaries</, 'the selector-like bar is back');
 });
 
 // ──────────────────────────────────────────────────────────── the band ──

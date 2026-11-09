@@ -47,6 +47,7 @@ function fixture() {
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
   db.exec(sqlOf('544_narrative_sections.sql'));
+  db.exec(sqlOf('202611082100_narrative_version_revision.sql'));
   raiseEvidenceTables(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);

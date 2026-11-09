@@ -726,9 +726,15 @@ const splitCheck = (v) => {
   if (v.runway === 'custom' && !(wholeOf(v.runway_months) >= 1 && wholeOf(v.runway_months) <= 120)) e.runway_months = 'Runway is a whole number of months from 1 to 120.';
   return e;
 };
+/**
+ * D5069: the Base revision the form opened at, by venture. Save split sends it back, so a split
+ * saved from a form opened before another save is refused (409 `changed_since_open`), not applied over it.
+ */
+const splitRevision = new Map();
 /** The stored split, so the form opens with it every time (decision 9). */
 const splitOptions = (w, projectId) => raiseOptions(w, projectId, 'use-of-funds').then((r) => {
   const out = {};
+  if (Number.isSafeInteger(r?.revision)) splitRevision.set(String(projectId), r.revision); else splitRevision.delete(String(projectId));
   const stored = new Map((Array.isArray(r?.sections) ? r.sections : []).map((s) => [String(s?.value), s]));
   for (const [key] of FUND_SECTIONS) {
     const s = stored.get(key);
@@ -759,7 +765,10 @@ const useOfFunds = {
     })),
     runway_months: v.runway === 'custom' ? wholeOf(v.runway_months) : Number(v.runway || 24),
   }),
-  submit: (w, projectId, v) => w.raise.useOfFunds(projectId, useOfFunds.toBody(v)),
+  submit: (w, projectId, v) => w.raise.useOfFunds(projectId, {
+    ...useOfFunds.toBody(v),
+    ...(splitRevision.has(String(projectId)) ? { expected_revision: splitRevision.get(String(projectId)) } : {}),
+  }),
 };
 
 /** The stages, stored as #1700 stores them: Identified is `to_contact`. */

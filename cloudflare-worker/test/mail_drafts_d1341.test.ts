@@ -18,7 +18,7 @@ import mail from '../src/routes/mail_drafts.ts';
 import { __resetForTest, budgetRefusalMessage, ROUTE } from '../src/services/aiRouter.ts';
 import { TASK_LABELS } from '../src/services/aiCatalog.ts';
 import { INTENTS, RELATIONSHIP_OF, intentFor } from '../src/services/mail/intents.ts';
-import { parseDraft, revisionInstruction } from '../src/services/mail/drafts.ts';
+import { blocksNow, draftAsk, parseDraft, revisionInstruction, runDraft, ticked } from '../src/services/mail/drafts.ts';
 import { kpiValue } from '../src/services/mail/blocks.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -423,4 +423,22 @@ test('D4666: a quote is member-bound, signed and short-lived; a rise in the pric
   assert.equal(await why(undefined), 'missing');
   assert.equal(await why({ not: 'a string' }), 'missing');
   assert.equal(await checkQuote({ JWT_SECRET: 'another-secret-entirely' } as any, quote, now, t0 + 1000).then((r) => r.ok), false, 'another signing key');
+});
+
+test('D4666: an accepted maximum pins the router run: the hold and the charge never pass it, even when the price rose after the check', async () => {
+  const f = await fixture();
+  try {
+    const user = f.db.prepare('SELECT * FROM users WHERE id = 2').get() as any;
+    const { ask, pack } = await draftAsk(f.env, user, { ...ASK, refs: ['interviewee:11'] });
+    const sources = ticked(pack, ask.refs);
+    const blocks = await blocksNow(f.env, user, pack, ask);
+    const free = await runDraft(f.env, user, { ask, pack, sources, blocks, parent: null });
+    assert.equal(free.ok, true, JSON.stringify(free));
+    const unpinned = f.runs().at(-1).charged_microusd;
+    assert.ok(unpinned > 1, 'the unpinned run charges more than the ceiling used below');
+    const ceiling = Math.floor(unpinned / 2);
+    const pinned = await runDraft(f.env, user, { ask, pack, sources, blocks, parent: null, pinMicrousd: ceiling });
+    assert.equal(pinned.ok, true, JSON.stringify(pinned));
+    assert.ok(f.runs().at(-1).charged_microusd <= ceiling, `charged ${f.runs().at(-1).charged_microusd} must not pass the accepted maximum ${ceiling}`);
+  } finally { f.close(); }
 });

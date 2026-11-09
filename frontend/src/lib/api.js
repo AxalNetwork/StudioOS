@@ -3547,8 +3547,9 @@ export const api = {
   hqFunds: () => request('/admin/hq/funds'),
   // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
   // through adminBillingListDisputes, read separately so an outage there
-  // costs one zone rather than the page.
-  hqRevenue: () => request('/admin/revenue/summary'),
+  // costs one zone rather than the page. D5039: `period` is a quarter key
+  // (`2026-Q4`); without it the Worker answers for today's quarter.
+  hqRevenue: (period) => request(`/admin/revenue/summary${period ? `?period=${encodeURIComponent(period)}` : ''}`),
   // HQ · Content and Platform (canvas H6). Two reads, two pages: the
   // content pipeline over `articles` + `admin_publications`, and the
   // platform view over `integrations` + `cron_run_history`.

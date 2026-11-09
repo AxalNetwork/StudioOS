@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { adminEvents } from '../../../lib/api';
-import { BoxShell, BoxTable, Failed, ListControls, Pager, Reading, useBoxRead, useSettled } from './CommunityLightbox';
+import { BoxShell, BoxTable, Failed, ListControls, Pager, Reading, useBoxRead, useSettled, MANAGE } from './CommunityLightbox';
 import { EVENTS, EVENTS_LINE, eventRow, eventsPage, eventsQuery, initialState } from './lightboxModel';
 
 /**
@@ -41,7 +42,7 @@ export default function EventsLightbox({ onClose, now: at }) {
   const id = 'community-box-events';
 
   return (
-    <BoxShell id={id} title={EVENTS.title} sub={EVENTS_LINE} onClose={onClose}>
+    <BoxShell id={id} title={EVENTS.title} sub={EVENTS_LINE} onClose={onClose} manage={<Link to="/admin/events" className={MANAGE}>Manage events →</Link>}>
       {(phone) => (
         <>
           <ListControls id={id} spec={EVENTS} state={state} setState={setState} phone={phone} />
