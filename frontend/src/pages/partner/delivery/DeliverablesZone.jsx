@@ -181,7 +181,7 @@ export default function PartnerDeliverablesZone() {
     data: read.data?.data ?? null,
     engagements: read.data?.engagements ?? null,
   };
-  const [view, setView] = useState('never_opened');
+  const [chosenView, setView] = useState('never_opened');
   const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
   const EMPTY_ITEM = { engagement_id: '', title: '', version: '', link_url: '', sent_at: '' };
@@ -249,6 +249,10 @@ export default function PartnerDeliverablesZone() {
   // 0)`): sent-and-not-opened is the firm's most expensive state, and a log
   // that opens on everything buries it. `By client` is an ORDERING rather than
   // a subset — it groups the same rows instead of removing any.
+  // D4822 (#4822, part 2): WHILE OPENS ARE NOT TRACKED, "Never opened" CANNOT MATCH ANYTHING TRUE — every sent
+  // row has no open because nothing records one — so the chip and "Chase unopened" are hidden and the log opens on
+  // All. They come back by themselves the day `read_tracking.available` does.
+  const view = readsUnavailable && chosenView === 'never_opened' ? 'all' : chosenView;
   const visible = (() => {
     if (view === 'never_opened') return items.filter((r) => r.sent_at && !r.opened_at);
     if (view === 'signed_off') return items.filter((r) => r.signed_off_at);
@@ -270,7 +274,8 @@ export default function PartnerDeliverablesZone() {
     return au - bu || (b.days_since_sent ?? -1) - (a.days_since_sent ?? -1);
   });
 
-  const rowActions = partnerZoneActions('delivery/deliverables', { view: { header: ['Client', 'Deliverable', 'Version', 'Sent', 'Age', 'Opened', 'Signed off'], rows: ordered, cells: (r) => [r.founder_name, r.title, r.version, r.sent_at, r.days_since_sent, r.opened_at, r.signed_off_at] } });
+  const rowActions = partnerZoneActions('delivery/deliverables', { view: { header: ['Client', 'Deliverable', 'Version', 'Sent', 'Age', 'Opened', 'Signed off'], rows: ordered, cells: (r) => [r.founder_name, r.title, r.version, r.sent_at, r.days_since_sent, r.opened_at, r.signed_off_at] } })
+    .filter((a) => !(readsUnavailable && a?.testid === 'action-deliverables-chase-unopened'));
 
   // NOT AN EARLY RETURN ANY MORE. This was
   //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
@@ -362,7 +367,8 @@ export default function PartnerDeliverablesZone() {
       <ZoneToolbar
         className="mb-3"
         role="partner"
-        filters={unlinked ? [] : partnerZoneFilters('delivery/deliverables', { value: view, onChange: setView })}
+        filters={unlinked ? [] : partnerZoneFilters('delivery/deliverables', { value: view, onChange: setView })
+          .filter((c) => !(readsUnavailable && c.testid === 'filter-deliverables-never-opened'))}
         actions={rowActions}
       />
     <ZoneBody

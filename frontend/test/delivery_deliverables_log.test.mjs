@@ -212,8 +212,11 @@ test('the chip row is the artboard’s four, with Never opened first', () => {
   }
   // AND THE DEFAULT IS THE FIRST ONE, because the artboard selects it: a log
   // that opens on everything buries the state it exists to surface.
-  assert.match(zone, /const \[view, setView\] = useState\('never_opened'\);/,
+  // D4822 (#4822, part 2): still the default wherever opens are tracked; while they are not, the chip is hidden and
+  // the log opens on All (the hide itself is exercised in delivery_zones_v2_part2_d4822.test.mjs).
+  assert.match(zone, /const \[chosenView, setView\] = useState\('never_opened'\);/,
     'the log no longer opens on the unopened rows');
+  assert.match(zone, /const view = readsUnavailable && chosenView === 'never_opened' \? 'all' : chosenView;/);
 });
 
 test('both writes stay prose, and their reasons are still exact', () => {

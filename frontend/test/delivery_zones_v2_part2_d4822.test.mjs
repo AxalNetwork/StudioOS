@@ -112,3 +112,29 @@ test('no schema word reaches product copy: Deliverables says read status is unav
   assert.match(cap, /href="#capacity-limits"/);
   assert.match(cap, /id="capacity-limits"/, 'Set capacity links to nothing');
 });
+
+test('while client opens are not tracked, the Never opened chip and Chase unopened are hidden and the log opens on All', async () => {
+  // Deck 3 is logged but not sent, so only the All view draws it: it proves the log opened on All, not Never opened.
+  const items = [deliverable(1, 1, 'Acme', 'eng_acme'), deliverable(2, 2, 'Birch', 'eng_birch'), { ...deliverable(3, 1, 'Acme', 'eng_acme'), sent_at: null, days_since_sent: null }]
+    .map((r) => ({ ...r, is_unopened: null }));
+  for (const [available, shown] of [[false, false], [true, true]]) {
+    stubApi({
+      listPartnerDeliverables: async () => ({ items, read_tracking: { available } }),
+      getPartnerDeliveryHealth: async () => ({ items: ENG }),
+    });
+    const view = await mountZone(DeliverablesZone, '/delivery/deliverables');
+    try {
+      await view.settle();
+      const ids = view.nodes().map((n) => view.props(n)?.['data-testid']).filter(Boolean);
+      assert.equal(ids.includes('filter-deliverables-never-opened'), shown, `Never opened chip with tracking ${available}`);
+      assert.equal(/Chase unopened/.test(view.text()), shown, `Chase unopened with tracking ${available}`);
+      if (!available) {
+        assert.match(view.text(), /Deck 1/);
+        assert.match(view.text(), /Deck 2/);
+        assert.match(view.text(), /Deck 3/, 'the log still opened on Never opened');
+      } else {
+        assert.doesNotMatch(view.text(), /Deck 3/, 'Never opened stopped being the default where opens are tracked');
+      }
+    } finally { await view.unmount(); restoreApi(); }
+  }
+});
