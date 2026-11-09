@@ -112,6 +112,7 @@ The API client, formatters and helpers. Nothing here renders.
 | `railOptions/` | Each profile's options that run a model, as data (D720 §11), one file per profile; `railOptions/README.md` lists them: `founder.js` (D771, #2097), `investor.js` (D772, #2098), `advisor.js` and `partner.js` (D773, #2099), and `admin.js` (D774, #2100). Each row has its page key, `<verb>:<object>` key, label, one of the canvas's fourteen kinds, its handler and where it lives; `FOUNDER_QUIET_PAGES` says why a founder page has none. D764 PR 3 (#2089) gives each option its models. Each profile's test holds its list equal to the code: `railOptions_founder_d771.test.mjs`, `rail_options_investor_d772.test.mjs`, `rail_options_d773.test.mjs` and `rail_options_admin_d774.test.mjs`. |
 | `spinout/` | Spin-Out Lab client logic. |
 | `recaptcha.js` | D1445 (#3707): loads the provider’s invisible v2 widget once and obtains a fresh, reset token for each SMS enrolment send or resend. |
+| `rate.js` | D4619 (#4619): `formatRate`, the one formatter for a rate stored as a fraction (IRR: 0.1 is "10%"); a missing rate is `null`, never "0%". |
 
 ## The drift rule
 
