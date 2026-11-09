@@ -3,7 +3,8 @@
  * the lifecycle of Axal's own skills. Mounts itself at
  * `/api/admin/ai-agents/skills`. Super Admin only.
  *
- *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval
+ *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval;
+ *                                    D4537: each row's slug, roles ({ key, label }) and tools
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
@@ -70,6 +71,9 @@ import { campaignProgress, cancelCampaign, continueCampaign, evaluatePublished, 
 import { compareResults, type ResultRow } from '../services/agents/skillEvalCompare';
 import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
 import type { OutputKind, Tag } from '../services/agents/skills';
+import { ROLES } from '../services/agents/catalogue';
+
+const ROLE_LABEL = new Map(ROLES.map((r) => [r.key, r.name]));
 
 type C = Context<{ Bindings: Env }>;
 const adminHqSkills = new Hono<{ Bindings: Env }>();
@@ -209,6 +213,8 @@ adminHqSkills.get('/', async (c) => {
     const notEvaluated = total - (summary?.recorded ?? 0);
     return {
       uid: row.uid, name: draft.name, ...areaAndLevel(draft, tax.category),
+      // D4537: what the catalogue filters on, from the same draft read: the slug, its roles and its tools.
+      slug: row.slug, roles: draft.roles.map((key) => ({ key, label: ROLE_LABEL.get(key) ?? key })), tools: draft.tools,
       status: lifecycleStatus(row.status, row.open_evidence ? { evidence_hash: row.open_evidence } : null, evidence),
       version: row.current_version || null, agents: row.agents,
       tokens_per_run: tokens.get(`${row.id}:${row.current_version}`) ?? null,

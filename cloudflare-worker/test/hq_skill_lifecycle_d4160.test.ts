@@ -393,6 +393,8 @@ test('D4160: a reason is required, every change is audited with it, and no email
   // D4121 (#4121): what the published version adds to a run that uses it: its prompt, by the AI budget's estimate.
   const v1 = w.db.prepare('SELECT v.* FROM agent_skill_versions v JOIN agent_skills s ON s.id = v.skill_id WHERE s.uid = ? AND v.version = 1').get(uid) as any;
   assert.deepEqual([list.status, list.version, list.agents, list.tokens_per_run, list.area?.slug, list.level], ['published', 1, 0, contextTokensOf(v1), 'finance_ops', 'proficient']);
+  // D4537: what the catalogue filters on, from the draft: its slug, roles with their labels, and tools.
+  assert.deepEqual([typeof list.slug, list.roles, list.tools], ['string', [{ key: 'cfo', label: 'CFO' }], ['stripe.read']]);
 });
 
 test('D4160: the diff between versions and the draft; bulk items done or refused one by one', async () => {
