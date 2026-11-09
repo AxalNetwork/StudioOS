@@ -202,7 +202,7 @@ test('a row says what it is, who raised it and its SLA in words; a missing detai
   const groups = escalationGroups(active().escalations, { readAt: READ, kindHours: kindHoursOf(active().sla_policy) });
   const html = render(EscalationQueue, {
     escalations: active().escalations, groups, count: 4,
-    decide: { openUid: null, onToggle: () => {}, panelFor: () => null },
+    decide: { openUid: null, onOpen: () => {}, refFor: () => () => {} },
   });
   const t = text(html);
   assert.match(t, /HQ escalations4 open/);

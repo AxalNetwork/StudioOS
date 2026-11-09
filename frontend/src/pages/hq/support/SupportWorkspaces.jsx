@@ -25,7 +25,7 @@ import { Unrecorded, Unreadable } from '../../../ui';
 import { StateShape } from '../security/StatusBadge.jsx';
 import {
   SUPPORT_WORKSPACES, workspaceHref, figureText, hoursText, queueKindChoices,
-  matrixCompares, mirrorLine, deliveryRows,
+  matrixCompares, mirrorLine, deliveryRows, nextUidAfter,
 } from './supportWorkspaceModel.js';
 
 // ───────────────────────────────────────────────────────────── badge ──
@@ -267,10 +267,10 @@ export function QueueKindFilter({ choices, value, onChange }) {
 /**
  * One escalation, an action row: who and what, the request's first line, who
  * raised it, the SLA in words, the deadline, and Review. Review opens the
- * decision panel beneath the row (the queue keeps its place); its name says
- * which escalation it opens.
+ * decision sheet over the queue (D5034 part 2), which keeps its place; its
+ * name says which escalation it opens, and focus comes back to it on close.
  */
-function EscalationRow({ row, decide }) {
+function EscalationRow({ row, decide, nextUid }) {
   const open = Boolean(decide) && decide.openUid === row.uid;
   return (
     <li className="border-t border-axal-hairline py-3 first:border-t-0 dark:border-gray-800" data-testid="hq-support-escalation-row" data-band={row.sla.band}>
@@ -295,18 +295,18 @@ function EscalationRow({ row, decide }) {
           {decide && (
             <button
               type="button"
-              onClick={() => decide.onToggle(row.uid)}
-              aria-expanded={open}
+              ref={decide.refFor ? decide.refFor(row.uid) : undefined}
+              onClick={(e) => decide.onOpen(row.item, e.currentTarget, nextUid)}
+              aria-haspopup="dialog"
               aria-label={`Review ${row.title}`}
-              className={`${BTN} w-full md:w-auto`}
+              className={`${BTN} w-full md:w-auto ${open ? 'ring-2 ring-violet-500' : ''}`}
               data-testid="hq-support-review"
             >
-              {open ? 'Close' : 'Review'}
+              Review
             </button>
           )}
         </div>
       </div>
-      {open && decide.panelFor(row.item)}
     </li>
   );
 }
@@ -330,7 +330,7 @@ export function EscalationQueue({ escalations, groups, count, kindFilter, decide
         {groups.map((g) => (
           <div key={g.band} className="mt-4" data-testid={`hq-support-band-${g.band}`}>
             <h3 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">{g.title} · {g.rows.length}</h3>
-            <ul className="mt-1">{g.rows.map((r) => <EscalationRow key={r.uid} row={r} decide={decide} />)}</ul>
+            <ul className="mt-1">{g.rows.map((r) => <EscalationRow key={r.uid} row={r} decide={decide} nextUid={nextUidAfter(groups, r.uid)} />)}</ul>
           </div>
         ))}
         {(count === null || count === undefined || count > listed) && (

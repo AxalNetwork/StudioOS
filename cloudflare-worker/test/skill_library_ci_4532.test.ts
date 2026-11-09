@@ -122,6 +122,7 @@ function world() {
     + AI_LOG_SCHEMA + sql('migrations/506_ai_rail_proposals.sql'));
   for (const m of ['199_super_admin', '089_skills_values_taxonomy', '090_seed_skills_values_taxonomy', '712_team_agents', '759_agent_skills',
     '202611022046_ai_admin_audit', '202611022055_agent_skill_moderation', '202611022140_hq_skill_lifecycle']) db.exec(sql(`migrations/${m}.sql`));
+    db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.prepare("INSERT INTO users (id, uid, email, name, role) VALUES (1, 'u-super', 'super@example.test', 'Sue Super', 'admin')").run();
   db.exec("INSERT INTO company_profiles (id, uid, company_name) VALUES (7, 'co-7', 'Acme')");
   return { db, env: { DB } as any };
