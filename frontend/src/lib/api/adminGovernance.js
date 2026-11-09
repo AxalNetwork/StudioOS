@@ -7,6 +7,11 @@ import { refusalError, request } from '../api.js';
  * create(body)      -> { document }. body: { entity_key, category, title, effective_date?, confidential?, template_slug?, envelope_id? }
  * read(uid)         -> { document, versions }
  * activity(uid)     -> { uid, events: [{ action, line, at, actor, version }] } (D4811 part 5)
+ * related(uid)      -> { uid, dependants: Rel[], governed_by: Rel[], banner: { affected, version, dismissed } } (D4811 part 8)
+ * relate(uid, { kind, ref }) -> { relation }. kind: 'governance' (a record's uid) or 'template' (a library slug)
+ * markReviewed(uid, id, note) -> { relation }; dismissRelated(uid) -> { banner } (hides the banner for this admin only)
+ * A Rel is { id, kind, ref, title, status, entity_key, category, restricted, missing, state, flag_version, flagged_at,
+ * reviewed_version, reviewed_at, reviewed_by, review_note }; state is review_suggested, reviewed or not_affected.
  * update(uid, body) -> { document }. body: any of title, effective_date, confidential, template_slug, envelope_id, status
  * uploadVersion(uid, { file, signed, note }) -> { document, version }. A PDF or .docx of at most 25 MB.
  * file(uid, n, { download }) -> { blob, filename, type }, read only when the reader opens it; no object URL is kept.
@@ -38,6 +43,11 @@ export const adminGovernanceApi = {
   read: (uid) => request(doc(uid)),
   // D4811 part 5: the record's audit trail for its workspace (GET /documents/:uid/activity).
   activity: (uid) => request(`${doc(uid)}/activity`),
+  // D4811 part 8: the documents a record governs, and their review flags (board CT-11).
+  related: (uid) => request(`${doc(uid)}/related`),
+  relate: (uid, body) => request(`${doc(uid)}/related`, { method: 'POST', body: JSON.stringify(body) }),
+  markReviewed: (uid, id, note = '') => request(`${doc(uid)}/related/${Number(id)}/reviewed`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
+  dismissRelated: (uid) => request(`${doc(uid)}/related/dismiss`, { method: 'POST' }),
   update: (uid, body) => request(doc(uid), { method: 'PATCH', body: JSON.stringify(body) }),
   uploadVersion: (uid, { file: upload, signed = false, note = '' } = {}) => {
     const fd = new FormData();
