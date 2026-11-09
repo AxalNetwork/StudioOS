@@ -196,7 +196,9 @@ test('the brand kit is drawn only for a white-label, and still says whose mark i
   // `whiteLabelOnly` and the page draws `tabsFor(d.kind)`, which drops it for
   // every other kind (asserted on the model in licence_navigation_d4707).
   assert.match(NAV_MODEL, /key: 'brand'[^}]*whiteLabelOnly: true/, 'the Brand kit tab is drawn for every licence, which H26 forbids in its own words');
-  assert.match(SRC, /\{tabsFor\(d\.kind\)\.map\(/,
+  // D4819 part 3: the tabs are drawn per section, from `sectionTabs(section, d.kind)`, which filters `tabsFor(kind)`.
+  assert.match(NAV_MODEL, /export function sectionTabs\(section, kind\) \{\n\s+return tabsFor\(kind\)\.filter\(/);
+  assert.match(SRC, /const subTabs = sectionTabs\(section, d\.kind\);[\s\S]*\{subTabs\.map\(/,
     'the Brand kit tab is drawn for every licence, which H26 forbids in its own words');
   assert.match(SRC, /step === BRAND_STEP && d\.kind === 'white_label'/,
     'the brand-kit editor mounts without re-checking the kind');
