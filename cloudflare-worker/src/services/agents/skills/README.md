@@ -21,6 +21,11 @@ version: 1
 input records, keyed by catalogue read key, and what the proposal must say, must
 say is "Not recorded", and must never say. Part D (#3954) runs them.
 
+`scenarios/` holds the qualification scenarios for the first ten skills (#4588,
+D4588): 5 to 10 cases per skill, each with a known-correct output and targeted
+incorrect outputs. They are not in the generated module and the seed does not
+import them yet; `cases/` stays the one golden case per skill.
+
 ## Rules for adding a skill
 
 - **Reads only.** Every tool ends in `.read` and names a source the catalogue

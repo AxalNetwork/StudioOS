@@ -88,6 +88,8 @@ import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dat
 import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import EvidencePart from './evidence/EvidencePart';
+import { canonicalVentureSearch, legacyVentureRedirect, resolveVenture, ventureRef } from './ventureQuery.js';
+import { VentureProvider } from './VentureContext.jsx';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
 import RankByFit from '../../ui/RankByFit';
 import { applyRank } from '../../lib/rankByFit';
@@ -511,6 +513,8 @@ export function primaryForModule(cycle, slug, search = '', open) {
 
 export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = false } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   // Writes build on the latest query, never on a render's (react-router hands a
   // functional update the search params of the render that made the setter), and
   // drop `drop`'s keys in the same write: a sign-in's return or `?tool=` that the
@@ -522,12 +526,15 @@ export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = 
     const next = new URLSearchParams(latest.current);
     for (const k of dropRef.current || []) next.delete(k);
     for (const k of extraDrop) next.delete(k);
-    next.set('project_id', String(id));
-    setSearchParams(next, { replace: true });
+    // D5074: the one form, so a legacy `?project=` never travels beside it.
+    setSearchParams(new URLSearchParams(canonicalVentureSearch(next, id)), { replace: true });
   }, [setSearchParams]);
-  // The read's own links (`next.href`) say `?project=`; the page's say
-  // `?project_id=`. Either picks the venture.
-  const named = Number(searchParams.get('project_id') || searchParams.get('project')) || null;
+  // D5074 (#5074): the address is parsed here and nowhere else (`ventureQuery.js`).
+  // The read's own links (`next.href`) say `?project=`, older ones a project UID;
+  // each names the venture, and the address is then replaced with `?project_id=`.
+  const ref = ventureRef(searchParams);
+  const named = ref?.id ?? null;
+  const namedUid = ref?.uid ?? null;
   // Back from a provider's sign-in at /build/connect with no venture named: the
   // one Build kept before the redirect (D686 §5.4), taken once.
   const [stashed] = useState(() => (named ? null : kept?.() ?? null));
@@ -543,14 +550,23 @@ export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = 
     let alive = true;
     api.listProjects().then((list) => {
       if (!alive) return;
-      const first = (list || [])[0];
+      // A UID names its venture; one not in the list falls back to the first, as an unreadable id always has.
+      const first = (namedUid ? resolveVenture(list, ref)?.project : null) || (list || [])[0];
       setProjectId(first?.id || null);
       setStatus(first ? 'ready' : 'none');
-      if (first) writeProject(first.id);
+      // A UID's address is rewritten by the redirect below, which keeps the hash.
+      if (first && !namedUid) writeProject(first.id);
     }).catch(() => { if (alive) setStatus('unreadable'); });
     return () => { alive = false; };
-  }, [requested, writeProject, reloadKey]);
-  return { projectId: immediate && requested ? requested : projectId, status: immediate && requested ? 'ready' : status, writeProject };
+  }, [requested, writeProject, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps -- `namedUid` is read with `requested`
+  // D5074: a legacy address (`?project=N`, a UID) is replaced with the canonical
+  // one once its venture is known, every other query key and the hash kept.
+  const current = immediate && requested ? requested : projectId;
+  useEffect(() => {
+    const to = legacyVentureRedirect(location, current);
+    if (to) navigate(to, { replace: true, state: location.state });
+  }, [current, location, navigate]);
+  return { projectId: current, status: immediate && requested ? 'ready' : status, writeProject };
 }
 
 /**
@@ -1432,7 +1448,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // The rail sits in the one frame every rail host uses (D556), as the
   // Validate desk's own did; the frame is this page's outermost element so it
   // docks to the edge.
+  // D5074 (#5074): the venture this page resolved, for every tool under it (`useVenture()`).
   return (
+    <VentureProvider projectId={projectId} status={projectStatus} reloadKey={projectsKey}>
     <RailCrumbsProvider section={name} module={moduleName}>
     <RailFrame rail={rail} className={distribution ? 'distribution-frame' : undefined} data-testid={`cycle-route-${cycle}`}>
       {/* Every cycle path is full-bleed (`cyclePaths.js`, D694), so this is the
@@ -1481,5 +1499,6 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab ? null : recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
+    </VentureProvider>
   );
 }

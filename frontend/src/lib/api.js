@@ -3360,6 +3360,8 @@ export const api = {
   updateProfileSettings: (data) => request('/settings/profile', { method: 'PUT', body: JSON.stringify(data) }),
   getPrivacySettings: () => request('/settings/privacy'),
   updatePrivacySettings: (data) => request('/settings/privacy', { method: 'PUT', body: JSON.stringify(data) }),
+  // D4615 — public-profile switches, field by field, with the revision read: { fields: { name: true }, expected_revision }.
+  updatePublicProfileSwitches: (data) => request('/settings/privacy/public-profile', { method: 'PUT', body: JSON.stringify(data) }),
   getAppearanceSettings: () => request('/settings/appearance'),
   updateAppearanceSettings: (data) => request('/settings/appearance', { method: 'PUT', body: JSON.stringify(data) }),
   getNotificationSettings: () => request('/settings/notifications'),
