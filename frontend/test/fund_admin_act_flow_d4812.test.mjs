@@ -29,7 +29,7 @@ test('each act\'s effect: figures it read, Not recorded with a reason, never a g
   assert.deepEqual([period.Quarter, period['Gross fee'], period['Catch-up'], period['Net fee']], ['2026Q4', '$92,000.00', '$0.00', '$92,000.00']);
   assert.equal(period['Offset applied'].notRecorded, true, 'an absent figure is not $0');
   const terms = fx(feeTermsEffects(fund, { annual_bps: 200, effective_from: '2026-01-01', lpa_reference: null }));
-  assert.deepEqual([terms['Annual rate'], terms.Status], ['2.00%', 'Draft → Confirmed']);
+  assert.deepEqual([terms['Annual rate'], terms.Status], ['2%', 'Draft → Confirmed']);
   assert.equal(terms['LPA reference'].notRecorded, true);
   const econ = fx(economicsEffects(fund, { carried_interest: 0.25, reason: 'Side letter agreed at first close.' }));
   assert.deepEqual([econ.Carry, econ['Management fee']], ['20.00% → 25.00%', '2.00% (unchanged)']);

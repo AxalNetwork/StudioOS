@@ -13,6 +13,7 @@
  * a missing figure is never drawn as $0.
  */
 import { actRow, money } from './fundAdminModel.js';
+import { bpsPercent } from '../../../lib/bps.js';
 
 export const STEPS = Object.freeze(['Prepare', 'Review', 'Confirm', 'Authenticate', 'Receipt']);
 
@@ -121,14 +122,13 @@ export function confirmedAt(date = new Date()) {
 
 // ─────────────────────────────────────────────────────────── part 5: the remaining acts
 
-const pct = (bps) => (Number.isFinite(Number(bps)) && bps != null ? `${(Number(bps) / 100).toFixed(2)}%` : null);
 const rate = (r) => (r == null || r === '' || !Number.isFinite(Number(r)) ? null : `${(Number(r) * 100).toFixed(2)}%`);
 
 /** Confirm fee terms: the rate, from when, on which LPA clause, and that it becomes the fund's terms. */
 export function feeTermsEffects(fund, t) {
   return [
     ['Fund', fund?.name || 'Not recorded'],
-    ['Annual rate', pct(t?.annual_bps) ?? nr('No rate is recorded on these terms.')],
+    ['Annual rate', bpsPercent(t?.annual_bps) ?? nr('No rate is recorded on these terms.')],
     ['Effective from', t?.effective_from || nr('No start date is recorded.')],
     ['LPA reference', t?.lpa_reference || nr('No LPA reference is recorded.')],
     ['Status', 'Draft → Confirmed'],

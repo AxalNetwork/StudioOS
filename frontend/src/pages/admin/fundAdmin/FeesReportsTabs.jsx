@@ -11,8 +11,6 @@ import { NO_FUND, QUARTER_RE, REJECT_REASON_MIN, money, refusalText, keepFund } 
 import { Line, NUM, Note, Panel, Section, Table } from './parts';
 import { ActFlow } from './MoneyFlow';
 import { actButton, feePeriodEffects, feeTermsEffects, reportIssueEffects } from './moneyFlowModel';
-
-const pct = (bps) => (Number.isFinite(Number(bps)) && bps != null ? `${(Number(bps) / 100).toFixed(2)}%` : null);
 import { useRead } from './useRead';
 
 // D1165: the remaining fund tabs, drawn from the approved FND13/FND14 boards.
@@ -125,10 +123,10 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
           return confirmation.terms ? (
             <ActFlow apis={apis} access={access} act="fee_terms.confirm" testId="fee-flow" title="Confirm fee terms"
               sub={`${fund.name}. Confirms these terms for the fund.`}
-              effects={feeTermsEffects(fund, terms)} label={`Confirm ${pct(terms?.annual_bps) || 'these'} fee terms`}
+              effects={feeTermsEffects(fund, terms)} label={`Confirm ${bpsPercent(terms?.annual_bps) || 'these'} fee terms`}
               consequences={['These become the fund’s confirmed fee terms.', 'Fee periods are computed from them from the date they take effect.']}
               run={() => apis.fees.confirmTerms(fund.id, confirmation.terms)}
-              receipt={() => [['Terms', `${pct(terms?.annual_bps) || 'Rate not recorded'} from ${terms?.effective_from || 'date not recorded'}`], ['Status', 'Confirmed'], ['Audit', 'Recorded as fee_terms.confirm']]}
+              receipt={() => [['Terms', `${bpsPercent(terms?.annual_bps) || 'Rate not recorded'} from ${terms?.effective_from || 'date not recorded'}`], ['Status', 'Confirmed'], ['Audit', 'Recorded as fee_terms.confirm']]}
               onClose={() => setConfirmation(null)} onDone={() => read.reload()} />
           ) : (
             <ActFlow apis={apis} access={access} act="fee_period.issue" testId="fee-flow" title={`Issue ${p.quarter} fee period`}
