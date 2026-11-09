@@ -135,7 +135,8 @@ export function nextAction(f: NextActionFacts): Focus | null {
   const unfit = f.claims.find((c) => c.fit_unrecorded > 0 && !decided(c));
   if (unfit) {
     return focus('missing_fit', `Record ICP fit for the interviews behind ${unfit.code}.`,
-      `${plural(unfit.fit_unrecorded, 'supporting interview has', 'supporting interviews have')} no ICP fit recorded, so ${unfit.code}’s status cannot be worked out.`,
+      // D4586 v2: missing fits leave the status unknown only when they could change it; otherwise they simply do not count yet.
+      `${plural(unfit.fit_unrecorded, 'supporting interview has', 'supporting interviews have')} no ICP fit recorded, so ${unfit.status === 'not_recorded' ? `${unfit.code}’s status cannot be worked out` : `they do not count toward ${unfit.code}’s bar yet`}.`,
       { label: `Open ${unfit.code}`, href: claimHref(pid, unfit.id) }, [record]);
   }
 

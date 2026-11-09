@@ -43,7 +43,7 @@ import {
 } from '../services/verdictHistory';
 import {
   canReadBoard, canReadDecision, canWrite,
-  verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, VALIDATION_BAR,
+  verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, v1StateFor, VALIDATION_BAR,
   type ProjectRef,
 } from './_founder_validate_helpers';
 // `insertHypothesis` stays — `POST /hypotheses`, the MANUAL form, is in this
@@ -169,7 +169,7 @@ async function loadEvidenceBase(env: Env, projectId: number) {
       const gid = model.aliasByNorm.get(normPhrase(typeof p === 'string' ? p : String((p as any)?.pain ?? '')));
       if (gid) groups.add(gid);
     }
-    return { row: r, groups, icp_fit: r.icp_fit };
+    return { row: r, groups, icp_fit: r.icp_fit, name: r.interviewee_name, company: r.interviewee_company };
   });
   return { interviews, model };
 }
@@ -229,7 +229,7 @@ async function buildBoard(env: Env, projectId: number) {
       // The page must be able to say WHY a verdict is missing rather than
       // rendering a blank cell that looks like a loading state.
       _note: verdict === null
-        ? `${evidence.fitUnrecorded} interview(s) touching this claim have no ICP fit recorded, so a verdict would be a guess`
+        ? `${evidence.fitUnrecorded} interview(s) touching this claim have no ICP fit recorded, and counting them could change the status, so a verdict would be a guess`
         : null,
     };
   });
@@ -247,7 +247,7 @@ async function buildBoard(env: Env, projectId: number) {
   // leaves `history: []`, a null start and unavailable coverage, and the chips
   // refuse rather than drawing an empty answer.
   await recordVerdictChanges(env, projectId, items.map((h: any) => ({
-    hypothesis_id: Number(h.id), verdict: h.verdict ?? null, lane: String(h.lane),
+    hypothesis_id: Number(h.id), verdict: h.verdict ?? null, lane: String(h.lane), v1: v1StateFor(h.evidence),
   }))).catch(() => 0);
   const now = new Date();
   const history = await loadVerdictHistory(env, projectId, {

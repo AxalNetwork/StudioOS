@@ -25,6 +25,7 @@ import AdminLab from '../src/pages/admin/lab/AdminLab.jsx';
 import {
   backfillLine, calendarDay, canRecordReview, etDay, etToday, filedOnProblem, filterGrads, filterHosts, filterOrders, filterReviews,
   gradRows, gradTiles, hostCounts, hostDecisions, hostDialog, hostRow, jurisdictionWord, orderRow, orderStep, refusalText, reviewRow,
+  SCHEDULED_NOT_RECORDED, scheduledBackfillLine,
 } from '../src/pages/admin/lab/labDesksModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -386,6 +387,36 @@ test('mounted Graduation: a failed read is Unreadable and the tiles say so; an u
     assert.equal(blind.of('lab-grad-issue-all-line'), 'Who is still waiting for a certificate could not be read.');
     assert.equal(blind.props('lab-grad-issue-all-open').disabled, true);
   } finally { await blind.close(); }
+});
+
+// D4663 (#4663): what the every-minute certificate backfill last did.
+// Mutation checked: a missing `last_tick` drawn as "0 issued of 0 tried" (the unrecorded case fails);
+// the unreadable sentence ignored (fails); the not-issued reasons dropped (fails).
+test('#4663 the scheduled backfill line: not recorded before any tick, what it did after, held and unreadable said', async () => {
+  assert.equal(scheduledBackfillLine(null), null);
+  assert.deepEqual(scheduledBackfillLine({ ...CERTS }), { state: 'unrecorded', text: SCHEDULED_NOT_RECORDED });
+  assert.deepEqual(scheduledBackfillLine({ ...CERTS, scheduled_backfill: { last_tick: null, not_issued: {} } }).state, 'unrecorded');
+  const tick = (o = {}) => ({ ran_at: '2026-11-09 12:00:00', status: 'done', scanned: 3, issued: 2, skipped: 1, more_waiting: false, ...o });
+  assert.deepEqual(scheduledBackfillLine({ ...CERTS, scheduled_backfill: { last_tick: tick({ more_waiting: true }), not_issued: { insufficient_data: 1, not_graduated: 0 } } }), {
+    state: 'recorded',
+    text: 'Scheduled backfill, last tick 2026-11-09 12:00 UTC: 2 issued of 3 tried · more are due and the next ticks take them · 1 graduate it tried still has no certificate (1: no name on record); each is tried again after six hours.',
+  });
+  assert.equal(scheduledBackfillLine({ ...CERTS, scheduled_backfill: { last_tick: tick({ scanned: 0, issued: 0, skipped: 0 }), not_issued: {} } }).text,
+    'Scheduled backfill, last tick 2026-11-09 12:00 UTC: 0 issued of 0 tried.');
+  assert.deepEqual(scheduledBackfillLine({ ...CERTS, scheduled_backfill: { last_tick: tick({ status: 'frozen', scanned: 0 }), not_issued: {} } }), {
+    state: 'held', text: 'Scheduled backfill, last tick 2026-11-09 12:00 UTC: this studio is suspended, so nothing was issued.',
+  });
+  assert.deepEqual(scheduledBackfillLine({ ...CERTS, scheduled_backfill: null, unavailable: { scheduled_backfill: 'When the scheduled backfill last ran could not be read.' } }), {
+    state: 'unreadable', text: 'When the scheduled backfill last ran could not be read.',
+  });
+  const v = await mount('/admin/programs/spinout-lab/graduation', { certs: CERTS });
+  try {
+    assert.equal(v.of('lab-grad-scheduled'), 'Not recorded', 'no tick on record is "Not recorded", never "0 issued"');
+  } finally { await v.close(); }
+  const ran = await mount('/admin/programs/spinout-lab/graduation', { certs: { ...CERTS, scheduled_backfill: { last_tick: tick(), not_issued: {} } } });
+  try {
+    assert.equal(ran.of('lab-grad-scheduled'), 'Scheduled backfill, last tick 2026-11-09 12:00 UTC: 2 issued of 3 tried.');
+  } finally { await ran.close(); }
 });
 
 test('the source: no browser pop-up, no bare dash, no venture filter in the browser, and the tabs no longer mount the old consoles', () => {

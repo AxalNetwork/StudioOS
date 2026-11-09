@@ -171,3 +171,65 @@ test.describe('the rail', () => {
     expect(r.violations).toEqual([]);
   });
 });
+
+test.describe('the boards\' queue grammar (D4814 part 8: AP-08, AP-10, AP-12)', () => {
+  const BOARDS = [
+    ['/admin/approvals/product-testers', 'testers', 'tester-pick-1', 'tester-more-3'],
+    ['/admin/approvals/co-marketing', 'pitches', 'pitch-pick-p1', 'pitch-more-p1'],
+    ['/admin/approvals/wellbeing-experts', 'experts', 'expert-pick-e1', 'expert-more-e1'],
+  ];
+  for (const [path, prefix, box, more] of BOARDS) {
+    test(`${path}: a pick shows the bar; axe passes with the bar and with ⋯ open`, async ({ page, request }) => {
+      await open(page, request, path);
+      await page.getByTestId(box).check();
+      await expect(page.getByTestId(`${prefix}-bulk-count`)).toHaveText('1 selected');
+      expect(await blocking(page)).toEqual([]);
+      await page.getByTestId(`${more}-button`).click();
+      expect(await blocking(page)).toEqual([]);
+    });
+  }
+
+  test('⋯ on a board: Tab walks it, Esc gives focus back; Assign… returns focus to ⋯; the bar\'s Assign… gets focus back too', async ({ page, request }) => {
+    await open(page, request, '/admin/approvals/product-testers');
+    const more = page.getByTestId('tester-more-3-button');
+    await more.focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    expect(await focused(page)).toBe('tester-more-3-assign');
+    await page.keyboard.press('Escape');
+    expect(await focused(page)).toBe('tester-more-3-button');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog', { name: /Assign Ben Sample/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+    expect(await focused(page)).toBe('tester-more-3-button');
+    await page.getByTestId('tester-pick-1').check();
+    await page.getByTestId('tester-pick-3').check();
+    await page.getByTestId('testers-bulk-assign').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog', { name: /Assign 2 items/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+    expect(await focused(page)).toBe('testers-bulk-assign');
+  });
+
+  test('a last row\'s ⋯ opens where its actions can be clicked, on a board and on the Inbox', async ({ page, request }) => {
+    const onTop = (id) => page.evaluate((id) => {
+      const b = document.querySelector(`[data-testid="${id}"]`).getBoundingClientRect();
+      // What is on top instead, if anything is, so a failure names it.
+      const e = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2);
+      return e?.closest(`[data-testid="${id}"]`) ? true : `${e?.tagName}[${e?.dataset?.testid || ''}] at ${Math.round(b.x)},${Math.round(b.y)}`;
+    }, id);
+    await open(page, request, '/admin/approvals/product-testers');
+    await page.getByTestId('tester-more-3-button').click();
+    await expect(page.getByTestId('tester-more-3-pop')).toHaveCSS('position', 'fixed');
+    expect(await onTop('tester-more-3-copy'), 'not clipped by the queue\'s scroller').toBe(true);
+    await page.goto('/admin/approvals');
+    const last = page.getByRole('button', { name: 'More actions for Person E' });
+    await last.scrollIntoViewIfNeeded();
+    await last.click();
+    await expect(page.getByTestId('approvals-pop-exploring:77')).toHaveCSS('position', 'fixed');
+    expect(await onTop('approvals-menu-exploring:77-copy')).toBe(true);
+  });
+});
+

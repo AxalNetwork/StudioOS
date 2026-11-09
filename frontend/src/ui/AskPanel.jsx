@@ -6,7 +6,7 @@ import { askPanelAdapter } from './askPanelAdapter.js';
 import { setAskSlot, useAskPanel } from './eadwynPanel.js';
 import {
   ASK_FOOT, ASK_RUNNING, ASK_SUGGESTED, ASK_PLACEHOLDER, acceptAllLabel, canSend, chargeLine, costLine,
-  optionCard, panelChips, refusalState, stateBlock,
+  optionCard, panelChips, promptOptions, refusalState, stateBlock,
 } from './askPanelModel.js';
 import { blockHref, needsBlockPage } from './sessionsBlockHandoff.js';
 import { FOUNDER_ASK_CHIPS } from '../lib/railOptions/founder.js';
@@ -38,7 +38,7 @@ import './askPanel.css';
 export const QUOTE_PAUSE_MS = 400;
 const CHIP_ROUTES = Object.fromEntries([...FOUNDER_ASK_CHIPS, ...ADVISOR_ASK_CHIPS].map((c) => [c.key, c.route]));
 
-export default function AskPanel({ page, label, crumb, options = [], aiOn = true, layout = 'dock', onClose, onNavigate }) {
+export default function AskPanel({ page, label, crumb, options = [], prompts = null, aiOn = true, layout = 'dock', onClose, onNavigate }) {
   const intent = useAskPanel().intent;
   const exclusive = !!intent?.exclusive;
   const [convUid, setConvUid] = useState(null);
@@ -50,7 +50,8 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
   const [text, setText] = useState('');
   const [hold, setHold] = useState(null);
   const inputRef = useRef(null);
-  const chips = panelChips(options);
+  // D5034 part 4: a page's own prompts come first and fill the composer; its run options follow.
+  const chips = panelChips([...promptOptions(prompts), ...(options || [])]);
   const modal = layout === 'sheet';
   const name = label || page || 'this page';
 

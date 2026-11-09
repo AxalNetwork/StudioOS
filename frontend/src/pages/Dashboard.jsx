@@ -178,6 +178,8 @@ export default function Dashboard({ activeRole, authUser }) {
           dashboardUnavailable={previewingInvestor ? '' : error}
           onRetryDashboard={() => { setLoading(true); load(); }}
         />
+        {/* D4815 (#4815): the investor's My tasks moved here from /deals; its own read, so a failed summary keeps it. */}
+        <MyTasks licence="investor" testId="studio-investor-my-tasks" />
       </div>
     );
   }
@@ -257,6 +259,8 @@ export default function Dashboard({ activeRole, authUser }) {
               .catch((e) => { setInvestorLC(null); reportError('Dashboard:investorLifecycle', e); });
           }}
         />
+        {/* D4815 (#4815): the investor's My tasks moved here from /deals (D1614 W8 placed it there). */}
+        <MyTasks licence="investor" testId="studio-investor-my-tasks" />
         <ProductTestingStudio user={authUser || user} />
       </div>
     );

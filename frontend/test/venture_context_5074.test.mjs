@@ -215,8 +215,19 @@ test('the Data room parses no query and looks no UID up itself: the shared conte
  * ------------------------------------------------------------------ */
 
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
-const has = (out, id) => new RegExp(`data-testid="${id}"`).test(out);
-const disabled = (out, id) => new RegExp(`<[^>]*disabled=""[^>]*data-testid="${id}"|<[^>]*data-testid="${id}"[^>]*disabled=""`).test(out);
+// Plain string scans, not a RegExp built from the id: same answers, and nothing
+// for a pattern scanner to read as a user-controlled expression.
+const has = (out, id) => out.includes(`data-testid="${id}"`);
+/** True when some tag carrying the test id also carries `disabled=""`. */
+const disabled = (out, id) => {
+  const mark = `data-testid="${id}"`;
+  for (let at = out.indexOf(mark); at !== -1; at = out.indexOf(mark, at + mark.length)) {
+    const open = out.lastIndexOf('<', at);
+    const close = out.indexOf('>', at);
+    if (open !== -1 && out.slice(open, close === -1 ? out.length : close).includes('disabled=""')) return true;
+  }
+  return false;
+};
 
 test('roomCan reads the map only: no map, an unknown key or a non-true value allows nothing', () => {
   assert.equal(roomCan(ROOM(ROOM_CAPS.owner), 'share'), true);
