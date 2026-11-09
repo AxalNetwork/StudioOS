@@ -11,8 +11,10 @@
  *     before any Beehiiv request; a key paste is refused; it may disconnect.
  *  5. The allowlist: every tool off the record, the draft tool included, is
  *     refused before any request; only the four are offered.
- *  6. The draft list is unreachable: nothing in the source imports it or
- *     names the draft tool at a call site; only `reads.ts` opens a session.
+ *  6. The draft list is reachable from one place: `drafts.ts`, which only the
+ *     provider imports and which alone mints a publish ticket (part 3); no
+ *     file names the draft tool as a literal; only `reads.ts` and `drafts.ts`
+ *     open a session.
  *  7. `services/beehiiv/*` never imports Axal VC's own newsletters.
  *  8. The typed reads: a bad id is dropped or refused before any request;
  *     both rate shapes come back as fractions; no address leaves reads.ts.
@@ -231,25 +233,33 @@ const ROOT = process.cwd();
 const code = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const SRC_FILES = () => walk(resolve(ROOT, 'cloudflare-worker/src')).map((p) => ({ path: relative(ROOT, p), text: readFileSync(p, 'utf8') }));
 
-test('6. the draft list is unreachable: nothing imports it or calls the draft tool; only reads.ts opens a Beehiiv session', () => {
+test('6. the draft list is reachable only through drafts.ts, which only the provider imports; only reads.ts and drafts.ts open a Beehiiv session', () => {
   const files = SRC_FILES();
-  const drafts = files.filter((f) => /BEEHIIV_DRAFT_TOOLS/.test(f.text)).map((f) => f.path);
-  assert.deepEqual(drafts, ['cloudflare-worker/src/services/beehiiv/mcp.ts'], 'only mcp.ts names the draft list');
+  const drafts = files.filter((f) => /BEEHIIV_DRAFT_TOOLS/.test(f.text)).map((f) => f.path).sort();
+  assert.deepEqual(drafts, ['cloudflare-worker/src/services/beehiiv/drafts.ts', 'cloudflare-worker/src/services/beehiiv/mcp.ts'], 'only mcp.ts and drafts.ts name the draft list');
+  // D2407 part 3: drafts.ts is reached only from the provider's publish, and alone mints a publish ticket.
+  const draftImporters = files.filter((f) => /beehiiv\/drafts'/.test(f.text)).map((f) => f.path);
+  assert.deepEqual(draftImporters, ['cloudflare-worker/src/integrations/providers/beehiiv.ts'], 'only the provider imports drafts.ts');
+  const minters = files.filter((f) => /\bmintMcpPublishTicket\(/.test(code(f.text))).map((f) => f.path).sort();
+  assert.deepEqual(minters, ['cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/services/beehiiv/drafts.ts'], 'only drafts.ts mints a publish ticket');
   for (const f of files) {
     assert.ok(!f.text.includes(`'${DRAFT_TOOL}'`) || f.path === 'cloudflare-worker/src/integrations/mcpProviders.ts', `${f.path} names the draft tool`);
     assert.doesNotMatch(f.text, /MCP_PROVIDERS\.beehiiv\.write_tools|beehiiv[^\n]*\.write_tools/, `${f.path} reaches Beehiiv's write tools`);
   }
   const importers = files.filter((f) => (f.path.startsWith('cloudflare-worker/src/services/beehiiv/') && /from '\.\/mcp'/.test(f.text)) || /beehiiv\/mcp'/.test(f.text)).map((f) => f.path);
-  assert.deepEqual(importers, ['cloudflare-worker/src/services/beehiiv/reads.ts'], 'only reads.ts imports mcp.ts');
-  const sessions = files.filter((f) => /MCP_PROVIDERS\.beehiiv|mcpProviderFor\('beehiiv'\)/.test(f.text) && /openMcpSession\(/.test(f.text)).map((f) => f.path);
-  assert.deepEqual(sessions, ['cloudflare-worker/src/services/beehiiv/reads.ts']);
+  assert.deepEqual(importers.sort(), ['cloudflare-worker/src/services/beehiiv/drafts.ts', 'cloudflare-worker/src/services/beehiiv/reads.ts'], 'only reads.ts and drafts.ts import mcp.ts');
+  const sessions = files.filter((f) => /MCP_PROVIDERS\.beehiiv|mcpProviderFor\('beehiiv'\)/.test(f.text) && /openMcpSession\(/.test(f.text)).map((f) => f.path).sort();
+  assert.deepEqual(sessions, ['cloudflare-worker/src/services/beehiiv/drafts.ts', 'cloudflare-worker/src/services/beehiiv/reads.ts']);
+  // reads.ts stays read only: it neither names the draft list nor mints a ticket.
+  const reads = files.find((f) => f.path.endsWith('services/beehiiv/reads.ts'))!.text;
+  assert.doesNotMatch(reads, /BEEHIIV_DRAFT_TOOLS|mintMcpPublishTicket/);
   // The one route file that reads Beehiiv takes no draft path: no publish route mentions Beehiiv.
   for (const f of files.filter((x) => /routes\/publish/.test(x.path))) assert.doesNotMatch(f.text, /beehiiv/i, f.path);
 });
 
 test('7. services/beehiiv/* never imports Axal VC\'s own newsletters, and nothing in it names their stores', () => {
   const files = SRC_FILES().filter((f) => f.path.startsWith('cloudflare-worker/src/services/beehiiv/'));
-  assert.deepEqual(files.map((f) => f.path.split('/').pop()).sort(), ['grow.ts', 'mcp.ts', 'reads.ts']);
+  assert.deepEqual(files.map((f) => f.path.split('/').pop()).sort(), ['drafts.ts', 'grow.ts', 'mcp.ts', 'reads.ts']);
   for (const f of files) {
     // Every import form: `import x from '…'`, a bare `import '…'`, an `export … from '…'` and a dynamic `import('…')`.
     for (const m of code(f.text).matchAll(/(?:\bimport\s*(?:[^'"]*?\bfrom\s*)?|\bexport\s[^'"]*?\bfrom\s*|\bimport\(\s*)['"]([^'"]+)['"]/g)) {
@@ -372,16 +382,21 @@ test('11. the shared lines hold Beehiiv: registry, company scope, the ledger, th
   assert.deepEqual([d.status, d.auth_type, d.audience_rule, d.integration_type], ['beta', 'oauth_mcp', 'venture', 'data_feed']);
   assert.equal(CONNECTOR_METADATA.beehiiv.category, 'Marketing');
   assert.ok(CATEGORY_ORDER.includes('Marketing'));
-  assert.deepEqual(CONNECTOR_METADATA.beehiiv.sends, [], 'nothing is sent: drafts are part 3');
+  assert.deepEqual(CONNECTOR_METADATA.beehiiv.sends, [], 'nothing is sent: a draft is a publish, never a sends row');
+  assert.deepEqual(CONNECTOR_METADATA.beehiiv.publishes, [{ what: 'A draft post in your publication', target: 'beehiiv' }]);
   assert.equal(writesProjectData('beehiiv'), true);
   assert.equal(FED_LEDGER_PROVIDERS.has('beehiiv'), true);
   const page = CONNECTOR_PAGES.beehiiv as any;
   assert.deepEqual([page.sign_in.kind, page.sign_in.label, page.endpoints.sign_in], ['mcp', 'Sign in with Beehiiv', BEEHIIV_MCP_URL]);
-  assert.ok(page.tools.every((t: any) => t.access === 'read'), 'no write tool on the page');
-  const named = new Set(page.tools.flatMap((t: any) => t.calls.map((c: string) => /call\('([^']+)'/.exec(c)![1])));
-  assert.deepEqual([...named].sort(), [...READ_TOOLS].sort(), 'the page names every tool called, and only those');
+  // D2407 part 3: one write tool, the draft, by its one call site in drafts.ts.
+  const writes = page.tools.filter((t: any) => t.access !== 'read');
+  assert.deepEqual(writes.map((t: any) => [t.name, t.access, t.calls]), [['draft', 'write', ['session.callTool(DRAFT_TOOL']]]);
+  assert.ok(readFileSync('cloudflare-worker/src/services/beehiiv/drafts.ts', 'utf8').includes('session.callTool(DRAFT_TOOL'));
+  const named = new Set(page.tools.filter((t: any) => t.access === 'read').flatMap((t: any) => t.calls.map((c: string) => /call\('([^']+)'/.exec(c)![1])));
+  assert.deepEqual([...named].sort(), [...READ_TOOLS].sort(), 'the page names every read tool called, and only those');
   assert.ok(page.long_description[0].includes('Never reads your subscribers’ addresses.'));
-  assert.ok(page.long_description.some((p: string) => p.includes('Drafts are not built yet.') && p.includes('Drafts need a paid plan.')));
+  assert.ok(page.long_description.some((p: string) => p.includes('Creates a draft in your Beehiiv when you press Send. You publish it from Beehiiv.') && p.includes('Drafts need a paid plan.')));
+  assert.ok(!page.long_description.some((p: string) => p.includes('not built yet')), 'the page no longer says drafts come later');
   const impl = getProviderImpl('beehiiv');
   assert.ok(impl?.connect && impl.disconnect && impl.revokeGranted && impl.ready);
   const index = readFileSync('cloudflare-worker/src/index.ts', 'utf8');

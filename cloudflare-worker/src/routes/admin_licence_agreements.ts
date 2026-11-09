@@ -228,6 +228,17 @@ r.post('/licences/:licenceUid/drafts', async (c) => {
     await logAdminAction(c.env, admin.id, admin.email, 'licence_agreement_drafted', {
       licence_uid: licence.uid, agreement_uid: uid, slot_key: slot, template_slug: tpl.slug, template_version: tpl.version, body_sha256: sha, reason,
     });
+    // D5052: a draft of a slot whose executed version needs replacing is that replacement. The history says so;
+    // nothing about the executed version changes, and nothing is sent. Best effort: an older D1 has no store.
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO licence_legal_events (licence_uid, action, scope_kind, scope_key, program_key, package_key, agreement_uid, agreement_revision, actor_user_id, reason, detail_json, created_at)
+         SELECT ?, 'replacement_prepared', CASE WHEN ? IS NOT NULL THEN 'program' ELSE 'package' END, COALESCE(?, ?), ?, ?, ?, 0, ?, ?, json_object('replaces', x.uid, 'slot_key', ?), ?
+           FROM licence_program_agreements x
+          WHERE x.licence_uid = ? AND x.slot_key = ? AND x.status = 'executed'
+            AND EXISTS (SELECT 1 FROM licence_legal_events e WHERE e.action = 'replacement_required' AND e.agreement_uid = x.uid)`,
+      ).bind(licence.uid, scope.program_key, scope.program_key, scope.package_key, scope.program_key, scope.package_key, uid, admin.id, reason, slot, at, licence.uid, slot).run();
+    } catch (e) { console.warn('[licence-agreements] replacement_prepared not recorded', (e as Error)?.message); }
     const row = await agreementByUid(c.env, uid);
     return c.json({ ok: true, agreement: presentVersion(row as any, !!signer?.email) }, 201);
   } catch (e) { return mapError(c, e); }
