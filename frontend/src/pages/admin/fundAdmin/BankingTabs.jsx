@@ -11,7 +11,7 @@ import {
 } from './fundAdminModel';
 import { ActFlow } from './MoneyFlow';
 import { actButton, matchEffects, matchOutcome } from './moneyFlowModel';
-import { Line, NUM, Note, Panel, Section, Table } from './parts';
+import { Line, NUM, TAP_LINK, Note, Panel, Section, Table } from './parts';
 import { useRead } from './useRead';
 
 /**
@@ -119,7 +119,7 @@ export function BankingTab({ apis, access }) {
       <Panel label="Payment instructions" testId="banking-payment-instructions">
         {actRow(access, 'bank_account.see')?.allowed === true
           ? <Line a="The entities' bank accounts" b="Entered, retired and revealed from the bank accounts console, behind your step-up."
-            action={<Link className={BTN.link} to={PAYMENT_INSTRUCTIONS_LINK.href} data-testid="payment-instructions-link">{PAYMENT_INSTRUCTIONS_LINK.text}</Link>} />
+            action={<Link className={TAP_LINK} to={PAYMENT_INSTRUCTIONS_LINK.href} data-testid="payment-instructions-link">{PAYMENT_INSTRUCTIONS_LINK.text}</Link>} />
           : <Line a="The entities' bank accounts" b={<span data-testid="payment-instructions-admin">{PAYMENT_INSTRUCTIONS_ADMIN}</span>} />}
       </Panel>
       </div>

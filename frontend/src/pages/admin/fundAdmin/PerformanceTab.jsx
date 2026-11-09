@@ -7,7 +7,7 @@ import { reportError } from '../../../lib/log';
 import { money, refusalText } from './fundAdminModel';
 import { ActFlow } from './MoneyFlow';
 import { actButton, markEffects } from './moneyFlowModel';
-import { Note, NUM, Panel, Section, TH, Table, Tiles } from './parts';
+import { Note, NUM, TAP_LINK, Panel, Section, TH, Table, Tiles } from './parts';
 import { useRead } from './useRead';
 import {
   MARK_INFO, MOVE_INFO, NAV_LINE, NOT_RECORDED, PICK_FUND, SOURCE_MAX,
@@ -40,7 +40,7 @@ function ChartPanel({ title, note, legend, foot, alt, table, testId, children })
   const [asTable, setAsTable] = useState(false);
   return (
     <Panel label={title} testId={testId}
-      aside={<button type="button" className={BTN.link} onClick={() => setAsTable((v) => !v)} data-testid={`${testId}-toggle`}>{asTable ? 'View as chart' : 'View as table'}</button>}>
+      aside={<button type="button" className={TAP_LINK} onClick={() => setAsTable((v) => !v)} data-testid={`${testId}-toggle`}>{asTable ? 'View as chart' : 'View as table'}</button>}>
       <div className="flex flex-col gap-2 px-4 py-3 sm:px-5">
         {note && <p className="m-0 text-[12.5px] text-zinc-700 dark:text-gray-200">{note}</p>}
         {legend && !asTable && <div className="flex flex-wrap gap-3 text-[11px] text-axal-muted dark:text-gray-400">{legend}</div>}
@@ -148,8 +148,8 @@ function PositionsTable({ positions, access, onMark, onMove }) {
     { key: 'acts', label: '', align: 'right', cell: (r) => (
       <FundActControl access={access} act="fund.valuation" testId={`fund-position-refused-${r.id}`} className="text-[11px] text-axal-muted dark:text-gray-400">
         <span className="inline-flex flex-wrap justify-end gap-2">
-          <button type="button" className={BTN.link} onClick={() => onMark(r.raw)} data-testid={`fund-position-mark-${r.id}`}>Record a mark</button>
-          <button type="button" className={BTN.link} onClick={() => onMove(r.raw)} data-testid={`fund-position-move-${r.id}`}>Move to another fund</button>
+          <button type="button" className={TAP_LINK} onClick={() => onMark(r.raw)} data-testid={`fund-position-mark-${r.id}`}>Record a mark</button>
+          <button type="button" className={TAP_LINK} onClick={() => onMove(r.raw)} data-testid={`fund-position-move-${r.id}`}>Move to another fund</button>
         </span>
       </FundActControl>
     ) },
