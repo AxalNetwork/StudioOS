@@ -26,7 +26,7 @@ export const STEPS = (plan, lane) => [
   ...(lane === 'founder' ? [{ key: 'spinout', title: 'Optional: apply to the Spin-Out Lab', line: 'This is a separate application you make after you sign in. It is not part of any plan and not needed to create your account.' }] : []),
 ];
 
-export function PlanSelection({ selection }) {
+export function PlanSelection({ selection, onRetry = null }) {
   if (!selection) return null;
   const ready = selection.state === 'ready';
   return (
@@ -42,7 +42,10 @@ export function PlanSelection({ selection }) {
           <p className="m-0 mt-1 text-xs"><Link to={`/pricing?for=${selection.tab}`} className="font-semibold text-violet-700 underline" data-testid="register-plan-change">Change plan</Link></p>
         </>
       ) : (
-        <p className="m-0" data-testid="register-plan-line">{selection.line}{' '}<Link to="/pricing" className="font-semibold underline">See plans</Link></p>
+        <p className="m-0" data-testid="register-plan-line">{selection.line}{' '}
+          {/* #4651: an unreadable catalogue is read again in place, so the visitor keeps the plan they chose. */}
+          {selection.state === 'unreadable' && onRetry && <><button type="button" className="font-semibold underline" onClick={onRetry} data-testid="register-plan-retry">Try again</button>{' or '}</>}
+          <Link to="/pricing" className="font-semibold underline">See plans</Link></p>
       )}
     </section>
   );
@@ -87,18 +90,20 @@ export function SignedInPlanNotice({ user, intent, onSignOut }) {
  */
 export function RegistrationPlanBlock({ intent, lane, onSelection, api = publicPricingApi }) {
   const [catalogue, setCatalogue] = useState(undefined);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!intent) return undefined;
     let alive = true;
     api.plansAndPacks().then((r) => { if (alive) setCatalogue(r); }, () => { if (alive) setCatalogue(false); });
     return () => { alive = false; };
-  }, [intent, api]);
+  }, [intent, api, attempt]);
+  const retry = () => { setCatalogue(undefined); setAttempt((n) => n + 1); };
   const selection = intent && catalogue !== undefined ? selectionFor(catalogue || null, intent) : null;
   useEffect(() => { onSelection?.(selection); }, [selection?.state, selection?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <>
       {intent && catalogue === undefined && <p className="text-xs text-gray-600 mb-4" data-testid="register-plan-reading">Reading the plan you chose…</p>}
-      <PlanSelection selection={selection} />
+      <PlanSelection selection={selection} onRetry={retry} />
       <RegistrationSteps selection={selection} lane={lane} />
     </>
   );
