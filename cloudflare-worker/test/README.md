@@ -33,6 +33,12 @@ migrated schema: the cap table scenario and venture links and the scoring report
 cross-kind, spent or revoked token and every account the link does not name, with nothing of the record in the
 refusal and no view, open or audit row written; another founder or an admin cannot revoke or mint the owner's link.
 
+`authz_calendar_writes_d4570.test.ts` (#4570, D4570 slice 4) asks the calendar's eight record writes (IC meeting RSVP,
+cancel and reschedule; check-in cancel and reschedule; manual-row edit and delete; push to the caller's calendar) through
+the real Worker on the migrated schema, as every account that is not a party, an attendee in the wrong role, a disabled
+party and no credentials: refused, nothing of the record named, and no row, copy mapping or audit row changed and no
+call made to the calendar provider.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.

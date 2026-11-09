@@ -1314,7 +1314,12 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   // token row existed, the screen said "Sign-in link sent", and no mail left.
   // Resend ran the same handler on a warm isolate, the errand survived, and
   // that second press was the first time a message was actually queued.
-  const queued = await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
+  // #4578 (D4578): /register asks for `purpose: 'signup'` right after it created the account, and gets the same link
+  // worded as "finish creating your account". The answer below is identical either way, so nothing is enumerated.
+  const signup = parsed.body?.purpose === 'signup';
+  const queued = signup
+    ? await sendEmail(c.env, 'auth_signup_link', email, { name, magic_url: magicUrl })
+    : await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
   if (!queued.ok) {
     console.error('[AUTH:magic-start] email enqueue failed', queued.reason || 'unknown');
     return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 502);
