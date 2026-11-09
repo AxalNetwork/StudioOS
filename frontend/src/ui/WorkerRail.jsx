@@ -34,6 +34,7 @@ import { budgetReadable } from '../pages/account/usageModel';
 import './workerRail.css';
 import { clearRailPage, setRailPage } from '../lib/railPage.js';
 import { closeSheets, useSheetOpen } from './sheetStore.js';
+import { RAIL_PINNED_KEY, isPinned, railCollapsed, withPin } from './railOperations.js';
 
 /**
  * The Eadwyn AI rail. One component, every licence.
@@ -505,6 +506,13 @@ export default function WorkerRail({
    * spend is not shown here, and a founder's never was.
    */
   readOnlyFor = null,
+  /**
+   * D4860 part 2 (#4860, PL-12): an operations screen (HQ's Platform consoles,
+   * Monitoring). The rail starts collapsed on every visit, opens for the visit
+   * when asked, and stays open on a page the viewer pinned. It neither reads
+   * nor writes the shared collapse preference (`ui/railOperations.js`).
+   */
+  operations = false,
   'data-testid': testId = 'worker-rail',
 }) {
   const founderRecord = readOnlyFor === 'founder-record';
@@ -523,7 +531,15 @@ export default function WorkerRail({
   // D1317: while a detail sheet is open the rail draws its spine beside it,
   // without changing the member's stored choice; it comes back on close.
   const sheetOpen = useSheetOpen();
-  const collapsed = stored || sheetOpen;
+  // D4860 part 2: an operations rail opens for this visit, or because it is
+  // pinned open on this page; the shared preference is not consulted.
+  const [pinned, setPinned] = useState(() => operations && isPinned(safeReadJSON(RAIL_PINNED_KEY, []), pathname));
+  const [visitOpen, setVisitOpen] = useState(pinned);
+  const collapsed = railCollapsed({ operations, stored, visitOpen, sheetOpen });
+  const pinOpen = useCallback((on) => {
+    safeWriteJSON(RAIL_PINNED_KEY, withPin(safeReadJSON(RAIL_PINNED_KEY, []), pathname, on));
+    setPinned(on);
+  }, [pathname]);
 
   // D1317: a mounted rail is where a detail sheet docks (`sheet.css`). Counted,
   // so a second rail unmounting does not undock the first.
@@ -551,15 +567,18 @@ export default function WorkerRail({
     if (sheetOpen) {
       closeSheets();
       setCollapsed(false);
+      // D4860 part 2: an operations rail opens for the visit and leaves the shared preference alone.
+      if (operations) { setVisitOpen(true); return; }
       safeWriteJSON(RAIL_COLLAPSED_KEY, false);
       return;
     }
+    if (operations) { setVisitOpen((prev) => !prev); return; }
     setCollapsed((prev) => {
       const next = !prev;
       safeWriteJSON(RAIL_COLLAPSED_KEY, next);
       return next;
     });
-  }, [sheetOpen]);
+  }, [sheetOpen, operations]);
 
   // WHERE: the provider's section and module, or this rail's workspace.
   const section = crumbs?.section || workspace;
@@ -1015,6 +1034,7 @@ export default function WorkerRail({
       className={`fwr ${className}`.trim()}
       aria-label={`Eadwyn AI · ${workspace}`}
       data-collapsed={collapsed ? 'true' : 'false'}
+      {...(operations ? { 'data-operations': 'true' } : {})}
       {...(askPanel && askDocked && askHasRoom ? { 'data-ask-room': 'true' } : {})}
       data-sheet-keep=""
       {...(founderRecord ? { 'data-founder-record': 'true' } : {})}
@@ -1042,7 +1062,9 @@ export default function WorkerRail({
           onClick={toggle}
           aria-expanded={!collapsed}
           aria-controls={bodyId}
-          title={collapsed ? `Show the Eadwyn AI rail for ${workspace}` : `Collapse the Eadwyn AI rail for ${workspace}`}
+          title={collapsed
+            ? (operations ? `Open Eadwyn: Ask about ${workspace}` : `Show the Eadwyn AI rail for ${workspace}`)
+            : `Collapse the Eadwyn AI rail for ${workspace}`}
           data-testid="button-worker-rail-toggle"
         >
           {collapsed
@@ -1059,6 +1081,19 @@ export default function WorkerRail({
           has its one Ask. Not on the 44px spine, and never on a deck rail
           (`groups`, D1604): the deck's Ask is its page header's. */}
       {!collapsed && !groups && <div className="fwr-ask-entry"><HeaderAsk fallback testId="rail-ask" /></div>}
+      {/* D4860 part 2 (PL-12): an operations rail is collapsed on every visit
+          unless the viewer pins it open on this page. */}
+      {operations && !collapsed && !founderRecord && (
+        <label className="fwr-pin" data-testid="label-worker-rail-pin">
+          <input
+            type="checkbox"
+            checked={pinned}
+            onChange={(e) => pinOpen(e.target.checked)}
+            data-testid="checkbox-worker-rail-pin"
+          />
+          <span>Pin open on this page</span>
+        </label>
+      )}
       {!sheet.open && !(serves && panel.open) && shown}
     </aside>
     {portalReady && askPanel && askDocked && createPortal(

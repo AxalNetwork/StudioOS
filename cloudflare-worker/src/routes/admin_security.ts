@@ -670,7 +670,11 @@ const FEED_AUDIT_ALL_SQL = `SELECT a.id, a.action, a.report_type, a.format, a.fi
      FROM admin_audit_log a
      LEFT JOIN users u ON u.id = a.admin_user_id
      LEFT JOIN users t ON t.id = a.viewed_user_id
-    ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`;
+    WHERE (? IS NULL OR datetime(a.exported_at) < datetime(?))
+      AND (? IS NULL OR datetime(a.exported_at) >= datetime(?))
+      AND (? IS NULL OR a.admin_user_id = ?)
+      AND (? IS NULL OR a.action LIKE ? ESCAPE '!' OR a.report_type LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(a.exported_at) DESC, a.id DESC LIMIT ?`;
 
 const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, a.filters_json, a.exported_at,
           u.name AS admin_name, u.email AS admin_email, a.admin_user_id,
@@ -679,7 +683,11 @@ const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, 
      LEFT JOIN users u ON u.id = a.admin_user_id
      LEFT JOIN users t ON t.id = a.viewed_user_id
     WHERE a.action LIKE '%export%'
-    ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`;
+      AND (? IS NULL OR datetime(a.exported_at) < datetime(?))
+      AND (? IS NULL OR datetime(a.exported_at) >= datetime(?))
+      AND (? IS NULL OR a.admin_user_id = ?)
+      AND (? IS NULL OR a.action LIKE ? ESCAPE '!' OR a.report_type LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(a.exported_at) DESC, a.id DESC LIMIT ?`;
 
 /** Twenty-five placeholders, one per entry in ACTOR_SIDE_ACTIONS (D625 added the three identity reads; D1232 the KYC value shown, renewals, audit, periods, D1230's Send to HQ and its decision, and D1229's case, figures, assignment, note, ask for information and re-check). */
 const FEED_ACTIVITY_ACTOR_SIDE_SQL = `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
@@ -687,7 +695,11 @@ const FEED_ACTIVITY_ACTOR_SIDE_SQL = `SELECT l.id, l.action, l.details, l.create
      FROM activity_logs l
      LEFT JOIN users u ON u.id = l.user_id
     WHERE l.action IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
+      AND (? IS NULL OR datetime(l.created_at) < datetime(?))
+      AND (? IS NULL OR datetime(l.created_at) >= datetime(?))
+      AND (? IS NULL OR l.user_id = ?)
+      AND (? IS NULL OR l.action LIKE ? ESCAPE '!' OR l.details LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(l.created_at) DESC, l.id DESC LIMIT ?`;
 
 /** One placeholder, one per entry in SUSPENSION_ACTIVITY_ACTIONS. */
 const FEED_ACTIVITY_SUSPENSIONS_SQL = `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
@@ -695,7 +707,11 @@ const FEED_ACTIVITY_SUSPENSIONS_SQL = `SELECT l.id, l.action, l.details, l.creat
      FROM activity_logs l
      LEFT JOIN users u ON u.id = l.user_id
     WHERE l.action IN (?)
-    ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
+      AND (? IS NULL OR datetime(l.created_at) < datetime(?))
+      AND (? IS NULL OR datetime(l.created_at) >= datetime(?))
+      AND (? IS NULL OR l.user_id = ?)
+      AND (? IS NULL OR l.action LIKE ? ESCAPE '!' OR l.details LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(l.created_at) DESC, l.id DESC LIMIT ?`;
 
 const FEED_LICENCE_ALL_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.actor_user_id,
           u.name AS actor_name, u.email AS actor_email,
@@ -703,7 +719,11 @@ const FEED_LICENCE_ALL_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.acto
      FROM licence_events e
      LEFT JOIN users u ON u.id = e.actor_user_id
      LEFT JOIN territory_licences l ON l.id = e.licence_id
-    ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
+    WHERE (? IS NULL OR datetime(e.created_at) < datetime(?))
+      AND (? IS NULL OR datetime(e.created_at) >= datetime(?))
+      AND (? IS NULL OR e.actor_user_id = ?)
+      AND (? IS NULL OR e.event LIKE ? ESCAPE '!' OR e.note LIKE ? ESCAPE '!' OR l.licence_ref LIKE ? ESCAPE '!' OR l.brand_name LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(e.created_at) DESC, e.id DESC LIMIT ?`;
 
 /** Two placeholders, one per entry in SUSPENSION_LICENCE_EVENTS. */
 const FEED_LICENCE_SUSPENSIONS_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.actor_user_id,
@@ -713,7 +733,11 @@ const FEED_LICENCE_SUSPENSIONS_SQL = `SELECT e.id, e.event, e.note, e.created_at
      LEFT JOIN users u ON u.id = e.actor_user_id
      LEFT JOIN territory_licences l ON l.id = e.licence_id
     WHERE e.event IN (?, ?)
-    ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
+      AND (? IS NULL OR datetime(e.created_at) < datetime(?))
+      AND (? IS NULL OR datetime(e.created_at) >= datetime(?))
+      AND (? IS NULL OR e.actor_user_id = ?)
+      AND (? IS NULL OR e.event LIKE ? ESCAPE '!' OR e.note LIKE ? ESCAPE '!' OR l.licence_ref LIKE ? ESCAPE '!' OR l.brand_name LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(e.created_at) DESC, e.id DESC LIMIT ?`;
 
 /**
  * D200 — the fifth store. The subject joins to an account where the event
@@ -727,9 +751,204 @@ const FEED_SECURITY_EVENTS_SQL = `SELECT s.id, s.kind, s.factor, s.outcome, s.de
      FROM security_events s
      LEFT JOIN users u ON u.id = s.user_id
      LEFT JOIN users sp ON sp.id = s.support_user_id
-    ORDER BY s.occurred_at DESC, s.id DESC LIMIT ?`;
+    WHERE (? IS NULL OR datetime(s.occurred_at) < datetime(?))
+      AND (? IS NULL OR datetime(s.occurred_at) >= datetime(?))
+      AND (? IS NULL OR s.user_id = ? OR s.support_user_id = ?)
+      AND (? IS NULL OR s.outcome = ?)
+      AND (? IS NULL OR s.kind LIKE ? ESCAPE '!' OR s.factor LIKE ? ESCAPE '!' OR s.detail LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!' OR sp.name LIKE ? ESCAPE '!' OR sp.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(s.occurred_at) DESC, s.id DESC LIMIT ?`;
+
+/**
+ * D4803 (Events) — the impersonation sessions for the FEED, under the same
+ * cursor and filters as the other four stores. The Data access zone keeps its
+ * own unfiltered read of the newest sessions: a filter on the ledger must not
+ * make that zone look as if nobody had acted as anyone.
+ * `ended` is 1 for sessions with an end, 0 for open ones, NULL for both.
+ */
+const FEED_IMPERSONATIONS_SQL = `SELECT i.id, i.context, i.started_at, i.ended_at,
+          a.name AS admin_name, a.email AS admin_email, i.admin_user_id,
+          t.name AS target_name, t.email AS target_email, i.target_user_id
+     FROM impersonation_sessions i
+     LEFT JOIN users a ON a.id = i.admin_user_id
+     LEFT JOIN users t ON t.id = i.target_user_id
+    WHERE (? IS NULL OR datetime(i.started_at) < datetime(?))
+      AND (? IS NULL OR datetime(i.started_at) >= datetime(?))
+      AND (? IS NULL OR i.admin_user_id = ?)
+      AND (? IS NULL OR (? = 1 AND i.ended_at IS NOT NULL) OR (? = 0 AND i.ended_at IS NULL))
+      AND (? IS NULL OR i.context LIKE ? ESCAPE '!' OR a.name LIKE ? ESCAPE '!' OR a.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(i.started_at) DESC, i.id DESC LIMIT ?`;
 
 type ImpersonationRow = Record<string, unknown>;
+
+/**
+ * D4803 (Events, SE03) — the ledger's cursor and its server-side filters.
+ *
+ * Each store applies the same four conditions in its own SQL, every value
+ * bound and every timestamp normalised through `datetime()` (D124), so each
+ * store still returns its OWN newest FEED_LIMIT matching rows and the merge
+ * stays exact, as the whole-feed read always was:
+ *
+ *   before  older than this instant (the cursor; the page's last `at`)
+ *   from    on or after this day, `YYYY-MM-DD`, UTC
+ *   to      on or before this day, `YYYY-MM-DD`, UTC (the whole day)
+ *   actor   a user id: who acted (a gate or step-up event also matches the
+ *           support operator acting for that account)
+ *   q       a search, matched as a substring, case-insensitively for ASCII
+ *           (SQLite's LIKE), against the action, the names and emails the row
+ *           joins, and the store's own text column
+ *   outcome ok | refused | live | ended | not_closed
+ *   source  one store's table name
+ *
+ * A value outside its shape is a 400 naming the field, never a quietly
+ * widened read: an investigator who typed a date the server ignored would be
+ * reading a list that is not the one they asked for.
+ */
+export const FEED_OUTCOMES = ['ok', 'refused', 'live', 'ended', 'not_closed'] as const;
+export const FEED_SOURCES = [
+  'admin_audit_log', 'activity_logs', 'impersonation_sessions', 'licence_events', 'security_events',
+] as const;
+type FeedOutcome = (typeof FEED_OUTCOMES)[number];
+type FeedSource = (typeof FEED_SOURCES)[number];
+export type FeedQuery = {
+  upper: string | null;
+  lower: string | null;
+  actor: number | null;
+  like: string | null;
+  outcome: FeedOutcome | null;
+  source: FeedSource | null;
+  applied: Record<string, string | number>;
+};
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SEARCH_MAX = 100;
+/** `YYYY-MM-DD HH:MM:SS`, UTC: the shape `datetime()` returns, so a bound value compares as the column does. */
+const sqlStamp = (ms: number) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+
+/** The query string as a FeedQuery, or the first field that is out of shape. */
+export function parseFeedQuery(q: (k: string) => string | undefined):
+  { ok: true; query: FeedQuery } | { ok: false; field: string; message: string } {
+  const applied: Record<string, string | number> = {};
+  const text = (k: string) => {
+    const v = q(k);
+    return typeof v === 'string' && v.trim() ? v.trim() : null;
+  };
+  let upper: number | null = null;
+  let lower: number | null = null;
+
+  const before = text('before');
+  if (before) {
+    const ms = parseStoredTs(before);
+    if (Number.isNaN(ms)) return { ok: false, field: 'before', message: 'The cursor is not a timestamp.' };
+    upper = ms;
+    applied.before = before;
+  }
+  const day = (k: 'from' | 'to') => {
+    const v = text(k);
+    if (!v) return { ok: true as const, ms: null };
+    const ms = DAY_RE.test(v) ? Date.parse(`${v}T00:00:00Z`) : NaN;
+    if (Number.isNaN(ms)) return { ok: false as const };
+    applied[k] = v;
+    return { ok: true as const, ms };
+  };
+  const from = day('from');
+  if (!from.ok) return { ok: false, field: 'from', message: 'The start date must be YYYY-MM-DD.' };
+  const to = day('to');
+  if (!to.ok) return { ok: false, field: 'to', message: 'The end date must be YYYY-MM-DD.' };
+  if (from.ms !== null) lower = from.ms;
+  // `to` names a whole day, so the bound is the start of the next one.
+  if (to.ms !== null) {
+    const end = to.ms + 86_400_000;
+    upper = upper === null ? end : Math.min(upper, end);
+  }
+  if (lower !== null && upper !== null && lower >= upper) {
+    return { ok: false, field: 'from', message: 'The start date is after the end of the range.' };
+  }
+
+  const actorText = text('actor');
+  let actor: number | null = null;
+  if (actorText) {
+    if (!/^[1-9]\d{0,9}$/.test(actorText)) return { ok: false, field: 'actor', message: 'The actor must be a user id.' };
+    actor = Number(actorText);
+    applied.actor = actor;
+  }
+
+  const search = text('q');
+  let like: string | null = null;
+  if (search) {
+    if (search.length > SEARCH_MAX) return { ok: false, field: 'q', message: `A search is at most ${SEARCH_MAX} characters.` };
+    // `!` escapes LIKE's own wildcards, so a search for "50%" finds "50%".
+    like = `%${search.replace(/[!%_]/g, (ch) => `!${ch}`)}%`;
+    applied.q = search;
+  }
+
+  const outcomeText = text('outcome');
+  let outcome: FeedOutcome | null = null;
+  if (outcomeText) {
+    if (!(FEED_OUTCOMES as readonly string[]).includes(outcomeText)) {
+      return { ok: false, field: 'outcome', message: `The outcome is one of ${FEED_OUTCOMES.join(', ')}.` };
+    }
+    outcome = outcomeText as FeedOutcome;
+    applied.outcome = outcome;
+  }
+
+  const sourceText = text('source');
+  let source: FeedSource | null = null;
+  if (sourceText) {
+    if (!(FEED_SOURCES as readonly string[]).includes(sourceText)) {
+      return { ok: false, field: 'source', message: 'The source is not one of the five stores.' };
+    }
+    source = sourceText as FeedSource;
+    applied.source = source;
+  }
+
+  return {
+    ok: true,
+    query: {
+      upper: upper === null ? null : sqlStamp(upper),
+      lower: lower === null ? null : sqlStamp(lower),
+      actor, like, outcome, source, applied,
+    },
+  };
+}
+
+/** The binds for one store's time, actor and search conditions, in statement order. */
+const timeBinds = (f: FeedQuery) => [f.upper, f.upper, f.lower, f.lower];
+const actorBinds = (f: FeedQuery, n = 2) => [f.actor, ...Array(n - 1).fill(f.actor)];
+const likeBinds = (f: FeedQuery, n: number) => [f.like, ...Array(n).fill(f.like)];
+
+/**
+ * Which stores a filtered read can hold a row from. Only `security_events`
+ * stores an outcome; the other four are written after their act (`ok`), and an
+ * impersonation's outcome is a state (live, ended, not closed).
+ */
+function storesFor(f: FeedQuery): Record<FeedSource, boolean> {
+  const all = {
+    admin_audit_log: true, activity_logs: true, impersonation_sessions: true, licence_events: true, security_events: true,
+  };
+  if (f.outcome === 'refused') Object.assign(all, { admin_audit_log: false, activity_logs: false, impersonation_sessions: false, licence_events: false });
+  if (f.outcome === 'ok') all.impersonation_sessions = false;
+  if (f.outcome === 'live' || f.outcome === 'ended' || f.outcome === 'not_closed') {
+    Object.assign(all, { admin_audit_log: false, activity_logs: false, licence_events: false, security_events: false });
+  }
+  if (f.source) for (const k of FEED_SOURCES) if (k !== f.source) all[k] = false;
+  return all;
+}
+
+/**
+ * The page ends on a whole second. The cursor is the last row's time and the
+ * next read takes rows strictly older, at the second `datetime()` keeps, so a
+ * page cut inside a second would drop that second's remaining rows. Trailing
+ * rows in the last row's second are held back to the next page — unless the
+ * whole page is one second, which is returned whole and said so.
+ */
+export function trimToSecond<T extends { ts: number }>(rows: T[], more: boolean): { page: T[]; split: boolean } {
+  if (!more || rows.length === 0) return { page: rows, split: false };
+  const sec = (t: number) => (Number.isNaN(t) ? NaN : Math.floor(t / 1000));
+  const last = sec(rows[rows.length - 1].ts);
+  let cut = rows.length;
+  while (cut > 0 && sec(rows[cut - 1].ts) === last) cut -= 1;
+  return cut === 0 ? { page: rows, split: true } : { page: rows.slice(0, cut), split: false };
+}
 
 r.get('/governance', async (c) => {
   await requireSuperAdmin(c);
@@ -739,12 +958,19 @@ r.get('/governance', async (c) => {
   // stale bookmark should show more than it asked for, never less.
   const filter = FEED_FILTERS.some((f) => f.key === asked) ? asked : 'all';
   const now = Date.now();
+  // D4803 — the cursor and the server-side filters. A value out of shape is
+  // refused with its field, never read as a wider list than was asked for.
+  const parsed = parseFeedQuery((k) => c.req.query(k));
+  if (!parsed.ok) return c.json({ error: parsed.message, code: 'invalid_filter', field: parsed.field }, 400);
+  const fq = parsed.query;
+  const narrowed = Object.keys(fq.applied).length > 0;
+  const stores = storesFor(fq);
 
-  const readAudit = filter === 'all' || filter === 'exports';
-  const readActivity = filter === 'all' || filter === 'suspensions';
-  const readImpersonations = filter === 'all' || filter === 'impersonations';
-  const readLicences = filter === 'all' || filter === 'licence_changes' || filter === 'suspensions';
-  const readSecurity = filter === 'all' || filter === 'auth';
+  const readAudit = (filter === 'all' || filter === 'exports') && stores.admin_audit_log;
+  const readActivity = (filter === 'all' || filter === 'suspensions') && stores.activity_logs;
+  const readImpersonations = (filter === 'all' || filter === 'impersonations') && stores.impersonation_sessions;
+  const readLicences = (filter === 'all' || filter === 'licence_changes' || filter === 'suspensions') && stores.licence_events;
+  const readSecurity = (filter === 'all' || filter === 'auth') && stores.security_events;
 
   const rows: Array<FeedRow & { ts: number }> = [];
   const sources: Array<{ table: string; available: boolean; rows?: number; reason?: string }> = [];
@@ -784,7 +1010,7 @@ r.get('/governance', async (c) => {
     try {
       const res = await env.DB
         .prepare(filter === 'exports' ? FEED_AUDIT_EXPORTS_SQL : FEED_AUDIT_ALL_SQL)
-        .bind(FEED_LIMIT).all<Record<string, unknown>>();
+        .bind(...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), FEED_LIMIT).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const a of got) {
         const action = String(a.action || '');
@@ -820,7 +1046,7 @@ r.get('/governance', async (c) => {
       const allow = suspensionsOnly ? SUSPENSION_ACTIVITY_ACTIONS : ACTOR_SIDE_ACTIONS;
       const res = await env.DB
         .prepare(suspensionsOnly ? FEED_ACTIVITY_SUSPENSIONS_SQL : FEED_ACTIVITY_ACTOR_SIDE_SQL)
-        .bind(...allow, FEED_LIMIT).all<Record<string, unknown>>();
+        .bind(...allow, ...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 4), FEED_LIMIT).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const l of got) {
         const action = String(l.action || '');
@@ -846,10 +1072,29 @@ r.get('/governance', async (c) => {
 
   // ── impersonation_sessions ────────────────────────────────────────────
   if (readImpersonations) {
-    if (impersonations === null) {
+    // Unfiltered, the feed shares the Data access zone's read; narrowed, it
+    // reads its own under the same conditions as the other four stores.
+    let feedImpersonations: ImpersonationRow[] | null = impersonations;
+    if (narrowed) {
+      const ended = fq.outcome === 'ended' ? 1 : fq.outcome === 'live' || fq.outcome === 'not_closed' ? 0 : null;
+      try {
+        const res = await env.DB.prepare(FEED_IMPERSONATIONS_SQL)
+          .bind(...timeBinds(fq), ...actorBinds(fq), ended, ended, ended, ...likeBinds(fq, 5), FEED_LIMIT)
+          .all<ImpersonationRow>();
+        feedImpersonations = res.results || [];
+      } catch {
+        feedImpersonations = null;
+      }
+    }
+    if (feedImpersonations === null) {
       sources.push({ table: 'impersonation_sessions', available: false, reason: IMPERSONATION_UNREADABLE });
     } else {
-      for (const i of impersonations) {
+      // An open session is live or not closed by the clock, which SQL cannot
+      // tell apart; the store's own count still decides `more`.
+      const wanted = fq.outcome === 'live' || fq.outcome === 'not_closed'
+        ? feedImpersonations.filter((i) => impersonationOutcome(i, now) === (fq.outcome === 'live' ? 'live' : 'not closed'))
+        : feedImpersonations;
+      for (const i of wanted) {
         rows.push({
           key: `impersonation:${i.id}`,
           at: (i.started_at as string) || null,
@@ -871,7 +1116,7 @@ r.get('/governance', async (c) => {
           outcome: impersonationOutcome(i, now),
         });
       }
-      sources.push({ table: 'impersonation_sessions', available: true, rows: took(impersonations.length) });
+      sources.push({ table: 'impersonation_sessions', available: true, rows: took(feedImpersonations.length) });
     }
   }
 
@@ -880,9 +1125,10 @@ r.get('/governance', async (c) => {
     try {
       const res = filter === 'suspensions'
         ? await env.DB.prepare(FEED_LICENCE_SUSPENSIONS_SQL)
-          .bind(...SUSPENSION_LICENCE_EVENTS, FEED_LIMIT).all<Record<string, unknown>>()
+          .bind(...SUSPENSION_LICENCE_EVENTS, ...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), FEED_LIMIT)
+          .all<Record<string, unknown>>()
         : await env.DB.prepare(FEED_LICENCE_ALL_SQL)
-          .bind(FEED_LIMIT).all<Record<string, unknown>>();
+          .bind(...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), FEED_LIMIT).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const e of got) {
         const event = String(e.event || '');
@@ -912,7 +1158,10 @@ r.get('/governance', async (c) => {
   // ── security_events — D200, the fifth store ───────────────────────────
   if (readSecurity) {
     try {
-      const res = await env.DB.prepare(FEED_SECURITY_EVENTS_SQL).bind(FEED_LIMIT).all<Record<string, unknown>>();
+      const secOutcome = fq.outcome === 'ok' || fq.outcome === 'refused' ? fq.outcome : null;
+      const res = await env.DB.prepare(FEED_SECURITY_EVENTS_SQL)
+        .bind(...timeBinds(fq), ...actorBinds(fq, 3), secOutcome, secOutcome, ...likeBinds(fq, 7), FEED_LIMIT)
+        .all<Record<string, unknown>>();
       const got = res.results || [];
       for (const s of got) {
         const outcome = String(s.outcome || '');
@@ -960,7 +1209,17 @@ r.get('/governance', async (c) => {
     const bv = Number.isNaN(b.ts) ? -Infinity : b.ts;
     return bv - av;
   });
-  const page = rows.slice(0, FEED_LIMIT).map(({ ts, ...row }) => row);
+  // More is held when any store filled its own page, OR when the stores
+  // together returned more than one page (two stores of forty each): the rows
+  // past FEED_LIMIT are real and Load older has to reach them.
+  if (rows.length > FEED_LIMIT) more = true;
+  const { page: kept, split } = trimToSecond(rows.slice(0, FEED_LIMIT), more);
+  const page = kept.map(({ ts, ...row }) => row);
+  // D4803 — Load older: the next read is everything strictly older than the
+  // last row kept. No cursor when nothing older is held, or when the last row
+  // has no time to continue from.
+  const lastAt = more && kept.length ? kept[kept.length - 1].at : null;
+  const cursor = lastAt && !Number.isNaN(parseSqlTs(lastAt)) ? { before: lastAt } : null;
 
   // ── H7's "Data access" zone: who saw data they do not own ─────────────
   // Impersonations and exports side by side, because the question this zone
@@ -1053,6 +1312,14 @@ r.get('/governance', async (c) => {
     rows: page,
     limit: FEED_LIMIT,
     more,
+    // D4803 — the cursor for Load older, what the server applied (so the page
+    // can say which list it is showing), and whether a page ended inside one
+    // second because every row on it shared that second.
+    cursor,
+    applied: fq.applied,
+    page_split_second: split,
+    outcomes: FEED_OUTCOMES,
+    stores: FEED_SOURCES,
     sources,
     // What no store can say, said once rather than once per row.
     tenant_available: false,
