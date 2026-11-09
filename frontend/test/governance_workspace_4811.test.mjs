@@ -12,6 +12,10 @@ import { adminGovernanceApi } from '../src/lib/api/adminGovernance.js';
 import GovernanceTab from '../src/pages/admin/contracts/GovernanceTab.jsx';
 import { executedLine, shortHash, versionMarkers, WORKSPACE_TABS } from '../src/pages/admin/contracts/GovernanceWorkspace.jsx';
 import { mountContracts } from './_contracts_dom.mjs';
+import { adminLegalReviewsApi } from '../src/lib/api/adminLegalReviews.js';
+// D4811 part 16: the Legal Review tab and the Overview's "Last review" read the review record; none is recorded here.
+adminLegalReviewsApi.list = async (kind, ref) => ({ object: { kind, ref, title: 'x', version: 1, sha256: 'a'.repeat(64) }, reviews: [], counsel: [], viewer: { id: 2, counsel: false, super_admin: false } });
+
 
 const never = () => new Promise(() => {});
 const govOriginals = { ...adminGovernanceApi }, apiOriginals = { ...api }, contractOriginals = { ...contractsApi };
@@ -58,7 +62,7 @@ test('mounted: Overview says each fact or why it is unknown; Versions marks In f
     assert.match(text, /GP LLC Operating Agreement/);
     assert.match(text, /Operating agreements · Axal VC GP LLC/);
     assert.match(text, /Executed versionv1 · signed copy/);
-    assert.match(text, /Last reviewNot recorded.*legal-review record is not built yet/);
+    assert.match(text, /Last reviewNot recorded.*No legal review has been recorded\./);
     assert.match(text, /Linked templateNot recorded.*No template linked/);
     assert.equal(calls.filter(([k]) => k === 'activity').length, 0, 'the trail is not read until its tab opens');
     const tab = (id) => view.nodes().find((n) => n.tagName === 'BUTTON' && view.props(n)?.id === `gw-tab-${id}`);
@@ -72,7 +76,7 @@ test('mounted: Overview says each fact or why it is unknown; Versions marks In f
     assert.equal(calls.filter(([k]) => k === 'activity').length, 1);
     assert.match(view.text(), /Moved from Approved to Executed.*Alex Made-up/);
     await act(async () => { view.props(tab('legal-review')).onClick({}); }); await view.flush();
-    assert.match(view.text(), /Not recorded.*waits on who records counsel approval/);
+    assert.match(view.text(), /Not recorded.*No legal review has been requested for this document\..*Request legal review/);
     await act(async () => { view.props(tab('related')).onClick({}); }); await view.flush();
     // D4811 part 8: Related reads the links; with none recorded it says so, and guesses nothing from titles.
     assert.match(view.text(), /No document is linked to this record yet.*nothing is inferred from titles/);
