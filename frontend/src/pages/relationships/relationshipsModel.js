@@ -145,6 +145,22 @@ export function draftEstimateLine(estimate) {
   return `Holds up to $${usd.toFixed(usd < 1 ? 4 : 2)} in AI tokens. Nothing is charged until you confirm.`;
 }
 
+// D4604: an accepted intro's delivery attempt, as the Worker records it (`delivery`, the teammate's own only).
+// Delivered and recorded are two facts: a send the mail server took can still be waiting for its record.
+export const DELIVERY_LINE = Object.freeze({
+  sending: 'This intro is being sent. Reload in a moment to see whether it went.',
+  unconfirmed: 'Your mail server may or may not have taken this intro. Look in your Sent folder, then say which. Sending it again before you know could deliver it twice.',
+  record_pending: 'Sent: your mail server took this intro. Its record here is not updated yet. Updating it sends nothing.',
+  not_sent: 'The last send of this intro did not go out. You can write it again.',
+});
+export const UPDATE_RECORD = 'Update the record';
+/** The delivery state of a request, or null. `canWrite` is false while a send is in flight, unconfirmed or delivered. */
+export function deliveryOf(r) {
+  const state = r?.status === 'accepted' ? r?.delivery?.state ?? null : null;
+  if (!state || !DELIVERY_LINE[state]) return { state: null, line: null, operationUid: null, canWrite: true };
+  return { state, line: DELIVERY_LINE[state], operationUid: r.delivery.operation_uid ?? null, canWrite: state === 'not_sent' };
+}
+
 /** "Omar Reyes → Lena Hart": who asked, and who was asked. */
 export const whoLine = (r) => `${r?.requester?.name || 'A teammate'} → ${r?.teammate?.name || 'A teammate'}`;
 /** "Alex Example · Bluefern Capital". */

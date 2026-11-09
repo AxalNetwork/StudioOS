@@ -268,19 +268,44 @@ async function ensureSchema(env: Env) {
 
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }
 
-/** Per-party notes live under metadata.private_notes[userId] — never returned whole. */
-function mergePrivateNote(existing: any, userId: number, note: unknown): Record<string, unknown> {
+/**
+ * Per-party notes live under metadata.private_notes[userId] — never returned whole. D4604: the note is stored as
+ * written (trimmed), never cut: one over NOTE_TOUCH_MAX is refused before this runs (`privateNoteOf`).
+ */
+function mergePrivateNote(existing: any, userId: number, text: string): Record<string, unknown> {
   const meta = safeJson(existing, {} as Record<string, unknown>);
   const raw = meta.private_notes;
   const map: Record<string, string> = raw && typeof raw === 'object' && !Array.isArray(raw)
     ? { ...(raw as Record<string, string>) }
     : {};
-  const text = note != null ? String(note).trim().slice(0, 2000) : '';
   if (text) map[String(userId)] = text;
   else delete map[String(userId)];
   if (Object.keys(map).length) meta.private_notes = map;
   else delete meta.private_notes;
   return meta;
+}
+
+/** D4604: a private note as given, or the refusal. Null and '' clear it; anything but text is refused. */
+function privateNoteOf(raw: unknown): { ok: true; text: string } | { ok: false; code: string; message: string } {
+  if (raw == null) return { ok: true, text: '' };
+  if (typeof raw !== 'string') return { ok: false, code: 'private_note_invalid', message: 'A private note must be text.' };
+  const text = raw.trim();
+  if (text.length > NOTE_TOUCH_MAX) {
+    return { ok: false, code: 'private_note_too_long', message: `Keep a private note to ${NOTE_TOUCH_MAX.toLocaleString('en-US')} characters. Nothing was saved.` };
+  }
+  return { ok: true, text };
+}
+
+/** D4604: the shared metadata a party may write, bounded as a whole. Private notes and the creator are never theirs to set. */
+const SHARED_META_MAX = 4000;
+function sharedMetaOf(raw: unknown): { ok: true; meta: Record<string, unknown> } | { ok: false; code: string; message: string } {
+  const meta = raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  delete meta.private_notes;
+  delete meta.created_by;
+  if (JSON.stringify(meta).length > SHARED_META_MAX) {
+    return { ok: false, code: 'metadata_too_large', message: `Keep the relationship's details under ${SHARED_META_MAX.toLocaleString('en-US')} characters. Nothing was saved.` };
+  }
+  return { ok: true, meta };
 }
 
 function relationshipForParty(row: any, userId: number) {
@@ -494,10 +519,9 @@ partnernet.post('/relationships', async (c) => {
   const [a, b] = pair(user.id, otherId);
   const initialStrength = Number(data?.strength_score);
   const strength = Number.isFinite(initialStrength) && initialStrength >= 0 && initialStrength <= 100 ? initialStrength : 50;
-  const metaIn = data?.metadata && typeof data.metadata === 'object' ? { ...data.metadata } : {};
-  delete (metaIn as any).private_notes;
-  metaIn.created_by = user.id;
-  const metaStr = JSON.stringify(metaIn).slice(0, 4000);
+  const shared = sharedMetaOf(data?.metadata);
+  if (!shared.ok) return refuse(c, 400, { code: shared.code, message: shared.message });
+  const metaIn: Record<string, unknown> = { ...shared.meta, created_by: user.id };
   const now = new Date().toISOString();
 
   // U8 (D493): the row is a REQUEST. It stays the author's alone until the
@@ -506,7 +530,7 @@ partnernet.post('/relationships', async (c) => {
   // row that ended can be asked again — except that a decline stands against
   // the person who was declined; only the decliner can reopen it.
   const existing: any = await c.env.DB.prepare(
-    'SELECT id, status, requested_by FROM partner_relationships WHERE partner_a_id = ? AND partner_b_id = ?',
+    'SELECT id, status, requested_by, requested_at, metadata FROM partner_relationships WHERE partner_a_id = ? AND partner_b_id = ?',
   ).bind(a, b).first();
   if (existing) {
     if (existing.status === 'accepted') return c.json({ error: 'Relationship already exists between these partners' }, 409);
@@ -516,6 +540,14 @@ partnernet.post('/relationships', async (c) => {
     }
   }
 
+  // D4604: asking again keeps each party's private note whole (they read it again once it is accepted), and the
+  // UPDATE is conditional on the ended state just read: a row another request reopened, or that was accepted, in
+  // between is not overwritten.
+  if (existing) {
+    const priv = safeJson(existing.metadata, {} as Record<string, unknown>).private_notes;
+    if (priv && typeof priv === 'object' && !Array.isArray(priv)) metaIn.private_notes = priv;
+  }
+  const metaStr = JSON.stringify(metaIn);
   let rel: any;
   try {
     rel = existing
@@ -523,8 +555,8 @@ partnernet.post('/relationships', async (c) => {
         `UPDATE partner_relationships
             SET relationship_type = ?, strength_score = ?, metadata = ?, status = 'pending',
                 requested_by = ?, requested_at = ?, responded_at = NULL, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ? RETURNING *`,
-      ).bind(relType, strength, metaStr, user.id, now, existing.id).first()
+          WHERE id = ? AND status = ? AND requested_by IS ? AND requested_at IS ? RETURNING *`,
+      ).bind(relType, strength, metaStr, user.id, now, existing.id, existing.status, existing.requested_by ?? null, existing.requested_at ?? null).first()
       : await c.env.DB.prepare(
         `INSERT INTO partner_relationships
            (partner_a_id, partner_b_id, relationship_type, strength_score, metadata, status, requested_by, requested_at)
@@ -534,6 +566,7 @@ partnernet.post('/relationships', async (c) => {
     if (/UNIQUE/i.test(e?.message || '')) return c.json({ error: 'Relationship already exists between these partners' }, 409);
     return c.json({ error: 'Could not create relationship' }, 500);
   }
+  if (!rel) return refuse(c, 409, { code: 'relationship_changed', message: 'This relationship changed while you were asking. Reload and try again.' });
 
   await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'requested', ?)`)
     .bind(rel.id, JSON.stringify({ requested_by: user.id, type: relType })).run();
@@ -549,7 +582,7 @@ partnernet.post('/relationships', async (c) => {
     });
   } catch { /* the request stands; the requests list shows it */ }
 
-  return c.json({ ...rel, metadata: safeJson(rel.metadata, {}) }, 201);
+  return c.json(relationshipForParty(rel, user.id), 201);
 });
 
 /**
@@ -611,8 +644,13 @@ partnernet.post('/relationships/:id/respond', async (c) => {
   if (rel.requested_by === user.id) return c.json({ error: 'Only the person the request names can answer it' }, 403);
   const status = decision === 'accept' ? 'accepted' : 'declined';
   const now = new Date().toISOString();
-  await c.env.DB.prepare('UPDATE partner_relationships SET status = ?, responded_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .bind(status, now, id).run();
+  // D4604: the answer is to the request just read — still pending, from the same requester, asked at the same time.
+  // A withdrawal, another answer or a new request in between leaves this one unwritten: 409, and no event or notice.
+  const answered = await c.env.DB.prepare(
+    `UPDATE partner_relationships SET status = ?, responded_at = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status = 'pending' AND requested_by = ? AND requested_by <> ? AND requested_at IS ?`,
+  ).bind(status, now, id, rel.requested_by, user.id, rel.requested_at ?? null).run();
+  if ((answered.meta?.changes ?? 0) !== 1) return c.json({ error: 'This request is not waiting for an answer' }, 409);
   await c.env.DB.prepare('INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, ?, ?)')
     .bind(id, status, JSON.stringify({ by: user.id })).run();
   if (status === 'accepted') {
@@ -639,7 +677,12 @@ partnernet.post('/relationships/:id/withdraw', async (c) => {
   const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
   if (!rel || rel.requested_by !== user.id) return c.json({ error: 'Not found' }, 404);
   if (rel.status !== 'pending') return c.json({ error: 'Only a request still waiting can be withdrawn' }, 409);
-  await c.env.DB.prepare(`UPDATE partner_relationships SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(id).run();
+  // D4604: only the request just read, still pending and still this author's; an answer that landed first stands.
+  const taken = await c.env.DB.prepare(
+    `UPDATE partner_relationships SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status = 'pending' AND requested_by = ? AND requested_at IS ?`,
+  ).bind(id, user.id, rel.requested_at ?? null).run();
+  if ((taken.meta?.changes ?? 0) !== 1) return c.json({ error: 'Only a request still waiting can be withdrawn' }, 409);
   await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'withdrawn', ?)`)
     .bind(id, JSON.stringify({ by: user.id })).run();
   return c.json({ ok: true, id, status: 'withdrawn' });
@@ -657,7 +700,9 @@ partnernet.post('/relationships/:id/remove', async (c) => {
   const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
   if (!rel || (rel.partner_a_id !== user.id && rel.partner_b_id !== user.id)) return c.json({ error: 'Not found' }, 404);
   if (rel.status !== 'accepted') return c.json({ error: 'Only an accepted relationship can be removed' }, 409);
-  await c.env.DB.prepare(`UPDATE partner_relationships SET status = 'removed', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(id).run();
+  // D4604: conditional on the accepted state just read, so two removals write one event.
+  const ended = await c.env.DB.prepare(`UPDATE partner_relationships SET status = 'removed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'accepted'`).bind(id).run();
+  if ((ended.meta?.changes ?? 0) !== 1) return c.json({ error: 'Only an accepted relationship can be removed' }, 409);
   await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'removed', ?)`)
     .bind(id, JSON.stringify({ by: user.id })).run();
   await Promise.all([recomputeNetworkScore(c.env, rel.partner_a_id, true), recomputeNetworkScore(c.env, rel.partner_b_id, true)]);
@@ -670,10 +715,11 @@ partnernet.patch('/relationships/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  const rel: any = await c.env.DB.prepare(`SELECT * FROM partner_relationships WHERE id = ?`).bind(id).first();
+  let rel: any = await c.env.DB.prepare(`SELECT * FROM partner_relationships WHERE id = ?`).bind(id).first();
   if (!rel) return c.json({ error: 'Not found' }, 404);
-  if (user.role !== 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
-  if (user.role === 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) {
+  const party = rel.partner_a_id === user.id || rel.partner_b_id === user.id;
+  if (user.role !== 'admin' && !party) return c.json({ error: 'Forbidden' }, 403);
+  if (user.role === 'admin' && !party) {
     await logAdminAction(c.env, user.id, user.email || '', 'partnernet_admin_bypass', {
       relationship_id: id, route: 'PATCH /relationships/:id',
     });
@@ -681,37 +727,54 @@ partnernet.patch('/relationships/:id', async (c) => {
   // U8: an unanswered (or ended) request is nobody's to edit.
   if (rel.status !== 'accepted') return c.json({ error: 'Not an accepted relationship' }, 409);
 
-  const updates: string[] = [];
-  const values: any[] = [];
+  // D4604: every input is checked before anything is written; a note over the limit is refused, never cut.
+  let note: string | null = null;
+  if (data?.private_note !== undefined) {
+    // A private note is a party's own: someone who is not on the relationship has none to write.
+    if (!party) return refuse(c, 403, { code: 'private_note_party_only', message: 'Only the two people on a relationship keep private notes on it.' });
+    const n = privateNoteOf(data.private_note);
+    if (!n.ok) return refuse(c, 400, { code: n.code, message: n.message });
+    note = n.text;
+  }
+  let shared: Record<string, unknown> | null = null;
+  if (data?.metadata && typeof data.metadata === 'object') {
+    const m = sharedMetaOf(data.metadata);
+    if (!m.ok) return refuse(c, 400, { code: m.code, message: m.message });
+    shared = m.meta;
+  }
+  const fixed: string[] = [];
+  const fixedValues: any[] = [];
   if (Number.isFinite(Number(data?.strength_score))) {
-    const s = Math.max(0, Math.min(100, Number(data.strength_score)));
-    updates.push('strength_score = ?'); values.push(s);
+    fixed.push('strength_score = ?'); fixedValues.push(Math.max(0, Math.min(100, Number(data.strength_score))));
   }
   if (data?.relationship_type && REL_TYPES.has(data.relationship_type)) {
-    updates.push('relationship_type = ?'); values.push(data.relationship_type);
+    fixed.push('relationship_type = ?'); fixedValues.push(data.relationship_type);
   }
-  let metaPatch: Record<string, unknown> | null = null;
-  let privateNoteTruncated = false;
-  if (data?.private_note !== undefined) {
-    const full = data.private_note != null ? String(data.private_note).trim() : '';
-    privateNoteTruncated = full.length > NOTE_TOUCH_MAX;
-    metaPatch = mergePrivateNote(rel.metadata, user.id, data.private_note);
-  }
-  if (data?.metadata && typeof data.metadata === 'object') {
-    const incoming = { ...data.metadata };
-    delete incoming.private_notes;
-    metaPatch = { ...(metaPatch || safeJson(rel.metadata, {} as Record<string, unknown>)), ...incoming };
-  }
-  if (metaPatch) {
-    updates.push('metadata = ?'); values.push(JSON.stringify(metaPatch).slice(0, 4000));
-  }
-  if (!updates.length) return c.json({ error: 'No valid fields' }, 400);
-  updates.push('updated_at = CURRENT_TIMESTAMP');
-  await c.env.DB.prepare(`UPDATE partner_relationships SET ${updates.join(', ')} WHERE id = ?`).bind(...values, id).run();
+  if (!fixed.length && note === null && !shared) return c.json({ error: 'No valid fields' }, 400);
 
-  await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'updated', ?)`)
-    .bind(id, JSON.stringify({ by: user.id, fields: Object.keys(data) })).run();
-  return c.json({ ok: true, note_limit: NOTE_TOUCH_MAX, note_truncated: privateNoteTruncated });
+  // D4604: the metadata is rewritten from the row just read, and only while it is still that row: the UPDATE names the
+  // metadata it was built from. A concurrent write (the other party's own note, say) makes it re-read and rebuild, so
+  // neither party's note is lost; a relationship that stopped being accepted is 409, with no event.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let meta: Record<string, unknown> | null = null;
+    if (note !== null) meta = mergePrivateNote(rel.metadata, user.id, note);
+    if (shared) meta = { ...(meta || safeJson(rel.metadata, {} as Record<string, unknown>)), ...shared };
+    // Fixed column fragments only; every value is bound.
+    const updates = [...fixed, ...(meta ? ['metadata = ?'] : []), 'updated_at = CURRENT_TIMESTAMP'];
+    const values = [...fixedValues, ...(meta ? [JSON.stringify(meta)] : [])];
+    const r = await c.env.DB.prepare(
+      `UPDATE partner_relationships SET ${updates.join(', ')} WHERE id = ? AND status = 'accepted' AND metadata IS ?`,
+    ).bind(...values, id, rel.metadata ?? null).run();
+    if ((r.meta?.changes ?? 0) === 1) {
+      await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'updated', ?)`)
+        .bind(id, JSON.stringify({ by: user.id, fields: Object.keys(data) })).run();
+      const saved = relationshipForParty({ metadata: meta ? JSON.stringify(meta) : rel.metadata }, user.id);
+      return c.json({ ok: true, note_limit: NOTE_TOUCH_MAX, my_private_note: saved.my_private_note });
+    }
+    rel = await c.env.DB.prepare(`SELECT * FROM partner_relationships WHERE id = ?`).bind(id).first();
+    if (!rel || rel.status !== 'accepted') return c.json({ error: 'Not an accepted relationship' }, 409);
+  }
+  return refuse(c, 409, { code: 'relationship_changed', message: 'This relationship kept changing while it was saved. Nothing was saved; try again.' });
 });
 
 partnernet.get('/relationships/:id/events', async (c) => {
