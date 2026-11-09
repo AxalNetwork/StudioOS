@@ -35,7 +35,7 @@ export default function StudioModules({ studio, tiles, extra = [], withheld = fa
     : studio.readOnly ? ['Default layout', `${items.length} modules`] : ['Your modules', placedLine(items)];
 
   return (
-    <section className="sm-root" data-testid="studio-modules" data-editing={studio.editing ? 'true' : undefined}>
+    <section className="sm-root" data-testid="studio-modules" data-tour="studio-modules" data-editing={studio.editing ? 'true' : undefined}>
       <StudioLayoutNotice studio={studio} titleOf={titleOf} />
       <div className="sm-head">
         <h2>{head[0]}</h2>

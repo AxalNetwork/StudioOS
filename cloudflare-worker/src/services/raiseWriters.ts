@@ -89,10 +89,10 @@ export async function scoreReadinessItem(env: Env, a: {
 /** Each computed check's newest eligible score; manual history never sets its re-score clock. */
 async function newestScores(env: Env, projectId: number) {
   const res = await env.DB.prepare(
-    `SELECT i.item_key, s.score, s.missing, s.scored_at FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
+    `SELECT i.item_key, s.score, s.missing, s.scored_at, s.input_hash FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
       WHERE s.project_id = ? AND s.source = 'computed' ORDER BY s.scored_at, s.id`,
-  ).bind(projectId).all<{ item_key: string; score: number | null; missing: string | null; scored_at: string }>();
-  const out = new Map<string, { score: number | null; missing: string | null; scored_at: string }>();
+  ).bind(projectId).all<{ item_key: string; score: number | null; missing: string | null; scored_at: string; input_hash: string | null }>();
+  const out = new Map<string, { score: number | null; missing: string | null; scored_at: string; input_hash: string | null }>();
   for (const r of res.results || []) out.set(r.item_key, r);
   return out;
 }
@@ -133,8 +133,8 @@ export async function rescoreReadiness(env: Env, a: { projectId: number; userId:
   }
   for (const c of computed) {
     await env.DB.prepare(
-      `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by) VALUES (?, ?, ?, ?, ?, 'computed', ?)`,
-    ).bind(ids.get(c.key), a.projectId, c.score, c.evidence, c.missing, a.userId).run();
+      `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by, input_hash) VALUES (?, ?, ?, ?, ?, 'computed', ?, ?)`,
+    ).bind(ids.get(c.key), a.projectId, c.score, c.evidence, c.missing, a.userId, c.input_hash ?? null).run();
     await logRaise(env, a.userId, a.projectId, 'fundraising-readiness', c.key, 'readiness_rescored', c.score == null ? `Not scored: ${c.missing}` : `Re-scored by its check: ${c.score}/10`);
   }
   return { scored: computed.length + (pmf?.changed ? 1 : 0), items: [...computed.map((c) => c.key), ...(pmf?.changed ? ['pmf'] : [])], ...(pmf ? { pmf } : {}) };
