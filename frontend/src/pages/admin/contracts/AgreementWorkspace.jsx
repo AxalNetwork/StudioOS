@@ -6,6 +6,7 @@ import { agreementRowSemantics } from '../../../lib/contractLifecycle';
 import { FileRows, EVENT_NAMES } from './AgreementDetail';
 import { InconsistencyFlag, LifecycleBadge } from './LifecycleBadge';
 import { Missing, ReadState, Recorded, button, card, date, downloadPdf, useRead } from './parts';
+import CrossBorderPanel from './CrossBorderPanel';
 
 /**
  * D4811 (#4811) part 14 — one agreement's workspace (board CT-07 "Document
@@ -64,7 +65,7 @@ export default function AgreementWorkspace({ uid }) {
           className={`min-h-[44px] whitespace-nowrap px-3 text-[12.5px] font-semibold ${tab === k ? 'border-b-2 border-violet-600 text-axal-ink dark:text-white' : 'text-axal-muted'}`}>{label}</button>)}
       </div>
       <div role="tabpanel" className={`${card} space-y-2 p-4 text-[12.5px]`} data-testid={`agreement-tab-${tab}`}>
-        {tab === 'overview' && <dl className="grid gap-2 sm:grid-cols-2">
+        {tab === 'overview' && <><dl className="grid gap-2 sm:grid-cols-2">
           <Fact label="Document type"><Recorded value={row.doc_type_label || row.doc_type} reason="No document type is recorded." /></Fact>
           <Fact label="Where it stands">{m.warning || m.line || <Missing reason="This store records no state." />}</Fact>
           <Fact label="Company">{m.company.name || <span className="text-axal-muted">{m.company.label}</span>}</Fact>
@@ -73,7 +74,9 @@ export default function AgreementWorkspace({ uid }) {
           <Fact label="Sent"><Recorded value={date(row.sent_at)} reason="No send is recorded." /></Fact>
           <Fact label="Signed"><Recorded value={date(row.signed_at)} reason="No signature date is recorded." /></Fact>
           <Fact label="Last legal review"><Missing reason="An agreement is not reviewed on its own: counsel reviews the template it was issued from (its Legal Review tab)." /></Fact>
-        </dl>}
+        </dl>
+          {/* D4811 part 17 (CT-15): the cross-border checks; open ones hold Send for signature. */}
+          <CrossBorderPanel uid={uid} /></>}
         {tab === 'document' && <ReadState read={pdf} what="Signed PDF">{pdf.data && (pdf.data.available
           ? <div className="space-y-2"><p className="font-mono text-xs break-all">SHA-256: {pdf.data.sha256}</p>
             <button type="button" className={button} onClick={() => downloadPdf(pdf.data.pdf_base64, 'signed-agreement.pdf')}>Download signed PDF</button></div>
