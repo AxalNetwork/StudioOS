@@ -20,9 +20,13 @@ here; until then its entry in that map holds today's zones for its area.
 | `ActionDialog.jsx` | D4801. The one Scope → Review → Result shell: in-page, a bottom sheet on phone with 48 px buttons, focus moved in, Tab trapped, Esc closes (not while a request is in flight), focus returned to the opener or the table caption. Also `StepIndicator`, `ScopeBox`, `YouAffected`, `ReasonField`. |
 | `AccessActions.jsx` | D4801. The five acts in that shell (revoke one, revoke selected, sign out account, end support session, emergency re-authentication): `actionCopy` (exact scope, whether you are affected), `resultTitle`, and the dialog that sends, then draws only what the server answered. |
 | `AccessWorkspace.jsx` | D4801. The Access workspace: the sessions table (phone cards from the same rows), View details, select and bulk revoke, the support-sessions table, "What each action reaches", and the emergency card; loading, unreadable, empty and read-only states. It writes through the `onAct` it is given. |
+| `resilienceModel.js` | D4803, pure. What Resilience says from `/overview`'s `backup_dr`: `DRILL_STEPS` (the six steps of `scripts/dr-drill.sh`), `pipeline` (done, failed, not reached), `drillHeadline` (Failed, Stale, Verified, Action required, Unavailable; never inferred from the heartbeat), `drillFacts`, `heartbeatState`, and the runbook and drill-runs links. |
+| `ResilienceWorkspace.jsx` | D4803. The Resilience workspace: the drill card first (steps, facts, raw record behind a disclosure), then Backup evidence and KV snapshots as separate cards, and Drill history as Not instrumented. The previous zone sits behind "How this is measured". |
+| `aiSafetyModel.js` | D4803, pure. The three AI Safety blocks from `/overview`'s `ai_safety`, each "x of n" with its own state: `contentSafety` (`SMALL_SAMPLE` 20), `deliveryEnforcement` (the router guard, with the legacy audit apart), `usageAnomalies`, and `recentVerdicts` in words. |
+| `AiSafetyWorkspace.jsx` | D4803. The AI Safety workspace: the HQ-only note, the three blocks, and the recent guard verdicts (a table on desktop, cards on phone). The previous zone sits behind "How this is measured". |
 | `SourceAvailability.jsx` | "n of n sources read" from the ledger's `sources[]`, with a failed source named and Retry beside the count, and the store names and implementation notes behind Source details. |
 
-Tested by `frontend/test/hq_security_v2_d4800.test.mjs` and `frontend/test/hq_security_access_d4801.test.mjs`; the zones that stay
+Tested by `frontend/test/hq_security_v2_d4800.test.mjs` and `frontend/test/hq_security_access_d4801.test.mjs` and `frontend/test/security_resilience_ai_4803.test.mjs`; the zones that stay
 in `../SecurityPage.jsx` keep their own tests (`hq_security*.test.mjs`,
 `hq_governance_h7.test.mjs`).
 
