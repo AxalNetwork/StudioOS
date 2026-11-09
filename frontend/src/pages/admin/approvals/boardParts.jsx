@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Lightbox, Skeleton } from '../../../ui';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { reportError } from '../../../lib/log';
 import { adminApprovalsApi } from '../../../lib/api/adminApprovals';
 import { refusalLine } from './approvalsModel';
 import { assignItems, refusalToast } from './inboxModel';
-import { BOARD_LANE, ownersOf, readLaneOwners, rowOwner } from './boardGrammar';
+import { BOARD_LANE, CHANGED_LEAD, CHANGED_REST, isChanged, ownersOf, readLaneOwners, rowOwner } from './boardGrammar';
 
 /**
  * D1046 (#2894) — what the three lane boards share: the card and type styles,
@@ -105,9 +106,11 @@ export function useLoad(fn, key, { enabled = true, what = 'approvals:board' } = 
  * known before sending (an unverified email, an expired licence), and a refusal
  * after sending is the Worker's own sentence. Nothing here uses alert or confirm.
  */
-export function DecisionDialog({ copy, testId, onClose, onSend, ready = true, blocked = null, danger = false, children }) {
+export function DecisionDialog({ copy, testId, onClose, onSend, onStale, ready = true, blocked = null, danger = false, children }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // D4814 (AP-18e): another decision got there first; nothing of yours was written.
+  const [stale, setStale] = useState(null);
   const send = async () => {
     if (!ready || blocked || busy) return;
     setBusy(true);
@@ -115,6 +118,7 @@ export function DecisionDialog({ copy, testId, onClose, onSend, ready = true, bl
     try {
       await onSend();
     } catch (e) {
+      if (isChanged(e)) { setStale(refusalLine(e)); setBusy(false); onStale?.(); return; }
       setError(refusalLine(e));
       setBusy(false);
     }
@@ -123,13 +127,28 @@ export function DecisionDialog({ copy, testId, onClose, onSend, ready = true, bl
     <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId={testId} width={520}
       footer={(
         <div className={FOOT}>
-          <button type="button" className={BTN} onClick={onClose} data-testid={`${testId}-cancel`}>Cancel</button>
-          <button type="button" className={danger ? BTN_DANGER : BTN_PRIMARY} disabled={!ready || !!blocked || busy} onClick={send} data-testid={`${testId}-send`}>
-            {busy ? 'Saving…' : copy.button}
-          </button>
+          {stale ? (
+            <>
+              <button type="button" className={BTN} onClick={onClose} data-testid={`${testId}-cancel`}>Close</button>
+              <button type="button" className={BTN_PRIMARY} onClick={onClose} data-testid={`${testId}-latest`}>View latest</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className={BTN} onClick={onClose} data-testid={`${testId}-cancel`}>Cancel</button>
+              <button type="button" className={danger ? BTN_DANGER : BTN_PRIMARY} disabled={!ready || !!blocked || busy} onClick={send} data-testid={`${testId}-send`}>
+                {busy ? 'Saving…' : copy.button}
+              </button>
+            </>
+          )}
         </div>
       )}>
       <div className="flex flex-col gap-3 px-5 py-4" data-testid={`${testId}-fields`}>
+        {stale ? (
+          <p role="alert" className="m-0 flex gap-2 rounded-[10px] border border-amber-300 bg-amber-50 px-3.5 py-3 text-[13px] text-axal-ink dark:border-amber-800 dark:bg-amber-950/40 dark:text-gray-100" data-testid={`${testId}-changed`}>
+            <span aria-hidden="true">↻</span>
+            <span><b>{CHANGED_LEAD}</b> {CHANGED_REST}<span className={`block ${SUB}`}>{stale}</span></span>
+          </p>
+        ) : null}
         <dl className="m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-[10px] border border-axal-hairline px-3.5 py-3 text-[13px] dark:border-gray-700" data-testid={`${testId}-explain`}>
           <dt className={EYE}>What changes</dt><dd className="m-0 text-axal-ink dark:text-gray-100" data-testid={`${testId}-changes`}>{copy.changes}</dd>
           <dt className={EYE}>Who is told</dt><dd className="m-0 text-axal-ink dark:text-gray-100" data-testid={`${testId}-told`}>{copy.told}</dd>
@@ -168,12 +187,20 @@ export function DialogField({ label, value, onChange, testId, placeholder = 'Wri
   );
 }
 
-/** The line a board shows after a decision lands. */
-export function DoneLine({ text, onDismiss }) {
+/**
+ * The line a board shows after a decision lands. D4814 (AP-18d): it ends with
+ * View in Decided. AP-18f: `text` may be `afterDecision`'s warning — the
+ * decision recorded but the notice not delivered — drawn amber, with Check
+ * item when the board passes `onCheck`. A plain string is the ordinary line.
+ */
+export function DoneLine({ text, onDismiss, onCheck }) {
   if (!text) return null;
+  const t = typeof text === 'string' ? { text, warn: false } : text;
   return (
-    <div role="status" className={`${CARD} flex flex-wrap items-center gap-2.5 px-4 py-3 text-[13px] text-axal-ink dark:text-gray-100`} data-testid="board-done">
-      <span>{text}</span>
+    <div role={t.warn ? 'alert' : 'status'} className={`${CARD} flex flex-wrap items-center gap-2.5 px-4 py-3 text-[13px] text-axal-ink dark:text-gray-100 ${t.warn ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40' : ''}`} data-testid="board-done">
+      <span className="min-w-0 flex-1">{t.warn ? <><b>{t.text}</b>{t.sub ? <span className={`block ${SUB}`}>{t.sub}</span> : null}</> : t.text}</span>
+      {t.warn && onCheck ? <button type="button" className={BTN} onClick={onCheck} data-testid="board-done-check">Check item</button> : null}
+      {!t.warn ? <Link to="/admin/approvals/decided" className={LINK} data-testid="board-done-decided">View in Decided</Link> : null}
       <button type="button" className="font-bold underline" onClick={onDismiss}>Dismiss</button>
     </div>
   );
@@ -270,5 +297,24 @@ export function OwnerBox({ owner, callerId, canTake, onTake, onAssign, testId })
         ) : null}
       </div>
     </section>
+  );
+}
+
+/**
+ * D4814 (#4814, part 6, AP-09/11/13): a board drawer's place in its tab —
+ * "2 of 6" with ‹ and ›, each a link to the item before or after it, carrying
+ * the tab the drawer came from so closing still returns there.
+ */
+export function DrawerStep({ step, prevTo, nextTo, from, testId }) {
+  if (!step) return null;
+  const BOX = 'inline-flex h-11 w-11 items-center justify-center rounded-[7px] border border-axal-hairline text-[13px] font-bold text-axal-ink hover:bg-gray-50 sm:h-8 sm:w-8 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
+  return (
+    <div className="flex items-center gap-1.5" data-testid={testId}>
+      <span className={`${SUB} ${MONO}`} data-testid={`${testId}-pos`}>{step.pos}</span>
+      {prevTo ? <Link to={prevTo} state={{ from }} aria-label="Previous item" className={BOX} data-testid={`${testId}-prev`}>‹</Link>
+        : <span aria-hidden="true" className={`${BOX} opacity-40`}>‹</span>}
+      {nextTo ? <Link to={nextTo} state={{ from }} aria-label="Next item" className={BOX} data-testid={`${testId}-next`}>›</Link>
+        : <span aria-hidden="true" className={`${BOX} opacity-40`}>›</span>}
+    </div>
   );
 }

@@ -83,3 +83,23 @@ test('every file the runbook names exists', () => {
     assert.ok(existsSync(at(path)), `the runbook names ${p}, which does not exist`);
   }
 });
+
+test('the hosted rehearsal is dispatch-only, scopes its secrets to one step, and can name no production database', () => {
+  const wf = raw('.github/workflows/schema-rehearsal.yml');
+  const keys = wf.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  const on = keys.slice(keys.indexOf('\non:'), keys.indexOf('\nconcurrency:'));
+  assert.match(on, /workflow_dispatch:/);
+  assert.doesNotMatch(on, /schedule:|push:|pull_request/, 'each run creates two databases; it must stay a decision, never a trigger');
+  // Secrets appear only in the step that runs the script.
+  const steps = keys.split(/\n {6}- (?=name:|uses:)/);
+  const withSecrets = steps.filter((s) => s.includes('secrets.'));
+  assert.equal(withSecrets.length, 1, 'Cloudflare secrets must be scoped to the one step that uses them');
+  assert.match(withSecrets[0], /node scripts\/schema-rehearsal\.mjs --run/);
+  assert.doesNotMatch(keys, /studioos-db\b|--env production|wrangler\.toml/, 'the workflow names production');
+  // The script cleans up from `finally`, and names only rehearsal databases.
+  const script = raw('scripts/schema-rehearsal.mjs');
+  assert.match(script, /\} finally \{\s*\n\s*try \{ cleanup\(\); \}/, 'cleanup must run whatever failed');
+  assert.match(script, /'d1', 'delete', side\.dbName/, 'cleanup deletes what it created');
+  assert.doesNotMatch(script.replace(/\/\*\*[\s\S]*?\*\//g, ''), /studioos-db\b|wrangler\.toml|--env/, 'the script names production outside its docblock');
+  assert.match(RUNBOOK, /schema-rehearsal\.yml/, 'the runbook must say how the rehearsal is run');
+});

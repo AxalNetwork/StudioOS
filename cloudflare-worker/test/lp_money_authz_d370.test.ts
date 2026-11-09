@@ -184,6 +184,28 @@ test('fund list: an LP sees the fund they hold a position in, and only that', as
   assert.deepEqual(ids(r.body.items), [1]);
 });
 
+test('fund list (D4636): an LP reads what names the fund, never its GP contact, terms or capital; the GP reads the row', async () => {
+  const env = makeEnv();
+  const lp = await call(funds, env, LP_ID, '/');
+  assert.deepEqual(Object.keys(lp.body.items[0]).sort(),
+    ['can_manage', 'company_id', 'created_at', 'id', 'name', 'relationship', 'slug', 'status', 'vintage_year']);
+  assert.deepEqual([lp.body.items[0].relationship, lp.body.items[0].can_manage], ['lp', false]);
+  assert.ok(!/gp1@fund\.example|1000000000/.test(JSON.stringify(lp.body)), 'the LP projection carries no GP email or fund size');
+  const gp = await call(funds, env, GP_ID, '/');
+  assert.deepEqual([gp.body.items[0].gp_email, gp.body.items[0].relationship, gp.body.items[0].can_manage], ['gp1@fund.example', 'gp', true]);
+  // Mutation checked: returning the whole row for every caller in fundListRow fails the key list.
+});
+
+test('family analytics (D4636): the funds the caller may operate, by the operating gate; a GP below its tier gets none', async () => {
+  const env = makeEnv();
+  env.__db.exec(`UPDATE users SET investor_tier = NULL WHERE id = ${GP_ID}`);
+  const r = await call(funds, env, GP_ID, '/analytics');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.items, [], 'no rollup without the tier /funds/:id/analytics requires');
+  assert.equal((await call(funds, env, GP_ID, '/1/analytics')).status, 402, 'the per-fund read agrees');
+  // Mutation checked: restoring `visibleFundsScope(user, { includeLp: false })` on /analytics returns [1] here.
+});
+
 test('fund list: a founder or partner with no fund sees none, and no GP email', async () => {
   for (const who of [FOUNDER_ID, PARTNER_ID]) {
     const env = makeEnv();

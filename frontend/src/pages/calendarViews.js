@@ -54,7 +54,8 @@ export const FAMILIES = Object.freeze([
   // #3959: the member's own learning plan and registered webinars (its boards are LRN1–LRN3, CAL12).
   { key: 'learning', label: 'Learning', kinds: ['learning'] },
   // D1486 §b (#3981): Publish's sends and Grow › Distribution's planned pieces.
-  { key: 'grow', label: 'Grow', kinds: ['publish_send', 'content_planned'] },
+  // #5131 (D1486 §e): and its campaign plans, ad flights, newsletter sends and sequence steps.
+  { key: 'grow', label: 'Grow', kinds: ['publish_send', 'content_planned', 'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step'] },
   { key: 'other', label: 'From other calendars', kinds: ['calendly_event', 'external_google', 'external_microsoft'] },
   // #3957: scheduled AI agent work sessions (CAL8–CAL11), teal.
   { key: 'agents', label: 'AI agents', kinds: ['agent_session'] },

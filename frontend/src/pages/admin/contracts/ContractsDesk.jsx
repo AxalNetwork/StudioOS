@@ -16,6 +16,7 @@ import { BankAccountsLink, FundStructureDoor } from './FundStructureSheet';
 import { useRead, ReadState, button } from './parts';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 import ContractSearch from './ContractSearch';
+import { AgreementCategories, LIBRARY_ITEMS, LibraryMenu, isLibrary, primaryOf, tabClass } from './ContractsNav';
 import MetricStrip from './MetricStrip';
 import GovernanceTab from './GovernanceTab';
 
@@ -33,6 +34,7 @@ export default function ContractsDesk({ section = null }) {
   const governance = section === 'governance';
   const hqDesk = !branchOfUser(user);
   const tab = params.get('tab') || 'agreements';
+  const primary = primaryOf(tab, { governance });
   const allowed = tabs.some(([id]) => id === tab) && (superAdmin || tab !== 'document-types');
   const [selected, setSelected] = useState(null);
   const [revision, setRevision] = useState(0);
@@ -63,12 +65,19 @@ export default function ContractsDesk({ section = null }) {
     {params.get('moved') === 'legal' && <p role="status">{CONTRACTS_MOVED_NOTICE}</p>}
     <ContractSearch onOpen={openResult} />
     <ReadState read={stats} what="Contract counts"><MetricStrip stats={stats.data} onDrill={drill} /></ReadState>
-    <nav aria-label="Contracts tabs" className="flex gap-1 overflow-x-auto border-b border-axal-hairline">{tabs.filter(([id]) => superAdmin || id !== 'document-types').map(([id, label]) => <React.Fragment key={id}><button type="button" className={`whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold ${!governance && id === tab ? 'border-violet-600 text-axal-ink dark:text-white' : 'border-transparent text-axal-muted'}`} aria-current={!governance && id === tab ? 'page' : undefined} onClick={() => navigate(id)}>{label}</button>
-        {/* D4563 (#4563): Corporate Governance sits beside the template library, at its own path. HQ only. */}
-        {id === 'templates' && hqDesk && <Link to="/admin/contracts/governance" className={`whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold ${governance ? 'border-violet-600 text-axal-ink dark:text-white' : 'border-transparent text-axal-muted'}`} aria-current={governance ? 'page' : undefined} data-testid="contracts-tab-governance">Corporate Governance</Link>}</React.Fragment>)}
-      {/* D1219 (#3216): Closings is its own page (D1213), reached from the tab row. */}
-      <Link to="/admin/contracts/closings" className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-[13px] font-semibold text-axal-muted" data-testid="contracts-tab-closings">Closings</Link></nav>
-    {governance ? (hqDesk ? <GovernanceTab /> : <p>Corporate Governance is HQ's alone.</p>) : !allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} revision={revision} />
+    {/* D4811 part 7: four workflow tabs; NDAs and Partner deals are Agreements categories; Forms and Document types are under Library. */}
+    <div className="flex flex-wrap items-end justify-between gap-2 border-b border-axal-hairline">
+      <nav aria-label="Contracts tabs" className="flex gap-1 overflow-x-auto">
+        <button type="button" className={tabClass(primary === 'agreements')} aria-current={primary === 'agreements' ? 'page' : undefined} onClick={() => navigate('agreements')}>Agreements</button>
+        <button type="button" className={tabClass(primary === 'templates')} aria-current={primary === 'templates' ? 'page' : undefined} onClick={() => navigate('templates')}>Templates</button>
+        {/* D4563 (#4563): Corporate Governance is at its own path. HQ only. */}
+        {hqDesk && <Link to="/admin/contracts/governance" className={tabClass(primary === 'governance')} aria-current={primary === 'governance' ? 'page' : undefined} data-testid="contracts-tab-governance">Corporate Governance</Link>}
+        {/* D1219 (#3216): Closings is its own page (D1213), reached from the tab row. */}
+        <Link to="/admin/contracts/closings" className={tabClass(false)} data-testid="contracts-tab-closings">Closings</Link></nav>
+      <LibraryMenu items={LIBRARY_ITEMS.filter(([k]) => superAdmin || k !== 'document-types')} current={!governance && isLibrary(tab) ? tab : null} onTab={(id) => navigate(id)} />
+    </div>
+    {!governance && allowed && primaryOf(tab) === 'agreements' && <AgreementCategories tab={tab} onTab={(id) => navigate(id)} />}
+    {governance ? (hqDesk ? <GovernanceTab workspaceLink={(uid) => <Link to={`/admin/contracts/governance/doc/${encodeURIComponent(uid)}`} className="text-xs font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>} /> : <p>Corporate Governance is HQ's alone.</p>) : !allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} revision={revision} />
       : tab === 'ndas' || tab === 'partner-deals' ? <RelatedLists key={tab} kind={tab} onOpen={setSelected} superAdmin={superAdmin} />
         : tab === 'templates' ? <AdminTemplates recordedPublication openSlug={params.get('open') || null} onOpenUsage={slug => navigate('agreements', { template: slug })} />
           : tab === 'forms' ? <AdminForms /> : <ContractRegistryTab />}

@@ -19,6 +19,11 @@ import { count, summary, title, top, total } from './format.js';
  * derive from it, so `/deals` still stacks them as the bucket overview". That
  * sentence stopped being true when ID4 landed, and nothing failed.
  *
+ * D4815 (#4815): NOT RENDERED NOW. The v2 canvas gives `/deals` one job, the
+ * investor's own deal flow; the zones there are one "Other deal activity" line
+ * (`pages/investor/dealflow/OtherDealActivity.jsx`). This board stays
+ * registered, with its tests, until the owner says whether to retire it.
+ *
  * D1243 (#3256): THREE SECTIONS NOW. The Pipeline zone (ID1) retired into
  * Deal flow, whose own board and table cover it above this one.
  *

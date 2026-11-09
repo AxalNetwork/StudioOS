@@ -107,12 +107,21 @@ export async function expertDecision(env: Env, row: any, actor: ReviewActor, dec
   ]);
   if (results.some((r) => 'success' in r && !r.success)) throw new Error('Decision batch failed');
   if (Number(results[0].meta?.changes) !== 1) throw new ExpertReviewError('review_changed', 'The profile or credentials changed. Read them again.', 409);
-  if (row.user_id) await notify(env, {
-    userId: row.user_id, type: `wellbeing_expert_${decision}`, title: `Wellbeing expert profile ${decision}`,
-    body: `Your wellbeing expert profile was ${decision}.${decision === 'declined' ? ` Reason: ${reason}` : ''}`,
-    link: '/wellbeing/expert-dashboard', channels: ['in_app', 'email'], payload: { expert_uid: row.uid, decision },
-  });
-  return { ok: true, verified: !!verified, hidden: !!hidden, decision_state: state, decided_by: decidedBy, decided_at: decidedAt, review_version: version };
+  // D4814 (AP-18f): the decision is committed above, so a notice that does
+  // not go out is reported (`notified: false`), never thrown. An expert with
+  // no account is told nothing, and `notified` is null: nobody was due a notice.
+  let notified: boolean | null = null;
+  if (row.user_id) {
+    notified = false;
+    try {
+      notified = (await notify(env, {
+        userId: row.user_id, type: `wellbeing_expert_${decision}`, title: `Wellbeing expert profile ${decision}`,
+        body: `Your wellbeing expert profile was ${decision}.${decision === 'declined' ? ` Reason: ${reason}` : ''}`,
+        link: '/wellbeing/expert-dashboard', channels: ['in_app', 'email'], payload: { expert_uid: row.uid, decision },
+      })) !== null;
+    } catch (e) { console.warn('[wellbeing] notify failed', e); }
+  }
+  return { ok: true, verified: !!verified, hidden: !!hidden, decision_state: state, decided_by: decidedBy, decided_at: decidedAt, review_version: version, notified };
 }
 
 export async function saveCredentials(env: Env, row: any, body: any) {

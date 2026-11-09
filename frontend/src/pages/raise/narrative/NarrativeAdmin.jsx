@@ -10,6 +10,7 @@ import {
   OTHER_VENTURE, READS_LINE, READS_TITLE, READ_ONLY, REASON_HOURS, REASON_MAX, REASON_MIN, TITLE,
   noteRow, notePosts, isNarrativeAdmin, openedLine, readRow,
 } from './narrativeModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D914 (#2698), part 8 of #2454 — the Investor narrative for an admin, and
@@ -191,7 +192,7 @@ export function NarrativeNotes({ projectId, version = null, admin = false }) {
       setText(''); setConfirm(false); setTick((n) => n + 1);
     } catch (e) {
       reportError('NarrativeAdmin:post', e);
-      setFailed(e?.message || 'The note could not be posted. Try again.');
+      setFailed(userFacingRaiseError(e, { fallback: 'The note could not be posted. Try again.' }));
     } finally { setBusy(false); }
   };
 

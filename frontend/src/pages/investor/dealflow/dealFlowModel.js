@@ -21,6 +21,25 @@ export const TITLE = 'Deal flow';
 
 export const PAGE_LINE = 'Every venture you are looking at, how it scores by scope, and where it stands with you.';
 
+/**
+ * D4815 (#4815): each Deals route names itself in the browser tab, rather than
+ * the product's marketing title. A deal page names its company (`DealRoomPage`).
+ */
+export const DEALS_PAGE_TITLES = Object.freeze({
+  root: 'Deal flow · Axal VC',
+  compare: 'Compare · Axal VC',
+  screening: 'Screening · Axal VC',
+  commit: 'Investment committee · Axal VC',
+  closing: 'Closing · Axal VC',
+});
+
+/** The tab title for a Deals route: the root, Compare, or a zone by its slug. */
+export function dealsPageTitle({ isRoot, isCompare, slug }) {
+  if (isRoot) return DEALS_PAGE_TITLES.root;
+  if (isCompare) return DEALS_PAGE_TITLES.compare;
+  return DEALS_PAGE_TITLES[slug] || DEALS_PAGE_TITLES.root;
+}
+
 export const VIEWS = Object.freeze(['board', 'table']);
 /** The scope switch (DLS1): Mine, All deals, New for you. */
 export const SCOPE_SWITCH = Object.freeze([

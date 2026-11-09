@@ -28,12 +28,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { teamRaw } from './_hqTeamSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const OVERLAY_RAW = read('frontend/src/pages/hq/HqBranchOverlay.jsx');
 const OVERLAY = codeOnly(OVERLAY_RAW);
 const HOME = codeOnly(read('frontend/src/pages/hq/HqHomePage.jsx'));
-const TEAM = codeOnly(read('frontend/src/pages/hq/HqTeamTable.jsx'));
+// D5044 — HQ Team is the composer and its parts in `pages/hq/team/`, read together.
+const TEAM = codeOnly(teamRaw());
 const BAR = codeOnly(read('frontend/src/components/HqViewingAsBar.jsx'));
 const APP = codeOnly(read('frontend/src/App.jsx'));
 const CTX = codeOnly(read('frontend/src/contexts/ViewAsBranchContext.js'));

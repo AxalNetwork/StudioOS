@@ -191,7 +191,7 @@ test('the room reads resolve a grant only among the caller’s own, and read onl
   assert.equal(lookups.length, 1, 'the room reads grew a second grant lookup');
   assert.match(lookups[0], /uid = \? AND investor_user_id = \?/);
   assert.match(ROOM, /activeGrant\(env, held\.project_id, userId\)/);
-  assert.match(routes, /import \{ activeGrant, ndaActive, logAccess \} from '\.\/data_room'/);
+  assert.match(routes, /import \{ activeGrant, projectNdaActive, logAccess \} from '\.\/data_room'/);
   // Every room table read after that is narrowed to the grant's project and
   // bound to `pid`, which only the grant produces.
   for (const table of ['data_room_files', 'data_room_folders', 'data_room_access_log']) {

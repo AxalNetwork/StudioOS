@@ -1,288 +1,286 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
-import { NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from '../expertise/kit';
-import { BatchPicker, FromTheLab, NoBatch, cohortLabel } from './kit';
+import { NothingYet, StatedLimit, Unrecorded, ZoneBody, inputClass } from '../expertise/kit';
+import { FromTheLab, NoBatch } from './kit';
+import { CohortLoading, StatusBadge, useCohortRead, useCohortWorkspace } from './CohortWorkspace';
+import { BOARD_COLUMNS, FOUNDER_STATES, dayTime, filterFounders, founderRows, needsAttention } from './cohortModel';
 
 /**
- * Cohorts · Founders — the batch an admin put this advisor in front of.
+ * Cohorts › Founders — founder triage for the selected cohort (D4813 boards C2,
+ * C3, C13; package 1 of #4813).
  *
- * THE CARD THIS REPLACES WAS FALSE ON THREE COUNTS. It said "Cohort assignment
- * does not exist yet", "Nothing in the product links an advisor to a cohort",
- * and "no table joins them". All three stopped being true when migration 206
- * and its routes shipped, and the file that rendered it says why that matters:
- * a card describing a closed gap tells an advisor a working feature is missing.
+ * EXPLICIT STATES, NOT A PERCENTAGE. Every founder is Failed, Grace, At risk,
+ * On track or Not assessed (`cohortModel.founderState`). A failed or grace
+ * founder sits in Needs attention whatever their percentage, and progress that
+ * cannot be read — no row, nothing required, an unreadable count — is Not
+ * assessed, never 0%.
  *
- * THE ASSIGNMENT IS THE AUTHORISATION, AND A REFUSAL IS NOT AN EMPTY LIST. The
- * worker returns 403 without an active assignment, whatever the caller's role.
- * That renders as a stated boundary — see `NoBatch` — because "no founders"
- * would report a refusal as a fact about the cohort.
+ * THE BOARD'S COLUMNS ARE STATES (C2), and the four-week view is the Overview's
+ * progress grid. D393's week lanes put every founder in the one lane of the
+ * batch's current week, so three of four lanes always read "Nobody here yet";
+ * the canvas replaced them, and so does this page.
  *
- * WHAT THIS PAGE DOES NOT SHOW, said on the page rather than left as a blank.
- * The canvas asked for company, stage, one live signal each, and the advisor's
- * own next action beside every founder. The read returns `{user_id, name,
- * email}`. Three of those four have no store, so the page says so instead of
- * rendering an empty column that reads as missing data.
+ * WHO IS LISTED IS THE WORKER'S DECISION. The founders read drops a founder who
+ * opted out of this advisor and is refused without an active assignment; this
+ * page filters nothing back in and adds nobody.
+ *
+ * LAST ACTIVITY IS WHAT IS RECORDED: the founder's latest recorded action on
+ * this advisor's guidance. Submissions and sessions have no activity record
+ * (D4813: new backend), so a founder with no guidance action reads "Not
+ * recorded", never "never".
+ *
+ * COMPANY, STAGE, A LIVE SIGNAL AND YOUR NEXT ACTION ARE NOT DRAWN. The roster
+ * returns name and email; the Lab records no venture for a founder here, no
+ * stage and no live signal. Those columns are absent rather than empty, so a
+ * blank is never mistaken for a founder with nothing going on.
  */
-/**
- * D393 — THE WEEK LANES, FROM THE LAB'S OWN WEEK RECORD.
- *
- * C1 draws four lanes, one per week, with every founder's card in the lane of
- * the week their cohort is in: "Lanes come from the cohort, not the founder".
- * `GET /me/cohort/:id/weeks` already returns the cycle's windows, the batch's
- * `current_week` (computed server-side from the windows) and each founder's
- * per-week status and deliverable counts, so this is a read of an existing
- * route, not a new one. One batch is on screen at a time (the batch picker is
- * the canvas's per-cohort chips), so every card sits in one lane and the other
- * lanes read "Nobody here yet" — which is true.
- *
- * NO WINDOWS, NO LANES. A cycle with no week windows has no current week, and
- * a board that put everyone in Week 1 would invent the one fact the lanes
- * exist to show. `lanes` is null and the page says why.
- */
-export function lanesFrom(weeksPayload, batchFounders) {
-  const windows = Array.isArray(weeksPayload?.weeks) ? weeksPayload.weeks : [];
-  const current = weeksPayload?.current_week ?? null;
-  const byUser = new Map((weeksPayload?.founders || []).map((f) => [Number(f.user_id), f]));
-  const cards = (batchFounders || []).map((f) => {
-    const row = byUser.get(Number(f.user_id))?.weeks?.[current] || null;
-    const done = row ? Number(row.deliverables_done) : null;
-    const required = row ? Number(row.deliverables_required) : null;
-    // Nothing required this week is not 0% — there is no fraction to show.
-    const pct = row && required > 0 ? Math.round((done / required) * 100) : null;
-    return {
-      user_id: f.user_id,
-      name: f.name || null,
-      status: row?.status || null,
-      done, required, pct,
-      behind: pct !== null && pct < 50,
-      complete: pct === 100,
-    };
-  });
-  if (!weeksPayload?.windows_recorded || !windows.length) {
-    return { lanes: null, cards, reason: 'This cycle has no week windows recorded, so which week the batch is in cannot be derived — and the lanes are that week.' };
+
+const VIEWS = [['board', 'Board'], ['table', 'Table']];
+const STATUS_FILTERS = [
+  ['all', 'All states'],
+  ['attention', 'Needs attention'],
+  ['failed', 'Failed'],
+  ['grace', 'Grace'],
+  ['at_risk', 'At risk'],
+  ['on_track', 'On track'],
+  ['not_assessed', 'Not assessed'],
+];
+const SORTS = [['attention', 'Needs attention first'], ['name', 'Name'], ['progress', 'Progress, lowest first'], ['deadline', 'Next deadline']];
+const TH = 'px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
+
+/** The latest recorded guidance action per founder. */
+export function lastActivityByFounder(guidance) {
+  const out = new Map();
+  for (const g of guidance?.items || []) {
+    for (const a of g.acted_by || []) {
+      const t = Date.parse(a.acted_at);
+      if (!Number.isFinite(t)) continue;
+      const prev = out.get(Number(a.user_id));
+      if (!prev || t > Date.parse(prev)) out.set(Number(a.user_id), a.acted_at);
+    }
   }
-  if (current == null) {
-    return { lanes: null, cards, reason: 'No week of this cycle has opened yet, so the batch is in no lane.' };
-  }
-  return {
-    lanes: windows.map((w) => ({ week: w.week_number, cards: w.week_number === current ? cards : [] })),
-    cards,
-    current,
-    reason: null,
-  };
+  return out;
 }
 
-/** The canvas's two view chips over the cards. Per-cohort chips are the batch picker. */
-export const FOUNDER_VIEWS = {
-  all: () => true,
-  behind: (c) => c.behind,
-};
-
-function initials(name) {
-  return String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '·';
+export function weekText(row) {
+  if (row.week == null) return null;
+  return row.held ? `Week ${row.week} · held` : `Week ${row.week}`;
 }
 
-/** One founder in a lane. No company line: the founders read returns none (see below). */
-export function FounderCard({ card }) {
+/** Progress as a bar and a number, or Not assessed — never 0% for unknown. */
+export function Progress({ row }) {
+  if (row.pct == null) {
+    return <span className="text-[11px] italic text-axal-faint" data-progress="none">— Not assessed</span>;
+  }
   return (
-    <div className={`rounded-[10px] border p-3 ${card.behind ? 'border-red-200 bg-red-50/40 dark:border-red-900' : 'border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900'}`} data-testid="founder-card">
-      <div className="flex items-center gap-2">
-        <span className="grid h-6 w-6 place-items-center rounded-lg bg-emerald-100 text-[10px] font-extrabold text-emerald-800">{initials(card.name)}</span>
-        <span className="min-w-0 truncate text-[12.5px] font-extrabold">{card.name || <Unrecorded>Name not recorded</Unrecorded>}</span>
+    <span className="inline-flex min-w-[96px] items-center gap-2" data-progress={row.pct}>
+      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-axal-hairline dark:bg-gray-800" aria-hidden="true">
+        <span className="block h-full rounded-full bg-emerald-600" style={{ width: `${row.pct}%` }} />
+      </span>
+      <span className="text-[11px] font-bold tabular-nums">{`${row.pct}%`}</span>
+    </span>
+  );
+}
+
+function LastActivity({ at }) {
+  return at ? <span>{`Acted on guidance · ${dayTime(at)}`}</span> : <Unrecorded />;
+}
+
+/** One founder, as a card (board columns, and the table on a phone). */
+export function FounderCard({ row, lastAt, guidanceHref }) {
+  return (
+    <article className={`rounded-[10px] border p-3 ${needsAttention(row) ? 'border-amber-200 dark:border-amber-900' : 'border-axal-hairline dark:border-gray-800'} bg-white dark:bg-gray-900`} data-testid="founder-card" data-state={row.state}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="min-w-0 truncate text-[12.5px] font-extrabold">{row.name || <Unrecorded>Name not recorded</Unrecorded>}</h3>
+        <StatusBadge state={row.state} />
       </div>
-      {card.pct === null ? (
-        <div className="mt-2 text-[10.5px] text-axal-faint">
-          {card.required === 0
-            ? 'No deliverable is required this week.'
-            : <Unrecorded reason="The Lab has no status row for this founder in this week.">Progress not recorded</Unrecorded>}
-        </div>
-      ) : (
-        <>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-axal-hairline">
-            <div className={`h-full rounded-full ${card.complete ? 'bg-emerald-600' : card.behind ? 'bg-red-600' : 'bg-amber-600'}`} style={{ width: `${card.pct}%` }} />
-          </div>
-          <div className="mt-1 text-[10px] font-bold tabular-nums">{`${card.done} of ${card.required} deliverables · ${card.pct}%`}</div>
-        </>
-      )}
-      {card.behind && (
-        <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-          Behind plan — under half this week&apos;s deliverables
-        </div>
-      )}
-    </div>
+      <div className="mt-1 text-[11px] text-axal-faint">{weekText(row) || <Unrecorded>Week not recorded</Unrecorded>}</div>
+      <div className="mt-2"><Progress row={row} /></div>
+      {row.reason && <p className="mt-2 text-[11.5px] leading-snug text-axal-muted">{row.reason}</p>}
+      <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-2 gap-y-0.5 text-[11px]">
+        <dt className="text-axal-faint">Next</dt>
+        <dd>{row.deadline ? dayTime(row.deadline) : <Unrecorded>No deadline recorded</Unrecorded>}</dd>
+        <dt className="text-axal-faint">Last</dt>
+        <dd><LastActivity at={lastAt} /></dd>
+      </dl>
+      <Link to={guidanceHref} className="mt-2 inline-flex min-h-[44px] items-center text-[12px] font-bold text-emerald-800 underline dark:text-emerald-300 lg:min-h-0">
+        Write guidance
+      </Link>
+    </article>
+  );
+}
+
+export function FounderTable({ rows, label, lastBy, guidanceHref }) {
+  return (
+    <Card padding="none" className="overflow-x-auto">
+      <table className="w-full text-[12.5px]" data-testid="founder-table">
+        <caption className="px-3 pt-2.5 text-left text-[11px] text-axal-faint">{`${rows.length} founder${rows.length === 1 ? '' : 's'} in ${label}`}</caption>
+        <thead>
+          <tr className="border-b border-axal-hairline dark:border-gray-700">
+            {['Founder', 'Cohort', 'Week', 'Progress', 'Status', 'Next deadline', 'Last activity', 'Action'].map((h) => (
+              <th key={h} scope="col" className={TH}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.user_id} className="border-b border-axal-hairline/60 align-top last:border-0 dark:border-gray-800" data-state={r.state}>
+              <th scope="row" className="px-3 py-2.5 text-left font-semibold">
+                {r.name || <Unrecorded>Name not recorded</Unrecorded>}
+                {r.email && <div className="text-[11px] font-normal text-axal-faint">{r.email}</div>}
+              </th>
+              <td className="px-3 py-2.5">{label}</td>
+              <td className="px-3 py-2.5 whitespace-nowrap">{weekText(r) || <Unrecorded />}</td>
+              <td className="px-3 py-2.5"><Progress row={r} /></td>
+              <td className="px-3 py-2.5">
+                <StatusBadge state={r.state} />
+                {r.reason && <div className="mt-1 max-w-[240px] text-[11px] leading-snug text-axal-muted">{r.reason}</div>}
+              </td>
+              <td className="px-3 py-2.5 whitespace-nowrap">{r.deadline ? dayTime(r.deadline) : <Unrecorded />}</td>
+              <td className="px-3 py-2.5"><LastActivity at={lastBy.get(Number(r.user_id))} /></td>
+              <td className="px-3 py-2.5"><Link to={guidanceHref} className="font-bold text-emerald-800 underline dark:text-emerald-300">Write guidance</Link></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );
 }
 
 export default function FoundersZone() {
-  const [assignments, setAssignments] = useState({ loading: true, error: '', items: [] });
-  const [cycleId, setCycleId] = useState(null);
-  const [batch, setBatch] = useState({ loading: false, error: '', items: [] });
-  const [weeks, setWeeks] = useState({ error: '', payload: null });
-  const [view, setView] = useState('all');
+  const ws = useCohortWorkspace();
+  const [params, setParams] = useSearchParams();
+  const founderParam = params.get('founder');
+  const only = founderParam && /^[1-9]\d*$/.test(founderParam) ? Number(founderParam) : null;
+  const [view, setView] = useState('board');
+  const [q, setQ] = useState('');
+  const [state, setState] = useState('all');
+  const [sort, setSort] = useState('attention');
 
-  const loadAssignments = useCallback(async () => {
-    setAssignments((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorCohorts();
-      const items = Array.isArray(res?.items) ? res.items : [];
-      setAssignments({ loading: false, error: '', items });
-      setCycleId(items[0]?.cohort_cycle_id ?? null);
-    } catch (e) {
-      setAssignments({ loading: false, error: e?.message || 'Your cohort assignments could not be read.', items: [] });
-    }
-  }, []);
+  const roster = useCohortRead((id) => api.listMyAdvisorCohortFounders(id),
+    { fallbackError: 'This cohort’s founders could not be read.' });
+  const guidance = useCohortRead((id) => api.listMyAdvisorCohortGuidance(id),
+    { fallbackError: 'This cohort’s guidance could not be read.' });
 
-  useEffect(() => { loadAssignments(); }, [loadAssignments]);
+  const label = ws.label || 'this cohort';
+  const weeks = ws.weeks;
+  const weeksReadable = Boolean(weeks.data) && !weeks.error;
+  const items = useMemo(() => (Array.isArray(roster.data?.items) ? roster.data.items : []), [roster.data]);
+  const rows = useMemo(() => founderRows(items, weeksReadable ? weeks.data : null), [items, weeksReadable, weeks.data]);
+  const shown = filterFounders(rows, { q, state, sort, founder: only });
+  const lastBy = useMemo(() => lastActivityByFounder(guidance.data), [guidance.data]);
+  const guidanceHref = ws.href('/cohorts/guidance');
+  const attention = rows.filter(needsAttention).length;
 
-  const loadBatch = useCallback(async () => {
-    if (cycleId == null) return;
-    setBatch((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorCohortFounders(cycleId);
-      setBatch({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [] });
-      // The lanes' week record. Its own state: a failed week read must not
-      // hide the roster, and an unavailable one says so rather than drawing
-      // every founder at 0%.
-      try {
-        const w = await api.listMyAdvisorCohortWeeks(cycleId);
-        if (w && w.available === false) setWeeks({ error: w.detail || 'The Lab’s week record could not be read.', payload: null });
-        else setWeeks({ error: '', payload: w });
-      } catch (err) {
-        setWeeks({ error: err?.message || 'The Lab’s week record could not be read.', payload: null });
-      }
-    } catch (e) {
-      // The worker's own sentence — "You are not assigned to this cohort", or
-      // the eligibility refusal — reaches `e.message` and is shown as-is. A
-      // refusal explains itself better than anything this page could invent.
-      setBatch({ loading: false, error: e?.message || 'This batch could not be read.', items: [] });
-    }
-  }, [cycleId]);
-
-  useEffect(() => { loadBatch(); }, [loadBatch]);
-
-  const current = assignments.items.find((a) => a.cohort_cycle_id === cycleId);
+  const showAll = () => { const next = new URLSearchParams(params); next.delete('founder'); setParams(next); };
 
   return (
     <div className="space-y-4">
-      <ZoneHeading
-        title="The founders you were assigned"
-        blurb="An admin decides which cohort you advise. Everything below is the Lab's record and the founder's own — read-only to the practice."
-        action={<BatchPicker items={assignments.items} value={cycleId} onChange={setCycleId} />}
-      />
-
       <ZoneBody
-        loading={assignments.loading}
-        error={assignments.error}
-        onRetry={loadAssignments}
-        isEmpty={assignments.items.length === 0}
+        loading={ws.assignments.loading}
+        error={ws.assignments.error}
+        onRetry={ws.reloadAssignments}
+        isEmpty={ws.assignments.items.length === 0}
         empty={<NoBatch />}
       >
-        <ZoneBody loading={batch.loading} error={batch.error} onRetry={loadBatch}
-          isEmpty={batch.items.length === 0}
+        {roster.loading && <CohortLoading what="founders" />}
+        <ZoneBody loading={roster.loading} error={roster.error} onRetry={roster.reload}
+          isEmpty={items.length === 0}
           empty={(
             <NothingYet
-              title={`No founders are recorded in ${cohortLabel(current?.cohort)}`}
-              body="You are assigned to this cohort, and the Lab has no members recorded against it. That is the Lab's record as it stands, not a failed read."
+              title="No founders are visible to you"
+              body={`You are assigned to ${label}, and no founder in it is visible to you: none is recorded yet, or those who are have not shared their progress with advisors. That is the Lab's record as it stands, not a failed read.`}
             />
           )}>
-          {(() => {
-            const model = lanesFrom(weeks.payload, batch.items);
-            const shown = (c) => (FOUNDER_VIEWS[view] || FOUNDER_VIEWS.all)(c);
-            const behind = model.cards.filter((c) => c.behind).length;
-            const complete = model.cards.filter((c) => c.complete).length;
-            return (
-              <div className="mb-4 space-y-3" data-testid="founder-lanes">
-                <div className="flex flex-wrap items-center gap-2">
-                  {[['all', 'All'], ['behind', 'Behind plan']].map(([key, label]) => (
-                    <button key={key} type="button" onClick={() => setView(key)}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${view === key ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-axal-hairline text-axal-muted'}`}>
-                      {label}
-                    </button>
-                  ))}
-                  {/* The canvas draws a bulk nudge. Nothing sends a founder a
-                      message from a cohort, so it is drawn as the gap it is. */}
-                  <button type="button" disabled title="Nothing sends a founder a nudge from a cohort: there is no cohort-to-founder message route."
-                    className="rounded-full border border-dashed border-axal-hairline px-2.5 py-1 text-[11px] text-axal-faint">
-                    Bulk: nudge behind-plan · not built
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
-                  {[
-                    { label: 'Assigned', value: model.cards.length, note: `in ${cohortLabel(current?.cohort)}` },
-                    { label: 'Behind plan', value: model.lanes ? behind : null, note: 'under half this week’s deliverables' },
-                    { label: 'Complete', value: model.lanes ? complete : null, note: 'every deliverable this week in' },
-                    { label: 'Flagged', value: null, note: 'nothing records an open question or a missed reply per founder' },
-                  ].map((t) => (
-                    <Card key={t.label} className="px-3 py-2.5">
-                      <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{t.label}</div>
-                      {t.value === null || t.value === undefined
-                        ? <div className="mt-1.5"><Unrecorded /></div>
-                        : <div className="mt-1 text-base font-extrabold tabular-nums tracking-tight">{t.value}</div>}
-                      <div className="mt-1 text-[10px] leading-snug text-axal-faint">{t.note}</div>
-                    </Card>
-                  ))}
-                </div>
-                {weeks.error ? (
-                  <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{weeks.error} The roster below is still the Lab&apos;s record.</p>
-                ) : model.lanes ? (
-                  <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
-                    {model.lanes.map((lane) => {
-                      const cards = lane.cards.filter(shown);
-                      return (
-                        <div key={lane.week} data-testid={`lane-${lane.week}`}>
-                          <div className="mb-2 flex items-baseline justify-between">
-                            <span className="text-[12px] font-extrabold">{`Week ${lane.week}`}{lane.week === model.current ? ' · now' : ''}</span>
-                            <span className="text-[11px] font-bold tabular-nums text-axal-faint">{cards.length}</span>
-                          </div>
-                          <div className="grid gap-2">
-                            {cards.map((c) => <FounderCard key={c.user_id} card={c} />)}
-                            {cards.length === 0 && (
-                              <div className="rounded-[10px] border border-dashed border-axal-hairline p-3 text-center text-[11px] text-axal-faint">Nobody here yet</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-[12px] text-axal-muted">{model.reason}</p>
-                )}
+          <div className="flex flex-wrap items-end gap-2.5" data-testid="founder-tools">
+            <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-[11px] font-bold text-axal-faint">
+              Search founders
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or email"
+                className={`${inputClass} min-h-[44px] lg:min-h-0`} />
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-bold text-axal-faint">
+              Status
+              <select value={state} onChange={(e) => setState(e.target.value)} className={`${inputClass} min-h-[44px] lg:min-h-0`}>
+                {STATUS_FILTERS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-bold text-axal-faint">
+              Sort
+              <select value={sort} onChange={(e) => setSort(e.target.value)} className={`${inputClass} min-h-[44px] lg:min-h-0`}>
+                {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </label>
+            <div role="radiogroup" aria-label="View" className="flex gap-1">
+              {VIEWS.map(([k, l]) => (
+                <button key={k} type="button" role="radio" aria-checked={view === k} onClick={() => setView(k)}
+                  className={`min-h-[44px] rounded-lg border px-3 text-[12px] font-bold lg:min-h-[34px] ${view === k
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
+                    : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-300'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-[11.5px] text-axal-faint" aria-live="polite">
+            {`${shown.length} of ${items.length}${roster.data?.truncated ? '+' : ''} founders shown · ${weeksReadable ? `${attention} need attention` : 'states not judged: the week record is not loaded'}`}
+          </p>
+          {only != null && (
+            <p role="status" className="text-[12px]">
+              Showing one founder from Needs your attention.{' '}
+              <button type="button" onClick={showAll} className="min-h-[44px] font-bold text-emerald-800 underline dark:text-emerald-300 lg:min-h-0">Show all founders</button>
+            </p>
+          )}
+          {weeks.error && (
+            <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">
+              {`${weeks.error} Every founder reads Not assessed until it loads; the roster is still the Lab's record.`}{' '}
+              <button type="button" onClick={ws.reloadWeeks} className="font-bold underline">Retry</button>
+            </p>
+          )}
+
+          {shown.length === 0 ? (
+            <p className="text-[12px] text-axal-muted">No founder matches this search and status.</p>
+          ) : view === 'board' ? (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3" data-testid="founder-board">
+              {BOARD_COLUMNS.map((col) => {
+                const cards = shown.filter(col.test);
+                return (
+                  <section key={col.key} aria-label={col.label} data-column={col.key}>
+                    <div className="mb-2 flex items-baseline justify-between">
+                      <h2 className="text-[12px] font-extrabold">{col.label}</h2>
+                      <span className="text-[11px] font-bold tabular-nums text-axal-faint">{cards.length}</span>
+                    </div>
+                    <div className="grid gap-2">
+                      {cards.map((r) => <FounderCard key={r.user_id} row={r} lastAt={lastBy.get(Number(r.user_id))} guidanceHref={guidanceHref} />)}
+                      {cards.length === 0 && (
+                        <div className="rounded-[10px] border border-dashed border-axal-hairline p-3 text-center text-[11px] text-axal-faint dark:border-gray-800">Nobody here</div>
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              <div className="hidden md:block"><FounderTable rows={shown} label={label} lastBy={lastBy} guidanceHref={guidanceHref} /></div>
+              <div className="grid gap-2 md:hidden" data-testid="founder-cards-mobile">
+                {shown.map((r) => <FounderCard key={r.user_id} row={r} lastAt={lastBy.get(Number(r.user_id))} guidanceHref={guidanceHref} />)}
               </div>
-            );
-          })()}
-          <Card padding="none" className="overflow-x-auto">
-            <table className="w-full text-[12.5px]">
-              <thead>
-                <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
-                  <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Founder</th>
-                  <th className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Contact</th>
-                </tr>
-              </thead>
-              <tbody>
-                {batch.items.map((f) => (
-                  <tr key={f.user_id} className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800">
-                    <td className="px-4 py-2.5 font-semibold">{f.name || <Unrecorded>Name not recorded</Unrecorded>}</td>
-                    <td className="px-4 py-2.5">{f.email || <Unrecorded />}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-          <div className="mt-3"><FromTheLab /></div>
-          <StatedLimit title="What a card does not carry">
-            Each card is the founder&apos;s name and this week&apos;s deliverables, both the Lab&apos;s record.
-            The Lab&apos;s roster records no company for a founder, so none is shown. Behind plan is the
-            one flag, read from the deliverable count; an unanswered question or a missed reply is not
-            recorded for any founder, so nothing here claims one.
+            </>
+          )}
+
+          <p className="text-[11px] text-axal-faint">
+            {`States: ${Object.values(FOUNDER_STATES).map((s) => s.label).join(', ')}. A failed or grace founder stays in Needs attention whatever their percentage. Founders who stopped sharing their progress with you do not appear.`}
+          </p>
+          <FromTheLab />
+          <StatedLimit title="What a founder row does not carry">
+            The roster gives a founder&apos;s name and email, and the Lab&apos;s week record their status and
+            deliverables. No venture, stage or live signal is recorded for a founder here, so none is shown.
+            Last activity is the founder&apos;s latest recorded action on your guidance; submissions and
+            sessions are not recorded as activity yet.
           </StatedLimit>
-          {/* COMPANY, STAGE, A LIVE SIGNAL AND YOUR NEXT ACTION ARE NOT DRAWN.
-              The design asks for a column each and none has a store behind it.
-              They are absent rather than empty: the columns are not here at
-              all, so a blank is never mistaken for a founder with nothing going
-              on. That rule has not changed — what changed is that the page used
-              to say so in a panel beneath the table, which told a reader about
-              the design rather than about their cohort. */}
         </ZoneBody>
       </ZoneBody>
     </div>

@@ -838,6 +838,10 @@ const COOL_OFF_PREFIXES = [
   '/api/admin/licences',
   // D5014 (#5014) — the pricing models and market data behind recommended licence fees. Same class.
   '/api/admin/licence-pricing',
+  // D5018 (#5018) — the reference prices behind every program's recommended fee. Same class.
+  '/api/admin/program-pricing',
+  // D5019 (#5019) — named sub-territories that exclusivity scopes are drawn on. Same class.
+  '/api/admin/territory-regions',
   // D5048 (#5048) — a licence's package and program agreements. Same class.
   '/api/admin/licence-agreements',
   // D708 — each Axal entity's bank accounts: the payment instructions every
@@ -911,6 +915,8 @@ const COOL_OFF_ROUTES = [
   '/api/admin/branches/:code/support-session',
   '/api/admin/branches/:code/accounts/:userId/move',
   '/api/admin/branches/:code/admins/:userId/unbind',
+  // D5043 — finishing a move is the move's second leg, paused as the move is.
+  '/api/admin/account-moves/:uid/retry-invitation',
   '/api/admin/users/:userId/demote-admin',
   // D714 — the three fund routes that are wholly Super Admin acts: issuing a
   // capital call, executing a distribution, and assigning a fund's ledger

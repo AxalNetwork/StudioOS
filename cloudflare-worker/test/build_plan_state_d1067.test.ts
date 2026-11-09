@@ -30,7 +30,7 @@ function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   for (const t of ['users', 'projects', 'activity_logs', 'discovery_interviews', 'interview_pain_severities', 'pain_groups', 'pain_group_aliases', 'hypotheses', 'hypothesis_pain_links', 'validation_decisions', 'mvp_features', 'roadmap_okrs', 'cap_table_holders', 'competitor_analyses', 'competitor_candidates', 'competitor_signals', 'ai_usage_logs', 'project_members', 'user_company_links']) db.exec(tableFromBaseline(base, t));
   db.exec('ALTER TABLE projects ADD COLUMN icp_definition_meta TEXT');
-  for (const f of ['214_validate_proposals.sql', '374_entity_obligations.sql', '440_validate_cycle_stores.sql', '460_validate_record_stores.sql', '464_verdict_decisions.sql', '441_build_cycle_stores.sql', '489_interview_findings.sql', '506_ai_rail_proposals.sql', '581_build_plans.sql']) db.exec(sql(f));
+  for (const f of ['214_validate_proposals.sql', '374_entity_obligations.sql', '440_validate_cycle_stores.sql', '460_validate_record_stores.sql', '464_verdict_decisions.sql', '441_build_cycle_stores.sql', '489_interview_findings.sql', '506_ai_rail_proposals.sql', '581_build_plans.sql', '202611091102_validate_decision_methodology.sql']) db.exec(sql(f));
   db.exec(`INSERT INTO users(id,email,name,role,founder_id,spinout_lab_active) VALUES
     (1,'one@example.test','Founder','founder',100,0),(3,'admin@example.test','Admin','admin',NULL,0),(4,'partner@example.test','Partner','partner',NULL,0);
     INSERT INTO projects(id,name,founder_id,company_id) VALUES(1,'One',100,10);
