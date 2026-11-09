@@ -8,6 +8,8 @@ import { zonePillClass } from './deskZoneNav';
 import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
 import ResearchHome from '../research/ResearchHome';
 import { EXAMPLES } from '../research/researchHome.js';
+import { tokensRefusal } from '../research/researchStates.js';
+import { openAddTokens } from '../../lib/aiTokens.js';
 import './founderResearchDesk.css';
 import { LensNavLink } from '../../workspaces/lens';
 import { useRailOption } from '../../ui/railCrumbs';
@@ -64,6 +66,7 @@ export default function FounderResearchDesk() {
   // D771 (#2097): while a question is at the model, the rail is that option's.
   useRailOption(asking ? 'ask:research' : null, 'Ask');
   const [askError, setAskError] = useState('');
+  const [askStop, setAskStop] = useState(null);
   const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState('');
   // WHICH sources failed, not just THAT some did. Task #107's batch: every card
@@ -127,13 +130,16 @@ export default function FounderResearchDesk() {
     event.preventDefault();
     const q = question.trim();
     if (!q || asking) return;
-    setAsking(true); setAskError('');
+    setAsking(true); setAskError(''); setAskStop(null);
     try {
       // D778 part 11: the press names its option on the run, keeping the rail's page.
       setAsked(await api.research.ask(q, undefined, railPressHeaders('ask:research')));
     } catch (cause) {
       setAsked(null);
-      setAskError(cause?.message || 'That question could not be answered right now.');
+      // D3701 part 4: a budget stop is RS-11's card, not an error line.
+      const stop = tokensRefusal(cause);
+      if (stop) setAskStop(stop);
+      else setAskError(cause?.message || 'That question could not be answered right now.');
     } finally { setAsking(false); }
   };
 
@@ -216,6 +222,7 @@ export default function FounderResearchDesk() {
             <div className="rh-examples">{EXAMPLES.map((text, index) => <button key={text} type="button" data-testid={`button-research-example-${index}`} onClick={() => { setQuestion(text); questionRef.current?.focus?.(); }}>{text}</button>)}</div>
             <div className="a7-honesty">Eadwyn answers only from the documents in your research library, and cites each one. Every question joins your thread on the Ask page.</div>
             <AskResult asked={asked} error={askError} />
+            {askStop ? <div className="a7-answer is-tokens" role="status" data-testid="status-research-out-of-tokens"><p><strong>{askStop.title}</strong></p><p>{askStop.body}</p><p>{askStop.note}</p><button type="button" className="rh-secondary" data-testid="button-research-add-tokens" onClick={() => openAddTokens({ from: 'Research' })}>Add tokens</button></div> : null}
           </section>
           <nav className="a7-anchors" aria-label="Research sections">{SECTIONS.map(([label, to], index) => <LensNavLink data-testid={`link-research-anchor-${index}`} key={label} to={`${to}${query}`} state={state} className={zonePillClass}>{label}</LensNavLink>)}</nav>
         </header>
