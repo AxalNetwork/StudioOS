@@ -161,7 +161,7 @@ function BookingForm({ slot, advisor, sessionType, bookingLinkSlug, onClose, onB
     <Lightbox label={`Book ${advisor.display_name || 'this advisor'}`} title={`Book ${advisor.display_name || 'this advisor'}`}
       sub={`${formatDateTime(slot.startsAt)}${slotMinutes(slot) != null ? ` · ${slotMinutes(slot)} min` : ''}`}
       onClose={onClose} width={460} phone="sheet" testId="booking-dialog">
-      <form className="p-1" onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
+      <form className="px-5 py-4" onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
         {/* D4715: the exact offer being booked, as the worker will copy it onto the booking. */}
         {offer && (
           <div data-testid="booking-offer" className="mb-3 rounded border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-100">
@@ -323,7 +323,7 @@ export function ReviewModal({ booking, onClose, onSubmitted }) {
   return (
     <Lightbox label="Review your session" title="Review your session" sub={booking.topic ? `Topic: ${booking.topic}` : undefined}
       onClose={onClose} width={460} phone="sheet" testId="review-dialog">
-      <form className="p-1" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+      <form className="px-5 py-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <fieldset className="mb-3">
           <legend className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Rating</legend>
           <StarRow rating={rating} onChange={setRating} />
