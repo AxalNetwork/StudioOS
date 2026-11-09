@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Unreadable } from '../../../ui';
 import StatusBadge from './StatusBadge.jsx';
 import {
-  DRILL_RUNS_HREF, RUNBOOK_HREF, drillFacts, drillHeadline, heartbeatState, pipeline, sizeOf, whenOf,
+  BACKUP_RUNS_HREF, DRILL_RUNS_HREF, RUNBOOK_HREF, drillFacts, drillHeadline, drillRunHref, exactBytes, exportAge, failoverOf,
+  heartbeatState, pipeline, sizeOf, whenOf,
 } from './resilienceModel.js';
 
 /**
@@ -18,6 +19,9 @@ import {
  *                as their own card, never a green light inferred from the other
  *   limits       KV has no restore drill (Unsupported); the drill record keeps
  *                only its latest run (Not instrumented)
+ *   failover     #5046: Unsupported, never "Not recorded": no standby exists,
+ *                recovery is backup plus restore; the server's technical reason
+ *                sits behind "Technical details"
  *   explanation  the previous zone's full detail, behind "How this is measured"
  */
 
@@ -58,7 +62,11 @@ export function DrillCard({ drill }) {
           <h2 id="res-drill-h" className="text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-white">{head.title}</h2>
           {head.line && <p className="text-[12.5px] text-axal-muted dark:text-gray-300" data-testid="res-drill-line">{head.line}</p>}
         </div>
-        <a href={RUNBOOK_HREF} target="_blank" rel="noreferrer" className={BTN} data-testid="res-runbook">Open runbook</a>
+        <div className="flex flex-wrap gap-2">
+          {/* #5046: only the links the record supports; a drill run is linked only when the record names it. */}
+          {drillRunHref(drill) && <a href={drillRunHref(drill)} target="_blank" rel="noreferrer" className={BTN} data-testid="res-drill-run">View evidence</a>}
+          <a href={RUNBOOK_HREF} target="_blank" rel="noreferrer" className={BTN} data-testid="res-runbook">Open runbook</a>
+        </div>
       </div>
       {drill?.available === true && drill.state !== 'never_run' && (
         <ol className="flex flex-wrap gap-2" aria-label="Drill steps" data-testid="res-pipeline">
@@ -98,8 +106,9 @@ export function BackupCard({ hb }) {
   const s = heartbeatState(hb, 'D1 export');
   const rows = hb?.available
     ? [
-      ['Latest D1 export', `${whenOf(hb.recovery_point) || 'Not recorded'}`],
-      ['Size', sizeOf(hb.size_bytes) || 'Not recorded'],
+      // #5046: the exact time and how old it is; the humanised size first, the exact bytes beside it.
+      ['Latest D1 export', whenOf(hb.recovery_point) ? <>{whenOf(hb.recovery_point)}{exportAge(hb) && <span className="text-axal-muted dark:text-gray-400"> · {exportAge(hb)}</span>}</> : 'Not recorded'],
+      ['Size', sizeOf(hb.size_bytes) ? <>{sizeOf(hb.size_bytes)} <span className="text-axal-muted dark:text-gray-400" data-testid="res-backup-bytes">({exactBytes(hb.size_bytes)})</span></> : 'Not recorded'],
       ['Runner', hb.source === 'gha' ? 'Scheduled export job (GitHub Actions)' : hb.source],
       ['Object', hb.key || 'Not recorded'],
       ['Freshness limit', `${hb.stale_after_hours} hours`],
@@ -114,6 +123,7 @@ export function BackupCard({ hb }) {
       {s.line && <p className="text-[12px] text-axal-muted dark:text-gray-300">{s.line}</p>}
       {rows.length > 0 && <Facts rows={rows} />}
       <p className="text-[12px] text-axal-faint dark:text-gray-400">A present export is evidence of a <b>backup</b>, not of a <b>restore</b>.</p>
+      <a href={BACKUP_RUNS_HREF} target="_blank" rel="noreferrer" className={`${BTN} self-start`} data-testid="res-backup-runs">Open export job runs →</a>
     </section>
   );
 }
@@ -132,6 +142,26 @@ export function KvCard({ hb }) {
         ['Namespaces written', 'Not instrumented: the snapshot heartbeat does not count namespaces'],
         ['Restore drill', <StatusBadge key="u" state="unsupported" label="No drill for KV" />],
       ]} />
+    </section>
+  );
+}
+
+/** #5046: failover is a capability that does not exist here, so it says Unsupported, with the reason one click away. */
+export function FailoverCard({ block }) {
+  const f = failoverOf(block);
+  return (
+    <section aria-labelledby="res-failover-h" className={`${CARD} flex flex-col gap-2`} data-testid="res-failover" data-state={f.state}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="res-failover-h" className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-white">Failover</h2>
+        <StatusBadge state={f.state} label={f.label} />
+      </div>
+      <p className="text-[12.5px] text-axal-ink dark:text-gray-100">{f.line}</p>
+      {f.detail && (
+        <details className="text-[12px]" data-testid="res-failover-detail">
+          <summary className="cursor-pointer font-semibold text-axal-muted dark:text-gray-300">Technical details</summary>
+          <p className="mt-2 text-axal-muted dark:text-gray-300">{f.detail}</p>
+        </details>
+      )}
     </section>
   );
 }
@@ -157,6 +187,7 @@ export default function ResilienceWorkspace({ block, unreadable, onRetry, childr
             <BackupCard hb={block ? block.backup : null} />
             <KvCard hb={block ? block.kv : null} />
           </div>
+          {block && <FailoverCard block={block} />}
           <section aria-labelledby="res-history-h" className={`${CARD} flex flex-col gap-2`} data-testid="res-history">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="res-history-h" className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-white">Drill history</h2>
