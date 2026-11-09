@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { EMPTY_DRAFT, draftFrom, latestOnly, saveRequest } from './statusReportDraft';
 import { useMutations, useZoneRead } from './useZoneMutations';
+import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
@@ -149,10 +150,36 @@ function ReportCard({ report, sending, discarding, onEdit, onSend, onDelete, not
 // The shape a composed draft always has lives in `statusReportDraft.js` (#4673), with the
 // rule that a draft belongs to the engagement and period it was composed for.
 
-function Composer({ engagements, onSaved, onError, note, focusTick = 0, target = null }) {
+/** D4822: "November 2026" from "2026-11"; the period as typed when it is not one. */
+export function periodWords(period) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(period || ''));
+  return m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : String(period || '');
+}
+
+/**
+ * D4822 (canvas PD4a): the composer always names what it is writing — the client, the period, and whether that
+ * report is a new one, a saved draft or already sent — from the identity it was COMPOSED for (#4673), never from
+ * the selectors, which may have moved since.
+ */
+export function ComposerAnchor({ client, period, state }) {
+  const word = state === 'sent' ? 'Sent · read only' : state === 'draft' ? 'Draft' : 'New report';
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-axal-hairline bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900" data-testid="status-report-anchor">
+      <span className="text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{client || 'Client not recorded'}</span>
+      <span className="text-[14px] text-axal-muted">· {periodWords(period)}</span>
+      <Pill tone={state === 'sent' ? 'ok' : state === 'draft' ? 'warn' : 'neutral'}>{word}</Pill>
+    </div>
+  );
+}
+
+function Composer({ engagements, onSaved, onError, note, focusTick = 0, target = null, defaultEngagementId = '' }) {
   const { run: runSave, isPending: isSaving } = useMutations();
   const shippedRef = useRef(null);
-  const [engagementId, setEngagementId] = useState('');
+  // D4822 part 2: opened from an engagement's Sheet, the composer starts on that engagement.
+  const [engagementId, setEngagementId] = useState(defaultEngagementId || '');
+  useEffect(() => {
+    if (defaultEngagementId) setEngagementId((v) => v || defaultEngagementId);
+  }, [defaultEngagementId]);
   // D1424 (#3700): the header's "New report" lands the cursor on Engagement.
   const engagementRef = useRef(null);
   useEffect(() => {
@@ -263,6 +290,11 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
 
       {composed && (
         <div className="mt-4 space-y-4">
+          <ComposerAnchor
+            client={(() => { const e = engagements.find((x) => String(x.engagement_id) === String(draft.engagement_id)); return e ? (e.founder_name || e.need_title || e.engagement_uid) : null; })()}
+            period={draft.period}
+            state={draft.existing?.state ?? null}
+          />
           {draft.existing?.state === 'sent' && (
             <p className="text-[12.5px] font-semibold text-amber-700 dark:text-amber-400">
               A report for {draft.period} was already sent. It cannot be edited —
@@ -272,9 +304,8 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
 
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                Shipped in {draft.period}
-              </div>
+              <h3 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Shipped</h3>
+              <div className="text-[11px] text-axal-faint">from the deliverables log, {periodWords(draft.period)}</div>
               {draft.shipped_from_log.length === 0 ? (
                 <p className="mt-1 text-[12px] text-axal-faint">
                   Nothing in the deliverables log carries a send date in this period.
@@ -291,9 +322,8 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
               )}
             </div>
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                Next, from open milestones
-              </div>
+              <h3 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Next</h3>
+              <div className="text-[11px] text-axal-faint">from open milestones</div>
               {draft.next_from_milestones.length === 0 ? (
                 <p className="mt-1 text-[12px] text-axal-faint">No open milestone.</p>
               ) : (
@@ -307,9 +337,8 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
               )}
             </div>
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                Blocked
-              </div>
+              <h3 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Blocked</h3>
+              <div className="text-[11px] text-axal-faint">open blockers, read live</div>
               {draft.blocked.length === 0 ? (
                 <p className="mt-1 text-[12px] text-axal-faint">Nothing open.</p>
               ) : (
@@ -419,9 +448,13 @@ export default function PartnerStatusReportsZone() {
   // guard. The listing returns the array; this is the belt for a response that
   // predates it, and it keeps "no blockers" and "not returned" from becoming
   // two shapes the JSX has to tell apart.
-  const items = (Array.isArray(d?.items) ? d.items : [])
+  // D4822 part 2: `?engagement=` narrows the feed to one engagement, and the composer starts on it.
+  const focus = useEngagementFocus();
+  const allItems = (Array.isArray(d?.items) ? d.items : [])
     .map((r) => ({ ...r, blockers: Array.isArray(r.blockers) ? r.blockers : [] }));
+  const items = allItems.filter((r) => matchesFocus(r, focus.key));
   const engagements = state.engagements || [];
+  const focusId = focusEngagementId([engagements, allItems], focus.key);
   const drafts = items.filter((r) => r.state === 'draft');
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
@@ -490,18 +523,16 @@ export default function PartnerStatusReportsZone() {
       notice={unlinked ? <NoPartnerProfile /> : null}
       isEmpty={unlinked || (items.length === 0 && !composing)}
       empty={(
+        <div className="space-y-3">
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allItems, ...engagements], focus.key)} shown={0} total={allItems.length} noun="reports" onClear={focus.clear} />
         <NothingYet
-          title="No report written yet"
-          body={
-            'A report is composed from what this engagement already carries — '
-            + 'what was shipped in the period, what is open, and what is blocked '
-            + 'with whose side it is on. You write the words; the record supplies '
-            + 'the facts.'
-          }
+          title="No status reports yet"
+          body="Prepare, review and record recurring client updates: what shipped, what is next, what is blocked. You write the words; the record supplies the facts."
           action={engagements.length > 0
-            ? <button type="button" className={buttonClass} onClick={() => setComposing(true)}>Compose one</button>
-            : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open proposals</Link>}
+            ? <button type="button" className={buttonClass} onClick={() => setComposing(true)}>Draft status report</button>
+            : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open Pipeline</Link>}
         />
+        </div>
       )}
     >
       <div className="space-y-6" aria-busy={read.refreshing || undefined}>
@@ -510,17 +541,13 @@ export default function PartnerStatusReportsZone() {
             The reports could not be refreshed just now, so what is shown may be out of date. {read.refreshError}
           </p>
         )}
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allItems, ...engagements], focus.key)} shown={items.length} total={allItems.length} noun="reports" onClear={focus.clear} />
         <ZoneHeading
-          title="Client status reports"
-          blurb={
-            'The recurring client-facing update: shipped, next, blocked. Drafted '
-            + 'with assistance and sent by a person — and where the blocker is on '
-            + 'the client’s side, the report says so plainly without treating it '
-            + 'as an excuse.'
-          }
+          title="Recurring client updates"
+          blurb="Prepare, review and record recurring client updates. Nothing sends automatically: a person reviews each one and records it as sent."
           action={engagements.length > 0 && (
             <button type="button" className={ghostButtonClass} onClick={() => setComposing((v) => !v)}>
-              {composing ? 'Close' : 'Compose a report'}
+              {composing ? 'Close' : 'Draft status report'}
             </button>
           )}
         />
@@ -528,6 +555,8 @@ export default function PartnerStatusReportsZone() {
         {/* ══ THE `pd4` STRIP ═══════════════════════════════════════════════
             `In draft · Sent this cycle · Naming a blocker · Median read time`,
             each counted over every report rather than the chip-narrowed list. */}
+        {/* D4822 part 2: these are firm-wide figures, so they are not drawn over one focused engagement. */}
+        {!focus.key && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <ReportTile
             label="In draft"
@@ -555,9 +584,10 @@ export default function PartnerStatusReportsZone() {
           <ReportTile
             label="Median read time"
             nr
-            note="nothing records that a client read one"
+            note="Read time unavailable · client reads are not currently tracked"
           />
         </div>
+        )}
 
         {d?.delivery_note && (
           <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.delivery_note}</p>
@@ -620,6 +650,7 @@ export default function PartnerStatusReportsZone() {
         {composing && (
           <Composer
             engagements={engagements}
+            defaultEngagementId={focusId}
             focusTick={focusTick}
             target={editTarget}
             note={note}
