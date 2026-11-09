@@ -100,6 +100,8 @@ export default function AdminCommunity() {
   }, [loc.search, loc.pathname, loc.hash, navigate]);
   const doors = useMemo(() => buildConsoles(reads), [reads]);
   const failed = pageFailed(reads);
+  // D4820 part 4: the Events lightbox's strip and tabs read what the overview already holds, so they cannot disagree with it.
+  const community = useMemo(() => ({ ev, fig, weeks, onRetry: reload }), [ev, fig, weeks, reload]);
   const empty = isEmptyCommunity(reads);
 
   const rail = (
@@ -123,7 +125,7 @@ export default function AdminCommunity() {
 
   return (
     <RailFrame rail={rail} data-testid="admin-community">
-      {Box && phone ? <Box onClose={closeBox} now={now} /> : (
+      {Box && phone ? <Box onClose={closeBox} now={now} community={community} /> : (
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="admin-community-page">
         <AdminPageHeader
           title="Community"
@@ -231,7 +233,7 @@ export default function AdminCommunity() {
         {!failed && !empty && small ? <AdditionalInsights /> : null}
       </div>
       )}
-      {Box && !phone ? <Box onClose={closeBox} now={now} /> : null}
+      {Box && !phone ? <Box onClose={closeBox} now={now} community={community} /> : null}
     </RailFrame>
   );
 }

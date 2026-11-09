@@ -55,8 +55,8 @@ page in a child component inside it:
   proposal exactly as approved, How it runs and Activity. The literal
   addresses above rank higher, so the nine keep their pages.
 - `ProposalReviewPage.jsx` — D4808: `/admin/programs/proposals/:uid`, a
-  proposal's review before Decide. The queue's Review leads here; Decide opens
-  from it.
+  proposal's review before Decide. D4873 (part 3): it draws the Proposals list
+  with `ProposalReviewSheet.jsx` open over it.
 - `genericProgramModel.js` — D4808: both pages' words and rows. Pure.
 - `overviewModel.js` — D4873 (#4873, part 2): the catalogue's operating console.
   Pure. The four headline cards (they reconcile with the queues; an unread
@@ -122,7 +122,10 @@ The pieces they draw with:
   search, status, sort and pages.
 - `ProposalFields.jsx` — D964: PG14's Basics and How it runs fields, shared by
   Propose a program and New program.
-- `DecideDialog.jsx` — D964: PG15a, a Super Admin's decision on one proposal.
+- `ProposalReviewSheet.jsx` — D4873 (#4873, part 3): PG04's review drawer, a `Sheet` over the
+  Proposals list at `/admin/programs/proposals/:uid`. The full specification of one revision,
+  read-only, its history, and the decision on it (Decline, Send back, Approve revision N), each
+  through a review step, sent with `expected_revision`. It replaces D964's Decide dialog.
 - `NewProgramDialog.jsx` — D964: New program (PG2's header), for a Super Admin.
 - `proposalsModel.js` — D964, pure: the proposal's statuses, PG14's steps and
   lists, the Review lines, PG15a's choices, PG19b, the list parameters and the

@@ -269,7 +269,7 @@ test('FND5: Add LP — an Admin sees the sentence in place of the first call and
   } finally { await s.close(); }
 });
 
-test('FND5: the row menu opens the drawer, sets the type and logs a contact, each in an in-page dialog', async () => {
+test('FND5: the row menu sets the type and logs a contact, each in an in-page dialog; the name opens the drawer', async () => {
   const v = await mount('/admin/fund-admin/lps');
   try {
     await v.click('lps-menu-12');
@@ -284,9 +284,10 @@ test('FND5: the row menu opens the drawer, sets the type and logs a contact, eac
     await v.submit('lps-contact-form');
     const logged = v.s.calls.find((c) => c[0] === 'logContact');
     assert.deepEqual([logged[1], logged[2].lp_id, logged[2].subject], [9, 12, 'Welcome pack']);
+    // D4812 part 4 (FA-02): Open is the LP's name, never hidden in the menu.
     await v.click('lps-menu-12');
-    await v.click('lps-menu-12-open');
-    assert.equal(v.at.path, '/admin/fund-admin/lps/12');
+    assert.ok(!v.by('lps-menu-12-open'));
+    assert.match(v.props('lps-open-12').href, /^\/admin\/fund-admin\/lps\/12/);
   } finally { await v.close(); }
   assert.doesNotMatch(read('frontend/src/pages/admin/fundAdmin/LpsTab.jsx') + read('frontend/src/pages/admin/fundAdmin/LpDrawer.jsx') + read('frontend/src/pages/admin/fundAdmin/LpDialogs.jsx'),
     /window\.(confirm|alert|prompt)\(/, 'dialogs, never browser pop-ups');

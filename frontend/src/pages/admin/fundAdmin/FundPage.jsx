@@ -5,13 +5,15 @@ import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { actRow, refusalText } from './fundAdminModel';
 import { withQuery } from './lpsModel';
-import { Line, NUM, Note, Panel, ReadFailure, Section, Tiles } from './parts';
+import { Line, NUM, Note, Panel, ReadFailure, Section, TH } from './parts';
+import { PersonPicker } from './PersonPicker';
+import { fundNav, identityLine, keyFigures } from './fundPageModel';
 import { LABEL } from './FundTabs';
 import { useRead } from './useRead';
 import {
   ECONOMICS_NOTE, FUND_NAME_MAX, FUND_REASON_MAX, FUND_STATUSES, NO_CARRY, NO_FEE, NO_GP, PROVIDERS, PROVIDER_MAX, REGENERATE_INFO,
-  WATERFALL, WATERFALL_LINE, checkEconomics, checkFacts, fact, factsForm, fundTiles, lpaCard, lpaRefusal, providersBody, rateInput,
-  rateText, statusLabel,
+  WATERFALL, WATERFALL_LINE, checkEconomics, checkFacts, fact, factsForm, lpaCard, lpaRefusal, providersBody, rateInput,
+  rateText,
 } from './fundsModel';
 
 /**
@@ -25,13 +27,15 @@ import {
  * for) reads as its sentence to an Admin. Edit fund facts is the header's
  * primary (`?edit=facts`).
  *
- * The GP of record and the ledger administrator are people: the console has
- * no person picker yet, so their Super Admin acts say so instead of guessing
- * an account (D1161 §4).
+ * D4812 part 3 (FA-04): the fund's identity first — its name, vintage,
+ * status and GP by name, and six key figures — then local navigation, then
+ * Economics and Roles. The GP of record and the ledger administrator are
+ * named (`GET /api/fund-admin/funds/:id/people`) and changed through the
+ * shared `PersonPicker`. Service providers and the GP's document fields fold
+ * away beneath; the LPA is Documents, and Edit fund facts is Settings.
  */
 const INFO = 'm-0 rounded-axal-sm border border-axal-hairline bg-gray-50 px-3 py-2 text-[12px] text-axal-ink dark:border-gray-800 dark:bg-gray-950/40 dark:text-gray-100';
 const MUTED = 'text-[12px] font-semibold text-axal-muted dark:text-gray-400';
-const NO_PICKER = 'Choosing the person is not drawn on this page yet.';
 
 function useAct() {
   const [busy, setBusy] = useState(false);
@@ -61,13 +65,16 @@ export function FundPage({ apis, access, overview, fundId }) {
   const location = useLocation();
   const navigate = useNavigate();
   const read = useRead(() => apis.funds.get(fundId), [apis, fundId]);
+  const perf = useRead(() => apis.performance.read(fundId), [apis, fundId], { enabled: Boolean(apis.performance?.read) });
+  const gp = useRead(() => apis.fundAdmin.people(fundId, 'gp'), [apis, fundId], { enabled: Boolean(apis.fundAdmin?.people) });
+  const ledgerAdmin = useRead(() => apis.fundAdmin.people(fundId, 'ledger'), [apis, fundId], { enabled: Boolean(apis.fundAdmin?.people) });
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState('');
   const { busy: lpaBusy, error: lpaError, run: runLpa } = useAct();
   const editAsked = new URLSearchParams(location.search).get('edit') === 'facts';
   const open = dialog || (editAsked ? 'facts' : null);
   const close = () => { setDialog(null); if (editAsked) navigate(`${location.pathname}${withQuery(location.search, 'edit', undefined)}`, { replace: true }); };
-  const done = async (text) => { close(); setNotice(text); await read.reload(); };
+  const done = async (text) => { close(); setNotice(text); await read.reload(); gp.reload(); ledgerAdmin.reload(); };
 
   const back = <Link className={BTN.link} to="/admin/fund-admin/funds" data-testid="fund-back">← Funds</Link>;
   if (read.status === 'loading' || read.status === 'idle') {
@@ -94,40 +101,68 @@ export function FundPage({ apis, access, overview, fundId }) {
   const economicsAllowed = actRow(access, 'fund.economics')?.allowed !== false;
   const download = () => runLpa(async () => { await apis.funds.downloadLpa(fund.id); }, 'The LPA could not be downloaded.', (e, fb) => lpaRefusal(e, refusalText(e, fb)));
 
+  const holder = (r) => (r.status === 'ready' ? r.data?.current : null);
+  const holderText = (r, none) => (r.status === 'unreadable' ? <span className="text-red-700 dark:text-red-300">Unreadable</span>
+    : r.status !== 'ready' ? (r.status === 'idle' ? <Unrecorded>Not read here</Unrecorded> : 'Reading…')
+      : r.data?.current ? <>{r.data.current.name} <span className="font-normal text-axal-muted dark:text-gray-400">· {r.data.current.kind}</span></> : <Unrecorded>{none}</Unrecorded>);
+
   return (
-    <Section title={fund.name || `Fund #${fund.id}`} sub={`${statusLabel(fund.status)}${fund.slug ? ` · slug ${fund.slug}` : ''}`} aside={back} testId="fund-page">
+    <Section title={fund.name || `Fund #${fund.id}`} sub={identityLine(fund, gp)} aside={back} testId="fund-page">
       {notice && <p role="status" className="m-0 text-[12.5px] text-axal-positive dark:text-emerald-300" data-testid="fund-notice">{notice}</p>}
-      <Tiles cols="lg:grid-cols-3" testId="fund-tiles" items={fundTiles(fund, item).map((t) => ({ ...t, testId: `fund-tile-${t.k.toLowerCase().replace(/\s+/g, '-')}` }))} />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 border-y border-axal-hairline py-4 sm:grid-cols-3 lg:grid-cols-6 dark:border-gray-800" data-testid="fund-figures">
+        {keyFigures(fund, item, perf).map((f) => (
+          <div key={f.key} data-testid={`fund-figure-${f.key}`}>
+            <dt className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">{f.label}</dt>
+            <dd className={`m-0 mt-1 text-[22px] font-bold tracking-[-.02em] text-axal-ink dark:text-gray-100 ${NUM}`}>
+              {f.value ?? (f.state === 'unreadable' ? <span className="text-[14px] text-red-700 dark:text-red-300">! Unreadable</span>
+                : f.state === 'loading' ? <span className="inline-block h-5 w-16 rounded bg-gray-200 dark:bg-gray-700" aria-label="Reading" />
+                  : <span className="text-[14px] font-normal"><Unrecorded reason={f.reason}>— Not recorded</Unrecorded></span>)}
+            </dd>
+            {f.note && <dd className="m-0 mt-0.5 font-mono text-[12px] text-axal-muted dark:text-gray-400">{f.note}</dd>}
+          </div>
+        ))}
+      </dl>
+      {item?.overdue_lines > 0 && <p className="m-0 text-[13px] text-amber-800 dark:text-amber-300" data-testid="fund-overdue">{`▲ ${item.overdue_lines} ${item.overdue_lines === 1 ? 'line' : 'lines'} overdue · `}<Link className="font-bold underline" to={`/admin/fund-admin/calls?fund=${fund.id}`}>Open lines</Link></p>}
+      <nav aria-label="This fund" className="-mb-px flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" data-testid="fund-nav">
+        {fundNav(fund.id).map((n) => (
+          <Link key={n.key} to={n.to} aria-current={n.key === 'overview' ? 'page' : undefined} data-testid={`fund-nav-${n.key}`}
+            className={`inline-flex min-h-[44px] shrink-0 items-center border-b-2 px-0.5 text-[13px] sm:min-h-[40px] ${n.key === 'overview' ? 'border-axal-violet font-bold text-axal-ink dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}>{n.label}</Link>
+        ))}
+      </nav>
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <Panel label="Economics" testId="fund-economics"
           aside={<FundActControl access={access} act="fund.economics" testId="fund-economics-refused" className={MUTED}>
-            <button type="button" className={BTN.ghost} onClick={() => setDialog('economics')} data-testid="fund-economics-change">Change</button>
+            <button type="button" className={BTN.ghost} onClick={() => setDialog('economics')} data-testid="fund-economics-change">Change…</button>
           </FundActControl>}>
           {economicsAllowed && access && <Note>{ECONOMICS_NOTE}</Note>}
-          <Line a="Carry" figure={<span data-testid="fund-carry">{rateText(fund.carried_interest) ?? <Unrecorded reason={NO_CARRY} />}</span>} />
-          <Line a="Management fee" figure={<span data-testid="fund-fee">{rateText(fund.management_fee) ?? <Unrecorded reason={NO_FEE} />}</span>} />
+          <Line a="Carry" figure={<span className="text-[15px]" data-testid="fund-carry">{rateText(fund.carried_interest) ?? <Unrecorded reason={NO_CARRY} />}</span>} />
+          <Line a="Management fee" figure={<span className="text-[15px]" data-testid="fund-fee">{rateText(fund.management_fee) ?? <Unrecorded reason={NO_FEE} />}</span>} />
+          <Line a={WATERFALL} b={WATERFALL_LINE} testId="fund-waterfall" />
         </Panel>
-        <Panel label="Waterfall" testId="fund-waterfall">
-          <Line a={WATERFALL} b={WATERFALL_LINE} />
-        </Panel>
-        <Panel label="General partner of record" testId="fund-gp"
-          aside={<FundActControl access={access} act="fund.gp_of_record" testId="fund-gp-refused" className={MUTED}>
-            <span className={MUTED} data-testid="fund-gp-no-picker">{NO_PICKER}</span>
-          </FundActControl>}>
+        <Panel label="Roles" testId="fund-roles">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-axal-hairline px-4 py-3 sm:px-5 dark:border-gray-800" data-testid="fund-gp">
+            <div className="min-w-0 flex-1">
+              <div className="text-[12px] text-axal-muted dark:text-gray-400">GP of record</div>
+              <div className="text-[13.5px] font-bold text-axal-ink dark:text-gray-100" data-testid="fund-gp-name">{holderText(gp, NO_GP)}</div>
+            </div>
+            <FundActControl access={access} act="fund.gp_of_record" testId="fund-gp-refused" className={MUTED}>
+              <button type="button" className={BTN.ghost} onClick={() => setDialog('pick-gp')} data-testid="fund-gp-change">Change…</button>
+            </FundActControl>
+          </div>
           {fund.gp_user_id == null && <Note testId="fund-gp-none">{`${NO_GP}. No LPA is drafted until one is named.`}</Note>}
-          <Fact k="Account of record" v={fund.gp_user_id != null ? 'Named' : null} testId="fund-gp-account" />
-          <Fact k="Name on documents" v={fact(fund.gp_name)} />
-          <Fact k="Title" v={fact(fund.gp_title)} />
-          <Fact k="Entity" v={fact(fund.gp_entity)} />
-          <Fact k="Email on documents" v={fact(fund.gp_email)} />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 sm:px-5" data-testid="fund-ledger-admin">
+            <div className="min-w-0 flex-1">
+              <div className="text-[12px] text-axal-muted dark:text-gray-400">Ledger administrator</div>
+              <div className="text-[13.5px] font-bold text-axal-ink dark:text-gray-100" data-testid="fund-ledger-admin-name">{holderText(ledgerAdmin, 'No ledger administrator is assigned. Admins keep the books.')}</div>
+            </div>
+            <FundActControl access={access} act="fund_ledger.administrator" testId="fund-ledger-admin-refused" className={MUTED}>
+              <button type="button" className={BTN.ghost} onClick={() => setDialog('pick-ledger')} data-testid="fund-ledger-admin-change">Change…</button>
+            </FundActControl>
+          </div>
         </Panel>
-        <Panel label="Service providers" testId="fund-providers"
-          aside={<FundActControl access={access} act="fund.write" testId="fund-providers-refused" className={MUTED}>
-            <button type="button" className={BTN.ghost} onClick={() => setDialog('providers')} data-testid="fund-providers-edit">Edit</button>
-          </FundActControl>}>
-          {PROVIDERS.map(([k, l]) => <Fact key={k} k={l} v={fact(fund[k])} testId={`fund-provider-${k}`} />)}
-        </Panel>
-        <Panel label="LPA" testId="fund-lpa"
+      </div>
+      <div id="fund-documents">
+        <Panel label="Documents · LPA" testId="fund-lpa"
           aside={<div className="flex flex-wrap gap-2">
             {lpaState.state === 'on_file' && <button type="button" className={BTN.ghost} onClick={download} disabled={lpaBusy} data-testid="fund-lpa-view">View LPA</button>}
             <FundActControl access={access} act="fund.write" testId="fund-lpa-regenerate-refused" className={MUTED}>
@@ -139,14 +174,32 @@ export function FundPage({ apis, access, overview, fundId }) {
           {lpaError && <div className="px-4 pb-3 sm:px-5"><Err text={lpaError} testId="fund-lpa-error" /></div>}
           <Note>Regenerate asks first: {REGENERATE_INFO.charAt(0).toLowerCase() + REGENERATE_INFO.slice(1)}</Note>
         </Panel>
-        <Panel label="Books" testId="fund-books"
-          aside={<FundActControl access={access} act="fund_ledger.administrator" testId="fund-ledger-admin-refused" className={MUTED}>
-            <span className={MUTED} data-testid="fund-ledger-admin-no-picker">{NO_PICKER}</span>
-          </FundActControl>}>
-          <Line a="Ledger administrator" testId="fund-ledger-admin"
-            b={fund.fund_admin_user_id != null ? 'An administrator is assigned. Their name is not read on this page.' : 'No ledger administrator is assigned. Admins keep the books.'} />
-        </Panel>
       </div>
+      <details id="fund-settings" className="rounded-axal-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="fund-reference">
+        <summary className="flex min-h-[44px] cursor-pointer items-center justify-between gap-3 px-4 py-3 sm:px-5">
+          <span>
+            <span className={TH}>Service providers and GP documents</span>
+            <span className="mt-0.5 block text-[12px] text-axal-muted dark:text-gray-400">Auditor, administrator, counsel, custodian · the GP’s name, title and entity on documents</span>
+          </span>
+          <span aria-hidden="true">▾</span>
+        </summary>
+        <div className="grid gap-4 border-t border-axal-hairline p-4 lg:grid-cols-2 dark:border-gray-800">
+          <Panel label="Service providers" testId="fund-providers"
+            aside={<FundActControl access={access} act="fund.write" testId="fund-providers-refused" className={MUTED}>
+              <button type="button" className={BTN.ghost} onClick={() => setDialog('providers')} data-testid="fund-providers-edit">Edit</button>
+            </FundActControl>}>
+            {PROVIDERS.map(([k, l]) => <Fact key={k} k={l} v={fact(fund[k])} testId={`fund-provider-${k}`} />)}
+          </Panel>
+          <Panel label="GP on documents" testId="fund-gp-documents">
+            <Fact k="Name on documents" v={fact(fund.gp_name)} />
+            <Fact k="Title" v={fact(fund.gp_title)} />
+            <Fact k="Entity" v={fact(fund.gp_entity)} />
+            <Fact k="Email on documents" v={fact(fund.gp_email)} />
+          </Panel>
+        </div>
+      </details>
+      {open === 'pick-gp' && <PersonPicker apis={apis} access={access} fund={fund} role="gp" current={holder(gp)} onClose={close} onDone={done} />}
+      {open === 'pick-ledger' && <PersonPicker apis={apis} access={access} fund={fund} role="ledger" current={holder(ledgerAdmin)} onClose={close} onDone={done} />}
       {open === 'economics' && <EconomicsDialog apis={apis} access={access} fund={fund} onClose={close} onDone={() => done('The fund’s economics changed. The reason is kept on the audit record.')} />}
       {open === 'providers' && <ProvidersDialog apis={apis} fund={fund} onClose={close} onDone={() => done('The service providers were saved.')} />}
       {open === 'regenerate' && <RegenerateDialog apis={apis} fund={fund} onClose={close} onDone={() => done('A new LPA draft was asked for. It replaces the current draft when it is ready.')} />}

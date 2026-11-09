@@ -91,7 +91,7 @@ export default function PublicNav() {
 
         <div className="ax-nav-actions">
           <Link to={SITE_ACTIONS.lpLogin} className="ax-lp">LP login</Link>
-          <Link to={SITE_ACTIONS.apply} className="ax-btn ax-btn-sm ax-btn-primary">Apply →</Link>
+          <Link to={SITE_ACTIONS.apply} className="ax-btn ax-btn-sm ax-btn-primary">Create account →</Link>
           <button
             type="button"
             className="ax-burger"

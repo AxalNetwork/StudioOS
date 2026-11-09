@@ -163,3 +163,18 @@ export const HISTORY_TABS = [
   { view: 'saved', label: 'Saved answers' },
   { view: 'discarded', label: 'Archived' },
 ];
+
+/**
+ * D3701 part 4 (RS-11) — a press the router refused before it ran. The
+ * Worker answers a budget stop with 402 in the budget's own words (D766,
+ * `refuseRun`), and nothing is stored: the history stays as it was. Null for
+ * any other failure, which keeps its own message.
+ */
+export function tokensRefusal(err) {
+  if (!err || err.status !== 402) return null;
+  return {
+    title: 'You’re out of AI tokens',
+    body: err.message || 'The included AI allowance and top-up balance cannot cover this run.',
+    note: 'Add tokens to ask. Your history stays readable, and nothing was charged.',
+  };
+}
