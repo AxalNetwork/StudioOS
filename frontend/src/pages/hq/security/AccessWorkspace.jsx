@@ -109,7 +109,7 @@ function ReachCard({ scope }) {
   );
 }
 
-export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onRefresh, now: nowProp }) {
+export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onRefresh, onLoadMore = null, now: nowProp }) {
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => {
     if (nowProp !== undefined) return undefined;
@@ -127,11 +127,22 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
   const caption = useRef(null);
   const zone = useMemo(() => viewerZone(), []);
 
-  // A new read is the new truth: what this page changed is in it now.
+  // A new read is the new truth: what this page changed is in it now. D4699 — Load more is not a
+  // new read: it extends this one (`appended_to`), so what this page changed stays marked.
+  const prevList = useRef(list);
   useEffect(() => {
+    const extended = list && list.appended_to && list.appended_to === prevList.current;
+    prevList.current = list;
+    if (extended) return;
     setChanged({ sessions: {}, accounts: {}, ended: {}, all: false, count: 0 });
     setSelected([]);
   }, [list]);
+  const [more, setMore] = useState({ busy: false, failed: false });
+  const loadMore = async () => {
+    if (!onLoadMore || more.busy) return;
+    setMore({ busy: true, failed: false });
+    try { await onLoadMore(); setMore({ busy: false, failed: false }); } catch { setMore({ busy: false, failed: true }); }
+  };
 
   const loaded = list && list !== unavailable;
   const tokenHours = loaded ? list.token_hours : null;
@@ -338,6 +349,16 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
             {q && shown.length === 0 && (
               <p className="px-4 py-3 text-[12.5px] text-axal-faint dark:text-gray-400">No session shown matches “{filter}”.</p>
             )}
+            {list.cursor && onLoadMore ? (
+              <div className="flex flex-wrap items-center gap-2 border-t border-axal-hairline px-4 py-3 text-[12px] dark:border-gray-800" data-testid="hq-sessions-more">
+                <button type="button" onClick={loadMore} disabled={more.busy}
+                  className="inline-flex min-h-[44px] items-center rounded-lg border border-axal-hairline bg-white px-3 font-semibold text-axal-ink hover:bg-axal-ground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[34px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+                  data-testid="hq-sessions-load-more">
+                  {more.busy ? 'Loading older sessions…' : 'Load older sessions'}
+                </button>
+                {more.failed ? <span className="text-red-700 dark:text-red-300" role="alert" data-testid="hq-sessions-more-failed">The next sessions could not be read. Try again.</span> : null}
+              </div>
+            ) : null}
           </>
         )}
       </>

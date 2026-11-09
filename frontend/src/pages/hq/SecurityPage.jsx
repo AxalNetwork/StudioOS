@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -393,6 +393,18 @@ export function DsrKindsNotRecorded({ kinds }) {
  * makes leaves this page by one door (`security/README.md`: no request from
  * the workspace files).
  */
+/**
+ * D4699 — whether the operator is still signed in once `kind` succeeds, so the page may re-read.
+ * Emergency re-authentication signs everyone out; signing out an account signs out its holder, so
+ * the operator's own account counts as signed out. Revoking their own current session is refused
+ * by the server, and ending a support session never ends the operator's.
+ */
+export function actLeavesOperatorSignedIn(kind, arg, ownUserId) {
+  if (kind === 'emergency') return false;
+  if (kind === 'sign_out') return ownUserId != null && Number(arg) !== Number(ownUserId);
+  return kind === 'revoke' || kind === 'revoke_selected' || kind === 'end';
+}
+
 export async function runSessionAct(client, kind, arg, reason) {
   if (kind === 'revoke') return client.hqRevokeSession(arg, reason);
   if (kind === 'revoke_selected') return client.hqRevokeSessions(arg, reason);
@@ -632,10 +644,20 @@ export default function HqSecurityPage() {
   const [readAt, setReadAt] = useState({ overview: null, feed: null });
   const stampRead = (k) => setReadAt((cur) => ({ ...cur, [k]: new Date().toISOString() }));
 
+  // D4699 — each read is numbered, and only the newest answer lands. A slow first read that answers
+  // after a retry (or after a filter changed) is dropped instead of overwriting the newer one.
+  const seq = useRef({ overview: 0, sessions: 0, feed: 0 });
+  const latest = (k) => { const n = ++seq.current[k]; return () => n === seq.current[k]; };
+
   const [data, setData] = useState(null);
-  const load = useCallback(() => {
-    setData(null);
-    api.hqSecurityOverview().then((r) => { setData(r); stampRead('overview'); }, (e) => { reportError('hq-security', e); setData(UNAVAILABLE); });
+  // `soft === true` only: `load` is also an onClick handler, and an event is not a soft re-read.
+  const load = useCallback((soft) => {
+    const current = latest('overview');
+    if (soft !== true) setData(null);
+    api.hqSecurityOverview().then(
+      (r) => { if (current()) { setData(r); stampRead('overview'); } },
+      (e) => { reportError('hq-security', e); if (current() && soft !== true) setData(UNAVAILABLE); },
+    );
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -643,16 +665,44 @@ export default function HqSecurityPage() {
   // zone acts on, and an unreadable list must cost that zone alone.
   const [sessionList, setSessionList] = useState(null);
   const loadSessions = useCallback(() => {
+    const current = latest('sessions');
     setSessionList(null);
-    api.hqSecuritySessions().then(setSessionList, (e) => { reportError('hq-sessions', e); setSessionList(UNAVAILABLE); });
+    api.hqSecuritySessions().then(
+      (r) => { if (current()) setSessionList(r); },
+      (e) => { reportError('hq-sessions', e); if (current()) setSessionList(UNAVAILABLE); },
+    );
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
-  // D4801 — the act alone; NOTHING IS RE-READ BEHIND IT. The workspace marks
+  // D4699 — Load more: the next page below the last session id, appended once (a re-read or a new
+  // first page in the meantime drops it). Resolves to the merged list, or throws for the caller's Retry.
+  const loadMoreSessions = useCallback(async () => {
+    const list = sessionList;
+    const before = list?.cursor?.before_id;
+    if (!before) return list;
+    const current = seq.current.sessions;
+    const page = await api.hqSecuritySessions(before);
+    if (current !== seq.current.sessions) return list;
+    const seen = new Set((list.rows || []).map((x) => x.id));
+    const merged = { ...list, rows: [...(list.rows || []), ...(page.rows || []).filter((x) => !seen.has(x.id))], cursor: page.cursor || null, total: page.total ?? list.total, appended_to: list };
+    setSessionList(merged);
+    return merged;
+  }, [sessionList]);
+
+  // D4801 — the act; the SESSION LIST IS NOT RE-READ BEHIND IT. The workspace marks
   // what the server confirmed (a revoked row reads Revoked, in the dialog's
   // word) and offers Re-read. Re-reading on its own would also be wrong after
   // the two acts that sign the operator out: the next request answers 401 and
   // the page leaves for /login before the result could be read.
-  const onSessionAct = useCallback((kind, arg, reason) => runSessionAct(api, kind, arg, reason), []);
+  // D4699 — what the act made stale elsewhere IS re-read, softly (the page and the dialog stay drawn):
+  // the overview's counts and the ledger, after an act that leaves the operator signed in. Never after
+  // emergency re-authentication, nor after signing out the operator's own account.
+  const ownUserId = sessionList && sessionList !== UNAVAILABLE ? (sessionList.rows || []).find((x) => x.is_current)?.user_id ?? null : null;
+  const refreshAfter = useRef(() => {});
+  const onSessionAct = useCallback(async (kind, arg, reason) => {
+    const result = await runSessionAct(api, kind, arg, reason);
+    if (actLeavesOperatorSignedIn(kind, arg, ownUserId)) refreshAfter.current();
+    return result;
+  }, [ownUserId]);
 
   // H23's ledger, its own request. The filter is applied SERVER-side because
   // the feed is a merged page of sixty rows across five stores: filtering
@@ -664,13 +714,15 @@ export default function HqSecurityPage() {
   // request feeds Overview's source count, which says which filter it counted under.
   const [controls, setControls] = useState(EMPTY_CONTROLS);
   const query = JSON.stringify(feedQuery(controls));
-  const loadFeed = useCallback(() => {
-    setFeed(null);
+  const loadFeed = useCallback((soft) => {
+    const current = latest('feed');
+    if (soft !== true) setFeed(null);
     api.hqGovernance(filter, JSON.parse(query)).then(
-      (r) => { setFeed(r); stampRead('feed'); },
-      (e) => { reportError('hq-governance', e); setFeed(UNAVAILABLE); },
+      (r) => { if (current()) { setFeed(r); stampRead('feed'); } },
+      (e) => { reportError('hq-governance', e); if (current() && soft !== true) setFeed(UNAVAILABLE); },
     );
   }, [filter, query]);
+  refreshAfter.current = () => { load(true); loadFeed(true); };
   const loadOlder = useCallback((before) => api.hqGovernance(filter, { ...JSON.parse(query), before }), [filter, query]);
   useEffect(() => {
     loadFeed();
@@ -691,6 +743,7 @@ export default function HqSecurityPage() {
       loadFeed={loadFeed}
       sessionList={sessionList}
       loadSessions={loadSessions}
+      loadMoreSessions={loadMoreSessions}
       onSessionAct={onSessionAct}
       readAt={readAt}
     />
@@ -698,7 +751,7 @@ export default function HqSecurityPage() {
 }
 
 export function SecurityConsole({
-  tab = 'overview', onTab = () => {}, data, load, feed, filter, setFilter, loadFeed, sessionList, loadSessions, onSessionAct, readAt = {},
+  tab = 'overview', onTab = () => {}, data, load, feed, filter, setFilter, loadFeed, sessionList, loadSessions, onSessionAct, readAt = {}, loadMoreSessions = null,
   controls = EMPTY_CONTROLS, setControls = () => {}, loadOlder = () => Promise.reject(new Error('no cursor reader')),
 }) {
   const feedReady = feed && feed !== UNAVAILABLE;
@@ -881,7 +934,7 @@ export function SecurityConsole({
             Each account can also revoke its own devices under Settings.
           </p>
         </Zone>
-        <AccessWorkspace list={sessionList} unavailable={UNAVAILABLE} onAct={onSessionAct} onRetry={loadSessions} onRefresh={refreshAll} />
+        <AccessWorkspace list={sessionList} unavailable={UNAVAILABLE} onAct={onSessionAct} onRetry={loadSessions} onRefresh={refreshAll} onLoadMore={loadMoreSessions} />
 
 
         {/* H7's own zone. Not "what changed" — who read rows they do not
