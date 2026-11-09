@@ -14,30 +14,80 @@ export const NO_PROPOSAL = 'No proposal made this program, so there is no approv
 export const NO_CAPABILITIES = 'This program has declared no capabilities.';
 export const NO_OPERATING_SCREEN = 'No operating screen exists for this program yet. It runs from this page.';
 
-/** A program's address, for a key the registry holds. */
-export const programHref = (key, tab = 'overview') =>
-  `${PROGRAMS_PATH}/${encodeURIComponent(key)}${tab === 'how' ? '/how-it-runs' : tab === 'activity' ? '/activity' : ''}`;
+/**
+ * D4873 (#4873, part 4, PG03): the shell's core sections, every program's: Overview, Playbook, Availability & grants,
+ * Participation, History and Settings. Playbook and History keep D4808's addresses (`/how-it-runs`, `/activity`).
+ */
+const TAB_SUFFIX = Object.freeze({
+  overview: '', how: '/how-it-runs', availability: '/availability', participation: '/participation', activity: '/activity', settings: '/settings',
+});
 
-/** The generic page's tabs: the same shell for every program. */
+/** A program's address, for a key the registry holds. */
+export const programHref = (key, tab = 'overview') => `${PROGRAMS_PATH}/${encodeURIComponent(key)}${TAB_SUFFIX[tab] ?? ''}`;
+
+/** The generic page's core tabs: the same shell for every program. */
 export const genericTabs = (key) => [
   { key: 'overview', label: 'Overview', path: programHref(key) },
-  { key: 'how', label: 'How it runs', path: programHref(key, 'how') },
-  { key: 'activity', label: 'Activity', path: programHref(key, 'activity') },
+  { key: 'how', label: 'Playbook', path: programHref(key, 'how') },
+  { key: 'availability', label: 'Availability & grants', path: programHref(key, 'availability') },
+  { key: 'participation', label: 'Participation', path: programHref(key, 'participation') },
+  { key: 'activity', label: 'History', path: programHref(key, 'activity') },
+  { key: 'settings', label: 'Settings', path: programHref(key, 'settings') },
 ];
 
 /** Which tab an address names. */
 export function genericTabFrom(pathname) {
   const path = String(pathname || '').replace(/\/+$/, '');
-  if (path.endsWith('/how-it-runs')) return 'how';
-  if (path.endsWith('/activity')) return 'activity';
-  return 'overview';
+  const hit = Object.entries(TAB_SUFFIX).find(([k, suffix]) => k !== 'overview' && path.endsWith(suffix));
+  return hit ? hit[0] : 'overview';
 }
 
-/** The key an address names: `/admin/programs/<key>[/how-it-runs|/activity]`. */
+/** The key an address names: `/admin/programs/<key>[/how-it-runs|/availability|/participation|/activity|/settings]`. */
 export function genericKeyFrom(pathname) {
-  const m = /^\/admin\/programs\/([^/]+)(?:\/(?:how-it-runs|activity))?\/?$/.exec(String(pathname || ''));
+  const m = /^\/admin\/programs\/([^/]+)(?:\/(?:how-it-runs|availability|participation|activity|settings))?\/?$/.exec(String(pathname || ''));
   return m ? decodeURIComponent(m[1]) : null;
 }
+
+/**
+ * D4873 (part 4): the capability modules the registry lists for a program (`programs.modules`), each with the
+ * operating screen that already runs it. A module with no screen for this key is named and marked so; a program with
+ * none runs from its core sections alone.
+ */
+export const MODULE_LABEL = Object.freeze({
+  applications: 'Applications', hosts: 'Hosts', cohorts: 'Cohorts', referral_queue: 'Referral queue', perk_queue: 'Perk queue',
+  learners: 'Learners', influencers: 'Influencers', offers: 'Offers', nda_signature: 'NDA / signature',
+});
+const MODULE_PATHS = Object.freeze({
+  'spinout-lab': { applications: '/applications', cohorts: '/cohorts', hosts: '/hosts' },
+  'mentor-cohorts': { cohorts: '/people' },
+  'investor-cohorts': { cohorts: '', nda_signature: '' },
+  'referral-partners': { referral_queue: '/queue' },
+  'refer-and-earn': { referral_queue: '/queue' },
+  perks: { perk_queue: '/queue' },
+  learning: { learners: '/people' },
+  influencer: { applications: '', influencers: '' },
+});
+export const NO_MODULES = 'None yet. This program works with the core sections alone.';
+export const MODULES_UNREAD = 'Its modules could not be read.';
+
+/** `{ state, rows: [{ key, label, path }] }` from the program read; `path` null where no screen runs the module here. */
+export function moduleRows(programKey, program) {
+  if (!program || typeof program !== 'object') return { state: 'loading', rows: [] };
+  if (program.extras && program.extras.available === false) return { state: 'unreadable', rows: [] };
+  if (!Array.isArray(program.modules)) return { state: 'pending', rows: [] };
+  const paths = MODULE_PATHS[programKey] || {};
+  return {
+    state: 'ready',
+    rows: program.modules.map((m) => ({
+      key: m, label: MODULE_LABEL[m] || m,
+      path: m in paths ? `${PROGRAMS_PATH}/${programKey}${paths[m]}` : null,
+    })),
+  };
+}
+
+/** The member-access choices Settings offers: the registry's seven words, and Not recorded (null). */
+export const ACCESS_CHOICES = Object.freeze(['open', 'apply', 'request', 'invite', 'assigned', 'not_open', 'closed']);
+export const PARTICIPATION_UNRECORDED = 'No participation store exists for this program yet, so who has joined is not recorded. It is not the same as nobody.';
 
 /** The refusal a registry read ended in: a key nobody holds, or a read that failed. */
 export function readProblem(error) {

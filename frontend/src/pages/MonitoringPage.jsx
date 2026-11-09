@@ -395,7 +395,8 @@ export default function MonitoringPage() {
 
   // D775 (#2101): H33 drew no rail. A plain admin watches the platform here too, so the rail takes the viewer's tier, as ContractsDesk does.
   // The anomaly panel's model call is the page's own, not the rail's (D780 moves it onto the run path).
-  const railProps = { note: 'Eadwyn reads the health, queue and error lines on this page. Draining or retrying a queue stays yours.' };
+  // D4860 part 2 (PL-12): an operations screen, so the rail starts collapsed unless asked or pinned.
+  const railProps = { operations: true, note: 'Eadwyn reads the health, queue and error lines on this page. Draining or retrying a queue stays yours.' };
   const rail = superAdmin ? <WorkerRail {...railProps} workspace="Monitoring" role="super_admin" data-testid="hq-monitoring-rail" /> : <WorkerRail {...railProps} workspace="Monitoring" role="admin" data-testid="admin-monitoring-rail" />;
 
   return (

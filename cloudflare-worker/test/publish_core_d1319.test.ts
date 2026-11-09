@@ -271,9 +271,10 @@ test('never automatic: no publish target is a sends row, send_modes refuses one,
   assert.deepEqual(callers.map((p) => p.split('/src/')[1]), ['services/publishCore.ts']);
   assert.doesNotMatch(readFileSync(new URL('integrations/autopush.ts', src), 'utf8'), /publish/);
   assert.deepEqual(files.filter((p) => readFileSync(p, 'utf8').includes('registerPublishTarget(') && !p.endsWith('publishTargets.ts')), [], 'only tests register a fake target');
-  // Part 1 adds no provider: nothing can be published yet.
-  // D1333 (#3481, part 2) fills PUBLISH_SOURCES: twelve store rows across the nine places (`publish_sources_d1333.test.ts`).
-  assert.deepEqual([PUBLISH_TARGETS.length, PUBLISH_SOURCES.length, PUBLISHERS.size], [0, 12, 0]);
+  // Part 1 adds no provider. D1333 (#3481, part 2) fills PUBLISH_SOURCES: twelve store rows across the nine places
+  // (`publish_sources_d1333.test.ts`). D2407 (#2407 part 3) adds the first provider row, Beehiiv's drafts.
+  assert.deepEqual([PUBLISH_TARGETS.length, PUBLISH_SOURCES.length, PUBLISHERS.size], [1, 12, 1]);
+  assert.deepEqual(PUBLISH_TARGETS.map((t) => t.key), ['beehiiv']);
   assert.ok(Object.isFrozen(PUBLISH_TARGETS) && Object.isFrozen(PUBLISH_SOURCES));
   assert.equal(PUBLISH_MODULES.length, 9);
   assert.equal(publishTarget('fakepub')!.retract, 'delete');

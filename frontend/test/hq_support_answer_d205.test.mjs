@@ -284,8 +284,13 @@ test('the page wires the panel, keeps the session list, and reloads quietly afte
   const at = CODE.indexOf('const onRecorded = useCallback(');
   assert.ok(at > 0);
   const fn = CODE.slice(at, CODE.indexOf('}, [fetchSupport]);', at));
-  assert.ok(fn.includes('setOpenUid(null)'), 'the panel stays open after its decision is recorded');
+  // D5034 part 2 — the sheet stays open on its outcome (recorded, then
+  // delivered or not), so recording does not close it; closing is the
+  // operator's, and focus then moves to the next row.
+  assert.ok(!fn.includes('setOpen(null)'), 'the sheet closes before its outcome is shown');
   assert.ok(fn.includes('fetchSupport(false)'), 'the refresh after a decision blanks the page');
+  const close = CODE.slice(CODE.indexOf('const closeSheet = useCallback('), CODE.indexOf('}, [open]);'));
+  assert.ok(close.includes('if (decided && open?.next) setFocusAfter(open.next);'), 'after a decision, focus does not move to the next row');
   assert.ok(!fn.includes('load()'), 'the refresh after a decision blanks the page');
   // D5031 (#5031) — two reads now, HQ's own desk and the branch hosts; each
   // blanks only on a retry, never after a decision.
