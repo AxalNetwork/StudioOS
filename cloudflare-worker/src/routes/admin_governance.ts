@@ -10,7 +10,8 @@
  *   GET   /api/admin/governance/documents/:uid      → { document, versions }
  *   GET   /api/admin/governance/documents/:uid/activity → { uid, events: [{ action, line, at, actor, version }] }   D4811 part 5
  *   GET   /api/admin/governance/documents/:uid/related → { uid, dependants, governed_by, banner: { affected, version, dismissed } }   D4811 part 8
- *   POST  /api/admin/governance/documents/:uid/related { kind: 'governance' | 'template', ref } → { relation }
+ *   POST  /api/admin/governance/documents/:uid/related { kind: 'governance' | 'template' | 'agreement', ref } → { relation }
+ *   GET   /api/admin/governance/governing?kind=template|agreement&ref=… → { governing: [...] }   D4811 part 19
  *   POST  /api/admin/governance/documents/:uid/related/:id/reviewed { note? } → { relation }
  *   POST  /api/admin/governance/documents/:uid/related/dismiss → { banner }   hides the banner for this admin only
  *   PATCH /api/admin/governance/documents/:uid      { title?, effective_date?, status?, confidential?, template_slug?, envelope_id? } → { document }
@@ -188,6 +189,18 @@ governance.get('/documents/:uid/activity', async (c) => {
  * with no title, reference or note. Links are references: nothing in a
  * dependant is ever changed here.
  */
+/**
+ * D4811 part 19: an agreement a governance record may govern, by the uid the
+ * Contracts desk uses: a legacy document's uid or an envelope's uuid. Its
+ * title and stored status, or null when there is none.
+ */
+async function agreementOf(env: Env, uid: string): Promise<{ title: string; status: string } | null> {
+  const d = await env.DB.prepare('SELECT title, status FROM documents WHERE uid = ?').bind(uid).first<any>().catch(() => null);
+  if (d) return { title: String(d.title), status: String(d.status) };
+  const e = await env.DB.prepare('SELECT document_title, status FROM esign_envelopes WHERE envelope_uuid = ?').bind(uid).first<any>().catch(() => null);
+  return e ? { title: String(e.document_title), status: String(e.status) } : null;
+}
+
 async function relationView(c: any, r: RelationRow & { reviewer_name?: string | null }, superAdmin: boolean, side: 'dependant' | 'governing') {
   const kind = side === 'dependant' ? r.dependent_kind : 'governance';
   const ref = side === 'dependant' ? r.dependent_ref : r.governing_uid;
@@ -198,6 +211,9 @@ async function relationView(c: any, r: RelationRow & { reviewer_name?: string | 
     if (!d) missing = true;
     else if (Number(d.confidential) === 1 && !superAdmin) restricted = true;
     else { title = d.title; status = d.status; entity = d.entity_key; category = d.category; }
+  } else if (kind === 'agreement') {
+    const a = await agreementOf(c.env, ref);
+    if (!a) missing = true; else { title = a.title; status = a.status; }
   } else {
     const t = await c.env.DB.prepare('SELECT title, category FROM legal_templates WHERE slug = ? AND is_active = 1').bind(ref).first().catch(() => null);
     if (!t) missing = true; else { title = t.title; category = t.category ?? null; }
@@ -209,6 +225,19 @@ async function relationView(c: any, r: RelationRow & { reviewer_name?: string | 
     review_note: restricted ? null : r.review_note,
   };
 }
+
+// D4811 part 19: the governance records that govern a template or an agreement (the reverse of
+// /documents/:uid/related), for their workspaces. A confidential governing record is counted, never named.
+governance.get('/governing', async (c) => {
+  const { superAdmin } = await hq(c);
+  const kind = c.req.query('kind');
+  const ref = String(c.req.query('ref') || '');
+  if ((kind !== 'template' && kind !== 'agreement') || !ref) return refuse(c, 422, { code: 'object_required', message: 'Name the template or agreement.' });
+  const rows = (await c.env.DB.prepare(`SELECT r.*, u.name AS reviewer_name FROM governance_relations r LEFT JOIN users u ON u.id = r.reviewed_by
+    WHERE r.dependent_kind = ? AND r.dependent_ref = ? ORDER BY r.id`).bind(kind, ref).all<any>()).results || [];
+  const governing = await Promise.all(rows.map((r: any) => relationView(c, r, superAdmin, 'governing')));
+  return c.json({ kind, ref, governing });
+});
 
 governance.get('/documents/:uid/related', async (c) => {
   const { user, superAdmin } = await hq(c);
@@ -230,7 +259,7 @@ governance.post('/documents/:uid/related', async (c) => {
   const doc = await visible(c, superAdmin);
   if (doc instanceof Response) return doc;
   const b = await c.req.json().catch(() => ({} as any));
-  if (!isRelationKind(b.kind)) return c.json({ error: "kind must be 'governance' or 'template'" }, 400);
+  if (!isRelationKind(b.kind)) return c.json({ error: "kind must be 'governance', 'template' or 'agreement'" }, 400);
   const ref = typeof b.ref === 'string' ? b.ref.trim() : '';
   if (!ref) return c.json({ error: 'ref is required' }, 400);
   if (b.kind === 'governance') {
@@ -238,6 +267,8 @@ governance.post('/documents/:uid/related', async (c) => {
     const target = UID.test(ref) ? await readDoc(c.env, ref) : null;
     // A record this admin may not open is not one they can link: the same answer as a record that does not exist.
     if (!target || (Number(target.confidential) === 1 && !superAdmin)) return refuse(c, 422, { code: 'relation_target_not_found', message: 'That governance record is not available. Nothing was saved.' });
+  } else if (b.kind === 'agreement') {
+    if (!(await agreementOf(c.env, ref))) return refuse(c, 422, { code: 'relation_target_not_found', message: 'That agreement is not on the Contracts desk. Nothing was saved.' });
   } else if (!(await templateExists(c.env, ref))) {
     return refuse(c, 422, { code: 'relation_target_not_found', message: 'That template is not in the library. Nothing was saved.' });
   }

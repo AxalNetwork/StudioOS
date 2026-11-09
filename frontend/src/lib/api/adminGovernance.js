@@ -8,7 +8,8 @@ import { refusalError, request } from '../api.js';
  * read(uid)         -> { document, versions }
  * activity(uid)     -> { uid, events: [{ action, line, at, actor, version }] } (D4811 part 5)
  * related(uid)      -> { uid, dependants: Rel[], governed_by: Rel[], banner: { affected, version, dismissed } } (D4811 part 8)
- * relate(uid, { kind, ref }) -> { relation }. kind: 'governance' (a record's uid) or 'template' (a library slug)
+ * relate(uid, { kind, ref }) -> { relation }. kind: 'governance' (a record's uid), 'template' (a library slug) or 'agreement' (a desk uid, part 19)
+ * governing(kind, ref) -> { governing: Rel[] } (part 19: the records that govern a template or agreement)
  * markReviewed(uid, id, note) -> { relation }; dismissRelated(uid) -> { banner } (hides the banner for this admin only)
  * A Rel is { id, kind, ref, title, status, entity_key, category, restricted, missing, state, flag_version, flagged_at,
  * reviewed_version, reviewed_at, reviewed_by, review_note }; state is review_suggested, reviewed or not_affected.
@@ -46,6 +47,8 @@ export const adminGovernanceApi = {
   // D4811 part 8: the documents a record governs, and their review flags (board CT-11).
   related: (uid) => request(`${doc(uid)}/related`),
   relate: (uid, body) => request(`${doc(uid)}/related`, { method: 'POST', body: JSON.stringify(body) }),
+  // D4811 part 19: the governance records that govern a template or an agreement.
+  governing: (kind, ref) => request(`${base}/governing?${new URLSearchParams({ kind, ref })}`),
   markReviewed: (uid, id, note = '') => request(`${doc(uid)}/related/${Number(id)}/reviewed`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   dismissRelated: (uid) => request(`${doc(uid)}/related/dismiss`, { method: 'POST' }),
   update: (uid, body) => request(doc(uid), { method: 'PATCH', body: JSON.stringify(body) }),
