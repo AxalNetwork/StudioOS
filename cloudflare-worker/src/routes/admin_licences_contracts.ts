@@ -17,6 +17,7 @@ import { refuse } from '../util/refusal';
 import { pushLicenceToBranch } from '../services/licencePush';
 import { readLicenceTerms, type LicenceTerms } from '../services/licenceTerms';
 import { str, byUid, logEvent } from '../services/licenceLedgerCore';
+import { currentTerms as currentExclusivity } from '../services/licenceExclusivity';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -173,9 +174,16 @@ r.post('/:uid/contract', async (c) => {
     // that cannot be read, every such field stays visible and is named in `unfilled_fields`.
     let terms: LicenceTerms | null = null;
     try { terms = (await readLicenceTerms(c.env, licence.uid))?.terms ?? null; } catch { terms = null; }
+    // D5019: a contractual exclusivity fills `{{exclusivity.<name>}}`; none, or one that cannot be read, leaves them unfilled.
+    let excl: Awaited<ReturnType<typeof currentExclusivity>> = null;
+    try { excl = await currentExclusivity(c.env, licence.uid); } catch { excl = null; }
     const { body, unfilled } = renderContract(
       tpl.body_md,
-      mergeValues(licence, (terr.results || []).map((t) => t.country_code), seats.results || [], terms),
+      mergeValues(licence, (terr.results || []).map((t) => t.country_code), seats.results || [], terms,
+        excl && excl.contractual && ['in_force', 'at_risk'].includes(excl.state)
+          ? { scope_type: excl.scope_type, countries: excl.territory.countries, regions: excl.territory.regions, starts_on: excl.starts_on, ends_on: excl.ends_on,
+            review_on: excl.review_on, cure_period_days: excl.cure_period_days, targets: excl.targets }
+          : null),
     );
 
     // The prior contract is SUPERSEDED, never deleted or edited — the same
