@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ShieldCheck, Loader2 } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { newOpKey } from '../../lib/opKey';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import SecurityTabs from './security/SecurityTabs.jsx';
@@ -14,6 +13,7 @@ import EventsWorkspace from './security/EventsWorkspace.jsx';
 import { activeCount, feedQuery } from './security/eventsModel.js';
 import ResilienceWorkspace from './security/ResilienceWorkspace.jsx';
 import AiSafetyWorkspace from './security/AiSafetyWorkspace.jsx';
+import PrivacyWorkspace from './security/PrivacyWorkspace.jsx';
 import StatusBadge from './security/StatusBadge.jsx';
 import { buildOverview, clockOf } from './security/overviewModel.js';
 import { tabFromSearch, tabOf } from './security/securityTabs.js';
@@ -66,7 +66,7 @@ import { tabFromSearch, tabOf } from './security/securityTabs.js';
  */
 export const UNAVAILABLE = Symbol('unavailable');
 /** Workspaces that say for themselves what could not be read (D4803), so the page banner stays off there. */
-const OWN_UNREADABLE = new Set(['overview', 'resilience', 'ai-safety']);
+const OWN_UNREADABLE = new Set(['overview', 'resilience', 'ai-safety', 'privacy']);
 
 const day = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
 // A number, formatted — or null when there is no number. Never a default.
@@ -603,141 +603,6 @@ export function BackupDr({ block, unreadable }) {
   );
 }
 
-/** The write bar's refusal, in words the operator can act on (D4675 keeps it for the DSR close). */
-export function writeBarMessage(err) {
-  const msg = String(err?.message || err || 'Request failed');
-  return msg === 'TOTP required'
-    ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
-    : msg;
-}
-
-/**
- * D168 — one open erasure request, and the two outcomes HQ may record.
- *
- * WHY THIS EXISTS. Before it, this zone rendered a statutory clock in amber,
- * turned it red when it ran out, and offered nothing: the only way a row left
- * the list was the subject cancelling their own request. HQ watched a legal
- * deadline it could not stop.
- *
- * `withdrawn` IS NOT OFFERED, and the server refuses it too. A withdrawal is
- * the subject's act, recorded when they cancel in their own Settings; a
- * control here would let an operator record that someone changed their mind
- * when they did not.
- *
- * `Fulfilled` RECORDS A MANUAL ACT, IT DOES NOT PERFORM ONE — the platform
- * erases nothing, and the button's own note says so. A control labelled as if
- * it deleted the account would be the `still_an_admin` mistake D134 named, in
- * the one place where the lie is also a compliance record.
- */
-export function DsrClose({ row, onDone }) {
-  const [outcome, setOutcome] = useState('');
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  // D4675 — ONE KEY PER CLOSE, resent on every retry of it, so a retry after a
-  // lost response or a step-up prompt is recorded once. A new outcome is a
-  // different close and gets a new key.
-  const [closeKey, setCloseKey] = useState(newOpKey);
-  // Set when the server recorded nothing because the request changed or was
-  // closed first: the row is out of date, and only a reload shows what is open.
-  const [outdated, setOutdated] = useState(false);
-  const choose = (next) => { setOutcome(next); setCloseKey(newOpKey()); setError(null); setOutdated(false); };
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.hqCloseDsrRequest(row.id, outcome, reason.trim(), {
-        requested_at: row.requested_at,
-        request_id: row.request_id ?? null,
-        close_key: closeKey,
-      });
-      // 202: sent, and not confirmed. The key is kept, so Try again is safe.
-      if (res?.code === 'outcome_unconfirmed') { setError(res.error); return; }
-      onDone?.();
-    } catch (err) {
-      if (err?.code === 'stale_request' || err?.code === 'no_open_request') {
-        setOutdated(true);
-        setError(writeBarMessage(err));
-      } else if (err?.code !== 'ledger_unavailable' && (!err?.status || err.status >= 500)) {
-        // No answer, or the server could not confirm: say unknown, not failed.
-        setError(`${writeBarMessage(err)} Whether it was recorded is not confirmed. Try again: the same close is recorded at most once.`);
-      } else {
-        setError(writeBarMessage(err));
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-  if (!outcome) {
-    return (
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="hq-dsr-actions">
-        <button
-          type="button"
-          onClick={() => choose('fulfilled')}
-          className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
-        >
-          Record as fulfilled
-        </button>
-        <button
-          type="button"
-          onClick={() => choose('denied')}
-          className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
-        >
-          Record as denied
-        </button>
-      </div>
-    );
-  }
-  return (
-    <form onSubmit={submit} className="mt-1.5 space-y-1.5" data-testid="hq-dsr-close-form">
-      <p className="text-[11px] leading-relaxed text-axal-muted">
-        {outcome === 'fulfilled'
-          ? 'This records that the erasure was carried out. It does not erase anything — the platform performs no deletion, so what you are recording is the manual act.'
-          : 'This records a refusal, with your reason stored against it. The subject can make a new request.'}
-      </p>
-      <label className="block text-[11px] font-semibold text-axal-muted">
-        Reason · required, stored with the action
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder={outcome === 'fulfilled'
-            ? 'e.g. records purged from D1 and R2 on 2026-09-19, ticket DSR-14'
-            : 'e.g. retained under an open legal hold, ticket DSR-15'}
-          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12px] font-normal text-axal-ink dark:bg-gray-900"
-        />
-      </label>
-      {error && <p role="alert" className="text-[11.5px] text-red-700 dark:text-red-300" data-testid="hq-dsr-close-error">{error}</p>}
-      <div className="flex items-center gap-1.5">
-        {outdated && (
-          <button
-            type="button"
-            onClick={() => onDone?.()}
-            className="rounded-md border border-axal-hairline bg-white px-2.5 py-1 text-[11px] font-bold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
-            data-testid="hq-dsr-reload"
-          >
-            Reload requests
-          </button>
-        )}
-        <button
-          type="submit"
-          disabled={busy || outdated || reason.trim().length < 8}
-          className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-amber-700 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500 dark:bg-gray-900 dark:text-amber-300 dark:hover:bg-amber-950/30"
-        >
-          {busy ? <Loader2 size={12} className="animate-spin" /> : null} Close as {outcome}
-        </button>
-        <button
-          type="button"
-          onClick={() => choose('')}
-          className="rounded-md px-2 py-1 text-[11px] font-semibold text-axal-faint hover:text-axal-ink dark:hover:text-gray-100"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
 /** A read as the Overview model takes it: in flight, failed, or answered. */
 const readOf = (v, at) => (v === null ? { state: 'loading' } : v === UNAVAILABLE ? { state: 'unreadable' } : { state: 'ready', value: v, at });
 
@@ -1097,8 +962,10 @@ export function SecurityConsole({
         </Zone>
       </>
     ),
+    // D4803 slice 3: SE06 leads and owns the one write (Record outcome); the
+    // previous zone stays behind "How this is measured", read-only.
     privacy: (
-      <>
+      <PrivacyWorkspace dsr={ready ? data.dsr : null} unreadable={data === UNAVAILABLE} onReread={load}>
         <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
           {/* D200 — H23 draws the DSR clocks "by territory · runs against the
               holding branch". Every request this database holds is HQ-held
@@ -1143,7 +1010,6 @@ export function SecurityConsole({
                       {d.last_outcome_at ? ` on ${String(d.last_outcome_at).slice(0, 10)}` : ''}
                     </p>
                   ) : null}
-                  <DsrClose row={d} onDone={load} />
                 </li>
               ))}
             </ul>
@@ -1164,8 +1030,7 @@ export function SecurityConsole({
             than performing one. A withdrawal is the subject&apos;s own and is recorded when they cancel.
           </p>
         </Zone>
-
-      </>
+      </PrivacyWorkspace>
     ),
     trust: (
       <div className="grid gap-4 md:grid-cols-2">

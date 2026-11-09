@@ -594,6 +594,20 @@ test('/callback, through the shared helpers, still lands on ?google=ok and excha
   assert.equal((db2.prepare('SELECT role FROM users').get() as any).role, 'exploring');
 });
 
+// #4651: a plan chosen on /pricing rides /register's `next` into the state; the callback lands a new signup on that
+// Pricing return (not onboarding), where the SPA reopens the checkout sheet (frontend/tests/visual/pricing_journey_4651).
+test('#4651: /callback lands a fresh signup and a returning member on the Pricing return their plan link carried', async () => {
+  const back = '/pricing?for=founder&checkout=founder%3Astudio&interval=yearly&seen=96000';
+  const db = freshDb();
+  const env = envFor(db);
+  const fresh = await withGoogle(await idToken({ email: 'plan.chooser@example.test' }), async () => callback(env, await startedState(env, { redirect: back, lane: 'founder' })));
+  assert.equal(fresh.status, 302);
+  assert.equal(fresh.headers.get('location'), `https://axal.vc${back}&google=ok&google_signup=1`);
+  seedUser(db, { id: 51, email: 'returning.d4651@example.test' });
+  const again = await withGoogle(await idToken({ email: 'returning.d4651@example.test', sub: 'sub-d4651-returning' }), async () => callback(env, await startedState(env, { redirect: back })));
+  assert.equal(again.headers.get('location'), `https://axal.vc${back}&google=ok`);
+});
+
 test('/callback now refuses an inactive account before linking it, and keeps its unverified refusal', async () => {
   const db = freshDb();
   seedUser(db, { id: 50, email: 'founder.d722@example.test', active: 0 });

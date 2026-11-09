@@ -13,13 +13,14 @@ import AgreementDetail from './AgreementDetail';
 import RelatedLists from './RelatedLists';
 import EnvelopeWizard from './EnvelopeWizard';
 import { BankAccountsLink, FundStructureDoor } from './FundStructureSheet';
-import { useRead, ReadState, Missing, button, card } from './parts';
+import { useRead, ReadState, button } from './parts';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 import { AgreementCategories, LIBRARY_ITEMS, LibraryMenu, isLibrary, primaryOf, tabClass } from './ContractsNav';
+import MetricStrip from './MetricStrip';
 import GovernanceTab from './GovernanceTab';
 
 const tabs = [['agreements', 'Agreements'], ['ndas', 'NDAs'], ['partner-deals', 'Partner deals'], ['templates', 'Templates'], ['forms', 'Forms'], ['document-types', 'Document types']];
-const filterKeys = ['status', 'q', 'doc_type', 'party_role', 'provider', 'sort', 'direction', 'offset', 'template', 'signed_recent'];
+const filterKeys = ['status', 'q', 'doc_type', 'party_role', 'provider', 'sort', 'direction', 'offset', 'template', 'signed_recent', 'attention'];
 /**
  * `section="governance"` (D4563, #4563) draws Corporate Governance, the tab at its own
  * address `/admin/contracts/governance` (tabs are paths), after Templates. HQ only.
@@ -47,19 +48,14 @@ export default function ContractsDesk({ section = null }) {
     if (governance) go(`/admin/contracts${next.toString() ? `?${next}` : ''}`); else setParams(next);
     setSelected(null);
   }
-  const cards = [
-    ['Total', stats.data?.total, {}],
-    ['Awaiting signature', stats.data?.pending_signature, { status: 'awaiting_signature' }],
-    ['Signed', stats.data?.by_status?.signed, { status: 'signed' }],
-    ['Average days to sign', stats.data?.avg_days_to_sign, { status: 'signed', sort: 'days_to_sign', direction: 'asc' }],
-    ['Signed, last 30 days', stats.data?.signed_last_30d, { status: 'signed', signed_recent: true }],
-  ];
+  // D4811 part 3: the six-cell strip (board CT-01) opens the records behind each count.
+  const drill = (target) => (target.kind === 'tab' ? navigate(target.tab) : navigate('agreements', target.filters));
   const railProps = { stance: 'Agreements and templates', note: 'Recorded agreements and the templates behind them. Resending or voiding requires an explicit action.' };
   const rail = superAdmin ? <WorkerRail {...railProps} workspace="Contracts" role="super_admin" data-testid="hq-contracts-rail" /> : <WorkerRail {...railProps} workspace="Contracts" role="admin" data-testid="admin-contracts-rail" />;
   return <RailFrame rail={rail} data-testid="hq-contracts-page"><div className="space-y-5 text-axal-ink dark:text-gray-100">
     <header className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">{superAdmin ? 'HQ' : 'Admin'} · Contracts</p><h1 className="text-2xl font-extrabold tracking-tight">Contracts</h1><p className="mt-1 text-[12.5px] text-axal-muted">Every agreement the platform sends, signs or keeps, and the templates behind them.</p></div><div className="flex flex-wrap items-center gap-2">{!branchOfUser(user) && <FundStructureDoor />}{superAdmin && !branchOfUser(user) && <BankAccountsLink />}<button type="button" className={`${button} bg-violet-600 text-white`} onClick={() => { const next = new URLSearchParams(params); next.set('new', ''); setParams(next); }}>New envelope</button><HeaderAsk /></div></header>
     {params.get('moved') === 'legal' && <p role="status">{CONTRACTS_MOVED_NOTICE}</p>}
-    <ReadState read={stats} what="Contract counts"><div className="grid grid-cols-2 gap-3 lg:grid-cols-5">{cards.map(([label, value, target]) => <button key={label} type="button" className={`${card} p-3 text-left`} onClick={() => navigate('agreements', target)}><span className="block text-[11px] text-axal-muted">{label}</span><span className="mt-1 block text-2xl font-bold">{value == null ? <Missing reason={label === 'Average days to sign' ? 'No signed agreement has both a recorded sent and signed date.' : 'This count was not returned.'} /> : value}</span></button>)}</div></ReadState>
+    <ReadState read={stats} what="Contract counts"><MetricStrip stats={stats.data} onDrill={drill} /></ReadState>
     {/* D4811 part 7: four workflow tabs; NDAs and Partner deals are Agreements categories; Forms and Document types are under Library. */}
     <div className="flex flex-wrap items-end justify-between gap-2 border-b border-axal-hairline">
       <nav aria-label="Contracts tabs" className="flex gap-1 overflow-x-auto">
