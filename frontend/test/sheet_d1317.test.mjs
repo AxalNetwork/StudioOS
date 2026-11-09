@@ -82,7 +82,9 @@ test('the dock: beside the rail’s 44px spine at 1024px and up, the window’s 
 
 test('the rail: a spine while a sheet is open, its choice untouched, docked and kept live, and its spine closes the sheet first', () => {
   const rail = read('frontend/src/ui/WorkerRail.jsx');
-  assert.match(rail, /const sheetOpen = useSheetOpen\(\);\s*const collapsed = stored \|\| sheetOpen;/);
+  // D4860 part 2: the rule moved to `railCollapsed`, which takes the sheet first for every rail.
+  assert.match(rail, /const sheetOpen = useSheetOpen\(\);[\s\S]*?const collapsed = railCollapsed\(\{ operations, stored, visitOpen, sheetOpen \}\);/);
+  assert.match(read('frontend/src/ui/railOperations.js'), /if \(sheetOpen\) return true;/);
   assert.match(rail, /if \(sheetOpen\) \{\s*closeSheets\(\);\s*setCollapsed\(false\);/, 'opening the rail closes the sheet first');
   assert.match(rail, /data-sheet-keep=""/);
   assert.match(rail, /document\.documentElement\.setAttribute\(RAIL_DOCK_ATTR, 'docked'\)/);

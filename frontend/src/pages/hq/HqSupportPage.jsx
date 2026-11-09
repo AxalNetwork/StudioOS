@@ -56,7 +56,7 @@
  *
  * Super Admin stays on axal.vc. This page configures nothing but the ticket SLA hours.
  */
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -67,12 +67,13 @@ import { escalationKindLabel, filterByKind, kindFilters } from '../../lib/escala
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import {
   workspaceFromSearch, queueOverview, distributionState, workspaceMarks, escalationGroups, kindHoursOf,
-  hqTicketRows, hqTicketCount, branchCards, sourcesText,
+  hqTicketRows, hqTicketCount, branchCards, sourcesText, branchLabelOf,
 } from './support/supportWorkspaceModel.js';
 import {
   SupportHeader, WorkspaceNav, ActionRequired, AllClear, QueueKindFilter, EscalationQueue, HqTicketsSection,
   SubsidiariesLine, BranchesWorkspace, DeliveryWorkspace, DistributionBanner, LoadingNote,
 } from './support/SupportWorkspaces.jsx';
+import { DecisionSheetView, EMPTY_TEXT } from './support/DecisionSheet.jsx';
 
 /** A read that failed, as the page holds it. Exported so `mergeSupport` is tested with the page's own value. */
 export const UNAVAILABLE = Symbol('unavailable');
@@ -511,28 +512,90 @@ export function EscalationDecisionView({
   );
 }
 
-/** The panel's state and its one write. */
-export function EscalationDecision({ item, onRecorded, onReload }) {
+/**
+ * D5034 part 2 — what a failed write means in the sheet: the request is gone
+ * (404, refused before any write), the outcome is unknown (no status or a
+ * 5xx: the decision may have been recorded), or it was refused (any other
+ * 4xx: nothing written, the server's sentence stands).
+ */
+export function sheetFailure(err) {
+  const status = err?.status;
+  if (status === 404) return { phase: 'gone' };
+  if (!status || status >= 500) return { phase: 'unknown' };
+  return { phase: 'decide', refusal: String(err?.data?.message || err?.message || 'The decision was refused.') };
+}
+
+/**
+ * The panel's state and its one write. `variant="sheet"` draws Support v2's
+ * decision sheet (D5034) over the queue; the default is the inline panel the
+ * licence page still uses. Either way this is the one place the escalation
+ * becomes the rail's record.
+ */
+export function EscalationDecision({ item, onRecorded, onReload, variant = 'panel', record = null, onResend, onClose, returnFocusTo, branchLabel, readAt, kindHours }) {
   // D775 (#2101): the escalation being answered is the rail's record while its panel is open.
   useRecordCrumb(escalationTitle(item), 'escalation', item.uid);
-  const [outcome, setOutcome] = useState('');
+  const [outcome, setOutcome] = useState(variant === 'sheet' ? 'answered' : '');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const submit = async (e) => {
-    e.preventDefault();
-    if (busy || !reason.trim()) return;
+  const [sheet, setSheet] = useState({ phase: 'decide', invalid: null, refusal: null });
+  const firstOutcome = useRef(null);
+  // The one write, for the panel and the sheet alike: reported as recorded
+  // only after it succeeded, and a failure rendered in words.
+  const writeDecision = async (onFailed) => {
     setBusy(true);
     setError(null);
     try {
       const res = await api.escalationAnswer(item.uid, { answer: reason.trim(), status: outcome });
       onRecorded?.(item, outcome, res);
+      return true;
     } catch (err) {
       reportError('hq-support:answer', err);
       setError(decisionError(err));
+      onFailed?.(err);
+      return false;
     } finally {
       setBusy(false);
     }
+  };
+  if (variant === 'sheet') {
+    const submitSheet = async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      // Refused here, in words tied to the field: an empty decision is never sent.
+      if (!reason.trim()) { setSheet({ phase: 'decide', invalid: EMPTY_TEXT[outcome], refusal: null }); return; }
+      setSheet({ phase: 'recording', invalid: null, refusal: null });
+      const ok = await writeDecision((err) => setSheet({ invalid: null, refusal: null, ...sheetFailure(err) }));
+      if (ok) setSheet({ phase: 'recorded', invalid: null, refusal: null });
+    };
+    return (
+      <DecisionSheetView
+        item={item}
+        branchLabel={branchLabel}
+        readAt={readAt}
+        kindHours={kindHours}
+        phase={sheet.phase === 'recorded' && !record ? 'recording' : sheet.phase}
+        outcome={outcome}
+        reason={reason}
+        invalid={sheet.invalid}
+        refusal={sheet.refusal}
+        record={record}
+        copy={OUTCOME_COPY[outcome](branchLabel || item.branch_code)}
+        onChoose={(o) => { setOutcome(o); setSheet((s) => ({ ...s, invalid: null, refusal: null })); }}
+        onReason={(v) => { setReason(v); if (sheet.invalid && v.trim()) setSheet((s) => ({ ...s, invalid: null })); }}
+        onSubmit={submitSheet}
+        onClose={() => onClose?.(sheet.phase === 'recorded')}
+        onResend={onResend}
+        onReread={onReload}
+        initialFocus={firstOutcome}
+        returnFocusTo={returnFocusTo}
+      />
+    );
+  }
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy || !reason.trim()) return;
+    await writeDecision();
   };
   return (
     <EscalationDecisionView
@@ -1514,7 +1577,11 @@ export default function HqSupportPage() {
   const [local, setLocal] = useState(null);
   const [full, setFull] = useState(null);
   const [branchBusy, setBranchBusy] = useState(false);
-  const [openUid, setOpenUid] = useState(null);
+  // D5034 part 2 — the escalation whose sheet is open: its row and the row after it.
+  const [open, setOpen] = useState(null);
+  const reviewButtons = useRef(new Map());
+  const opener = useRef(null);
+  const [focusAfter, setFocusAfter] = useState(null);
   const [recorded, setRecorded] = useState([]);
   // D801 — the escalation queue's kind filter; '' is every kind.
   const [kindFilter, setKindFilter] = useState('');
@@ -1553,9 +1620,10 @@ export default function HqSupportPage() {
   }, [fetchFull]);
   useEffect(() => { load(); }, [load]);
 
+  // The sheet stays open on its outcome (recorded, delivered or not); the queue
+  // re-reads quietly behind it.
   const onRecorded = useCallback((item, outcome, res) => {
     setRecorded((prev) => [recordOf(item, outcome, res), ...prev]);
-    setOpenUid(null);
     fetchSupport(false);
   }, [fetchSupport]);
   // D5033 — Send again, with its state on the record it resends.
@@ -1574,19 +1642,24 @@ export default function HqSupportPage() {
       setRecorded((prev) => prev.map((r) => (r.uid === uid ? resendStep(r, 'error', e) : r)));
     });
   }, []);
+  // Review opens the sheet; closing it returns focus to that row's Review,
+  // or, after a decision, to the next row's (the canvas's "focus returns to the
+  // next row in the queue").
   const decide = {
-    openUid,
+    openUid: open?.item.uid || null,
     kind: kindFilter,
-    onToggle: (uid) => setOpenUid((cur) => (cur === uid ? null : uid)),
-    panelFor: (x) => (
-      <EscalationDecision
-        key={x.uid}
-        item={x}
-        onRecorded={onRecorded}
-        onReload={() => { setOpenUid(null); load(); }}
-      />
-    ),
+    onOpen: (item, button, nextUid) => { opener.current = button || null; setOpen({ item, next: nextUid || null }); },
+    refFor: (uid) => (el) => { if (el) reviewButtons.current.set(uid, el); else reviewButtons.current.delete(uid); },
   };
+  const closeSheet = useCallback((decided) => {
+    if (decided && open?.next) setFocusAfter(open.next);
+    setOpen(null);
+  }, [open]);
+  useEffect(() => {
+    if (open || !focusAfter) return;
+    reviewButtons.current.get(focusAfter)?.focus();
+    setFocusAfter(null);
+  }, [open, focusAfter]);
 
   const { data: ready, branchState } = mergeSupport(local, full);
   // The page as a whole failed only when neither read answered.
@@ -1725,6 +1798,22 @@ export default function HqSupportPage() {
         />
         <WorkspaceNav current={workspace} marks={marks} />
         <div className="mt-4" data-testid="hq-support-workspace" data-workspace={workspace}>{body}</div>
+        {open && (
+          <EscalationDecision
+            key={open.item.uid}
+            variant="sheet"
+            item={open.item}
+            record={recorded.find((r) => r.uid === open.item.uid) || null}
+            onRecorded={onRecorded}
+            onResend={onResend}
+            onClose={closeSheet}
+            onReload={() => { closeSheet(false); fetchSupport(false); }}
+            returnFocusTo={opener}
+            branchLabel={branchLabelOf(ready, open.item.branch_code)}
+            readAt={ready?.read_at}
+            kindHours={kindHoursOf(ready?.sla_policy)}
+          />
+        )}
       </div>
     </RailFrame>
   );
