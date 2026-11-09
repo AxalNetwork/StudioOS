@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { adminGovernanceApi } from '../../../lib/api/adminGovernance';
 import { reportError } from '../../../lib/log';
 import PdfPages from './PdfPages';
