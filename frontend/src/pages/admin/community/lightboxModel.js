@@ -338,6 +338,44 @@ export function whenLabel(at) {
   return `${dayLabel(at)} · ${time} UTC`;
 }
 
+/** D4820 part 5 (CM08): a row's kind, as the chips name it. */
+const KIND_WORD = { events: 'Event', jobs: 'Job', circles: 'Circle', wellbeing: 'Wellbeing' };
+
+/** "Today", "Yesterday" or "Mon 9 Nov", in UTC, from the page's clock. */
+export function dayHeading(day, now = Date.now()) {
+  if (!day) return 'Date not recorded';
+  const today = new Date(now).toISOString().slice(0, 10);
+  const yesterday = new Date(now - 86_400_000).toISOString().slice(0, 10);
+  if (day === today) return 'Today';
+  if (day === yesterday) return 'Yesterday';
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+/** The page's rows, grouped by UTC day in their order (the read is newest first); an undated row is its own group, last. */
+export function groupsOf(rows) {
+  const out = [];
+  for (const r of rows) {
+    const last = out.at(-1);
+    if (last && last.day === r.day) last.rows.push(r);
+    else out.push({ day: r.day, rows: [r] });
+  }
+  return out;
+}
+
+/**
+ * D4820 part 5 (CM08): the kind chips' counts, from the read's `by_kind`
+ * (D932, sent only when no kind is chosen). Each count is a whole number or
+ * null (its source could not be read); a missing or odd `by_kind` is null for
+ * every kind, so a chip never shows a count the Worker did not send.
+ */
+export function activityKindCounts(answer) {
+  const b = answer?.by_kind;
+  const ok = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
+  const counts = Object.fromEntries(['events', 'jobs', 'circles', 'wellbeing'].map((k) => [k, b && typeof b === 'object' ? ok(b[k]) : null]));
+  const all = Number.isInteger(answer?.total) && answer.total >= 0 && b ? answer.total : null;
+  return { all, ...counts, admin: null };
+}
+
 /**
  * The activity read's answer as a page. A source that failed is named, and
  * its rows and count are absent, never zero. The Worker's paging stops at
@@ -352,6 +390,22 @@ export function activityPage(answer, page) {
   const from = answer.rows.length ? (at - 1) * ROWS + 1 : 0;
   const to = from ? from + answer.rows.length - 1 : 0;
   const failed = (answer.unreadable || []).map((u) => SOURCE_WORD[u?.source] || 'one source');
+  const rows = answer.rows.map((r, i) => {
+    const t = stamp(r.at);
+    const dated = !Number.isNaN(t);
+    return {
+      key: `${at}-${i}`,
+      icon: r.icon || '•',
+      kind: KIND_WORD[r.kind] || null,
+      sentence: String(r.sentence || ''),
+      href: typeof r.href === 'string' && r.href.startsWith('/admin') ? r.href : null,
+      when: whenLabel(r.at),
+      lastChange: r.dated_by === 'last_change',
+      day: dated ? new Date(t).toISOString().slice(0, 10) : null,
+      // A registration row counts a whole day (one row per event per day), so it has no time of its own.
+      time: !dated ? NOT_RECORDED : r.count != null ? 'All day' : new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }),
+    };
+  });
   return {
     state: 'ready',
     page: at,
@@ -359,14 +413,9 @@ export function activityPage(answer, page) {
     from,
     to,
     total,
-    rows: answer.rows.map((r, i) => ({
-      key: `${at}-${i}`,
-      icon: r.icon || '•',
-      sentence: String(r.sentence || ''),
-      href: typeof r.href === 'string' && r.href.startsWith('/admin') ? r.href : null,
-      when: whenLabel(r.at),
-      lastChange: r.dated_by === 'last_change',
-    })),
+    rows,
+    // D4820 part 5 (CM08): the page's rows grouped by UTC day, newest first, the time first in each row.
+    groups: groupsOf(rows),
     partial: failed.length ? `Could not be read: ${[...new Set(failed)].join(', ')}. Those rows are not here and not in the count, which is not a claim that nothing happened.` : null,
     capped: total > ACTIVITY_CAP ? `Pages stop at ${nf(ACTIVITY_CAP)} rows. Narrow the kind or the dates to reach older ones.` : null,
   };
