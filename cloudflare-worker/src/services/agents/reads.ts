@@ -30,7 +30,7 @@
  */
 import type { Env } from '../../types';
 import type { AgentRow, Scope } from './teams';
-import { isTeamViewer } from '../mercury/growFeeds';
+import { isTeamViewer } from '../mercury/teamViewer';
 import { atLeast, resolveAccess } from '../captableAccess';
 import { readRecord } from '../capTableRecord';
 import { heldLicences } from '../accountLicences';
