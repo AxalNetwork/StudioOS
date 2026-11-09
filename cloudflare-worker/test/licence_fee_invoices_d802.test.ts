@@ -3,7 +3,7 @@
  * (migration 513): the licence year, issuing once per year, recording payment,
  * the PDF, who may do each, and the Administrator's read.
  *
- * On node:sqlite with the baseline's own DDL and migrations 260, 472 and 513
+ * On node:sqlite with the baseline's own DDL and migrations 260, 472, 513 and 202611090909
  * from their files. The bank account is written as the console writes it, with
  * a number drawn at run time, so no account number is in this file; the people
  * and the licensees are placeholders. The PDF renderer is stubbed. Each case
@@ -37,7 +37,7 @@ const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 const mig = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 const SCHEMA = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'territory_licences', 'licence_admins']
   .map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
-  + '\n' + ['260_subsidiary_statements.sql', '472_entity_bank_accounts.sql', '513_licence_fee_invoices.sql'].map(mig).join('\n')
+  + '\n' + ['260_subsidiary_statements.sql', '472_entity_bank_accounts.sql', '513_licence_fee_invoices.sql', '202611090909_statement_actions.sql'].map(mig).join('\n')
   // D797's terms table; its branch-copy column is a branch table this test does not use.
   + '\n' + mig('512_licence_terms.sql').replace(/ALTER TABLE branch_licence[^;]*;/, '')
   // D4694 — the revision columns, read from their migration.

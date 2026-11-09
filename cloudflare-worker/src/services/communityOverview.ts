@@ -15,6 +15,8 @@
  *   · `{ available: false, unreadable: true, reason }` — its store failed, and
  *     that is not a claim of zero;
  *   · `{ recorded: false, reason }` — no store holds it.
+ * D4820 part 3 adds `queue.experts`: the wellbeing experts waiting to be
+ * verified, as Approvals counts them, with each one's id, headline and wait.
  * `queue`, `participation_by_role` and `wellbeing` are made of parts that read
  * different stores, so each part is its own block and fails alone.
  *
@@ -332,6 +334,61 @@ async function expertsPart(env: Env) {
   return { verified: n(r?.verified), unverified: n(r?.unverified), hidden: n(r?.hidden), inactive: n(r?.inactive) };
 }
 
+/**
+ * D4820 part 3 (#4820, CM02) — WELLBEING EXPERTS WAITING TO BE VERIFIED, the
+ * third queue under Waiting on you. ONE DEFINITION: the same rule as
+ * Approvals' `wellbeing_experts` lane (`APPROVAL_SOURCES`, D1043's "To
+ * verify" bar): active, unverified, not hidden, not declined, at least 70%
+ * complete, and not a sample. `community_experts_queue_4820.test.ts` holds the
+ * two WHERE clauses to the same predicate, so Community and Approvals cannot
+ * count different experts.
+ *
+ * NO PERSON TRAVELS. An expert is waiting since the profile was created (no
+ * store records a submission time; Approvals ages the lane the same way). The
+ * rows carry the expert's id, the profile's headline and the wait, never the
+ * expert's name or account: Community names records, not people (D931).
+ */
+export const EXPERTS_TO_VERIFY_WHERE =
+  'is_active = 1 AND verified = 0 AND COALESCE(hidden_by_admin, 0) = 0 '
+  + "AND decision_state <> 'declined' "
+  + "AND COALESCE(profile_completion_pct, 0) >= 70 AND substr(uid, 1, 5) <> 'seed_'";
+export const EXPERTS_QUEUE_COUNT_SQL =
+  'SELECT COUNT(*) AS pending, '
+  + 'SUM(CASE WHEN datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS overdue, '
+  + 'MIN(datetime(created_at)) AS oldest '
+  + 'FROM experts WHERE ' + EXPERTS_TO_VERIFY_WHERE;
+export const EXPERTS_QUEUE_ROWS_SQL =
+  'SELECT id, headline, created_at FROM experts WHERE ' + EXPERTS_TO_VERIFY_WHERE
+  + ' ORDER BY julianday(created_at) ASC, id ASC LIMIT ?';
+
+async function expertsQueue(env: Env, nowMs: number) {
+  const r = await env.DB.prepare(EXPERTS_QUEUE_COUNT_SQL)
+    .bind(sqlTime(nowMs - OVERDUE_HOURS * 3_600_000))
+    .first<{ pending: number; overdue: number; oldest: string | null }>();
+  const rows = await env.DB.prepare(EXPERTS_QUEUE_ROWS_SQL).bind(REVIEW_ROWS)
+    .all<{ id: number; headline: string | null; created_at: string | null }>();
+  const hoursSince = (v: unknown) => {
+    const at = v ? Date.parse(`${String(v).replace(' ', 'T')}Z`) : NaN;
+    return Number.isFinite(at) ? { at, hours: Math.max(0, Math.floor((nowMs - at) / 3_600_000)) } : null;
+  };
+  const oldest = hoursSince(r?.oldest);
+  return {
+    pending: n(r?.pending),
+    overdue: n(r?.overdue),
+    oldest_wait_hours: oldest ? oldest.hours : null,
+    rows: (rows.results || []).map((e) => {
+      const w = hoursSince(e.created_at);
+      const headline = typeof e.headline === 'string' && e.headline.trim() ? e.headline.trim() : null;
+      return {
+        expert_id: Number(e.id), headline,
+        waiting_since: w ? new Date(w.at).toISOString() : null,
+        waiting_hours: w ? w.hours : null,
+        overdue: w !== null && w.hours > OVERDUE_HOURS,
+      };
+    }),
+  };
+}
+
 /** Bookings by when they were made, with real experts only. */
 async function bookingsPart(env: Env, axis: WeekAxis, before: WeekAxis) {
   const totals = await env.DB.prepare(
@@ -464,7 +521,7 @@ export function parseCommunityWeeks(raw: string | undefined): CommunityWeeks | n
 export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: number = Date.now()) {
   const axis = weekAxis(new Date(nowMs).toISOString(), weeks);
   const before = previousAxis(axis);
-  const [ev, jobsQ, jobs, jobsRoles, circles, network, experts, bookings, checkins] = await Promise.all([
+  const [ev, jobsQ, jobs, jobsRoles, circles, network, experts, bookings, checkins, expertsQ] = await Promise.all([
     eventsParts(env, weeks, nowMs),
     block('The job board queue', () => jobsQueue(env, nowMs)),
     block('The job board', () => jobsBlock(env, axis, before, nowMs)),
@@ -474,6 +531,7 @@ export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: 
     block('Wellbeing experts', () => expertsPart(env)),
     block('Expert bookings', () => bookingsPart(env, axis, before)),
     block('Wellbeing check-ins', () => checkinsPart(env, axis)),
+    block('The wellbeing experts queue', () => expertsQueue(env, nowMs)),
   ]);
   return {
     weeks,
@@ -483,7 +541,7 @@ export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: 
     previous: { from: before.from, to: before.to },
     as_of: new Date(nowMs).toISOString(),
     blocks: {
-      queue: { events: ev.queue, event_rows: ev.review, jobs: jobsQ, overdue_hours: OVERDUE_HOURS },
+      queue: { events: ev.queue, event_rows: ev.review, jobs: jobsQ, experts: expertsQ, overdue_hours: OVERDUE_HOURS },
       events: ev.events,
       jobs,
       participation_by_role: { events: ev.byRole, jobs: jobsRoles },

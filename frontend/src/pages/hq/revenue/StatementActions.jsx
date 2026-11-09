@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { currencyCode, parseMinor } from '../../../lib/money.js';
 import { UNRECORDED_CURRENCY, money, statementAllowsPaidInFull } from './revenueModel.js';
+import { actionAvailability } from './statementActionModel.js';
 
 /**
- * D5039 — the statement entry HQ has today (D453, D458, D514), moved here from
- * `RevenuePage.jsx` unchanged when the page was split. The statement drawer
- * mounts `StatementActions` as its footer. The governed versions the canvas
- * draws (Record a payment with before → after, RV05b; Mark issued and Void
- * behind a reason) are the next slice of #5039, so nothing here was redesigned
- * or weakened: the payloads refuse what the Worker refuses, and the Worker is
- * the gate.
+ * D5039 — the statement drawer's footer. Part 1 moved today's entry here
+ * unchanged; part 2 replaces its paid total, Mark as issued, Mark paid in full
+ * and Void with the governed flows (`StatementActionFlow.jsx`: a reason, the
+ * revision read, a client key, and the step-up where money moves). What stays
+ * is the dispute entry (D514), which is still the PATCH. The Worker refuses a
+ * paid figure or a status on that PATCH, so nothing here can reach them.
  */
 
 /** Quarter period the statement routes accept (YYYY-Qn). */
@@ -21,33 +21,6 @@ export function statementDrawPayload({ licenceUid, period }) {
   if (!STATEMENT_PERIOD_RE.test(p)) return { error: 'The period is a quarter, written YYYY-Qn.' };
   return { licenceUid, period: p };
 }
-
-/**
- * Paid and disputed amounts leave as integer minor units. A blank payment is
- * refused; zero is allowed when nothing was received.
- */
-export function statementPaidPayload({ amountText, note, owedCents, currency }) {
-  const text = String(amountText ?? '').trim();
-  if (text === '') return { error: 'Enter what was received, in the licence currency. 0 is valid when nothing arrived.' };
-  if (!currencyCode(currency)) return { error: 'This statement has no recorded currency, so what was received cannot be read as an amount.' };
-  const parsed = parseMinor(text, currency);
-  if (!parsed.ok) return { error: `The paid amount: ${parsed.message}` };
-  const paid_cents = parsed.minor;
-  const owed = Number(owedCents);
-  if (Number.isFinite(owed) && paid_cents > owed) {
-    return { error: `That is more than the ${money(owed, currency)} this statement claims.` };
-  }
-  return { body: { paid_cents, paid_note: String(note ?? '').trim() || null } };
-}
-
-export function statementVoidPayload({ note }) {
-  const void_note = String(note ?? '').trim();
-  if (void_note.length < 10) {
-    return { error: 'Voiding must say why — at least ten characters, read by whoever audits it.' };
-  }
-  return { body: { status: 'void', void_note } };
-}
-
 
 /**
  * D514 — 0 clears a dispute (and needs no reason); anything above 0 must say
@@ -105,130 +78,88 @@ export function StatementFacts({ statement: s }) {
 }
 
 /**
- * HQ-entered half of a statement: issue, record paid or disputed, void.
+ * The drawer's footer: the governed actions this statement offers, each
+ * opening its flow through `onStart(kind)`, with the reason beside one that is
+ * not offered; and the dispute entry (D514), which saves through `onUpdate`.
  */
-export function StatementActions({ statement, onUpdate }) {
+export function StatementActions({ statement, onUpdate, onStart }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [paid, setPaid] = useState({ amount: '', note: '' });
   const [dispute, setDispute] = useState({ amount: '', note: '' });
-  const [voidNote, setVoidNote] = useState('');
-  const canPayInFull = statementAllowsPaidInFull(statement);
-  const canIssue = statementAllowsIssue(statement);
   if (!statement?.uid) return null;
   const rowLabel = `${statement.brand_name || statement.licence_ref || statement.licence_uid || statement.uid} ${statement.period || ''}`.trim();
+  const can = actionAvailability(statement);
 
-  const patch = async (body) => {
+  const submitDispute = async (e) => {
+    e.preventDefault();
     if (busy) return;
+    const p = statementDisputePayload({ amountText: dispute.amount, note: dispute.note, currency: statement.currency });
+    if (p.error) { setMsg({ err: true, text: p.error }); return; }
     setBusy(true); setMsg(null);
     try {
-      await onUpdate(statement.uid, body);
-      setMsg({ err: false, text: 'Saved.' });
-      setPaid({ amount: '', note: '' });
+      await onUpdate(statement.uid, p.body);
+      setMsg({ err: false, text: 'Dispute saved.' });
       setDispute({ amount: '', note: '' });
     } catch (err) {
-      setMsg({ err: true, text: err?.data?.message || err?.message || 'The update was not saved.' });
+      setMsg({ err: true, text: err?.data?.message || err?.message || 'The dispute was not saved.' });
     } finally {
       setBusy(false);
     }
   };
 
-  const submitPaid = (e) => {
-    e.preventDefault();
-    const p = statementPaidPayload({ amountText: paid.amount, note: paid.note, owedCents: statement.owed_cents, currency: statement.currency });
-    if (p.error) { setMsg({ err: true, text: p.error }); return; }
-    patch(p.body);
-  };
-
-  const submitDispute = (e) => {
-    e.preventDefault();
-    const p = statementDisputePayload({ amountText: dispute.amount, note: dispute.note, currency: statement.currency });
-    if (p.error) { setMsg({ err: true, text: p.error }); return; }
-    patch(p.body);
-  };
-
-  const submitVoid = (e) => {
-    e.preventDefault();
-    const p = statementVoidPayload({ note: voidNote });
-    if (p.error) { setMsg({ err: true, text: p.error }); return; }
-    patch(p.body);
-  };
-
-  const input = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-2 py-1 text-[12px]';
-  const btn = 'rounded-md border border-axal-hairline px-2 py-1 text-[12px] font-bold disabled:opacity-50';
-  const isDraft = statement.status === 'draft';
-  const isVoid = statement.status === 'void';
-
   // D514 — A VOID ROW OFFERS NOTHING FURTHER, and says so: a period holds one
   // statement, and a void one cannot be drawn again.
-  if (isVoid) {
+  if (statement.status === 'void') {
     return (
-      <p className="mt-2 border-t border-axal-hairline/60 pt-2 text-[12px] text-axal-faint" data-testid={`hq-statement-void-${statement.uid}`}>
+      <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid={`hq-statement-void-${statement.uid}`}>
         Void. Nothing further can be entered, and this period cannot be drawn again.
       </p>
     );
   }
 
+  const input = 'w-full rounded-lg border border-axal-hairline bg-white px-2.5 py-2 text-[13.5px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+  const btn = 'min-h-[44px] rounded-lg border border-axal-hairline px-3 text-[13.5px] font-bold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet dark:border-gray-700 sm:min-h-[36px]';
+  const why = [can.issue, can.record_payment, can.void].map((x) => x.why).filter(Boolean);
+
   return (
-    <div className="mt-2 border-t border-axal-hairline/60 pt-2" data-testid={`hq-statement-actions-${statement.uid}`}>
-      <div className="flex flex-wrap gap-2">
-        {isDraft && (canIssue ? (
-          <button type="button" disabled={busy} className={`${btn} bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200`}
-            onClick={() => patch({ status: 'issued' })} aria-label={`Mark ${rowLabel} as issued`}>
-            Mark as issued
+    <div className="flex flex-col gap-2" data-testid={`hq-statement-actions-${statement.uid}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        {can.record_payment.offered && (
+          <button type="button" className={`${btn} border-transparent bg-axal-violet text-white hover:bg-violet-800 dark:hover:bg-violet-600`}
+            onClick={() => onStart?.('record_payment')} aria-label={`Record a payment for ${rowLabel}`}>
+            Record payment…
           </button>
-        ) : (
-          <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="hq-statement-no-issue">
-            Mark as issued is unavailable while the owed figure is a floor.
-          </span>
-        ))}
-        {!isVoid && (
-          <>
-            {statement.status === 'paid' ? null : (
-              canPayInFull ? (
-                <button type="button" disabled={busy} className={btn}
-                  onClick={() => patch({ status: 'paid', paid_cents: statement.owed_cents, paid_note: paid.note || 'Marked paid in full' })}>
-                  Mark paid in full
-                </button>
-              ) : (
-                <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="hq-statement-no-paid-in-full">
-                  Paid in full is unavailable while the owed figure is a floor.
-                </span>
-              )
-            )}
-          </>
+        )}
+        {can.issue.offered && (
+          <button type="button" className={btn} onClick={() => onStart?.('issue')} aria-label={`Mark ${rowLabel} as issued`}>
+            Mark issued…
+          </button>
+        )}
+        {can.void.offered && (
+          <button type="button" className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300`}
+            onClick={() => onStart?.('void')} aria-label={`Void ${rowLabel}`}>
+            Void…
+          </button>
         )}
       </div>
-      {!isVoid && (
-        <form onSubmit={submitVoid} className="mt-2 space-y-1">
-          <div className="text-[12px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Void statement</div>
-          <p className="text-[12px] text-axal-faint">A void period cannot be drawn again.</p>
-          <input className={input} required minLength={10} placeholder="Why this claim is withdrawn — required" value={voidNote} onChange={(e) => setVoidNote(e.target.value)} aria-label={`Void reason for ${rowLabel}`} />
-          <button type="submit" disabled={busy} className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300`}>Void</button>
+      {why.map((w) => (
+        <p key={w} className="text-[12.5px] text-amber-800 dark:text-amber-200" data-testid={w === can.issue.why ? 'hq-statement-no-issue' : undefined}>
+          <span aria-hidden="true">◐ </span>{w}
+        </p>
+      ))}
+      <details className="rounded-lg border border-axal-hairline px-3 py-2 dark:border-gray-700">
+        <summary className="cursor-pointer text-[13.5px] font-bold">Record dispute…</summary>
+        <form onSubmit={submitDispute} className="mt-2 grid gap-2 sm:grid-cols-2">
+          <p className="text-[12.5px] text-axal-muted dark:text-gray-400 sm:col-span-2">The disputed amount replaces the one recorded; 0 clears the dispute.</p>
+          <input className={input} type="text" inputMode="decimal" autoComplete="off" placeholder="Disputed amount" value={dispute.amount} onChange={(e) => setDispute((x) => ({ ...x, amount: e.target.value }))} aria-label={`Disputed amount for ${rowLabel}`} />
+          <input className={input} placeholder="Why — required above 0" value={dispute.note} onChange={(e) => setDispute((x) => ({ ...x, note: e.target.value }))} aria-label={`Dispute reason for ${rowLabel}`} />
+          <button type="submit" disabled={busy} className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300 sm:col-span-2 sm:justify-self-start`}>{busy ? 'Saving…' : 'Save dispute'}</button>
         </form>
-      )}
-      {!isVoid && (
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          <form onSubmit={submitPaid} className="space-y-1">
-            <div className="text-[12px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Set total paid</div>
-            <p className="text-[12px] text-axal-faint">Replaces the total received so far; it does not add a receipt.</p>
-            <input className={input} type="text" inputMode="decimal" autoComplete="off" placeholder="Total received to date" value={paid.amount} onChange={(e) => setPaid((x) => ({ ...x, amount: e.target.value }))} aria-label={`Total paid for ${rowLabel}`} />
-            <input className={input} placeholder="Reference or note" value={paid.note} onChange={(e) => setPaid((x) => ({ ...x, note: e.target.value }))} aria-label={`Payment note for ${rowLabel}`} />
-            <button type="submit" disabled={busy} className={`${btn} bg-emerald-700 text-white hover:bg-emerald-800 dark:hover:bg-emerald-600`}>Save total paid</button>
-          </form>
-          <form onSubmit={submitDispute} className="space-y-1">
-            <div className="text-[12px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Record dispute</div>
-            <p className="text-[12px] text-axal-faint">0 clears the dispute.</p>
-            <input className={input} type="text" inputMode="decimal" autoComplete="off" placeholder="Disputed amount" value={dispute.amount} onChange={(e) => setDispute((x) => ({ ...x, amount: e.target.value }))} aria-label={`Disputed amount for ${rowLabel}`} />
-            <input className={input} placeholder="Why — required above 0" value={dispute.note} onChange={(e) => setDispute((x) => ({ ...x, note: e.target.value }))} aria-label={`Dispute reason for ${rowLabel}`} />
-            <button type="submit" disabled={busy} className={`${btn} border-red-300 text-red-800 dark:border-red-500/40 dark:text-red-300`}>Save dispute</button>
-          </form>
-        </div>
-      )}
+      </details>
       {msg && (
-        <p role={msg.err ? 'alert' : 'status'} className={`mt-1 text-[12px] ${msg.err ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{msg.text}</p>
+        <p role={msg.err ? 'alert' : 'status'} className={`text-[13px] ${msg.err ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{msg.text}</p>
       )}
+      <p className="text-[12.5px] text-axal-muted dark:text-gray-400">Super Admin · each change asks for a reason and is audited; a payment and a void ask for your authenticator code.</p>
     </div>
   );
 }
-
