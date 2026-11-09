@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { adminGovernanceApi } from '../../../lib/api/adminGovernance';
 import { reportError } from '../../../lib/log';
 import PdfPages from './PdfPages';
@@ -11,6 +11,7 @@ import {
 import { governanceLifecycle } from '../../../lib/contractLifecycle';
 import { LifecycleBadge } from './LifecycleBadge';
 import { DrillList, EntitiesTable, EntityAttention, GroupHeader } from './GovernanceAttention';
+import GovernanceWorkspace from './GovernanceWorkspace';
 
 /**
  * D4563 (#4563) — HQ Contracts › Corporate Governance, at its own address
@@ -27,6 +28,8 @@ export default function GovernanceTab() {
   const [panel, setPanel] = useState(null); // { kind: 'new', entity, category? } | { kind: 'doc', uid } | { kind: 'ownership' }
   const read = useRead(() => adminGovernanceApi.list(), [revision]);
   const [params] = useSearchParams();
+  // D4811 part 5: `/admin/contracts/governance/doc/:uid` is one record's workspace.
+  const { uid: workspaceUid } = useParams();
   const changed = () => setRevision((n) => n + 1);
   const data = read.data;
   // D4811 part 2: `?entity=<key>` is one entity's page, `?records=<state>` a summary count's records.
@@ -40,7 +43,9 @@ export default function GovernanceTab() {
         <p className="text-[12.5px] text-axal-muted">Operating agreements, formation certificates, member registers, resolutions and signing authority records of the three Axal entities. A file is never replaced: a corrected one is a new version.</p></div>
     </div>
     <ReadState read={read} what="Governance documents">
-      {data && (focus ? <>
+      {data && (workspaceUid ? <GovernanceWorkspace key={`${workspaceUid}:${revision}`} uid={workspaceUid} categories={data.categories} entities={data.entities}
+        onEdit={() => open(workspaceUid)} />
+      : focus ? <>
         <EntityAttention entity={focus} onAdd={(category) => add(focus, category)} onOpen={open} />
         <EntityCard entity={focus} categories={data.categories} onNew={() => add(focus)} onOpen={open} />
       </> : drill ? <DrillList entities={data.entities} state={drill} onAdd={add} onOpen={open} /> : <>
@@ -133,6 +138,7 @@ function DocumentPanel({ uid, categories, superAdmin, onClose, onChanged }) {
   const d = read.data?.document;
   return <SidePanel title={d ? d.title : 'Governance document'} onClose={onClose} testId="governance-document-panel">
     <ReadState read={read} what="This document">{d && <>
+      <Link to={`/admin/contracts/governance/doc/${encodeURIComponent(d.uid)}`} className="text-xs font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>
       <div className="flex flex-wrap items-center gap-2 text-xs"><StatusPill status={d.status} /><span className="text-axal-muted">{categories.find((c) => c.key === d.category)?.label}</span>{d.confidential && <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[11px]">Confidential</span>}</div>
       <StatusMoves document={d} versions={read.data.versions} onDone={refresh} />
       <Details document={d} superAdmin={superAdmin} onDone={refresh} />
