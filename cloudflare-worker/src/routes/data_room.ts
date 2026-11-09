@@ -117,6 +117,7 @@ import { deckSourceReady, sourceFile, sourceState, sourceQuote, typedFile, fileK
 import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
 import { defaultDeps as searchDeps, filesToIndex, forgetFile, indexFile, searchRoom } from '../services/dataRoomSearch';
 import { SupportHistoryError, supportPage, supportReadHistory } from '../services/supportReads';
+import { hasActivePairNda, hasActiveVentureNda } from '../services/dealAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -216,24 +217,17 @@ export async function activeGrant(env: Env, projectId: number, userId: number): 
  * round would quietly accept a row the rest of the system considers malformed.
  */
 export async function ndaActive(env: Env, founderUserId: number, investorUserId: number): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `SELECT 1 FROM pairwise_ndas
-      WHERE party_a_user_id = ? AND party_b_user_id = ? AND status = 'active'
-        AND (valid_until IS NULL OR datetime(valid_until) > datetime('now'))`,
-  ).bind(founderUserId, investorUserId).first();
-  return !!row;
+  // D4631 part 2: the shared NDA rule (services/dealAccess.ts), for this one pair.
+  return hasActivePairNda(env, founderUserId, investorUserId);
 }
 
-/** The NDA belongs to the venture founder, independently of who shared it. */
+/**
+ * The NDA belongs to the venture founder, independently of who shared it. D4631 part 2: the shared rule in
+ * services/dealAccess.ts, the one the deal's sections and documents read, so every data-room gate (the listing,
+ * a download, the founder's "who can open this" record, Research's held rooms, a round call's room) agrees.
+ */
 export async function projectNdaActive(env: Env, projectId: number, investorUserId: number): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `SELECT 1 FROM pairwise_ndas n
-       JOIN users owner ON owner.id = n.party_a_user_id
-       JOIN projects p ON p.founder_id = owner.founder_id
-      WHERE p.id = ? AND n.party_b_user_id = ? AND n.status = 'active'
-        AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))`,
-  ).bind(projectId, investorUserId).first();
-  return !!row;
+  return hasActiveVentureNda(env, projectId, investorUserId);
 }
 
 export async function logAccess(env: Env, projectId: number, userId: number, action: string, fileId: number | null) {
@@ -554,7 +548,7 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
               granter.name AS granted_by_name, granter.role AS granted_by_role,
               EXISTS (
                 SELECT 1 FROM pairwise_ndas n
-                 WHERE n.party_a_user_id IN (SELECT owner.id FROM users owner WHERE owner.founder_id = p.founder_id)
+                 WHERE n.party_a_user_id IN (SELECT owner.id FROM users owner WHERE owner.founder_id = p.founder_id AND COALESCE(owner.is_active, 1) = 1)
                    AND n.party_b_user_id = g.investor_user_id
                    AND n.status = 'active'
                    AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
