@@ -32,7 +32,7 @@ test('the Team section is H10–H11, and each board\'s route answers its own key
 });
 
 test('Team draws the users console, whose account drawer names the open account', () => {
-  assert.match(read('pages/hq/AccountsPage.jsx'), /<UsersConsole onImpersonate=\{onImpersonate\} \/>/, 'Team no longer draws the users console');
+  assert.match(read('pages/hq/AccountsPage.jsx'), /<UsersConsole onImpersonate=\{onImpersonate\} reloadKey=\{keys\.directory\} onChanged=\{\(\) => invalidate\('directory_change'\)\} \/>/, 'Team no longer draws the users console');
   const code = read('pages/admin/consoles/UsersConsole.jsx');
   const drawer = code.slice(code.indexOf('export function UserDetailModal('));
   assert.match(drawer, /^export function UserDetailModal\([^)]*\) \{\s*(?:\/\/[^\n]*\n\s*)*useRecordCrumb\(userRow\?\.name \|\| userRow\?\.email \|\| null, 'account', userRow\?\.id\);/,
