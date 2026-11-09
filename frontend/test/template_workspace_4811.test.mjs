@@ -13,6 +13,10 @@ import Desk from '../src/pages/admin/contracts/ContractsDesk.jsx';
 import { TEMPLATE_TABS, savedLine, templateRow, templateVersionMarkers, usageLine, versionRows } from '../src/pages/admin/contracts/TemplateWorkspace.jsx';
 import { EMPTY_FILTERS, activeFilterCount, applyFilters, filterOptions } from '../src/pages/admin/contracts/contractSearchModel.js';
 import { mountContracts } from './_contracts_dom.mjs';
+import { adminLegalReviewsApi } from '../src/lib/api/adminLegalReviews.js';
+// D4811 part 16: the Legal Review tab and the Overview's "Last review" read the review record; none is recorded here.
+adminLegalReviewsApi.list = async (kind, ref) => ({ object: { kind, ref, title: 'x', version: 1, sha256: 'a'.repeat(64) }, reviews: [], counsel: [], viewer: { id: 2, counsel: false, super_admin: false } });
+
 
 const never = () => new Promise(() => {});
 const originals = { ...api }, contractOriginals = { ...contractsApi };
@@ -68,7 +72,7 @@ test('mounted: Overview says each fact or why it is unknown; Versions and Activi
     assert.match(text, /Published versionv2/);
     assert.match(text, /Merge fields2/);
     assert.match(text, /Used by4 agreements made from it/);
-    assert.match(text, /Last reviewNot recorded.*question C/);
+    assert.match(text, /Last reviewNot recorded.*No legal review has been recorded\./);
     assert.ok(view.nodes().some((n) => n.tagName === 'A' && view.props(n)?.href === '/admin/contracts?tab=templates&open=initial_lpa' && /Edit in editor/.test(nodeText(n))), 'Edit in editor opens the editor on it');
     assert.deepEqual(calls.filter(([k]) => k === 'adminTemplateStoreVersions').map(([, a]) => a), [['initial_lpa']]);
     await act(async () => { view.props(tabButton(view, 'versions')).onClick({}); }); await view.flush();
@@ -83,7 +87,7 @@ test('mounted: Overview says each fact or why it is unknown; Versions and Activi
     assert.match(view.text(), /4 agreements made from it/);
     assert.ok(view.nodes().some((n) => n.tagName === 'A' && view.props(n)?.href === '/admin/contracts?template=initial_lpa'), 'its agreements are one press away');
     await act(async () => { view.props(tabButton(view, 'legal-review')).onClick({}); }); await view.flush();
-    assert.match(view.text(), /Not recorded.*question C/);
+    assert.match(view.text(), /Not recorded.*No legal review has been requested for this document\./);
   } finally { await view.unmount(); restore(); }
 });
 
