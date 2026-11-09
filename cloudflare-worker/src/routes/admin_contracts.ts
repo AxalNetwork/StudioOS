@@ -30,6 +30,7 @@ import { renderLegalPdf } from '../services/legalPaperRender';
 import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { refuse } from '../util/refusal';
+import { logAdminAction } from '../services/adminAudit';
 import { confirmationFor } from '../services/governanceHighRisk';
 import { SEARCH_LIMIT, rank, searchAgreements, searchGovernance, searchQuery, searchTemplates, type SearchResult } from '../services/contractSearch';
 import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON, isRestrictedSlug } from '../services/templateSafety';
@@ -1697,6 +1698,48 @@ adminContracts.post('/:uid/resend', async (c) => {
 // Task #5 (Z): now requires a free-text `reason` (>=5 chars) and mirrors
 // the void into `dd_audit_log` when the envelope is referenced by any
 // open dd_findings row (so the diligence audit trail captures it).
+// D4811 (#4811) part 11 — the "Link recipient" repair (boards CT-01, CT-02): an
+// agreement whose recipient has no company is linked to a deal, and through it
+// to the company. Only the stores that carry a company link can be repaired:
+// a legacy `documents` row takes the deal's company, an envelope takes the deal.
+// A row that is already linked is never relinked here, and nothing else on it
+// changes. Pairwise NDAs and partner deals have no company link to make.
+adminContracts.post('/:uid/link', async (c) => {
+  const admin = await requireAdmin(c);
+  const uid = c.req.param('uid');
+  const body = await c.req.json().catch(() => ({} as any));
+  const dealId = Number(body?.deal_id);
+  if (!Number.isInteger(dealId) || dealId <= 0) {
+    return refuse(c, 422, { code: 'deal_required', message: 'Choose the deal this agreement belongs to. Nothing was linked.' });
+  }
+  const sql = getSQL(c.env);
+  try {
+    const ref = await findContractByUid(sql, uid);
+    if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available.' });
+    if (ref.source === 'pairwise_nda' || ref.source === 'partner_deal') {
+      return refuse(c, 409, { code: 'link_not_supported', message: 'This agreement is kept between its parties and has no company link to make. Nothing was linked.' });
+    }
+    const deals: any[] = await sql`SELECT d.id, d.uid, d.project_id, p.name AS project_name FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id = ${dealId} LIMIT 1`;
+    if (!deals.length) return refuse(c, 404, { code: 'deal_not_found', message: 'That deal is not available. Nothing was linked.' });
+    const deal = deals[0];
+    const already = ref.source === 'documents' ? ref.row.project_id != null : ref.row.deal_id != null;
+    if (already) {
+      return refuse(c, 409, { code: 'already_linked', message: 'This agreement is already linked. It is not relinked from here. Nothing was changed.' });
+    }
+    if (ref.source === 'documents') {
+      await sql`UPDATE documents SET project_id = ${deal.project_id}, updated_at = CURRENT_TIMESTAMP WHERE uid = ${ref.row.uid} AND project_id IS NULL`;
+    } else {
+      await sql`UPDATE esign_envelopes SET deal_id = ${deal.id} WHERE id = ${ref.row.id} AND deal_id IS NULL`;
+    }
+    await logAdminAction(c.env, Number(admin.id), String(admin.email ?? ''), 'contract_linked', {
+      uid, source: ref.source, deal_id: Number(deal.id), project_id: Number(deal.project_id),
+    });
+    return c.json({ ok: true, uid, source: ref.source, deal_id: Number(deal.id), project_name: deal.project_name });
+  } finally {
+    await sql.end();
+  }
+});
+
 adminContracts.post('/:uid/void', async (c) => {
   // Task #6 — voiding a contract is irreversible from the recipient's POV
   // (their magic link stops working). Gate on TOTP step-up.
