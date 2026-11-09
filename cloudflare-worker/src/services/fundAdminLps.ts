@@ -144,8 +144,10 @@ const MONEY = ['commitment_cents', 'called_cents', 'received_cents', 'outstandin
  * `'fund_not_administered'` when `fund` names a fund the console does not
  * administer. The caller has passed `requireFundAdminReader`.
  */
-export async function fundAdminLps(env: Env, user: User, query: LpQuery, today: string) {
-  if (!await auditRead(env, user, 'fund_lps_read', { surface: 'fund_admin.lps', fund_id: query.fund_id, lp_id: query.lp_id })) return null;
+export async function fundAdminLps(env: Env, user: User, query: LpQuery, today: string, opts: { all?: boolean } = {}) {
+  // D4812 part 4: the export reads every row the filters keep, and says so on its audit row.
+  const surface = opts.all ? 'fund_admin.lps.export' : 'fund_admin.lps';
+  if (!await auditRead(env, user, 'fund_lps_read', { surface, fund_id: query.fund_id, lp_id: query.lp_id, ...(opts.all ? { filters: { ...query, page: undefined, per_page: undefined } } : {}) })) return null;
   const administered = await administeredFunds(env);
   const funds = query.fund_id === null ? administered : administered.filter((f) => f.id === query.fund_id);
   if (query.fund_id !== null && !funds.length) return 'fund_not_administered' as const;
@@ -314,6 +316,6 @@ export async function fundAdminLps(env: Env, user: User, query: LpQuery, today: 
     total_rows: filtered.length,
     totals,
     tally,
-    items: filtered.slice(start, start + query.per_page),
+    items: opts.all ? filtered : filtered.slice(start, start + query.per_page),
   };
 }
