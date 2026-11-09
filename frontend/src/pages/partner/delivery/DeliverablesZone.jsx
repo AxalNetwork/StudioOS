@@ -16,6 +16,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { useMutations, useZoneRead, signature } from './useZoneMutations';
+import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 
 /**
  * Delivery · Deliverables — `/delivery/deliverables`.
@@ -49,8 +50,8 @@ function OpenedState({ row }) {
   // opens cannot be observed (#4690) it is not "unopened" at all.
   if (row.read_state === 'unopened') return <Pill tone="warn">Unopened</Pill>;
   return (
-    <NotComputable why="Nothing in this product records an open — the client sets that, and there is no surface for them to set it on yet.">
-      Opens not recorded
+    <NotComputable why="Client opens are not currently tracked.">
+      Read status unavailable
     </NotComputable>
   );
 }
@@ -213,8 +214,16 @@ export default function PartnerDeliverablesZone() {
   }, [focusAdd, read.data]);
 
   const d = state.data;
-  const items = Array.isArray(d?.items) ? d.items : [];
+  // D4822 part 2: `?engagement=` (from the engagement Sheet) narrows the log to one engagement; every figure below
+  // is then that engagement's, and the bar above the log says so.
+  const focus = useEngagementFocus();
+  const allItems = Array.isArray(d?.items) ? d.items : [];
+  const items = allItems.filter((r) => matchesFocus(r, focus.key));
   const engagements = state.engagements || [];
+  const focusId = focusEngagementId([engagements, allItems], focus.key);
+  useEffect(() => {
+    if (focusId) setNewItem((n) => (n.engagement_id ? n : { ...n, engagement_id: focusId }));
+  }, [focusId]);
   // ══ THE ARTBOARD'S FOUR TILES, COUNTED OVER THE WHOLE LOG ═══════════════
   // Never over `visible`: a figure that changes because a chip was clicked is
   // not reporting what its label claims.
@@ -364,16 +373,14 @@ export default function PartnerDeliverablesZone() {
       isEmpty={unlinked || (items.length === 0)}
       empty={(
         <div className="space-y-4">
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allItems, ...engagements], focus.key)} shown={0} total={allItems.length} noun="deliverables" onClear={focus.clear} />
+        {/* D4822 (canvas `First deliverable`): one line of purpose and the action that is reachable from here. */}
         <NothingYet
-          title="Nothing logged yet"
-          body={
-            'This is the record of what the firm shipped and when. Log the first '
-            + 'one and the engagement it belongs to starts carrying it — Health '
-            + 'reads the same rows to see what has been sent and not opened.'
-          }
+          title="No deliverables yet"
+          body="Keep a record of work handed to clients."
           action={engagements.length > 0
-            ? <button type="button" ref={addToggle} className={buttonClass} aria-expanded={adding} onClick={() => setAdding((v) => !v)}>{adding ? 'Cancel' : 'Log a deliverable'}</button>
-            : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open proposals</Link>}
+            ? <button type="button" ref={addToggle} className={buttonClass} aria-expanded={adding} onClick={() => setAdding((v) => !v)}>{adding ? 'Cancel' : 'Log first deliverable'}</button>
+            : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open Pipeline</Link>}
         />
         {refreshNote}
         {createdNote}
@@ -384,16 +391,13 @@ export default function PartnerDeliverablesZone() {
       <div className="space-y-6" aria-busy={read.refreshing || undefined}>
         {refreshNote}
         {createdNote}
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allItems, ...engagements], focus.key)} shown={items.length} total={allItems.length} noun="deliverables" onClear={focus.clear} />
         <ZoneHeading
-          title="What was shipped"
-          blurb={
-            'Every item the firm has sent, with the engagement it belongs to. '
-            + 'Whether the client opened it is theirs to record, and nothing in '
-            + 'this product lets them yet — so that column says so.'
-          }
+          title="Shipped work"
+          blurb="Keep the durable log of work handed to clients and what happened next."
           action={engagements.length > 0 && (
             <button type="button" ref={addToggle} className={ghostButtonClass} aria-expanded={adding} onClick={() => setAdding((v) => !v)}>
-              {adding ? 'Cancel' : 'Log a deliverable'}
+              {adding ? 'Cancel' : 'Log deliverable'}
             </button>
           )}
         />
@@ -411,7 +415,7 @@ export default function PartnerDeliverablesZone() {
             value={String(unopened.length)}
             nr={readsUnavailable}
             note={readsUnavailable
-              ? 'opens are not recorded, so no deliverable can be called unopened'
+              ? 'read status unavailable: client opens are not currently tracked'
               : (oldestUnopened
                 ? `oldest ${oldestUnopened.days_since_sent} days out`
                 : 'nothing sent and unopened')}
@@ -429,7 +433,7 @@ export default function PartnerDeliverablesZone() {
           <ShipTile
             label="Median days to open"
             nr
-            note="no opened_at is written anywhere, so there is no sample to take a median of"
+            note="Read time unavailable · client opens are not currently tracked"
           />
         </div>
 
@@ -471,13 +475,13 @@ export default function PartnerDeliverablesZone() {
                     ? { pill: 'Opened', pillTone: 'info' }
                     : (row.sent_at
                       ? (row.read_state === 'not_recorded'
-                        ? { pill: 'Opens not recorded', pillTone: 'neutral', sub: 'we cannot see opens — this says nothing about the client' }
+                        ? { pill: 'Read status unavailable', pillTone: 'neutral', sub: 'client opens are not currently tracked' }
                         : { pill: 'Never opened', pillTone: 'danger', sub: 'or opened without telling us' })
                       : { pill: 'Not sent', pillTone: 'neutral' })),
               ],
             };
           })}
-          note={'The unopened rows lead the page and tint red because work delivered into silence is the firm\u2019s most expensive state: invoiced, unreviewed, and blocking the next milestone — which is also why an engagement with unopened deliverables reads at risk on the board. `Median days to open` is absent rather than averaged, and the reason here is stronger than the artboard\u2019s "too few opened items": `opened_at` is the client\u2019s column, no founder-side surface writes it, and a median over a column nobody writes would be a number about our own silence. `Never opened` means exactly sent-and-not-acknowledged-here, never that the client ignored it.'}
+          note={'Unopened rows lead, oldest first, only where opens can be observed. Client opens are not currently tracked, so a sent deliverable reads \u201cRead status unavailable\u201d \u2014 never \u201cignored\u201d \u2014 and the median time to open stays empty rather than averaging a record nobody writes.'}
         />
 
         <ZoneDraft
@@ -527,8 +531,8 @@ export default function PartnerDeliverablesZone() {
             <strong>It means we do not know.</strong>{' '}
             {d?.median_days_to_open_note
               || 'Nothing in this product records an open, so every sent deliverable reads unopened.'}{' '}
-            While opens cannot be observed the count above is Not recorded, not a number, and no health rating uses it. The reason is ours: <code>opened_at</code>{' '}
-            is the client’s column to set and there is no surface where they can.
+            While opens cannot be observed the count above is Not recorded, not a number, and no health rating uses it. The reason is ours:
+            only the client can say they opened something, and there is no place for them to say it yet.
             Reading it as “the client ignored it” would turn a gap in our product
             into an accusation about them.
           </p>
@@ -542,9 +546,9 @@ export default function PartnerDeliverablesZone() {
           </p>
           <p className="mt-2">
             <strong>No median, and no chart of one.</strong> A median over a
-            column nobody writes is a number about our own silence, not about
-            client behaviour. It stays an em-dash until a founder-side surface
-            exists.
+            record nobody writes is a number about our own silence, not about
+            client behaviour. Read time stays unavailable until clients can record
+            an open.
           </p>
         </StatedLimit>
       </div>

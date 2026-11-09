@@ -8,6 +8,9 @@
 // GET /:uid answers too.
 //   GET  /admin/ai-agents/skills                    → { skills: [{ uid, name, area, level, status: draft|in_review|published|retired,
 //                                                        version | null, agents, tokens_per_run: null, golden: { pass, total, meets_bar }, last_eval }], pass_bar }
+//   D4537: each row also has slug, roles: [{ key, label }], tools: [name]
+//   GET  /admin/ai-agents/skills/library            D4225: the source library files → { skills: [{ slug, name, area, level, cases,
+//                                                        check: { ok } | { ok: false, code, message }, in_store: status | null }] }
 //   GET  /admin/ai-agents/skills/:uid               → { skill, review: { open, approved, history }, cases, evals, versions, retired }
 //   GET  /admin/ai-agents/skills/:uid/diff?from=vN&to=draft|vM → { from, to, frontmatter: [{ field, from, to }], steps: [{ op, text }] }
 //   POST /admin/ai-agents/skills/:uid/review         { reviewer_uid } → 201 { status: 'in_review', review };
@@ -31,6 +34,7 @@ const send = (path, method, body) => request(`${BASE}${path}`, { method, body: J
 
 export const adminHqSkillsApi = {
   list: (options) => request(BASE, options),
+  library: (options) => request(`${BASE}/library`, options),
   get: (uid) => request(`${BASE}/${enc(uid)}`),
   diff: (uid, { from, to } = {}) => {
     const q = new URLSearchParams(Object.entries({ from, to }).filter(([, v]) => v)).toString();

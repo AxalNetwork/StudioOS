@@ -16,6 +16,8 @@ export interface RuntimeOptions {
   transport?: (uid:string)=>CallbackTransport;
   /** #3708: the owner's staged diagnostic; absent, `/diagnose` is not served. */
   diagnose?: (platform: Platform, meetingUrl: string, context: RuntimeDiagnoseContext)=>Promise<void>;
+  /** D5153: the deployed commit its host passed in (`MEETING_BOT_VERSION`); reported on /healthz so the host can refuse a different build. */
+  version?: string;
 }
 export interface RuntimeDiagnoseContext {uid:string;secret:string;callbackOrigin:string;stop:AbortSignal}
 export interface RuntimeAdapterContext {uid:string;secret:string;callbackOrigin:string;transport:CallbackTransport}
@@ -33,7 +35,7 @@ export class RuntimeHost {
   }
   async fetch(request:Request):Promise<Response>{
     const path=new URL(request.url).pathname,now=this.options.now?.()??Date.now();
-    if(request.method==='GET'&&path==='/healthz')return reply({ready:MEETING_BOT_NOTICE_PUBLISHED});
+    if(request.method==='GET'&&path==='/healthz')return reply({ready:MEETING_BOT_NOTICE_PUBLISHED,version:/^[a-f0-9]{7,40}$/.test(this.options.version??'')?this.options.version:null});
     if(request.method!=='POST'||!['/start','/stop','/diagnose'].includes(path))return reply({code:'not_found'},404);
     let raw='';
     try{

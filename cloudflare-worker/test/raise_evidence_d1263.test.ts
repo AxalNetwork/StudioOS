@@ -293,3 +293,42 @@ test('fingerprints bind privacy policy as well as source figures',async()=>{
  try{sources(w);const first=(await collectEvidenceSources(w.env,1,1)).candidates.find(c=>c.kind==='kpi-snapshot')!;rule.private_reason='bank';const changed=(await collectEvidenceSources(w.env,1,1)).candidates.find(c=>c.kind==='kpi-snapshot')!;assert.notEqual(changed.snapshot_hash,first.snapshot_hash);assert.equal(changed.private_reason,'bank');}
  finally{rule.private_reason=previous;w.db.close();}
 });
+
+// D5073 — many decisions in one request; every check stays per row, one authoritative result per row.
+test('batch accept: one request, one result per row; a stale snapshot is its own refusal and writes nothing; a repeat finds them decided',async()=>{
+ const w=world();try{sources(w);await buildCandidates(w.ctx);
+ const rows=['kpi-snapshot','bank-runway','consented-quote'].map(k=>{const q=proposal(w,k);return{id:q.uid,snapshot_hash:JSON.parse(q.payload_json).snapshot_hash};});
+ const sent=[rows[0],{...rows[1],snapshot_hash:'0'.repeat(64)},rows[2]];
+ const r=await call(w,1,'POST','/evidence/items/batch?project=1',{action:'accept',items:sent});
+ assert.equal(r.status,200,JSON.stringify(r.body));
+ assert.deepEqual([r.body.requested,r.body.applied,r.body.failed],[3,2,1]);
+ assert.deepEqual(r.body.results.map((x:any)=>[x.id,x.ok,x.code??null]),[[rows[0].id,true,null],[rows[1].id,false,'changed'],[rows[2].id,true,null]],'in the order sent, a refusal named by its code');
+ assert.equal(w.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid=?').get(rows[1].id)?.status,'proposed','the refused row wrote nothing');
+ assert.equal(auditCount(w),2,'one audit row per accepted row');
+ const again=await call(w,1,'POST','/evidence/items/batch?project=1',{action:'accept',items:[rows[0],rows[2]]});
+ assert.deepEqual(again.body.results.map((x:any)=>x.code),['decided','decided']);
+ assert.equal(auditCount(w),2);
+ }finally{w.db.close();}
+});
+test('batch: the cap, the shape, a repeated id and who may send it',async()=>{
+ const w=world();try{sources(w);await buildCandidates(w.ctx);const q=proposal(w);const hash=JSON.parse(q.payload_json).snapshot_hash;
+ const post=(who:number,b:unknown)=>call(w,who,'POST','/evidence/items/batch?project=1',b);
+ assert.equal((await post(1,{action:'accept',items:[]})).status,400);
+ assert.equal((await post(1,{action:'accept',items:Array.from({length:51},(_,i)=>({id:`u${i}`,snapshot_hash:hash}))})).status,400,'at most 50');
+ assert.equal((await post(1,{action:'accept',items:Array.from({length:50},(_,i)=>({id:`u${i}`,snapshot_hash:hash}))})).body.failed,50,'fifty is allowed; unknown ids are refusals, not errors');
+ assert.equal((await post(1,{action:'obliterate',items:[{id:q.uid}]})).status,400);
+ assert.equal((await post(1,{action:'accept',items:[{id:q.uid}],extra:1})).status,400);
+ const dup=await post(1,{action:'dismiss',items:[{id:q.uid},{id:q.uid}]});
+ assert.deepEqual(dup.body.results.map((x:any)=>[x.ok,x.code??null]),[[true,null],[false,'invalid']],'a row sent twice is decided once');
+ for(const who of [2,3,4,5])assert.notEqual((await post(who,{action:'dismiss',items:[{id:proposal(w)?.uid??'x'}]})).status,200,`user ${who}`);
+ }finally{w.db.close();}
+});
+test('batch share: a version that moved is that row\'s refusal; the others are shared',async()=>{
+ const w=world();try{sources(w);const a=await pin(w,'kpi-snapshot');const b=await pin(w,'bank-runway');
+ await setSharing(w.ctx,b.uid,{version:b.version,visibility:'summary'});
+ const r=await call(w,1,'POST','/evidence/items/batch?project=1',{action:'share',items:[{id:a.uid,version:a.version,visibility:'summary'},{id:b.uid,version:b.version,visibility:'after_nda'}]});
+ assert.deepEqual(r.body.results.map((x:any)=>[x.ok,x.code??null]),[[true,null],[false,'changed']]);
+ assert.equal(w.db.prepare('SELECT visibility FROM raise_evidence_items WHERE uid=?').get(a.uid)?.visibility,'summary');
+ assert.equal(w.db.prepare('SELECT visibility FROM raise_evidence_items WHERE uid=?').get(b.uid)?.visibility,'summary','the stale row kept what the newer write set');
+ }finally{w.db.close();}
+});
