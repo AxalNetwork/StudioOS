@@ -57,9 +57,11 @@ function world(vars: Record<string, string | undefined> = {}) {
   for (const m of ['712_team_agents.sql', '202611021724_team_agents_persona.sql', '202611041609_outside_assistant_bindings.sql']) db.exec(sql(`migrations/${m}`));
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   for (const m of ['759_agent_skills.sql', '202611022326_agent_skill_context_tokens.sql', '202611022055_agent_skill_moderation.sql', '202611022140_hq_skill_lifecycle.sql']) db.exec(sql(`migrations/${m}`));
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(AI_BUDGET_MIGRATION + sql('migrations/465_ai_rail_preferences.sql') + sql('migrations/510_member_ai_pauses.sql')
     + sql('migrations/525_ai_reservation_idempotency.sql') + sql('migrations/632_ai_hold_context.sql'));
   db.exec(sql('migrations/202611022313_agent_skill_runs.sql'));
+  db.exec(sql('migrations/202611090905_skill_version_eval_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Synthetic Super', 'admin', null, 'free');
   user.run(EDITOR, 'u-editor', 'editor@example.test', 'Synthetic Editor', 'founder', 100, 'growth');

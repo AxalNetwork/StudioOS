@@ -165,7 +165,8 @@ test('each ?tab= deep link opens its own workspace, and an unknown one opens Ove
 
 test('every zone the page drew before is still drawn, under its workspace', () => {
   const where = {
-    events: ['data-testid="hq-gov-filters"', 'data-testid="hq-gov-feed"', 'data-testid="hq-gov-sources"', 'data-testid="hq-security-events-retention"', 'data-testid="hq-gov-tenant-view"'],
+    // D4803 — retention and the branch-view note moved behind "How this is measured" (SE03's explanation layer).
+    events: ['data-testid="hq-gov-filters"', 'data-testid="hq-gov-feed"', 'data-testid="hq-gov-sources"', 'data-testid="events-how-toggle"', 'data-testid="events-older"'],
     access: ['data-testid="hq-sessions"', 'data-testid="hq-sessions-revoke-selected"', 'data-testid="hq-force-reauth"', 'data-testid="hq-data-access"', '>Admins with MFA<', '>Failed sign-ins<'],
     privacy: ['data-testid="hq-dsr"', 'data-testid="hq-dsr-actions"', 'data-testid="hq-dsr-groups"', 'data-testid="hq-dsr-branches"', 'data-testid="hq-dsr-kinds-not-recorded"'],
     trust: ['data-testid="hq-sanctions"', '>KYC pending<', '>KYC rejected<'],
