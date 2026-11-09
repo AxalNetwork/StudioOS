@@ -805,17 +805,19 @@ test('mounted, Product testers (APR4): five tabs with counts, the facts, intake 
   const v = await board('/admin/approvals/product-testers', testerRoute());
   try {
     assert.match(v.of('approvals-board-header'), /Approvals.*Product testers.*New lane/s);
-    assert.match(v.of('testers-tab-waiting'), /Waiting\s*2/);
+    // D4814 part 3: the canvas's Pending, the shared four-cell summary, the pool below the queue.
+    assert.match(v.of('testers-tab-waiting'), /Pending\s*2/);
     assert.match(v.of('testers-tab-active'), /Active\s*1/);
     assert.match(v.of('testers-tab-removed'), /Removed\s*0/);
     assert.match(v.of('testers-facts'), /Admins cannot apply/);
     assert.match(v.of('testers-intake-paused'), /Member intake is paused\. Nobody can apply now\./);
-    assert.match(v.of('testers-tile-waiting'), /Waiting\s*2\s*oldest/);
+    assert.match(v.of('testers-strip-waiting'), /Pending\s*2\s*applications/);
     assert.match(v.of('testers-tile-active'), /Active testers\s*1/);
     assert.match(v.of('testers-tile-in-program'), /In a testing program now\s*1/);
     assert.match(v.props('testers-chart-bars')['aria-label'], /^Applications to test products in the last 12 weeks: /);
-    assert.match(v.of('tester-1'), /Gus Demo\s*gus@example\.com\s*Investor.*3 hours a week\s*Given · v2\s*Approved\s*Verified/s);
-    assert.match(v.of('tester-3'), /Ben Sample.*Not given.*! Not given.*! Not verified/s);
+    assert.match(v.of('tester-1'), /Gus Demo\s*gus@example\.com\s*3 hours a week\s*Investor/s);
+    assert.doesNotMatch(v.of('tester-1'), /! Email not verified|! No email consent/, 'nothing stops Gus');
+    assert.match(v.of('tester-3'), /Ben Sample.*! Email not verified\s*! No email consent/s);
     assert.ok(!v.has('tester-2'), 'an active tester is not on Waiting');
     assert.ok(gets(v, '/api/admin/product-testers?').some((p) => p.includes('in_programme=yes')), 'the in-program tile is the Worker\'s count');
   } finally { await v.unmount(); }
@@ -834,8 +836,9 @@ test('mounted, a tester (APR5): the row opens their address over the board; A ap
     assert.equal(v.at.path, '/admin/approvals/product-testers/1');
     assert.match(v.of('tester-drawer-content'), /Investor.*Applied\s*17 Oct 2026.*Email\s*Verified\s*gus@example\.com.*What do you want to test\?\s*B2B tools for small funds\..*Email consent: given on 17 Oct 2026, version v2\..*Product Alpha · picked.*Approved by Admin B · 14 Aug 2026/s);
     assert.ok(v.has('testers-tab-waiting'), 'the board stays under the drawer');
-    assert.ok(v.has('tester-assign'), 'Assign is the inbox\'s');
-    assert.equal(v.props('tester-assign').href, '/admin/approvals/items/product_testers-1');
+    // D4814 part 3: the owner is in the drawer, first; this fake inbox holds no record of it, so it is "Not read".
+    assert.match(v.of('tester-owner'), /Owner\s*Not read/);
+    assert.ok(!v.has('tester-assign'), 'no link away to the inbox for Assign');
     await v.click('tester-action-approve');
     assert.match(v.of('tester-dialog-approve-told'), /They are told by email and in their inbox\./);
     assert.match(v.of('tester-dialog-approve-recorded'), /Recorded in their history: who approved them and when/);
@@ -930,8 +933,9 @@ test('mounted, Co-marketing (APR6): five states read alone and paged, the tiles 
     assert.match(v.of('pitches-tab-withdrawn'), /Withdrawn\s*—/, 'a failed state is a dash, never 0');
     assert.match(v.of('pitches-tile-visits'), /Visits from published pitches, 30 days\s*412/);
     assert.match(v.of('pitches-tile-signups'), /Sign-ups\s*9\s*from published pitches, 30 days/);
-    assert.match(v.of('pitches-tile-approved'), /Approved, not yet published\s*1\s*oldest/);
-    assert.match(v.of('pitch-p1'), /Hiring your first engineer\s*Webinar\s*Partner A\s*14 Nov 2026\s*Seed founders, Europe/);
+    // D4814 part 3: the four-cell summary's fourth cell, and the canvas's Pitch · Partner · Format columns.
+    assert.match(v.of('pitches-strip-approved'), /Approved, not published\s*1\s*oldest/);
+    assert.match(v.of('pitch-p1'), /Hiring your first engineer\s*Seed founders, Europe\s*Partner A\s*Webinar\s*14 Nov 2026/);
     await v.click('pitch-open-p1');
     assert.equal(v.at.path, '/admin/approvals/co-marketing/p1');
     assert.match(v.of('pitch-drawer-content'), /Summary\s*A one-hour webinar\..*Angle\s*The first hire sets the bar.*What they bring\s*Two hiring managers.*Attribution code: issued on approval\..*Proposed by Partner A · 18 Oct 2026/s);
@@ -987,19 +991,20 @@ test('mounted, Wellbeing experts (APR8): five tabs with Declined, the tiles, the
   let v = await board('/admin/approvals/wellbeing-experts', expertRoute());
   try {
     assert.ok(gets(v, '/api/wellbeing/admin/experts').some((p) => /state=all/.test(p) && /limit=200/.test(p)));
-    assert.match(v.of('experts-tab-verify'), /To verify\s*2/);
+    assert.match(v.of('experts-tab-verify'), /Needs verification\s*2/);
     assert.match(v.of('experts-tab-declined'), /Declined\s*1/);
     assert.match(v.of('experts-tab-hidden'), /Hidden\s*1/);
-    assert.match(v.of('experts-tile-verify'), /To verify\s*2\s*oldest/);
-    assert.match(v.of('expert-e1'), /Expert A\s*Founder coach\s*92%\s*Licence and 1 file/);
+    assert.match(v.of('experts-strip-waiting'), /Needs verification\s*2\s*experts/);
+    assert.match(v.of('expert-e1'), /Expert A\s*Founder coach\s*Licence and 1 file/);
+    assert.match(v.of('expert-open-e1'), /^Verify →$/);
     assert.match(v.of('expert-e2'), /Expert B.*Licence/s);
   } finally { await v.unmount(); }
   v = await board('/admin/approvals/wellbeing-experts/declined', expertRoute());
   try { assert.match(v.of('expert-e3'), /Expert C.*! None given/s); } finally { await v.unmount(); }
   v = await board('/admin/approvals/wellbeing-experts', expertRoute({ list: (q) => json({ items: q.get('offset') === '0' ? EXPERTS.slice(0, 1) : [], total: 80 }) }));
   try {
-    assert.match(v.of('experts-tab-verify'), /To verify\s*—/);
-    assert.match(v.of('experts-tile-verify'), /To verify\s*—/);
+    assert.match(v.of('experts-tab-verify'), /Needs verification\s*—/);
+    assert.match(v.of('experts-strip-waiting'), /Needs verification\s*Could not be read/);
     assert.match(v.of('experts-partial'), /first 1 of 80/);
   } finally { await v.unmount(); }
 });
@@ -1007,7 +1012,8 @@ test('mounted, Wellbeing experts (APR8): five tabs with Declined, the tiles, the
 test('mounted, an expert (APR8d, APR8a, APR8b): credentials and profile; Verify needs "I checked their credentials" and sends the version; Decline needs a reason; an expired licence is refused first', async () => {
   let v = await board('/admin/approvals/wellbeing-experts/e1', expertRoute());
   try {
-    assert.match(v.of('expert-drawer-content'), /92% complete\s*Coaching.*Languages\s*English, Portuguese.*Pricing\s*\$120 an hour.*Licence number WB-4821 · issued by Board Name · expires 31 Mar 2028.*Licence\.pdf/s);
+    // D4814 part 3 (AP-13a): credentials and evidence first, then the owner, then the profile.
+    assert.match(v.of('expert-drawer-content'), /Credentials and evidence\s*Licence number WB-4821 · issued by Board Name · expires 31 Mar 2028.*Licence\.pdf.*Register lookups aren’t automated.*Owner.*92% complete\s*Coaching.*Languages\s*English, Portuguese.*Pricing\s*\$120 an hour/s);
     assert.equal(v.props('expert-file-f1').href, '/api/wellbeing/experts/credentials/files/f1');
     await v.click('expert-action-verify');
     assert.equal(v.props('expert-dialog-verify-send').disabled, true, 'not until they say they checked');

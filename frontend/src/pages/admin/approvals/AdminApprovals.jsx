@@ -267,7 +267,7 @@ function RowActions({ row, onAssign, onCopy }) {
  * they own now. The button names the person. `line` is what a caller adds
  * (Assign overdue…'s cap).
  */
-function AssignDialog({ items, title, line, inbox, callerId, onClose, onDone }) {
+export function AssignDialog({ items, title, line, inbox, callerId, onClose, onDone }) {
   const choices = assignChoices(inbox?.reply, callerId);
   const [pick, setPick] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -548,20 +548,26 @@ function StripCell({ label, testId, t, tone, children }) {
   );
 }
 
-/** D4814: who holds a row. Unassigned is amber with Assign beside it; an unread record is "Not read", never "Unassigned". */
-function OwnerCell({ row, callerId, onAssign }) {
+/**
+ * D4814: who holds a row. Unassigned is amber with Assign beside it; an unread
+ * record is "Not read", never "Unassigned". Part 3: the native boards draw it
+ * too, under their own `prefix`.
+ */
+export function OwnerCell({ row, callerId, onAssign, prefix = 'approvals' }) {
   const a = row.assignee;
-  if (a.kind === 'unread') return <span title="The assignment record could not be read for this item." className={`cursor-help ${SUB}`} data-testid={`approvals-owner-${row.key}`}>Not read</span>;
+  const id = `${prefix}-owner-${row.key}`;
+  if (a.kind === 'loading') return <span aria-label="Reading the owner" className={SUB} data-testid={id}>…</span>;
+  if (a.kind === 'unread') return <span title="The assignment record could not be read for this item." className={`cursor-help ${SUB}`} data-testid={id}>Not read</span>;
   if (a.kind === 'none') {
     return (
-      <span className="flex flex-wrap items-center gap-2" data-testid={`approvals-owner-${row.key}`}>
+      <span className="flex flex-wrap items-center gap-2" data-testid={id}>
         <span className="font-bold text-axal-amber-deep dark:text-amber-200">Unassigned</span>
-        <button type="button" className={BTN_SM} onClick={() => onAssign([row])} data-testid={`approvals-owner-assign-${row.key}`}>Assign</button>
+        <button type="button" className={BTN_SM} onClick={() => onAssign([row])} data-testid={`${prefix}-owner-assign-${row.key}`}>Assign</button>
       </span>
     );
   }
   const you = callerId != null && Number(a.id) === Number(callerId);
-  return <span data-testid={`approvals-owner-${row.key}`}>{a.text}{you ? <span className={SUB}> · you</span> : null}</span>;
+  return <span data-testid={id}>{a.text}{you ? <span className={SUB}> · you</span> : null}</span>;
 }
 
 /** D4814: Review opens the item here; the line under it says where review continues. */
