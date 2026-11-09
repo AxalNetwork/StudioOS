@@ -84,7 +84,13 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
   const host = dom.document.createElement('div'); dom.document.body.appendChild(host);
   const root = createRoot(host);
   const { error, warn } = console; console.error = () => {}; console.warn = () => {};
-  const tick = async (n = 40) => { for (let i = 0; i < n; i += 1) await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5)))); };
+  const step = () => act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5))));
+  // Settle: 40 ticks, then on until a heading is drawn or 10 s pass. A fixed count alone failed on a loaded CI runner
+  // once H4 (#5168) moved modules to on-demand chunks; a page that never draws one still fails, 10 s later.
+  const tick = async (n = 40) => {
+    for (let i = 0; i < n; i += 1) await step();
+    for (const until = Date.now() + 10_000; !select(dom.document, 'h1').length && Date.now() < until;) await step();
+  };
   const read = () => ({
     path: at?.pathname,
     studio: select(dom.document, STUDIO).length,
