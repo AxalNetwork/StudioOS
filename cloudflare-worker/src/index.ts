@@ -840,6 +840,8 @@ const COOL_OFF_PREFIXES = [
   '/api/admin/licence-pricing',
   // D5018 (#5018) — the reference prices behind every program's recommended fee. Same class.
   '/api/admin/program-pricing',
+  // D5019 (#5019) — named sub-territories that exclusivity scopes are drawn on. Same class.
+  '/api/admin/territory-regions',
   // D5048 (#5048) — a licence's package and program agreements. Same class.
   '/api/admin/licence-agreements',
   // D708 — each Axal entity's bank accounts: the payment instructions every
