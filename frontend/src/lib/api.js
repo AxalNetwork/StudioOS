@@ -906,7 +906,8 @@ export const api = {
   // BLOCK-AUTH-01 — passwordless magic-link sign-in. /start always returns the
   // same 202 (no account-existence leak); the link in the email hits the
   // worker's GET /magic/verify which sets cookies and 302s into the SPA.
-  magicStart: (email) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify({ email }) }),
+  // #4578: `purpose: 'signup'` asks for the new-account wording of the same link; anything else is a sign-in link.
+  magicStart: (email, { purpose } = {}) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify(purpose === 'signup' ? { email, purpose } : { email }) }),
   // BLOCK-AUTH-03 — step-up: re-assert a RECENT TOTP for the current session.
   stepUp: (totp_code) => request('/auth/step-up', { method: 'POST', body: JSON.stringify({ totp_code }) }),
   // NICE-AUTH-04 — sign out every active session (alias of revokeAllSessions).

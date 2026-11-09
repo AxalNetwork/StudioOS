@@ -70,8 +70,13 @@ test('the page reads three endpoints and writes through six, and nothing else', 
   // acts it dispatches are counted here too rather than hidden behind a name.
   const calls = [...new Set([...PAGE.matchAll(/\b(?:api|client)\.(\w+)\(/g)].map((m) => m[1]))].sort();
   assert.match(PAGE, /runSessionAct\(api, kind, arg, reason\)/, 'the session acts are dispatched to something other than api');
+  // D4803 — the DSR close moved into the Privacy workspace's Record outcome
+  // dialog (`security/PrivacyActions.jsx`), which takes `api.hqCloseDsrRequest`
+  // as its one write; it is still this page's write, so it is pinned there.
+  assert.match(readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/security/PrivacyActions.jsx'), 'utf8'), /send = api\.hqCloseDsrRequest\b/,
+    'the Record outcome dialog writes through something other than hqCloseDsrRequest');
   assert.deepEqual(calls, [
-    'hqCloseDsrRequest', 'hqEndImpersonation', 'hqForceReauthUser', 'hqGovernance', 'hqRevokeSession',
+    'hqEndImpersonation', 'hqForceReauthUser', 'hqGovernance', 'hqRevokeSession',
     'hqRevokeSessions', 'hqSecurityForceReauth', 'hqSecurityOverview', 'hqSecuritySessions',
   ]);
 });
