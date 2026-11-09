@@ -289,6 +289,8 @@ export function ActivityCard({ activity, span = 7, onRetry, onOpen }) {
   return (
     <Card id="activity" title="Community activity" span={span} state={activity.state} reason={activity.reason} onRetry={onRetry}>
       {() => (<>
+        {/* D4820 part 6 (CM01): insight before chart; the total is withheld, and says why, when a series could not be read (CM03). */}
+        {activity.insight ? <span className="text-[14px] font-semibold leading-[1.45] text-axal-ink dark:text-gray-100" data-testid="community-activity-insight">{activity.insight.text}</span> : null}
         <span className={SUB} data-testid="community-activity-sentence">{activity.sentence}</span>
         {activity.missing ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400" data-testid="community-activity-missing">{activity.missing}</span> : null}
         {empty ? (
