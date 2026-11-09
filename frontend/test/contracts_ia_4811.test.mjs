@@ -24,7 +24,7 @@ const superAdmin = { id: 1, role: 'admin', name: 'Super', is_super_admin: 1 };
 const admin = { id: 2, role: 'admin', name: 'Admin', is_super_admin: 0 };
 const element = () => React.createElement(AuthProvider, null, React.createElement(Desk));
 const walk = (x) => (x.nodeType === 3 || !x.childNodes?.length ? x.textContent || '' : x.childNodes.map(walk).join(''));
-const nav = (view) => view.nodes().find((n) => n.tagName === 'NAV' && view.props(n)?.['aria-label'] === 'Contracts');
+const nav = (view) => view.nodes().find((n) => n.tagName === 'NAV' && view.props(n)?.['aria-label'] === 'Contracts tabs');
 const current = (view) => (nav(view)?.childNodes || []).filter((n) => view.props(n)?.['aria-current'] === 'page').map(walk);
 const radios = (view) => view.nodes().filter((n) => view.props(n)?.role === 'radio');
 
@@ -67,10 +67,13 @@ test('the Library: a disclosure with Forms and, for the Super Admin, Document ty
     const lib = () => view.nodes().find((n) => view.props(n)?.['data-testid'] === 'contracts-library');
     assert.match(walk(lib()), /^Library: Forms/);
     assert.equal(view.props(lib())['aria-expanded'], false);
+    assert.equal(view.props(view.nodes().find((n) => view.props(n)?.id === 'contracts-library')).hidden, true, 'closed: the list is hidden');
     assert.deepEqual(current(view), [], 'no workflow tab is current on a Library view');
     assert.equal(radios(view).length, 0, 'the categories belong to Agreements only');
     await act(async () => { view.props(lib()).onClick({}); });
     assert.equal(view.props(lib())['aria-expanded'], true);
+    const list = view.nodes().find((n) => view.props(n)?.id === 'contracts-library');
+    assert.equal(view.props(list).hidden, false, 'the list shows once the disclosure opens');
     const items = view.nodes().filter((n) => n.tagName === 'BUTTON' && ['Forms', 'Document types'].includes(walk(n)));
     assert.deepEqual(items.map(walk), ['Forms', 'Document types']);
     assert.equal(view.props(items[0])['aria-current'], 'page');

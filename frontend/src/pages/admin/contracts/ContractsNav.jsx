@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 
 /**
  * D4811 (#4811) part 7 — the Contracts desk's information architecture (boards
@@ -8,6 +7,8 @@ import { Link } from 'react-router-dom';
  * deals are categories inside Agreements (a radiogroup, CT-93); Forms and
  * Document types sit under a Library disclosure (not an ARIA menu, CT-93).
  *
+ * The tab row itself is drawn by `ContractsDesk.jsx` (its links are that page's
+ * doors); this file holds the rules, the Library disclosure and the categories.
  * Every existing address keeps working: `?tab=ndas`, `?tab=partner-deals`,
  * `?tab=forms` and `?tab=document-types` still open their view, now inside
  * the new grouping. Other pages link to them (the trust member pages), and
@@ -26,27 +27,10 @@ export function primaryOf(tab, { governance = false } = {}) {
 }
 export const isLibrary = (tab) => LIBRARY_ITEMS.some(([k]) => k === tab);
 
-const tabClass = (on) => `inline-flex min-h-[44px] items-center whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold ${on ? 'border-violet-600 text-axal-ink dark:text-white' : 'border-transparent text-axal-muted'}`;
-
-export default function ContractsNav({ tab, governance, hqDesk, superAdmin, onTab }) {
-  const primary = primaryOf(tab, { governance });
-  const library = !governance && isLibrary(tab);
-  const items = LIBRARY_ITEMS.filter(([k]) => superAdmin || k !== 'document-types');
-  return <div className="flex flex-wrap items-end justify-between gap-2 border-b border-axal-hairline">
-    <nav aria-label="Contracts" className="flex gap-1 overflow-x-auto">
-      <button type="button" className={tabClass(primary === 'agreements')} aria-current={primary === 'agreements' ? 'page' : undefined} onClick={() => onTab('agreements')}>Agreements</button>
-      <button type="button" className={tabClass(primary === 'templates')} aria-current={primary === 'templates' ? 'page' : undefined} onClick={() => onTab('templates')}>Templates</button>
-      {/* D4563 (#4563): Corporate Governance is at its own path. HQ only. */}
-      {hqDesk && <Link to="/admin/contracts/governance" className={tabClass(primary === 'governance')} aria-current={primary === 'governance' ? 'page' : undefined} data-testid="contracts-tab-governance">Corporate Governance</Link>}
-      {/* D1219 (#3216): Closings is its own page (D1213), reached from the tab row. */}
-      <Link to="/admin/contracts/closings" className={tabClass(false)} data-testid="contracts-tab-closings">Closings</Link>
-    </nav>
-    <LibraryMenu items={items} current={library ? tab : null} onTab={onTab} />
-  </div>;
-}
+export const tabClass = (on) => `inline-flex min-h-[44px] items-center whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold ${on ? 'border-violet-600 text-axal-ink dark:text-white' : 'border-transparent text-axal-muted'}`;
 
 /** The Library disclosure: a button that shows a short list of the configuration views. Escape closes it and returns focus. */
-function LibraryMenu({ items, current, onTab }) {
+export function LibraryMenu({ items, current, onTab }) {
   const [open, setOpen] = useState(false);
   const button = useRef(null);
   useEffect(() => {
@@ -59,11 +43,12 @@ function LibraryMenu({ items, current, onTab }) {
     <button ref={button} type="button" aria-expanded={open} aria-controls="contracts-library" data-testid="contracts-library"
       className={`min-h-[44px] rounded-lg border px-3 text-[12.5px] font-semibold ${current ? 'border-violet-600' : 'border-axal-hairline'}`}
       onClick={() => setOpen((o) => !o)}>Library{current ? `: ${items.find(([k]) => k === current)?.[1] || ''}` : ''} <span aria-hidden="true">▾</span></button>
-    {open && <ul id="contracts-library" className="absolute right-0 z-10 mt-1 min-w-48 rounded-lg border border-axal-hairline bg-white p-1 shadow-lg dark:bg-gray-900">
+    {/* Always in the page, hidden while closed: a disclosure, so its list exists for assistive tech and server render alike. */}
+    <ul id="contracts-library" hidden={!open} className="absolute right-0 z-10 mt-1 min-w-48 rounded-lg border border-axal-hairline bg-white p-1 shadow-lg dark:bg-gray-900">
       {items.map(([k, label]) => <li key={k}><button type="button" aria-current={current === k ? 'page' : undefined}
         className="block min-h-[44px] w-full rounded px-3 text-left text-[12.5px] hover:bg-axal-ground dark:hover:bg-gray-800"
         onClick={() => { setOpen(false); onTab(k); }}>{label}</button></li>)}
-    </ul>}
+    </ul>
   </div>;
 }
 

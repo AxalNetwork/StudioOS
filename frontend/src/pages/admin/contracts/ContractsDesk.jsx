@@ -15,7 +15,7 @@ import EnvelopeWizard from './EnvelopeWizard';
 import { BankAccountsLink, FundStructureDoor } from './FundStructureSheet';
 import { useRead, ReadState, Missing, button, card } from './parts';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
-import ContractsNav, { AgreementCategories, primaryOf } from './ContractsNav';
+import { AgreementCategories, LIBRARY_ITEMS, LibraryMenu, isLibrary, primaryOf, tabClass } from './ContractsNav';
 import GovernanceTab from './GovernanceTab';
 
 const tabs = [['agreements', 'Agreements'], ['ndas', 'NDAs'], ['partner-deals', 'Partner deals'], ['templates', 'Templates'], ['forms', 'Forms'], ['document-types', 'Document types']];
@@ -32,6 +32,7 @@ export default function ContractsDesk({ section = null }) {
   const governance = section === 'governance';
   const hqDesk = !branchOfUser(user);
   const tab = params.get('tab') || 'agreements';
+  const primary = primaryOf(tab, { governance });
   const allowed = tabs.some(([id]) => id === tab) && (superAdmin || tab !== 'document-types');
   const [selected, setSelected] = useState(null);
   const [revision, setRevision] = useState(0);
@@ -60,7 +61,16 @@ export default function ContractsDesk({ section = null }) {
     {params.get('moved') === 'legal' && <p role="status">{CONTRACTS_MOVED_NOTICE}</p>}
     <ReadState read={stats} what="Contract counts"><div className="grid grid-cols-2 gap-3 lg:grid-cols-5">{cards.map(([label, value, target]) => <button key={label} type="button" className={`${card} p-3 text-left`} onClick={() => navigate('agreements', target)}><span className="block text-[11px] text-axal-muted">{label}</span><span className="mt-1 block text-2xl font-bold">{value == null ? <Missing reason={label === 'Average days to sign' ? 'No signed agreement has both a recorded sent and signed date.' : 'This count was not returned.'} /> : value}</span></button>)}</div></ReadState>
     {/* D4811 part 7: four workflow tabs; NDAs and Partner deals are Agreements categories; Forms and Document types are under Library. */}
-    <ContractsNav tab={tab} governance={governance} hqDesk={hqDesk} superAdmin={superAdmin} onTab={(id) => navigate(id)} />
+    <div className="flex flex-wrap items-end justify-between gap-2 border-b border-axal-hairline">
+      <nav aria-label="Contracts tabs" className="flex gap-1 overflow-x-auto">
+        <button type="button" className={tabClass(primary === 'agreements')} aria-current={primary === 'agreements' ? 'page' : undefined} onClick={() => navigate('agreements')}>Agreements</button>
+        <button type="button" className={tabClass(primary === 'templates')} aria-current={primary === 'templates' ? 'page' : undefined} onClick={() => navigate('templates')}>Templates</button>
+        {/* D4563 (#4563): Corporate Governance is at its own path. HQ only. */}
+        {hqDesk && <Link to="/admin/contracts/governance" className={tabClass(primary === 'governance')} aria-current={primary === 'governance' ? 'page' : undefined} data-testid="contracts-tab-governance">Corporate Governance</Link>}
+        {/* D1219 (#3216): Closings is its own page (D1213), reached from the tab row. */}
+        <Link to="/admin/contracts/closings" className={tabClass(false)} data-testid="contracts-tab-closings">Closings</Link></nav>
+      <LibraryMenu items={LIBRARY_ITEMS.filter(([k]) => superAdmin || k !== 'document-types')} current={!governance && isLibrary(tab) ? tab : null} onTab={(id) => navigate(id)} />
+    </div>
     {!governance && allowed && primaryOf(tab) === 'agreements' && <AgreementCategories tab={tab} onTab={(id) => navigate(id)} />}
     {governance ? (hqDesk ? <GovernanceTab /> : <p>Corporate Governance is HQ's alone.</p>) : !allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} revision={revision} />
       : tab === 'ndas' || tab === 'partner-deals' ? <RelatedLists key={tab} kind={tab} onOpen={setSelected} superAdmin={superAdmin} />
