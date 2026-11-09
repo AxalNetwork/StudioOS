@@ -107,7 +107,7 @@ test('the overview: drillable counts, the chart from the ownership links, the en
     assert.match(text, /GP OA v1/);
     assert.match(text, /None recorded as executed/);
     assert.match(text, /None you can open/, 'an entity whose only executed record is confidential does not claim none exists');
-    assert.match(text, /Not recorded.*legal-review record is not built yet/, 'last review is unknown, never a date');
+    assert.match(text, /Not recorded.*Legal Review tab/, 'last review is unknown here, never a date');
     assert.match(text, /Restricted: only the Super Admin can open it\./, 'the empty category of the collection says Restricted, not None recorded');
     assert.doesNotMatch(text, /View restricted ownership details/, 'only the Super Admin is offered the ownership');
     assert.doesNotMatch(text, /score/i);

@@ -73,7 +73,7 @@ export default function AgreementWorkspace({ uid }) {
           <Fact label="Provider"><Recorded value={providerLabel(row.provider)} reason="No provider is recorded." /></Fact>
           <Fact label="Sent"><Recorded value={date(row.sent_at)} reason="No send is recorded." /></Fact>
           <Fact label="Signed"><Recorded value={date(row.signed_at)} reason="No signature date is recorded." /></Fact>
-          <Fact label="Last legal review"><Missing reason="Legal review is not recorded yet (question C)." /></Fact>
+          <Fact label="Last legal review"><Missing reason="An agreement is not reviewed on its own: counsel reviews the template it was issued from (its Legal Review tab)." /></Fact>
         </dl>
           {/* D4811 part 17 (CT-15): the cross-border checks; open ones hold Send for signature. */}
           <CrossBorderPanel uid={uid} /></>}
@@ -85,7 +85,7 @@ export default function AgreementWorkspace({ uid }) {
           <p className="text-axal-muted">An agreement is issued once, from one template version. These are the files recorded for it: the renderings and the signed copies.</p>
           <ReadState read={files} what="Recorded files">{files.data && (files.data.files?.length ? <FileRows files={files.data.files} /> : <Missing reason={files.data.reason || 'No rendered file is recorded for this agreement.'} />)}</ReadState>
         </>}
-        {tab === 'review' && <Missing reason="No legal-review record exists yet. Who records an approval is open question C." />}
+        {tab === 'review' && <Missing reason="An agreement is not reviewed on its own. Counsel reviews the template it was issued from, and the governance records; open the template's Legal Review tab from Related." />}
         {tab === 'activity' && <ReadState read={history} what="Signing history">{history.data && (activityRows(history.data).length
           ? <ol className="space-y-1">{activityRows(history.data).map((r) => <li key={r.key}>{r.what} · <Recorded value={date(r.at)} reason="This event has no recorded time." /></li>)}</ol>
           : <Missing reason={history.data.reason || 'No signing events were recorded.'} />)}</ReadState>}

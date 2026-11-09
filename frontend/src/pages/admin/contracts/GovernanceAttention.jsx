@@ -89,7 +89,7 @@ function CountPills({ counts }) {
 const latestLine = (f, withheld) => f?.latest_executed
   ? <>{f.latest_executed.title}<span className="block font-mono text-[11px] text-axal-muted">{f.latest_executed.version ? `v${f.latest_executed.version} · ` : ''}{dayLabel(f.latest_executed.effective_date) ? `effective ${dayLabel(f.latest_executed.effective_date)}` : 'effective date not recorded'}</span></>
   : <span className="text-axal-muted">{withheld > 0 ? 'None you can open' : 'None recorded as executed'}</span>;
-const LAST_REVIEW = 'The legal-review record is not built yet (D4811 question C).';
+const LAST_REVIEW = 'Each record\'s legal review is on its Legal Review tab (D4811 part 16).';
 
 /** The entities table (CT-03), with phone rows. */
 export function EntitiesTable({ entities }) {
