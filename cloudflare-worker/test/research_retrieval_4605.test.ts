@@ -12,7 +12,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
-import research, { withinBudget } from '../src/routes/research.ts';
+import research, { withinBudget, citationOf, CITATION_PASSAGE_CHARS } from '../src/routes/research.ts';
 import { embedAndUpsertById, capBytes, indexRevision, PASSAGE_MAX_BYTES } from '../src/services/vectorize.ts';
 import { AI_LOG_SCHEMA, AI_BUDGET_MIGRATION } from './_ai_budget_fixture.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -207,4 +207,30 @@ test('some chunks written and some not is partial, says how much, and still name
   assert.equal(row.chunk_count, 3, 'every id this run may have written');
   // Recorded before the first write, so an interrupted run leaves them nameable.
   assert.deepEqual([...new Set(spans)], [3]);
+});
+
+// D3701 (Research v2, RS-07): a citation carries its exact passage, so the
+// answer can show it without the page re-reading the index.
+test('D3701: the answer and the stored row carry each citation\'s passage, past the preview', async () => {
+  const f = fixture();
+  const r = await ask(f);
+  assert.equal(r.body.reason, 'answered');
+  const c = r.body.citations[0];
+  // Mutation checked: `passage` dropped from citationOf → undefined here.
+  assert.equal(c.passage, PASSAGE.slice(0, CITATION_PASSAGE_CHARS));
+  assert.equal(c.passage_truncated, PASSAGE.length > CITATION_PASSAGE_CHARS);
+  const row = f.db.prepare('SELECT citations FROM research_ask_answers ORDER BY id DESC LIMIT 1').get() as any;
+  assert.equal(JSON.parse(row.citations)[0].passage, c.passage, 'the stored answer keeps the passage for history');
+  const history = await call(f, 'GET', '/ask/sessions?session=s-1');
+  assert.equal(history.body.items.at(-1).citations[0].passage, c.passage);
+});
+
+test('D3701: an empty passage is null, a short one is whole, a long one is cut and says so', () => {
+  const p = (text: string) => ({ hit: { title: 'T', score: 0.9, chunk: 2, page: null } as any, document_uid: 'd', revision: null, text, full: true });
+  const blank = citationOf(p('  '), 'd');
+  assert.deepEqual([blank.passage, blank.passage_truncated], [null, false]);
+  assert.deepEqual([citationOf(p(' Short. '), 'd').passage, citationOf(p('Short.'), 'd').passage_truncated], ['Short.', false]);
+  const long = citationOf(p('y'.repeat(CITATION_PASSAGE_CHARS + 1)), 'd');
+  // Mutation checked: no slice → the whole text is stored.
+  assert.deepEqual([long.passage.length, long.passage_truncated], [CITATION_PASSAGE_CHARS, true]);
 });

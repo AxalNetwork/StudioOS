@@ -10,6 +10,10 @@ import SecurityTabs from './security/SecurityTabs.jsx';
 import OverviewWorkspace from './security/OverviewWorkspace.jsx';
 import SourceAvailability from './security/SourceAvailability.jsx';
 import AccessWorkspace from './security/AccessWorkspace.jsx';
+import EventsWorkspace from './security/EventsWorkspace.jsx';
+import { activeCount, feedQuery } from './security/eventsModel.js';
+import ResilienceWorkspace from './security/ResilienceWorkspace.jsx';
+import AiSafetyWorkspace from './security/AiSafetyWorkspace.jsx';
 import StatusBadge from './security/StatusBadge.jsx';
 import { buildOverview, clockOf } from './security/overviewModel.js';
 import { tabFromSearch, tabOf } from './security/securityTabs.js';
@@ -61,6 +65,8 @@ import { tabFromSearch, tabOf } from './security/securityTabs.js';
  * what HQ did, which is not a branch's to show.
  */
 export const UNAVAILABLE = Symbol('unavailable');
+/** Workspaces that say for themselves what could not be read (D4803), so the page banner stays off there. */
+const OWN_UNREADABLE = new Set(['overview', 'resilience', 'ai-safety']);
 
 const day = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
 // A number, formatted — or null when there is no number. Never a default.
@@ -82,35 +88,9 @@ const GOV_FILTERS = [
   { key: 'auth', label: 'Sign-ins and step-ups' },
 ];
 
-/**
- * The artboard's one piece of decoration: "Rows involving impersonation or a
- * licence suspension carry a tint — the only decoration on the page, and it
- * is there to be scanned for." Three tones, and `note` is deliberately no
- * tint at all rather than a fourth colour. A refused sign-in is `alert` too.
- */
-const ROW_TINT = {
-  alert: 'bg-red-50/40 dark:bg-red-950/20',
-  warn: 'bg-amber-50/40 dark:bg-amber-950/20',
-  note: '',
-};
-const ACTION_INK = {
-  alert: 'text-red-700 dark:text-red-300',
-  warn: 'text-amber-800 dark:text-amber-300',
-  note: 'text-axal-ink dark:text-white',
-};
-/**
- * H23's fifth column. `refused` and `not closed` are the two that want
- * finding; `live` is a state worth a second look; `ok` and `ended` are the
- * quiet majority.
- */
-const OUTCOME_INK = {
-  refused: 'text-red-700 dark:text-red-300',
-  'not closed': 'text-red-700 dark:text-red-300',
-  live: 'text-amber-800 dark:text-amber-300',
-  unknown: 'text-amber-800 dark:text-amber-300',
-  ok: 'text-axal-muted',
-  ended: 'text-axal-muted',
-};
+/** D4803 — the Events filter bar, untouched: exactly the read the ledger always made. */
+export const EMPTY_CONTROLS = Object.freeze({ q: '', range: 'any', custom: {}, actor: '', outcome: '', source: '' });
+
 
 /**
  * D4691 — every actor on this page arrives in one shape (`actor_identity`,
@@ -130,16 +110,6 @@ export function identityLine(identity) {
   const kind = IDENTITY_KIND_LABEL[identity.kind] || 'unknown';
   const behalf = identity.kind === 'support' && identity.on_behalf_of ? ` for ${identity.on_behalf_of.label}` : '';
   return { kind, text: `${identity.label}${behalf}` };
-}
-function IdentityChip({ identity, fallback }) {
-  const line = identityLine(identity);
-  if (!line) return fallback ? <>{fallback}</> : <Unrecorded>unnamed</Unrecorded>;
-  return (
-    <span data-identity-kind={identity.kind}>
-      <span className="mr-1 rounded border border-axal-hairline px-1 text-[9px] font-bold uppercase tracking-[.05em] text-axal-faint">{line.kind}</span>
-      {line.text}
-    </span>
-  );
 }
 
 function Zone({ title, sub, children, tone = '' }) {
@@ -823,13 +793,18 @@ export default function HqSecurityPage() {
   // and read as "that is all there is".
   const [feed, setFeed] = useState(null);
   const [filter, setFilter] = useState('all');
+  // D4803 — the Events workspace's filters, sent with the category. The same
+  // request feeds Overview's source count, which says which filter it counted under.
+  const [controls, setControls] = useState(EMPTY_CONTROLS);
+  const query = JSON.stringify(feedQuery(controls));
   const loadFeed = useCallback(() => {
     setFeed(null);
-    api.hqGovernance(filter).then(
+    api.hqGovernance(filter, JSON.parse(query)).then(
       (r) => { setFeed(r); stampRead('feed'); },
       (e) => { reportError('hq-governance', e); setFeed(UNAVAILABLE); },
     );
-  }, [filter]);
+  }, [filter, query]);
+  const loadOlder = useCallback((before) => api.hqGovernance(filter, { ...JSON.parse(query), before }), [filter, query]);
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
@@ -843,6 +818,9 @@ export default function HqSecurityPage() {
       feed={feed}
       filter={filter}
       setFilter={setFilter}
+      controls={controls}
+      setControls={setControls}
+      loadOlder={loadOlder}
       loadFeed={loadFeed}
       sessionList={sessionList}
       loadSessions={loadSessions}
@@ -854,6 +832,7 @@ export default function HqSecurityPage() {
 
 export function SecurityConsole({
   tab = 'overview', onTab = () => {}, data, load, feed, filter, setFilter, loadFeed, sessionList, loadSessions, onSessionAct, readAt = {},
+  controls = EMPTY_CONTROLS, setControls = () => {}, loadOlder = () => Promise.reject(new Error('no cursor reader')),
 }) {
   const feedReady = feed && feed !== UNAVAILABLE;
   const access = feedReady ? feed.data_access : null;
@@ -959,9 +938,14 @@ export function SecurityConsole({
   // D4800 — the Overview workspace's findings, clear row, areas and sources,
   // from the two reads above and nothing else.
   const overviewModel = buildOverview({ overview: readOf(data, readAt.overview), feed: readOf(feed, readAt.feed) });
-  const filterLabel = feedReady && feed.filter && feed.filter !== 'all'
+  const categoryLabel = feedReady && feed.filter && feed.filter !== 'all'
     ? (feed.filters || GOV_FILTERS).find((f) => f.key === feed.filter)?.label || feed.filter
     : null;
+  // D4803 — a search or date filter narrows the same read, and the count says so.
+  const narrowedBy = feedReady ? activeCount(feed.applied) : 0;
+  const filterLabel = categoryLabel && narrowedBy
+    ? `${categoryLabel} and ${narrowedBy} more`
+    : categoryLabel || (narrowedBy ? `${narrowedBy}-filter` : null);
   const refreshAll = () => { load(); loadFeed(); loadSessions(); };
   const observed = clockOf(readAt.overview);
   const here = tabOf(tab);
@@ -1001,139 +985,18 @@ export function SecurityConsole({
       />
     ),
     events: (
-      <>
-        {/* Canvas H23's ledger. ts · actor · branch · event · outcome, one
-            filter bar, monospace on every cell, and NO tile above it — H7's
-            rule, which H23 restates: a summary tile over an audit log is a
-            dashboard, and legibility is not the property you want from a
-            log. */}
-        <Zone
-          title="Security events"
-          sub={feedReady
-            ? `${feed.rows.length} newest${feed.more ? ' of more' : ''} · ${feed.sources.filter((x) => x.available).length} of ${feed.sources.length} stores read`
-            : 'five stores, one ledger · append-only'}
-        >
-          <div className="flex flex-wrap items-center gap-2" data-testid="hq-gov-filters">
-            {(feedReady ? feed.filters : GOV_FILTERS).map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => setFilter(f.key)}
-                aria-pressed={filter === f.key}
-                title={f.reads ? `reads ${f.reads}` : undefined}
-                className={`rounded-lg border px-3 py-1.5 text-[11.5px] font-semibold ${
-                  filter === f.key
-                    ? 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
-                    : 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:bg-gray-900 dark:hover:bg-gray-800'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          {feed === UNAVAILABLE && (
-            <div className="mt-3">
-              <Unreadable
-                what="The security ledger"
-                claim="This is not a claim that nobody did anything."
-                onRetry={() => setFilter((f) => f)}
-              />
-            </div>
-          )}
-          {feed === null && <p className="mt-3 text-[12px] text-axal-faint">Loading…</p>}
-
-          {feedReady && feed.rows.length === 0 && (
-            <p className="mt-3 text-[12px] text-axal-faint" data-testid="hq-gov-empty">
-              No event matches this filter. Every store below was read and none held a row —
-              which is a different fact from a store that could not be read.
-            </p>
-          )}
-
-          {feedReady && feed.rows.length > 0 && (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full font-mono text-[11px]" data-testid="hq-gov-feed">
-                <thead>
-                  <tr className="text-left text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-                    <th className="py-1 pr-3">ts</th>
-                    <th className="py-1 pr-3">actor</th>
-                    <th className="py-1 pr-3">branch</th>
-                    <th className="py-1 pr-3">event</th>
-                    <th className="py-1">outcome</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {feed.rows.map((r) => (
-                    <tr key={r.key} className={`border-t border-axal-hairline align-top ${ROW_TINT[r.tone] || ''}`}>
-                      <td className="py-1.5 pr-3 font-mono text-[10.5px] text-axal-faint">
-                        {day(r.at) || <Unrecorded>no timestamp</Unrecorded>}
-                      </td>
-                      <td className="py-1.5 pr-3 font-mono font-semibold"><IdentityChip identity={r.actor_identity} fallback={r.actor} /></td>
-                      <td className="py-1.5 pr-3 font-mono text-axal-muted">{r.tenant || <Unrecorded />}</td>
-                      <td className={`py-1.5 pr-3 font-mono font-bold ${ACTION_INK[r.tone] || ACTION_INK.note}`}>
-                        {r.action}
-                        {r.target ? <span className="ml-2 font-normal text-axal-muted">{r.target}</span> : null}
-                      </td>
-                      <td className={`py-1.5 font-mono font-semibold ${OUTCOME_INK[r.outcome] || 'text-axal-muted'}`}>
-                        {r.outcome || <Unrecorded />}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {feedReady && (
-            <>
-              <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-reason">
-                <b>Branch.</b> {feed.tenant_reason}
-              </p>
-              <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-axal-faint" data-testid="hq-gov-sources">
-                {feed.sources.map((src) => (
-                  <li key={src.table} className={src.available ? 'font-mono' : 'font-mono text-red-700 dark:text-red-300'}>
-                    {src.table} ·{' '}
-                    {src.available ? `${num(src.rows)} read` : (src.reason || 'unreadable')}
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-                Newest first, no pagination above the fold, and no summary tile over it: the first question of
-                an audit log is what just happened, never page four, and a count of refusals is a dashboard
-                where the refusals themselves are the record. Refused sign-ins, impersonations and suspensions
-                carry a tint — the only decoration here, and it is there to be scanned for. A refusal is one row
-                per minute per email address and network, carrying the first reason in that minute: the ledger records
-                that someone was refused, not how many times. Whether an HQ act landed on its branch is on
-                Platform → Deployments, which reads the audit mirror.
-              </p>
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-view">
-                <b>Viewing as a branch.</b> {feed.tenant_view_reason}
-              </p>
-            </>
-          )}
-          {(se?.not_counted || []).length > 0 && (
-            <ul className="mt-3 space-y-1.5" data-testid="hq-security-events-not-counted">
-              {se.not_counted.map((n) => (
-                <li key={n.what} className="text-[11px] leading-relaxed text-axal-faint">
-                  <b className="text-axal-muted">{n.what}</b> — <Unrecorded />. {n.reason}
-                </li>
-              ))}
-            </ul>
-          )}
-          {se && !se.available && (
-            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-unreadable">
-              The ledger&apos;s counts could not be read: {se.reason} The feed above still shows what the other
-              stores hold; a security_events row absent from it is a store that answered nothing, not a quiet day.
-            </p>
-          )}
-          {se?.available && (
-            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-retention">
-              Kept for {se.retention_days} days, and the ledger&apos;s own seal refuses any delete inside that window.
-            </p>
-          )}
-        </Zone>
-
-      </>
+      <EventsWorkspace
+        feed={feed}
+        unavailable={UNAVAILABLE}
+        filter={filter}
+        setFilter={setFilter}
+        controls={controls}
+        setControls={setControls}
+        onRetry={loadFeed}
+        loadOlder={loadOlder}
+        se={se}
+        categories={GOV_FILTERS}
+      />
     ),
     access: (
       <>
@@ -1328,20 +1191,22 @@ export function SecurityConsole({
         </Zone>
       </div>
     ),
+    // D4803 slice 2: SE08 leads; the previous zone stays whole behind "How this is measured".
     'ai-safety': (
-      <>
+      <AiSafetyWorkspace block={ready ? data.ai_safety : null} unreadable={data === UNAVAILABLE} onRetry={load}>
         <Zone title="AI safety" sub="guardrail hits · Advisor-AI outputs the screen caught">
           <AiSafety block={ready ? data.ai_safety : null} />
         </Zone>
-      </>
+      </AiSafetyWorkspace>
     ),
+    // D4803 slice 2: SE09 leads; the previous zone stays whole behind "How this is measured".
     resilience: (
-      <>
+      <ResilienceWorkspace block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} onRetry={load}>
         <Zone title="Backup / DR drill" sub="two facts, each its own state">
           <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
           {ready && <NotRecordedList items={data.backup_dr?.not_recorded} testid="hq-dr-not-recorded" />}
         </Zone>
-      </>
+      </ResilienceWorkspace>
     ),
   };
 
@@ -1391,7 +1256,7 @@ export function SecurityConsole({
 
         <SecurityTabs current={tab} onSelect={onTab} marks={overviewModel.marks} />
 
-        {data === UNAVAILABLE && tab !== 'overview' && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
+        {data === UNAVAILABLE && !OWN_UNREADABLE.has(tab) && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
 
         <div className="mt-4 space-y-4" data-testid={`security-ws-${tab}`}>
           {workspaces[tab] || workspaces.overview}
