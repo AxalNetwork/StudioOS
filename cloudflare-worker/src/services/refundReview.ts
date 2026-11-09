@@ -150,7 +150,7 @@ export async function decideRefundPolicy(env: Env, t: RefundTarget, nowMs = Date
   }
 
   if (kind === 'expert_booking') {
-    let scheduledAt = NaN;
+    let scheduledAt: number;
     try {
       const bid = meta.booking_id ? Number(meta.booking_id) : null;
       const r = bid

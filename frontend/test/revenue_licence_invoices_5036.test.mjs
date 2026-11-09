@@ -18,7 +18,7 @@ import { codeOnly } from './_codeOnly.mjs';
 
 const root = new URL('../../', import.meta.url);
 const PAGE = codeOnly(readFileSync(new URL('frontend/src/pages/hq/RevenuePage.jsx', root), 'utf8'));
-const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/ /g, ' ').replace(/\s+/g, ' ');
+const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ');
 const draw = (invoices) => renderToStaticMarkup(React.createElement(LicenceInvoices, { invoices, onRetry: () => {} }));
 
 /** The Worker's `licence_invoices` payload (services/licenceFeeReceivables.ts). */
