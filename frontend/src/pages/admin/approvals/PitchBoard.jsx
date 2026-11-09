@@ -4,12 +4,12 @@ import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { safeExternalUrl } from '../../../lib/url';
 import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
 import { AssignDialog, OwnerCell, UrgencyPill } from './AdminApprovals';
-import { DECIDED_HERE, LIFECYCLE_LINE, afterDecision, boardCrumb, boardStrip, lifecycleSteps, slaOfBand } from './boardGrammar';
+import { DECIDED_HERE, LIFECYCLE_LINE, afterDecision, boardCrumb, boardStep, boardStrip, lifecycleSteps, slaOfBand } from './boardGrammar';
 import {
   BOARDS, PITCH_TABS, assetWord, dayText, decisionCopy, doneLine, hoursSince, ageText, pitchRows, publishUrlOk, reasonReady, tabPath,
 } from './approvalsModel';
 import {
-  BTN, BTN_PRIMARY, BoardStrip, CARD, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
+  BTN, BTN_PRIMARY, BoardStrip, CARD, DrawerStep, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
   TD, TH, Tile, nf, useBoardOwners, useLoad,
 } from './boardParts';
 import Sheet from '../../../ui/Sheet.jsx';
@@ -98,7 +98,7 @@ function PitchDialog({ kind, pitch, onClose, onDone, onStale }) {
 const STATE_WORD = { proposed: 'Proposed', approved: 'Approved, to publish', published: 'Published', rejected: 'Declined', withdrawn: 'Withdrawn' };
 
 /** One pitch at its own address (APR6d), over the board. */
-function PitchDrawer({ uid, onClose, onDecided, own }) {
+function PitchDrawer({ uid, onClose, onDecided, own, step, from }) {
   const read = useLoad(() => approvalBoardsApi.pitch(uid), `pitch-${uid}`, { what: 'approvals:pitch' });
   const [dialog, setDialog] = useState(null);
   const p = read.reply;
@@ -113,6 +113,7 @@ function PitchDrawer({ uid, onClose, onDecided, own }) {
     <>
       <Sheet label={ready ? `${p.title}, co-marketing pitch` : 'Co-marketing pitch'} eyebrow={ready ? `Co-marketing pitch · ${STATE_WORD[p.status] || p.status}` : 'Co-marketing pitch'}
         title={ready ? (p.title || 'Untitled pitch') : 'Co-marketing pitch'} sub={ready ? 'Esc to close' : null} onClose={onClose} testId="pitch-drawer" width={600}
+        headerActions={<DrawerStep step={step} from={from} testId="pitch-step" prevTo={step?.prev ? `/admin/approvals/co-marketing/${encodeURIComponent(step.prev.key)}` : null} nextTo={step?.next ? `/admin/approvals/co-marketing/${encodeURIComponent(step.next.key)}` : null} />}
         footer={ready && (p.status === 'proposed' || p.status === 'approved') ? (
           <div className="flex flex-col gap-2">
             <div className={`${FOOT} flex-wrap items-center`}>
@@ -309,7 +310,7 @@ export default function PitchBoard({ at }) {
         </div>
       </section>
       {publish ? <PitchDialog kind="publish" pitch={publish} onClose={() => setPublish(null)} onDone={decided} onStale={reload} /> : null}
-      {at.item ? <PitchDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} /> : null}
+      {at.item ? <PitchDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={read.status === 'ready' ? boardStep(pitchRows(read.reply?.items), at.item) : null} from={from} /> : null}
       {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={own.finish} /> : null}
     </div>
   );
