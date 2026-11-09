@@ -114,7 +114,7 @@ export function CohortWorkspaceProvider({ preview = false, children }) {
       gate: weeksGate,
       fetch: () => api.listMyAdvisorCohortWeeks(cycleId),
       accept: acceptWeeks,
-      onState: setWeeks,
+      onState: (st) => setWeeks({ ...st, for: cycleId }),
       fallbackError: WEEKS_UNAVAILABLE,
     });
     // `version` is the refresh button.
@@ -137,7 +137,10 @@ export function CohortWorkspaceProvider({ preview = false, children }) {
     refresh: () => { setVersion((v) => v + 1); loadAssignments(); },
     lastUpdated,
     markUpdated,
-    weeks,
+    // Until the read for THIS cohort has answered, the week record is loading:
+    // the render between a switch and the read starting must not show the
+    // previous cohort's weeks, or an empty record as if it were read.
+    weeks: cycleId != null && weeks.for !== cycleId ? { loading: true, error: '', data: null } : weeks,
     reloadWeeks: loadWeeks,
     href: (path, extra) => withCohort(path, cycleId, extra),
   }), [preview, assignments.loading, assignments.error, items, loadAssignments, cycleId, current, notice, select,
@@ -160,7 +163,7 @@ export function useCohortWorkspace() {
  */
 export function useCohortRead(fetch, { accept, fallbackError } = {}) {
   const { cycleId, version, markUpdated } = useCohortWorkspace();
-  const [state, setState] = useState({ loading: cycleId != null, error: '', data: null });
+  const [state, setState] = useState({ loading: false, error: '', data: null, for: undefined });
   const gate = useRef(createRequestGate()).current;
   const reload = useCallback(() => {
     if (cycleId == null) { gate.invalidate(); setState({ loading: false, error: '', data: null }); return undefined; }
@@ -168,12 +171,14 @@ export function useCohortRead(fetch, { accept, fallbackError } = {}) {
       gate,
       fetch: () => fetch(cycleId),
       accept,
-      onState: (s) => { setState(s); if (s.data) markUpdated(); },
+      onState: (s) => { setState({ ...s, for: cycleId }); if (s.data) markUpdated(); },
       fallbackError,
     });
   }, [cycleId, version]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { reload(); }, [reload]);
-  return { ...state, reload };
+  // Loading until the read for the selected cohort has answered (see `weeks`).
+  if (cycleId != null && state.for !== cycleId) return { loading: true, error: '', data: null, reload };
+  return { loading: state.loading, error: state.error, data: state.data, reload };
 }
 
 /** "Loading November 2026…" — a loading line always names what is loading. */
