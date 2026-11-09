@@ -15,8 +15,9 @@ import { railPressHeaders } from '../../lib/railPage.js';
 import { RETRIEVAL_UNAVAILABLE } from './askOutcome.js';
 import {
   ASK_STATES, CITATION_AVAILABILITY, HISTORY_TABS, answerWithCitations, answerabilityOf, askStateOf,
-  citationAvailability, indexStateOf,
+  citationAvailability, indexStateOf, tokensRefusal,
 } from './researchStates.js';
+import { openAddTokens } from '../../lib/aiTokens.js';
 
 const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
 
@@ -143,6 +144,8 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const askOption = railOptionFor(railPage, { file: ZONE_FILE, control: 'ask' });
   useRailOption(busy ? askOption?.key : null, askOption?.label);
   const [error, setError] = useState('');
+  // D3701 part 4: a 402 from Ask is a budget stop, drawn as RS-11's card.
+  const [tokens, setTokens] = useState(null);
   const [lib, setLib] = useState({ loading: true, error: '', payload: null });
   const [view, setView] = useState('session');
   const [thread, setThread] = useState({ loading: true, error: '', payload: null });
@@ -201,7 +204,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
     e.preventDefault();
     const q = question.trim();
     if (!q) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setTokens(null);
     try {
       // D778 part 11: the press names its profile's option on the run (founder's by default).
       const r = await api.research.ask(q, sessionUid, railPressHeaders(askOption?.key ?? 'ask:library'));
@@ -212,7 +215,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
       setView('session');
       await loadThread('session', r?.session_uid || '');
     } catch (err) {
-      setError(err?.message || 'That question could not be answered right now.');
+      const stop = tokensRefusal(err);
+      if (stop) setTokens(stop);
+      else setError(err?.message || 'That question could not be answered right now.');
     } finally { setBusy(false); }
   };
 
@@ -384,6 +389,19 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             </div>
           </form>
         </Card>
+
+        {tokens ? (
+          <Card className="border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/25" data-testid="ask-out-of-tokens">
+            <div className="flex flex-wrap items-start justify-between gap-3" role="status">
+              <div>
+                <p className="text-[13px] font-extrabold text-axal-amber-deep dark:text-amber-300"><span aria-hidden="true">! </span>{tokens.title}</p>
+                <p className="mt-1 text-[12px] text-gray-700 dark:text-gray-300">{tokens.body}</p>
+                <p className="mt-1 text-[11.5px] text-gray-600 dark:text-gray-400">{tokens.note}</p>
+              </div>
+              <button type="button" className={buttonClass} data-testid="ask-add-tokens" onClick={() => openAddTokens({ from: 'Research › Ask' })}>Add tokens</button>
+            </div>
+          </Card>
+        ) : null}
 
         {/* THE THREAD. One card per exchange, in the order asked, each with the
             citations under it and its own charge on the right — which is the
