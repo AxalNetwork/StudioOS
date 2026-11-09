@@ -116,3 +116,50 @@ export function askStateOf(t, { libraryUids = null } = {}) {
   if (reason === 'retrieval_unavailable' || reason === 'model_unavailable') return reason;
   return null;
 }
+
+/**
+ * D3701 part 3 (RS-07) — one citation's availability. `available` while the
+ * library read lists its document, `gone` when it does not, and null when the
+ * library was not read or the citation names no document: unknown is not gone.
+ */
+export function citationAvailability(ct, libraryUids) {
+  if (!libraryUids || !ct?.document_uid) return null;
+  return libraryUids.has(ct.document_uid) ? 'available' : 'gone';
+}
+
+export const CITATION_AVAILABILITY = {
+  available: { label: 'Available', tone: 'ok', glyph: '✓' },
+  gone: { label: 'No longer available', tone: 'neutral', glyph: '⊠' },
+};
+
+/**
+ * What "Copy with citations" puts on the clipboard: the answer, then each
+ * numbered source with its page and passage as recorded. A citation stored
+ * before passages were kept says so rather than copying nothing.
+ */
+export function answerWithCitations(t) {
+  const lines = [String(t?.answer || '').trim()];
+  const cites = Array.isArray(t?.citations) ? t.citations : [];
+  if (cites.length) {
+    lines.push('', 'Sources');
+    cites.forEach((ct, i) => {
+      const where = [ct.page != null ? `page ${ct.page}` : null, ct.chunk != null ? `passage ${ct.chunk + 1}` : null].filter(Boolean).join(', ');
+      lines.push(`[${ct.n || i + 1}] ${ct.title || 'Untitled document'}${where ? ` (${where})` : ''}`);
+      lines.push(ct.passage ? `    “${ct.passage}${ct.passage_truncated ? '…' : ''}”` : '    Passage not recorded for this answer.');
+    });
+  }
+  return lines.join('\n');
+}
+
+/**
+ * RS-07's history tabs. `session` is kept first: asking appends to the
+ * current session, and leaving the reader on All after a question would make
+ * the answer look lost (the reason `ask` resets the view). Archived is the
+ * discarded disposition (D549).
+ */
+export const HISTORY_TABS = [
+  { view: 'session', label: 'This session' },
+  { view: 'all', label: 'All' },
+  { view: 'saved', label: 'Saved answers' },
+  { view: 'discarded', label: 'Archived' },
+];

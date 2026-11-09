@@ -2,7 +2,9 @@
  * D4563 (#4563) — HQ Contracts › Corporate Governance, over
  * `services/governance.ts` (migration 202611062154).
  *
- *   GET   /api/admin/governance                     → { entities: [{ key, name, documents, withheld }], categories, statuses, super_admin }
+ *   GET   /api/admin/governance                     → { entities: [{ key, name, documents, withheld, attention }], categories, statuses, super_admin, group }
+ *         `attention` (D4811 part 2, `services/governanceAttention.ts`): the entity's expected records, each with its
+ *         state, its counts and its facts; `group`: the intercompany links read from the ownership rows, nothing else.
  *   GET   /api/admin/governance/linkable            → { templates: [{ slug, title, category }], envelopes: [{ id, title, completed_at }] }
  *   POST  /api/admin/governance/documents           { entity_key, category, title, effective_date?, confidential?, template_slug?, envelope_id? } → { document }
  *   GET   /api/admin/governance/documents/:uid      → { document, versions }
@@ -30,6 +32,7 @@ import {
   envelopeExists, executedEvidence, isCategory, isEntity, isStatus, ownershipOf, readDoc, readVersions, sha256Hex, sniffDocument,
   templateExists, versionKey, versionView, type DocRow, type GovernanceEntity,
 } from '../services/governance';
+import { entityAttention, groupOf, type DocFacts } from '../services/governanceAttention';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 
@@ -67,12 +70,18 @@ governance.get('/', async (c) => {
   for (const r of rows) latest.set(r.document_uid, r);
   const cnt = (await c.env.DB.prepare('SELECT document_uid, COUNT(*) AS n FROM governance_document_versions GROUP BY document_uid').all<any>()).results || [];
   for (const r of cnt) counts.set(r.document_uid, Number(r.n));
+  // D4811: every document (confidential ones too) feeds the attention view, which says of a record only what this viewer may know.
+  const facts: DocFacts[] = (docs as DocRow[]).map((row) => ({ row, versions: counts.get(row.uid) ?? 0, latestVersion: latest.get(row.uid) ? Number(latest.get(row.uid).version) : null }));
   const entities = GOVERNANCE_ENTITIES.map((key) => {
     const mine = (docs as DocRow[]).filter((d) => d.entity_key === key);
     const shown = mine.filter((d) => superAdmin || Number(d.confidential) !== 1);
-    return { key, name: entityName(key), documents: shown.map((d) => docView(d, latest.get(d.uid) ?? null, counts.get(d.uid) ?? 0)), withheld: mine.length - shown.length };
+    return {
+      key, name: entityName(key), documents: shown.map((d) => docView(d, latest.get(d.uid) ?? null, counts.get(d.uid) ?? 0)), withheld: mine.length - shown.length,
+      attention: entityAttention(key, facts, superAdmin),
+    };
   });
-  return c.json({ entities, categories: GOVERNANCE_CATEGORIES, statuses: GOVERNANCE_STATUSES, super_admin: superAdmin });
+  const profiles = (await c.env.DB.prepare('SELECT entity_key, ownership_json FROM governance_entity_profiles').all<any>().catch(() => ({ results: [] }))).results || [];
+  return c.json({ entities, categories: GOVERNANCE_CATEGORIES, statuses: GOVERNANCE_STATUSES, super_admin: superAdmin, group: groupOf(profiles as any[]) });
 });
 
 governance.get('/linkable', async (c) => {

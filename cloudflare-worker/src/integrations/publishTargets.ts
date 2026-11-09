@@ -2,7 +2,7 @@
  * D1319 (#3480, part 1 of #2400) — what each provider's publish capability
  * is, as data: one row per publishing provider. Each provider issue (Beehiiv
  * #2407, X #2403, TikTok #2401, Facebook #2399) adds its own row with its
- * adapter; part 1 adds none, so nothing can be published yet.
+ * adapter. Beehiiv's (#2407 part 3, drafts only) is the first.
  *
  * A ROW WITH AN UNKNOWN LIMIT REFUSES TO PREVIEW. `retract` is `delete` (the
  * provider deletes the post), `none` (a draft StudioOS never deletes) or
@@ -31,7 +31,26 @@ export interface PublishTarget {
   verified_on: string | null;
 }
 
-export const PUBLISH_TARGETS: readonly PublishTarget[] = Object.freeze([]);
+export const PUBLISH_TARGETS: readonly PublishTarget[] = Object.freeze([
+  // D2407 (#2407 part 3): a DRAFT in the founder's own Beehiiv publication,
+  // never a post. Text only (no media). The text limit is Axal VC's own
+  // ceiling, a draft's 20,000 characters, not a Beehiiv limit (none is
+  // documented; UNVERIFIED). Retract `none`: Axal VC never deletes a
+  // founder's post. Every place a founder publishes from.
+  Object.freeze({
+    key: 'beehiiv',
+    text_limit: 20_000,
+    media_limit: 0,
+    media_types: Object.freeze([]),
+    audience: 'Draft only: not sent to subscribers',
+    retract: 'none',
+    modules: Object.freeze([
+      'overview', 'updates', 'product-improvement', 'distribution', 'revenue-and-traction',
+      'team-expansion', 'partner-network', 'market-expansion', 'durable-company-building',
+    ]),
+    verified_on: null,
+  }),
+]);
 
 /** The owner's ceiling on sends a destination makes a day (#2400 decision D); a founder may set lower. */
 export const PUBLISH_DAILY_CAP = 10;
