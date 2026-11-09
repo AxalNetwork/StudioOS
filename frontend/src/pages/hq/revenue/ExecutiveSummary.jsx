@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Figure, When, Why, BTN } from './RevenueStates.jsx';
 import {
-  LEDGER_FIGURES, currencyPosition, isReady, pendingState, summaryCurrencies, summaryTemporal, tokenMarginView,
+  LEDGER_FIGURES, currencyPosition, isReady, ledgerPosition, pendingState, summaryCurrencies, summaryTemporal, tokenMarginView,
 } from './revenueModel.js';
 
 /**
@@ -16,6 +16,12 @@ import {
  * would say the same nothing several times. The figures that ARE read come per
  * native currency underneath: the contracted run-rate, refunds and open
  * disputes. Nothing is converted and nothing is summed across currencies.
+ *
+ * D5082 (#5082): once the Worker sends `licence_invoices` (D5036), the four
+ * ledger positions are drawn per native currency from the licence-fee invoice
+ * ledger — Invoiced and Collected for the period, Outstanding and Overdue as of
+ * now — and say they are licence fees only. Until then they stay one row of
+ * Not recorded; an unreadable ledger is Unavailable. Neither is ever 0.
  */
 
 function Kpi({ label, figure, when, note, why, onWhy, attention = false, testId }) {
@@ -36,9 +42,80 @@ function Kpi({ label, figure, when, note, why, onWhy, attention = false, testId 
 }
 
 const GRID = 'grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6';
+const LEDGER_GRID = 'grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4';
+const LEDGER_WHEN = { Invoiced: 'period', Collected: 'period', Outstanding: 'now', Overdue: 'now' };
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/** D5082: the four ledger positions — per currency once the ledger is read, else one row in its state. */
+function LedgerPosition({ ledger, period, onWhy }) {
+  if (ledger.state !== 'recorded') {
+    const note = { not_recorded: 'No ledger yet', unavailable: 'Ledger unreadable' }[ledger.state] || null;
+    return (
+      <div className={LEDGER_GRID} data-testid="hq-revenue-ledger-tiles" data-ledger-state={ledger.state}>
+        {LEDGER_FIGURES.map((label) => (
+          <Kpi
+            key={label}
+            label={label}
+            figure={{ state: ledger.state, text: null }}
+            when={<When kind={LEDGER_WHEN[label]} period={period} />}
+            note={note}
+            why={ledger.state === 'loading' ? null : 'ledger'}
+            onWhy={onWhy}
+          />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2" data-testid="hq-revenue-ledger-tiles" data-ledger-state="recorded">
+      <div className="flex flex-wrap items-center gap-2 font-mono text-[12px] font-bold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400">
+        <span>Licence fees · invoice ledger</span>
+        <Why source="ledger" onOpen={onWhy} />
+      </div>
+      {!ledger.currencies.length && (
+        <div className={LEDGER_GRID} data-testid="hq-revenue-ledger-none">
+          {LEDGER_FIGURES.map((label) => (
+            <Kpi
+              key={label}
+              label={label}
+              figure={{ state: 'zero', text: 'None' }}
+              when={<When kind={LEDGER_WHEN[label]} period={period} />}
+              note={LEDGER_WHEN[label] === 'period' ? 'No licence invoice issued' : 'No open licence invoice'}
+            />
+          ))}
+        </div>
+      )}
+      {ledger.currencies.map((c) => (
+        <div key={c.currency} className="flex flex-col gap-1.5" data-testid={`hq-revenue-ledger-${c.currency}`}>
+          <div className="font-mono text-[12px] font-bold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400">{c.currency}</div>
+          <div className={LEDGER_GRID}>
+            <Kpi label="Invoiced" figure={c.invoiced} when={<When kind="period" period={period} />} note={Number.isFinite(c.invoices) ? plural(c.invoices, 'invoice', 'invoices') : null} />
+            <Kpi label="Collected" figure={c.collected} when={<When kind="period" period={period} />} note="recorded by HQ" />
+            <Kpi label="Outstanding" figure={c.outstanding} when={<When kind="now" />} note={Number.isFinite(c.openInvoices) ? `${plural(c.openInvoices, 'open invoice', 'open invoices')}` : null} />
+            <Kpi
+              label="Overdue"
+              figure={c.overdue}
+              when={<When kind="now" />}
+              note={Number.isFinite(c.overdueInvoices) && c.overdueInvoices > 0 ? plural(c.overdueInvoices, 'invoice past due', 'invoices past due') : null}
+              attention={c.overdue.state === 'recorded'}
+            />
+          </div>
+        </div>
+      ))}
+      {(ledger.expectedNotInvoiced > 0 || ledger.cannotInvoice > 0) && (
+        <p className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="hq-revenue-ledger-gaps">
+          {ledger.expectedNotInvoiced > 0 && <span>{plural(ledger.expectedNotInvoiced, 'licence year has', 'licence years have')} started without an invoice.</span>}
+          {ledger.cannotInvoice > 0 && <span>{plural(ledger.cannotInvoice, 'billable licence cannot', 'billable licences cannot')} be invoiced.</span>}
+          <Why source="ledger" onOpen={onWhy} />
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function ExecutiveSummary({ summary, refunds, disputes, period, onWhy, onRetrySummary, onRetryRefunds, onRetryDisputes }) {
   const currencies = summaryCurrencies({ summary, refunds, disputes });
+  const ledger = ledgerPosition(summary);
   const token = isReady(summary) ? summary.token_cost : null;
   const v = tokenMarginView(token);
   const marginFigure = !isReady(summary)
@@ -57,19 +134,7 @@ export function ExecutiveSummary({ summary, refunds, disputes, period, onWhy, on
         <span className="text-[12.5px] text-axal-muted dark:text-gray-400">Native currency only · no FX conversion · currencies are never added together</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="hq-revenue-ledger-tiles">
-        {LEDGER_FIGURES.map((label) => (
-          <Kpi
-            key={label}
-            label={label}
-            figure={{ state: 'not_recorded', text: null }}
-            when={<When kind={label === 'Outstanding' || label === 'Overdue' ? 'now' : 'period'} period={period} />}
-            note="No ledger yet"
-            why="ledger"
-            onWhy={onWhy}
-          />
-        ))}
-      </div>
+      <LedgerPosition ledger={ledger} period={period} onWhy={onWhy} />
 
       {currencies.map((cur) => {
         const p = currencyPosition(cur, { summary, refunds, disputes });

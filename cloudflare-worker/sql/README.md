@@ -25,6 +25,7 @@ and is not kept in sync.
 | `migrations/202611081919_skill_release_evidence.sql` | D4533 (#4533): the release evidence of Axal's skills: a draft's declared required models, the evidence hash a review and an eval result were given on, and an HQ version's manifest in its own row. Triggers keep versions, cases, results and decided reviews as written. Additive, nothing backfilled. |
 | `migrations/202611082048_ticket_filing_snapshot.sql` | D5030 (#5030): `tickets.filed_persona`, `filed_role`, `filed_licence_uid`, `filed_branch_code`, the support context a ticket was filed in, written once by the INSERT. Additive, nothing backfilled. |
 | `migrations/202611082049_support_sla_policy_version.sql` | D5032 (#5032): `support_sla_policy_state`, the version of the ticket SLA tiers on this database (HQ's own, or the copy a branch applied). New table, re-runnable, no seed. |
+| `migrations/202611090953_meeting_bot_runtime_startup.sql` | D5153 (#5153): `meeting_bots.runtime_stage`, `runtime_stage_at`, `runtime_version`, `runtime_error_code`, `runtime_callback_seen_at`, `runtime_start_ms`, the operator's startup facts for a run (closed code lists, no meeting content). Additive, nothing backfilled. |
 | `migrations/202611090834_intro_delivery_attempt.sql` | D4604 (#4604): nullable `relationship_interactions.delivery_op_uid`, the send operation that holds an accepted introduction's delivery, so a second composition cannot resend it and a delivered one is reconciled to made. Additive, nothing backfilled. |
 
 ## Adding a change

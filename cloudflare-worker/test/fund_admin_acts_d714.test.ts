@@ -509,3 +509,23 @@ test('on a branch Worker an admin is still refused the fee\'s Super Admin acts, 
   assert.equal(one(env, 'SELECT status FROM fund_mgmt_fee_terms').status, 'draft');
   assert.equal((await fees.call(env, fees.GP, `/api/fund-fees/1/terms/${draft.body.uid}/confirm`, { method: 'POST' })).status, 200);
 });
+
+test('D4812 follow-up: a new GP of record is an existing, active account; checked only after the Super Admin gate', async () => {
+  const env = makeEnv();
+  env.__db.exec(`INSERT INTO users (id, email, name, role, is_active, investor_tier, investor_subscription_status, kyc_status)
+    VALUES (77, 'gone@example.test', 'Inactive GP', 'investor', 0, 'institutional', 'active', 'approved');`);
+  const gpOf = () => env.__db.prepare('SELECT gp_user_id FROM vc_funds WHERE id = 1').get().gp_user_id;
+  for (const bad of [999999, 77, '41x', 0, -1]) {
+    const r = await call(env, SUPER, 'PATCH', '/api/funds/1', { gp_user_id: bad });
+    assert.deepEqual([r.status, r.body?.error], [400, 'gp_account_invalid'], String(bad));
+    assert.equal(gpOf(), GP, 'nothing written');
+  }
+  // A plain Admin is refused by the gate first, so the refusal says nothing about which accounts exist.
+  const admin = await call(env, ADMIN, 'PATCH', '/api/funds/1', { gp_user_id: 999999 });
+  assert.deepEqual([admin.status, admin.body?.code], [403, 'super_admin_required']);
+  // Any active account may be named, any role; and no GP stays allowed.
+  assert.equal((await call(env, SUPER, 'PATCH', '/api/funds/1', { gp_user_id: OTHER_GP })).status, 200);
+  assert.equal(gpOf(), OTHER_GP);
+  assert.equal((await call(env, SUPER, 'PATCH', '/api/funds/1', { gp_user_id: null })).status, 200);
+  assert.equal(gpOf(), null);
+});

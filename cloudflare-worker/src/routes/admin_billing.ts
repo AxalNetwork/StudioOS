@@ -8,8 +8,10 @@ import { logAdminAction } from '../services/adminAudit';
 import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../services/referralCommissions';
 import { refusalBody } from '../util/refusal';
 import { paymentChangeReason } from '../services/catalog';
-import { currencyCode } from '../services/currencies';
-import { exponentOf, parseMinor } from '../../../frontend/src/lib/money.js';
+import {
+  buildRefundReview, decideRefundPolicy, fromStripe, resolveRefundTarget, reviewIdempotencyKey, verifyReview,
+  type RefundTarget, type StripeCharge,
+} from '../services/refundReview';
 
 // Task #11 (II) — Admin billing actions. Mounted at `/api/admin/billing`
 // BEFORE the catch-all `/api/admin` in index.ts so the nested routes resolve
@@ -45,299 +47,141 @@ const STRIPE_REFUND_REASONS = new Set(['duplicate', 'fraudulent', 'requested_by_
 /** D224 — the shortest written refund reason accepted. Exported for the SPA's own check. */
 export const REFUND_REASON_MIN = 12;
 
-// Minimal shapes of the Stripe objects we read back. No Stripe SDK in the
-// Worker (see billing.ts::stripeCall) — we hand-type only the fields we touch.
-interface StripePaymentIntent {
-  id: string;
-  amount: number;
-  amount_received?: number;
-  currency: string;
-  latest_charge?: string | null;
-  metadata?: Record<string, string>;
-}
-interface StripeCharge {
-  id: string;
-  amount: number;
-  amount_captured?: number;
-  amount_refunded?: number;
-  currency: string;
-  paid?: boolean;
-  refunded?: boolean;
-  payment_intent?: string | null;
-  metadata?: Record<string, string>;
-  created?: number;
-  description?: string | null;
-}
+// D5037 — the target, the policy and the review live in services/refundReview.ts, read the same way by the review
+// (which moves nothing) and by the write below.
 
-// Incorporation statuses past which filing has begun → no refund (Task #11
-// policy). 'paid' is intentionally still refundable: the packet pipeline is
-// enqueued on 'paid' but the no-refund line is drawn once filing actually
-// progresses (packet_processing and beyond).
-const INCORPORATION_FILED_STATUSES = new Set([
-  'packet_processing', 'packet_ready', 'filed', 'submitted', 'in_review', 'completed', 'active',
-]);
+/** A refund's audit-safe summary of the review it was confirmed from. */
+const reviewSummary = (t: RefundTarget, requested: number) => ({
+  gross_cents: fromStripe(t.gross, t.currency),
+  refunded_before_cents: fromStripe(t.refunded, t.currency),
+  remaining_before_cents: fromStripe(t.remaining, t.currency),
+  requested_cents: fromStripe(requested, t.currency),
+  full: requested === t.remaining,
+});
 
-// Session cancellation window — refunds for an advisorship/expert booking are
-// only allowed when the session is still at least this far in the future.
-const SESSION_CANCEL_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-interface RefundPolicyDecision {
-  allowed: boolean;
-  // Why a refund is blocked (only set when allowed=false), machine-readable.
-  reason?: string;
-  // Product family the decision was made against, for audit/UX context.
-  kind: string;
-  // Free-text note carried into the audit row (e.g. proration guidance).
-  note?: string;
-  // Charge total in minor units, used downstream for proportional clawback.
-  chargeAmountCents?: number | null;
-  // Resolved PaymentIntent id (so the clawback can key off it).
-  paymentIntentId?: string | null;
-  // D5029: the charge's ISO 4217 currency when Stripe named a listed one; null when it could not be read. A refund
-  // amount typed in major units is converted in THIS currency, and is refused when it is null.
-  currency?: string | null;
-}
-
-/**
- * Encode the per-product refund policy (Task #11):
- *   - incorporation  → no refund once filing has begun
- *   - expert_booking → 24h cancellation window (must be >24h before the session)
- *   - subscription   → allowed; refunds should be prorated (admin sets amount)
- *   - everything else → allowed
- *
- * Resolves product context from the PaymentIntent/charge `metadata.kind` and a
- * D1 lookup of the owning order row. Never throws — on any lookup failure it
- * fails OPEN (allowed) with a note, because the admin retains override and the
- * money-movement guardrails (step-up, audit) still apply.
- */
-async function evaluateRefundPolicy(
-  env: Env,
-  opts: { paymentIntentId?: string; chargeId?: string },
-): Promise<RefundPolicyDecision> {
-  const seen: { currency: string | null } = { currency: null };
-  const decision = await decideRefundPolicy(env, opts, seen);
-  return { ...decision, currency: seen.currency };
-}
-
-async function decideRefundPolicy(
-  env: Env,
-  opts: { paymentIntentId?: string; chargeId?: string },
-  seen: { currency: string | null },
-): Promise<RefundPolicyDecision> {
-  let pi: StripePaymentIntent | null = null;
-  let charge: StripeCharge | null = null;
-  try {
-    if (opts.paymentIntentId) {
-      pi = await stripeCall<StripePaymentIntent>(env, `/payment_intents/${encodeURIComponent(opts.paymentIntentId)}`, {}, { method: 'GET' });
-    } else if (opts.chargeId) {
-      charge = await stripeCall<StripeCharge>(env, `/charges/${encodeURIComponent(opts.chargeId)}`, {}, { method: 'GET' });
-      if (charge?.payment_intent) {
-        pi = await stripeCall<StripePaymentIntent>(env, `/payment_intents/${encodeURIComponent(charge.payment_intent)}`, {}, { method: 'GET' });
-      }
-    }
-  } catch (e) {
-    // Couldn't read the object — fail open but say so. The refund still needs
-    // step-up + audit, and the admin can proceed knowingly.
-    return { allowed: true, kind: 'unknown', note: `policy_lookup_failed:${(e as Error).message.slice(0, 80)}` };
-  }
-
-  seen.currency = currencyCode(String(charge?.currency ?? pi?.currency ?? '').toUpperCase());
-  const meta = pi?.metadata || charge?.metadata || {};
-  const kind = (meta.kind || '').toLowerCase();
-  const paymentIntentId = pi?.id || charge?.payment_intent || opts.paymentIntentId || null;
-  const chargeAmountCents = (charge?.amount ?? pi?.amount ?? null);
-
-  // --- Incorporation: no refund after filing has begun. ------------------
-  if (kind === 'incorporation') {
-    let status: string | null = null;
-    try {
-      const incId = meta.incorporation_id ? Number(meta.incorporation_id) : null;
-      const r = incId
-        ? await env.DB.prepare(`SELECT status FROM incorporations WHERE id = ? LIMIT 1`).bind(incId).first<{ status: string }>()
-        : (paymentIntentId
-          ? await env.DB.prepare(`SELECT status FROM incorporations WHERE stripe_payment_intent = ? LIMIT 1`).bind(paymentIntentId).first<{ status: string }>()
-          : null);
-      status = r?.status ?? null;
-    } catch { /* table missing in dev — fail open below */ }
-    if (status && INCORPORATION_FILED_STATUSES.has(status.toLowerCase())) {
-      return { allowed: false, reason: `incorporation_filed:${status}`, kind, chargeAmountCents, paymentIntentId };
-    }
-    return { allowed: true, kind, note: status ? `incorporation_status:${status}` : 'incorporation_status:unknown', chargeAmountCents, paymentIntentId };
-  }
-
-  // --- Expert booking: 24h cancellation window. --------------------------
-  if (kind === 'expert_booking') {
-    try {
-      const bid = meta.booking_id ? Number(meta.booking_id) : null;
-      const r = bid
-        ? await env.DB.prepare(`SELECT scheduled_at FROM expert_bookings WHERE id = ? LIMIT 1`).bind(bid).first<{ scheduled_at: string | null }>()
-        : (paymentIntentId
-          ? await env.DB.prepare(`SELECT scheduled_at FROM expert_bookings WHERE stripe_payment_intent_id = ? LIMIT 1`).bind(paymentIntentId).first<{ scheduled_at: string | null }>()
-          : null);
-      const scheduledAt = r?.scheduled_at ? Date.parse(r.scheduled_at) : NaN;
-      if (Number.isFinite(scheduledAt)) {
-        if (scheduledAt - Date.now() < SESSION_CANCEL_WINDOW_MS) {
-          return { allowed: false, reason: 'session_cancel_window_passed', kind, chargeAmountCents, paymentIntentId };
-        }
-      }
-    } catch { /* table missing in dev — fail open below */ }
-    return { allowed: true, kind, note: 'session_within_cancel_window', chargeAmountCents, paymentIntentId };
-  }
-
-  // --- Subscriptions: allowed; refunds should be prorated. ---------------
-  if (kind === 'tier' || kind === 'investor' || kind === 'mi_pro' || kind === 'subscription') {
-    return { allowed: true, kind, note: 'subscription_refund_should_be_prorated', chargeAmountCents, paymentIntentId };
-  }
-
-  return { allowed: true, kind: kind || 'unknown', chargeAmountCents, paymentIntentId };
-}
-
-// BLOCK-PAY-02 — POST /api/admin/billing/refund
+// D5037 — POST /api/admin/billing/refund/review — LOOK UP AND REVIEW. MOVES NO MONEY.
 //
-// Body accepts EXACTLY ONE of `payment_intent` / `charge`, an optional
-// `amount` (positive integer minor units → partial refund; omit for a full
-// refund), a REQUIRED free-text `reason` (D224), an optional `stripe_reason`
-// (Stripe's closed enum), and an optional `target_user_id` for audit linkage.
-// On success writes one audit entry through `logAdminAction`
-// (action='billing_refund') capturing the refund id +
-// status, and returns the refund summary.
+// Body: exactly one of `payment_intent` / `charge`, and optionally `amount` (Stripe minor units) or `amount_major`
+// (what a person typed, read in the charge's own currency, D5029). Answers what the operator must see before
+// confirming: the payment's identifiers, the customer and the account it maps to, gross, refunded to date, what is
+// left, the requested amount and whether it is the whole of it, the product policy (allowed, blocked or unavailable)
+// with its note and whether an override is needed, and the referral clawback it would cause. With them, a
+// `review_token` the refund below requires: signed over these facts, for this admin, for ten minutes.
 //
-// D224 — A REFUND IS HQ'S GOVERNED ACTION. It moves money out of HQ's Stripe
-// account, and until D224 any admin holding a TOTP session and a fresh step-up
-// could issue one: the D133 class, where a power that belongs to the one
-// holder was reachable by every admin. `requireSuperAdminWriteBar` keeps the
-// two checks it already had (TOTP-minted session, recent step-up) and adds the
-// elevation last, in the order `POST /impersonate` checks them. On a branch it
-// refuses with "HQ only": the Stripe account this route drives is HQ's.
+// Super admin, as the refund is. No step-up: it is a read, and the step-up guards the confirmation, where money moves.
+// No audit row: nothing changed. Stripe is only ever GET here.
+adminBilling.post('/refund/review', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const built = await buildRefundReview(c.env, admin.id, body as Record<string, unknown>);
+  if (!built.ok) {
+    return c.json({ error: built.message, code: built.code, ...(('extra' in built && built.extra) || {}) }, built.status);
+  }
+  return c.json({ ok: true, review: built.review, review_token: built.review_token });
+});
+
+// BLOCK-PAY-02 — POST /api/admin/billing/refund — CONFIRM A REVIEWED REFUND.
 //
-// THE REASON IS REQUIRED TEXT (REFUND_REASON_MIN characters or more), checked
-// before the policy read and before Stripe is called, so a refused request
-// moves nothing. A Stripe enum value alone ("duplicate") still satisfies
-// Stripe's own field, but it is not the reason: the canvas's line is that
-// "customer request" explains nothing to the auditor reading it in a year.
+// D5037: THE TARGET AND THE AMOUNT COME FROM THE REVIEW, never from this body. The body carries the `review_token`
+// `/refund/review` issued, a REQUIRED written `reason` (D224), and, when the review's policy was blocked or
+// unavailable, `override_policy: true` with a written `override_reason`. Optional: `stripe_reason` (Stripe's closed
+// enum), `target_user_id` for audit linkage, `idempotency_key`. A body that names a target or an amount is refused:
+// the operator confirms what they reviewed, or reviews again.
+//
+// BEFORE STRIPE IS ASKED TO REFUND, the write re-reads the target and re-decides the policy with the same code the
+// review used, and refuses (`review_stale`) when either moved: another refund landed, or the policy changed. A
+// requested amount above what is left is refused; it cannot be, since the review refused it and the remaining has not
+// moved, but the check is here so the write does not lean on the review alone.
+//
+// D224 — A REFUND IS HQ'S GOVERNED ACTION. `requireSuperAdminWriteBar` keeps the TOTP session, the recent step-up and
+// the Super Admin elevation, checked first, in the order `POST /impersonate` checks them. On a branch it refuses with
+// "HQ only". The reason is checked before anything else is read, so a refused request moves nothing.
+//
+// IDEMPOTENT. The key is the caller's, or one derived from the review, so a double click or a retry of one confirmed
+// review is one refund, and a second refund of the same charge needs a second review.
 adminBilling.post('/refund', async (c) => {
   const adminUser = await requireSuperAdminWriteBar(c);
 
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-  const paymentIntent = typeof body.payment_intent === 'string' ? body.payment_intent.trim() : '';
-  const charge = typeof body.charge === 'string' ? body.charge.trim() : '';
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   const targetUserId = Number.isInteger(body.target_user_id) ? (body.target_user_id as number) : null;
   const clientIdemKey = typeof body.idempotency_key === 'string' ? body.idempotency_key.trim().slice(0, 255) : '';
   const overridePolicy = body.override_policy === true;
+  const overrideReason = typeof body.override_reason === 'string' ? body.override_reason.trim() : '';
 
-  // Require exactly one charge identifier — Stripe rejects both-at-once and a
-  // refund with neither is meaningless. Fail explicitly rather than guessing.
-  if ((paymentIntent && charge) || (!paymentIntent && !charge)) {
-    return c.json({ error: 'Provide exactly one of payment_intent or charge', code: 'invalid_target' }, 400);
-  }
   if (reason.length < REFUND_REASON_MIN) {
     return c.json({
       error: `A refund needs a written reason of at least ${REFUND_REASON_MIN} characters, saying why this money goes back.`,
       code: 'reason_required',
     }, 400);
   }
-
-  // Optional partial-refund amount, in ONE of two forms. `amount`: positive integer minor units of the charge's
-  // currency, as Stripe takes it (the form callers used before D5029). `amount_major`: what a person typed, in
-  // major units ("25.50", "2500"), converted below in the charge's own currency.
-  let amount: number | null = null;
-  const amountMajor = body.amount_major == null ? null : String(body.amount_major).trim();
-  if (body.amount != null && amountMajor !== null) {
-    return c.json({ error: 'Send amount or amount_major, not both', code: 'invalid_amount' }, 400);
+  const verified = await verifyReview(c.env, body.review_token, adminUser.id);
+  if (!verified.ok) {
+    return c.json({ error: verified.message, code: verified.code }, verified.code === 'review_required' ? 400 : 409);
   }
-  if (body.amount != null) {
-    const n = Number(body.amount);
-    if (!Number.isSafeInteger(n) || n <= 0) {
-      return c.json({ error: 'amount must be a positive integer in minor units', code: 'invalid_amount' }, 400);
+  const claims = verified.claims;
+  for (const k of ['payment_intent', 'charge', 'amount', 'amount_major']) {
+    if (body[k] != null) {
+      return c.json({ error: 'The payment and the amount are the ones you reviewed. To change either, look the payment up again.', code: 'review_fixed', field: k }, 400);
     }
-    amount = n;
   }
 
-  // Encode the per-product refund policy. A blocked decision stops the refund
-  // UNLESS the admin explicitly overrides — the override is recorded in Stripe
-  // metadata + the audit row so a forced refund is never silent.
-  const policy = await evaluateRefundPolicy(c.env, {
-    paymentIntentId: paymentIntent || undefined,
-    chargeId: charge || undefined,
-  });
-  if (!policy.allowed && !overridePolicy) {
+  // Re-read the target and re-decide the policy, with the code the review used.
+  const resolved = await resolveRefundTarget(c.env, claims.pi ? { paymentIntentId: claims.pi } : { chargeId: claims.ch });
+  if (!resolved.ok) return c.json({ error: resolved.message, code: resolved.code }, resolved.status);
+  const t = resolved.target;
+  const policy = await decideRefundPolicy(c.env, t);
+  if (t.charge !== claims.ch || t.remaining !== claims.rem || t.currency !== claims.cur || policy.state !== claims.ps) {
     return c.json({
-      error: 'Refund blocked by product policy',
-      code: 'refund_policy_blocked',
-      reason: policy.reason,
-      kind: policy.kind,
+      error: 'The payment changed since you reviewed it, so nothing was refunded. Look it up again and check the new figures.',
+      code: 'review_stale',
+      now: { remaining_cents: fromStripe(t.remaining, t.currency), currency: t.currency, policy_state: policy.state },
     }, 409);
   }
+  const requested = claims.req ?? t.remaining;
+  if (t.remaining <= 0) return c.json({ error: 'Nothing is left to refund on this charge.', code: 'nothing_refundable' }, 409);
+  if (requested > t.remaining) return c.json({ error: 'That is more than is left to refund on this charge.', code: 'over_remaining' }, 409);
 
-  // D5029: a typed major-unit amount is read in the charge's currency, exactly, or refused. No currency read from
-  // Stripe means no conversion: it is never guessed as two decimals.
-  if (amountMajor !== null) {
-    if (!policy.currency) {
-      return c.json({
-        error: 'The charge\'s currency could not be read from Stripe, so the amount cannot be converted to its minor unit. Nothing was refunded.',
-        code: 'currency_unknown',
-      }, 409);
+  // Blocked and unavailable both need the Super Admin's explicit, written override. Unavailable is never read as
+  // allowed: nobody decided it.
+  const overridden = policy.state !== 'allowed';
+  if (overridden) {
+    if (!overridePolicy) {
+      return c.json(policy.state === 'blocked'
+        ? { error: 'Refund blocked by product policy', code: 'refund_policy_blocked', reason: policy.reason, kind: policy.kind, note: policy.note }
+        : { error: 'The refund policy for this payment could not be resolved. Refunding it needs an explicit override with a written reason.', code: 'policy_unavailable', reason: policy.reason, kind: policy.kind, note: policy.note }, 409);
     }
-    const parsed = parseMinor(amountMajor, policy.currency);
-    if (!parsed.ok || parsed.minor <= 0) {
+    if (overrideReason.length < REFUND_REASON_MIN) {
       return c.json({
-        error: parsed.ok ? 'The amount must be positive.' : parsed.message,
-        code: 'invalid_amount',
-        currency: policy.currency,
-        decimals: exponentOf(policy.currency),
+        error: `Overriding the refund policy needs its own written reason of at least ${REFUND_REASON_MIN} characters.`,
+        code: 'override_reason_required',
       }, 400);
-    }
-    amount = parsed.minor;
-  }
-  // Stripe's own quirks at the boundary, not the app's units: a three-decimal currency is refunded in multiples of
-  // ten of its minor unit, and ISK and UGX (no decimals in ISO 4217) are sent to Stripe as two-decimal amounts.
-  let stripeAmount: number | null = amount;
-  if (amount != null && policy.currency && amountMajor !== null) {
-    const exp = exponentOf(policy.currency);
-    if (exp === 3 && amount % 10 !== 0) {
-      return c.json({
-        error: `Stripe refunds ${policy.currency} in steps of 0.010: ${amountMajor} is not a multiple of that.`,
-        code: 'invalid_amount',
-        currency: policy.currency,
-      }, 400);
-    }
-    if (policy.currency === 'ISK' || policy.currency === 'UGX') stripeAmount = amount * 100;
-    if (stripeAmount != null && !Number.isSafeInteger(stripeAmount)) {
-      return c.json({ error: 'That amount is larger than can be sent to Stripe exactly.', code: 'invalid_amount' }, 400);
     }
   }
 
   const form: Record<string, string> = {};
-  if (paymentIntent) form.payment_intent = paymentIntent;
-  else form.charge = charge;
-  if (stripeAmount != null) form.amount = String(stripeAmount);
-  // Stripe's own `reason` is its closed enum, taken from `stripe_reason` when
-  // the caller names one (or from `reason` when that is itself an enum value,
-  // the shape callers used before D224). The written reason goes to metadata.
+  if (claims.pi) form.payment_intent = claims.pi;
+  else form.charge = claims.ch;
+  form.amount = String(requested);
+  // Stripe's own `reason` is its closed enum, taken from `stripe_reason` when the caller names one (or from `reason`
+  // when that is itself an enum value, the shape callers used before D224). The written reason goes to metadata.
   const stripeReason = typeof body.stripe_reason === 'string' ? body.stripe_reason.trim() : '';
   if (STRIPE_REFUND_REASONS.has(stripeReason)) form.reason = stripeReason;
   else if (STRIPE_REFUND_REASONS.has(reason)) form.reason = reason;
-  // Always stamp who/why into Stripe metadata so the refund is traceable back
-  // to an Axal admin from the Stripe dashboard, even if it predates this row.
+  // Who and why, on the refund in Stripe, so it is traceable from the dashboard too.
   form['metadata[admin_user_id]'] = String(adminUser.id);
   if (targetUserId != null) form['metadata[target_user_id]'] = String(targetUserId);
   form['metadata[admin_reason]'] = reason.slice(0, 500);
   form['metadata[product_kind]'] = policy.kind;
-  // Record a forced refund (policy said no, admin overrode) so it's auditable
-  // from the Stripe dashboard, not just our DB.
-  if (!policy.allowed && overridePolicy) {
+  form['metadata[policy_state]'] = policy.state;
+  if (overridden) {
     form['metadata[policy_override]'] = '1';
+    if (policy.state === 'unavailable') form['metadata[policy_unavailable]'] = '1';
     if (policy.reason) form['metadata[policy_reason]'] = policy.reason.slice(0, 200);
+    form['metadata[override_reason]'] = overrideReason.slice(0, 500);
   }
 
-  // Idempotency: prefer a caller-supplied key (lets a UI mint one stable key
-  // per user-intent for true double-submit protection). Absent that, derive a
-  // deterministic key from admin + target + amount so an accidental retry /
-  // double-click collapses to ONE refund. A genuinely-intended second refund of
-  // the same amount on the same charge can pass an explicit `idempotency_key`.
-  const idempotencyKey = clientIdemKey
-    || `refund:${adminUser.id}:${paymentIntent || charge}:${amount ?? 'full'}`;
+  const idempotencyKey = clientIdemKey || await reviewIdempotencyKey(claims);
 
   let refund: StripeRefund;
   try {
@@ -347,9 +191,8 @@ adminBilling.post('/refund', async (c) => {
     if (msg === 'stripe_not_configured') {
       return c.json({ error: 'Stripe is not configured', code: 'stripe_not_configured' }, 503);
     }
-    // stripeCall throws `stripe_error:<status>:<body>` — surface the upstream
-    // status + message so the admin sees WHY (charge already refunded, unknown
-    // id, etc.) instead of a generic 500. Explicit failure over silent fallback.
+    // stripeCall throws `stripe_error:<status>:<body>` — surface the upstream status and message so the admin sees
+    // WHY, instead of a generic 500. Explicit failure over silent fallback.
     const m = /^stripe_error:(\d+):([\s\S]*)$/.exec(msg);
     const upstreamStatus = m ? Number(m[1]) : 502;
     const detail = m ? m[2] : msg;
@@ -357,20 +200,12 @@ adminBilling.post('/refund', async (c) => {
     return c.json({ error: 'Stripe refund failed', code: 'stripe_error', upstream_status: upstreamStatus, detail }, status);
   }
 
-  // Clawback the referral commission tied to this purchase (Task #11). The
-  // customer refund has already landed, so this is best-effort: it never
-  // throws and a failure is surfaced + audited rather than rolling back the
-  // refund. Reverses the Connect transfer proportionally for a partial refund.
-  const clawbackPaymentIntent = refund.payment_intent || policy.paymentIntentId || paymentIntent || null;
-  // The clawback sizes each reversal proportionally to THIS refund's share of
-  // the original charge, and finalizes the ledger only once the charge is FULLY
-  // refunded. Both need authoritative figures, so fetch the charge AFTER the
-  // refund: `amount` is the proportional denominator, `amount_refunded` is the
-  // cumulative figure (covers sequential partial refunds correctly). Never
-  // infer full-vs-partial from the request shape — a no-amount "refund the
-  // remaining balance" call is a partial in money terms once a prior partial
-  // refund exists.
-  let chargeAmountCents = policy.chargeAmountCents ?? null;
+  // Clawback the referral commission tied to this purchase (Task #11). The customer refund has already landed, so
+  // this is best-effort: it never throws, and a failure is surfaced and audited rather than rolling the refund back.
+  // The charge is re-read AFTER the refund: `amount` is the proportional denominator and `amount_refunded` the
+  // cumulative figure, so sequential partial refunds reverse their share correctly.
+  const clawbackPaymentIntent = refund.payment_intent || t.payment_intent || null;
+  let chargeAmountCents: number | null = t.gross;
   let chargeRefundedToDateCents: number | null = null;
   if (refund.charge) {
     try {
@@ -396,12 +231,8 @@ adminBilling.post('/refund', async (c) => {
     }
   }
 
-  // Audit AFTER the refund lands so we capture the real refund id + status.
-  // D224: through `logAdminAction` (D159), which writes the `admin_audit_log`
-  // row HQ's governance feed and the Revenue refunds list read, plus the
-  // hashed-actor `activity_logs` row, each best-effort — the money has already
-  // moved, so a logging failure must never fail the request or imply the
-  // refund did not happen. One call, so one row in each store per refund.
+  // Audit AFTER the refund lands so the row carries the real refund id and status. D224: through `logAdminAction`
+  // (D159), one call, so one row in each store per refund; best-effort, because the money has already moved.
   await logAdminAction(c.env, adminUser.id, adminUser.email || '', 'billing_refund', {
     refund_id: refund.id,
     status: refund.status,
@@ -412,10 +243,13 @@ adminBilling.post('/refund', async (c) => {
     reason,
     target_user_id: targetUserId,
     product_kind: policy.kind,
-    policy_allowed: policy.allowed,
-    policy_reason: policy.reason || null,
-    policy_override: !policy.allowed && overridePolicy,
-    policy_note: policy.note || null,
+    policy_state: policy.state,
+    policy_allowed: policy.state === 'allowed',
+    policy_reason: policy.reason,
+    policy_override: overridden,
+    override_reason: overridden ? overrideReason : null,
+    policy_note: policy.note,
+    review: reviewSummary(t, requested),
     clawback,
   });
 
@@ -431,10 +265,11 @@ adminBilling.post('/refund', async (c) => {
     },
     policy: {
       kind: policy.kind,
-      allowed: policy.allowed,
-      reason: policy.reason || null,
-      overridden: !policy.allowed && overridePolicy,
-      note: policy.note || null,
+      state: policy.state,
+      allowed: policy.state === 'allowed',
+      reason: policy.reason,
+      overridden,
+      note: policy.note,
     },
     clawback,
   });

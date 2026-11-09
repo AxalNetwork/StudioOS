@@ -25,6 +25,46 @@ const PREVIEW_STEPS = Object.freeze({
 
 export const RUNBOOK_HREF = 'https://github.com/AxalNetwork/StudioOS/blob/main/documentation/operations/D1_RECOVERY.md';
 export const DRILL_RUNS_HREF = 'https://github.com/AxalNetwork/StudioOS/actions/workflows/dr-drill.yml';
+/** #5046: the nightly D1 export job (`.github/workflows/backup-d1.yml`), where each export's own log lives. */
+export const BACKUP_RUNS_HREF = 'https://github.com/AxalNetwork/StudioOS/actions/workflows/backup-d1.yml';
+
+/** #5046: the drill run that wrote the record, when the record names one; never a guessed link. */
+export function drillRunHref(drill) {
+  const id = drill && drill.available === true ? drill.run_id : null;
+  return (typeof id === 'number' && Number.isSafeInteger(id) && id > 0) || (typeof id === 'string' && /^\d{1,20}$/.test(id))
+    ? `https://github.com/AxalNetwork/StudioOS/actions/runs/${id}` : null;
+}
+
+/** #5046: the exact figure behind a humanised size ("290,880,712 bytes"), or null. */
+export function exactBytes(bytes) {
+  return typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0 ? `${Math.round(bytes).toLocaleString('en-US')} bytes` : null;
+}
+
+/** #5046: "3 hours ago" for an export, from the heartbeat's own age; null when it is not recorded. */
+export function exportAge(hb) {
+  return hb && hb.available === true && typeof hb.age_hours === 'number' && hb.age_hours >= 0
+    ? (hb.age_hours < 1 ? 'less than an hour ago' : `${Math.floor(hb.age_hours)} hour${Math.floor(hb.age_hours) === 1 ? '' : 's'} ago`) : null;
+}
+
+/**
+ * #5046: failover is a capability the platform does not have, so it is
+ * Unsupported, never "Not recorded". The server names it in `backup_dr.
+ * not_recorded` (D481); its reason is the technical detail, behind a
+ * disclosure. Absent from the payload, the card still says Unsupported: no
+ * standby exists in this architecture (CLAUDE.md: one Worker, one D1).
+ */
+export const FAILOVER_ITEM = 'Failover test';
+export function failoverOf(block) {
+  const item = Array.isArray(block?.not_recorded) ? block.not_recorded.find((n) => n && n.what === FAILOVER_ITEM) : null;
+  return {
+    state: 'unsupported',
+    label: 'Not supported',
+    line: 'No standby environment is configured. Recovery relies on backup and restore, which the restore drill tests.',
+    detail: item && typeof item.reason === 'string' ? item.reason : null,
+  };
+}
+/** The server's other named absences, without failover, which the Failover card now carries. */
+export const otherNotRecorded = (block) => (Array.isArray(block?.not_recorded) ? block.not_recorded.filter((n) => n && n.what !== FAILOVER_ITEM) : []);
 /** `.github/workflows/dr-drill.yml`'s schedule, in words. */
 export const DRILL_SCHEDULE = 'Monthly, on the 1st at 06:00 UTC, or run it now from GitHub Actions';
 
@@ -148,7 +188,8 @@ export function heartbeatState(hb, what = 'export') {
     if (hb.state === 'never_written') return { state: 'action_required', label: 'Never written', line: hb.reason || `No ${what} has been recorded.` };
     return { state: 'unavailable', label: hb.state === 'invalid' ? 'Not valid evidence' : 'Unavailable', line: hb.reason || null };
   }
-  const age = typeof hb.age_hours === 'number' ? ago(hb.age_hours, 'hour') : null;
+  // #5046: whole hours, as the backup card says them ("3 hours ago", never "3.4 hours ago").
+  const age = exportAge(hb);
   if (!hb.fresh) return { state: 'stale', label: `Stale · ${age || 'age unknown'}`, line: `Older than its ${hb.stale_after_hours}-hour limit.` };
-  return { state: 'healthy', label: `Present · ${age || 'fresh'}`, line: null };
+  return { state: 'healthy', label: `Fresh · ${age || 'within its limit'}`, line: null };
 }
