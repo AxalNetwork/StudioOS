@@ -19,7 +19,7 @@ import { investorProjectIds, investorActiveCompany } from './_investorProjectSco
 import { canAccessProject, getMemberProjectIds } from '../services/projectAccess';
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
-  ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
+  ASK_AGAIN_DAYS, ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
   draftLines, landReply, noMetrics, payloadFor, periodFacts,
   type Audience, type AskKind, type Snapshot, type ShippedItem,
 } from '../services/updateShare';
@@ -833,15 +833,61 @@ r.post('/asks/:askUid/ask-again', async (c) => {
     if (refused) return refused;
     const n = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM update_ask_replies WHERE ask_id = ?').bind(ask.id).first<{ n: number }>();
     if (!canAskAgain(ask.sent_at, Number(n?.n ?? 0), ask.asked_again_at)) {
-      return c.json({ detail: 'An ask can be asked again once it has had no reply for 14 days' }, 409);
+      return c.json({ detail: `An ask can be asked again once it has had no reply for ${ASK_AGAIN_DAYS} days` }, 409);
     }
+    // #4645 (D4645): CLAIM THE COOLDOWN BEFORE SENDING, and claim it in SQL.
+    //
+    // The cooldown was checked above and then written AFTER the whole
+    // recipient loop, by id and unconditionally. Two presses at once — a
+    // double click, a retried request — both passed the check above and both
+    // notified every recipient, and the second write overwrote the first's
+    // timestamp. Worse, a `notify` that threw part-way through the loop left
+    // `asked_again_at` unset, so a retry re-sent to everyone who had already
+    // been told: the recipients at the front of the list got the reminder
+    // twice, and nothing recorded how far the first attempt had got.
+    //
+    // The claim is now the same predicate `canAskAgain` applies, written into
+    // the UPDATE's WHERE clause and bound. Only the request whose write
+    // changes a row sends anything; the loser gets the same 409 as a request
+    // inside the cooldown, which is what it is. `changes()` is the lock.
+    const claimedAt = nowIso();
+    const earliest = new Date(Date.now() - ASK_AGAIN_DAYS * 86_400_000).toISOString();
+    const claim = await c.env.DB.prepare(
+      `UPDATE update_asks SET asked_again_at = ?
+        WHERE id = ? AND (asked_again_at IS NULL OR asked_again_at <= ?)
+          AND NOT EXISTS (SELECT 1 FROM update_ask_replies WHERE ask_id = update_asks.id)`,
+    ).bind(claimedAt, ask.id, earliest).run();
+    if (Number((claim as any)?.meta?.changes ?? 0) === 0) {
+      return c.json({ detail: 'This ask was asked again a moment ago. Reload it to see where it stands.' }, 409);
+    }
+    // The recipients are read AFTER the claim, so the list is the one current
+    // at the moment this reminder is actually sent rather than one read before
+    // a wait (#4645: "current recipient and record identities after data refresh").
     const rcps = await c.env.DB.prepare('SELECT DISTINCT user_id FROM update_recipients WHERE update_id = ? AND user_id IS NOT NULL').bind(ask.update_id).all<{ user_id: number }>();
-    for (const x of rcps.results || []) {
-      await notify(c.env, { userId: x.user_id, type: 'followed_entity_news', title: 'Asked again', body: ask.text,
-        link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid }, category: 'proactive_nudges' });
+    const recipients = (rcps.results || []).map((x) => Number(x.user_id));
+    // Per-recipient outcome. `notify` answers with the inbox row's id, or null
+    // when it could not deliver, and never throws — so one recipient's failure
+    // cannot cost the rest their reminder, and the response can be reconciled
+    // against the list instead of asserting that all of them were reached.
+    let notified = 0;
+    const failed: number[] = [];
+    for (const userId of recipients) {
+      const id = await notify(c.env, { userId, type: 'followed_entity_news', title: 'Asked again', body: ask.text,
+        link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid }, category: 'proactive_nudges' })
+        .catch(() => null);
+      if (id == null) failed.push(userId); else notified += 1;
     }
-    await c.env.DB.prepare('UPDATE update_asks SET asked_again_at = ? WHERE id = ?').bind(nowIso(), ask.id).run();
-    return c.json({ uid: ask.uid, asked_again: (rcps.results || []).length });
+    return c.json({
+      uid: ask.uid, asked_again_at: claimedAt,
+      // `asked_again` was the length of the recipient list — a claim of
+      // delivery the handler never checked. These three are what happened.
+      recipients: recipients.length, notified, failed: failed.length,
+      // What this guarantees, stated as narrowly as it is true: the cooldown
+      // claim makes one reminder per ask per window, and each recipient gets
+      // at most one inbox row from this request. Delivery beyond the inbox
+      // (email, push) is the notify pipeline's, and is not exactly-once.
+      delivery: 'in_app inbox rows written here; onward channels are the notify pipeline\'s and are not guaranteed exactly once',
+    });
   } catch (e) { return mapError(c, e); }
 });
 
