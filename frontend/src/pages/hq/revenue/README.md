@@ -1,9 +1,9 @@
-# pages/hq/revenue — Revenue v2, the read-only cockpit (D5039; #5039 part 1)
+# pages/hq/revenue — Revenue v2: the cockpit and its governed receivable actions (D5039; #5039 parts 1 and 2)
 
 The parts of HQ › Revenue at `/admin/revenue`, drawn to the landed canvas
 (`design/incoming/Revenue v2 Page.dc.html` and `Revenue v2 · Boards.dc.html`,
 boards RV01 to RV15). `../RevenuePage.jsx` is the host: it makes the page's
-seven reads, keeps the Period and the Scope, lays the parts out in canvas
+six reads, keeps the Period and the Scope, lays the parts out in canvas
 order and re-exports their names, so callers and tests still import from the
 page. Nothing here fetches except through the callbacks the host passes.
 
@@ -14,16 +14,21 @@ page. Nothing here fetches except through the callbacks the host passes.
 | `RevenueHeader.jsx` | The header (Period, Scope, read time, the “N of M sources complete” button) and `DataCoverageDrawer` (RV11), where each explanation lives once. |
 | `ExecutiveSummary.jsx` | The financial position (the four ledger figures Not recorded once, then per native currency the contracted run-rate, refunds and open disputes, then the streams without a full ledger) and `NeedsAttention`, which draws nothing when nothing needs action. |
 | `RevenueStreams.jsx` | `RevenueStreams` (Coverage replaces Read; the licence row is a contracted run-rate), `RevenueTrend` (an honest no-series state) and margin-first AI economics (`AiEconomics`, also exported as D5027's `TokenPnl`). |
-| `Receivables.jsx` | Receivables from the statements HQ drew (table at 1024px and up, cards below), the D514 policy state `StatementDrawHeld`, and `StatementDrawer` (RV05). |
-| `StatementActions.jsx` | Today's statement entry (D453, D458, D514): the payload checks and `StatementActions`, moved here unchanged and mounted as the drawer's footer. |
+| `Receivables.jsx` | Receivables from the statements HQ drew (table at 1024px and up, cards below), the D514 policy state `StatementDrawHeld`, and `StatementDrawer` (RV05), which swaps its body for an action's flow and holds Escape and × while its request is out. |
+| `StatementActions.jsx` | The drawer's footer: Record payment…, Mark issued… and Void… where the statement offers them (with the reason where it does not), and Record dispute… (D514's PATCH); plus the draw and dispute payload checks. |
+| `StatementActionFlow.jsx` | One governed action (part 2, RV05b): Prepare → Review (before → after) → Confirm → Authenticate → Receipt for a payment, Prepare → Review → Confirm → Receipt for Mark issued, Scope → Review → Authenticate → Result for Void; `FlowOutcome` draws the six outcomes. |
+| `statementActionModel.js` | The flows' pure rules: `actionAvailability`, `paymentPreview` and `statusPreview` (before → after, unknown never 0), `actionBody` (reason, revision, key), `classifyOutcome` (settled, partial, applied, refused, stale, unknown) and `createActionRunner` (no double submit; a retry resends the same key). |
 | `Subsidiaries.jsx` | Reporting health first, then the period's statement per licence; Not drawn and Not reported, never 0. |
 | `BillingExceptions.jsx` | Open disputes and the refunds HQ issued, each with its own loading, unreadable and empty state; today's refund form (`RefundForm`, D224, behind the step-up) unchanged beneath it. |
-| `Promotions.jsx` | Promotions as badge columns (HQ saved, Branch synced, Enforced, Issued, Remaining, Reporting) with the no-ceiling state, and the D228 ceiling editor unchanged. |
+| `Promotions.jsx` | Promotions as badge columns (HQ saved, Branch synced, Enforced, Issued, Remaining, Reporting) with the no-ceiling state, the D228 ceiling editor, and `LicencePicker` (part 2): the scoped picker, read when "Set a ceiling…" opens. |
 
-Tested by `frontend/test/hq_revenue_v2_5039.test.mjs` (the cockpit) and the
+Tested by `frontend/test/hq_revenue_v2_5039.test.mjs` (the cockpit),
+`frontend/test/hq_revenue_receivable_actions_5039.test.mjs` (the governed
+actions) and the
 older revenue tests, which read every file here through
 `frontend/test/_revenuePage.mjs`; the Worker's `?period=` by
-`cloudflare-worker/test/admin_revenue_period_5039.test.ts`.
+`cloudflare-worker/test/admin_revenue_period_5039.test.ts`; the actions and
+the picker by `cloudflare-worker/test/statement_actions_5039.test.ts`.
 
 ## Rules
 
@@ -36,4 +41,8 @@ older revenue tests, which read every file here through
 - **An explanation is written once**, as a source's reason in
   `coverageSources`, and every “Why?” opens the drawer at it.
 - **A new part is a new file here**, rendered by `../RevenuePage.jsx`; its
-  pure rules go in `revenueModel.js`. Type is 12px or more.
+  pure rules go in `revenueModel.js`, or in the part's own model file when
+  they are a flow of their own (`statementActionModel.js`). Type is 12px or more.
+- **A write that moves money is governed:** a reason, the revision read, a
+  client idempotency key, the step-up, and an outcome that is never drawn as
+  success unless the Worker said so. No `window.confirm`.

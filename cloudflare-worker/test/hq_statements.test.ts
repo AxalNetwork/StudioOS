@@ -88,12 +88,20 @@ const SCHEMA = `
   CREATE TABLE licence_deployments (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_uid TEXT NOT NULL UNIQUE,
     code TEXT NOT NULL UNIQUE, hostname TEXT NOT NULL, worker_name TEXT NOT NULL, d1_name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'live', rpc_secret_hash TEXT);
+  CREATE TABLE user_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, jti TEXT, factor TEXT,
+    assurance_level TEXT, revoked_at TEXT, step_up_due_at TEXT, last_seen_at TEXT,
+    last_step_up_at TEXT, created_at TEXT DEFAULT (datetime('now')));
 `;
 
 /** Migration 260's three tables, read from the file rather than retyped. */
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION_260 = readFileSync(
   resolve(ROOT, 'cloudflare-worker/sql/migrations/260_subsidiary_statements.sql'), 'utf8',
+);
+// D5039 — the statement revision and the governed-action ledger.
+const MIGRATION_ACTIONS = readFileSync(
+  resolve(ROOT, 'cloudflare-worker/sql/migrations/202611090909_statement_actions.sql'), 'utf8',
 );
 
 function seededDb() {
@@ -103,11 +111,16 @@ function seededDb() {
   // drifted from the shipped DDL would let a column rename pass here and fail
   // in production, which is the one thing this fixture must not do.
   db.exec(MIGRATION_260);
+  db.exec(MIGRATION_ACTIONS);
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(HOLDER, 'admin', 'Sue', 'sue@axal.example');
   u.run(PLAIN, 'admin', 'Pat', 'pat@axal.example');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(HOLDER);
+  // A TOTP session minted now: the write bar's step-up, for the governed payment and void (D5039).
+  for (const id of [HOLDER, PLAIN]) {
+    db.prepare(`INSERT INTO user_sessions (user_id, jti, factor, assurance_level) VALUES (?, ?, 'totp', 'totp')`).run(id, `totp-${id}`);
+  }
 
   const l = db.prepare(
     `INSERT INTO territory_licences
@@ -135,7 +148,7 @@ function statementsApp() {
   const call = async (path: string, init: RequestInit = {}, userId: number | null = HOLDER) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (userId !== null) {
-      const token = await new SignJWT({ user_id: userId, role: 'admin' })
+      const token = await new SignJWT({ user_id: userId, role: 'admin', jti: `totp-${userId}` })
         .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
         .sign(new TextEncoder().encode(JWT_SECRET));
       headers.Authorization = `Bearer ${token}`;
@@ -159,6 +172,25 @@ function statementsApp() {
 
 const draw = (body: Record<string, unknown>): [string, RequestInit] =>
   ['/statements/draw', { method: 'POST', body: JSON.stringify(body) }];
+
+/**
+ * D5039 — a governed action (issue, payments, void) as the drawer sends it:
+ * a reason, the revision the row holds now and a fresh idempotency key.
+ */
+let keySeq = 0;
+async function act(
+  app: { call: (p: string, i?: RequestInit) => Promise<{ status: number; body: any }>; rows: () => any[] },
+  uid: string, kind: 'issue' | 'payments' | 'void', body: Record<string, unknown> = {},
+) {
+  const row = app.rows().find((x) => x.uid === uid);
+  return app.call(`/statements/${uid}/${kind}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      reason: 'Agreed with the subsidiary finance lead', expected_revision: row?.revision ?? 0,
+      idempotency_key: `test-key-${(keySeq += 1)}`, ...body,
+    }),
+  });
+}
 
 /* ------------------------------------------------------------------ *
  * The arithmetic, tested without a database                           *
@@ -290,7 +322,8 @@ test('a licence with no agreed share refuses rather than drawing at 0%', async (
 });
 
 test('a re-draw replaces a draft and refuses anything further', async () => {
-  const { call, report, rows, db } = statementsApp();
+  const app = statementsApp();
+  const { call, report, rows, db } = app;
   // Every stream reported, so the statement is complete and may be issued (D514
   // refuses issuing a floor).
   for (const stream of ['subscriptions', 'licence_fees', 'token_margin']) report(stream, 0);
@@ -307,7 +340,8 @@ test('a re-draw replaces a draft and refuses anything further', async () => {
   assert.equal(rows()[0].gross_cents, 200_000);
 
   // Issued: somebody has seen this figure.
-  const issued = await call(`/statements/${first.body.uid}`, { method: 'PATCH', body: JSON.stringify({ status: 'issued' }) });
+  assert.equal(rows()[0].revision, 1, 'a re-draw did not move the revision a governed action names (D5039)');
+  const issued = await act(app, first.body.uid, 'issue');
   assert.equal(issued.status, 200);
   const third = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
   assert.equal(third.status, 409);
@@ -377,7 +411,8 @@ test('a period filter must be a period', async () => {
 });
 
 test('paid is recorded with who and when, and overpayment refuses', async () => {
-  const { call, report, rows } = statementsApp();
+  const app = statementsApp();
+  const { call, report, rows } = app;
   // Every stream reported so paying the full owed figure is allowed (D458).
   for (const stream of ['subscriptions', 'licence_fees', 'token_margin', 'other']) {
     report(stream, 100_000);
@@ -385,61 +420,60 @@ test('paid is recorded with who and when, and overpayment refuses', async () => 
   const { body } = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
   assert.equal(body.complete, true);
   assert.equal(body.owed_cents, 140_000);
+  assert.equal((await act(app, body.uid, 'issue')).status, 200);
 
-  const over = await call(`/statements/${body.uid}`, {
-    method: 'PATCH', body: JSON.stringify({ paid_cents: 150_000 }),
-  });
+  const over = await act(app, body.uid, 'payments', { amount_cents: 150_000 });
   assert.equal(over.status, 409);
-  assert.equal(over.body.error, 'over_payment');
+  assert.equal(over.body.error, 'over_owed');
   assert.equal(rows()[0].paid_cents, 0, 'an over-payment was recorded anyway');
 
-  const ok = await call(`/statements/${body.uid}`, {
-    method: 'PATCH', body: JSON.stringify({ paid_cents: 140_000, paid_note: 'wire ref 88123' }),
-  });
+  const ok = await act(app, body.uid, 'payments', { amount_cents: 140_000, reference: 'wire ref 88123' });
   assert.equal(ok.status, 200);
   const [row] = rows();
   assert.equal(row.paid_cents, 140_000);
   assert.equal(row.paid_note, 'wire ref 88123');
   assert.equal(row.paid_by_user_id, HOLDER, 'nothing records which operator entered the payment');
   assert.ok(row.paid_at, 'a payment was recorded with no time');
-  assert.equal(ok.body.outstanding_cents, 0);
+  assert.equal(row.status, 'paid');
+  assert.equal(ok.body.after.outstanding_cents, 0);
 });
 
 test('an incomplete statement refuses paid in full', async () => {
-  const { call, report, rows } = statementsApp();
+  const app = statementsApp();
+  const { call, report, rows } = app;
   report('other', 100_000);
   const { body } = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
   assert.equal(body.complete, false);
 
+  // D5039: paid and status are not PATCH fields any more, and the refusal writes nothing.
   const full = await call(`/statements/${body.uid}`, {
     method: 'PATCH', body: JSON.stringify({ status: 'paid', paid_cents: body.owed_cents }),
   });
   assert.equal(full.status, 409);
-  assert.equal(full.body.error, 'incomplete_statement');
+  assert.equal(full.body.error, 'governed_action_required');
   assert.equal(rows()[0].status, 'draft');
+  assert.equal(rows()[0].paid_cents, 0);
 
-  const centsOnly = await call(`/statements/${body.uid}`, {
-    method: 'PATCH', body: JSON.stringify({ paid_cents: body.owed_cents }),
-  });
-  assert.equal(centsOnly.status, 409);
-  assert.equal(centsOnly.body.error, 'incomplete_statement');
+  // A floor cannot be issued, so no payment can be recorded against it either.
+  assert.equal((await act(app, body.uid, 'issue')).body.error, 'incomplete_statement');
+  const pay = await act(app, body.uid, 'payments', { amount_cents: body.owed_cents });
+  assert.equal(pay.status, 409);
+  assert.equal(pay.body.error, 'invalid_status');
+  assert.equal(rows()[0].paid_cents, 0);
 });
 
 test('voiding requires a reason of at least ten characters', async () => {
-  const { call, report, rows } = statementsApp();
+  const app = statementsApp();
+  const { call, report, rows } = app;
   report('other', 100_000);
   const { body } = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
 
-  const bare = await call(`/statements/${body.uid}`, {
-    method: 'PATCH', body: JSON.stringify({ status: 'void', void_note: 'oops' }),
-  });
+  const bare = await act(app, body.uid, 'void', { reason: 'oops' });
   assert.equal(bare.status, 400);
-  assert.equal(bare.body.error, 'void_note_required');
+  assert.equal(bare.body.error, 'reason_required');
   assert.equal(rows()[0].status, 'draft');
 
-  const ok = await call(`/statements/${body.uid}`, {
-    method: 'PATCH', body: JSON.stringify({ status: 'void', void_note: 'Terms changed before issue' }),
-  });
+  const ok = await act(app, body.uid, 'void', { reason: 'Terms changed before issue' });
   assert.equal(ok.status, 200);
   assert.equal(rows()[0].status, 'void');
 });
@@ -474,21 +508,21 @@ test('a patch that changes nothing is refused rather than silently succeeding', 
   assert.equal(r.body.error, 'nothing_to_update');
 });
 
-test('a status outside the four is refused, and refuses BEFORE the other fields are written', async () => {
+test('D5039 — a PATCH carrying paid or status is refused whole, the dispute in it included', async () => {
   const { call, report, rows } = statementsApp();
   report('other', 100_000);
   const { body } = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
 
-  const r = await call(`/statements/${body.uid}`, {
-    method: 'PATCH', body: JSON.stringify({ paid_cents: 1_000, paid_note: 'part', status: 'settled' }),
-  });
-  assert.equal(r.status, 400);
-  assert.equal(r.body.error, 'bad_status');
-  // THE HALF THAT MATTERS: the paid figure in the same request must not have
-  // landed. Three statements are three chances to write half a change, which
-  // is why the route validates everything before it prepares any of them.
-  assert.equal(rows()[0].paid_cents, 0, 'a rejected request wrote half of itself');
-  assert.equal(rows()[0].status, 'draft');
+  for (const extra of [{ status: 'void', void_note: 'Withdrawn after review' }, { paid_cents: 1_000 }, { status: 'settled' }]) {
+    const r = await call(`/statements/${body.uid}`, {
+      method: 'PATCH', body: JSON.stringify({ disputed_cents: 5_000, dispute_note: 'a fee we contest', ...extra }),
+    });
+    assert.equal(r.status, 409, JSON.stringify(extra));
+    assert.equal(r.body.error, 'governed_action_required');
+    assert.match(r.body.message, /\/payments, \/issue or \/void/);
+  }
+  // THE HALF THAT MATTERS: nothing in a refused request landed.
+  assert.deepEqual([rows()[0].paid_cents, rows()[0].disputed_cents, rows()[0].status], [0, 0, 'draft']);
 });
 
 test('a statement that does not exist is 404, not a silent no-op', async () => {
@@ -649,7 +683,7 @@ const audit = (db: InstanceType<typeof DatabaseSync>) => {
 test('D514 — a floor cannot be marked as issued; a complete statement can', async () => {
   const floor = statementsApp();
   const f = await drawn(floor, { other: 100_000 });
-  const refused = await patch(floor, f.uid, { status: 'issued' });
+  const refused = await act(floor, f.uid, 'issue');
   assert.equal(refused.status, 409);
   assert.equal(refused.body.error, 'incomplete_statement');
   assert.match(refused.body.message, /cannot be marked as issued/);
@@ -657,11 +691,11 @@ test('D514 — a floor cannot be marked as issued; a complete statement can', as
 
   const est = statementsApp();
   const e = await drawn(est, ALL, { is_estimate: true });
-  assert.equal((await patch(est, e.uid, { status: 'issued' })).status, 409, 'an estimated statement was issued');
+  assert.equal((await act(est, e.uid, 'issue')).status, 409, 'an estimated statement was issued');
 
   const full = statementsApp();
   const c = await drawn(full, ALL);
-  const ok = await patch(full, c.uid, { status: 'issued' });
+  const ok = await act(full, c.uid, 'issue');
   assert.equal(ok.status, 200);
   assert.equal(full.rows()[0].status, 'issued');
 });
@@ -669,8 +703,9 @@ test('D514 — a floor cannot be marked as issued; a complete statement can', as
 test('D514 — no refusal promises a re-draw after a void', async () => {
   const app = statementsApp();
   const s = await drawn(app, ALL);
-  const over = await patch(app, s.uid, { paid_cents: s.owed_cents + 1 });
-  await patch(app, s.uid, { status: 'void', void_note: 'Terms changed before issue' });
+  await act(app, s.uid, 'issue');
+  const over = await act(app, s.uid, 'payments', { amount_cents: s.owed_cents + 1 });
+  await act(app, s.uid, 'void', { reason: 'Terms changed before issue' });
   const redraw = await app.call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
   assert.equal(redraw.status, 409, 'a void period was drawn again');
   assert.equal(redraw.body.error, 'already_issued');
@@ -680,7 +715,7 @@ test('D514 — no refusal promises a re-draw after a void', async () => {
   assert.match(redraw.body.message, /cannot be drawn again, voided or not/);
   const floor = statementsApp();
   const f = await drawn(floor, { other: 100_000 });
-  const inc = await patch(floor, f.uid, { paid_cents: f.owed_cents });
+  const inc = await act(floor, f.uid, 'issue');
   assert.equal(inc.body.error, 'incomplete_statement');
   assert.doesNotMatch(inc.body.message, /re-?draw/i);
 });
@@ -689,65 +724,80 @@ test('D514 — a re-draw that would leave more paid and disputed than owed is re
   const app = statementsApp();
   app.report('other', 100_000);
   const first = await app.call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
-  assert.equal((await patch(app, first.body.uid, { paid_cents: 30_000, paid_note: 'part' })).status, 200);
+  // A draft takes no payment since D5039, so the recorded figure here is a dispute.
+  assert.equal((await patch(app, first.body.uid, { disputed_cents: 30_000, dispute_note: 'part' })).status, 200);
   app.db.prepare('UPDATE subsidiary_usage_reports SET gross_cents = ? WHERE stream = ?').run(10_000, 'other');
   const again = await app.call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
   assert.equal(again.status, 409);
   assert.equal(again.body.error, 'recorded_above_owed');
-  assert.equal(app.rows()[0].owed_cents, 35_000, 'the owed figure moved under a recorded payment');
-  assert.equal(app.rows()[0].paid_cents, 30_000);
+  assert.equal(app.rows()[0].owed_cents, 35_000, 'the owed figure moved under a recorded dispute');
+  assert.equal(app.rows()[0].disputed_cents, 30_000);
 });
 
 test('D514 — paid and disputed together never exceed owed, and a dispute can be cleared', async () => {
   const app = statementsApp();
   const s = await drawn(app, ALL); // owed 140_000
+  await act(app, s.uid, 'issue');
   assert.equal((await patch(app, s.uid, { disputed_cents: 200_000, dispute_note: 'fee' })).body.error, 'over_owed');
   assert.equal((await patch(app, s.uid, { disputed_cents: 100_000, dispute_note: 'fee' })).status, 200);
-  const paidOver = await patch(app, s.uid, { paid_cents: 50_000 });
+  const paidOver = await act(app, s.uid, 'payments', { amount_cents: 50_000 });
   assert.equal(paidOver.status, 409, 'paid was accepted over a standing dispute');
   assert.equal(paidOver.body.error, 'over_owed');
   const cleared = await patch(app, s.uid, { disputed_cents: 0 });
   assert.equal(cleared.status, 200, 'a dispute could not be cleared');
   assert.deepEqual([app.rows()[0].disputed_cents, app.rows()[0].dispute_note], [0, null]);
-  assert.equal((await patch(app, s.uid, { paid_cents: 50_000 })).status, 200);
+  assert.equal((await act(app, s.uid, 'payments', { amount_cents: 50_000 })).status, 200);
+  // A dispute recorded after a payment is bounded by what is left.
+  assert.equal((await patch(app, s.uid, { disputed_cents: 100_000, dispute_note: 'fee' })).body.error, 'over_owed');
 });
 
 test('D514 — an amount that is not a whole number of minor units is refused, never stored as 0', async () => {
   const app = statementsApp();
   const s = await drawn(app, ALL);
-  await patch(app, s.uid, { paid_cents: 10_000 });
-  for (const bad of ['100', 1.5, -1, null, 'abc', true]) {
-    const r = await patch(app, s.uid, { paid_cents: bad });
-    assert.equal(r.status, 400, `paid_cents ${JSON.stringify(bad)} was accepted`);
+  await act(app, s.uid, 'issue');
+  await act(app, s.uid, 'payments', { amount_cents: 10_000 });
+  for (const bad of ['100', 1.5, -1, null, 'abc', true, 0]) {
+    const r = await act(app, s.uid, 'payments', { amount_cents: bad });
+    assert.equal(r.status, 400, `amount_cents ${JSON.stringify(bad)} was accepted`);
     assert.equal(r.body.error, 'bad_amount');
+    if (bad === 0) continue; // 0 clears a dispute; it is not a payment
     const d = await patch(app, s.uid, { disputed_cents: bad, dispute_note: 'x' });
     assert.equal(d.status, 400, `disputed_cents ${JSON.stringify(bad)} was accepted`);
   }
   assert.equal(app.rows()[0].paid_cents, 10_000, 'a bad amount overwrote the recorded payment');
 });
 
-test('D514 — every action a PATCH carries writes its own audit row', async () => {
+test('D514 — every action writes its own audit row', async () => {
   const app = statementsApp();
   const s = await drawn(app, ALL);
-  const r = await patch(app, s.uid, { status: 'issued', paid_cents: 20_000, paid_note: 'first wire' });
-  assert.equal(r.status, 200);
+  assert.equal((await act(app, s.uid, 'issue')).status, 200);
+  assert.equal((await act(app, s.uid, 'payments', { amount_cents: 20_000, reference: 'first wire' })).status, 200);
   const rows = audit(app.db);
-  assert.deepEqual(rows.map((x) => x.action), ['subsidiary_statement_payment_total', 'subsidiary_statement_issued']);
+  assert.deepEqual(rows.map((x) => x.action), ['subsidiary_statement_issued', 'subsidiary_statement_payment_recorded']);
   for (const { details } of rows) {
     assert.equal(details.uid, s.uid);
     assert.equal(details.licence_uid, 'lic_fr');
     assert.equal(details.period, '2026-Q3');
-    assert.equal(details.from_status, 'draft');
     assert.equal(typeof details.amounts, 'object');
+    assert.equal(details.note, 'Agreed with the subsidiary finance lead');
   }
-  assert.equal(rows[0].details.amounts.paid_cents, 20_000);
+  assert.equal(rows[0].details.from_status, 'draft');
+  assert.equal(rows[1].details.from_status, 'issued');
+  assert.equal(rows[1].details.amounts.amount_cents, 20_000);
+  assert.equal(rows[1].details.amounts.paid_after_cents, 20_000);
   await patch(app, s.uid, { disputed_cents: 5_000, dispute_note: 'a fee we contest' });
   await patch(app, s.uid, { disputed_cents: 0 });
-  await patch(app, s.uid, { status: 'void', void_note: 'Withdrawn after review' });
   assert.deepEqual(audit(app.db).slice(2).map((x) => x.action),
-    ['subsidiary_statement_dispute', 'subsidiary_statement_dispute_cleared', 'subsidiary_statement_void']);
-  assert.equal(audit(app.db)[4].details.note, 'Withdrawn after review');
-  assert.equal(audit(app.db)[4].details.from_status, 'issued');
+    ['subsidiary_statement_dispute', 'subsidiary_statement_dispute_cleared']);
+
+  const other = statementsApp();
+  const o = await drawn(other, ALL);
+  await act(other, o.uid, 'issue');
+  await act(other, o.uid, 'void', { reason: 'Withdrawn after review' });
+  const v = audit(other.db)[1];
+  assert.equal(v.action, 'subsidiary_statement_void');
+  assert.equal(v.details.note, 'Withdrawn after review');
+  assert.equal(v.details.from_status, 'issued');
 });
 
 /* ------------------------------------------------------------------ *
@@ -813,12 +863,15 @@ test('D5029: a ceiling names a listed currency or the licence\'s own, and a figu
 });
 
 test('D5029: a paid or disputed figure past the safe integer is refused, not stored rounded', async () => {
-  const { call, report } = statementsApp();
+  const app = statementsApp();
+  const { call, report } = app;
   for (const stream of ['subscriptions', 'licence_fees', 'token_margin', 'other']) report(stream, 100_000);
   const { body } = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
-  for (const field of ['paid_cents', 'disputed_cents']) {
-    const r = await call(`/statements/${body.uid}`, { method: 'PATCH', body: JSON.stringify({ [field]: 2 ** 53 }) });
-    assert.equal(r.status, 400, `${field}: ${JSON.stringify(r.body)}`);
-    assert.equal(r.body.error, 'bad_amount');
-  }
+  await act(app, body.uid, 'issue');
+  const pay = await act(app, body.uid, 'payments', { amount_cents: 2 ** 53 });
+  assert.equal(pay.status, 400, JSON.stringify(pay.body));
+  assert.equal(pay.body.error, 'bad_amount');
+  const r = await call(`/statements/${body.uid}`, { method: 'PATCH', body: JSON.stringify({ disputed_cents: 2 ** 53 }) });
+  assert.equal(r.status, 400, JSON.stringify(r.body));
+  assert.equal(r.body.error, 'bad_amount');
 });

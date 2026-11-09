@@ -8,6 +8,10 @@ import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
 import { Unreadable } from '../../ui/Honesty';
 import { STOP_CHOICE, stopQuote, stopWords } from './stopSheet';
 import { useRailOption } from '../../ui/railCrumbs';
+// #4574 H4: the timer and the theme hook live in recordingClock.js, so the minimised pill on every signed-in
+// page loads them without this whole view. Re-exported: every existing importer is unchanged.
+import { clock, short, useDarkTheme } from './recordingClock';
+export { clock, short, useDarkTheme };
 
 /**
  * The Recording View (D685 §5.7, #1588), full screen at `/validate/record/live`,
@@ -78,15 +82,6 @@ export function statusWord(l, phase, stageAt = -1) {
   if (l.paused) return 'Paused';
   return 'Recording';
 }
-
-/** ms → hh:mm:ss, as the canvas draws it (§5.7.2), the hour always shown. */
-export function clock(ms) {
-  const t = Math.max(0, Math.floor((ms || 0) / 1000));
-  const p = (n) => String(n).padStart(2, '0');
-  return `${p(Math.floor(t / 3600))}:${p(Math.floor((t % 3600) / 60))}:${p(t % 60)}`;
-}
-/** mm:ss, for a marked moment. */
-export const short = (ms) => clock(ms).replace(/^00:/, '');
 
 /** The language under the timer: a name from the session, never a default "English". */
 const LANGS = { en: 'English', fr: 'French', es: 'Spanish', de: 'German', it: 'Italian', pt: 'Portuguese', nl: 'Dutch', ja: 'Japanese', zh: 'Chinese', ko: 'Korean', hi: 'Hindi', ar: 'Arabic', ru: 'Russian', pl: 'Polish', sv: 'Swedish', tr: 'Turkish' };
@@ -274,17 +269,6 @@ function TabVideo({ stream }) {
 }
 
 /** The page's theme, followed as the root's `dark` class changes: the ring draws its palette from it. */
-export function useDarkTheme() {
-  const read = () => typeof document !== 'undefined' && !!document.documentElement?.classList?.contains?.('dark');
-  const [dark, setDark] = useState(read);
-  useEffect(() => {
-    if (typeof MutationObserver === 'undefined') return undefined;
-    const o = new MutationObserver(() => setDark(read()));
-    o.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => o.disconnect();
-  }, []);
-  return dark ? 'dark' : 'light';
-}
 
 export default function RecordingView({ st, now = Date.now(), theme = 'light', reduced = false, you = '', actions = {}, onExit, onOpen, ai = null }) {
   const exitRef = useRef(null);
