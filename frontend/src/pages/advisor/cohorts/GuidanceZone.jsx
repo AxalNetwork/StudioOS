@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import { NothingYet, Unrecorded, ZoneBody, ZoneHeading, Field, inputClass, buttonClass } from '../expertise/kit';
-import { BatchPicker, NoBatch, cohortLabel } from './kit';
+import { NoBatch, cohortLabel } from './kit';
+import { CohortLoading, useCohortRead, useCohortWorkspace } from './CohortWorkspace';
 
 /**
  * Cohorts · Guidance — what was said to the batch, and who acted on it.
@@ -33,37 +34,17 @@ import { BatchPicker, NoBatch, cohortLabel } from './kit';
  *     the commitment is not recorded rather than inventing the threshold.
  */
 export default function GuidanceZone() {
-  const [assignments, setAssignments] = useState({ loading: true, error: '', items: [] });
-  const [cycleId, setCycleId] = useState(null);
-  const [data, setData] = useState({ loading: false, error: '', payload: null });
+  // D4813: the cohort is the workspace's (header selector, `?cohort=`); the
+  // read is keyed by it and a late answer for another cohort is dropped.
+  const ws = useCohortWorkspace();
+  const cycleId = ws.cycleId;
+  const data = useCohortRead((id) => api.listMyAdvisorCohortGuidance(id),
+    { fallbackError: 'This batch’s guidance could not be read.' });
+  const load = data.reload;
   const [draft, setDraft] = useState('');
   const [week, setWeek] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
-
-  const loadAssignments = useCallback(async () => {
-    setAssignments((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorCohorts();
-      const items = Array.isArray(res?.items) ? res.items : [];
-      setAssignments({ loading: false, error: '', items });
-      setCycleId(items[0]?.cohort_cycle_id ?? null);
-    } catch (e) {
-      setAssignments({ loading: false, error: e?.message || 'Your cohort assignments could not be read.', items: [] });
-    }
-  }, []);
-  useEffect(() => { loadAssignments(); }, [loadAssignments]);
-
-  const load = useCallback(async () => {
-    if (cycleId == null) return;
-    setData((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      setData({ loading: false, error: '', payload: await api.listMyAdvisorCohortGuidance(cycleId) });
-    } catch (e) {
-      setData({ loading: false, error: e?.message || 'This batch’s guidance could not be read.', payload: null });
-    }
-  }, [cycleId]);
-  useEffect(() => { load(); }, [load]);
 
   const post = async () => {
     const body = draft.trim();
@@ -94,7 +75,7 @@ export default function GuidanceZone() {
     } finally { setBusy(false); }
   };
 
-  const payload = data.payload;
+  const payload = data.data;
   const counts = payload?.counts || null;
   const items = payload?.items || [];
   const live = items.filter((g) => !g.retired_at);
@@ -106,20 +87,17 @@ export default function GuidanceZone() {
         blurb="What you have said to this batch, and which founders acted on it."
       />
 
-      {assignments.items.length > 1 && (
-        <BatchPicker items={assignments.items} value={cycleId} onChange={setCycleId} />
-      )}
-
       {/* Nested like ThisWeekZone: the outer body owns "can I see any batch at
           all", the inner owns "did this batch's guidance read". Both state
           `loading` explicitly, which `_zoneGuards` requires. */}
       <ZoneBody
-        loading={assignments.loading}
-        error={assignments.error}
-        onRetry={loadAssignments}
-        isEmpty={assignments.items.length === 0}
+        loading={ws.assignments.loading}
+        error={ws.assignments.error}
+        onRetry={ws.reloadAssignments}
+        isEmpty={ws.assignments.items.length === 0}
         empty={<NoBatch />}
       >
+      {data.loading && <CohortLoading what="guidance" />}
       <ZoneBody
         loading={data.loading}
         error={data.error}
@@ -128,7 +106,7 @@ export default function GuidanceZone() {
         empty={(
           <NothingYet
             title="Nothing said to this batch yet"
-            body={`Guidance you post to ${cohortLabel(assignments.items.find((a) => a.cohort_cycle_id === cycleId)?.cohort)} appears here with the founders who acted on it. Nothing is inferred — an empty list means you have not posted, not that nobody read.`}
+            body={`Guidance you post to ${cohortLabel(ws.current?.cohort)} appears here with the founders who acted on it. Nothing is inferred — an empty list means you have not posted, not that nobody read.`}
           />
         )}
       >
