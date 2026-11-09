@@ -658,6 +658,11 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
         const { pushLicenceToBranch } = await import('../../services/licencePush');
         await pushLicenceToBranch(env, signed.licence_id);
       }
+      // D5052: the schedule may satisfy the program's legal gate; record the gate's answer (best effort).
+      if (signed) {
+        const { syncLegalGateById } = await import('../../services/agreementPolicies');
+        await syncLegalGateById(env, signed.licence_id, { actorId: null, reason: 'Program schedule signed.' });
+      }
     } catch (e) { console.warn('[docusign] program_schedule_sign_failed', (e as Error)?.name || 'error'); }
     // D5049 — a package or program agreement version signed through DocuSign is executed as on the in-house route.
     try {
