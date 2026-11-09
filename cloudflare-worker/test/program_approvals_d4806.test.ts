@@ -40,7 +40,7 @@ const ROLE: Record<number, string> = { [SUPER]: 'admin', [LIS1]: 'admin', [OTHER
 function built(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   loadSchema(db, { below: 560 });
-  for (const m of ['560_program_registry.sql', '561_program_proposals.sql', '562_program_grants_draft.sql', '563_referral_partner_terms.sql', '202611031502_influencer_program.sql', '202611072010_program_approved_specs.sql', '202611082300_programs_member_access_modules_4873.sql']) {
+  for (const m of ['560_program_registry.sql', '561_program_proposals.sql', '562_program_grants_draft.sql', '563_referral_partner_terms.sql', '202611031502_influencer_program.sql', '202611072010_program_approved_specs.sql', '202611082300_programs_member_access_modules_4873.sql', '202611090830_program_proposal_revisions_4873.sql']) {
     db.exec(readFileSync(resolve(MIGRATIONS, m), 'utf8'));
   }
   return db;
@@ -173,8 +173,12 @@ function seed(db: DatabaseSync, uid: string, name: string) {
   db.prepare(`INSERT INTO program_proposals (uid, created_by_user_id, licence_uid, status, name, purpose, who_json, grp, join_method, cycle, cohort_weeks, seats,
       rewards_json, template_keys, tools_json, sent_at) VALUES (?, ?, 'lic-lis', 'sent', ?, 'A purpose.', '["Founders"]', 'Access', 'By invitation', 'rolling', NULL, 20,
       '["None"]', '[]', '{"events":true}', '2026-11-05T09:00:00.000Z')`).run(uid, LIS1, name);
+  // D4873: sent once, so revision 1, with that send's row.
+  db.prepare('UPDATE program_proposals SET revision = 1 WHERE uid = ?').run(uid);
+  db.prepare(`INSERT INTO program_proposal_revisions (proposal_id, revision, spec_json, sent_at)
+    SELECT id, 1, json_object('name', name), sent_at FROM program_proposals WHERE uid = ?`).run(uid);
 }
-const decide = (db: DatabaseSync, uid: string, outcome: string, race?: Race) => call(db, SUPER, 'POST', `/proposals/${uid}/decision`, { outcome, note: 'Reviewed.' }, race);
+const decide = (db: DatabaseSync, uid: string, outcome: string, race?: Race) => call(db, SUPER, 'POST', `/proposals/${uid}/decision`, { outcome, note: 'Reviewed.', expected_revision: 1 }, race);
 /** Everything an approval would write, for a before-and-after comparison. */
 const written = (db: DatabaseSync, key: string) => ({
   program: count(db, 'SELECT COUNT(*) AS n FROM programs WHERE key = ?', key),

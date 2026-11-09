@@ -3,6 +3,7 @@ import { api } from '../../../lib/api';
 import { Lightbox, actionDanger, actionGhost } from '../../../ui';
 import DataRoomDialog, { roomRefusal } from './DataRoomDialog.jsx';
 import { deleteFolderCopy, folderChoices, folderNdaCopy, folderPath, renameCopy } from './filesModel.js';
+import { roomCan } from './dataRoomModel.js';
 import Sheet from '../../../ui/Sheet.jsx';
 
 /**
@@ -33,7 +34,9 @@ export function NewFolderDialog({ room, projectUid, onClose, onDone }) {
   );
 }
 
-export default function FolderLightbox({ room, uid, projectUid, owner, onClose, onDone }) {
+export default function FolderLightbox({ room, uid, projectUid, onClose, onDone }) {
+  // D5074: the folder's controls are the Worker's capabilities for this caller, never the role.
+  const canGate = roomCan(room, 'set_gate');
   const folder = (room?.folders || []).find((f) => f.uid === uid);
   const [ask, setAsk] = useState(null);
   if (!folder) return null;
@@ -76,8 +79,8 @@ export default function FolderLightbox({ room, uid, projectUid, owner, onClose, 
     <Sheet label={folder.name} eyebrow="Folder" title={folder.name} onClose={onClose} testId="dataroom-folder"
       footer={(
         <div className="flex flex-wrap justify-between gap-2">
-          <button type="button" className={actionDanger} onClick={() => setAsk({ kind: 'delete' })} data-testid="dataroom-folder-delete-open">Delete folder</button>
-          <button type="button" className={actionGhost} onClick={() => setAsk({ kind: 'rename', name: folder.name })} data-testid="dataroom-folder-rename-open">Rename</button>
+          {roomCan(room, 'delete_folder') ? <button type="button" className={actionDanger} onClick={() => setAsk({ kind: 'delete' })} data-testid="dataroom-folder-delete-open">Delete folder</button> : <span />}
+          {roomCan(room, 'edit') ? <button type="button" className={actionGhost} onClick={() => setAsk({ kind: 'rename', name: folder.name })} data-testid="dataroom-folder-rename-open">Rename</button> : null}
         </div>
       )}>
       <div className="flex flex-col gap-3 px-5 py-4 text-[13px] text-axal-ink dark:text-gray-100">
@@ -85,7 +88,7 @@ export default function FolderLightbox({ room, uid, projectUid, owner, onClose, 
         <div className="flex items-start justify-between gap-3">
           <span className="flex flex-col"><strong className="font-bold">Needs the NDA</strong>
             <span className={`text-[12px] ${MUTED}`}>{nda ? 'Investors need an active NDA for what this folder sets.' : 'Switch it on to ask for an NDA on this folder.'}</span></span>
-          <button type="button" role="switch" aria-checked={nda} aria-label="Needs the NDA" disabled={!owner} title={owner ? undefined : 'Only the venture’s owner changes a gate.'}
+          <button type="button" role="switch" aria-checked={nda} aria-label="Needs the NDA" disabled={!canGate} title={canGate ? undefined : 'Only the venture’s owner changes a gate.'}
             onClick={() => setAsk({ kind: 'nda', inside: true })} data-testid="dataroom-folder-nda-switch"
             className={`relative h-6 w-11 flex-none rounded-full border disabled:cursor-not-allowed disabled:opacity-50 ${nda ? 'border-axal-violet bg-axal-violet' : 'border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-800'}`}>
             <span aria-hidden="true" className={`absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow ${nda ? 'left-[22px]' : 'left-0.5'}`} />

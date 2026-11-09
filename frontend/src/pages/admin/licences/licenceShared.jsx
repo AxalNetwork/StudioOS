@@ -55,6 +55,10 @@ export const SCHEDULE_STEP = STEPS.length + 5;
 // D802 (#2238) — invoicing the annual fee happens every year a licence runs,
 // not once in the issue flow, so it is unnumbered too.
 export const FEE_INVOICES_STEP = STEPS.length + 6;
+// D4819 (#4819), part 3 — the Overview, the canvas's first section: separate
+// facts read from the licence's own stores. Unnumbered, as it describes a
+// licence rather than performing a step of its issue.
+export const OVERVIEW_STEP = STEPS.length + 7;
 
 // The ladder's own statuses, which are NOT licence statuses. `STATUS_TONE` above
 // covers `active`/`suspended`/`terminated`/`draft`/`pending_activation` and none

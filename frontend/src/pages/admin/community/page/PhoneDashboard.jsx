@@ -45,7 +45,8 @@ function ActivitySummary({ activity, summary, onRetry, onOpen }) {
   return (
     <Card id="activity" title="Community activity" span={12} state={activity.state} reason={activity.reason} onRetry={onRetry}>
       {() => (<>
-        <span className="text-[14px] leading-[1.45] text-axal-ink dark:text-gray-100" data-testid="community-activity-sentence">{activity.sentence}</span>
+        {activity.insight ? <span className="text-[14px] font-semibold leading-[1.45] text-axal-ink dark:text-gray-100" data-testid="community-activity-insight">{activity.insight.text}</span> : null}
+        <span className="text-[13px] leading-[1.45] text-axal-muted dark:text-gray-400" data-testid="community-activity-sentence">{activity.sentence}</span>
         {activity.missing ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400" data-testid="community-activity-missing">{activity.missing}</span> : null}
         <dl className="m-0 grid grid-cols-3 gap-2" data-testid="community-phone-activity">
           {summary.map((s) => (
