@@ -84,7 +84,7 @@ import { branchBindings } from '../services/branches';
 import { emergencyScope, deploymentOutcomes } from '../services/emergencyScope';
 import {
   HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
-  dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE,
+  dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE, loadRecentDsrClosures,
 } from '../services/dsrRequests';
 import { ensureAdminAuditLogTable } from './admin';
 
@@ -469,6 +469,9 @@ r.get('/overview', async (c) => {
       branches: { bound: boundBranchCount(env), reason: DSR_BRANCH_REASON },
       ledger_available: ledgerAvailable,
       ...(ledgerReason ? { ledger_reason: ledgerReason } : {}),
+      // D4803 (SE06) — the requests closed in the last 90 days, with who closed
+      // them; its own read and its own unreadable state.
+      recent: await loadRecentDsrClosures(env),
     },
     // D200 — the ledger H23 draws: rows today and refused sign-ins in 24h,
     // with the retention, the kinds, and what it deliberately does not count.
