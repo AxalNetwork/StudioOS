@@ -247,7 +247,7 @@ function storedOf(r: Record<string, any>): StoredRecommendation {
     base_annual_fee_cents: Number(r.base_annual_fee_cents), recommended_annual_fee_cents: fee,
     guidance_min_cents: n(r.guidance_min_cents), guidance_max_cents: n(r.guidance_max_cents),
     programs: parse(r.programs_json, []), standalone_sum_cents: sum,
-    bundle_saving_cents: n(r.bundle_saving_cents), bundle_discount_bps: n(r.bundle_discount_bps),
+    bundle_saving_cents: n(r.bundle_saving_cents), bundle_discount_bps: n(r.bundle_saving_bps),
     bundle_value_warning: Number(r.bundle_value_warning) === 1,
     bundle_premium_cents: Number(r.bundle_value_warning) === 1 && sum !== null ? fee - sum : null,
     warnings, trace: parse(r.trace_json, {}),
@@ -300,7 +300,7 @@ export async function createRecommendation(env: Env, a: {
       `INSERT INTO package_pricing_recommendations (uid, licence_uid, package_uid, package_key, package_version, licence_snapshot_uid,
          snapshot_is_latest, snapshot_reason, pricing_model_version, country_index_ppm, currency, base_annual_fee_cents,
          recommended_annual_fee_cents, guidance_min_cents, guidance_max_cents, standalone_sum_cents, bundle_saving_cents,
-         bundle_discount_bps, bundle_value_warning, inputs_key, programs_json, warnings_json, trace_json, created_by)
+         bundle_saving_bps, bundle_value_warning, inputs_key, programs_json, warnings_json, trace_json, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       uid, a.licenceUid, rec.package_uid, rec.package_key, rec.package_version, snap.uid,

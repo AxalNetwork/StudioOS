@@ -34,7 +34,9 @@ CREATE TABLE IF NOT EXISTS package_pricing_recommendations (
   -- NULL when any included program has no standalone price: never a sum of the programs that happen to have one.
   standalone_sum_cents INTEGER CHECK (standalone_sum_cents IS NULL OR typeof(standalone_sum_cents) = 'integer'),
   bundle_saving_cents INTEGER CHECK (bundle_saving_cents IS NULL OR (typeof(bundle_saving_cents) = 'integer' AND bundle_saving_cents >= 0)),
-  bundle_discount_bps INTEGER CHECK (bundle_discount_bps IS NULL OR (typeof(bundle_discount_bps) = 'integer' AND bundle_discount_bps BETWEEN 0 AND 10000)),
+  -- The bundle discount in basis points (`bundle_discount_bps` in the API). Not named `*discount_bps`: that name is
+  -- reserved for a SAFE term on the cap-table record (`captable_equity_plan.test.mjs`).
+  bundle_saving_bps INTEGER CHECK (bundle_saving_bps IS NULL OR (typeof(bundle_saving_bps) = 'integer' AND bundle_saving_bps BETWEEN 0 AND 10000)),
   bundle_value_warning INTEGER NOT NULL DEFAULT 0 CHECK (bundle_value_warning IN (0, 1)),
   inputs_key TEXT NOT NULL UNIQUE,
   programs_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(programs_json)),
