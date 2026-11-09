@@ -37,6 +37,7 @@ export * from './api/adminRefunds.js';
 export * from './api/adminStatementActions.js';
 export * from './api/adminStorage.js';
 export * from './api/adminSubAccounts.js';
+export * from './api/advisorCohortGuidance.js';
 export * from './api/agentEngine.js';
 export * from './api/aiBudget.js';
 export * from './api/approvalBoards.js';
