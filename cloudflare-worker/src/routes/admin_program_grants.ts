@@ -67,7 +67,11 @@ import { offerRefusal } from '../services/programGrantStates';
 import { createAndSendEnvelope } from './esign';
 import { sha256Hex } from '../services/pdf';
 import { PROGRAM_SCHEDULE_DOC_TYPE, scheduleDocument, voidSupersededSchedules } from '../services/programSchedule';
-import { scheduleAgreementSentStatements, scheduleAgreementsSupersededStatements } from '../services/programAgreements';
+import { agreementsOfLicence, scheduleAgreementSentStatements, scheduleAgreementsSupersededStatements } from '../services/programAgreements';
+import {
+  alreadyHolds, freezeHoldingStatements, holdingsOf, isMissingPolicyStore, latestPolicy, legalWaitingByProgram, programLegalStatus,
+  replacementOnTermsChangeStatement, requirementFor, syncLegalGate, type Holding, type Policy,
+} from '../services/agreementPolicies';
 import {
   DEFAULT_KEYS, TERM_KEYS, presentGrant, programNamed, programOf, readDefaults, readGrid, readHistory, readinessRefusal,
   termsDiff, termsHashOf, termsOf, validateTerms, type LicenceLite, type Terms,
@@ -104,6 +108,20 @@ async function licenceByUid(env: Env, uid: string) {
 async function grantRow(env: Env, licenceId: number, programKey: string) {
   return await env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? AND program_key = ?')
     .bind(licenceId, programKey).first<Record<string, any>>();
+}
+
+/**
+ * D5052 (#5052): the program's latest agreement policy and the licence's current holdings, or nulls on a
+ * database without the policy store (an older D1), where nothing is frozen and nothing gates — as before.
+ */
+async function policyContext(env: Env, licenceUid: string, programKey: string): Promise<{ ready: boolean; latest: Policy | null; holdings: Holding[] }> {
+  try {
+    const [latest, holdings] = await Promise.all([latestPolicy(env, 'program', programKey), holdingsOf(env, licenceUid)]);
+    return { ready: true, latest, holdings };
+  } catch (e) {
+    if (isMissingPolicyStore(e)) return { ready: false, latest: null, holdings: [] };
+    throw e;
+  }
 }
 
 /**
@@ -182,7 +200,14 @@ const INSERT_SCHEDULE = `INSERT INTO program_grant_schedules (grant_id, revision
 r.get('/', async (c) => {
   try {
     await requireSuperAdmin(c);
-    const [grid, defaults] = [await readGrid(c.env, today()), await readDefaults(c.env)];
+    // D5052: each licence's legal gate, so a program whose required agreement is unsigned is not counted in force.
+    const licenceRows = ((await c.env.DB.prepare(
+      `SELECT DISTINCT l.id, l.uid, l.licence_ref, l.brand_name, l.kind, l.status, l.renews_on
+         FROM territory_licences l JOIN program_grants g ON g.licence_id = l.id`,
+    ).all<LicenceLite & { id: number }>()).results || []);
+    const waiting = new Map<number, Map<string, number>>();
+    for (const l of licenceRows) waiting.set(l.id, await legalWaitingByProgram(c.env, l, today()));
+    const [grid, defaults] = [await readGrid(c.env, today(), waiting), await readDefaults(c.env)];
     return c.json({ programs: defaults, ...grid });
   } catch (e) { return mapError(c, e); }
 });
@@ -202,9 +227,11 @@ r.get('/licences/:uid', async (c) => {
     const rows = ((await c.env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? ORDER BY id').bind(licence.id)
       .all<Record<string, any>>()).results || []);
     const t = today();
+    // D5052: the frozen agreement policy's gate, so an unsigned required agreement never reads as in force here.
+    const waiting = await legalWaitingByProgram(c.env, licence as LicenceLite & { id: number }, t);
     return c.json({
       licence: { uid: licence.uid, licence_ref: licence.licence_ref, brand_name: licence.brand_name, kind: licence.kind, status: licence.status, renews_on: licence.renews_on },
-      grants: rows.map((g) => presentGrant(g, licence, t)),
+      grants: rows.map((g) => presentGrant({ ...g, legal_waiting: waiting.get(String(g.program_key)) ?? null }, licence, t)),
       history: await readHistory(c.env, licence.id),
     });
   } catch (e) { return mapError(c, e); }
@@ -338,6 +365,32 @@ r.post('/licences/:uid/:program', async (c) => {
       return refuse(c, 400, 'invalid_terms', 'capacity_uncapped cannot be set with a capacity cap.');
     }
     const at = nowIso();
+    // D5052: the policy this grant will hold is the program's LATEST version, frozen in the grant's own batch
+    // (a package the licence already holds keeps the version it froze). Under `required_before_grant` the grant
+    // is refused until every required agreement is executed; the schedule is not one of them (it is built from
+    // the grant's terms, so it cannot come first).
+    const policy = await policyContext(c.env, licence.uid, programKey);
+    const freeze = !!policy.latest && !alreadyHolds(policy.holdings, 'program', programKey, policy.latest, null);
+    const prospective: Holding[] = policy.latest
+      ? [...policy.holdings.filter((h) => !(h.scope_kind === 'program' && h.scope_key === programKey)),
+        { uid: 'prospective', licence_uid: licence.uid, scope_kind: 'program', scope_key: programKey, policy_uid: policy.latest.uid,
+          policy_version: policy.latest.version, origin: 'program_granted', package_offer_uid: null, frozen_at: at, frozen_by_user_id: admin.id,
+          superseded_at: null, superseded_by_uid: null, policy: policy.latest }]
+      : policy.holdings;
+    const requirement = requirementFor(programKey, prospective);
+    if (requirement.legal_gate === 'required_before_grant') {
+      const rows = await agreementsOfLicence(c.env, licence.uid);
+      const before = programLegalStatus({ program_key: programKey, state: 'granted', requires_signed_schedule: 0 }, rows, requirement, { grantInForce: true });
+      if (before.missing.length) {
+        return refuse(c, 409, 'agreement_required_before_grant',
+          `${program.name} is granted only once its agreement is executed: ${before.requirement.documents.filter((d) => !d.satisfied).map((d) => d.label).join(', ')}.`,
+          { missing: before.missing, policy_uid: requirement.policy_uid, policy_version: requirement.policy_version });
+      }
+    }
+    const freezeStatements = freeze ? freezeHoldingStatements(c.env, {
+      uid: newUid(), licenceUid: licence.uid, scopeKind: 'program', scopeKey: programKey, origin: 'program_granted',
+      packageOfferUid: null, actorId: admin.id, at, reason,
+    }) : [];
     const changed = termsDiff({}, Object.fromEntries(Object.entries(terms).filter(([, val]) => val != null)));
     if (fromDraft) changed.unshift({ key: 'state', before: 'draft', after: 'granted' });
     const action = fromDraft ? 'granted' : existing ? 'regranted' : 'granted';
@@ -356,6 +409,7 @@ r.post('/licences/:uid/:program', async (c) => {
         supersedeSchedules(c.env, existing.id),
         // D5048: the grant's canonical schedule agreements stop being current with it.
         ...scheduleAgreementsSupersededStatements(c.env, existing.id, at, admin.id),
+        ...freezeStatements,
         queuePushStatement(c.env, licence.id),
         clearGuard(c.env),
       ]);
@@ -365,6 +419,7 @@ r.post('/licences/:uid/:program', async (c) => {
         await c.env.DB.batch([
           c.env.DB.prepare(INSERT_GRANT).bind(newUid(), licence.id, programKey, ...termValues(terms), note.note ?? null, admin.id, at),
           history,
+          ...freezeStatements,
           queuePushStatement(c.env, licence.id),
         ]);
       } catch (e) {
@@ -374,6 +429,7 @@ r.post('/licences/:uid/:program', async (c) => {
       }
     }
     const saved = await grantRow(c.env, licence.id, programKey);
+    if (policy.ready) await syncLegalGate(c.env, licence.uid, { actorId: admin.id, reason });
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pushed }, existing ? 200 : 201);
   } catch (e) { return mapError(c, e); }
@@ -401,6 +457,9 @@ r.patch('/licences/:uid/:program', async (c) => {
     const changed = termsDiff(before, after);
     const noteChanged = note.note !== undefined && (note.note ?? null) !== (existing.note ?? null);
     if (!changed.length && !noteChanged) return refuse(c, 400, 'no_change', 'Nothing changes: these are the terms the grant already has.');
+    // D5052: an executed agreement drafted against these terms no longer matches them. It is recorded as
+    // needing a replacement (once per revision) and left exactly as signed.
+    const policyReady = (await policyContext(c.env, licence.uid, programKey)).ready;
     // D4805: a change of terms is a new revision. The grant names the revision it read, so a stale change
     // loses; the schedule signed under the old revision no longer vouches for these terms (the grant waits
     // on an amendment) but its record stays; and the history and the owed branch push commit with it.
@@ -409,6 +468,9 @@ r.patch('/licences/:uid/:program', async (c) => {
         .bind(...termValues(after), note.note === undefined ? (existing.note ?? null) : note.note, admin.id, nowIso(), existing.id, existing.terms_revision ?? 1),
       decisionGuard(c.env),
       programEvent(c.env, licence.id, admin.id, { action: 'terms_changed', program_key: programKey, changed, note_changed: noteChanged, reason }, reason),
+      ...(policyReady ? [replacementOnTermsChangeStatement(c.env, {
+        licenceUid: licence.uid, programKey, newRevision: Number(existing.terms_revision ?? 1) + 1, actorId: admin.id, at: nowIso(), reason,
+      })] : []),
       ...voidSupersededSchedules(c.env, existing.id),
       supersedeSchedules(c.env, existing.id),
       // D5048: the grant's canonical schedule agreements stop being current with it.
@@ -418,6 +480,7 @@ r.patch('/licences/:uid/:program', async (c) => {
     ]);
     if (run.lost) return refuse(c, 409, 'not_granted', 'This grant changed while you were changing it. Read it again.');
     const saved = await grantRow(c.env, licence.id, programKey);
+    if (policyReady) await syncLegalGate(c.env, licence.uid, { actorId: admin.id, reason });
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), changed, pushed });
   } catch (e) { return mapError(c, e); }
@@ -450,6 +513,8 @@ function transition(action: 'paused' | 'resumed' | 'ended', from: string[], to: 
       ]);
       if (run.lost) return refuse(c, 409, 'wrong_state', 'This grant changed while you were changing it. Read it again.');
       const saved = await grantRow(c.env, licence.id, programKey);
+      // D5052: a pause, resume or end changes whether the program's gate is in play; record its answer.
+      await syncLegalGate(c.env, licence.uid, { actorId: admin.id, reason });
       const pushed = await pushLicenceToBranch(c.env, licence.id);
       return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pushed });
     } catch (e) { return mapError(c, e); }

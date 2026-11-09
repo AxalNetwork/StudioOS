@@ -906,7 +906,8 @@ export const api = {
   // BLOCK-AUTH-01 — passwordless magic-link sign-in. /start always returns the
   // same 202 (no account-existence leak); the link in the email hits the
   // worker's GET /magic/verify which sets cookies and 302s into the SPA.
-  magicStart: (email) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify({ email }) }),
+  // #4578: `purpose: 'signup'` asks for the new-account wording of the same link; anything else is a sign-in link.
+  magicStart: (email, { purpose } = {}) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify(purpose === 'signup' ? { email, purpose } : { email }) }),
   // BLOCK-AUTH-03 — step-up: re-assert a RECENT TOTP for the current session.
   stepUp: (totp_code) => request('/auth/step-up', { method: 'POST', body: JSON.stringify({ totp_code }) }),
   // NICE-AUTH-04 — sign out every active session (alias of revokeAllSessions).
@@ -3547,8 +3548,9 @@ export const api = {
   hqFunds: () => request('/admin/hq/funds'),
   // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
   // through adminBillingListDisputes, read separately so an outage there
-  // costs one zone rather than the page.
-  hqRevenue: () => request('/admin/revenue/summary'),
+  // costs one zone rather than the page. D5039: `period` is a quarter key
+  // (`2026-Q4`); without it the Worker answers for today's quarter.
+  hqRevenue: (period) => request(`/admin/revenue/summary${period ? `?period=${encodeURIComponent(period)}` : ''}`),
   // HQ · Content and Platform (canvas H6). Two reads, two pages: the
   // content pipeline over `articles` + `admin_publications`, and the
   // platform view over `integrations` + `cron_run_history`.
@@ -3597,9 +3599,11 @@ export const api = {
   // Canvas H7's privileged-action feed, unioned across the four stores that
   // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
   // client-side filter would quietly show a handful of rows and read as
-  // "that is all there is".
-  hqGovernance: (filter) =>
-    request(`/admin/security/governance?filter=${encodeURIComponent(filter || 'all')}`),
+  // "that is all there is". D4803 — the Events workspace's search, date,
+  // actor, outcome and source filters and the Load older cursor (`before`)
+  // go the same way: as query values, never applied to the page in the browser.
+  hqGovernance: (filter, params = {}) =>
+    request(`/admin/security/governance?${new URLSearchParams({ filter: filter || 'all', ...params })}`),
   hqSecurityForceReauth: (reason) =>
     request('/admin/security/force-reauth', { method: 'POST', body: JSON.stringify({ reason }) }),
   // D165 — ONE account, not every account. Same bar as the bulk revoke above

@@ -19,3 +19,51 @@
 .dark .a7-answer-foot a{color:#c4b5fd}
 .dark .a7-fund-stats div{background:#2b2634;border-color:#463f4e}
 @media(max-width:600px){.a7-question button{width:100%}.a7-fund-stats{grid-template-columns:1fr 1fr}}
+/* D3701 RS-01 — the Research Overview header, question card and cards. */
+.rh-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.rh-eyebrow{display:block;margin-bottom:6px;color:#6b6577;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+.rh-actions{display:flex;align-items:center;gap:8px}
+.rh-primary{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 16px;border:0;border-radius:9px;background:#7c3aed;color:#fff;font:inherit;font-size:13px;font-weight:800;text-decoration:none;cursor:pointer;white-space:nowrap}
+.rh-primary:focus-visible,.rh-examples button:focus-visible,.rh-unreadable button:focus-visible,.rh-coverage summary:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+.rh-question{margin-top:16px}
+.rh-label{display:block;font-size:13px;font-weight:800;color:#18181b}
+.rh-question .a7-question{margin-top:10px}
+.rh-examples{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.rh-examples button{padding:6px 12px;border:1px dashed #d6d3df;border-radius:999px;background:#fff;color:#18181b;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.rh-continue{border-color:#ddd2fb;background:#f4f0fe}
+.rh-continue-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap}
+.rh-continue-row strong{font-size:15px}
+.rh-muted{margin:2px 0 0;color:#6b6577;font-size:11.5px}
+.rh-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.rh-pair .a7-card{margin-top:14px}
+.rh-list{margin:0;padding:0;list-style:none}
+.rh-list li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #ececf1}
+.rh-list li:first-child{border-top:0}
+.rh-list strong{display:block;font-size:12.5px}
+.rh-pills{display:inline-flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+.rh-chips{display:flex;flex-wrap:wrap;gap:8px}
+.rh-chip{padding:6px 12px;border:1px solid #ececf1;border-radius:999px;color:#18181b;font-size:12px;font-weight:600;text-decoration:none}
+.rh-note{margin-top:8px}
+.rh-nr{padding:10px 12px;border:1px dashed #d6d3df;border-radius:10px}
+.rh-nr strong,.rh-unreadable strong{font-size:12px}
+.rh-nr p,.rh-unreadable p{margin:4px 0 0;color:#6b6577;font-size:11.5px;line-height:1.5}
+.rh-unreadable{padding:10px 12px;border:1px solid #ececf1;border-radius:10px;background:#f8f7fb;opacity:.9}
+.rh-unreadable button{margin-top:8px;padding:6px 12px;border:1px solid #d6d3df;border-radius:8px;background:#fff;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.rh-coverage{margin-top:18px;border-top:1px solid #ececf1;padding-top:12px}
+.rh-coverage summary{display:flex;flex-direction:column;gap:2px;cursor:pointer;list-style:none}
+.rh-coverage summary span{color:#6b6577;font-size:12px}
+.dark .rh-label,.dark .rh-examples button,.dark .rh-chip{color:#e5e7eb}
+.dark .rh-eyebrow,.dark .rh-muted,.dark .rh-nr p,.dark .rh-unreadable p,.dark .rh-coverage summary span{color:#9ca3af}
+.dark .rh-examples button,.dark .rh-unreadable button{background:#111827;border-color:#4b5563;color:#e5e7eb}
+.dark .rh-continue{background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.4)}
+.dark .rh-chip,.dark .rh-list li,.dark .rh-unreadable,.dark .rh-coverage{border-color:#374151}
+.dark .rh-unreadable{background:#1f2937}
+.dark .rh-nr{border-color:#4b5563}
+.dark .rh-primary{background:#a78bfa;color:#0b1220}
+@media(max-width:600px){.rh-actions{width:100%}.rh-actions .rh-primary{flex:1;min-height:44px}.rh-pair{grid-template-columns:1fr}.rh-list li{flex-direction:column;align-items:flex-start}.rh-continue-row .rh-primary{width:100%;min-height:44px}}
+/* D3701 part 4 — RS-11 "You're out of AI tokens": amber, the canvas's warning tone. */
+.a7-answer.is-tokens{border-color:#fcd34d;background:#fffbeb;color:#92400e}
+.rh-secondary{display:inline-flex;align-items:center;min-height:36px;margin-top:8px;padding:0 14px;border:1px solid #d6d3df;border-radius:9px;background:#fff;color:#18181b;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.rh-secondary:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+.dark .rh-secondary{background:#111827;border-color:#4b5563;color:#e5e7eb}
+.dark .a7-answer.is-tokens{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.45);color:#fcd34d}

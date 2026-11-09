@@ -9,7 +9,7 @@ unchanged when it was split.
 - `LicenceDetail.jsx` — lifecycle: one licence, its header, its actions
   (activate, suspend, reinstate, renew, terminate) and its tab bar.
 - `TerritoryEditor.jsx` — step 2, the countries a licence holds.
-- `CommercialTerms.jsx` — steps 3 and 4: `SeatEditor` and `TermsEditor`.
+- `CommercialTerms.jsx` — step 3: `SeatEditor` (step 4 is `TermsWorkspace.jsx`).
 - `ContractStep.jsx` — step 5, the contract instantiated from a template.
 - `DeployStep.jsx` — step 6, the branch deployment.
 - `AdminsEditor.jsx` — the licence's administrators: appoint, demote, detach.
@@ -28,10 +28,14 @@ unchanged when it was split.
   on a phone. Its rows are the doors to one licence.
 - `LicenceDeepLink.jsx` — D4819: `/admin/licences/:uid` and
   `/admin/licences/:uid/:section`, opened in today's detail view.
+- `TermsWorkspace.jsx` — D4819 part 2: the Terms section (L05 to L07): the
+  schedule read-only by default, Amend terms as a reviewed session, and the
+  conflict view when another admin wrote first. It replaced step 4's editor.
 
 The models these read stay beside the page in `../`: `licenceNavModel.js`
 (tabs and selection), `licenceLedgerModel.js` (the ledger's cells, Needs HQ and
-the zero test, D4819), `licenceReasonModel.js` and `LicenceReasonDialog.jsx`
+the zero test, D4819), `licenceTermsAmendModel.js` (the Terms section's rows,
+amendment, effects and conflict, D4819), `licenceReasonModel.js` and `LicenceReasonDialog.jsx`
 (reasons), `licenceHistoryModel.js` and `LicenceHistory.jsx` (history).
 
 **Rule for adding to it.** A new licence domain is a new file here, imported

@@ -13,19 +13,20 @@ import { Link } from 'react-router-dom';
 export const CHIPS = [{ value: '', label: 'All' }, ...ACTIVITY_KINDS];
 
 /** CM1 row 7: the ten newest, with the filter chips. Its own read, so a chip reads again only this card. */
-export function RecentCard({ refresh, onOpen, span = 7 }) {
+/** D4820 part 2: `rows` is how many it lists (CM09: four on a phone). */
+export function RecentCard({ refresh, onOpen, span = 7, rows = RECENT_ROWS }) {
   const [kind, setKind] = useState('');
   const [tick, setTick] = useState(0);
   const [read, setRead] = useState(idle);
   useEffect(() => {
     let live = true;
     setRead(idle);
-    communityApi.activity({ limit: RECENT_ROWS, ...(kind ? { kind } : {}) }).then(
+    communityApi.activity({ limit: rows, ...(kind ? { kind } : {}) }).then(
       (data) => { if (live) setRead({ status: 'ready', data }); },
       (e) => { reportError('admin-community:recent', e); if (live) setRead({ status: 'error', data: null }); },
     );
     return () => { live = false; };
-  }, [kind, tick, refresh]);
+  }, [kind, tick, refresh, rows]);
   const view = read.status === 'ready' ? activityPage(read.data, 1) : null;
   const state = read.status === 'loading' ? 'loading' : (read.status === 'error' || view?.state !== 'ready') ? 'unreadable' : 'ready';
   return (
@@ -36,14 +37,14 @@ export function RecentCard({ refresh, onOpen, span = 7 }) {
         <div role="group" aria-label="Kind" className="flex flex-wrap gap-1.5" data-testid="community-recent-chips">
           {CHIPS.map((c) => (
             <button key={c.value || 'all'} type="button" aria-pressed={kind === c.value} onClick={() => setKind(c.value)}
-              className={`min-h-[32px] rounded-full border px-2.5 py-1 text-[12px] font-bold ${kind === c.value ? 'border-axal-violet bg-axal-lavender text-axal-violet dark:border-violet-400 dark:bg-violet-950/40 dark:text-violet-300' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}
+              className={`min-h-[32px] max-md:min-h-[44px] rounded-full border px-2.5 py-1 text-[12px] font-bold ${kind === c.value ? 'border-axal-violet bg-axal-lavender text-axal-violet dark:border-violet-400 dark:bg-violet-950/40 dark:text-violet-300' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}
               data-testid={`community-recent-chip-${c.value || 'all'}`}>{c.label}</button>
           ))}
         </div>
         {view.partial ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400" role="status">{view.partial}</span> : null}
         {view.rows.length ? (
           <ul className="m-0 flex list-none flex-col p-0" data-testid="community-recent">
-            {view.rows.slice(0, RECENT_ROWS).map((r) => (
+            {view.rows.slice(0, rows).map((r) => (
               <li key={r.key} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-axal-hairline py-2 first:border-t-0 dark:border-gray-800">
                 <span className="flex min-w-0 items-baseline gap-2.5">
                   <span aria-hidden="true" className="font-bold text-axal-violet dark:text-violet-300">{r.icon}</span>

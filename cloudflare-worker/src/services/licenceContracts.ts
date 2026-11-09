@@ -92,6 +92,20 @@ export type LicenceTermsResult = Pushed & {
   changed: Record<string, { before: unknown; after: unknown }>;
 };
 
+/**
+ * D4694 / D4819 — the 409 a stale terms write gets: nothing was saved, and this is what to reload.
+ * `changed_by` and `changed_at` name the write that holds `current_revision`, and are null when the
+ * record does not say (the other write has not logged yet, or wrote before D4819). Never guessed.
+ */
+export type LicenceTermsConflict = {
+  error: 'terms_conflict';
+  message: string;
+  current_revision: number | null;
+  current: unknown;
+  changed_by: string | null;
+  changed_at: string | null;
+};
+
 // ── termination and branch sync (D4686) ─────────────────────────────────────
 
 /** The five consequences of a termination, in the order they run. */

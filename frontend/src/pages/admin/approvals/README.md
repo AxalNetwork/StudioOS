@@ -15,6 +15,7 @@ under the shared admin header (D936). `/admin/held/approvals` forwards here with
 | `ExpertBoard.jsx` | Wellbeing experts (APR8) on D1043's review read: five tabs with Declined, the tiles, the credentials column, the expert's drawer, and the Verify (with "I checked their credentials"), Decline, Hide, Restore and Remove verification dialogs. The `/admin/wellbeing` roster's toggles are retired into it. |
 | `boardParts.jsx` | What the boards share: styles, a tile, the failed card, a pager, one read answered alone, and the decision dialog that says what changes, who is told and what is recorded. D1047: `FOOT` (a dialog's or drawer's buttons, full width on a phone) and `PhoneBack` (a drawer's "‹ [lane]" on a phone). |
 | `HeldApprovalsRedirect.jsx` | The old address, forwarded with its query and hash. |
+| `boardGrammar.js` | D4814 (#4814, part 3): pure functions for the native boards' one grammar — the crumb, the owner read joined on numeric id, the four-cell summary and Co-marketing's lifecycle. |
 
 The rule for adding here: a lane joins `LANES` with its glance key once the
 Worker counts it, and its door joins `LaneDoor` as a literal `<Link to="…">`,
@@ -42,3 +43,17 @@ Review · ⋯) with one Filters panel and one Sort, then Workload (the two
 charts). The Inbox tab, Waiting and All all read `waitingFigure`, so they show
 one number; a figure short by an unread lane is "N+" from the Worker's
 `tiles.at_least`, never 0. Waiting on HQ is drawn only in a studio shell.
+
+D4814 part 2: ownership. The Assign dialog orders reviewers you, lowest
+workload, alphabetical and says assigning changes ownership only; the
+ownership callout's Assign overdue… reads `assigned=none&age=past` across
+every lane up to the Worker's `ASSIGNMENT_CAP`; a row's ⋯ is a disclosure
+popover, never an ARIA menu; the bulk bar floats in a holder of no height; the
+drawer puts the owner first and ends with "Continue review in [destination] →".
+
+D4814 part 3: the native boards share one grammar. `boardGrammar.js` holds it
+as pure functions: the crumb (Approvals › Lanes › board), the owner read (the
+inbox filtered to the board's lane, joined on each item's numeric id), the
+four-cell summary and Co-marketing's lifecycle. `boardParts.jsx` draws it:
+`BoardStrip`, `OwnerBox`, `useBoardOwners`, and a `DecisionDialog` that states
+what changes, who is told and what is recorded before any field.

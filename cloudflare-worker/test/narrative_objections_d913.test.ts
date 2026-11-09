@@ -65,6 +65,7 @@ function readFixture() {
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
   db.exec(sqlOf('544_narrative_sections.sql'));
+  db.exec(sqlOf('202611082100_narrative_version_revision.sql'));
   db.exec(sqlOf('545_narrative_notes.sql'));
   db.exec(sqlOf('761_narrative_read_end.sql')); // D1465: activeReason reads ended_at
   db.exec(sqlOf('624_narrative_objection_answers.sql'));
@@ -255,6 +256,115 @@ test('the answer write refuses: the objection, the section, the version, how, an
   } finally { db.close(); }
 });
 
+// D5069 — the whole of one Save version is one write.
+const verRev = (db: DatabaseSync, v = 7) => (db.prepare('SELECT revision FROM narrative_version_meta WHERE project_id = ? AND version = ?').get(P, v) as any)?.revision;
+const stored = (db: DatabaseSync) => ({
+  sections: db.prepare("SELECT section AS section_key, body FROM narrative_sections WHERE project_id = ? AND version = 7 ORDER BY section_key").all(P).map((x: any) => ({ ...x })),
+  answers: db.prepare('SELECT objection_key, section_key FROM narrative_objection_answers WHERE project_id = ?').all(P).map((x: any) => ({ ...x })),
+});
+
+test('PUT /narrative/:version saves sections and answers together, bumps the revision once, and says what changed', async () => {
+  const db = answerFixture();
+  try {
+    const key = await objectionKey('too small a market');
+    const r = await call(db, FOUNDER, 'PUT', '/raise/narrative/7', {
+      sections: [{ section: 'market', body: 'Mid-market finance teams.' }, { section: 'team', body: 'Two operators.' }],
+      answers: [{ objection: key, section: 'market', how: 'picked' }],
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.saved.map((x: any) => x.section), ['market', 'team']);
+    assert.deepEqual(r.body.answered, [key]);
+    assert.equal(r.body.revision, verRev(db));
+    const s = stored(db);
+    assert.deepEqual(s.sections.map((x: any) => x.section_key), ['market', 'team']);
+    assert.deepEqual(s.answers, [{ objection_key: key, section_key: 'market' }]);
+    const again = await call(db, FOUNDER, 'PUT', '/raise/narrative/7', { sections: [{ section: 'team', body: 'Three operators.' }], expected_revision: r.body.revision });
+    assert.equal(again.status, 200, JSON.stringify(again.body));
+    assert.equal(again.body.revision, r.body.revision + 1);
+  } finally { db.close(); }
+});
+
+test('PUT /narrative/:version: a statement that fails part-way leaves no section and no answer behind', async () => {
+  const db = answerFixture();
+  try {
+    const key = await objectionKey('too small a market');
+    db.exec(`CREATE TRIGGER boom BEFORE INSERT ON narrative_objection_answers BEGIN SELECT RAISE(ABORT, 'boom'); END`);
+    const before = stored(db);
+    const r = await call(db, FOUNDER, 'PUT', '/raise/narrative/7', {
+      sections: [{ section: 'market', body: 'Mid-market finance teams.' }],
+      answers: [{ objection: key, section: 'market', how: 'picked' }],
+    });
+    assert.ok(r.status >= 400, 'the save fails');
+    assert.deepEqual(stored(db), before, 'nothing of it stays');
+    assert.equal(verRev(db) ?? 0, 0, 'the revision is not spent either');
+  } finally { db.close(); }
+});
+
+test('a stale expected_revision is a 409 changed_since_open with the current revision, and nothing is written', async () => {
+  const db = answerFixture();
+  try {
+    const first = await call(db, FOUNDER, 'PUT', '/raise/narrative/7', { sections: [{ section: 'team', body: 'Two operators.' }] });
+    assert.equal(first.status, 200);
+    const before = stored(db);
+    const stale = await call(db, FOUNDER, 'PUT', '/raise/narrative/7', { sections: [{ section: 'market', body: 'Someone else wrote this.' }], expected_revision: 0 });
+    assert.equal(stale.status, 409);
+    assert.equal(stale.body.error, 'changed_since_open');
+    assert.equal(stale.body.current_revision, first.body.revision);
+    assert.deepEqual(stored(db), before);
+    const one = await call(db, FOUNDER, 'PUT', '/raise/narrative/7/sections/market', { body: 'Stale single.', expected_revision: 0 });
+    assert.equal(one.status, 409);
+    assert.deepEqual(stored(db), before);
+    const ok = await call(db, FOUNDER, 'PUT', '/raise/narrative/7/sections/market', { body: 'Fresh single.', expected_revision: first.body.revision });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.body.revision, first.body.revision + 1, 'a single-section save spends a revision too');
+  } finally { db.close(); }
+});
+
+test('a save that loses the race between its check and its batch is a 409 and writes nothing', async () => {
+  const db = answerFixture();
+  try {
+    const key = await objectionKey('too small a market');
+    const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    const inner = d1Over(db);
+    let raced = false;
+    const DB = new Proxy(inner as any, { get: (t, k) => k !== 'batch' ? t[k].bind?.(t) ?? t[k] : async (stmts: any[]) => {
+      if (!raced && stmts.length > 2) { raced = true; db.exec(`INSERT INTO narrative_version_meta (project_id, version, start_from, revision) VALUES (${P}, 7, 'live', 1) ON CONFLICT (project_id, version) DO UPDATE SET revision = 1`); }
+      return t.batch(stmts);
+    } });
+    const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+    let res: Response;
+    try {
+      res = await app.request(`/api/cycles/raise/narrative/7?project=${P}`, { method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sections: [{ section: 'market', body: 'Raced.' }], answers: [{ objection: key, section: 'market', how: 'picked' }] }) },
+      { JWT_SECRET, ENVIRONMENT: 'development', DB } as any);
+    } finally { [console.warn, console.error] = saved; }
+    assert.equal(raced, true);
+    assert.equal(res.status, 409, await res.clone().text());
+    assert.equal((await res.json() as any).error, 'changed_since_open');
+    assert.deepEqual(stored(db), { sections: [], answers: [] }, 'the guarded writes saw the moved revision and wrote nothing');
+    assert.equal(verRev(db), 1);
+  } finally { db.close(); }
+});
+
+test('PUT /narrative/:version refuses: nothing to change, a duplicate section, an unknown one, an unknown objection, a bad revision', async () => {
+  const db = answerFixture();
+  try {
+    const key = await objectionKey('too small a market');
+    const put = (b: unknown, v = 7) => call(db, FOUNDER, 'PUT', `/raise/narrative/${v}`, b);
+    assert.equal((await put({})).status, 400);
+    assert.equal((await put({ sections: [{ section: 'team', body: 'a' }, { section: 'team', body: 'b' }] })).status, 400);
+    assert.equal((await put({ sections: [{ section: 'vision', body: 'a' }] })).status, 404);
+    assert.equal((await put({ answers: [{ objection: 'nope', section: 'market', how: 'picked' }] })).status, 404);
+    assert.equal((await put({ answers: [{ objection: key, section: 'market', how: 'guess' }] })).status, 400);
+    assert.equal((await put({ sections: [{ section: 'team', body: 'a' }], expected_revision: -1 })).status, 400);
+    assert.equal((await put({ sections: [{ section: 'team', body: 'a' }] }, 8)).status, 404, 'another venture\'s version');
+    assert.equal((await call(db, ADMIN, 'PUT', '/raise/narrative/7', { sections: [{ section: 'team', body: 'a' }] })).status, 403);
+    assert.deepEqual(stored(db), { sections: [], answers: [] });
+  } finally { db.close(); }
+});
+
 test('a failed answers read leaves every objection unanswered-unknown, never hides the objections', async () => {
   const db = answerFixture();
   try {
@@ -311,6 +421,7 @@ async function draftFixture({ answer = GOOD as unknown, balance = 5000000 } = {}
   f.db.exec(between(m463, 'CREATE TABLE IF NOT EXISTS raise_prospect_feedback'));
   f.db.exec(between(m463, 'CREATE TABLE IF NOT EXISTS narrative_version_meta'));
   f.db.exec(sqlOf('544_narrative_sections.sql'));
+  f.db.exec(sqlOf('202611082100_narrative_version_revision.sql'));
   // Version 2, for a seed fund: its Market words hold a figure, and so do the objection and the founder's answer.
   f.db.exec(`INSERT INTO spinout_deck_overrides (project_id, field_key, value, version, investor_type) VALUES
       (1, '__version__', 'seed_fund', 2, 'seed_fund'),
