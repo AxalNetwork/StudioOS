@@ -16,6 +16,7 @@ files say how to act on it.
 | `DATA_RETENTION.md` | Look up how long each deck store keeps its rows and R2 objects, what removes them, and the known gaps (D1508). |
 | `DECK_GRID.md` | Run deck builder v2, the Grid (D1547, #3792): switch off a model, refund a batch, unstick a batch, purge an image including a DMCA takedown. Says which steps have a route, which are SQL, and that none is tested on staging yet; `deck_grid_runbook_3792` keeps it true to the code. |
 | `D1_RECOVERY.md` | Recover D1 when the data is wrong and a Worker rollback will not help. |
+| `SCHEMA_DRIFT.md` | What schema checks run before a deploy, what the post-deploy `schema-drift` job finds after it, and how a red result is escalated and corrected without silencing the check (#4591). |
 | `INCIDENT_RESPONSE.md` | Respond to an incident: severities, response times and who is paged. |
 | `CLAUDE_REVIEW.md` | Run, tune and cost the advisory pull-request review on the Anthropic API. |
 | `GITHUB_CONNECTOR_APP.md` | Register the StudioOS GitHub App for the GitHub connector (D655), put its Client ID and secret in production, check, rotate and remove them, and troubleshoot a failed connect. |

@@ -18,6 +18,22 @@
  *                  deleted figure back. A support session may disconnect.
  *   revokeGranted  a grant the route refused, revoked at Beehiiv, best effort
  *   ready          D751: whether a sign-in can register (`mcpReadiness`)
+ *
+ * PUBLISHING, DRAFT ONLY (#2407 part 3, D1319's adapter). Every call comes
+ * from `routes/publish.ts` or `services/publishCore.ts`, after the founder's
+ * own steps; nothing here is reached by a sync, a cron or Eadwyn.
+ *   listDestinations  the publications the member's sign-in sees, each
+ *                     "Draft only: not sent to subscribers". They arrive
+ *                     switched off for every company (PUBLISH's rule).
+ *   publishPreview    `previewDraft`: the title and email-safe HTML `publish`
+ *                     sends, and the problems that keep Send off. No request.
+ *   publish           `createBeehiivDraft`: one draft, never a post (no
+ *                     `status`), with a one-time publish ticket.
+ *   NO retract        retract kind `none`: Axal VC never deletes or edits a
+ *                     founder's post. "Delete it on Beehiiv", then Mark as
+ *                     removed, as PUBLISH draws it.
+ *   NO findPublished  no read tool lists drafts (UNVERIFIED), so Check is not
+ *                     offered: an unknown outcome is looked for in Beehiiv.
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../../types';
@@ -28,6 +44,8 @@ import {
 } from '../mcpClient';
 import { mcpPreregisteredFor, mcpReadiness } from '../mcpSignIn';
 import { selectJwt } from '../../auth';
+import { beehiivReadsFor } from '../../services/beehiiv/reads';
+import { BEEHIIV_AUDIENCE, createBeehiivDraft, previewDraft } from '../../services/beehiiv/drafts';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -66,4 +84,15 @@ async function revokeGranted(env: Env, result: ConnectResult): Promise<void> {
 
 const ready = (env: Env) => mcpReadiness(env, BEEHIIV, mcpPreregisteredFor(env, BEEHIIV));
 
-registerProvider({ key: 'beehiiv', connect, disconnect, revokeGranted, ready });
+/** The publications this sign-in can see, as PUBLISH's places: the draft goes to the one the founder switches on. */
+async function listDestinations(env: Env, row: IntegrationRow) {
+  if (row.provider_key !== BEEHIIV.key) return [];
+  const reads = await beehiivReadsFor(env, row);
+  return (await reads.publications()).map((p) => ({ external_account_id: p.id, display_name: p.name ?? p.id, audience_label: BEEHIIV_AUDIENCE }));
+}
+
+const publishPreview = async (_env: Env, _row: IntegrationRow, input: Parameters<typeof previewDraft>[0]) => previewDraft(input);
+
+const publish = (env: Env, row: IntegrationRow, envelope: Parameters<typeof createBeehiivDraft>[2]) => createBeehiivDraft(env, row, envelope);
+
+registerProvider({ key: 'beehiiv', connect, disconnect, revokeGranted, ready, listDestinations, publishPreview, publish });
