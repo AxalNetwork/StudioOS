@@ -15,7 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import TrustContentPage from '../src/pages/hq/TrustContentPage.jsx';
-import { DsrClose } from '../src/pages/hq/SecurityPage.jsx';
+import DsrOutcomeDialog from '../src/pages/hq/security/PrivacyActions.jsx';
 import { REFUSALS, PUBLISH_UNCONFIRMED, publishRefusalText } from '../src/pages/hq/trustContentModel.js';
 import { newOpKey } from '../src/lib/opKey.js';
 
@@ -135,16 +135,27 @@ test('Publish: drafts changed since the dialog opened — it closes, re-reads, a
 });
 
 // ------------------------------------------------------------ the DSR close
+// D4803 (slice 3): the close is SE06's Record outcome dialog
+// (`security/PrivacyActions.jsx`), Scope → Review → Result. The D4675 rules
+// are the same and so are these assertions: it names the reviewed request,
+// one key per close resent on every retry, unconfirmed is not done, a request
+// that changed underneath offers a reload and no second send.
 
-const ROW = { id: 7, requested_at: '2026-10-01 09:00:00', request_id: 41, days_left: 10 };
+const ROW = {
+  key: 'open:7', open: true, label: 'DSR-0041', kind: 'Erasure', subject: 'founder@lumen.example', userId: 7,
+  received: '1 Oct 2026', receivedFull: 'Thu 1 Oct 2026, 09:00 UTC', due: 'Sat 31 Oct 2026', remaining: '10 days',
+  raw: { id: 7, requested_at: '2026-10-01 09:00:00', request_id: 41, days_left: 10 },
+};
 const CLOSE = '/api/admin/security/dsr/7/close';
 
-async function openClose(handler, onDone = () => {}) {
-  const m = await mount(h(DsrClose, { row: ROW, onDone }), (req) => handler(req));
-  await m.press('Record as denied');
-  await m.typeIn('INPUT', 'retained under an open legal hold');
+async function openClose(handler, onRecorded = () => {}, onReread = () => {}) {
+  const m = await mount(h(DsrOutcomeDialog, { row: ROW, onClose() {}, onRecorded, onReread }), (req) => handler(req));
+  await m.type('dsr-outcome-denied', 'denied');
+  await m.typeIn('TEXTAREA', 'retained under an open legal hold');
+  await m.click('dsr-continue');
   return m;
 }
+const resultOf = (m) => m.props('dsr-result')['data-result'];
 
 test('DSR close: it names the reviewed request, and a retry after no answer resends the SAME key', async () => {
   let done = 0;
@@ -153,17 +164,21 @@ test('DSR close: it names the reviewed request, and a retry after no answer rese
     return json({ ok: true, replayed: true });
   }, () => { done += 1; });
   try {
-    await m.submit('hq-dsr-close-form');
-    assert.match(m.of('hq-dsr-close-error'), /not confirmed/i, 'a lost answer read as a failure');
+    await m.click('dsr-confirm');
+    assert.equal(resultOf(m), 'unconfirmed', 'a lost answer read as a failure or a success');
+    assert.match(m.of('dsr-result'), /not confirmed/i);
     assert.equal(done, 0);
-    await m.submit('hq-dsr-close-form');
+    await m.click('dsr-retry');
+    await m.click('dsr-confirm');
     const sent = posts(m.seen, CLOSE);
     assert.equal(sent.length, 2);
-    assert.equal(sent[0].body.requested_at, ROW.requested_at, 'the close does not name the reviewed request');
-    assert.equal(sent[0].body.request_id, ROW.request_id);
+    assert.equal(sent[0].body.requested_at, ROW.raw.requested_at, 'the close does not name the reviewed request');
+    assert.equal(sent[0].body.request_id, ROW.raw.request_id);
     assert.equal(sent[0].body.outcome, 'denied');
     assert.match(String(sent[0].body.close_key), /^op_[0-9a-f]{32}$/);
     assert.equal(sent[0].body.close_key, sent[1].body.close_key, 'the retry carried a new key');
+    assert.equal(resultOf(m), 'done');
+    assert.match(m.of('dsr-result'), /already on record/);
     assert.equal(done, 1, 'a recorded close did not refresh the list');
   } finally { await m.unmount(); }
 });
@@ -172,37 +187,66 @@ test('DSR close: 202 unconfirmed is shown as unconfirmed and the list is not ref
   let done = 0;
   const m = await openClose(() => json({ ok: false, code: 'outcome_unconfirmed', error: 'The close was sent, but whether it was recorded could not be read back.' }, 202), () => { done += 1; });
   try {
-    await m.submit('hq-dsr-close-form');
-    assert.match(m.of('hq-dsr-close-error'), /could not be read back/);
+    await m.click('dsr-confirm');
+    assert.equal(resultOf(m), 'unconfirmed');
+    assert.match(m.of('dsr-result'), /could not be read back/);
     assert.equal(done, 0, 'an unconfirmed close was treated as done');
   } finally { await m.unmount(); }
 });
 
-test('DSR close: a stale or already-closed request offers a reload and no second submit', async () => {
-  for (const code of ['stale_request', 'no_open_request']) {
-    let done = 0;
-    const m = await openClose(() => json({ error: `Nothing was recorded (${code}).`, code }, 409), () => { done += 1; });
+test('DSR close: a stale or already-closed request offers a reload and no second send', async () => {
+  for (const [code, extra, now] of [
+    ['stale_request', { current_requested_at: '2026-10-05 08:00:00' }, /asked again on 5 Oct 2026/],
+    ['no_open_request', { last_outcome: 'withdrawn', last_outcome_at: '2026-10-02 14:28:00' }, /Withdrawn by the requester at Fri 2 Oct 2026, 14:28 UTC/],
+  ]) {
+    let reread = 0;
+    const m = await openClose(() => json({ error: `Nothing was recorded (${code}).`, code, ...extra }, 409), () => {}, () => { reread += 1; });
     try {
-      await m.submit('hq-dsr-close-form');
-      assert.match(m.of('hq-dsr-close-error'), /Nothing was recorded/);
-      assert.doesNotMatch(m.of('hq-dsr-close-error'), /not confirmed/i, `${code}: a certain refusal read as uncertain`);
-      assert.ok(m.has('hq-dsr-reload'), `${code}: no way to see what is open now`);
-      await m.click('hq-dsr-reload');
-      assert.equal(done, 1);
+      await m.click('dsr-confirm');
+      assert.equal(resultOf(m), 'changed', `${code}: a certain refusal read as something else`);
+      assert.match(m.of('dsr-result'), /Nothing was saved/);
+      assert.match(m.of('dsr-result'), now, `${code}: the dialog does not say what the request is now`);
+      assert.doesNotMatch(m.of('dsr-result'), /not confirmed/i, `${code}: a certain refusal read as uncertain`);
+      assert.equal(m.has('dsr-confirm'), false, `${code}: a second send is still offered`);
+      assert.ok(m.has('dsr-copy-reason'), `${code}: the reason is not kept`);
+      await m.click('dsr-reload');
+      assert.equal(reread, 1);
+      assert.equal(posts(m.seen, CLOSE).length, 1);
     } finally { await m.unmount(); }
   }
 });
 
-test('DSR close: choosing another outcome is another act, with a new key', async () => {
+test('DSR close: choosing another outcome, or another reason, is another act, with a new key', async () => {
   const m = await openClose(() => { throw new TypeError('Failed to fetch'); });
   try {
-    await m.submit('hq-dsr-close-form');
-    await m.press('Cancel');
-    await m.press('Record as fulfilled');
-    await m.typeIn('INPUT', 'records purged on 2026-10-02, ticket DSR-14');
-    await m.submit('hq-dsr-close-form');
+    await m.click('dsr-confirm');
+    await m.click('dsr-retry');
+    await m.press('Back');
+    await m.type('dsr-outcome-fulfilled', 'fulfilled');
+    await m.typeIn('TEXTAREA', 'records purged on 2026-10-02, ticket DSR-14');
+    await m.click('dsr-continue');
+    await m.click('dsr-confirm');
+    await m.click('dsr-retry');
+    await m.press('Back');
+    await m.typeIn('TEXTAREA', 'records purged on 2026-10-02, ticket DSR-15');
+    await m.click('dsr-continue');
+    await m.click('dsr-confirm');
     const sent = posts(m.seen, CLOSE);
-    assert.equal(sent.length, 2);
+    assert.equal(sent.length, 3);
+    assert.equal(sent[1].body.outcome, 'fulfilled');
     assert.notEqual(sent[0].body.close_key, sent[1].body.close_key, 'a different outcome reused the first close\'s key');
+    assert.notEqual(sent[1].body.close_key, sent[2].body.close_key, 'a different reason reused the earlier close\'s key');
+  } finally { await m.unmount(); }
+});
+
+test('DSR close: Withdrawn is not offered, and a reason under the floor goes nowhere', async () => {
+  const m = await mount(h(DsrOutcomeDialog, { row: ROW, onClose() {} }), () => json({ ok: true }));
+  try {
+    assert.equal(m.has('dsr-outcome-withdrawn'), false, 'HQ is offered a withdrawal, which is the subject\'s own act');
+    assert.match(m.of('dsr-scope'), /It does not erase data\./);
+    await m.typeIn('TEXTAREA', 'short');
+    await m.click('dsr-continue');
+    assert.equal(m.has('dsr-confirm'), false, 'a reason under the floor reached Review');
+    assert.equal(posts(m.seen, CLOSE).length, 0);
   } finally { await m.unmount(); }
 });
