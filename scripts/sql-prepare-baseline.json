@@ -1,6 +1,7 @@
 {
   "note": "Interpolations inside DB.prepare(`…`) present when this ledger was written, each reviewed and none an injection. The gate fails on NEW entries only. Removing a site is always allowed. Regenerate with: node scripts/check-sql-prepare.mjs --write",
   "sites": {
+    "SELECT @ routes/admin_legal_reviews.ts": 4,
     "SUMS @ routes/research.ts": 1,
     "bandSql @ routes/research_overview.ts": 1,
     "base @ routes/admin_cohort.ts": 2,
