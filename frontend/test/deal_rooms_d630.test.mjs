@@ -93,10 +93,12 @@ test('dr-pipeline: each live deal with Join or Leave, the quota, and what joinin
   assert.ok(t.includes(JOIN_NOTE), 'the join note is drawn');
   assert.match(JOIN_NOTE, /Only an invited or committed investor can read them\./);
   assert.equal((markup.match(/data-testid="dr-pipeline-row"/g) || []).length, 2, 'a passed deal is not offered');
-  assert.match(t, /Acme\s*Diligence\s*Invitation requested\s*Logistics\s*·\s*\$1,500,000\s*Leave/);
-  assert.match(t, /Birch\s*Screening\s*Fintech\s*·\s*Round size: the company has not recorded one\.\s*Request an invitation/);
+  assert.match(t, /Acme\s*Diligence\s*Invitation requested\s*Logistics\s*·\s*\$1,500,000\s*Open deal\s*Leave/);
+  // D4815: a room the investor may already open offers Open deal, not a request for what they have.
+  assert.match(t, /Birch\s*Screening\s*Fintech\s*·\s*Round size: the company has not recorded one\.\s*Open deal/);
 
-  const full = renderedText(html(h(DealRoomsList, { dealsState: { loading: false, error: false, deals: DEALS }, quotaState: ok(QUOTA_FULL_PRO) })));
+  const refused = DEALS.map((d) => (d.id === 2 ? { ...d, can_read: false } : d));
+  const full = renderedText(html(h(DealRoomsList, { dealsState: { loading: false, error: false, deals: refused }, quotaState: ok(QUOTA_FULL_PRO) })));
   assert.match(full, /Birch[\s\S]*Request an invitation\s*Your Professional plan is full/);
 });
 
@@ -271,6 +273,7 @@ test('the deal room keeps Invitations (admin), Transfers (admin, partner) and re
   assert.match(page, /<DealSyndicates projectId=\{deal\.project_id\} user=\{user\} \/>/);
   // D1215, D1155: an Admin records transfers; an Operating Partner reads them.
   assert.match(page, /<DealTransfersTab dealId=\{deal\.id\} currency=\{deal\.currency\} canRecord=\{isAdmin\} \/>/);
+  // D4815: the rooms to join have their own route, /deals/rooms.
   const routes = codeOnly(read('workspaces/investor/InvestorDealsRoutes.jsx'));
-  assert.match(routes, /<DealRoomsPanel \/>/, '/deals carries the deal rooms to join');
+  assert.match(routes, /isRooms\s*\?\s*<DealRoomsPanel \/>/, '/deals/rooms carries the deal rooms to join');
 });
