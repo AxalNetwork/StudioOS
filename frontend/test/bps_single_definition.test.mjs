@@ -145,7 +145,8 @@ test('every page that shows a rate reads it from the one helper', () => {
   // Named rather than counted, because the point is which pages were converted.
   for (const rel of [
     // #4707: the licence page's rates are drawn by its terms and detail parts.
-    'pages/admin/licences/CommercialTerms.jsx',
+    // D4819: the Terms section draws them through its model (step 4's editor moved there).
+    'pages/admin/licenceTermsAmendModel.js',
     'pages/admin/licences/LicenceDetail.jsx',
     'pages/subsidiary/MyLicencePage.jsx',
     'pages/NeedsBoardPage.jsx',

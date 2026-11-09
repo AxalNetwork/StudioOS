@@ -20,7 +20,8 @@ import { DEFAULT_TAB, stepOfTab, tabKeyMove, tabOfStep, tabsFor } from '../licen
 import { STATUS_TONE, HISTORY_STEP, ADMINS_STEP, NOTICES_STEP, BRAND_STEP, SCHEDULE_STEP, FEE_INVOICES_STEP, n0, fee, Chip, Field } from './licenceShared';
 import { AdminsEditor } from './AdminsEditor';
 import { BrandKitEditor } from './BrandKitEditor';
-import { SeatEditor, TermsEditor } from './CommercialTerms';
+import { SeatEditor } from './CommercialTerms';
+import TermsWorkspace from './TermsWorkspace';
 import { ContractStep } from './ContractStep';
 import { DeployStep } from './DeployStep';
 import { NoticesEditor } from './NoticesEditor';
@@ -350,7 +351,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           <TerritoryEditor licence={d} held={held} onSaved={refresh} onOpenLicence={onOpenLicence} />
         )}
         {step === 3 && <SeatEditor licence={d} onSaved={refresh} />}
-        {step === 4 && <TermsEditor licence={d} onSaved={refresh} />}
+        {/* D4819: the canvas's Terms section: read-only by default, amended in a reviewed session. */}
+        {step === 4 && <TermsWorkspace licence={d} onSaved={refresh} onOpenTab={(key) => onTab?.(key)} />}
         {step === 5 && <ContractStep licence={d} onSaved={refresh} />}
         {step === 6 && <DeployStep licence={d} />}
         {step === ADMINS_STEP && <AdminsEditor key={grant?.uid || 'admins'} licence={d} prefill={grant}
