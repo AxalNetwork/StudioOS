@@ -44,10 +44,9 @@ test('no list, no total', () => {
   assert.equal(total({ items: [] }), null);
 });
 
-/** The four sections that declare a total, and a payload shape for each. */
+/** The sections that declare a total, and a payload shape for each. D4815 retired the investor Deals board and its Closing section. */
 const DECLARED = [
   ['advisor', '/practice', 'sessions', (items) => ({ items }), 200],
-  ['investor', '/deals', 'closing', (items) => ({ items }), 200],
   ['partner', '/offers', 'catalog', (items) => ({ items }), 200],
 ];
 
@@ -62,11 +61,12 @@ test('each declared total counts the list its rows are drawn from, and stops at 
   }
 });
 
-test('the investor Deals board has no Pipeline section since D1243: Deal flow\'s own board and table count the deals', () => {
-  const board = boardFor('investor', '/deals', null);
-  assert.ok(!board.sections.some((s) => s.slug === 'pipeline'), 'the retired Pipeline section is back on the board');
-  assert.ok(!('deals' in board.sources), 'the board still reads the deal list for a section it no longer draws');
-  assert.deepEqual(board.sections.map((s) => s.slug), ['screening', 'commit', 'closing']);
+// D4815 (#4815): the investor Deals board is retired. `/deals` is My Deal Flow,
+// whose "Other deal activity" line links each zone, and nothing rendered it.
+test('the investor Deals board is retired: no bucket board answers /deals', () => {
+  // Mutation checked: re-registering `investor:/deals` in boards/index.js → this fails.
+  assert.equal(boardFor('investor', '/deals', null), null);
+  assert.ok(!('investor:/deals' in BOARDS));
 });
 
 test('no registry declares a total on a section with no source', () => {

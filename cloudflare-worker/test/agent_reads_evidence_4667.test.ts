@@ -131,24 +131,29 @@ test('the ten skills: an input matrix, and a preflight through the actual reader
       assert.notEqual(full.state, 'ready', `${slug}: the built readers do not carry its typed evidence, so it is not ready`);
       assert.equal(none.state, 'not_ready', `${slug}: with no project it cannot run`);
       assert.ok(full.limits.length > 0, `${slug}: what is missing is named`);
-      assert.equal(full.paths.default_context, 'unsupported', `${slug}: the default and scheduled path cannot supply its required evidence`);
+      // D4667 second and third slices: typed readers now carry every required input of these five; the other five still
+      // need document text, typed board metrics, typed fund performance or a person's review policy.
+      const carried = ['cash-runway-snapshot', 'monthly-investor-update', 'legal-due-diligence-coordination', 'pipeline-health-diagnostics', 'customer-interview-summary'].includes(slug);
+      assert.equal(full.paths.default_context, carried ? 'supported' : 'unsupported', `${slug}: which paths can supply its required evidence`);
       assert.equal(full.paths.manual, 'approved_tool_reads_not_exercised_here');
     }
-    // The three skills whose required evidence has no reader at all say exactly that.
+    // Balances and burn have typed readers now (agent_typed_readers_4667); this fixture's agent has no sponsor, so both
+    // are withheld. Board metrics are still only activity summaries.
     const cash = (await preflight(f.env, 'cash-runway-snapshot', f.ctx(), READERS, NOW))!;
-    assert.deepEqual(cash.inputs.map((i) => [i.read, i.status]), [['mercury.balances', 'unavailable_reader'], ['grow.records', 'partial']]);
-    assert.match(cash.inputs[1].note!, /activity summaries, not typed record/);
+    assert.deepEqual(cash.inputs.map((i) => [i.read, i.status]), [['mercury.balances', 'withheld'], ['grow.burn', 'withheld']]);
+    const board = (await preflight(f.env, 'board-meeting-brief', f.ctx(), READERS, NOW))!;
+    assert.match(board.inputs.find((i) => i.read === 'grow.records')!.note!, /activity summaries, not typed record/);
     const interview = (await preflight(f.env, 'customer-interview-summary', f.ctx(), READERS, NOW))!;
-    assert.equal(interview.state, 'not_ready', 'summaries are not a transcript with consent');
+    assert.equal(interview.state, 'not_ready', 'a transcript the sponsor may not read leaves nothing to summarise');
     const risk = (await preflight(f.env, 'contract-risk-issue-spotting', f.ctx(), READERS, NOW))!;
-    assert.ok(risk.inputs.find((i) => i.read === 'manual:review_policy')!.note!.includes('Supplied by the person'));
+    assert.ok(risk.inputs.find((i) => i.read === 'manual:review_policy')!.note!.includes('A person supplies this'));
     // The gate is not hard-wired shut: readers that DECLARE typed records, answering fresh and complete, make it ready.
     const typed: any = { ...READERS };
-    for (const read of ['mercury.balances', 'grow.records']) typed[read] = async () => ({ records: [{ ref: 'x', at: '2026-11-05 10:00:00' }], coverage: coverageOf(1, 1) });
-    const provides = { ...READER_PROVIDES, 'mercury.balances': 'typed_record', 'grow.records': 'typed_record' };
+    for (const read of ['mercury.balances', 'grow.burn']) typed[read] = async () => ({ records: [{ ref: 'x', at: '2026-11-05 10:00:00' }], coverage: coverageOf(1, 1) });
+    const provides = { ...READER_PROVIDES, 'mercury.balances': 'typed_record', 'grow.burn': 'typed_record' };
     const ready = (await preflight(f.env, 'cash-runway-snapshot', f.ctx(), typed, NOW, provides))!;
     assert.deepEqual([ready.state, ready.limits], ['ready', []]);
-    const lies = (await preflight(f.env, 'cash-runway-snapshot', f.ctx(), typed, NOW))!;
+    const lies = (await preflight(f.env, 'cash-runway-snapshot', f.ctx(), typed, NOW, { ...provides, 'grow.burn': 'activity_summaries' } as any))!;
     assert.equal(lies.state, 'not_ready', 'a reader that does not declare the shape cannot make a skill ready by answering');
   } finally { f.close(); }
 });

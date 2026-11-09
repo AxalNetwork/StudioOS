@@ -183,7 +183,7 @@ test('every investor row lands on its own workspace overview', () => {
   // D4815 (canvas DX1): the root is My Deal Flow. It WAS the zones' bucket
   // board, which read as three mini-apps under the flow; the zones are now one
   // "Other deal activity" line inside DealFlow, each linking to its route.
-  assert.match(dealsShell, /<DealFlow view=\{view\} scope=\{scope\} more=\{more\} \/>/,
+  assert.match(dealsShell, /<DealFlow view=\{view\} scope=\{scope\} \/>/,
     'the /deals root no longer renders Deal flow');
   assert.doesNotMatch(dealsShell, /<BucketBoard|<BucketOverview/,
     'the /deals root stacks the zone mini-boards under Deal flow again');

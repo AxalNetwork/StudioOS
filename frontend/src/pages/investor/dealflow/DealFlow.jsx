@@ -197,10 +197,11 @@ function EmptyFlow() {
  * The /deals root for an Investor (D1236, D1240): the toolbar, the controls,
  * then the Board on the firm's own stages or the Table, every setting in the
  * address. D4815 (canvas DX1): the root is My Deal Flow only. Screening, the
- * committee and Closing are one "Other deal activity" line linking to their
- * routes; `more` (the deal rooms and My tasks) sits collapsed under it.
+ * committee, Closing and the deal rooms are one "Other deal activity" line
+ * linking to their routes (the deal rooms at `/deals/rooms` since the second
+ * slice; My tasks moved to Studio).
  */
-export default function DealFlow({ view, scope, more }) {
+export default function DealFlow({ view, scope }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth() || {};
@@ -213,7 +214,6 @@ export default function DealFlow({ view, scope, more }) {
   const [dialog, setDialog] = useState(null);
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const pick = (id) => setPicked((p) => pickToggle(p, id));
 
   const lists = scope !== 'new';
@@ -303,10 +303,6 @@ export default function DealFlow({ view, scope, more }) {
   const flowLoading = flow.kind === 'loading' || deals.kind === 'loading' || (entries == null && flow.kind === 'ok');
   // DX13: when the personal flow is unreadable, what survives is said to be separate from it.
   const flowUnreadable = scope !== 'new' && !flowLoading && (flow.kind === 'unreadable' || (scope === 'all' && deals.kind === 'unreadable'));
-  const openRooms = () => {
-    setMoreOpen(true);
-    if (typeof document !== 'undefined') setTimeout(() => document.getElementById('deal-rooms')?.scrollIntoView?.({ block: 'start' }), 0);
-  };
   let body;
   if (scope === 'new') {
     body = <NewForYou onToast={(text) => setToast({ kind: 'moved', text })} />;
@@ -374,13 +370,7 @@ export default function DealFlow({ view, scope, more }) {
           <button type="button" className="text-[13px] underline" onClick={() => setPicked([])}>Clear</button>
         </div>
       )}
-      <OtherDealActivity surviving={flowUnreadable} onRooms={more ? openRooms : undefined} />
-      {more && (
-        <details id="deal-rooms" className={box} open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)} data-testid="dealflow-more">
-          <summary className="cursor-pointer text-[13px] font-semibold">Your deal rooms and tasks</summary>
-          {more}
-        </details>
-      )}
+      <OtherDealActivity surviving={flowUnreadable} />
       {dialog?.kind === 'filters' && (
         <FiltersDrawer filters={settings.filters} sectors={sectors} count={(f) => rows.filter((r) => (view === 'board' ? r.inFlow : true) && passes(r, f, user?.id ?? null)).length}
           onClose={() => setDialog(null)} onApply={(filters) => { setDialog(null); setSettings({ filters }); }} />

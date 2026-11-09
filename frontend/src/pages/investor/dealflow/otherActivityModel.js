@@ -2,7 +2,7 @@
  * D4815 (#4815), canvas DX1 — the "Other deal activity" line under Deal flow.
  *
  * `/deals` has one job: the investor's own deal flow. Screening, the investment
- * committee and Closing each have their own route, so the root carries one
+ * committee, Closing and the deal rooms each have their own route, so the root carries one
  * compact line with a count per zone and a link to it, not a mini-version of
  * each zone. Each count is the headline its zone page draws, read from the
  * same endpoint, so the line cannot report a number the zone cannot reproduce:
@@ -10,7 +10,7 @@
  *   Screening      — `GET /api/deals/screening`, the desk's rows.
  *   IC decisions   — `GET /api/ic/commit-room`, the decisions not yet decided.
  *   Closing        — `GET /api/deals?scope=mine`, the deals at the closing stage.
- *   Deal rooms     — `GET /api/deals`, the live rooms the panel below lists.
+ *   Deal rooms     — `GET /api/deals`, the live rooms `/deals/rooms` lists.
  *
  * A read that fails, or a store the reply marks unavailable, is `null`: the
  * line says "Unreadable" for that zone alone and never prints 0 in its place.
@@ -47,7 +47,7 @@ export const OTHER_ACTIVITY = Object.freeze([
   {
     key: 'rooms',
     label: 'Deal rooms',
-    href: '#deal-rooms',
+    href: '/deals/rooms',
     count: (r) => { const xs = rowsOf(r); return xs ? xs.filter((d) => dealStage(d) !== null).length : null; },
   },
 ]);

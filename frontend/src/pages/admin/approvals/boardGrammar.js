@@ -171,7 +171,8 @@ export function afterDecision(line, reply, who) {
       sub: `Check the item before trying again — ${who || 'they'} may not know yet.`,
     };
   }
-  return { warn: false, text: line };
+  // `decided`: the line reports a recorded decision, so it offers View in Decided (AP-18d).
+  return { warn: false, text: line, decided: true };
 }
 
 /**
@@ -185,4 +186,18 @@ export function boardStep(rows, key) {
   const i = list.findIndex((r) => String(r.key) === String(key));
   if (i < 0) return null;
   return { pos: `${(i + 1).toLocaleString('en-US')} of ${list.length.toLocaleString('en-US')}`, prev: list[i - 1] || null, next: list[i + 1] || null };
+}
+
+/**
+ * D4814 (#4814, part 8, AP-08/10/12): a board's waiting tab selects rows the
+ * way the Inbox does (AP-03). `sel` is the set of picked row keys; only the rows
+ * on screen count, so a key left over from another page or tab is never sent.
+ * Answers what is picked, whether the header box is checked (every row) or
+ * mixed (some), and the line the bar reads ("2 selected").
+ */
+export function pickState(sel, rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const picked = list.filter((r) => sel?.has?.(r.key));
+  const all = list.length > 0 && picked.length === list.length;
+  return { picked, all, some: picked.length > 0 && !all, line: `${picked.length.toLocaleString('en-US')} selected` };
 }
