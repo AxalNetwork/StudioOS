@@ -83,8 +83,12 @@ function stubProviders({ writeFails = false } = {}) {
     if (url.host === 'graph.microsoft.com') return writeFails ? json({ error: 'refused' }, 503) : json({ id: 'ms-new' });
     return json({}, 404);
   }) as any;
-  const writes = (host: RegExp) => seen.filter((u) => host.test(new URL(u).host) && !/oauth2|login\./.test(new URL(u).host)).length;
-  return { seen, restore: () => { globalThis.fetch = was; }, google: () => writes(/googleapis\.com/), ms: () => writes(/graph\.microsoft\.com/) };
+  // Counted by EXACT host. An unanchored regex on a host matches anywhere in it, so `/googleapis\.com/` would
+  // have counted `evil-googleapis.com.example.test` as a Google write (CodeQL, 2 high alerts on #5276). The
+  // write endpoints are their own hosts, so equality is both safer and more precise: it no longer has to
+  // exclude the token hosts by name.
+  const writes = (host: string) => seen.filter((u) => new URL(u).host === host).length;
+  return { seen, restore: () => { globalThis.fetch = was; }, google: () => writes('www.googleapis.com'), ms: () => writes('graph.microsoft.com') };
 }
 
 /** One create hook, with the provider world counted. */
