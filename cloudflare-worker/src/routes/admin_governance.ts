@@ -35,6 +35,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { isSuperAdmin, requireHqAuthoring, requireStepUp } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
+import { entityJurisdiction } from '../services/crossBorder';
 import {
   DOCX, GOVERNANCE_CATEGORIES, GOVERNANCE_ENTITIES, GOVERNANCE_STATUSES, MAX_FILE_BYTES, PDF, canMove, dateOf, docView, entityName,
   envelopeExists, isCategory, isEntity, isStatus, ownershipOf, readDoc, readVersions, sha256Hex, sniffDocument,
@@ -87,7 +88,7 @@ governance.get('/', async (c) => {
     const mine = (docs as DocRow[]).filter((d) => d.entity_key === key);
     const shown = mine.filter((d) => superAdmin || Number(d.confidential) !== 1);
     return {
-      key, name: entityName(key), documents: shown.map((d) => docView(d, latest.get(d.uid) ?? null, counts.get(d.uid) ?? 0)), withheld: mine.length - shown.length,
+      key, name: entityName(key), jurisdiction: entityJurisdiction(key), documents: shown.map((d) => docView(d, latest.get(d.uid) ?? null, counts.get(d.uid) ?? 0)), withheld: mine.length - shown.length,
       attention: entityAttention(key, facts, superAdmin),
     };
   });

@@ -229,7 +229,9 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     .sort((a, b) => (STRENGTH_WEIGHT[a.strength ?? ''] ?? 0.5) - (STRENGTH_WEIGHT[b.strength ?? ''] ?? 0.5))[0];
   const claimMeta = {
     open: claims.length,
-    fit_unrecorded: claims.filter((c) => c.status === 'not_recorded' && c.fit_unrecorded > 0).map((c) => ({ code: c.code, interviews: c.fit_unrecorded })),
+    // D4586 v2: a missing fit leaves a status unknown only when it could change it, so every undecided claim with
+    // missing fits is listed, not only the unknown ones: recording the fit is still what moves it toward its bar.
+    fit_unrecorded: claims.filter((c) => c.fit_unrecorded > 0 && !['supported', 'contested', 'refuted'].includes(c.status)).map((c) => ({ code: c.code, interviews: c.fit_unrecorded })),
     untested: claims.filter((c) => c.status === 'untested').map((c) => c.code),
     weakest: weakest?.code ?? null,
     decided_grade: ivMean.grade,
