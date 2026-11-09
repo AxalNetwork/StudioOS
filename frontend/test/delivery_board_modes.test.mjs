@@ -284,7 +284,7 @@ test('the ops row is the artboard’s three, and two are still prose', () => {
     'the gate branch no longer draws the same header row as the live one');
   assert.match(zone, /notice=\{unlinked \? <NoPartnerProfile \/> :/,
     'the gate stopped saying why the zone is empty');
-  assert.match(zone, /const v1 = unlinked \? \[\] : partnerZoneFilters\('delivery\/board'/,
+  assert.match(zone, /filters=\{unlinked \? \[\] : chips\}/,
     'a filter chip is drawn over rows this account cannot read');
 });
 

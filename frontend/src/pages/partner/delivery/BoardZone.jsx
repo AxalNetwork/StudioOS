@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { ZoneBody, NoPartnerProfile, isNoPartnerProfile } from '../kit';
+import { ZoneBody, NoPartnerProfile, StatedLimit, isNoPartnerProfile } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -86,7 +86,8 @@ const PRIMARY_BUTTON = 'inline-flex min-h-[44px] items-center rounded-lg bg-[#7c
 const V2_CHIPS = [['Needs attention', 'attention', 'Attention'], ['All', 'all', 'All'], ['Project', 'project', 'Projects'], ['Embedded', 'embedded', 'Embedded']];
 
 export default function PartnerDeliveryBoardZone() {
-  const [state, setState] = useState({ loading: true, refreshing: false, error: '', data: null, readAt: null });
+  // `error` is a failed FIRST read (the zone's own error state); `refreshError` a failed later read, which keeps the board.
+  const [state, setState] = useState({ loading: true, refreshing: false, error: '', refreshError: '', data: null, readAt: null });
   const [view, setView] = useState(null); // null until the first read decides Attention or All
   const [query, setQuery] = useState('');
   const [params, setParams] = useSearchParams();
@@ -94,12 +95,15 @@ export default function PartnerDeliveryBoardZone() {
 
   // The first read shows the loading state; a later one keeps the board on screen while it refreshes (D4698).
   const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: !s.data, refreshing: Boolean(s.data), error: '' }));
+    setState((s) => ({ ...s, loading: !s.data, refreshing: Boolean(s.data), error: '', refreshError: '' }));
     try {
       const r = await api.getPartnerDeliveryBoard();
-      setState({ loading: false, refreshing: false, error: '', data: r || {}, readAt: new Date() });
+      setState({ loading: false, refreshing: false, error: '', refreshError: '', data: r || {}, readAt: new Date() });
     } catch (e) {
-      setState((s) => ({ ...s, loading: false, refreshing: false, error: e?.message || 'The engagement board did not load.' }));
+      const msg = e?.message || 'The engagement board did not load.';
+      setState((s) => (s.data
+        ? { ...s, loading: false, refreshing: false, refreshError: msg }
+        : { ...s, loading: false, refreshing: false, error: msg }));
     }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -119,7 +123,7 @@ export default function PartnerDeliveryBoardZone() {
 
   // The gate (no partner profile) keeps the zone's own empty state underneath its notice rather than replacing it.
   const unlinked = isNoPartnerProfile(state.error);
-  const v1 = unlinked ? [] : partnerZoneFilters('delivery/board', { value: current, onChange: setView });
+  const v1 = partnerZoneFilters('delivery/board', { value: current, onChange: setView });
   const chips = V2_CHIPS.flatMap(([from, key, label]) => {
     const chip = v1.find((c) => c.label === from);
     return chip ? [{ ...chip, label: `${label} · ${counts[key]}` }] : [];
@@ -153,9 +157,11 @@ export default function PartnerDeliveryBoardZone() {
         </div>
       )}
 
-      {items.length > 0 && (
+      {/* The header row also draws for an account with no firm (its actions, never its chips); an empty workspace
+          has nothing to filter, so it shows only the one empty state. */}
+      {(items.length > 0 || unlinked) && (
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          <ZoneToolbar className="flex-1" role="partner" filters={chips} actions={rowActions} />
+          <ZoneToolbar className="flex-1" role="partner" filters={unlinked ? [] : chips} actions={rowActions} />
           <label className="flex items-center gap-2 text-[14px] text-[#6b6577] dark:text-gray-400">
             <span className="sr-only">Find a client</span>
             <input
@@ -173,13 +179,18 @@ export default function PartnerDeliveryBoardZone() {
         </div>
       )}
 
+      {/* A refresh that fails keeps the last read on screen and says so (D4698): the board is not blanked. */}
+      {state.refreshError && (
+        <p role="alert" className="mb-3 text-[14px] text-[#b91c1c] dark:text-red-300">
+          The board could not be refreshed; this is the last read.{' '}
+          <button type="button" onClick={load} className="font-semibold underline">Retry</button>
+        </p>
+      )}
       <ZoneBody
         loading={state.loading}
-        error={unlinked || state.data ? null : state.error}
+        error={unlinked ? null : state.error}
         onRetry={load}
-        notice={unlinked ? <NoPartnerProfile /> : (state.error && state.data ? (
-          <p role="alert" className="text-[14px] text-[#b91c1c] dark:text-red-300">The board could not be refreshed; this is the last read. <button type="button" onClick={load} className="font-semibold underline">Retry</button></p>
-        ) : null)}
+        notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || items.length === 0}
         empty={<DeliveryEmpty />}
       >
@@ -250,6 +261,10 @@ export default function PartnerDeliveryBoardZone() {
           <p className="text-[13px] text-[#6b6577] dark:text-gray-400">
             Not rated is not On track: an engagement with nothing recorded against it has no health yet. Rows open the engagement sheet.
           </p>
+
+          <StatedLimit title="What this board does not claim">
+            <p>Health is read from milestones, blockers, deliverables and retained hours; with none of those an engagement is not rated. Whether a client opened a deliverable is not tracked, and no reporting cadence is stored, so nothing here calls a report late.</p>
+          </StatedLimit>
 
           {/* D395 — the lifecycle and the invoice ledger, over every row the board read. */}
           <EngagementLifecycle rows={items} onChanged={load} />
