@@ -190,7 +190,9 @@ test('2. one version in flight and one executed per slot; history coexists; the 
     'a second executed version in force for the slot is refused');
   for (let i = 0; i < 3; i++) ins.run(`h${i}`, LIVE, 'package_master', 'package_master', null, 'venture_building', null, 'superseded', `eh${i}`, '2026-10-01', '2026-10-02');
   ins.run('v1', LIVE, 'package_master', 'package_master', null, 'venture_building', null, 'voided', null, null, null);
-  // Another licence, and the program scopes, are other slots.
+  // Another licence, and the program scopes, are other slots. (D5057: an agreement names a shared licence, so the
+  // other licence is a real territory licence, which carries one.)
+  db.prepare("INSERT INTO territory_licences (id, uid, licence_ref, legal_entity_name, brand_name, status) VALUES (2, 'lic_other', 'AXL-002', 'Other SAS', 'Other', 'active')").run();
   ins.run('b1', 'lic_other', 'package_master', 'package_master', null, 'venture_building', null, 'draft', null, null, null);
   ins.run('p1', LIVE, 'program_licence', 'program_licence:spinout-lab', 'spinout-lab', null, null, 'draft', null, null, null);
   ins.run('p2', LIVE, 'program_schedule', 'program_schedule:spinout-lab', 'spinout-lab', null, null, 'draft', null, null, null);
@@ -353,7 +355,7 @@ test('7. grant, required, sent, executed and legally in force are read apart', a
   s = body.programs[0];
   assert.deepEqual([s.agreement_sent, s.agreement_executed, s.legally_in_force, s.executed_agreement_uid], [true, true, true, body.agreements[0].uid]);
   assert.equal(body.slots[0].executed, body.agreements[0].uid);
-  assert.equal(body.licence_identity, 'territory_licence');
+  assert.equal(body.licence_identity, 'shared_licence', 'D5057: the uid names the shared licence identity');
   const one = await call(db, 'GET', `/api/admin/licence-agreements/${body.agreements[0].uid}`);
   assert.equal(one.status, 200);
   assert.deepEqual(one.body.events.map((e: any) => e.action), ['sent', 'executed']);
