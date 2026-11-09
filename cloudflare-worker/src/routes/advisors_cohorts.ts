@@ -388,7 +388,7 @@ async function requireOwnCohort(
 // (migration 202611091920). Shared by the guidance routes below.
 // ---------------------------------------------------------------------------
 
-type GuidanceStore = GuidanceRow & {
+export type GuidanceStore = GuidanceRow & {
   uid: string; cohort_cycle_id: number; advisor_user_id: number;
   title: string | null; body: string; week_number: number | null;
   is_draft: number; version: number; updated_at: string;
@@ -459,10 +459,12 @@ async function ownGuidance(env: Env, uid: string, advisorUserId: number): Promis
  * while the row is still at `expected`; when another tab got there first it
  * changes nothing and the caller answers 409 with the row as it now stands,
  * so the page can compare rather than overwrite. The history row is written in
- * the same batch, from the row as updated, and only when the update landed
- * (it selects the row at the new version, which a skipped update never made).
+ * the same batch, from the row as updated, and only when the update landed:
+ * `changes()` is the row count of the UPDATE just before it in the batch (one
+ * connection, one transaction), so a skipped update writes no history even
+ * when another writer has already moved the row to the same version number.
  */
-async function writeGuidanceVersion(
+export async function writeGuidanceVersion(
   env: Env, row: GuidanceStore, expected: number, actorUserId: number, action: string,
   next: { title: string | null; body: string; week_number: number | null; is_draft: number;
     answer: string | null; answered_at: string | null; retired_at: string | null; posted_at: string },
@@ -480,8 +482,8 @@ async function writeGuidanceVersion(
       `INSERT OR IGNORE INTO cohort_guidance_versions
          (guidance_id, version, action, title, body, week_number, is_draft, actor_user_id, created_at)
        SELECT id, version, ?, title, body, week_number, is_draft, ?, ?
-         FROM cohort_guidance WHERE id = ? AND version = ? AND updated_at = ?`
-    ).bind(action, actorUserId, now, row.id, expected + 1, now),
+         FROM cohort_guidance WHERE id = ? AND version = ? AND changes() > 0`
+    ).bind(action, actorUserId, now, row.id, expected + 1),
   ]);
   return Number(upd?.meta?.changes) > 0;
 }

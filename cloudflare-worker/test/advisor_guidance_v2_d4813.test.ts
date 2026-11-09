@@ -19,6 +19,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
 import advisors from '../src/routes/advisors.ts';
+import { writeGuidanceVersion } from '../src/routes/advisors_cohorts.ts';
 import { parseGuidanceWeek, guidanceCounts, guidanceStatus } from '../src/routes/_advisor_cohort_helpers.ts';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 
@@ -277,6 +278,23 @@ test('D4813: an edit against a stale version is refused with 409 and the row as 
   assert.equal(cleared.status, 200);
   assert.equal(cleared.body.item.title, null);
   assert.equal((await patch(db, uid, { version: 'x', retired: true })).status, 400);
+});
+
+test('D4813: the write itself refuses a version another writer already moved past (the race the pre-check cannot see)', async () => {
+  const db = freshDb();
+  const g = await post(db, { title: 'Race', body: 'Original' });
+  const row = db.prepare('SELECT * FROM cohort_guidance WHERE uid = ?').get(g.body.uid) as any;
+  // Both tabs read version 1; the other one lands first.
+  db.prepare("UPDATE cohort_guidance SET body = 'Theirs', version = 2 WHERE id = ?").run(row.id);
+  const next = { title: 'Mine', body: 'Mine', week_number: null, is_draft: 0, answer: null, answered_at: null, retired_at: null, posted_at: row.posted_at };
+  const landed = await writeGuidanceVersion(env(db), row, 1, AVA, 'edited', next);
+  assert.equal(landed, false, 'the UPDATE only lands at the version it was made on');
+  const after = db.prepare('SELECT body, version FROM cohort_guidance WHERE id = ?').get(row.id) as any;
+  assert.deepEqual({ ...after }, { body: 'Theirs', version: 2 });
+  const hist = db.prepare('SELECT version FROM cohort_guidance_versions WHERE guidance_id = ? ORDER BY version').all(row.id) as any[];
+  assert.deepEqual(hist.map((h) => h.version), [1], 'and writes no history for a write that did not land');
+  assert.equal(await writeGuidanceVersion(env(db), { ...row, version: 2 }, 2, AVA, 'edited', next), true);
+  assert.equal((db.prepare('SELECT version FROM cohort_guidance WHERE id = ?').get(row.id) as any).version, 3);
 });
 
 test('D4813: a page that predates versions can still answer and retire, checked against the row as read', async () => {
