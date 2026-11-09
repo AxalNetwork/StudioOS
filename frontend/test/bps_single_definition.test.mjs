@@ -147,7 +147,8 @@ test('every page that shows a rate reads it from the one helper', () => {
     // #4707: the licence page's rates are drawn by its terms and detail parts.
     // D4819: the Terms section draws them through its model (step 4's editor moved there).
     'pages/admin/licenceTermsAmendModel.js',
-    'pages/admin/licences/LicenceDetail.jsx',
+    // D4819 part 3: the detail's figures grid became the Overview's Commercial fact, drawn by its model.
+    'pages/admin/licenceOverviewModel.js',
     'pages/subsidiary/MyLicencePage.jsx',
     'pages/NeedsBoardPage.jsx',
     // D5039: Revenue's rates are drawn by its model, `pages/hq/revenue/`.

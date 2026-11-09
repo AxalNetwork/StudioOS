@@ -97,6 +97,8 @@ type Row = {
   rewards_json: string | null; template_keys: string; hq_receives: string | null; tools_json: string | null;
   sent_at: string | null; decision: string | null; hq_note: string | null; decided_by_user_id: number | null;
   decided_at: string | null; program_key: string | null; created_at: string; updated_at: string;
+  /** D4873: the latest send's number; null for a proposal never sent. */
+  revision?: number | null;
 };
 
 const listOf = (raw: unknown): string[] => {
@@ -133,7 +135,52 @@ export function proposalView(r: Row, studio: string | null = null) {
     tools: toolsOf(r.tools_json),
     sent_at: r.sent_at, decision: r.decision, hq_note: r.hq_note, decided_at: r.decided_at, program_key: r.program_key,
     created_at: r.created_at, updated_at: r.updated_at,
+    revision: r.revision == null ? null : Number(r.revision),
   };
+}
+
+// ---------------------------------------------------------------------------
+// D4873 (#4873, part 3): revisions
+// ---------------------------------------------------------------------------
+
+/** A decision's outcome as a revision records it. */
+const REVISION_OUTCOME: Record<Outcome, string> = {
+  approve_studio: 'approved_studio', approve_catalogue: 'approved_catalogue', send_back: 'sent_back', decline: 'declined',
+};
+
+type RevisionRow = {
+  revision: number; spec_json: string | null; sent_at: string | null; sent_by_user_id: number | null;
+  outcome: string | null; hq_note: string | null; decided_at: string | null;
+};
+
+/** A frozen send's fields in `proposalView`'s words, or null when what was sent is not recorded. */
+export function specOf(json: string | null): Partial<ReturnType<typeof proposalView>> | null {
+  if (json == null) return null;
+  let o: Record<string, unknown>;
+  try { o = JSON.parse(json); } catch { return null; }
+  if (!o || typeof o !== 'object') return null;
+  const v = proposalView({
+    ...(o as Record<string, unknown>), id: 0, uid: '', created_by_user_id: 0, licence_uid: null, status: 'sent', sent_at: null,
+    decision: null, hq_note: null, decided_by_user_id: null, decided_at: null, program_key: null, created_at: '', updated_at: '',
+    template_keys: typeof o.template_keys === 'string' ? o.template_keys : '[]',
+  } as unknown as Row);
+  return {
+    name: v.name, purpose: v.purpose, who: v.who, group: v.group, join_method: v.join_method, cycle: v.cycle,
+    cohort_weeks: v.cohort_weeks, seats: v.seats, eligibility: v.eligibility, rewards: v.rewards,
+    template_keys: v.template_keys, hq_receives: v.hq_receives, tools: v.tools,
+  };
+}
+
+/** Every revision of one proposal, oldest first: what was sent (or that it is not recorded) and the decision on it. */
+export async function revisionsOf(env: Env, proposalId: number) {
+  const r = await env.DB.prepare(
+    `SELECT revision, spec_json, sent_at, sent_by_user_id, outcome, hq_note, decided_at
+       FROM program_proposal_revisions WHERE proposal_id = ? ORDER BY revision`,
+  ).bind(proposalId).all<RevisionRow>();
+  return (r.results || []).map((x) => ({
+    revision: Number(x.revision), sent_at: x.sent_at, spec: specOf(x.spec_json), spec_recorded: x.spec_json != null,
+    outcome: x.outcome, hq_note: x.hq_note, decided_at: x.decided_at,
+  }));
 }
 
 const notFound = () => new ProgramError(404, 'unknown_proposal', 'No proposal has that uid.');
@@ -320,11 +367,28 @@ export async function sendProposal(
   const gate = policy({ id: actor.id, studio: actor.studio });
   if (!gate.open) throw new ProposalsClosed(gate.sentence);
   const t = new Date().toISOString();
-  const res = await env.DB.prepare(
-    `UPDATE program_proposals SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ? AND status IN ('draft', 'sent_back')`,
-  ).bind(t, t, row.id).run();
+  // D4873: a send is a new revision. The proposal takes the next number and, in the same batch, that revision's row
+  // freezes the proposal's own columns as one JSON object, exactly as the send left them (read in SQL from the row the
+  // UPDATE just locked; `program_proposal_revisions.spec_json`), so what HQ
+  // reads and decides is what was sent, whatever the studio edits after a send-back.
+  const [res] = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE program_proposals SET status = 'sent', sent_at = ?, updated_at = ?, revision = COALESCE(revision, 0) + 1
+        WHERE id = ? AND status IN ('draft', 'sent_back')`,
+    ).bind(t, t, row.id),
+    env.DB.prepare(
+      `INSERT INTO program_proposal_revisions (proposal_id, revision, spec_json, sent_at, sent_by_user_id, created_at)
+       SELECT id, revision,
+              json_object('name', name, 'purpose', purpose, 'who_json', who_json, 'grp', grp, 'join_method', join_method,
+                'cycle', cycle, 'cohort_weeks', cohort_weeks, 'seats', seats, 'eligibility', eligibility, 'rewards_json', rewards_json,
+                'template_keys', template_keys, 'hq_receives', hq_receives, 'tools_json', tools_json),
+              sent_at, ?, ?
+         FROM program_proposals WHERE id = ? AND status = 'sent' AND sent_at = ?`,
+    ).bind(actor.id, t, row.id, t),
+  ]);
   if (!Number(res.meta?.changes)) throw new ProgramError(409, 'not_editable', 'This proposal changed. Reload it.');
-  await logAdminAction(env, actor.id, actor.email, PROPOSAL_ACTIONS.send, { uid, licence_uid: actor.studio });
+  const sent = await env.DB.prepare('SELECT revision FROM program_proposals WHERE id = ?').bind(row.id).first<{ revision: number }>();
+  await logAdminAction(env, actor.id, actor.email, PROPOSAL_ACTIONS.send, { uid, licence_uid: actor.studio, revision: Number(sent?.revision) });
   return proposalView(await ownRow(env, uid, actor), await studioName(env, actor.studio));
 }
 
@@ -383,6 +447,7 @@ export async function myProposals(env: Env, actor: { id: number; studio: string 
   return {
     rows: (rows.results || []).map((r) => ({
       uid: r.uid, name: r.name, sent_at: r.sent_at, status: r.status, hq_note: r.hq_note, updated_at: r.updated_at,
+      revision: r.revision == null ? null : Number(r.revision),
     })),
     total: Number(total?.n ?? 0), page: lq.page, page_size: PAGE_SIZE,
   };
@@ -401,7 +466,7 @@ export async function hqQueue(env: Env, lq: ListQuery) {
   ).bind(...args).first<{ n: number }>();
   // Oldest first by default (dc:368); `sort` picks the direction.
   const rows = await env.DB.prepare(
-    `SELECT p.uid, p.name, p.licence_uid, p.sent_at, p.status, l.brand_name
+    `SELECT p.uid, p.name, p.licence_uid, p.sent_at, p.status, p.revision, p.decided_at, l.brand_name
        FROM program_proposals p LEFT JOIN territory_licences l ON l.uid = p.licence_uid
       WHERE p.status != 'draft'
         AND (? IS NULL OR (? = 'hq-held' AND p.licence_uid IS NULL) OR p.licence_uid = ?)
@@ -411,7 +476,7 @@ export async function hqQueue(env: Env, lq: ListQuery) {
                p.sent_at ASC, p.id ASC
       LIMIT ? OFFSET ?`,
   ).bind(...args, lq.sort, lq.sort, PAGE_SIZE, (lq.page - 1) * PAGE_SIZE)
-    .all<{ uid: string; name: string | null; licence_uid: string | null; sent_at: string | null; status: ProposalStatus; brand_name: string | null }>();
+    .all<{ uid: string; name: string | null; licence_uid: string | null; sent_at: string | null; status: ProposalStatus; revision: number | null; decided_at: string | null; brand_name: string | null }>();
   const counts = await env.DB.prepare(
     "SELECT status, COUNT(*) AS n FROM program_proposals WHERE status != 'draft' GROUP BY status",
   ).all<{ status: ProposalStatus; n: number }>();
@@ -421,6 +486,8 @@ export async function hqQueue(env: Env, lq: ListQuery) {
     rows: (rows.results || []).map((r) => ({
       uid: r.uid, name: r.name, studio: r.licence_uid ? (r.brand_name?.trim() || r.licence_uid) : 'HQ-held',
       licence_uid: r.licence_uid, sent_at: r.sent_at, status: r.status,
+      // D4873: the revision HQ decides or decided, and when.
+      revision: r.revision == null ? null : Number(r.revision), decided_at: r.decided_at,
     })),
     total: Number(total?.n ?? 0), page: lq.page, page_size: PAGE_SIZE, counts: by,
   };
@@ -438,7 +505,8 @@ export async function proposalDetail(env: Env, uid: string, actor: { id: number;
     row = await env.DB.prepare("SELECT * FROM program_proposals WHERE uid = ? AND status != 'draft'").bind(uid).first<Row>();
     if (!row) throw notFound();
   }
-  return proposalView(row, await studioName(env, row.licence_uid));
+  // D4873: every revision, oldest first, with what each send held and the decision on it.
+  return { ...proposalView(row, await studioName(env, row.licence_uid)), revisions: await revisionsOf(env, row.id) };
 }
 
 // ---------------------------------------------------------------------------
@@ -490,11 +558,13 @@ export function reviewSections(v: ReturnType<typeof proposalView>): NewProgram['
  * The frozen record of an approval: every material field of the proposal as it was approved, what each one becomes,
  * and which of them are operational. Written once with the program (`program_approved_specs`, append-only).
  */
-export function approvedSpec(v: ReturnType<typeof proposalView>, decision: 'studio' | 'catalogue') {
+export function approvedSpec(v: ReturnType<typeof proposalView>, decision: 'studio' | 'catalogue', revision: number | null = null) {
   const on = v.tools ? (Object.keys(TOOLS) as ToolKey[]).filter((k) => v.tools![k]) : [];
   return {
     proposal_uid: v.uid,
     decision,
+    // D4873: the revision this approval approved.
+    revision,
     fields: {
       name: v.name, group: v.group, purpose: v.purpose, who: v.who, join_method: v.join_method, cycle: v.cycle,
       cohort_weeks: v.cohort_weeks, seats: v.seats, eligibility: v.eligibility, rewards: v.rewards,
@@ -534,9 +604,18 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
   if ((outcome === 'send_back' || outcome === 'decline') && !note) {
     throw new ProgramError(400, 'note_required', 'Write a note to the studio. It is required to send a proposal back or decline it.');
   }
+  // D4873 (#4873, part 3): A DECISION NAMES THE REVISION IT DECIDES. The reviewer read one revision; the request says
+  // which (`expected_revision`), and a proposal sent again since is refused with nothing written.
+  const expected = b.expected_revision;
+  if (typeof expected !== 'number' || !Number.isInteger(expected) || expected < 1) {
+    throw new ProgramError(400, 'expected_revision_required', 'Send the revision you reviewed (expected_revision). Nothing was decided.');
+  }
   const row = await env.DB.prepare("SELECT * FROM program_proposals WHERE uid = ? AND status != 'draft'").bind(uid).first<Row>();
   if (!row) throw notFound();
   if (row.status !== 'sent') throw new ProgramError(409, 'not_waiting', 'Only a proposal sent to HQ and not yet decided can be decided.');
+  if (Number(row.revision) !== expected) {
+    throw new ProgramError(409, 'revision_changed', `This proposal is now revision ${row.revision ?? 'unknown'}, not the revision ${expected} you reviewed. Read it again, then decide. Nothing was decided.`);
+  }
 
   const status: ProposalStatus = outcome === 'send_back' ? 'sent_back' : outcome === 'decline' ? 'declined' : 'approved';
   const decision = outcome === 'approve_studio' ? 'studio' : outcome === 'approve_catalogue' ? 'catalogue' : null;
@@ -549,8 +628,14 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
   // no history line.
   const stmts: D1PreparedStatement[] = [env.DB.prepare(
     `UPDATE program_proposals SET status = ?, decision = ?, hq_note = ?, decided_by_user_id = ?, decided_at = ?, program_key = ?, updated_at = ?
-      WHERE id = ? AND status = 'sent'`,
-  ).bind(status, decision, note || null, actor.id, t, null, t, row.id)];
+      WHERE id = ? AND status = 'sent' AND revision = ?`,
+  ).bind(status, decision, note || null, actor.id, t, null, t, row.id, expected)];
+  // D4873: the decision is recorded on the revision it decided, once, and only by the decision that won.
+  stmts.push(env.DB.prepare(
+    `UPDATE program_proposal_revisions SET outcome = ?, hq_note = ?, decided_at = ?, decided_by_user_id = ?
+      WHERE proposal_id = ? AND revision = ? AND outcome IS NULL
+        AND EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = ? AND decided_at = ? AND decided_by_user_id = ? AND revision = ?)`,
+  ).bind(REVISION_OUTCOME[outcome], note || null, t, actor.id, row.id, expected, row.id, status, t, actor.id, expected));
   if (decision) {
     if (decision === 'studio' && !row.licence_uid) {
       throw new ProgramError(409, 'no_studio', 'This proposal was sent by no studio, so it cannot be approved for one studio only.');
@@ -571,7 +656,7 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
       `INSERT INTO program_approved_specs (program_key, proposal_uid, decision, decided_at, spec_json, created_at)
        SELECT ?, ?, ?, ?, ?, ?
         WHERE EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?)`,
-    ).bind(programKey, row.uid, decision, t, JSON.stringify(approvedSpec(v, decision)), t, row.id, t, actor.id));
+    ).bind(programKey, row.uid, decision, t, JSON.stringify(approvedSpec(v, decision, expected)), t, row.id, t, actor.id));
     if (decision === 'studio') {
       const lic = await env.DB.prepare('SELECT id FROM territory_licences WHERE uid = ?').bind(row.licence_uid).first<{ id: number }>();
       if (lic) {
@@ -591,11 +676,11 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
     throw new ProgramError(409, 'not_waiting', 'Another decision landed first. Reload the proposal.');
   }
   await logAdminAction(env, actor.id, actor.email, PROPOSAL_ACTIONS.decide, {
-    uid, outcome, note: note || null, ...(programKey ? { program_key: programKey } : {}),
+    uid, outcome, note: note || null, revision: expected, ...(programKey ? { program_key: programKey } : {}),
     ...(decision === 'studio' ? { draft_grant: draftLicence !== null } : {}),
   });
   const after = await env.DB.prepare('SELECT * FROM program_proposals WHERE id = ?').bind(row.id).first<Row>();
-  return proposalView(after!, await studioName(env, after!.licence_uid));
+  return { ...proposalView(after!, await studioName(env, after!.licence_uid)), revisions: await revisionsOf(env, row.id) };
 }
 
 // ---------------------------------------------------------------------------
