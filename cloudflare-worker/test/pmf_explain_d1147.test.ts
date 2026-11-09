@@ -21,7 +21,7 @@ async function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   const baseline = read('../sql/schema_baseline.sql');
   for (const t of ['users','projects','activity_logs','data_room_files','raise_prospects','spinout_deck_overrides','discovery_interviews','interview_pain_severities','pain_groups','pain_group_aliases','hypotheses','hypothesis_pain_links','waitlist_signups','metric_targets','validation_decisions','roadmap_okrs','competitor_analyses','competitor_candidates','competitor_sources','competitor_signals']) db.exec(tableFromBaseline(baseline, t));
-  for (const f of ['311_revenue_entries.sql','440_validate_cycle_stores.sql','464_verdict_decisions.sql','460_validate_record_stores.sql','438_interview_sessions.sql','499_github_roadmap.sql','442_raise_cycle_stores.sql','536_readiness_stated_evidence.sql','558_readiness_scores_nullable_score.sql','598_venture_scorecards.sql']) db.exec(read('../sql/migrations/' + f));
+  for (const f of ['311_revenue_entries.sql','440_validate_cycle_stores.sql','464_verdict_decisions.sql','460_validate_record_stores.sql','438_interview_sessions.sql','499_github_roadmap.sql','442_raise_cycle_stores.sql','536_readiness_stated_evidence.sql','558_readiness_scores_nullable_score.sql','202611091000_readiness_input_hash.sql','598_venture_scorecards.sql']) db.exec(read('../sql/migrations/' + f));
   db.exec(tableFromBaseline(read('../sql/migrations/221_research_ask_sessions.sql'), 'research_zone_drafts'));
   db.exec(`INSERT INTO users(id,email,name,role,is_active,founder_id) VALUES
     (1,'owner@example.test','Synthetic owner','founder',1,11),(2,'other@example.test','Other owner','founder',1,22),
