@@ -32,6 +32,7 @@ import { codeOnly } from './_codeOnly.mjs';
 // through its component tree, which the loader cannot resolve. The split is
 // deliberate — see `opportunityLog.js`'s own docblock.
 import { acceptanceRate, classifyBooking, SYSTEM_CANCELS } from '../src/pages/advisor/practice/opportunityLog.js';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/advisor/practice/OpportunitiesZone.jsx');
@@ -71,7 +72,8 @@ test('the system-cancel set is exactly what the worker writes, not a guess', () 
   // `cancel_reason` itself in exactly two places; if a third is ever added,
   // the new reason would silently be counted as a DECLINE — an advisor
   // refusing work they never saw. This fails instead.
-  const worker = read('cloudflare-worker/src/routes/advisors.ts');
+  // #4715: the advisor router is advisors.ts plus the route modules it mounts.
+  const worker = advisorRoutesSource();
   const written = new Set(
     [...worker.matchAll(/cancel_reason = (?:COALESCE\(cancel_reason, )?'([a-z_]+)'/g)].map((m) => m[1]),
   );

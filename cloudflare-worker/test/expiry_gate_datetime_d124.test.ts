@@ -216,7 +216,8 @@ test('no access-control gate compares a bare timestamp column', () => {
   // across every file that gates on these two columns.
   const FILES = [
     'routes/auth.ts', 'routes/auth_passkey.ts', 'routes/advisor_grants.ts',
-    'routes/advisors.ts', 'routes/data_room.ts', 'routes/research.ts',
+    // #4715: the advisor gate moved to routes/advisors_engagements.ts.
+    'routes/advisors_engagements.ts', 'routes/data_room.ts', 'routes/research.ts',
     'routes/market_intel.ts', 'services/trust.ts',
   ];
   // A bare column on either side of a comparison against the clock. The
