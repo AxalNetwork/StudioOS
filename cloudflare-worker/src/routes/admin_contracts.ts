@@ -30,7 +30,9 @@ import { renderLegalPdf } from '../services/legalPaperRender';
 import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { refuse } from '../util/refusal';
-import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON } from '../services/templateSafety';
+import { SEARCH_LIMIT, rank, searchAgreements, searchGovernance, searchQuery, searchTemplates, type SearchResult } from '../services/contractSearch';
+import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON, isRestrictedSlug } from '../services/templateSafety';
+import { contractAttention, isAttentionFilter, matchesAttention } from '../services/contractAttention';
 import {
   listTemplates as storeListTemplates,
   getTemplate as storeGetTemplate,
@@ -898,6 +900,9 @@ adminContracts.get('/', async (c) => {
   if (provider && !['native', 'docusign'].includes(provider)) return c.json({ error: 'Unknown provider' }, 400);
   if (partyRole && !['founder', 'investor', 'advisor', 'partner', 'axal'].includes(partyRole)) return c.json({ error: 'Unknown party role' }, 400);
   if (projectId && (!/^\d+$/.test(projectId) || !Number.isSafeInteger(Number(projectId)) || Number(projectId) < 1)) return c.json({ error: 'Invalid project id' }, 400);
+  // D4811 part 3 — a metric strip cell's records (`services/contractAttention.ts`).
+  const attention = c.req.query('attention') || '';
+  if (attention && !isAttentionFilter(attention)) return c.json({ error: 'invalid_contract_query', message: 'Choose a valid attention filter.', field: 'attention' }, 400);
   const template = c.req.query('template') || '';
   const signedRecent = c.req.query('signed_recent');
   if (signedRecent && signedRecent !== 'true') return c.json({ error: 'signed_recent must be true' }, 400);
@@ -909,6 +914,9 @@ adminContracts.get('/', async (c) => {
   try {
     let rows = await loadAllContracts(sql, true);
     if (c.req.query('recorded') === 'true') rows = await recordedSigningDates(c, rows);
+    // A stalled send is known only from a recorded send date, so that filter always reads the recorded rows.
+    if (attention === 'stalled' && c.req.query('recorded') !== 'true') rows = await recordedSigningDates(c, rows);
+    if (attention) { const now = Date.now(); rows = rows.filter(r => matchesAttention(r as any, attention as any, now)); }
 
     if (status && status !== 'all') rows = rows.filter(r => status === 'awaiting_signature'
       ? ['sent', 'generated'].includes(r.status) : r.status === status);
@@ -1043,6 +1051,38 @@ adminContracts.get('/templates/store/:slug/fields', async (c) => {
   }
 });
 
+/**
+ * D4811 part 3 — the strip's two library cells. Legal review required: the
+ * templates counsel has not reviewed (restricted, D803) and the governance
+ * records in review; Restricted: those templates and the confidential
+ * governance records. Counts only. Governance is HQ's (D4563): a branch
+ * Worker reads it as not recorded, and a failed read is unreadable, never 0.
+ */
+async function reviewAttention(c: AppContext) {
+  let templates: number | null = null;
+  try {
+    const rows = (await c.env.DB.prepare('SELECT slug FROM legal_templates WHERE is_active = 1').all<{ slug: string }>()).results || [];
+    templates = rows.filter(r => isRestrictedSlug(r.slug)).length;
+  } catch { templates = null; }
+  let review: number | null = null, confidential: number | null = null;
+  let governance: 'hq' | 'branch' | 'unreadable' = 'hq';
+  if (c.env.BRANCH_CODE) governance = 'branch';
+  else {
+    try {
+      const g = await c.env.DB.prepare(
+        `SELECT SUM(CASE WHEN status = 'review' THEN 1 ELSE 0 END) AS review,
+                SUM(CASE WHEN confidential = 1 AND status <> 'archived' THEN 1 ELSE 0 END) AS confidential
+           FROM governance_documents`,
+      ).first<{ review: number | null; confidential: number | null }>();
+      review = Number(g?.review ?? 0); confidential = Number(g?.confidential ?? 0);
+    } catch { governance = 'unreadable'; }
+  }
+  return {
+    legal_review: { templates, governance: review, governance_scope: governance },
+    restricted: { templates, governance: confidential, governance_scope: governance },
+  };
+}
+
 // GET /api/admin/contracts/stats — aggregate counters across the union.
 adminContracts.get('/stats', async (c) => {
   await requireAdmin(c);
@@ -1082,6 +1122,11 @@ adminContracts.get('/stats', async (c) => {
         : null,
       signed_last_30d: signedRecent,
       pending_signature: byStatus.sent + byStatus.generated,
+      // D4811 part 3 — the metric strip (board CT-01), over the rows the page lists.
+      attention: {
+        ...contractAttention((recorded ? rows : await recordedSigningDates(c, loaded)) as any[], Date.now()),
+        ...(await reviewAttention(c)),
+      },
     });
   } catch {
     return c.json({ error: 'Contracts are unreadable. Try again.', code: 'contracts_unreadable' }, 503);
@@ -1305,6 +1350,52 @@ adminContracts.get('/partner-deals', async (c) => {
 });
 
 // GET /api/admin/contracts/:uid — detail (UNION-aware).
+/**
+ * D4811 part 4 — GET /api/admin/contracts/search?q=&historical=true
+ * (`services/contractSearch.ts`, board CT-13). One ranked list across
+ * templates, agreements and governance records, current versions first and
+ * earlier versions only on request. A store that cannot be read is named in
+ * `unreadable`, never reported as no match. Governance is HQ's; a
+ * confidential record is the Super Admin's alone, and is not even counted
+ * for anyone else.
+ */
+adminContracts.get('/search', async (c) => {
+  const admin = await requireAdmin(c);
+  const q = searchQuery(c.req.query('q'));
+  if (!q) return c.json({ error: 'invalid_search', message: 'Type at least 2 characters (at most 200) to search.', field: 'q' }, 400);
+  const historical = c.req.query('historical') === 'true';
+  const superAdmin = isSuperAdmin(admin as any);
+  const unreadable: string[] = [];
+  const results: SearchResult[] = [];
+  let hidden = 0;
+  try {
+    const t = await searchTemplates(c.env, q);
+    results.push(...t.current.filter(r => r.score > 0));
+    const h = t.historical.filter(r => r.score > 0);
+    if (historical) results.push(...h); else hidden += h.length;
+  } catch { unreadable.push('template'); }
+  const governanceScope = c.env.BRANCH_CODE ? 'branch' : 'hq';
+  if (governanceScope === 'hq') {
+    try {
+      const g = await searchGovernance(c.env, q, superAdmin);
+      results.push(...g.current.filter(r => r.score > 0));
+      const h = g.historical.filter(r => r.score > 0);
+      if (historical) results.push(...h); else hidden += h.length;
+    } catch { unreadable.push('governance'); }
+  }
+  const sql = getSQL(c.env);
+  try { results.push(...searchAgreements(await loadAllContracts(sql, true), q)); }
+  catch { unreadable.push('agreement'); }
+  finally { await sql.end(); }
+  const ranked = rank(results);
+  const counts = { template: 0, agreement: 0, governance: 0 };
+  for (const r of ranked) counts[r.type] += 1;
+  return c.json({
+    q, historical, total: ranked.length, items: ranked.slice(0, SEARCH_LIMIT).map(({ score, ...r }) => r),
+    counts, hidden_historical: historical ? 0 : hidden, unreadable, governance_scope: governanceScope, limit: SEARCH_LIMIT,
+  });
+});
+
 adminContracts.get('/:uid/history', async (c) => {
   const admin = await requireAdmin(c);
   const sql = getSQL(c.env);

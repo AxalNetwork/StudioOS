@@ -102,7 +102,7 @@ async function assertFields(m) {
 test('real inputs, chips, checks, notes, paired fields and files update and validate', async () => {
   await assertFields({ default: FormLightbox });
   await mutationCheck(source, path, assertFields, [
-    ['note(values) : note', "'A fixed note' : note"],
+    ['note(values, field) : note', "'A fixed note' : note"],
     ['if (!fieldVisible(field, values)) return null;', 'if (false) return null;'],
     ['setValue(field.name, option.value);', "setValue(field.name, 'invented');"],
     ['if (Object.keys(found).length) return;', 'if (false) return;'],

@@ -539,7 +539,7 @@ test('with no cap stated, nothing is over anything and the response says why', a
   const r = (await call(e, 'GET', '/capacity', ours)).body;
   assert.equal(r.cap_hours, null);
   assert.equal(r.cap_source, null);
-  assert.match(r.cap_note, /no capacity cap is recorded/i);
+  assert.match(r.cap_note, /Capacity limits not set/i); // D4822: canvas copy
   assert.equal(r.over_committed_count, null);
   assert.equal(r.people.length, 1);
   assert.equal(r.people[0].hours, 62);
@@ -593,7 +593,7 @@ test('a stated cap is the firm’s number, and clearing it restores the refusal'
   assert.equal(r.cap_hours, null);
   assert.equal(r.over_committed_count, null);
   assert.equal(r.people[0].over_committed, null);
-  assert.match(r.cap_note, /no capacity cap is recorded/i);
+  assert.match(r.cap_note, /Capacity limits not set/i); // D4822: canvas copy
   assert.equal(
     db.prepare('SELECT COUNT(*) AS c FROM partner_capacity').get().c, 0,
     'clearing wrote a row instead of removing one',
@@ -1095,4 +1095,15 @@ test('no route writes a value it computes', () => {
     assert.ok(!named.has(derived),
       `a write names \`${derived}\` — it is derived or the client's, and must not be written here`);
   }
+});
+
+// D4822 (#4822, part 2): with no live engagement there is nothing to refuse to average, so no sentence —
+// "0 of 0 engagements have no score" is commentary on nothing.
+test('a firm whose engagements are all cancelled gets no satisfaction note, not a 0-of-0 sentence', async () => {
+  const db = freshDb();
+  db.prepare(`UPDATE engagements SET cancelled_at = '2026-10-01' WHERE partner_id = 1`).run();
+  const r = (await call(env(db), 'GET', '/health', ours)).body;
+  assert.equal(r.satisfaction_avg, null);
+  assert.equal(r.satisfaction_unscored_count, 0);
+  assert.equal(r.satisfaction_note, null, 'a sentence about zero engagements was written');
 });

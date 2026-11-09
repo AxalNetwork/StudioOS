@@ -19,6 +19,7 @@ import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // shell picks the sidebar from it and the router picks route elements from it;
 // when those two disagree the nav offers one thing and the route serves another.
 import { resolveActiveRole, resolveHeldLicences } from './lib/activeRole';
+import { multiLicenceSet } from './lib/multiLicencePages.js';
 import { buildLicenceSidebar, isLicence } from './lib/licenceSidebar';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
@@ -90,6 +91,9 @@ import { keepFirstTouch } from './lib/referralRef';
 import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
 import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+// D4474 (#4474): /studio and /spinout-lab for a member who holds more than one licence, one block per licence.
+const MultiLicenceStudio = lazy(() => import('./pages/studio/MultiLicenceStudio'));
+const MultiLicenceSpinoutLab = lazy(() => import('./pages/spinout/MultiLicenceSpinoutLab'));
 const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
 
 // The four workspace shells, rebuilt from the design canvases. The IA itself
@@ -544,7 +548,8 @@ import { signInPath as assistantSignInPath } from './pages/connect/assistantCons
 import { PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
-import UseOfFundsMovedRedirect from './pages/raise/useoffunds/UseOfFundsMovedRedirect';
+// #4574 H4: an old address's redirect, loaded when one is hit: its model pulls the whole forecast model into the shell.
+const UseOfFundsMovedRedirect = lazy(() => import('./pages/raise/useoffunds/UseOfFundsMovedRedirect'));
 import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
 import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
@@ -2461,6 +2466,10 @@ function AppInner() {
   // Spin-Out Lab) keeps `effectiveRole`, so it renders the primary licence's view.
   const heldLicences = resolveHeldLicences({ user, realUser, viewMode, isImpersonating });
   const holds = (licence) => heldLicences.includes(licence);
+  // D4474 (#4474): the held licences, in licence order, when a member on their own account holds two or more;
+  // null otherwise. Studio and Spin-Out Lab then draw one block per held licence. An admin (with or without a
+  // "View as" preview), an impersonation and an exploring account get null, so they keep today's page.
+  const multiLicence = multiLicenceSet({ user, realUser, isImpersonating, effectiveRole, heldLicences });
 
   // Which shell's Research zone list to render. Admin has no research shell of
   // its own, so it previews the founder one rather than falling through to a
@@ -2591,12 +2600,24 @@ function AppInner() {
           SpinoutLabPage loads founder-scoped Lab state on mount, so an investor
           would fire a request that is not theirs to make; and all three pages
           are lazy, so an investor never downloads the founder chunk (or vice
-          versa). Logged-in visitors get the normal app shell either way. */}
+          versa). Logged-in visitors get the normal app shell either way.
+
+          D4474 (#4474): a member who holds two or more licences gets
+          MultiLicenceSpinoutLab, one block per held part: the Lab block
+          (SpinoutLabPage) for Founder, Advisor or Operating Partner, and the
+          Investor block (SpinoutLabInvestorPage) for Investor. For the same
+          first reason, SpinoutLabPage mounts only inside the Lab block, so a
+          member with no Lab licence never fires the founder-scoped Lab
+          request. An admin preview, an impersonation and an exploring
+          account keep the ternary on effectiveRole below; a signed-out
+          visitor still gets SpinoutLabPage. */}
       <Route
         path="/spinout-lab"
         element={
           user
-            ? authOnly(effectiveRole === 'investor'
+            ? authOnly(multiLicence
+              ? <MultiLicenceSpinoutLab licences={multiLicence} activeRole={effectiveRole} />
+              : effectiveRole === 'investor'
                 ? <SpinoutLabInvestorPage />
                 : <SpinoutLabPage />)
             : <SpinoutLabPage />
@@ -2735,7 +2756,9 @@ function AppInner() {
           stay permissive so deep links keep working during the split. */}
       {/* Spin-Out Lab members (role `exploring`, lab-active) build their skills +
           values profile in Studio too — the lab Profiling page reads from it. */}
-      <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <Dashboard activeRole={effectiveRole} authUser={user} />)} />
+      {/* D4474 (#4474): two or more held licences draw one Studio block per licence; everyone else, an admin, a
+          "View as" preview, an impersonation and an exploring Lab member included, keeps Dashboard. */}
+      <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), multiLicence ? <MultiLicenceStudio licences={multiLicence} activeRole={effectiveRole} authUser={user} /> : <Dashboard activeRole={effectiveRole} authUser={user} />)} />
       <Route path="/studio/tickets/new" element={guard(['founder'], <Dashboard activeRole={effectiveRole} authUser={user} />)} />
       <Route path="/studio/archetype" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ArchetypeCardPage activeRole={effectiveRole} />)} />
       {/* Task #9 — holding-state dashboard for chat-onboarded users awaiting admin role review. */}

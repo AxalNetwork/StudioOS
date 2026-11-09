@@ -51,6 +51,37 @@ export function BotOperationsPanel({ report, pricing, range, setRange }) {
   </>;
 }
 
+const STAGES = {
+  dispatch_accepted: 'Dispatch accepted', container_binding_resolved: 'Container binding', image_resolved: 'Runtime image',
+  container_starting: 'Container starting', runtime_port_waiting: 'Waiting for port 8080', runtime_health_ready: 'Runtime health',
+  runtime_command_accepted: 'Start command accepted', provider_starting: 'Provider starting',
+};
+const seconds = (ms) => ms == null ? 'Not recorded' : `${number(ms / 1000)}s`;
+
+/** D5153 (#5153): each recent failed run with the stage and code it stopped at, and HQ's next step. Codes only. */
+export function RecentFailedRuns({ recent }) {
+  if (!recent) return null;
+  return <Card><h2 className="font-bold">Recent failed runs</h2>
+    <p className="mt-1 text-xs text-axal-muted dark:text-gray-300">The last 20 failed runs in 30 days. “Runtime reported” says whether the bot ever called back: when it did not, the meeting provider was never contacted.</p>
+    {recent.state !== 'ok' ? <p className="mt-3 text-sm text-axal-muted dark:text-gray-300">{recent.state === 'not_recorded' ? 'Not recorded' : 'Unreadable'}</p>
+      : !recent.runs.length ? <p className="mt-3 text-sm text-axal-muted dark:text-gray-300">No failed runs in the last 30 days.</p>
+      : <ul className="mt-3 space-y-3" data-testid="recent-failed-runs">{recent.runs.map((r) => <li key={r.uid} className="rounded-lg border border-axal-hairline p-3 text-sm dark:border-gray-700">
+        <div className="flex flex-wrap items-baseline justify-between gap-2"><b>{platforms[r.platform]} · {r.runtime_error_code ? label(r.runtime_error_code) : r.failure_code ? label(r.failure_code) : 'Failed'}</b><span className="text-xs tabular-nums text-axal-muted dark:text-gray-300">{r.created_at ? new Date(r.created_at).toLocaleString() : 'Not recorded'}</span></div>
+        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
+          <dt className="text-axal-muted dark:text-gray-300">Stage</dt><dd>{r.runtime_stage ? STAGES[r.runtime_stage] : 'Not recorded'}</dd>
+          <dt className="text-axal-muted dark:text-gray-300">Failure code</dt><dd>{r.failure_code ?? 'Not recorded'}</dd>
+          <dt className="text-axal-muted dark:text-gray-300">Startup code</dt><dd>{r.runtime_error_code ?? 'None recorded'}</dd>
+          <dt className="text-axal-muted dark:text-gray-300">Detail</dt><dd className="break-all">{r.failure_detail ?? 'None recorded'}</dd>
+          <dt className="text-axal-muted dark:text-gray-300">Runtime reported</dt><dd>{r.callback_received === null ? 'Not recorded' : r.callback_received ? 'Yes' : 'No'}</dd>
+          <dt className="text-axal-muted dark:text-gray-300">Runtime version</dt><dd className="break-all">{r.runtime_version ? r.runtime_version.slice(0, 10) : 'Not recorded'}</dd>
+          <dt className="text-axal-muted dark:text-gray-300">Startup took</dt><dd>{seconds(r.runtime_start_ms)}</dd>
+          <dt className="text-axal-muted dark:text-gray-300">Elapsed</dt><dd>{seconds(r.elapsed_ms)}</dd>
+        </dl>
+        <p className="mt-2 text-xs text-axal-ink dark:text-gray-200"><span className="font-bold">Next step: </span>{r.action}</p>
+      </li>)}</ul>}
+  </Card>;
+}
+
 export default function MeetingBotsPage() {
   const [data,setData] = useState(null), [range,setRange] = useState('days7'), [reading,setReading] = useState(false);
   const [session,setSession] = useState(''), [link,setLink] = useState(''), [live,setLive] = useState(null), [busy,setBusy] = useState(false), [error,setError] = useState('');
@@ -81,6 +112,7 @@ export default function MeetingBotsPage() {
     <Link to="/admin/platform" className="text-xs font-bold text-axal-muted dark:text-gray-300">← Platform</Link>
     <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-extrabold tracking-tight">Meeting bots</h1><p className="mt-1 text-sm text-axal-muted dark:text-gray-300">HQ operations · counts, timing and cost</p></div><div className="flex flex-wrap items-center gap-2"><button className={button} disabled={reading} onClick={refresh}>{reading ? 'Reading…' : 'Refresh'}</button><HeaderAsk /></div></header>
     {data ? <BotOperationsPanel report={data.operations} pricing={data.pricing} range={range} setRange={setRange} /> : <p role="status" className="text-sm text-axal-muted dark:text-gray-300">Reading meeting bot operations…</p>}
+    {data && <RecentFailedRuns recent={data.recent_failures} />}
     <Card><h2 className="font-bold">Test Eadwyn AI</h2><p className="mt-1 text-sm text-axal-muted dark:text-gray-300">Send Eadwyn AI to a test meeting. First create a fresh audio session in Validate and record consent. This uses your session and the usual AI-token charges.</p>
       <form onSubmit={start} className="mt-4 grid gap-3 sm:grid-cols-[9rem_1fr_auto] sm:items-end">
         <label className="text-xs font-bold">Your session ID<input className={field} type="number" min="1" step="1" required value={session} onChange={e => setSession(e.target.value)} /></label>

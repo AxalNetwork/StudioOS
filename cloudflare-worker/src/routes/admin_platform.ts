@@ -87,7 +87,7 @@
 import { Hono } from 'hono';
 import { backfillMemberFileSizes } from '../services/memberFileSizeBackfill';
 import { ownBotTest, dispatchBotTest, validBotTestId } from '../services/meetingBotOperationsTest';
-import { readMeetingBotOperations, meetingBotPricePolicy } from '../services/meetingBotOperationsRead';
+import { readMeetingBotOperations, meetingBotPricePolicy, readRecentBotFailures } from '../services/meetingBotOperationsRead';
 import { startDiagnosis, readDiagnosis, readDiagnosisScreenshot } from '../services/meetingBotDiagnose';
 import { BotError } from '../services/meetingBots';
 import type { Env } from '../types';
@@ -221,18 +221,40 @@ r.post('/switches/:key', async (c) => {
   }
   const auditAction = thrown ? 'platform_switch_thrown' : 'platform_switch_released';
   let changed: boolean;
+  let recorded = true;
+  let mirrored: boolean | null = null;
   try {
     // The change and its audit row in one batch: both or neither (D4703).
+    // D4860 part 3: a throw is mirrored to KV first; a D1 outage then still
+    // stops Eadwyn, answered 202 below with no audit row yet.
     await ensureAdminAuditLogTable(c.env);
-    ({ changed } = await setOperatorSwitch(c.env, key, thrown, reason, actor.id, {
+    ({ changed, recorded, mirrored } = await setOperatorSwitch(c.env, key, thrown, reason, actor.id, {
       revision: thrown ? undefined : (revision as number),
       audit: adminAuditStatement(c.env, actor.id, auditAction, { reason, switch_key: key, ...(thrown ? {} : { revision }) }, { onlyIfChanged: true }),
+      auditMirrorOnly: thrown ? undefined : adminAuditStatement(c.env, actor.id, auditAction, { reason, switch_key: key, revision, store: 'emergency' }),
     }));
   } catch {
     return c.json({
       error: 'The operator switch store could not be written, so nothing was changed.',
       code: 'store_unavailable',
     }, 503);
+  }
+  if (thrown && !recorded) {
+    return c.json({
+      ok: true,
+      recorded: false,
+      code: 'thrown_unrecorded',
+      message: 'Thrown in the emergency store, so Eadwyn stops within about a minute everywhere. The database did not '
+        + 'answer, so there is no audit row yet: throw it again once the database answers to record it.',
+    }, 202);
+  }
+  if (!thrown && changed && mirrored === false) {
+    return c.json({
+      ok: true,
+      code: 'release_incomplete',
+      message: 'Released in the database, but the emergency store still holds the switch, so Eadwyn stays off. '
+        + 'Release it again to clear the emergency store.',
+    }, 202);
   }
   if (!changed) {
     if (!thrown) {
@@ -267,8 +289,8 @@ r.post('/switches/:key', async (c) => {
     ok: true,
     switch: entry,
     message: thrown
-      ? `Thrown. This deployment refuses at once; every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds.`
-      : `Released. Every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds, unless the deployment still holds it on.`,
+      ? `Thrown. This deployment refuses at once; every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds${mirrored === false ? ', but the emergency store did not take it, so a database outage could release it: throw it again to mirror it' : ''}.`
+      : `Released. Every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds${mirrored ? ', and within about a minute where the emergency store is read' : ''}, unless the deployment still holds it on.`,
   });
 });
 
@@ -418,7 +440,8 @@ r.get('/advisory-refunds-due', async (c) => {
 // D886 B10: aggregated HQ operations, never customer content.
 r.get('/meeting-bots', async (c) => {
   await requireSuperAdmin(c);
-  return c.json({ operations: await readMeetingBotOperations(c.env), pricing: meetingBotPricePolicy() });
+  // D5153: the recent failed runs, each with its startup stage, code and next step.
+  return c.json({ operations: await readMeetingBotOperations(c.env), pricing: meetingBotPricePolicy(), recent_failures: await readRecentBotFailures(c.env) });
 });
 
 // A test uses a fresh, consented session owned by the operator. It cannot

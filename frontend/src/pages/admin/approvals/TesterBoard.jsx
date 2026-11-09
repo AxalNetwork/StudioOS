@@ -1,15 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
-import { BandPill } from './AdminApprovals';
+import { AssignDialog, OwnerCell, UrgencyPill } from './AdminApprovals';
+import { DECIDED_HERE, afterDecision, boardCrumb, boardStep, boardStrip, slaOfBand } from './boardGrammar';
 import {
   BOARDS, INTAKE_PAUSED, INTAKE_PAUSED_LINE, PROFILES, TESTER_TABS,
   answerPairs, dayText, decisionCopy, doneLine, profileChart, profileWord, reasonReady, tabPath, testerActions, testerHistory, testerRows,
 } from './approvalsModel';
 import {
-  BTN, BTN_PRIMARY, CARD, DecisionDialog, FOOT, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SELECT, SUB,
-  TD, TH, Tile, WARN_PILL, nf, useLoad,
+  BTN, BTN_PRIMARY, BoardStrip, CARD, DrawerStep, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SELECT, SUB,
+  TD, TH, Tile, WARN_PILL, nf, useBoardOwners, useLoad,
 } from './boardParts';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -22,7 +23,7 @@ import Sheet from '../../../ui/Sheet.jsx';
  * is not verified, and dialog A says so before anything is sent.
  */
 
-const CRUMB = { to: '/admin/approvals', label: 'Approvals', current: 'Product testers' };
+const CRUMB = boardCrumb('Product testers');
 const NEW_PILL = { label: 'New lane', tone: 'held' };
 export const TESTER_READ_PAGES = 10;
 const FACTS = 'Who can apply: Founders, Investors, Advisors, Operating Partners, Explorers · Who decides: any Admin or Super Admin · Admins cannot apply';
@@ -98,27 +99,31 @@ function ProfileChart({ chart }) {
   );
 }
 
-function TesterTable({ tab, rows, from }) {
+function TesterTable({ tab, rows, from, own }) {
   const open = (r) => <Link className={LINK} to={`/admin/approvals/product-testers/${r.id}`} state={{ from }} data-testid={`tester-open-${r.id}`}>Open</Link>;
   if (tab === 'waiting') {
+    // D4814 (AP-08): Applicant · Applying as · Waiting · Owner · Review. What
+    // would stop a decision (an unverified email, no consent) stays under the name.
     return (
-      <table className="w-full min-w-[1040px]">
+      <table className="w-full min-w-[820px]">
         <thead><tr className="border-b border-axal-hairline dark:border-gray-700">
-          <th className={TH}>Waiting</th><th className={TH}>Applicant</th><th className={TH}>Profile</th><th className={TH}>Applied</th>
-          <th className={TH}>Availability</th><th className={TH}>Email consent</th><th className={TH}>Identity</th><th className={TH}>Email</th><th className={TH}><span className="sr-only">Open</span></th>
+          <th className={TH}>Applicant</th><th className={TH}>Applying as</th><th className={TH}>Waiting</th><th className={TH}>Owner</th><th className={TH}>Review</th>
         </tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`tester-${r.id}`}>
-              <td className={TD}><span className={MONO}>{r.age || 'Not recorded'}</span><BandPill band={r.band} /></td>
-              <td className={TD}>{r.name}{r.email ? <div className={SUB}>{r.email}</div> : null}</td>
-              <td className={TD}><span className={PILL}>{r.profile}</span></td>
-              <td className={`${TD} ${MONO}`}>{r.applied}</td>
-              <td className={TD}>{r.availability || <span className={SUB}>Not given</span>}</td>
-              <td className={TD}>{r.consent ? <span className={MONO}>{r.consent}</span> : <span className={WARN_PILL}>! Not given</span>}</td>
-              <td className={TD}>{r.identity}</td>
-              <td className={TD}>{r.emailVerified ? 'Verified' : <span className={WARN_PILL}>! Not verified</span>}</td>
-              <td className={TD}>{open(r)}</td>
+              <td className={TD}>
+                <b>{r.name}</b>{r.email ? <div className={SUB}>{r.email}</div> : null}
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {!r.emailVerified ? <span className={WARN_PILL}>! Email not verified</span> : null}
+                  {!r.consent ? <span className={WARN_PILL}>! No email consent</span> : null}
+                  {r.availability ? <span className={SUB}>{r.availability}</span> : null}
+                </div>
+              </td>
+              <td className={TD}>{r.profile}</td>
+              <td className={TD}><span className={MONO}>{r.age || 'Not recorded'}</span><UrgencyPill sla={slaOfBand(r.band)} /></td>
+              <td className={TD}><OwnerCell row={own.asRow({ ...r, who: r.name })} callerId={own.callerId} onAssign={own.assign} prefix="tester" /></td>
+              <td className={TD}><Link className={`${BTN} sm:min-h-[30px]`} to={`/admin/approvals/product-testers/${r.id}`} state={{ from }} data-testid={`tester-open-${r.id}`}>Review →</Link></td>
             </tr>
           ))}
         </tbody>
@@ -174,7 +179,7 @@ function TesterTable({ tab, rows, from }) {
  * Dialogs A, B and C, and Resume. `kind` is approve, decline, pause-remove, remove or resume.
  * D1204: also the dialogs Product testing's Tester pool opens from its ⋯ menu.
  */
-export function TesterDialog({ kind, tester, onClose, onDone }) {
+export function TesterDialog({ kind, tester, onClose, onDone, onStale }) {
   const name = tester.member?.name || 'This member';
   const [note, setNote] = useState('');
   const [reason, setReason] = useState('');
@@ -187,10 +192,11 @@ export function TesterDialog({ kind, tester, onClose, onDone }) {
   const blocked = !tester.member?.email_verified ? `${name}’s email is not verified, so they cannot be told. Ask them to verify it first.` : null;
   const send = async () => {
     const r = await approvalBoardsApi.decideTester(tester.id, action, { note: note.trim(), reason: needsReason ? reason.trim() : '' });
-    onDone(doneLine(key, name, r || {}));
+    // D4814 (AP-18f): the reply rides along; a board reads `notified` from it.
+    onDone(doneLine(key, name, r || {}), r);
   };
   return (
-    <DecisionDialog copy={{ ...copy, title, changes: kind === 'pause-remove' ? 'From the Active tab. They are told.' : copy.changes }} testId={`tester-dialog-${kind}`} onClose={onClose} onSend={send}
+    <DecisionDialog copy={{ ...copy, title, changes: kind === 'pause-remove' ? 'From the Active tab. They are told.' : copy.changes }} testId={`tester-dialog-${kind}`} onClose={onClose} onSend={send} onStale={onStale}
       ready={!needsReason || reasonReady(key, reason)} blocked={blocked} danger={action === 'decline' || action === 'remove'}>
       {kind === 'pause-remove' ? (
         <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0" data-testid="tester-dialog-choice">
@@ -212,22 +218,29 @@ const ACTION_LABEL = { approve: 'Approve…', decline: 'Decline…', 'pause-remo
 const EYEBROW = { applied: 'Product tester application', active: 'Product tester · active', paused: 'Product tester · paused', declined: 'Product tester · declined', removed: 'Product tester · removed' };
 
 /** One tester at their own address (APR5), over the board. */
-function TesterDrawer({ id, onClose, onDecided }) {
+function TesterDrawer({ id, onClose, onDecided, own, step, from }) {
   const read = useLoad(() => approvalBoardsApi.tester(id), `tester-${id}`, { what: 'approvals:tester' });
   const [dialog, setDialog] = useState(null);
   const t = read.reply?.tester;
   const ready = read.status === 'ready' && t;
-  const done = (line) => { setDialog(null); read.reload(); onDecided(line); };
+  // D4814 part 5: the dialog keeps the item it opened on while the drawer reads it again
+  // after a conflict, so its "changed while you were reviewing" note stays on screen.
+  const held = useRef(null);
+  if (ready) held.current = t;
+  const done = (line, reply) => { setDialog(null); read.reload(); onDecided(afterDecision(line, reply, t?.member?.name)); };
   return (
     <>
       <Sheet label={ready ? `${t.member?.name || 'Member'}, product tester` : 'Product tester'} eyebrow={ready ? EYEBROW[t.status] : 'Product tester'}
         title={ready ? (t.member?.name || 'Name not recorded') : 'Product tester'} sub={ready ? 'Esc to close' : null} onClose={onClose} testId="tester-drawer" width={600}
+        headerActions={<DrawerStep step={step} from={from} testId="tester-step" prevTo={step?.prev ? `/admin/approvals/product-testers/${step.prev.id}` : null} nextTo={step?.next ? `/admin/approvals/product-testers/${step.next.id}` : null} />}
         footer={ready ? (
-          <div className={`${FOOT} flex-wrap items-center`}>
-            {t.status === 'applied' ? <Link className={BTN} to={`/admin/approvals/items/product_testers-${t.id}`} data-testid="tester-assign">Assign…</Link> : null}
-            {testerActions(t.status).map((a) => (
-              <button key={a} type="button" className={a === 'approve' || a === 'resume' ? BTN_PRIMARY : BTN} onClick={() => setDialog(a)} data-testid={`tester-action-${a}`}>{ACTION_LABEL[a]}</button>
-            ))}
+          <div className="flex flex-col gap-2">
+            <div className={`${FOOT} flex-wrap items-center`}>
+              {testerActions(t.status).map((a) => (
+                <button key={a} type="button" className={a === 'approve' || a === 'resume' ? BTN_PRIMARY : BTN} onClick={() => setDialog(a)} data-testid={`tester-action-${a}`}>{ACTION_LABEL[a]}</button>
+              ))}
+            </div>
+            <p className={`m-0 ${SUB}`} data-testid="tester-decided-here">{DECIDED_HERE}</p>
           </div>
         ) : null}>
         <div className="flex flex-col gap-4 px-5 py-4" data-testid="tester-drawer-content">
@@ -240,6 +253,11 @@ function TesterDrawer({ id, onClose, onDecided }) {
           ) : null}
           {ready ? (
             <>
+              {/* D4814 (AP-09a): the owner first; only a waiting application is on the inbox, so only it has one. */}
+              {t.status === 'applied' ? (
+                <OwnerBox owner={own.of(t.id)} callerId={own.callerId} canTake={own.canTake} testId="tester-owner"
+                  onTake={() => own.take({ id: t.id, name: t.member?.name })} onAssign={() => own.assign([{ id: t.id, name: t.member?.name }])} />
+              ) : null}
               <div className="flex flex-wrap gap-1.5"><span className={PILL}>{profileWord(t.member?.role)}</span></div>
               <dl className="m-0 grid grid-cols-2 gap-3">
                 <Fact k="Applied" v={dayText(t.applied_at)} />
@@ -279,7 +297,7 @@ function TesterDrawer({ id, onClose, onDecided }) {
           ) : null}
         </div>
       </Sheet>
-      {dialog && ready ? <TesterDialog kind={dialog} tester={t} onClose={() => setDialog(null)} onDone={done} /> : null}
+      {dialog && held.current ? <TesterDialog kind={dialog} tester={held.current} onClose={() => setDialog(null)} onDone={done} onStale={read.reload} /> : null}
     </>
   );
 }
@@ -298,15 +316,13 @@ export default function TesterBoard({ at }) {
   const totals = ready ? all.reply.totals : null;
   const tabRows = useMemo(() => (ready ? testerRows(all.reply.rows.filter((r) => r.status === tab.status)) : []), [ready, all.reply, tab.status]);
   const shown = filterTesters(tabRows, f);
-  // The Worker reads oldest application first, so the first waiting row read is the oldest.
-  const oldest = ready ? testerRows(all.reply.rows.filter((r) => r.status === 'applied'))[0] : null;
   const chart = ready ? profileChart(all.reply.rows, { complete: all.reply.complete }) : null;
   const from = at.item ? (loc.state?.from || tabPath('product-testers', 'waiting')) : loc.pathname;
   const count = (status) => (all.status === 'loading' ? { kind: 'load' } : !totals ? { kind: 'dash', tip: 'The testers could not be read.' } : { kind: 'num', value: nf(totals[status] || 0) });
   // Literal paths, so the reachability walk finds every tab.
   const tabs = (
     <>
-      <HeaderTab to="/admin/approvals/product-testers" count={count('applied')} data-testid="testers-tab-waiting">Waiting</HeaderTab>
+      <HeaderTab to="/admin/approvals/product-testers" count={count('applied')} data-testid="testers-tab-waiting">Pending</HeaderTab>
       <HeaderTab to="/admin/approvals/product-testers/active" count={count('active')} data-testid="testers-tab-active">Active</HeaderTab>
       <HeaderTab to="/admin/approvals/product-testers/paused" count={count('paused')} data-testid="testers-tab-paused">Paused</HeaderTab>
       <HeaderTab to="/admin/approvals/product-testers/declined" count={count('declined')} data-testid="testers-tab-declined">Declined</HeaderTab>
@@ -314,19 +330,15 @@ export default function TesterBoard({ at }) {
     </>
   );
   const decided = (line) => { setDone(line); all.reload(); inProgram.reload(); };
+  const own = useBoardOwners('product-testers', setDone);
+  const waitingRows = ready ? testerRows(all.reply.rows.filter((r) => r.status === 'applied')) : [];
+  const strip = boardStrip({ status: all.status, label: 'Pending', total: totals ? totals.applied || 0 : null, rows: waitingRows, complete: ready && all.reply.complete, owners: own.owners, noun: 'applications' });
   return (
     <div className="flex flex-col gap-5" data-testid="approvals-board-product-testers">
       <AdminPageHeader crumb={CRUMB} title={b.title} pills={[NEW_PILL]} line={b.line} scope tabs={tabs} data-testid="approvals-board-header" />
-      <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="testers-facts">{FACTS}</p>
       {INTAKE_PAUSED ? <p role="note" className={`${CARD} m-0 px-4 py-3 text-[13px] font-semibold text-amber-800 dark:text-amber-200`} data-testid="testers-intake-paused">{INTAKE_PAUSED_LINE}</p> : null}
-      <p className={`m-0 ${SUB}`} data-testid="testers-info">Approved testers form the tester pool. Testing programs recruit from it on Platform › Product testing, at HQ. This board decides applications and the pool only.</p>
-      <DoneLine text={done} onDismiss={() => setDone(null)} />
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-        <Tile label="Waiting" testId="testers-tile-waiting" sub={oldest?.age ? `oldest ${oldest.age}` : null}><Figure status={all.status} value={totals?.applied} /></Tile>
-        <Tile label="Active testers" testId="testers-tile-active"><Figure status={all.status} value={totals?.active} /></Tile>
-        <Tile label="In a testing program now" testId="testers-tile-in-program"><Figure status={inProgram.status} value={inProgram.reply?.matching} /></Tile>
-      </div>
-      {chart ? <ProfileChart chart={chart} /> : null}
+      <DoneLine text={done} onDismiss={() => setDone(null)} onCheck={() => { all.reload(); setDone(null); }} />
+      <BoardStrip cells={strip} testId="testers-strip" />
       {all.status === 'error' ? <Failed what="The product testers" onRetry={all.reload} testId="testers-failed" />
         : all.status === 'loading' ? <Skeleton.Text lines={4} />
           : (
@@ -350,7 +362,7 @@ export default function TesterBoard({ at }) {
               {!all.reply.complete ? <p className={`m-0 px-3 py-2 ${SUB}`} data-testid="testers-partial">{`This list is the first ${nf(all.reply.rows.length)} of ${nf(all.reply.matching)} testers. Search and filters cover those only.`}</p> : null}
               {shown.length ? (
                 <>
-                  <div className="overflow-x-auto"><TesterTable tab={tab.key} rows={shown.slice(page * PAGE, page * PAGE + PAGE)} from={from} /></div>
+                  <div className="overflow-x-auto"><TesterTable tab={tab.key} rows={shown.slice(page * PAGE, page * PAGE + PAGE)} from={from} own={own} /></div>
                   <Pager page={page} total={shown.length} onPage={setPage} testId="testers-pager" />
                 </>
               ) : tabRows.length ? <p className={`m-0 px-3 py-4 ${SUB}`} data-testid="testers-none-match">No tester matches these filters.</p>
@@ -362,7 +374,19 @@ export default function TesterBoard({ at }) {
                 ) : <p className={`m-0 px-3 py-4 ${SUB}`} data-testid="testers-empty">{`No tester is ${tab.label.toLowerCase()}.`}</p>}
             </section>
           )}
-      {at.item ? <TesterDrawer id={at.item} onClose={() => navigate(from)} onDecided={decided} /> : null}
+      {/* D4814: the pool, after the queue — what the board looks after, not work waiting. */}
+      <section aria-labelledby="testers-pool-h" className="flex flex-col gap-3" data-testid="testers-pool">
+        <h2 id="testers-pool-h" className={H2}>The tester pool</h2>
+        <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="testers-facts">{FACTS}</p>
+        <p className={`m-0 ${SUB}`} data-testid="testers-info">Approved testers form the tester pool. Testing programs recruit from it on Platform › Product testing, at HQ. This board decides applications and the pool only.</p>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Tile label="Active testers" testId="testers-tile-active"><Figure status={all.status} value={totals?.active} /></Tile>
+          <Tile label="In a testing program now" testId="testers-tile-in-program"><Figure status={inProgram.status} value={inProgram.reply?.matching} /></Tile>
+        </div>
+        {chart ? <ProfileChart chart={chart} /> : null}
+      </section>
+      {at.item ? <TesterDrawer id={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={boardStep(shown, at.item)} from={from} /> : null}
+      {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={own.finish} /> : null}
     </div>
   );
 }

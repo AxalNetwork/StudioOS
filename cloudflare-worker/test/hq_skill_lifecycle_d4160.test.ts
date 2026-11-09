@@ -49,6 +49,7 @@ function world() {
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: assign reads the moderation table
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql'));
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(sql('migrations/202611081919_skill_release_evidence.sql')); // D4533: release evidence
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
@@ -392,6 +393,8 @@ test('D4160: a reason is required, every change is audited with it, and no email
   // D4121 (#4121): what the published version adds to a run that uses it: its prompt, by the AI budget's estimate.
   const v1 = w.db.prepare('SELECT v.* FROM agent_skill_versions v JOIN agent_skills s ON s.id = v.skill_id WHERE s.uid = ? AND v.version = 1').get(uid) as any;
   assert.deepEqual([list.status, list.version, list.agents, list.tokens_per_run, list.area?.slug, list.level], ['published', 1, 0, contextTokensOf(v1), 'finance_ops', 'proficient']);
+  // D4537: what the catalogue filters on, from the draft: its slug, roles with their labels, and tools.
+  assert.deepEqual([typeof list.slug, list.roles, list.tools], ['string', [{ key: 'cfo', label: 'CFO' }], ['stripe.read']]);
 });
 
 test('D4160: the diff between versions and the draft; bulk items done or refused one by one', async () => {
@@ -495,4 +498,87 @@ test('#4531 slice 2: the draft evaluation judges structure, evidence, refusal an
   const put = await call(w, SUPER, 'PUT', `${HQ}/${uid}/cases`, { reason: 'A case citing a made-up record.', cases: [bad] });
   assert.deepEqual([put.status, put.body.error], [400, 'case_invalid']);
   assert.match(put.text, /citation of stripe\.read\.burn_usd, which its records do not hold/);
+});
+
+test('#4531 slice 3: draft results name their evaluator, and the compare route reports a version against the draft per case and model', async () => {
+  const { EVALUATOR, caseSha, checkCase } = await import('../src/services/agents/skillLifecycle.ts');
+  const w = world();
+  stubRun();
+  const uid = await newSkill(w);
+  await setCases(w, uid, [...Array(10).fill('MRR 41,200')]);
+  await approve(w, uid);
+  assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] })).status, 200);
+  // Mutation checked: the draft INSERT without evaluator_version → null here and this fails.
+  const drafts = w.db.prepare('SELECT DISTINCT evaluator_version AS v FROM agent_skill_eval_results').all() as any[];
+  assert.deepEqual(drafts.map((r) => r.v), [EVALUATOR.version]);
+  assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).status, 200);
+
+  // The published history: one result per live case on v1, as the evaluation board would record it.
+  if (!(w.db.prepare("SELECT name FROM sqlite_master WHERE name = 'agent_skill_version_evals'").get())) {
+    w.db.exec(readFileSync(new URL('../sql/migrations/202611022313_agent_skill_runs.sql', import.meta.url), 'utf8'));
+    w.db.exec(readFileSync(new URL('../sql/migrations/202611090905_skill_version_eval_identity.sql', import.meta.url), 'utf8'));
+  }
+  const skillId = (w.db.prepare('SELECT id FROM agent_skills WHERE uid = ?').get(uid) as any).id;
+  const cases = w.db.prepare('SELECT uid, name, input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id').all(skillId) as any[];
+  const ins = w.db.prepare(`INSERT INTO agent_skill_version_evals (skill_id, version, case_key, case_name, model_id, result, run_by, evaluator_version, case_sha256)
+    VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const [i, k] of cases.entries()) {
+    const checked = checkCase({ name: k.name, input: JSON.parse(k.input_json), expect: JSON.parse(k.expect_json) });
+    assert.ok(checked.ok);
+    ins.run(skillId, k.uid, k.name, anyModel(w), i === 0 ? 'fail' : 'pass', SUPER, EVALUATOR.version, await caseSha(checked as any));
+  }
+
+  assert.equal((await call(w, ADMIN, 'GET', `${HQ}/${uid}/evals/compare?from=v1&to=draft`)).status, 403, 'Super Admin only');
+  const r = await call(w, SUPER, 'GET', `${HQ}/${uid}/evals/compare?from=v1&to=draft`);
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual([r.body.baseline.history, r.body.candidate.history], ['published', 'draft'], 'each side read from its own history');
+  assert.equal(r.body.pairs.length, 10, 'one report per case and model');
+  // The draft case and the published case are the same text, so they compare: one fail turned pass, nine still pass.
+  // Mutation checked: the draft side's case_sha256 taken from the raw input_json string → every pair `case_changed`.
+  assert.deepEqual([r.body.totals.improved, r.body.totals.still_pass, r.body.totals.case_changed], [1, 9, 0]);
+  assert.equal(r.body.attribution.quality_only, true);
+  assert.equal(r.body.current_evaluator_version, EVALUATOR.version);
+  assert.equal((await call(w, SUPER, 'GET', `${HQ}/${uid}/evals/compare?from=v9&to=draft`)).body.error, 'version_unknown');
+});
+
+test('D4536: the library response carries the catalogue coverage, read from published versions, pins and the library files', async () => {
+  const w = world();
+  const skill = w.db.prepare(`INSERT INTO agent_skills (uid, scope, company_id, slug, name, purpose, output_kind, status, current_version, created_by)
+    VALUES (?, ?, ?, ?, ?, 'A fixture.', 'brief', ?, ?, ${SUPER})`);
+  const version = w.db.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
+    VALUES (?, ?, '---', 'n', 'p', '[]', '[]', 'brief', ?, ?, ${SUPER})`);
+  const tags = JSON.stringify([{ slug: 'investor_reporting', level: 'proficient' }]);
+  const pub = Number(skill.run('s-pub', 'hq', null, 'cash-runway-snapshot', 'Runway', 'published', 2).lastInsertRowid);
+  version.run(pub, 1, tags, JSON.stringify(['ceo']));
+  version.run(pub, 2, tags, JSON.stringify(['cfo']));
+  skill.run('s-draft', 'hq', null, 'own-draft', 'Own draft', 'draft', 0);
+  const retired = Number(skill.run('s-old', 'hq', null, 'old', 'Old', 'retired', 1).lastInsertRowid);
+  version.run(retired, 1, tags, JSON.stringify(['cto']));
+  skill.run('s-co', 'company', 1, 'acme-private', 'Acme private', 'published', 0);
+  const agent = (w.db.prepare('SELECT id FROM team_agents WHERE uid = ?').get(CFO) as { id: number }).id;
+  w.db.prepare(`INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by) VALUES (?, ?, 1, ${EDITOR})`).run(agent, pub);
+
+  const r = await call(w, SUPER, 'GET', HQ);
+  assert.equal(r.status, 200, r.text);
+  const c = r.body.coverage;
+  assert.deepEqual(c.by_scope, { hq: { draft: 1, published: 1, retired: 1, review_requested: 0 }, company: { draft: 0, published: 1, retired: 0, review_requested: 0 } });
+  // The current version (v2) lists cfo; v1's ceo and the retired skill's cto cover nothing.
+  // Mutation checked: joining every version instead of `v.version = s.current_version` counts ceo and this fails.
+  assert.deepEqual(c.by_role.filter((x: any) => x.published).map((x: any) => x.role), ['cfo']);
+  assert.equal(c.by_area.find((a: any) => a.area === 'finance_ops').published_primary, 1);
+  assert.deepEqual(c.adoption, { links: 1, agents: 1, pinned_behind_current: 1, published_without_links: 0 });
+  assert.equal(c.sources.seeded, 1, 'cash-runway-snapshot is a library file in the store');
+  assert.equal(c.sources.authored_in_store, 2, 'own-draft and old are HQ skills with no library file');
+  assert.ok(!r.text.includes('acme-private'), 'a company skill\'s slug never reaches the response');
+  assert.equal(c.drafts.without_current_evaluation, 0, 'the full list computes it');
+  assert.equal(c.executions.available, false);
+
+  const paged = await call(w, SUPER, 'GET', `${HQ}?page=1`);
+  assert.equal(paged.body.coverage.drafts.without_current_evaluation.available, false, 'a page cannot say it for the catalogue');
+  assert.deepEqual(paged.body.coverage.by_scope, c.by_scope, 'the counts are the catalogue\'s, whatever the page');
+
+  // A removed agent's pin is not adoption.
+  w.db.prepare("UPDATE team_agents SET status = 'removed' WHERE id = ?").run(agent);
+  assert.deepEqual((await call(w, SUPER, 'GET', HQ)).body.coverage.adoption, { links: 0, agents: 0, pinned_behind_current: 0, published_without_links: 1 });
+  assert.equal((await call(w, ADMIN, 'GET', HQ)).status, 403, 'HQ analytics are Super Admin only');
 });

@@ -6,116 +6,25 @@
  * happy-path flow start → milestone (×4) → auto-advance → milestone
  * (week-2 set) → … → week-4 milestone (auto-exit) against a mocked D1
  * sql() helper, exercising the same exported logic functions the wire
- * handlers wrap. No new test deps — same node:test + type-erasure pattern
- * used by `projects.test.mjs` (see `_transpile-ts.mjs`).
+ * handlers wrap (`services/labLifecycle.ts`, D4663).
  *
- * Run with:  node --test cloudflare-worker/test/spinout_lab.test.mjs
+ * Run with:  node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *              --test cloudflare-worker/test/spinout_lab.test.mjs
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-import { transpileTs } from './_transpile-ts.mjs';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import * as catalog from '../src/services/spinoutLabCatalog.ts';
+import * as lifecycle from '../src/services/labLifecycle.ts';
 
 /* ------------------------------------------------------------------ */
-/* Load the catalog + helpers + 4 logic functions out of the real     */
-/* TS source. Strips imports, slices each named export by anchor      */
-/* + brace balancing, and re-exports them via a wrapping IIFE.        */
-/* Same approach as `projects.test.mjs` — guarantees we test the      */
-/* exact source bytes that ship to Cloudflare.                        */
+/* D4663: the catalog and the four lifecycle functions are imported    */
+/* from their modules. This file used to slice them out of the route's */
+/* source by brace counting, which kept wire-only reads out of         */
+/* getLabState and made a service import its week advance from a      */
+/* route. It still tests the exact module that ships.                  */
 /* ------------------------------------------------------------------ */
 async function loadModule() {
-  // The catalog constants were extracted to services/spinoutLabCatalog.ts
-  // (route file re-exports them) — slice from both real sources.
-  const srcPath = resolve(__dirname, '../src/routes/spinout_lab.ts');
-  const catPath = resolve(__dirname, '../src/services/spinoutLabCatalog.ts');
-  const src = `${await readFile(catPath, 'utf8')}\n\n${await readFile(srcPath, 'utf8')}`;
-
-  function sliceBlock(anchor) {
-    const start = src.indexOf(anchor);
-    assert.notEqual(start, -1, `${anchor} not found in spinout_lab.ts`);
-    let i = src.indexOf('{', start);
-    let depth = 0;
-    for (; i < src.length; i++) {
-      if (src[i] === '{') depth++;
-      else if (src[i] === '}') {
-        depth--;
-        if (depth === 0) return src.slice(start, i + 1);
-      }
-    }
-    throw new Error(`failed to balance braces for ${anchor}`);
-  }
-
-  function sliceConstArray(anchor) {
-    const start = src.indexOf(anchor);
-    assert.notEqual(start, -1, `${anchor} not found in spinout_lab.ts`);
-    let depth = 0;
-    let i = src.indexOf('[', start);
-    for (; i < src.length; i++) {
-      if (src[i] === '[') depth++;
-      else if (src[i] === ']') {
-        depth--;
-        if (depth === 0) {
-          const semi = src.indexOf(';', i);
-          return src.slice(start, semi + 1);
-        }
-      }
-    }
-    throw new Error(`failed to balance brackets for ${anchor}`);
-  }
-
-  // The two top-level scaffolding constants the logic depends on.
-  const constSprint = (() => {
-    const m = src.match(/const SPRINT_DAYS = \d+;/);
-    assert.ok(m, 'SPRINT_DAYS not found');
-    return m[0];
-  })();
-
-  const pieces = [
-    sliceConstArray('export const MILESTONES'),
-    sliceBlock('export const OPTIONAL_MILESTONES'),
-    // Set literal has no braces — slice to the closing `]);`.
-    (() => {
-      const start = src.indexOf('export const VALID_MILESTONE_KEYS');
-      assert.notEqual(start, -1, 'export const VALID_MILESTONE_KEYS not found');
-      const end = src.indexOf(']);', start);
-      assert.notEqual(end, -1, 'VALID_MILESTONE_KEYS terminator not found');
-      return src.slice(start, end + 3);
-    })(),
-    sliceBlock('function weekForKey('),
-    sliceBlock('export function weekMet('),
-    sliceBlock('export function unlockedFeaturesThrough('),
-    sliceBlock('function daysSince('),
-    constSprint,
-    sliceBlock('export async function getLabState('),
-    sliceBlock('export async function startLab('),
-    sliceBlock('export async function recordMilestone('),
-    sliceBlock('export async function exitLab('),
-  ];
-
-  const body = pieces.map((b) => b.replace(/^export\s+/, '')).join('\n\n');
-
-  const wrapped = `const __out = (() => {
-    ${body}
-    return {
-      MILESTONES,
-      VALID_MILESTONE_KEYS,
-      weekForKey,
-      weekMet,
-      unlockedFeaturesThrough,
-      getLabState,
-      startLab,
-      recordMilestone,
-      exitLab,
-    };
-  })();`;
-
-  const outputText = transpileTs(wrapped);
-
-  return new Function(`${outputText}; return __out;`)();
+  return { ...catalog, ...lifecycle };
 }
 
 /* ------------------------------------------------------------------ */

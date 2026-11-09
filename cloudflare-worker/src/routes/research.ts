@@ -77,7 +77,7 @@ import { refuse } from '../util/refusal';
 // The data room's own gate, imported rather than retyped: the grant check, the
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
-import { activeGrant, ndaActive, logAccess } from './data_room';
+import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
@@ -745,8 +745,19 @@ export function withinBudget(passages: EligiblePassage[], budget = ASK_CONTEXT_B
   return kept;
 }
 
+/**
+ * D3701 (Research v2, RS-07): how much of the cited passage a citation keeps,
+ * so the answer can show "its exact passage" without the page re-reading the
+ * index. The excerpt is the start of the text the model was given for that
+ * citation, never a summary of it, and `passage_truncated` says when it is
+ * cut. It is stored in the answer's citations JSON (migration 221), which is
+ * read only by the answer's owner, about the owner's own document.
+ */
+export const CITATION_PASSAGE_CHARS = 600;
+
 /** D4605: a citation names the document, the index run, the chunk and its page. */
-function citationOf(p: EligiblePassage, documentUid: string) {
+export function citationOf(p: EligiblePassage, documentUid: string) {
+  const text = String(p.text || '').trim();
   return {
     title: p.hit.title,
     document_uid: documentUid,
@@ -754,6 +765,9 @@ function citationOf(p: EligiblePassage, documentUid: string) {
     chunk: p.hit.chunk ?? null,
     page: p.hit.page ?? null,
     score: Number(p.hit.score.toFixed(3)),
+    // D3701: the passage itself. Null, not '', when the index gave no text.
+    passage: text ? text.slice(0, CITATION_PASSAGE_CHARS) : null,
+    passage_truncated: text.length > CITATION_PASSAGE_CHARS,
   };
 }
 
@@ -852,6 +866,13 @@ research.post('/ask', async (c) => {
   let answer: string | null = null;
   let usage: { model?: string; prompt_tokens?: number; completion_tokens?: number; cached?: boolean; est_cost_usd?: number } | null = null;
   let off = false;
+  // D3701 part 4 (RS-11): a run the router refused before it ran (out of AI
+  // tokens, a spend limit, a review hold, the guard). Answered in the shared
+  // refusal's words and status (D766, `refuseRun`), and NOT recorded as
+  // `model_unavailable`: that said "the model didn't respond" about a run
+  // that never started, and sent the reader to try again instead of to Add
+  // tokens. Nothing ran, so nothing is charged or stored.
+  let refused: { refusal?: string | null; error?: string } | null = null;
   try {
     const out = await runAI(c.env, {
       task: 'research_ask',
@@ -870,6 +891,7 @@ research.post('/ask', async (c) => {
     });
     answer = out.ok && out.output ? out.output.trim() : null;
     off = out.refusal === 'assist_off';
+    if (!out.ok && out.refusal && out.refusal !== 'assist_off') refused = { refusal: out.refusal, error: out.error };
     // The router's own receipt, already written to `ai_usage_logs`. Taken
     // whether or not the answer arrived — a model that ran and returned
     // nothing still cost what it cost, and hiding that would make the session
@@ -881,6 +903,12 @@ research.post('/ask', async (c) => {
 
   // D765: off on this page, nothing ran, so no answer is recorded either.
   if (off) return refuseAssistOff(c);
+  // D3701 part 4: refused before running. `refuseRun` is null for a model that
+  // could not be reached, which stays `model_unavailable` below.
+  if (refused) {
+    const r = refuseRun(c, refused);
+    if (r) return r;
+  }
 
   const receipt = {
     model: usage?.model ?? null,
@@ -4719,29 +4747,30 @@ research.get('/diligence', async (c) => {
   ).bind(user.id, user.id).all<any>();
 
   // "Open to you" is what THIS investor may open, not what the founder marked
-  // `open`. An investor holding a live NDA with the founder who granted the
-  // room may open the `nda` files too — the download route already lets them —
+  // `open`. An investor holding a live NDA with the venture's founder
+  // may open the `nda` files too — the download route already lets them —
   // so counting only `visibility = 'open'` told a signed investor that files
-  // were behind an NDA they had already signed. One NDA check per granting
-  // founder, through the data room's own `ndaActive`, never a second copy of
+  // were behind an NDA they had already signed. One NDA check per venture,
+  // through the data room's own `projectNdaActive` (D4631 part 2: the venture's
+  // NDA by the shared rule, whoever granted the room), never a second copy of
   // its predicate here.
-  const ndaByFounder = new Map<number, boolean>();
+  const ndaByProject = new Map<number, boolean>();
   for (const r of rows.results || []) {
-    const founder = Number(r.granted_by_user_id);
-    if (!ndaByFounder.has(founder)) ndaByFounder.set(founder, await ndaActive(c.env, founder, user.id));
+    const pid = Number(r.project_id);
+    if (!ndaByProject.has(pid)) ndaByProject.set(pid, await projectNdaActive(c.env, pid, user.id));
   }
 
   // D691 decision 6 — the counts are what this investor's tier admits.
   const counted = new Map<number, { total: number; open: number }>();
   for (const r of rows.results || []) {
     const pid = Number(r.project_id);
-    const nda = ndaByFounder.get(Number(r.granted_by_user_id)) === true;
+    const nda = ndaByProject.get(pid) === true;
     // D1103 — and only what the grant's folders hold.
     counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
   }
 
   const items = (rows.results || []).map((r: any) => {
-    const nda = ndaByFounder.get(Number(r.granted_by_user_id)) === true;
+    const nda = ndaByProject.get(Number(r.project_id)) === true;
     const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
     return {
       grant_uid: r.grant_uid,
@@ -4782,7 +4811,7 @@ research.get('/diligence', async (c) => {
 // The list above says which rooms are open to you; these two are the room and
 // the document pages behind it (canvases b6a5f992 and 96463a46). They read the
 // data room's own tables and pass through the data room's own gate —
-// `activeGrant`, `ndaActive` and `logAccess` from `data_room.ts` — so there is
+// `activeGrant`, `projectNdaActive` and `logAccess` from `data_room.ts` — so there is
 // one definition of "this investor may see this" in the worker, not two.
 //
 // KEYED BY GRANT UID, NOT PROJECT UID. The grant is the thing the investor
@@ -4840,7 +4869,7 @@ async function heldRoom(env: Env, userId: number, grantUid: string): Promise<Hel
     `SELECT id, uid, name FROM projects WHERE id = ?`
   ).bind(grant.project_id).first<{ id: number; uid: string; name: string }>();
   if (!project) return null;
-  return { grant, project, nda: await ndaActive(env, grant.granted_by_user_id, userId) };
+  return { grant, project, nda: await projectNdaActive(env, project.id, userId) };
 }
 
 /**

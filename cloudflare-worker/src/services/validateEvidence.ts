@@ -42,6 +42,11 @@ export type EvidenceItemFull = {
   direction: 'supports' | 'contradicts';
   date: string | null;
   hypothesis_id: number;
+  /**
+   * Experiments only (D4586 § 4): whether the experiment has an observed result. Planned, running,
+   * or done with no result recorded is `false`: kept as context, never counted as a result.
+   */
+  observed?: boolean;
 };
 
 export type EvidenceCtx = { env: Env; projectId: number };
@@ -63,6 +68,22 @@ const SIGNAL_KIND: Record<string, string> = {
 };
 const money = (cents: number | null, currency: string | null) =>
   cents == null ? null : `${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(currency || 'usd').toUpperCase()}`;
+
+/** D4586 § 4: an experiment supplies an observed result only once a result is recorded, whatever its status. */
+export const experimentObserved = (result: string | null | undefined) => typeof result === 'string' && result.trim() !== '';
+
+const STATUS_WORD: Record<string, string> = { planned: 'Planned', running: 'Running', done: 'Done' };
+
+/**
+ * D4586 § 4: an experiment's evidence word. Its result when one is recorded; otherwise its status
+ * and that no result is in, so a done experiment never reads as a finding: "Done · no result
+ * recorded", "Running · no result yet".
+ */
+export function experimentWord(status: string | null | undefined, result: string | null | undefined): string {
+  if (experimentObserved(result)) return String(result).trim();
+  const s = String(status ?? '');
+  return s === 'done' ? 'Done · no result recorded' : `${STATUS_WORD[s] ?? 'Status not recorded'} · no result yet`;
+}
 
 /** Every evidence item on the venture's claims, or on one claim. */
 export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: number } = {}): Promise<EvidenceItemFull[]> {
@@ -119,6 +140,7 @@ export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: numbe
   const kpis = ev.some((e) => e.kind === 'metric') ? await latestKpis(env, projectId) : new Map();
   for (const e of ev) {
     let label: string | null = null;
+    let observed: boolean | undefined;
     let date: string | null = e.created_at ? String(e.created_at).slice(0, 10) : null;
     if (e.kind === 'metric' && e.ref_id.startsWith('posthog-')) {
       // D4585 (#4585): a tracked PostHog metric, as `addEvidence` accepts it (D1605): its name, its latest value from
@@ -144,7 +166,8 @@ export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: numbe
         'SELECT title, status, result FROM hypothesis_experiments WHERE id = ? AND project_id = ?',
       ).bind(Number(e.ref_id), projectId).first<{ title: string; status: string; result: string | null }>() : null;
       if (!x) continue;
-      label = `${x.title} · ${x.result || x.status}`;
+      observed = experimentObserved(x.result);
+      label = `${x.title} · ${experimentWord(x.status, x.result)}`;
     } else if (e.kind === 'signal') {
       const m = /^(signal|revenue|waitlist)-([1-9][0-9]{0,9})$/.exec(e.ref_id);
       if (!m) continue;
@@ -179,6 +202,7 @@ export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: numbe
     out.push({
       id: `evidence-${e.id}`, link: `evidence-${e.id}`, kind: e.kind as EvidenceItemFull['kind'], ref_id: e.ref_id,
       label: label as string, strength: strengthOf(e.strength), direction: dirOf(e.direction), date, hypothesis_id: Number(e.hypothesis_id),
+      ...(observed === undefined ? {} : { observed }),
     });
   }
   return out;

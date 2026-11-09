@@ -225,11 +225,21 @@ test('a re-sync changes nothing twice', async () => {
   const gh = fakeGithub(repo);
   try {
     const first = await syncGithub(w.env, w.row());
+    // An earlier stamp stands in for a second sync that lands in a later second: it must survive.
+    // Mutation checked: `updated_at = CURRENT_TIMESTAMP` on every re-sync → the stamp moves and this fails.
+    w.db.exec("UPDATE roadmap_okrs SET updated_at = '2026-01-01 00:00:00'");
     const before = snapshot(w);
     const second = await syncGithub(w.env, w.row());
     assert.equal(snapshot(w), before, 'the same read writes the same rows');
     assert.equal(second.counts.release_rows_created, 0);
     assert.deepEqual([second.counts.milestone_items, second.counts.items_shipped], [first.counts.milestone_items, first.counts.items_shipped]);
+    // A title GitHub did change still stamps the row; the unchanged rows keep theirs.
+    // Mutation checked: `updated_at = updated_at` always → the renamed row keeps the old stamp.
+    const renamed = repo.issues.find((i: any) => !i.pull_request);
+    renamed.title = `${renamed.title} (renamed)`;
+    await syncGithub(w.env, w.row());
+    const stamps = w.all('SELECT objective, updated_at FROM roadmap_okrs ORDER BY id');
+    assert.deepEqual(stamps.filter((x: any) => x.updated_at !== '2026-01-01 00:00:00').map((x: any) => x.objective), [renamed.title]);
     // A later release that also names #1 does not move its mark.
     repo.releases.push(release(903, 'v1.2', '2026-10-12T12:00:00Z', 'Again: #1'));
     await syncGithub(w.env, w.row());

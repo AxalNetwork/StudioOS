@@ -31,12 +31,20 @@ const TOOL = () => readdirSync(resolve(root, TOOL_DIR)).filter((f) => f.endsWith
 const ROUTE = 'cloudflare-worker/src/routes/data_room.ts';
 
 test('the NDA gate reads pairwise_ndas, not a second NDA notion', () => {
-  const w = read(ROUTE);
+  // D4631 part 2: the route asks the shared deal policy (services/dealAccess.ts)
+  // whether an NDA is in force, so the rule is read where it now lives.
+  const route = read(ROUTE);
+  assert.match(route, /import \{[^}]*hasActivePairNda[^}]*hasActiveVentureNda[^}]*\} from '\.\.\/services\/dealAccess'/,
+    'the data room must ask the shared NDA rule, not keep its own');
+  assert.match(route, /return hasActiveVentureNda\(env, projectId, investorUserId\)/);
+  assert.match(route, /return hasActivePairNda\(env, founderUserId, investorUserId\)/);
+  const w = read('cloudflare-worker/src/services/dealAccess.ts');
   assert.match(w, /FROM pairwise_ndas/, 'the gate must use the existing e-sign NDA table');
   // Migration 025 fixes party_a as the founder. Accepting either ordering
   // would take rows the rest of the system treats as malformed.
-  assert.match(w, /party_a_user_id = \? AND party_b_user_id = \?/);
-  assert.ok(!/party_b_user_id = \? AND party_a_user_id = \?/.test(w),
+  // Party A then party B in the same statement (the shared rule checks party A's account is active between them).
+  assert.match(w, /n\.party_a_user_id = \? AND [^`]*?n\.party_b_user_id = \?/);
+  assert.ok(!/party_b_user_id = \? AND party_a_user_id = \?/.test(w + route),
     'the reversed ordering must not be accepted');
   // THE COLUMN IS NORMALISED, NOT JUST THE CLOCK (D124). This read
   // `valid_until > datetime('now')` until 2026-09-16, and that form does not
@@ -47,7 +55,7 @@ test('the NDA gate reads pairwise_ndas, not a second NDA notion', () => {
   // side is the plausible fix and changes nothing; the stored value is what
   // has to be normalised. `cloudflare-worker/test/expiry_gate_datetime_d124.test.ts`
   // owns the general rule and proves this gate closes against a real database.
-  assert.match(w, /valid_until IS NULL OR datetime\(valid_until\) > datetime\('now'\)/,
+  assert.match(w, /(n\.)?valid_until IS NULL OR datetime\((n\.)?valid_until\) > datetime\('now'\)/,
     'a lapsed NDA must not open a file');
 });
 

@@ -3,7 +3,9 @@
  * the lifecycle of Axal's own skills. Mounts itself at
  * `/api/admin/ai-agents/skills`. Super Admin only.
  *
- *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval
+ *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval;
+ *                                    D4537: each row's slug, roles ({ key, label }) and tools
+ *                                    D4536: `coverage`, the catalogue's counts (SKILL_ANALYTICS_METRICS.md)
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
@@ -62,13 +64,19 @@ import {
   type CaseExpect, type CaseInput, type DraftParts, type ReviewRow,
 } from '../services/agents/skillLifecycle';
 import {
-  MODELS_MAX, diffEvidence, evidenceChanges, evidenceFrom, evidenceHashOf, evidenceOf, liveCases, parseEvidence, releaseDecision, requiredModels, suiteRevision,
+  EVALUATOR, MODELS_MAX, caseSha, diffEvidence, evidenceChanges, evidenceFrom, evidenceHashOf, evidenceOf, liveCases, parseEvidence, releaseDecision, requiredModels, suiteRevision,
   type Evidence,
 } from '../services/agents/skillLifecycle';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import { campaignProgress, cancelCampaign, continueCampaign, evaluatePublished, startCampaign } from '../services/agents/skillEval';
+import { compareResults, type ResultRow } from '../services/agents/skillEvalCompare';
 import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
 import type { OutputKind, Tag } from '../services/agents/skills';
+import { ROLES } from '../services/agents/catalogue';
+import { SKILL_LIBRARY } from '../services/agents/skillLibrary.generated';
+import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
+
+const ROLE_LABEL = new Map(ROLES.map((r) => [r.key, r.name]));
 
 type C = Context<{ Bindings: Env }>;
 const adminHqSkills = new Hono<{ Bindings: Env }>();
@@ -201,21 +209,54 @@ adminHqSkills.get('/', async (c) => {
     pinTokenMap(env, rows.filter((s) => s.current_version).map((s) => ({ skill_id: s.id, version: s.current_version }))),
   ]);
   const evals = new Map((evalResult.results ?? []).map((r) => [r.skill_id, r]));
+  let draftsUnevaluated = 0;
   const skills = drafts.map(({ row, draft, models, evidence }) => {
     const summary = evals.get(row.id);
     const pass = summary?.pass ?? 0;
     const total = row.live_cases * models.length;
     const notEvaluated = total - (summary?.recorded ?? 0);
+    if (row.status === 'draft' && notEvaluated > 0) draftsUnevaluated++;
     return {
       uid: row.uid, name: draft.name, ...areaAndLevel(draft, tax.category),
+      // D4537: what the catalogue filters on, from the same draft read: the slug, its roles and its tools.
+      slug: row.slug, roles: draft.roles.map((key) => ({ key, label: ROLE_LABEL.get(key) ?? key })), tools: draft.tools,
       status: lifecycleStatus(row.status, row.open_evidence ? { evidence_hash: row.open_evidence } : null, evidence),
       version: row.current_version || null, agents: row.agents,
       tokens_per_run: tokens.get(`${row.id}:${row.current_version}`) ?? null,
       golden: { pass, total, not_evaluated: notEvaluated, meets_bar: notEvaluated === 0 && meetsBar(pass, total) }, last_eval: summary?.last_run ?? null,
     };
   });
-  return c.json({ skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null });
+  // D4536: the catalogue's coverage, in two more fixed reads whatever the page.
+  const coverage = await libraryCoverage(env, tax.category, page == null ? draftsUnevaluated : null);
+  return c.json({ skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null, coverage });
 });
+
+/** D4536: every skill's scope, status and current published roles and tags, and HQ's pins, as two aggregate reads. */
+async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, draftsWithoutCurrentEvaluation: number | null) {
+  const [rows, adoption] = await Promise.all([
+    env.DB.prepare(`SELECT s.scope, s.status, s.current_version,
+        CASE WHEN s.scope = 'hq' THEN s.slug END AS slug,
+        CASE WHEN s.scope = 'hq' THEN v.roles_json END AS published_roles_json,
+        CASE WHEN s.scope = 'hq' THEN v.taxonomy_json END AS published_tags_json,
+        (SELECT COUNT(*) FROM agent_skill_cases k WHERE k.skill_id = s.id AND k.removed_at IS NULL) AS live_cases,
+        (SELECT COUNT(*) FROM agent_skill_roles r WHERE r.skill_id = s.id) AS draft_roles,
+        (SELECT COUNT(*) FROM agent_skill_tags t WHERE t.skill_id = s.id) AS draft_tags,
+        EXISTS (SELECT 1 FROM agent_skill_reviews q WHERE q.skill_id = s.id AND q.status = 'requested') AS review_requested
+      FROM agent_skills s LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version`).all<CoverageRow>(),
+    env.DB.prepare(`SELECT COUNT(l.id) AS links, COUNT(DISTINCT l.agent_id) AS agents,
+        COALESCE(SUM(CASE WHEN l.version < s.current_version THEN 1 ELSE 0 END), 0) AS behind_current,
+        (SELECT COUNT(*) FROM agent_skills p WHERE p.scope = 'hq' AND p.status = 'published' AND NOT EXISTS (
+          SELECT 1 FROM agent_skill_links l2 JOIN team_agents a2 ON a2.id = l2.agent_id WHERE l2.skill_id = p.id AND a2.status <> 'removed'
+        )) AS published_without_links
+      FROM agent_skill_links l JOIN agent_skills s ON s.id = l.skill_id AND s.scope = 'hq'
+      JOIN team_agents a ON a.id = l.agent_id AND a.status <> 'removed'`).first<AdoptionRow>(),
+  ]);
+  return catalogueCoverage(rows.results ?? [], {
+    category, roleKeys: ROLES.map((r) => r.key), librarySlugs: SKILL_LIBRARY.map((e) => e.slug),
+    adoption: adoption ?? { links: 0, agents: 0, behind_current: 0, published_without_links: 0 },
+    draftsWithoutCurrentEvaluation,
+  });
+}
 
 // D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.
 adminHqSkills.get('/library', async (c) => {
@@ -305,6 +346,53 @@ adminHqSkills.get('/:uid/diff', async (c) => {
   const to = await side(c.req.query('to'), 'draft');
   if (!from || !to) return say(c, 400, 'version_unknown', 'Compare a published version (v1, v2, …) or the draft.');
   return c.json({ from: c.req.query('from') ?? fromDefault, to: c.req.query('to') ?? 'draft', ...diffParts(from.parts, to.parts), evidence: diffEvidence(from.evidence, to.evidence) });
+});
+
+// D4531 slice 3 (section E): the candidate's results against the baseline's, per case and per model.
+// `from` (the baseline) and `to` (the candidate) are each a published version (v1, v2, …) or the draft; by default the
+// current version against the draft. A version's rows are the published history (agent_skill_version_evals); the
+// draft's are the draft history under its current evidence (agent_skill_eval_results). The two histories stay apart:
+// each side is read from its own table, and the report names which it read. Super Admin, read-only.
+adminHqSkills.get('/:uid/evals/compare', async (c) => {
+  await requireSuperAdmin(c);
+  const s = await hqSkill(c.env, c.req.param('uid'));
+  if (!s) return noSkill(c);
+  const read = async (raw: string): Promise<{ label: string; history: 'draft' | 'published'; rows: ResultRow[] } | null> => {
+    if (raw === 'draft') {
+      const e = await evidenceOf(c.env, s, await draftPartsOf(c.env, s));
+      const rows = (await c.env.DB.prepare(
+        `SELECT r.model_id, r.result, r.detail, r.run_at, r.evaluator_version, k.uid, k.name, k.input_json, k.expect_json
+           FROM agent_skill_eval_results r JOIN agent_skill_cases k ON k.id = r.case_id
+          WHERE r.skill_id = ? AND r.evidence_hash = ? ORDER BY r.id`,
+      ).bind(s.id, e.evidence_hash).all<{ model_id: string; result: ResultRow['result']; detail: string | null; run_at: string; evaluator_version: number | null; uid: string; name: string; input_json: string; expect_json: string }>()).results ?? [];
+      return {
+        label: 'draft', history: 'draft',
+        rows: await Promise.all(rows.map(async (r) => {
+          const k = checkCase({ name: r.name, input: parse(r.input_json, null), expect: parse(r.expect_json, null) });
+          return {
+            case_key: r.uid, case_name: r.name, case_sha256: k.ok ? await caseSha(k) : null, model_id: r.model_id,
+            result: r.result, evaluator_version: r.evaluator_version, detail: r.detail, run_at: r.run_at,
+          };
+        })),
+      };
+    }
+    const m = /^v([1-9][0-9]{0,5})$/.exec(raw);
+    if (!m || !(await versionOf(c.env, s.id, Number(m[1])))) return null;
+    const rows = (await c.env.DB.prepare(
+      `SELECT case_key, case_name, case_sha256, model_id, result, evaluator_version, detail, run_at
+         FROM agent_skill_version_evals WHERE skill_id = ? AND version = ? ORDER BY id`,
+    ).bind(s.id, Number(m[1])).all<ResultRow>()).results ?? [];
+    return { label: raw, history: 'published', rows };
+  };
+  const from = await read((c.req.query('from') ?? (s.current_version > 0 ? `v${s.current_version}` : '')).trim());
+  const to = await read((c.req.query('to') ?? 'draft').trim());
+  if (!from || !to) return say(c, 400, 'version_unknown', 'Compare a published version (v1, v2, …) or the draft.');
+  return c.json({
+    baseline: { side: from.label, history: from.history, results: from.rows.length },
+    candidate: { side: to.label, history: to.history, results: to.rows.length },
+    current_evaluator_version: EVALUATOR.version,
+    ...compareResults(from.rows, to.rows),
+  });
 });
 
 // ── Review ──────────────────────────────────────────────────────────────────
@@ -446,8 +534,9 @@ async function runEvals(env: Env, admin: User, s: SkillRow, models: string[]) {
   for (const k of cases) {
     for (const model of models) {
       const r = await runCase(env, d, parse<CaseInput>(k.input_json, { records: {} }), parse<CaseExpect>(k.expect_json, null as any), model, admin.id);
-      await env.DB.prepare(`INSERT INTO agent_skill_eval_results (case_id, skill_id, draft_hash, model_id, result, detail, usage_log_id, run_by, evidence_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(k.id, s.id, e.definition_hash, model, r.result, r.detail, r.usage_log_id, admin.id, e.evidence_hash).run();
+      // D4531 slice 3: the evaluator that judged it, on the row and not only inside the evidence hash.
+      await env.DB.prepare(`INSERT INTO agent_skill_eval_results (case_id, skill_id, draft_hash, model_id, result, detail, usage_log_id, run_by, evidence_hash, evaluator_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(k.id, s.id, e.definition_hash, model, r.result, r.detail, r.usage_log_id, admin.id, e.evidence_hash, e.evaluator_version).run();
     }
   }
   return { cases: cases.length, evidence: e, summary: await evalSummary(env, s.id, e) };

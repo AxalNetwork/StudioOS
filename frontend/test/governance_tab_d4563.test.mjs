@@ -136,7 +136,7 @@ test('the Super Admin is offered the ownership, and an unrecorded entity reads N
   const view = await mountContracts(React.createElement(GovernanceTab), '/admin/contracts/governance', superAdmin);
   try {
     await view.flush();
-    await view.click('Ownership (Super Admin)'); await view.flush();
+    await view.click('🔒 View restricted ownership details'); await view.flush();
     assert.equal(calls.filter(([k]) => k === 'ownership').length, 1, 'read only once it opens');
     const text = view.text();
     assert.match(text, /Member A · Class A units · percent not recorded/);
@@ -155,7 +155,8 @@ test('the desk: Corporate Governance sits after Templates at its own path, HQ on
     const link = view.nodes().find((n) => view.props(n)?.['data-testid'] === 'contracts-tab-governance');
     assert.ok(link, 'the tab is drawn');
     assert.equal(view.props(link)['aria-current'], 'page');
-    assert.match(view.text(), /Templates.*Corporate Governance.*Forms/s, 'beside the template library');
+    // D4811 part 7: the four workflow tabs, then the Library menu (Forms, Document types).
+    assert.match(view.text(), /Agreements.*Templates.*Corporate Governance.*Closings.*Library/s, 'after Templates, among the four workflow tabs');
     assert.match(view.text(), /Holdings OA/);
   } finally { await view.unmount(); restore(); }
   stub({ list: async () => listing() });

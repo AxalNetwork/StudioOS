@@ -214,3 +214,29 @@ test('SCORING reads only items shared beyond Private, current at read, under one
     assert.equal(opens(w), 0, 'SCORING reads are not investor opens');
   } finally { w.db.close(); }
 });
+
+// D4631 part 2 (#4631): the evidence pack reads the venture's NDA by the shared rule (services/dealAccess.ts), the
+// same one the data room and the deal's documents read: only `active`, inside its term, with an active account of
+// this venture's founder as party A.
+test('D4631: the evidence pack opens only on an NDA in force by the shared rule; values stay withheld otherwise', async () => {
+  const w = world(); try {
+    await fullPack(w); grant(w); nda(w);
+    const read = async () => { const r: any = await investorEvidence(w.env, 1, 5); return [r.nda_signed, r.items === null]; };
+    assert.deepEqual(await read(), [true, false], 'an active NDA with the venture\'s founder');
+    for (const status of ['pending', 'partially_signed', 'expired', 'revoked']) {
+      w.db.prepare('UPDATE pairwise_ndas SET status = ? WHERE party_b_user_id = 5').run(status);
+      assert.deepEqual(await read(), [false, true], status);
+    }
+    w.db.exec("UPDATE pairwise_ndas SET status = 'active', valid_until = '2000-01-01' WHERE party_b_user_id = 5");
+    assert.deepEqual(await read(), [false, true], 'a lapsed term');
+    // Mutation checked: evidenceNda back on its own per-founder loop (services/trust.ts' check) reads this as in force.
+    w.db.exec("UPDATE pairwise_ndas SET valid_until = 'not a date' WHERE party_b_user_id = 5");
+    assert.deepEqual(await read(), [false, true], 'a term that cannot be read is not in force');
+    w.db.exec('UPDATE pairwise_ndas SET valid_until = NULL WHERE party_b_user_id = 5');
+    // Mutation checked: the same old loop also counts a deactivated founder account as party A.
+    w.db.exec('UPDATE users SET is_active = 0 WHERE id = 1');
+    assert.deepEqual(await read(), [false, true], 'party A is no longer an active account of the venture');
+    w.db.exec('UPDATE users SET is_active = 1 WHERE id = 1');
+    assert.deepEqual(await read(), [true, false], 'restored');
+  } finally { w.db.close(); }
+});

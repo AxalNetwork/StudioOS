@@ -17,6 +17,8 @@ import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
   TABS, fileRows, grantRows, isDataRoomTab, isOldFileAddress, movedKind, tabHref, tabSearch,
 } from '../src/pages/raise/dataroom/dataRoomModel.js';
+import { resolveVenture } from '../src/pages/cycles/ventureQuery.js';
+import { ROOM_CAPS } from './_data_room_capabilities.mjs'; // D5074: the Worker's maps, pinned to it by its own test
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -28,6 +30,7 @@ const FAR = '2099-01-01';
 const ROOM = {
   project_uid: 'p3uid', // D5072: the room by id names its venture's uid
   project: { uid: 'p3uid', name: 'Harbor Ledger' },
+  role: 'owner', capabilities: ROOM_CAPS.owner,
   folders: [{ id: 1, uid: 'f1', name: 'Financials', parent_id: null, visibility: 'nda' }],
   files: [
     { id: 11, uid: 'a1', name: 'Model.xlsx', folder_id: 1, visibility: 'nda', access_tier: 'invited', access_expires_at: null, downloads: 4 },
@@ -97,6 +100,10 @@ test('seven tabs, and only their words are tabs; a file is still a record; the v
   assert.ok(!isDataRoomTab('cap-table', 'files'), 'only the Data room has these words');
   assert.equal(tabSearch('?project=7&mode=workspace#x'), '?project_id=7');
   assert.equal(tabHref(TABS[2], '?project_id=3&version=2'), '/raise/data-room/access?project_id=3');
+  // D5074: the venture's uid is the shared context's (`ventureQuery.js`), no longer the Data room's own lookup.
+  assert.equal(resolveVenture(PROJECTS, { id: 3 })?.projectUid, 'p3uid');
+  assert.equal(resolveVenture({ items: PROJECTS }, { id: '4' })?.projectUid, 'p4uid');
+  assert.equal(resolveVenture(PROJECTS, { id: 9 }), null);
 });
 
 test('D1109: only the two old modes forward, and only a file\'s number is its old page', () => {

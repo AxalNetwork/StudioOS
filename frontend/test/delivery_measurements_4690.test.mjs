@@ -41,7 +41,8 @@ test('hours are shown against the cap the Worker compared with, not the weekly n
 test('a deliverable is only called unopened where opens are observable', () => {
   assert.match(deliverables, /const unopened = items\.filter\(\(r\) => r\.is_unopened === true\);/);
   assert.match(deliverables, /readsUnavailable = d\?\.read_tracking\?\.available === false/);
-  assert.match(deliverables, /Opens not recorded/);
+  // D4822: the canvas's words for the same absence.
+  assert.match(deliverables, /Read status unavailable/);
   assert.match(deliverables, /nr=\{readsUnavailable\}/, 'the Never opened tile is drawn as a number while opens are unobservable');
   assert.match(deliverables, /const isUnopened = row\.is_unopened === true;/, 'a not-recorded row is tinted as a failure');
   // Health states what it could not count rather than printing 0 of N.
@@ -55,9 +56,13 @@ test('a deliverable is only called unopened where opens are observable', () => {
 test('mode on Health and Board comes from the seat collection, not one row\'s scope', () => {
   assert.match(health, /r\.mode === 'embedded' \? 'Embedded' : 'Project'/);
   assert.ok(!/r\.seat_scope \? 'Embedded'/.test(health), 'an empty-scope seat makes the engagement a project');
-  assert.match(board, /r\.seat_state === 'active'/);
+  // D4822: Board v2 reads the row's derived state (`seat_state`, from the whole collection) to treat a fully
+  // revoked engagement as closed; mode itself is the Worker's `seats.mode`.
+  assert.match(board, /r\.seat_state === 'revoked'/);
 });
 
 test('Embedded / month is Not recorded, not zero, when no recurring amount is recorded', () => {
-  assert.match(board, /nr=\{d\?\.embedded_monthly == null\}/);
+  // D4822: Board v2 prints an embedded row's value only when a recurring amount is recorded, never $0.
+  const attention = read('frontend/src/pages/partner/delivery/boardAttention.js');
+  assert.match(attention, /return row\.recurring_monthly_cents != null \? `Embedded seat · \$\{dollars\(row\.recurring_monthly_cents \/ 100\)\} \/ mo` : 'Embedded seat';/);
 });
