@@ -23,7 +23,7 @@ import { storedPmfChecklist } from '../scoring/pmfStore';
  * creator column (decision 12, `cycleActivity.ts`).
  */
 import type { ActionResult, ModuleSpec, RecordAction, RecordField, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
-import { activeGrant, dataRoomOwner, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
+import { activeGrant, dataRoomOwner, projectNdaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
 import { ACCESS_TIERS, grantFolderScope, investorCommitted, tierAdmits } from '../dataRoomAccess';
 import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
 import { deckReaders, readBySentence } from '../narrative/readers';
@@ -473,7 +473,7 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
  * Who can open the file now (decision 6): each active grant, confirmed by
  * `activeGrant`, whose investor the file's tier and expiry admit
  * (`tierAdmits`, with `investorCommitted` for a committed-only file), and,
- * for an `nda` file, only once that investor's NDA is live (`ndaActive`),
+ * for an `nda` file, only once that investor's NDA is live (`projectNdaActive`),
  * the gate `data_room.ts` applies. D1103 — and whose folders hold the file.
  */
 async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id: number; name: string | null }>> {
@@ -488,7 +488,8 @@ async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id:
     if (!grant) continue;
     const committed = f.access_tier === 'committed' ? await investorCommitted(rc.env, rc.projectId, investor) : false;
     if (!tierAdmits(f, committed, Date.now(), await grantFolderScope(rc.env, grant.id))) continue;
-    if (f.visibility === 'nda' && !(await ndaActive(rc.env, grant.granted_by_user_id, investor))) continue;
+    // D4631 part 2: the venture's NDA, by the shared rule, as the data room's own download gate reads it.
+    if (f.visibility === 'nda' && !(await projectNdaActive(rc.env, rc.projectId, investor))) continue;
     out.push({ id: investor, name: g.name });
   }
   return out;
