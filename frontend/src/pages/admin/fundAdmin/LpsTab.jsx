@@ -3,8 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Pill, Unrecorded, Unreadable } from '../../../ui';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import {
-  FILTERS, NOT_RECORDED, ROW_MENU, SORTS, bookletText, cell, day, identityText, lpHref, lpIdFrom, lpTiles, lpTypeText,
-  rosterQuery, typeBars, typeNote, typeSummary, withQuery,
+  FILTERS, NOT_RECORDED, ROW_MENU, SORTS, absence, activeChips, bookletText, cell, day, identityText, lpHref, lpIdFrom, lpTiles, lpTypeText,
+  resultLine, rosterQuery, typeBars, typeNote, typeSummary, withQuery,
 } from './lpsModel';
 import { NUM, Note, Panel, Section, TH, Table, Tiles } from './parts';
 import { useRead } from './useRead';
@@ -22,6 +22,12 @@ import { AddLpDialog, ContactDialog, LpTypeDialog } from './LpDialogs';
  * Add LP is `fund.write`, an Admin's act; a first call issues a call, which
  * is a Super Admin's (`capital_call.issue`), so an Admin adds the LP without
  * one and reads the sentence in its place.
+ *
+ * D4812 part 4 (FA-02): the toolbar shows each active filter as a chip with
+ * ✕, the result line counts every row the filters keep with their committed
+ * total, the LP's name is the way in (Open is no longer in the row menu), an
+ * identity the store could not read says Unreadable, and Export view writes
+ * the same rows, every page, as CSV from the Worker.
  */
 const CHIP = 'inline-flex min-h-[30px] items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold max-sm:min-h-[44px]';
 const chipTone = (on) => (on
@@ -49,7 +55,7 @@ export function LpsTab({ apis, access, funds }) {
   const rows = data?.items || [];
 
   return (
-    <Section title="LPs" sub="Every LP of every fund administered here: commitment, calls, LPA, identity check and booklet."
+    <Section title="LP roster" sub="Every LP of every fund administered here: commitment, calls, LPA, identity check and booklet."
       aside={<button type="button" className={BTN.primary} onClick={() => setDialog({ kind: 'add' })} data-testid="lps-add">Add LP</button>}
       testId="lps-section">
       {roster.status === 'unreadable' && (
@@ -66,8 +72,8 @@ export function LpsTab({ apis, access, funds }) {
           </Panel>
         </div>
       )}
-      <Panel label="LPs" sub={data ? `${data.total_rows} LP${data.total_rows === 1 ? '' : 's'}` : null} testId="lps-table-panel">
-        <Toolbar query={query} search={location.search} go={go} />
+      <Panel label="LPs" sub={data ? resultLine(data) : null} testId="lps-table-panel">
+        <Toolbar query={query} search={location.search} go={go} apis={apis} />
         {data && (rows.length === 0
           ? <Note testId="lps-empty"><Unrecorded>No LP matches these filters.</Unrecorded></Note>
           : <Table wide testId="lps-table" rowTestId={(r) => `lps-row-${r.limited_partner_id}`} rowKey={(r) => r.limited_partner_id} rows={rows}
@@ -86,10 +92,13 @@ export function LpsTab({ apis, access, funds }) {
               { key: 'outstanding', label: 'Outstanding', align: 'right', mono: true, cell: (r) => <Fig row={r} k="outstanding_cents" /> },
               { key: 'distributed', label: 'Distributed', align: 'right', mono: true, cell: (r) => <Fig row={r} k="distributed_cents" /> },
               { key: 'lpa', label: 'LPA', cell: (r) => (r.lpa_signed ? <Pill tone="ok">Signed</Pill> : <Pill tone="warn">Pending</Pill>) },
-              { key: 'identity', label: 'Identity', cell: (r) => (r.kyc_status ? identityText(r.kyc_status) : <Unrecorded reason={r.unavailable?.kyc_status}>{NOT_RECORDED}</Unrecorded>) },
+              { key: 'identity', label: 'Identity', cell: (r) => (r.kyc_status ? identityText(r.kyc_status)
+                : absence(r.unavailable?.kyc_status) === 'Unreadable'
+                  ? <span className="font-semibold text-red-700 dark:text-red-300" data-testid={`lps-identity-unreadable-${r.limited_partner_id}`}>! Unreadable · <button type="button" className="underline" onClick={roster.reload}>Retry</button></span>
+                  : <Unrecorded reason={r.unavailable?.kyc_status}>{NOT_RECORDED}</Unrecorded>) },
               { key: 'booklet', label: 'Booklet', cell: (r) => (r.booklet ? bookletText(r.booklet) : <Unrecorded reason={r.unavailable?.booklet}>{NOT_RECORDED}</Unrecorded>) },
               { key: 'notice', label: 'Last notice', mono: true, cell: (r) => (r.last_notice ? day(r.last_notice.issued_at) : <Unrecorded reason={r.unavailable?.last_notice}>{NOT_RECORDED}</Unrecorded>) },
-              { key: 'menu', label: '', align: 'right', cell: (r) => <RowMenu row={r} onPick={(kind) => (kind === 'open' ? navigate(lpHref(r.limited_partner_id, location.search)) : setDialog({ kind, row: r }))} /> },
+              { key: 'menu', label: '', align: 'right', cell: (r) => <RowMenu row={r} onPick={(kind) => setDialog({ kind, row: r })} /> },
             ]}
             foot={<Pager data={data} go={go} />} />)}
       </Panel>
@@ -155,8 +164,19 @@ function TypeChart({ tally }) {
 }
 
 /** Search, the filters, the toggles and the sort: each kept in the address, applied on the Worker. */
-function Toolbar({ query, search, go }) {
+function Toolbar({ query, search, go, apis }) {
   const [q, setQ] = useState(query.q || '');
+  const [exporting, setExporting] = useState({ status: 'idle', text: '' });
+  const chips = activeChips(query);
+  const exportView = async () => {
+    setExporting({ status: 'busy', text: '' });
+    try {
+      const out = await apis.fundAdmin.exportLps(query);
+      setExporting({ status: 'done', text: `Exported ${out?.name || 'the view'}.` });
+    } catch (e) {
+      setExporting({ status: 'failed', text: typeof e?.message === 'string' && e.message.trim() ? e.message.trim() : 'The LP view could not be exported.' });
+    }
+  };
   const select = (k, list, label) => (
     <label className="flex items-center gap-1.5">
       <span className="sr-only">{label}</span>
@@ -171,7 +191,20 @@ function Toolbar({ query, search, go }) {
         <input className={INPUT} type="search" placeholder="Search name or email" aria-label="Search name or email" value={q}
           onChange={(e) => setQ(e.target.value)} maxLength={100} data-testid="lps-search" />
         <button type="submit" className={BTN.ghost} data-testid="lps-search-go">Search</button>
+        {apis?.fundAdmin?.exportLps && <button type="button" className={BTN.ghost} onClick={exportView} disabled={exporting.status === 'busy'} data-testid="lps-export">{exporting.status === 'busy' ? 'Exporting…' : 'Export view'}</button>}
       </form>
+      {exporting.text && <p role={exporting.status === 'failed' ? 'alert' : 'status'} className={`m-0 text-[12px] ${exporting.status === 'failed' ? 'text-red-700 dark:text-red-300' : 'text-axal-muted dark:text-gray-400'}`} data-testid="lps-export-status">{exporting.text}</p>}
+      {chips.length > 0 && (
+        <ul className="m-0 flex list-none flex-wrap items-center gap-2 p-0" aria-label="Active filters" data-testid="lps-chips">
+          {chips.map((c) => (
+            <li key={c.key}>
+              <button type="button" className={`${CHIP} ${chipTone(true)}`} onClick={() => go(c.key, undefined)} aria-label={`Remove filter: ${c.label}`} data-testid={`lps-chip-${c.key}`}>
+                {c.label} <span aria-hidden="true">✕</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {select('lpa', FILTERS.lpa, 'LPA')}
         {select('identity', FILTERS.identity, 'Identity')}

@@ -426,3 +426,67 @@ export function workspaceMarks(overview, recorded, distribution) {
   if (distribution?.state === 'incomplete') marks.policy = { text: 'Not on every branch', tone: 'attention' };
   return marks;
 }
+
+// ──────────────────────────────────────────────────────── part 3 ──
+
+const SUPPORT = '/admin/hq-support';
+
+/**
+ * D5034 part 3 — Eadwyn's block on Support: the page's own next steps (D4873
+ * `steps`), drawn in place of the model list and prices, so the rail answers
+ * "what needs me here" and not "which model". Built only from what the page
+ * read; each step links to the workspace where the work is, and nothing in it
+ * acts. A figure the page could not make is never a step's zero.
+ */
+export function supportRailSteps({ overview, recorded, distribution, failed = false, onRetry } = {}) {
+  const title = 'For Support';
+  if (failed) return { title, state: 'unavailable', text: 'The Support read failed, so what is waiting is unknown, not none.', onRetry };
+  if (!overview || overview.state === 'loading') return { title, state: 'loading' };
+  const items = [];
+  if (overview.pastSla && overview.pastSla.value > 0) {
+    items.push({ key: 'past', tone: 'act', text: `${figureText(overview.pastSla)} past SLA, escalations and HQ tickets together.`, to: `${SUPPORT}?tab=queue`, action: 'Open the queue' });
+  }
+  if (overview.dueSoon && overview.dueSoon.value > 0) {
+    items.push({ key: 'due', tone: 'info', text: `${figureText(overview.dueSoon)} due soon.`, to: `${SUPPORT}?tab=queue`, action: 'Open the queue' });
+  }
+  const nd = notDelivered(recorded);
+  if (nd > 0) {
+    items.push({ key: 'delivery', tone: 'act', text: `${plural(nd, 'decision', 'decisions')} recorded at HQ but not delivered.`, to: `${SUPPORT}?tab=delivery`, action: 'Open Delivery' });
+  }
+  if (distribution?.state === 'incomplete') {
+    items.push({ key: 'policy', tone: 'act', text: `HQ's ticket SLA is applied on ${distribution.current} of ${distribution.total} subsidiaries.`, to: `${SUPPORT}?tab=policy`, action: 'Open Policy' });
+  }
+  const subs = overview.subsidiaries;
+  if (subs && (subs.state === 'failed' || (subs.unread && subs.unread.length))) {
+    items.push({
+      key: 'branches', tone: 'info',
+      text: subs.state === 'failed' ? 'The subsidiaries could not be read.' : `Not read: ${subs.unread.join(', ')}.`,
+      to: `${SUPPORT}?tab=branches`, action: 'Open Branches',
+    });
+  }
+  if (items.length) return { title, state: 'ready', items, foot: 'Eadwyn reads this page and changes nothing. You record every decision.' };
+  if (overview.state === 'clear') return { title, state: 'empty', text: 'Nothing is waiting at HQ, and every source answered.' };
+  return { title, state: 'empty', text: 'Nothing on this page needs a step from you.' };
+}
+
+/**
+ * D5034 part 3 — whether the subsidiary figures on screen are older than
+ * HQ's. They are when a quiet refresh brought HQ's own read back but the
+ * branch read has not (yet) answered: the page keeps the last good branch
+ * figures, and says which read they come from instead of mixing two times.
+ * Null when they are the same read.
+ */
+export function branchFreshness(hqReadAt, branchReadAt, { asking = false } = {}) {
+  if (!hqReadAt || !branchReadAt || String(branchReadAt) >= String(hqReadAt)) return null;
+  const at = clockOf(branchReadAt);
+  return {
+    at,
+    asking,
+    text: `Subsidiary figures are from the ${at ? `${at} UTC ` : 'earlier '}read${asking ? ', asking each subsidiary again…' : '; the latest subsidiary read did not complete.'}`,
+  };
+}
+
+/** What the offline banner says, with the read it keeps on screen. */
+export function offlineText(readAt) {
+  return `You're offline. Showing the ${readAt ? `${readAt} UTC ` : 'last '}read. Decisions can't be recorded until you reconnect.`;
+}
