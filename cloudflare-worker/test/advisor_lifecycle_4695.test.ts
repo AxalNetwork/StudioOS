@@ -58,7 +58,7 @@ const SCHEMA = `
 ` + ['201_advisors_table_in_ledger', '202_advisor_profile_fields', '203_advisor_services', '204_advisor_proof',
   '205_advisor_booking_amounts', '206_advisor_cohort_assignments', '241_advisor_money_model', '369_advisor_client_notes',
   '238_advisor_engagements', '239_advisor_deliverables', '202611062152_advisor_deliverable_recipients',
-  '240_advisor_sessions_config', '218_advisor_client_grants', '394_advisor_practice', '202611071547_advisor_engagement_events',
+  '240_advisor_sessions_config', '218_advisor_client_grants', '394_advisor_practice', '202611071547_advisor_engagement_events', '202611082054_advisor_engagement_corrections',
   // #4702: the advisor's recorded answer and who cancelled, written by every booking transition.
   '202611071558_advisor_booking_decision', '202611082030_advisor_booking_offer'].map(mig).join('\n');
 

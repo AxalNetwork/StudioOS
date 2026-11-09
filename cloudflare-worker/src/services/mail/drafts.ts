@@ -279,11 +279,12 @@ export type DraftOutcome =
  * and the MCP tool `mail_draft`, so either is charged once, by the router, and
  * stores one `mail_drafts` row with its sources and that charge.
  */
-export async function runDraft(env: Env, user: User, input: { ask: DraftAsk; pack: Pack; sources: PackItem[]; blocks: Block[]; parent: { uid: string; revision: Revision } | null; rail?: RailContext }): Promise<DraftOutcome> {
+export async function runDraft(env: Env, user: User, input: { ask: DraftAsk; pack: Pack; sources: PackItem[]; blocks: Block[]; parent: { uid: string; revision: Revision } | null; rail?: RailContext; pinMicrousd?: number }): Promise<DraftOutcome> {
   const { ask, pack, sources, blocks, parent } = input;
   const opts = draftRunOptions(user, pack, ask, sources, blocks, parent?.revision ?? null, input.rail);
   // The page and the rail are named at the call, where D552's and D765's scans read them.
-  const out = await run(env, { ...opts, surface: AI_SURFACE.mailDraft, rail: opts.rail });
+  // D4666: an accepted quote pins the run: the router holds no more than it said and settles at no more.
+  const out = await run(env, { ...opts, surface: AI_SURFACE.mailDraft, rail: opts.rail, ...(input.pinMicrousd != null ? { pinMicrousd: input.pinMicrousd } : {}) });
   if (out.refusal) {
     return { ok: false, refusal: out.refusal, error: out.refusal === 'guard_unavailable' ? 'The draft could not be checked. A started run may still be charged.' : undefined };
   }

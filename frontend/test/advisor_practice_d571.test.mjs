@@ -37,6 +37,7 @@ import {
 } from '../src/pages/advisor/practice/ClientAccessLog.jsx';
 import { AdvisorProfileView } from '../src/pages/advisor/AdvisorProfilePage.jsx';
 import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -44,7 +45,8 @@ const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const text = (el) => html(el).replace(/<[^>]+>/g, ' ').replace(/&#x27;|&rsquo;|’/g, "'")
   .replace(/&quot;/g, '"').replace(/&ldquo;|&rdquo;|“|”/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
-const ADVISORS = read('cloudflare-worker/src/routes/advisors.ts');
+// #4715: the advisor router is advisors.ts plus the route modules it mounts.
+const ADVISORS = advisorRoutesSource();
 const GRANTS = read('cloudflare-worker/src/routes/advisor_grants.ts');
 const API = read('frontend/src/lib/api.js');
 const APP = read('frontend/src/App.jsx');

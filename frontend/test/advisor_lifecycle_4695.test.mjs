@@ -8,12 +8,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { laneMoves } from '../src/pages/advisor/practice/engagementBoard.js';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 
 test('the board offers exactly the moves the Worker\'s state graph allows', () => {
   // Mutations checked: a lane added to the graph without the board; a lane removed from the board only.
-  const worker = read('../../cloudflare-worker/src/routes/advisors.ts');
+  // #4715: the advisor router is advisors.ts plus the route modules it mounts.
+  const worker = advisorRoutesSource();
   const graph = worker.slice(worker.indexOf('export const ENGAGEMENT_GRAPH'), worker.indexOf('});', worker.indexOf('export const ENGAGEMENT_GRAPH')));
   for (const [lane, to] of [['drafting', ['proposed', 'signed', 'ended']], ['proposed', ['drafting', 'signed', 'ended']],
     ['signed', ['renewal_due']], ['renewal_due', ['signed']], ['ended', []]]) {

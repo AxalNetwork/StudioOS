@@ -147,8 +147,11 @@ test('the page converts entered currency to cents and shows bps as a percentage'
   // D4694: the conversion moved into the form's pure module (lib/licenceCoreTermsForm.js) with the dirty-field logic.
   const form = readFileSync(resolve(root, 'frontend/src/lib/licenceCoreTermsForm.js'), 'utf8');
   assert.match(form, /Math\.round\(n\.value \* 100\)/, 'entered units → integer cents');
-  assert.match(s, /buildCoreSave\(/, 'the page saves through it');
-  assert.ok(!/parseFloat\(/.test(s) && !/parseFloat\(/.test(form), 'no float parsing of money');
+  // D4819: the page's Terms section builds its save in its model, beside the page.
+  const model = readFileSync(resolve(root, 'frontend/src/pages/admin/licenceTermsAmendModel.js'), 'utf8');
+  assert.match(model, /buildCoreSave\(/, 'the page saves through it');
+  assert.match(s, /planApply\(/, 'and the page applies through the model');
+  assert.ok(!/parseFloat\(/.test(s) && !/parseFloat\(/.test(form) && !/parseFloat\(/.test(model), 'no float parsing of money');
   // D149 MOVED THE PROPERTY AND THIS ASSERTION FOLLOWED IT, INVERTED. It used
   // to read `Number(bps) / 100` here under the comment "bps → percent happens
   // in exactly one place" — which was true of this file and false of the tree:

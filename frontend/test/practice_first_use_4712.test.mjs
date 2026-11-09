@@ -233,12 +233,12 @@ test('mounted Sessions, empty: availability is published here, and a confirmed s
     await m.press(/^Publish slot$/);
     assert.equal(m.writes().length, 0, 'an empty slot is refused before it is sent');
     assert.match(m.text(), /Choose when the slot starts and when it ends\./);
-    // The end is the start plus one hour as an instant. Building it as "hour + 1
-    // mod 24" on the same date put the end before the start from 23:00 UTC, so the
-    // page rightly refused the slot and this test failed for an hour every day.
-    const startsAt = Date.now() + 3 * 86400000;
-    const local = (t) => new Date(t).toISOString().slice(0, 16);
-    await m.type('slot-starts', local(startsAt)); await m.type('slot-ends', local(startsAt + 3600000));
+    // The end is the start plus an hour, as an instant. Adding 1 to the hour
+    // text wrapped 23:xx to 00:xx on the SAME date, so between 23:00 and 23:59
+    // UTC the slot ended before it began and the form rightly refused it.
+    const at = (ms) => new Date(ms).toISOString().slice(0, 16);
+    const start = Date.now() + 3 * 86400000;
+    await m.type('slot-starts', at(start)); await m.type('slot-ends', at(start + 3600000));
     await m.type('slot-seats', '21');
     await m.press(/^Publish slot$/);
     assert.equal(m.writes().length, 0, 'more than 20 seats is refused before it is sent');

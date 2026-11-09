@@ -112,10 +112,27 @@ export const reviewHref = (uid) => `${PROGRAMS_PATH}/proposals/${encodeURICompon
 export const decidedProgramHref = (proposal) => (proposal?.program_key ? programHref(proposal.program_key) : null);
 
 /** The compact proposal line on the catalogue: how many wait on HQ, in words. */
-export function proposalSummary(waiting) {
+export function proposalSummary(waiting, now = Date.now()) {
   if (!waiting || waiting.state === 'loading') return { state: 'loading', text: 'Reading the proposals…' };
   if (waiting.state === 'unreadable') return { state: 'unreadable', text: 'The proposals could not be read. That is not the same as none.' };
   if (waiting.state !== 'ready') return { state: 'off', text: '' };
   const n = Number(waiting.count) || 0;
-  return { state: 'ready', count: n, text: n === 0 ? 'No proposal is waiting on HQ.' : `${n.toLocaleString('en-US')} ${n === 1 ? 'proposal is' : 'proposals are'} waiting on HQ.` };
+  const out = { state: 'ready', count: n, text: n === 0 ? 'No proposal is waiting on HQ.' : `${n.toLocaleString('en-US')} ${n === 1 ? 'proposal is' : 'proposals are'} waiting on HQ.` };
+  // D4873 (PG01): the oldest one's age and the latest one's studio, from the queue's own rows. The queue reads
+  // oldest first, a page at a time, so the latest studio is known only when every waiting row was read.
+  const rows = Array.isArray(waiting.rows) ? waiting.rows.filter((r) => r && r.sent_at) : [];
+  if (n > 0 && rows.length) {
+    const byAge = [...rows].sort((a, b) => String(a.sent_at).localeCompare(String(b.sent_at)));
+    out.oldest = daysSince(byAge[0].sent_at, now);
+    out.latestStudio = rows.length >= n ? byAge[byAge.length - 1].studio || null : null;
+  }
+  return out;
+}
+
+/** "3 days", "1 day" or "today", from an ISO time. */
+export function daysSince(iso, now = Date.now()) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const d = Math.floor((now - t) / 86_400_000);
+  return d <= 0 ? 'today' : `${d} ${d === 1 ? 'day' : 'days'}`;
 }

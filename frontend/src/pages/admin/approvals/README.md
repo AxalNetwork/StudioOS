@@ -42,3 +42,10 @@ Review · ⋯) with one Filters panel and one Sort, then Workload (the two
 charts). The Inbox tab, Waiting and All all read `waitingFigure`, so they show
 one number; a figure short by an unread lane is "N+" from the Worker's
 `tiles.at_least`, never 0. Waiting on HQ is drawn only in a studio shell.
+
+D4814 part 2: ownership. The Assign dialog orders reviewers you, lowest
+workload, alphabetical and says assigning changes ownership only; the
+ownership callout's Assign overdue… reads `assigned=none&age=past` across
+every lane up to the Worker's `ASSIGNMENT_CAP`; a row's ⋯ is a disclosure
+popover, never an ARIA menu; the bulk bar floats in a holder of no height; the
+drawer puts the owner first and ends with "Continue review in [destination] →".

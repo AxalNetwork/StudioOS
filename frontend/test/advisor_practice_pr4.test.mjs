@@ -48,12 +48,14 @@ import {
   groupByDay, narrowSlots, openNote, ruleNote, ruleValue, slotCounts, slotKind,
   slotTime,
 } from '../src/pages/advisor/practice/sessionGrid.js';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/advisor/practice/SessionsZone.jsx');
 const P = codeOnly(PAGE);
 const GRID = codeOnly(read('frontend/src/pages/advisor/practice/sessionGrid.js'));
-const WORKER = read('cloudflare-worker/src/routes/advisors.ts');
+// #4715: the advisor router is advisors.ts plus the route modules it mounts.
+const WORKER = advisorRoutesSource();
 const API = read('frontend/src/lib/api.js');
 const FILTERS = read('frontend/src/workspaces/advisorZoneFilters.js');
 const ACTIONS = read('frontend/src/workspaces/advisorZoneActions.js');

@@ -7,8 +7,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { renderedText } from './_renderedText.mjs';
@@ -17,6 +15,7 @@ import {
   StatementActions, StatementFacts, StatementDrawHeld, STATEMENT_DRAW_HELD,
   statementAllowsIssue, statementDisputePayload, floorsInCurrency,
 } from '../src/pages/hq/RevenuePage.jsx';
+import { revenuePageSource } from './_revenuePage.mjs';
 
 const render = (el) => renderedText(renderToStaticMarkup(el));
 const actions = (statement) => renderToStaticMarkup(React.createElement(StatementActions, { statement, onUpdate: async () => ({}) }));
@@ -93,7 +92,7 @@ test('a per-currency line summing floors says it is a floor', () => {
 });
 
 test('the rail no longer says the page enters no payment', () => {
-  const page = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/RevenuePage.jsx'), 'utf8'));
+  const page = codeOnly(revenuePageSource());
   assert.doesNotMatch(page, /enters no payment/);
   assert.match(page, /the paid and disputed totals on a branch statement are figures an HQ operator types in/);
 });

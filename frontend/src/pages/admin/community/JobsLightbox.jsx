@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { communityApi } from '../../../lib/api/community';
-import { BoxShell, BoxTable, Failed, ListControls, Pager, Reading, SUB, useBoxRead, useSettled } from './CommunityLightbox';
+import { BoxShell, BoxTable, Failed, ListControls, Pager, Reading, SUB, useBoxRead, useSettled, MANAGE } from './CommunityLightbox';
 import { JOBS, JOBS_FOOT, JOBS_LINE, initialState, jobRow, jobsQuery, listPage } from './lightboxModel';
 
 /**
@@ -36,7 +37,7 @@ export default function JobsLightbox({ onClose, now: at }) {
   const id = 'community-box-jobs';
 
   return (
-    <BoxShell id={id} title={JOBS.title} sub={JOBS_LINE} onClose={onClose}>
+    <BoxShell id={id} title={JOBS.title} sub={JOBS_LINE} onClose={onClose} manage={<Link to="/admin/jobs" className={MANAGE}>Manage jobs →</Link>}>
       {(phone) => (
         <>
           <ListControls id={id} spec={JOBS} state={state} setState={setState} phone={phone} />

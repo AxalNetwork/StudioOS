@@ -6,7 +6,7 @@
 //   PUT /api/admin/licences/:uid/terms { terms?: { <key>: value|null }, sections?: { <key>: '§7.3'|null }, reason, expected_revision }
 //                                      → { ok, terms, sections, revision, changed, pushed }; 400 invalid_terms names the field,
 //                                        400 reason_required, 400 revision_required, 403 step_up_required (a TOTP session and a recent step-up),
-//                                        409 terms_conflict { current_revision, current } when another save got there first (D4694)
+//                                        409 terms_conflict { current_revision, current, changed_by, changed_at } when another save got there first (D4694, D4819)
 // The Administrator's read is `/api/licence/mine`, which carries `terms`, `terms_reason` and `sections`.
 import { request } from '../api.js';
 
