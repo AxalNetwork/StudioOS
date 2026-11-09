@@ -28,6 +28,9 @@ export const SYNC_ERRORS = {
   connection_refused: 'The provider refused the saved connection. Reconnect to sync again.',
   copy_refused: 'Some sessions were not copied to this calendar. Sync again to retry.',
   sync_failed: 'The last sync did not complete. Try again.',
+  // D5201 (#5201): the copy preference could not be read, so no NEW copy was made. Fail closed: an unreadable
+  // setting never turns "Copy new Axal sessions to: None" into a copy the member did not ask for.
+  copy_preference_unreadable: 'Your calendar settings could not be read, so new sessions were not copied here. Try again.',
 } as const;
 export type SyncErrorCode = keyof typeof SYNC_ERRORS;
 
