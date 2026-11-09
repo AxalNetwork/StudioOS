@@ -718,7 +718,8 @@ async function roadmapGithub(env: Env, p: Project) {
  * a variant), marked Modelled. Null with neither, or no value.
  */
 async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; source: 'record' | 'model' | null }> {
-  const cap = await readCapTable(env, p.id);
+  // #4603 part 3: Today's figures only, so a lean read (no holder kinds, no close uids, the model only as the fallback).
+  const cap = await readCapTable(env, p.id, { lean: true });
   if (cap.source === 'record') {
     const total = cap.today.totals.shares_outstanding;
     const pool = (cap.start.start.pool_shares ?? 0) + cap.start.start.holders.filter(h => h.type === 'options').reduce((n, h) => n + h.shares, 0);
