@@ -96,6 +96,7 @@ export default function StudioModuleTile({ mod, size, spec, edit = null, fixed =
       data-lifted={edit?.lifted ? 'true' : undefined}
       data-fixed={fixed ? 'true' : undefined}
       data-testid={`studio-tile-${mod.key}`}
+      data-tour="studio-tile"
       {...tileProps}
     >
       <div className="sm-tile-head">

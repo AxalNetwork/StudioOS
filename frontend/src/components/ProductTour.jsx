@@ -1,118 +1,167 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronRight, ChevronLeft } from 'lucide-react';
 import { api } from '../lib/api';
+import { inertOutside, tabbable, tabTarget } from '../ui/lightboxFocus.js';
+import { usePhoneWidth } from '../ui/phone/usePhoneWidth.js';
+import { useEscapeClose } from './useEscapeClose.js';
+import { STUDIO_ROLES, placeTip, resolveSteps, stepFrom, tourKey } from './productTourModel.js';
 
 /**
  * Task #6 (IF) — First-login product tour.
  *
- * Renders a small skippable overlay coachmark anchored to specific
- * `data-tour="…"` selectors. Fires on mount if `/api/onboarding/checklist`
- * reports `meta.tour_seen_at` is null. Persists completion server-side
- * so it never re-fires. Re-runnable from Settings → Onboarding.
+ * A skippable coachmark over `data-tour="…"` anchors. Fires on mount if
+ * `/api/onboarding/checklist` reports `meta.tour_seen_at` is null, and
+ * persists completion server-side so it never re-fires. Re-runnable from the
+ * Onboarding section of the account settings.
  *
- * Anchors used in the SPA:
- *   - data-tour="onboarding-checklist" — the dashboard panel
- *   - data-tour="sidebar-nav"          — primary sidebar
- *   - data-tour="settings"             — settings link
+ * D4623 (#4623): the steps and their rules are `productTourModel.js`, per
+ * licence (`role`) and viewport. A step whose anchor is not drawn is skipped,
+ * or, if it is page-level, explains its concept from the middle of the
+ * screen. The list is read again on every move, so a lazy home that mounts
+ * late still gets its steps. The coachmark keeps the modal contract of
+ * `ui/Lightbox.jsx` through the same helpers (`ui/lightboxFocus.js`): focus
+ * moves in on open and on each step, Tab stays inside, the rest of the page is
+ * inert, Escape closes it through the shared stack (`useEscapeClose`), and
+ * focus goes back to what held it. The arrow keys move between steps. It is
+ * placed again on every scroll and resize, and stays inside a phone's width.
  *
- * The anchor lookup falls back to a centred box when an anchor is missing
- * so missing markup never blocks the tour.
- *
- * D323 dropped the "search" and "notifications" steps. Their anchors lived
- * only on the retired "Welcome back" page, so every Studio home already showed
- * them as unanchored boxes; the command palette (Cmd+K) is named in the
- * sidebar step instead.
+ * D323 dropped the "search" and "notifications" steps; D4623 dropped the
+ * onboarding-checklist step with the panel it pointed at.
  */
-const STEPS = [
-  {
-    anchor: 'onboarding-checklist',
-    title: 'Your onboarding checklist',
-    body: 'This panel guides you through the actions that unlock the most value for your role. Items mark themselves complete as you go.',
-  },
-  {
-    anchor: 'sidebar-nav',
-    title: 'Navigate StudioOS',
-    body: 'Everything you need lives in the sidebar — projects, capital, integrations, compliance. Press Cmd+K from anywhere to jump to a page.',
-  },
-  {
-    anchor: 'settings',
-    title: "You're ready",
-    body: 'Settings lets you re-run this tour, reset your checklist, connect integrations, and configure notifications. Have fun.',
-  },
-];
+const OPEN_DELAY_MS = 600;
+// The role homes load lazily (#4622): a Studio licence waits a little for its modules to draw before opening.
+const OPEN_POLL_MS = 250;
+const OPEN_TRIES = 12;
 
-export default function ProductTour({ enabled, onDone }) {
-  const [step, setStep] = useState(0);
-  const [anchorRect, setAnchorRect] = useState(null);
-  const [visible, setVisible] = useState(false);
+const viewport = () => ({ width: window.innerWidth || 0, height: window.innerHeight || 0 });
+const findAnchor = (anchor) => (typeof document.querySelector === 'function' ? document.querySelector(`[data-tour="${anchor}"]`) : null);
+const rectOf = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, left: r.left, width: r.width, height: r.height }; };
 
-  useEffect(() => {
-    if (!enabled) return;
-    const t = setTimeout(() => setVisible(true), 600);
-    return () => clearTimeout(t);
-  }, [enabled]);
+export default function ProductTour({ enabled, onDone, role = 'founder' }) {
+  const phone = usePhoneWidth();
+  const [stepId, setStepId] = useState(null);
+  const [view, setView] = useState(null);
+  const root = useRef(null);
+  const box = useRef(null);
+  const primary = useRef(null);
+  const opener = useRef(null);
+  const ids = useId();
+  const open = stepId != null;
+
+  const read = useCallback(() => resolveSteps(role, { phone, find: findAnchor, viewportWidth: viewport().width }), [role, phone]);
 
   useEffect(() => {
-    if (!visible) return;
-    const cur = STEPS[step];
-    const el = document.querySelector(`[data-tour="${cur.anchor}"]`);
-    if (el) {
-      const r = el.getBoundingClientRect();
-      setAnchorRect({ top: r.top, left: r.left, width: r.width, height: r.height });
-      try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
-    } else {
-      setAnchorRect(null);
+    if (!enabled) return undefined;
+    let tries = 0;
+    let timer;
+    const tick = () => {
+      const list = read();
+      const studioPending = STUDIO_ROLES.includes(role) && !list.some((s) => s.id === 'studio');
+      if (studioPending && tries < OPEN_TRIES) { tries += 1; timer = setTimeout(tick, OPEN_POLL_MS); return; }
+      if (!list.length) return;
+      opener.current = typeof document !== 'undefined' ? document.activeElement : null;
+      setStepId(list[0].id);
+    };
+    timer = setTimeout(tick, OPEN_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [enabled, read, role]);
+
+  // Lay the current step out: its anchor's box and the card beside it.
+  const layout = useCallback((scroll) => {
+    if (stepId == null) return;
+    const list = read();
+    const at = list.findIndex((s) => s.id === stepId);
+    if (at < 0) {
+      const next = stepFrom(list, stepId, 1) || stepFrom(list, stepId, -1);
+      if (next) setStepId(next.id); else setView(null);
+      return;
     }
-  }, [step, visible]);
+    const step = list[at];
+    if (scroll && step.el) { try { step.el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* an old browser */ } }
+    const rect = step.el ? rectOf(step.el) : null;
+    const height = box.current?.offsetHeight || 200;
+    setView({ step, index: at, count: list.length, rect, tip: placeTip(rect, viewport(), height) });
+  }, [read, stepId]);
+
+  useLayoutEffect(() => { layout(true); }, [layout]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const again = () => layout(false);
+    window.addEventListener('resize', again);
+    window.addEventListener('scroll', again, true);
+    return () => { window.removeEventListener('resize', again); window.removeEventListener('scroll', again, true); };
+  }, [open, layout]);
+
+  // Everything else is inert while the tour is open. Focus goes back to what
+  // held it once the page is live again (an inert control cannot take focus).
+  const drawn = view != null;
+  useEffect(() => {
+    if (!drawn || !root.current || typeof document === 'undefined') return undefined;
+    const restore = inertOutside(root.current, document.body);
+    return () => {
+      restore();
+      const back = opener.current;
+      opener.current = null;
+      if (back && back.isConnected !== false) back.focus?.();
+    };
+  }, [drawn]);
+
+  // Focus moves to the step's main action on open and on every step.
+  const shownId = view?.step?.id;
+  useEffect(() => { if (shownId) primary.current?.focus?.(); }, [shownId]);
 
   const finish = useCallback(async (skipped = false) => {
-    setVisible(false);
-    try { await api.patchOnboardingMeta({ tour_seen: true }); } catch {}
+    setStepId(null);
+    setView(null);
+    try { await api.patchOnboardingMeta({ tour_seen: true }); } catch { /* the tour may fire again; nothing is lost */ }
     if (onDone) onDone(skipped);
   }, [onDone]);
 
-  if (!enabled || !visible) return null;
+  const move = useCallback((dir) => {
+    const next = stepFrom(read(), stepId, dir);
+    if (next) setStepId(next.id);
+    else if (dir > 0) finish(false);
+  }, [read, stepId, finish]);
 
-  const cur = STEPS[step];
-  const last = step === STEPS.length - 1;
+  useEscapeClose(() => finish(true), { active: open });
 
-  // Tooltip position — adjacent to anchor on the right by default; falls
-  // back to centred when no anchor.
-  const tipStyle = anchorRect
-    ? {
-        position: 'fixed',
-        top: Math.min(window.innerHeight - 220, Math.max(20, anchorRect.top + anchorRect.height / 2 - 100)),
-        left: Math.min(window.innerWidth - 340, Math.max(20, anchorRect.left + anchorRect.width + 16)),
-        width: 320,
-        zIndex: 250,
-      }
-    : {
-        position: 'fixed',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: 320,
-        zIndex: 250,
-      };
+  const onKeyDown = (e) => {
+    if (e.key === 'Tab') {
+      const list = tabbable(box.current, document.activeElement);
+      const to = tabTarget(list, document.activeElement, e.shiftKey);
+      if (to == null) return;
+      e.preventDefault();
+      (to === -1 ? box.current : list[to])?.focus?.();
+      return;
+    }
+    const action = tourKey(e.key);
+    if (!action) return;
+    e.preventDefault();
+    move(action === 'next' ? 1 : -1);
+  };
 
-  return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/30 z-[240]"
-        onClick={() => finish(true)}
-        role="presentation"
-      />
-      {/* Highlight ring around anchor */}
-      {anchorRect && (
+  if (!enabled || !open || !view || typeof document === 'undefined') return null;
+
+  const { step, index, count, rect, tip } = view;
+  const last = index === count - 1;
+  const titleId = `${ids}-title`;
+  const bodyId = `${ids}-body`;
+
+  return createPortal(
+    <div ref={root} data-testid="product-tour">
+      <div className="fixed inset-0 bg-black/30 z-[240]" onClick={() => finish(true)} role="presentation" />
+      {rect && (
         <div
           aria-hidden="true"
+          data-testid="product-tour-ring"
           style={{
             position: 'fixed',
-            top: anchorRect.top - 6,
-            left: anchorRect.left - 6,
-            width: anchorRect.width + 12,
-            height: anchorRect.height + 12,
+            top: rect.top - 6,
+            left: rect.left - 6,
+            width: rect.width + 12,
+            height: rect.height + 12,
             border: '3px solid #8b5cf6',
             borderRadius: 12,
             boxShadow: '0 0 0 4px rgba(139, 92, 246, 0.25)',
@@ -122,47 +171,55 @@ export default function ProductTour({ enabled, onDone }) {
           }}
         />
       )}
-      {/* Tooltip */}
       <div
+        ref={box}
         role="dialog"
-        aria-label={cur.title}
-        style={tipStyle}
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={bodyId}
+        tabIndex={-1}
+        onKeyDown={onKeyDown}
+        data-testid="product-tour-dialog"
+        data-step={step.id}
+        data-placement={tip.placement}
+        style={{ position: 'fixed', top: tip.top, left: tip.left, width: tip.width, maxHeight: tip.maxHeight, overflowY: 'auto', zIndex: 250 }}
         className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-4"
       >
         <div className="flex items-start justify-between gap-2 mb-2">
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-violet-600 dark:text-violet-300 font-semibold">
-              Step {step + 1} of {STEPS.length}
+            <div className="text-[10px] uppercase tracking-wider text-violet-600 dark:text-violet-300 font-semibold" data-testid="product-tour-count">
+              Step {index + 1} of {count}
             </div>
-            <h3 className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">{cur.title}</h3>
+            <h3 id={titleId} className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">{step.title}</h3>
           </div>
           <button
             type="button"
             onClick={() => finish(true)}
-            aria-label="Skip tour"
-            className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+            aria-label="Close the tour"
+            className="text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
           >
             <X size={14} />
           </button>
         </div>
-        <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">{cur.body}</p>
+        <p id={bodyId} className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">{step.body}</p>
         <div className="mt-4 flex items-center justify-between">
           <button
             type="button"
             onClick={() => finish(true)}
-            className="text-[11px] text-gray-500 hover:underline"
+            className="text-[11px] text-gray-500 dark:text-gray-400 hover:underline"
           >Skip tour</button>
           <div className="flex items-center gap-2">
-            {step > 0 && (
+            {index > 0 && (
               <button
                 type="button"
-                onClick={() => setStep((s) => s - 1)}
+                onClick={() => move(-1)}
                 className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
               ><ChevronLeft size={12} /> Back</button>
             )}
             <button
+              ref={primary}
               type="button"
-              onClick={() => (last ? finish(false) : setStep((s) => s + 1))}
+              onClick={() => (last ? finish(false) : move(1))}
               className="flex items-center gap-1 text-xs px-3 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white"
             >
               {last ? 'Done' : 'Next'} {!last && <ChevronRight size={12} />}
@@ -170,6 +227,7 @@ export default function ProductTour({ enabled, onDone }) {
           </div>
         </div>
       </div>
-    </>
+    </div>,
+    document.body,
   );
 }
