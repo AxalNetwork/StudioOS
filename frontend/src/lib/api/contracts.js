@@ -43,6 +43,8 @@ export const contractsApi = {
   templates: () => request('/admin/contracts/templates/store?recorded=true'),
   agreements: params => request(`/admin/contracts?${query({ ...params, recorded: true })}`),
   stats: () => request('/admin/contracts/stats?recorded=true'),
+  // D4811 part 4: cross-object legal search (GET /search): templates, agreements and governance, current versions unless historical.
+  search: ({ q, historical = false } = {}) => request(`/admin/contracts/search?${query({ q, historical: historical ? 'true' : '' })}`),
   recipients: params => request(`/admin/contracts/recipients?${query(params)}`),
   deals: params => request(`/admin/contracts/deal-options?${query(params)}`),
   published: () => request('/admin/contracts/published-templates'),
