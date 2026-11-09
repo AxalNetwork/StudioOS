@@ -9,8 +9,8 @@ import { tabHref } from './securityTabs.js';
  * workspace, drawn from `buildOverview` (`overviewModel.js`).
  *
  * ORDER IS THE POINT: Action required, then "Checked and clear", then status
- * by area, then the sources. Nothing passive sits above a finding. There is
- * no score (D4803).
+ * by area, then recent security events, then the sources. Nothing passive sits
+ * above a finding. There is no score (D4803).
  *
  * THE ONE SENTENCE THIS PAGE MUST NEVER SAY BY ACCIDENT is "nothing needs
  * action". It is drawn only when every read answered and no finding is open.
@@ -128,12 +128,69 @@ export function StatusByArea({ areas }) {
   );
 }
 
+/**
+ * D4800 (hierarchy item 3) — the newest ledger rows in Events' words, each
+ * with its outcome, actor and time, the raw action under the label. An
+ * unreadable ledger says so with Retry; it is never drawn as "no events".
+ */
+export function RecentEvents({ recent, onRetry, filterLabel }) {
+  const r = recent || { state: 'loading', rows: [] };
+  return (
+    <section aria-labelledby="security-recent-h" className="rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="security-recent-events" data-state={r.state}>
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="security-recent-h" className="text-[14px] font-extrabold tracking-tight">Recent security events</h2>
+        <Link to={tabHref('events')} className="text-[12px] font-bold text-violet-700 hover:text-violet-800 dark:text-violet-300 dark:hover:text-violet-200">Open Events</Link>
+      </div>
+      {r.filtered && (
+        <p className="mb-2 text-[11.5px] text-axal-faint" data-testid="security-recent-filtered">
+          Narrowed in Events{filterLabel ? ` (${filterLabel})` : ''}: these are the newest matching rows, not the newest rows.
+        </p>
+      )}
+      {r.partial && (
+        <p className="mb-2 text-[11.5px] text-axal-faint" data-testid="security-recent-partial">
+          A source could not be read, so rows from it may be missing here.
+        </p>
+      )}
+      {r.state === 'loading' && <p className="text-[12.5px] text-axal-muted">Reading the security ledger…</p>}
+      {r.state === 'unavailable' && (
+        <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-axal-muted">
+          <StatusBadge state="unavailable" />
+          <span>The security ledger could not be read. This is not a claim that nothing happened.</span>
+          <button type="button" onClick={onRetry} className={ACTION_PLAIN}>Retry</button>
+        </div>
+      )}
+      {r.state === 'empty' && (
+        <p className="text-[12.5px] text-axal-muted" data-testid="security-recent-empty">
+          <StatusBadge state="measured_zero" label="No events" /> The ledger was read and holds no row in its window.
+        </p>
+      )}
+      {r.state === 'rows' && (
+        <ol className="divide-y divide-axal-hairline dark:divide-gray-800">
+          {r.rows.map((e) => (
+            <li key={e.key} className="flex flex-col gap-1 py-2 sm:flex-row sm:items-start sm:gap-4" data-testid="security-recent-row">
+              <span className="shrink-0 sm:w-28"><StatusBadge state={e.state} label={e.word} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-bold text-axal-ink dark:text-white">{e.label}</div>
+                <div className="truncate font-mono text-[11px] text-axal-faint" title={e.raw}>{e.raw}</div>
+              </div>
+              <span className="shrink-0 text-[11.5px] text-axal-muted dark:text-gray-300 sm:w-44 sm:text-right">
+                {e.actor || 'An unnamed actor'}<br /><span className="font-mono text-[11px] text-axal-faint">{e.at}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export default function OverviewWorkspace({ model, onRetry, filterLabel, sourceNotes }) {
   return (
     <div className="space-y-5" data-testid="security-overview">
       <ActionRequiredList model={model} onRetry={onRetry} />
       <CheckedAndClear items={model.clear} />
       <StatusByArea areas={model.areas} />
+      <RecentEvents recent={model.recent} onRetry={onRetry.feed} filterLabel={filterLabel} />
       <section aria-labelledby="security-sources-h" className="rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
         <h2 id="security-sources-h" className="mb-2 text-[14px] font-extrabold tracking-tight">Evidence sources</h2>
         <SourceAvailability sources={model.sources} onRetry={onRetry.feed} filterLabel={filterLabel} data-testid="security-overview-sources">

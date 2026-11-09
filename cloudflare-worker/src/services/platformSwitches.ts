@@ -105,6 +105,22 @@ export type OperatorHalf =
   }
   | { available: false; reason: string };
 
+/**
+ * D4860 part 3: the switch's KV mirror (services/emergencySwitches.ts), read
+ * before D1 by the gate. `recorded` is false for a throw D1 never took.
+ */
+export type EmergencyHalf =
+  | { bound: false }
+  | { bound: true; readable: false; reason: string }
+  | { bound: true; readable: true; thrown: boolean; recorded: boolean; set_at: string | null };
+
+/** What the console says when the mirror holds a throw the database never recorded. */
+export const MIRROR_ONLY_REASON = 'Held by the emergency store: this was thrown while the database could not record it, '
+  + 'so there is no audit row yet. Throw it again once the database answers to record it, or release it.';
+/** What the console says when the database holds a throw the mirror does not. */
+export const UNMIRRORED_REASON = 'Thrown in the database, but the emergency store does not hold it, so a database outage '
+  + 'could release it at the gate. Throw it again to mirror it.';
+
 export interface PlatformSwitch {
   key: string;
   label: string;
@@ -129,6 +145,8 @@ export interface PlatformSwitch {
   deploy?: 'on' | 'off';
   /** An operator switch's stored half. */
   operator?: OperatorHalf;
+  /** D4860 part 3: the operator half's KV mirror, on an operator switch only. */
+  emergency?: EmergencyHalf;
 }
 
 const onOff = (b: boolean): SwitchState => (b ? 'on' : 'off');
@@ -173,11 +191,22 @@ async function eadwynSwitch(env: Env, kill: AdvisorKillState): Promise<PlatformS
     };
   }
 
+  const em = kill.emergency;
+  const emergency: EmergencyHalf = !em || !em.bound ? { bound: false }
+    : !em.readable ? { bound: true, readable: false, reason: em.reason }
+      : { bound: true, readable: true, thrown: em.record?.thrown === true, recorded: em.record ? em.record.revision != null || !em.record.thrown : true, set_at: em.record?.set_at || null };
+  const mirrorThrown = emergency.bound && emergency.readable && emergency.thrown;
+  const dbThrown = operator.available && operator.thrown;
+
   const state: SwitchState = kill.off ? 'on' : operator.available ? 'off' : 'unreadable';
   let reason: string | undefined;
   if (kill.by === 'deploy') {
     reason = 'Held on by the deployment. Releasing an operator switch does not turn Eadwyn back on; '
       + 'only a deployment does.';
+  } else if (mirrorThrown && !dbThrown) {
+    reason = MIRROR_ONLY_REASON;
+  } else if (dbThrown && emergency.bound && emergency.readable && !emergency.thrown) {
+    reason = UNMIRRORED_REASON;
   } else if (state === 'unreadable') {
     reason = 'The operator switch store could not be read, so whether an operator has thrown this '
       + 'is unknown. Eadwyn fails open on the same error and keeps answering; the deployment can '
@@ -197,6 +226,7 @@ async function eadwynSwitch(env: Env, kill: AdvisorKillState): Promise<PlatformS
     writable: true,
     deploy: kill.deploy ? 'on' : 'off',
     operator,
+    emergency,
   };
 }
 
