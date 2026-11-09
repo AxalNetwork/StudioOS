@@ -21,7 +21,7 @@
  */
 import http from 'node:http';
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, extname, join, relative, resolve } from 'node:path';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import * as F from './fixtures/portfolio.mjs';
@@ -53,9 +53,13 @@ if (!existsSync(join(DOCS, 'index.html'))) {
 mkdirSync(OUT, { recursive: true });
 
 const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
+/** A request path is served only when it is made of these characters and resolves inside DOCS. */
+const SAFE_PATH = /^\/[A-Za-z0-9._/-]*$/;
 const server = http.createServer((req, res) => {
-  let file = join(DOCS, decodeURIComponent(req.url.split('?')[0]));
-  if (!file.startsWith(DOCS)) { res.writeHead(403); res.end(); return; }
+  const pathname = String(req.url || '/').split('?')[0];
+  if (!SAFE_PATH.test(pathname) || pathname.includes('..')) { res.writeHead(403); res.end(); return; }
+  let file = resolve(DOCS, `.${pathname}`);
+  if (file !== DOCS && !file.startsWith(DOCS + sep)) { res.writeHead(403); res.end(); return; }
   try { if (statSync(file).isDirectory()) file = join(file, 'index.html'); } catch { file = join(DOCS, 'index.html'); }
   if (!existsSync(file)) file = join(DOCS, 'index.html');
   const type = TYPES[extname(file)] || 'application/octet-stream';
