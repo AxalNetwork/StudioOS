@@ -104,14 +104,26 @@ test('the three queues carry H22’s own names, in H22’s order', () => {
   assert.deepEqual(Object.keys(QUEUE_TITLES), ['escalations', 'hq_held', 'admin_product']);
 });
 
-test('the matrix has H22’s four columns, in order, and HQ is the first row', () => {
-  const at = CANVAS.indexOf('<span class="zt">Tenant × queue</span>');
-  assert.ok(at > 0);
-  const canvasCols = [...CANVAS.slice(at, at + 900).matchAll(/<span class="th">([^<]+)<\/span>/g)].map((m) => m[1]);
+test('the matrix has the v2 canvas’s four columns, in order, and HQ is the first row', () => {
+  // D5034 part 3 (#5034) — H22's "Tenant × queue" (Branch, Escalations, HQ-held, About Admin) is the
+  // Support v2 canvas's "Queues by subsidiary" (SU04a), named for operators; the cells are unchanged.
+  const V2 = read('design/incoming/Support v2 Page.dc.html');
+  const at = V2.indexOf('Queues by subsidiary');
+  assert.ok(at > 0, 'the v2 canvas no longer draws Queues by subsidiary');
+  const block = V2.slice(at, at + 1200);
+  const canvasCols = ['Subsidiary', 'Escalations', 'Customer tickets on HQ', 'Subsidiary admin tickets'];
+  let from = 0;
+  for (const c of canvasCols) {
+    const i = block.indexOf(`>${c}<`, from);
+    assert.ok(i > 0, `the canvas does not draw the column ${c} in this order`);
+    from = i;
+  }
   const html = render(TenantMatrix, { matrix: payload().matrix });
+  assert.match(html, />Queues by subsidiary</);
   const head = html.slice(html.indexOf('<thead>'), html.indexOf('</thead>'));
   const pageCols = [...head.matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
   assert.deepEqual(pageCols, canvasCols);
+  assert.match(head, /<th scope="col"/);
   const firstRow = html.slice(html.indexOf('<tbody>'));
   assert.match(firstRow, /^<tbody><tr[^>]*data-kind="hq"/, 'HQ is not the first row — the table would total more than its rows');
 });

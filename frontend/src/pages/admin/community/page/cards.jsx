@@ -8,10 +8,9 @@ import { AS_ENTERED_TIP, OVERDUE_HOURS, QUEUE_CLEAR, activityEmpty, bookingsEmpt
 import { CARD, Card, DomainActions, EYE, H2, LINK, MONO, OverdueDot, PartState, SUB, TAG, TableToggle, Tile } from './parts';
 import { Link } from 'react-router-dom';
 
-/** The funnel (Registered → Confirmed → Attended), show-up and waitlisted beside it, and events by type. D4820: no zero funnel, and the event types with no event are not listed. */
+/** The funnel (Registered → Confirmed → Attended), show-up and waitlisted beside it. D4820: no zero funnel. Part 4: events by type moved to the Events lightbox's By type tab (`ByTypeParts`). */
 export function FunnelParts({ ev, showUp, weeks, onRetry }) {
   const f = ev.funnel;
-  const bt = ev.byType;
   const wl = ev.waitlisted;
   const empty = funnelEmpty(f);
   return (<>
@@ -51,12 +50,24 @@ export function FunnelParts({ ev, showUp, weeks, onRetry }) {
     {empty && wl.state === 'ready' && wl.value ? (
       <span className={SUB} data-testid="community-waitlisted">{`${wl.value.toLocaleString('en-US')} waitlisted on ${wl.events} upcoming events.`}</span>
     ) : empty && wl.state !== 'ready' ? <PartState part={wl} onRetry={onRetry} /> : null}
+  </>);
+}
+
+/**
+ * D4820 part 4 (CM05) — events by type, published or waiting, starting in the period: the Events
+ * lightbox's By type tab. Moved off the overview. Types with an event are drawn; how many had none
+ * is one line, never twelve zero rows.
+ */
+export function ByTypeParts({ ev, weeks, onRetry }) {
+  const bt = ev.byType;
+  return (<>
     <span className={EYE}>{`Events by type · starting in these ${weeks} weeks`}</span>
     {bt.state !== 'ready' ? <PartState part={bt} onRetry={onRetry} /> : bt.shown.length ? (
       <div role="img" aria-label={`Events by type: ${bt.shown.map((r) => `${r.label} ${r.value}`).join(', ')}.`} data-testid="community-by-type">
         <HBars rows={bt.shown.map((r) => ({ label: r.label, value: r.value }))} />
       </div>
     ) : <span className={SUB}>{`No published or waiting event starts in these ${weeks} weeks.`}</span>}
+    {bt.state === 'ready' && bt.shown.length > 0 && bt.none.length > 0 ? <span className={SUB} data-testid="community-by-type-none">{`${bt.none.length} of the ${bt.shown.length + bt.none.length} types had no event.`}</span> : null}
   </>);
 }
 
@@ -218,7 +229,9 @@ export function AttentionCard({ needs, onRetry }) {
       </span>}>
       {() => (<>
       <span className={SUB} data-testid="community-needs-line">{`${needs.total} waiting · ${needs.overdue ? 'overdue first' : 'oldest first'}. Overdue is more than ${OVERDUE_HOURS} hours.`}</span>
-      {needs.partial ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400">{needs.partial}</span> : null}
+      {/* D4820 CM02c: the kinds behind the total; a kind that could not be read is left out, and the partial line says so. */}
+      {needs.byKind ? <span className={`${SUB} ${MONO}`} data-testid="community-needs-kinds">{[['events', 'events'], ['jobs', 'jobs'], ['experts', 'experts']].filter(([k]) => needs.byKind[k] !== null).map(([k, w]) => `${needs.byKind[k]} ${w}`).join(' · ')}</span> : null}
+      {needs.partial ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400" data-testid="community-needs-partial">{needs.partial}</span> : null}
       {needs.rows?.length ? (
         <ul className="m-0 flex list-none flex-col gap-2.5 p-0" data-testid="community-needs">
           {needs.rows.map((r) => (
@@ -226,9 +239,12 @@ export function AttentionCard({ needs, onRetry }) {
               <span className="flex min-w-0 items-center gap-2">
                 <span className="whitespace-nowrap rounded-full border border-axal-hairline px-2 text-[11px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100">{r.kind}</span>
                 <span className="min-w-0">
+                  {/* Each kind's literal Approvals address, so the reachability walk finds it. D4820 part 3: an expert opens its wellbeing_experts item. */}
                   {r.kind === 'Event'
                     ? <Link to={`/admin/approvals/items/events-${encodeURIComponent(r.ref)}`} className={`${LINK} text-[13px] text-axal-ink dark:text-gray-100`} data-testid={`community-need-open-${r.id}`}>{r.title}</Link>
-                    : <Link to={`/admin/approvals/items/jobs-${encodeURIComponent(r.ref)}`} className={`${LINK} text-[13px] text-axal-ink dark:text-gray-100`} data-testid={`community-need-open-${r.id}`}>{r.title}</Link>}
+                    : r.kind === 'Expert'
+                      ? <Link to={`/admin/approvals/items/wellbeing_experts-${encodeURIComponent(r.ref)}`} className={`${LINK} text-[13px] text-axal-ink dark:text-gray-100`} data-testid={`community-need-open-${r.id}`}>{r.title}</Link>
+                      : <Link to={`/admin/approvals/items/jobs-${encodeURIComponent(r.ref)}`} className={`${LINK} text-[13px] text-axal-ink dark:text-gray-100`} data-testid={`community-need-open-${r.id}`}>{r.title}</Link>}
                   {r.sub ? <span className={`${SUB} block`}>{r.sub}</span> : null}
                   <span className={`${SUB} ${MONO} flex items-center gap-1.5`} data-testid={`community-need-wait-${r.id}`}>
                     {r.overdue ? <><OverdueDot /><span className="font-bold text-axal-ink dark:text-gray-100">Overdue</span><span aria-hidden="true">·</span></> : null}
@@ -273,6 +289,8 @@ export function ActivityCard({ activity, span = 7, onRetry, onOpen }) {
   return (
     <Card id="activity" title="Community activity" span={span} state={activity.state} reason={activity.reason} onRetry={onRetry}>
       {() => (<>
+        {/* D4820 part 6 (CM01): insight before chart; the total is withheld, and says why, when a series could not be read (CM03). */}
+        {activity.insight ? <span className="text-[14px] font-semibold leading-[1.45] text-axal-ink dark:text-gray-100" data-testid="community-activity-insight">{activity.insight.text}</span> : null}
         <span className={SUB} data-testid="community-activity-sentence">{activity.sentence}</span>
         {activity.missing ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400" data-testid="community-activity-missing">{activity.missing}</span> : null}
         {empty ? (

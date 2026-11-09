@@ -49,6 +49,8 @@ const FULL = {
   blocks: {
     queue: {
       overdue_hours: 72,
+      // D4820 part 3: no expert waits here, so this file's totals stay the events' and jobs'.
+      experts: { available: true, pending: 0, overdue: 0, oldest_wait_hours: null, rows: [] },
       events: { available: true, count: 4, overdue: 1, oldest_hours: 100, waiting_from_created_at: 0 },
       event_rows: { available: true, total: 4, rows: [
         { event_id: 3, title: 'Pricing Clinic', waiting_since: at(-3), from_created: false, waiting_hours: 72, overdue: false },
@@ -106,7 +108,8 @@ test('#4717 Waiting on you adds the Community read\'s two queues, and a queue it
   const t = tile(buildTiles(ALL), 'waiting');
   assert.equal(t.state, 'ready');
   assert.equal(t.value, '7');
-  assert.equal(t.sub, '4 events · 3 jobs · oldest 4 days');
+  // D4820 part 3: the experts to verify are the third queue, counted even at 0.
+  assert.equal(t.sub, '4 events · 3 jobs · 0 experts · oldest 4 days');
   assert.equal(t.overdue, true);
   // A queue that failed is a missing total, never a partial sum; a count that is not a whole number is not read as one.
   assert.equal(tile(buildTiles(withBlock('queue.events', UNREAD)), 'waiting').state, 'unreadable');
@@ -224,6 +227,10 @@ test('#4717 Needs a decision: the queues\' oldest rows, oldest first, their coun
   assert.match(half.partial, /job board could not be read/);
   const neither = withBlock('queue.jobs', UNREAD);
   neither.overview.data.blocks.queue.events = UNREAD;
+  // D4820 part 3: with the experts queue still read, the card answers for it alone and names the two it could not read.
+  assert.equal(buildNeeds(neither).state, 'ready');
+  assert.match(buildNeeds(neither).partial, /^The events queue and the job board could not be read, so only experts are listed\.$/);
+  neither.overview.data.blocks.queue.experts = UNREAD;
   assert.equal(buildNeeds(neither).state, 'unreadable');
 });
 
@@ -348,7 +355,7 @@ test('mounted CM10a: the job board failing costs only its blocks, and says it is
     // #4717: the server's own sentence for the block it could not read.
     assert.match(m.of('community-card-jobs'), /could not be read on this database\. That is not the same as none\./);
     assert.match(m.of('community-figure-circles'), /3 of 4/, 'another block stopped answering');
-    assert.match(m.of('community-card-needs'), /job board could not be read, so only events are listed/);
+    assert.match(m.of('community-card-needs'), /job board could not be read, so only events and experts are listed/);
     assert.ok(!m.has('community-unreadable'));
   } finally { await m.unmount(); }
 });
