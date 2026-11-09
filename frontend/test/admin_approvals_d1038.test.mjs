@@ -872,7 +872,10 @@ test('mounted, a tester: an unverified email is refused before sending (APR5r); 
     await v.change('tester-dialog-reason', 'We are full for this quarter.');
     await v.click('tester-dialog-decline-send');
     assert.deepEqual(v.posts, [{ path: '/api/admin/product-testers/1/decline', body: { note: null, reason: 'We are full for this quarter.' } }]);
-    assert.match(v.of('tester-dialog-decline-refused'), /This tester changed while you were looking at it/);
+    // D4814 part 5 (AP-18e): another decision got there first — nothing of yours was written; the latest state is read.
+    assert.match(v.of('tester-dialog-decline-changed'), /This item changed while you were reviewing it\. The latest state has been loaded\. Nothing was recorded by you\.\s*This tester changed while you were looking at it/);
+    assert.equal(v.of('tester-dialog-decline-latest'), 'View latest');
+    assert.ok(!v.has('tester-dialog-decline-send'), 'no second send from a stale dialog');
     assert.ok(!v.has('board-done'), 'a refusal is never shown as done');
   } finally { await v.unmount(); }
 });
@@ -1166,7 +1169,8 @@ test('D1047 (APR15c): a board\'s drawer has "‹ [lane]" back on a phone; dialog
   } finally { await v.unmount(); }
   const parts = read('frontend/src/pages/admin/approvals/boardParts.jsx');
   assert.match(parts, /export const FOOT = 'flex justify-end gap-2 max-sm:\*:flex-1';/);
-  assert.match(parts, /<div className=\{FOOT\}>\s*<button type="button" className=\{BTN\} onClick=\{onClose\} data-testid=\{`\$\{testId\}-cancel`\}>/, 'the decision dialog\'s buttons');
+  // D4814 part 5: the footer swaps Cancel/send for Close/View latest after a conflict; both pairs sit in FOOT.
+  assert.match(parts, /<div className=\{FOOT\}>[\s\S]{0,200}<button type="button" className=\{BTN\} onClick=\{onClose\} data-testid=\{`\$\{testId\}-cancel`\}>/, 'the decision dialog\'s buttons');
   for (const [f, label] of [['TesterBoard', 'Product testers'], ['PitchBoard', 'Co-marketing'], ['ExpertBoard', 'Wellbeing experts']]) {
     const src = read(`frontend/src/pages/admin/approvals/${f}.jsx`);
     assert.ok(src.includes(`<PhoneBack label="${label}" onClose={onClose}`), f);

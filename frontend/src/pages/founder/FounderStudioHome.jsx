@@ -31,13 +31,12 @@
  * modules (`FounderStudioBody` with `phone`), and the chat's composer is no
  * longer pinned, so the modules never scroll under it.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
-import { cyclesApi } from '../../lib/api/cycles.js';
-import { reportError } from '../../lib/log';
 import { startFounderStudioReads } from './founderStudioReads';
+import { useFounderCycleReads } from './useFounderCycleReads';
 import FounderStudioBody from './FounderStudioBody';
 import StudioPhone, { StudioConversations } from './StudioPhone';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
@@ -61,7 +60,8 @@ export default function FounderStudioHome({ user, embedded = false }) {
   const [retry, setRetry] = useState(0);
   // D4362 (#4362): an admin arranges their own Founder Studio (the hook sends `profile`).
   const studio = useStudioLayout({ profile: 'founder', viewer: user });
-  const cycles = useCycleReads(reads.project, cyclesPlaced(studio.shown));
+  // D4619 (#4619): each cycle read is kept and committed under the full venture + cycle key (`useFounderCycleReads`).
+  const cycles = useFounderCycleReads(reads.project, cyclesPlaced(studio.shown));
 
   useEffect(() => {
     // #4622: each read is committed as it settles; one a newer run has superseded is dropped.
@@ -105,41 +105,4 @@ export default function FounderStudioHome({ user, embedded = false }) {
     return <StudioPhone tab={tab} ticketOpen={Boolean(ticket)} advisorAvailable={advisorAvailable} after={body(true)}>{chat}</StudioPhone>;
   }
   return body(false);
-}
-
-/**
- * One overview read per cycle with a placed module, for the venture the page
- * reads. Undefined while it loads; `{ failed }` when it failed (or the
- * venture could not be read); `{ noProject }` when there is no venture.
- */
-function useCycleReads(project, placed) {
-  const [reads, setReads] = useState({});
-  const asked = useRef(new Set());
-  const mounted = useRef(true);
-  const [n, setN] = useState(0);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const want = placed.join(',');
-  const projectId = project && !project.failed ? project.id : null;
-  const projectState = project === undefined ? 'loading' : project === null ? 'none' : project.failed ? 'failed' : 'ready';
-  useEffect(() => {
-    if (projectState === 'loading') return;
-    // A read in flight is kept when another cycle is added or retried: only unmounting drops it.
-    for (const cycle of want.split(',').filter(Boolean)) {
-      const k = `${projectState}:${projectId}:${cycle}`;
-      if (asked.current.has(k)) continue;
-      asked.current.add(k);
-      if (projectState === 'none') { setReads((r) => ({ ...r, [cycle]: { noProject: true } })); continue; }
-      if (projectState === 'failed') { setReads((r) => ({ ...r, [cycle]: { failed: 'The venture could not be read.' } })); continue; }
-      setReads((r) => ({ ...r, [cycle]: undefined }));
-      cyclesApi.overview(cycle, projectId).then(
-        (d) => { if (mounted.current) setReads((r) => ({ ...r, [cycle]: d || {} })); },
-        (e) => { reportError(`FounderStudio:cycle:${cycle}`, e); if (mounted.current) setReads((r) => ({ ...r, [cycle]: { failed: e?.message || 'Source unavailable' } })); },
-      );
-    }
-  }, [want, projectId, projectState, n]);
-  const retry = (cycle) => {
-    asked.current.delete(`${projectState}:${projectId}:${cycle}`);
-    setN((x) => x + 1);
-  };
-  return { reads, retry };
 }

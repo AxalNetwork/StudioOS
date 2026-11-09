@@ -100,7 +100,10 @@ function freshDb() {
       cohort_cycle_id INTEGER NOT NULL, week_number INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       deliverables_done INTEGER NOT NULL DEFAULT 0,
-      deliverables_required INTEGER NOT NULL DEFAULT 0
+      deliverables_required INTEGER NOT NULL DEFAULT 0,
+      -- Migration 156's decision columns, which production has had all along
+      -- and the weeks read returns since D4813.
+      grace_until TEXT, grace_reason TEXT, decided_at TEXT, decided_by TEXT, decision_reason TEXT
     );
     -- advisor_office_hour_slots and advisor_bookings in the LIVE (t13) shape:
     -- scripts/sqlite-table-collisions-baseline.json records that schema.sql's

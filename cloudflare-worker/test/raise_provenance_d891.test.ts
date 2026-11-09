@@ -68,7 +68,7 @@ test('metrics name stored typed, Mercury and verified revenue sources; credits a
 });
 test('typed traction is stated; only verified ledger receipts justify measured traction', async () => {
  const {db,env}=fixture(); db.exec('UPDATE projects SET mrr=123,revenue=456,paying_customers=7 WHERE id=1');
- let traction=(await computeReadiness(env,1)).find(x=>x.key==='traction')!; assert.equal(traction.evidence,'stated'); assert.equal(traction.score,10);
+ let traction=(await computeReadiness(env,1)).find(x=>x.key==='traction')!; assert.equal(traction.evidence,'stated'); assert.equal(traction.score,5,'D5071: a typed figure is a stated claim, scored 5, never 10');
  db.exec("INSERT INTO revenue_entries(uid,project_id,customer,amount_cents,revenue_type,received_on,source,verification) VALUES('synthetic-revenue',1,'Customer',50000,'one_time',date('now','start of month','-1 month','+17 days'),'stripe','verified')");
  traction=(await computeReadiness(env,1)).find(x=>x.key==='traction')!; assert.equal(traction.evidence,'measured'); assert.match(traction.reads[0].b,/500/);
  db.exec("UPDATE revenue_entries SET received_on='2000-01-01'"); assert.equal((await computeReadiness(env,1)).find(x=>x.key==='traction')!.evidence,'stated');
@@ -155,7 +155,7 @@ test('migration 536 relabels historical computed traction only and preserves sco
  db.exec(baseline);
  // Production can already have higher-numbered files: replay independent deltas first.
  // 558 explicitly depends on 536 and must follow it to retain nullable scores.
- for(const f of files) if(migrationNumber(f.name)>BASELINE_CUTOFF && f.name!==allocated.name && f.name!=='558_readiness_scores_nullable_score.sql') db.exec(f.sql);
+ for(const f of files) if(migrationNumber(f.name)>BASELINE_CUTOFF && f.name!==allocated.name && f.name!=='558_readiness_scores_nullable_score.sql' && f.name!=='202611091000_readiness_input_hash.sql') db.exec(f.sql); // D5071's column comes after the rebuilds
  db.exec("INSERT INTO users(id,role,name,email,is_active) VALUES(1,'founder','Synthetic founder','fixture@example.test',1); INSERT INTO projects(id,name) VALUES(1,'Synthetic venture')");
  const columnsBefore=db.prepare('PRAGMA table_info(readiness_scores)').all();
  const objectsBefore=db.prepare("SELECT name,type FROM sqlite_master WHERE tbl_name='readiness_scores' AND type IN ('index','trigger') ORDER BY name").all();

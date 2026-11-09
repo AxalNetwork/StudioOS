@@ -28,9 +28,10 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import decks, { ensureSchema, getDeckRow, projectOwned } from './decks';
+import decks, { effectiveSlidesFor, ensureSchema, getDeckRow, projectOwned, rowToDeck } from './decks';
 import type { RouteMount } from '../util/routeRegistry';
 import { refuse } from '../util/refusal';
+import { shareIncludeFromBody } from '../services/decks/shareInclude';
 
 /** The preflight model's checks (`CHECKS` in `preflightModel.js`). */
 export const PREFLIGHT_CHECKS = Object.freeze(['layout', 'overflow', 'density', 'font', 'contrast', 'image', 'alt', 'theme', 'placeholder', 'sources']);
@@ -120,6 +121,33 @@ deckPreflight.put('/:id{[0-9]+}/preflight/dismissals', async (c) => {
       .bind(deckId, version, findingId).run();
   }
   return c.json({ deck_id: deckId, version, dismissed: await dismissedOf(c.env, deckId, version) });
+});
+
+/**
+ * D4598 (#4598) part 2 — the effective content a PROPOSED share link would send: this
+ * version's own cards, in a variant's order (D1565), less what "What is included"
+ * leaves out (`shareSlides`). Share checks this before it writes a link, against the
+ * exact shape a link would carry — the same selection `linkSentCards` computes once a
+ * link exists, so the check and the attribution it is bound to never drift apart.
+ *
+ *   POST /api/decks/:id/preflight/link-cards
+ *        { variant_uid?: string | null, include?: Partial<ShareInclude> }
+ *        → { deck_id, version, theme, slides }
+ *
+ * Who: the access of `GET /api/decks/:id` — a reader may preview a link's content too.
+ */
+deckPreflight.post('/:id{[0-9]+}/preflight/link-cards', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => null) as any;
+  const include = shareIncludeFromBody(body?.include);
+  if (!include) return refuse(c, 400, { code: 'invalid_include', message: 'Include is an object of the six booleans, or left out for the defaults.' });
+  const variantUid = typeof body?.variant_uid === 'string' && body.variant_uid.trim() ? body.variant_uid.trim() : null;
+  await ensureSchema(c.env);
+  let row: any;
+  try { row = await getDeckRow(c.env, Number(c.req.param('id'))); } catch { return c.json({ error: 'not found' }, 404); }
+  try { await projectOwned(c, user, Number(row.project_id)); } catch { return c.json({ error: 'forbidden' }, 403); }
+  const slides = await effectiveSlidesFor(c.env, row, { kind: 'share', variantUid, include });
+  return c.json({ deck_id: Number(row.id), version: row.version, theme: rowToDeck(row, false).theme, slides });
 });
 
 export default deckPreflight;

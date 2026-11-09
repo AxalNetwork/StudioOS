@@ -222,16 +222,17 @@ function buildIndex(project: BuildProject, reads: BuildRead[], figures: Figure[]
     : project.company_id == null || !num(tools) || tools === 0
       ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: null, href: `/build/operating-systems?project=${project.id}#tools` }
       : { key: 'tools', title: 'Tools', detail: `${Number(facts.tools_connected)} connected · ${Number(facts.tools_failing)} failing`, value: String(tools), href: `/build/operating-systems?project=${project.id}#tools` };
-  // #1693's keys, never the cells: a stored pain theme, and an open filing's date.
+  // #1693's keys, never the cells: a stored pain theme or hypothesis, and an open filing's date.
   // #4603 part 2: the counts come from the read's facts when it gives them (the overview reads no feature rows).
+  // #5067: `linked` is the module's own count (a pain theme OR a hypothesis) — this label agrees with it.
   const counted = num(Number(solution?.facts?.features)) && num(Number(solution?.facts?.linked));
   const features = counted ? Number(solution!.facts!.features) : (solution?.rows ?? []).length;
   const linked = counted ? Number(solution!.facts!.linked) : (solution?.rows ?? []).filter((r) => r.keys?.linked === 'yes').length;
   const solutionRow: IndexRow = solution?.card.state === 'unreadable'
-    ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain', value: UNREADABLE, href: href('solution-design') }
+    ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain or hypothesis', value: UNREADABLE, href: href('solution-design') }
     : !features
-      ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain', value: null, href: href('solution-design') }
-      : { key: 'solution-design', title: 'Solution design', detail: plural(linked, 'feature linked to a pain', 'features linked to a pain'), value: '', href: href('solution-design') };
+      ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain or hypothesis', value: null, href: href('solution-design') }
+      : { key: 'solution-design', title: 'Solution design', detail: plural(linked, 'feature linked to a pain or hypothesis', 'features linked to a pain or hypothesis'), value: '', href: href('solution-design') };
   const due = (company?.rows ?? [])
     .filter((r) => r.keys?.state !== 'filed' && typeof r.keys?.due === 'string')
     .map((r) => String(r.keys!.due)).sort()[0];

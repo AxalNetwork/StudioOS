@@ -226,6 +226,19 @@ export function acceptAllOffer(proposals) {
   const [source, provider] = JSON.parse(best[0]);
   return { source, provider, count: best[1], label: `Accept all from ${sourceWord(source)}${provider ? ` · ${providerWord(provider)}` : ''}` };
 }
+/**
+ * D5073: what an Accept all press covers, in words. It applies to the proposals LOADED in this view from that source
+ * (the page the server sent, not the whole server-side set), at most `ACCEPT_ALL_CAP` per press, and says how many
+ * loaded ones wait for the next press and whether the server holds more than were loaded.
+ */
+export function acceptAllScope(proposals, offer, hasMore = false) {
+  const plan = acceptAllPlan(proposals, offer);
+  const parts = [`Applies to the ${plan.take.length} loaded proposal${plan.take.length === 1 ? '' : 's'} from this source, at most ${ACCEPT_ALL_CAP} per press.`];
+  if (plan.left > 0) parts.push(`${plan.left} more loaded ${plan.left === 1 ? 'one waits' : 'ones wait'} for the next press.`);
+  if (hasMore) parts.push('More are waiting on the server beyond this page; look again after this press to load them.');
+  parts.push('Each outcome is listed after.');
+  return parts.join(' ');
+}
 /** One outcome per proposal pressed, in words (VR4's list after Accept all). */
 export function outcomeWord(result) {
   if (result?.ok) return 'Accepted';

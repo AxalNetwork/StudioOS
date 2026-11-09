@@ -1,8 +1,11 @@
 import { useId, useState } from 'react';
+import { Lightbox } from '../../../ui';
 import { Unrecorded } from '../../../ui';
 import { BTN, INPUT } from '../../account/AccountCenter';
 import { NUM } from './parts';
-import { STEPS, UNVERIFIED, checkCode, confirmedAt } from './moneyFlowModel';
+import { FundActControl } from '../../../lib/fundActs';
+import { refusalText } from './fundAdminModel';
+import { STEPS, UNVERIFIED, actGate, checkCode, confirmedAt } from './moneyFlowModel';
 
 /**
  * D4812 part 2 (#4812, FA-03 and FA-08) — the money-action flow's parts, used
@@ -141,5 +144,55 @@ export function FlowReceipt({ rows, at, onDone, doneLabel = 'Done', testId }) {
         <button type="button" className={`${BTN.primary} min-h-[44px]`} onClick={onDone} data-testid={`${testId}-done`}>{doneLabel}</button>
       </div>
     </div>
+  );
+}
+
+/**
+ * D4812 part 5 (FA-03, FA-08) — one act as the flow, after its page's own
+ * form (Prepare): Review (the exact effect), Confirm (what it does, the button
+ * naming the act), Authenticate (the code, for a Super Admin act only) and the
+ * Receipt. `run` performs the act and returns the server's answer; `receipt`
+ * turns that answer into rows. An unread act table stops at Review; an act the
+ * table refuses reads its sentence there.
+ */
+export function ActFlow({ apis, access, act, title, sub = null, effects, consequences, label, run, receipt, onClose, onBack = null, onDone, testId, width = 560 }) {
+  const [step, setStep] = useState('review');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [answer, setAnswer] = useState(null);
+  const gate = actGate(access, act);
+  const needsCode = gate.tier === 'super_admin';
+  const go = async () => {
+    setBusy(true); setError('');
+    try {
+      const out = await run();
+      setAnswer(out ?? {});
+      setStep('receipt');
+      await onDone?.(out);
+    } catch (e) { setError(refusalText(e, 'The act could not be completed.')); } finally { setBusy(false); }
+  };
+  const at = { review: 1, confirm: needsCode ? 3 : 2, receipt: 4 }[step];
+  return (
+    <Lightbox label={title} title={step === 'receipt' ? `${title} · done` : step === 'confirm' ? (needsCode ? 'Confirm and authenticate' : 'Confirm') : `Review · ${title}`}
+      sub={sub} testId={testId} onClose={() => { if (!busy) onClose(); }} width={width}>
+      <div className="flex flex-col gap-3 px-5 py-4">
+        <FlowSteps at={at} skipAuth={!needsCode} testId={`${testId}-steps`} />
+        {step === 'review' && <>
+          <Effects rows={effects} testId={`${testId}-effects`} />
+          {gate.state !== 'allowed' && <NotOffered gate={gate} testId={`${testId}-refused`} />}
+          <div className="flex justify-end gap-2">
+            <button type="button" className={BTN.ghost} onClick={onBack || onClose} data-testid={`${testId}-back`}>Back to edit</button>
+            {gate.state === 'allowed' && <button type="button" className={BTN.primary} onClick={() => setStep('confirm')} data-testid={`${testId}-continue`}>Continue to confirm</button>}
+          </div>
+        </>}
+        {step === 'confirm' && (
+          <FundActControl access={access} act={act} testId={`${testId}-confirm-refused`}>
+            <ConfirmAct apis={apis} needsCode={needsCode} testId={`${testId}-confirm`} label={label} busy={busy} error={error}
+              consequences={consequences} run={go} onBack={() => { setError(''); setStep('review'); }} />
+          </FundActControl>
+        )}
+        {step === 'receipt' && <FlowReceipt testId={`${testId}-done`} onDone={onClose} rows={receipt(answer)} />}
+      </div>
+    </Lightbox>
   );
 }

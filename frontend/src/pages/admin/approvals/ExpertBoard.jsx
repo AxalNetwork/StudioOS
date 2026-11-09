@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { safeExternalUrl } from '../../../lib/url';
 import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
 import { AssignDialog, BandPill, OwnerCell, UrgencyPill } from './AdminApprovals';
-import { DECIDED_HERE, REGISTER_NOTE, boardCrumb, boardStrip, slaOfBand } from './boardGrammar';
+import { DECIDED_HERE, REGISTER_NOTE, afterDecision, boardCrumb, boardStep, boardStrip, slaOfBand } from './boardGrammar';
 import { BOARDS, EXPERT_TABS, dayText, decisionCopy, doneLine, expertBoard, expertState, reasonReady, tabPath } from './approvalsModel';
 import {
-  BTN, BTN_PRIMARY, BoardStrip, CARD, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
+  BTN, BTN_PRIMARY, BoardStrip, CARD, DrawerStep, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
   TD, TH, WARN_PILL, nf, useBoardOwners, useLoad,
 } from './boardParts';
 import Sheet from '../../../ui/Sheet.jsx';
@@ -43,24 +43,26 @@ export async function readAllExperts(client = approvalBoardsApi) {
 const today = () => new Date().toISOString().slice(0, 10);
 const expiredOn = (c) => (c?.expires_on && c.expires_on < today() ? c.expires_on : null);
 
-function ExpertDialog({ kind, expert, onClose, onDone }) {
+function ExpertDialog({ kind, expert, onClose, onDone, onStale }) {
   const [checked, setChecked] = useState(false);
   const [reason, setReason] = useState('');
   const key = `expert_${kind}`;
   const name = expert.name || 'This expert';
   const copy = decisionCopy(key, { who: name, version: expert.review_version });
   const send = async () => {
-    if (kind === 'verify') await approvalBoardsApi.verifyExpert(expert.uid, true, expert.review_version);
-    else if (kind === 'unverify') await approvalBoardsApi.verifyExpert(expert.uid, false);
-    else if (kind === 'decline') await approvalBoardsApi.declineExpert(expert.uid, reason.trim());
-    else if (kind === 'hide') await approvalBoardsApi.hideExpert(expert.uid, true);
-    else if (kind === 'restore') await approvalBoardsApi.hideExpert(expert.uid, false);
-    onDone(doneLine(key, name));
+    let r = null;
+    if (kind === 'verify') r = await approvalBoardsApi.verifyExpert(expert.uid, true, expert.review_version);
+    else if (kind === 'unverify') r = await approvalBoardsApi.verifyExpert(expert.uid, false);
+    else if (kind === 'decline') r = await approvalBoardsApi.declineExpert(expert.uid, reason.trim());
+    else if (kind === 'hide') r = await approvalBoardsApi.hideExpert(expert.uid, true);
+    else if (kind === 'restore') r = await approvalBoardsApi.hideExpert(expert.uid, false);
+    // D4814 (AP-18f): the board reads `notified` from the reply.
+    onDone(afterDecision(doneLine(key, name), r, name));
   };
   const blocked = kind === 'verify' && expiredOn(expert.credentials) ? 'The recorded credential has expired. Ask the expert to update it.' : null;
   const ready = kind === 'verify' ? checked : kind === 'decline' ? reasonReady('expert_decline', reason) : true;
   return (
-    <DecisionDialog copy={copy} testId={`expert-dialog-${kind}`} onClose={onClose} onSend={send} ready={ready} blocked={blocked} danger={kind === 'decline' || kind === 'hide' || kind === 'unverify'}>
+    <DecisionDialog copy={copy} testId={`expert-dialog-${kind}`} onClose={onClose} onSend={send} onStale={onStale} ready={ready} blocked={blocked} danger={kind === 'decline' || kind === 'hide' || kind === 'unverify'}>
       {kind === 'verify' ? (
         <label className="flex items-start gap-2 text-[13px] font-semibold text-axal-ink dark:text-gray-100">
           <input type="checkbox" checked={checked} onChange={(e) => setChecked(!!e.target.checked)} data-testid="expert-dialog-checked" />
@@ -84,12 +86,16 @@ const DECISION_WORD = { verified: 'Verified', unverified: 'Verification removed'
 const STATE_EYEBROW = { verify: 'Needs verification', incomplete: 'Profile incomplete', verified: 'Verified', declined: 'Declined', hidden: 'Hidden' };
 
 /** One expert at their own address (APR8d), over the board. */
-function ExpertDrawer({ uid, onClose, onDecided, own }) {
+function ExpertDrawer({ uid, onClose, onDecided, own, step, from }) {
   const read = useLoad(() => approvalBoardsApi.expert(uid), `expert-${uid}`, { what: 'approvals:expert' });
   const profile = useLoad(() => api.wellbeingExpertGet(uid), `expert-profile-${uid}`, { what: 'approvals:expert:profile' });
   const [dialog, setDialog] = useState(null);
   const e = read.reply?.expert;
   const ready = read.status === 'ready' && e;
+  // D4814 part 5: the dialog keeps the item it opened on while the drawer reads it again
+  // after a conflict, so its "changed while you were reviewing" note stays on screen.
+  const held = useRef(null);
+  if (ready) held.current = e;
   const state = ready ? expertState(e) : null;
   const pro = profile.status === 'ready' ? profile.reply : null;
   const done = (line) => { setDialog(null); read.reload(); onDecided(line); };
@@ -101,6 +107,7 @@ function ExpertDrawer({ uid, onClose, onDecided, own }) {
     <>
       <Sheet label={ready ? `${e.name}, wellbeing expert` : 'Wellbeing expert'} eyebrow={ready ? `Wellbeing expert · ${STATE_EYEBROW[state] || 'Expert'}` : 'Wellbeing expert'}
         title={ready ? (e.name || 'Name not recorded') : 'Wellbeing expert'} sub={ready ? (e.headline || 'Esc to close') : null} onClose={onClose} testId="expert-drawer" width={600}
+        headerActions={<DrawerStep step={step} from={from} testId="expert-step" prevTo={step?.prev ? `/admin/approvals/wellbeing-experts/${encodeURIComponent(step.prev.key)}` : null} nextTo={step?.next ? `/admin/approvals/wellbeing-experts/${encodeURIComponent(step.next.key)}` : null} />}
         footer={ready && ACTIONS[state] ? (
           <div className="flex flex-col gap-2">
             <div className={`${FOOT} flex-wrap items-center`}>
@@ -168,7 +175,7 @@ function ExpertDrawer({ uid, onClose, onDecided, own }) {
           ) : null}
         </div>
       </Sheet>
-      {dialog && ready ? <ExpertDialog kind={dialog} expert={e} onClose={() => setDialog(null)} onDone={done} /> : null}
+      {dialog && held.current ? <ExpertDialog kind={dialog} expert={held.current} onClose={() => setDialog(null)} onDone={done} onStale={read.reload} /> : null}
     </>
   );
 }
@@ -205,7 +212,7 @@ export default function ExpertBoard({ at }) {
   return (
     <div className="flex flex-col gap-5" data-testid="approvals-board-wellbeing-experts">
       <AdminPageHeader crumb={CRUMB} title={b.title} pills={[NEW_PILL]} line={b.line} scope tabs={tabs} data-testid="approvals-board-header" />
-      <DoneLine text={done} onDismiss={() => setDone(null)} />
+      <DoneLine text={done} onDismiss={() => setDone(null)} onCheck={() => { read.reload(); setDone(null); }} />
       <BoardStrip cells={strip} testId="experts-strip" />
       {read.status === 'error' ? <Failed what="The experts" onRetry={read.reload} testId="experts-failed" />
         : read.status === 'loading' ? <Skeleton.Text lines={4} />
@@ -259,7 +266,7 @@ export default function ExpertBoard({ at }) {
               ) : <p className={`m-0 ${SUB}`} data-testid="experts-empty">{`No expert is in ${tab.label}.`}</p>}
             </>
           )}
-      {at.item ? <ExpertDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} /> : null}
+      {at.item ? <ExpertDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={board ? boardStep(board.rows, at.item) : null} from={from} /> : null}
       {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={own.finish} /> : null}
     </div>
   );

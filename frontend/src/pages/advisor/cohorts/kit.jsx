@@ -52,36 +52,10 @@ export function NoBatch({ detail }) {
   );
 }
 
-/**
- * The batch picker. Rendered only when there is more than one to pick from —
- * a single-option control is a decision nobody has.
- */
-export function BatchPicker({ items, value, onChange }) {
-  if (!items || items.length < 2) return null;
-  return (
-    <label className="flex flex-wrap items-center gap-2 text-[12px]">
-      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Batch</span>
-      <select
-        className="rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] dark:border-gray-700 dark:bg-gray-900"
-        value={value ?? ''}
-        onChange={(e) => onChange(Number(e.target.value))}
-      >
-        {items.map((a) => (
-          <option key={a.cohort_cycle_id} value={a.cohort_cycle_id}>{cohortLabel(a.cohort)}</option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
-
-export function cohortLabel(cohort) {
-  if (!cohort) return 'Cohort';
-  const month = MONTHS[Number(cohort.month) - 1];
-  return `${month || `Month ${cohort.month}`} ${cohort.year}`;
-}
+// D4813: the per-zone batch picker is gone. One cohort is selected for the
+// whole workspace in the header (`CohortWorkspace.jsx`, `?cohort=`), and the
+// name of a cohort comes from the model so the header and the zones agree.
+export { cohortLabel } from './cohortModel';
 
 export const WEEK_TONE = {
   passed: 'ok',

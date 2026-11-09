@@ -90,5 +90,5 @@ test('3. the overview reads counts, not feature or risk rows, and its card and i
   const m = await page(large);
   assert.deepEqual(o.body.cards[0], m.body.card, 'the overview card is the module card');
   const row = o.body.index.find((x: any) => x.key === 'solution-design');
-  assert.equal(row.detail, '0 features linked to a pain');
+  assert.equal(row.detail, '0 features linked to a pain or hypothesis');
 });

@@ -174,10 +174,13 @@ test('queue: an empty queue is none waiting; skew, outage and absence are unavai
 });
 
 test('the whole read: a dead source keeps the overall level from ok, and nothing private leaves', async () => {
+  // Part 3: team agents off (their signals are not_running) and a restore drill that passed a day ago.
+  const drill = { schema_version: 1, at: '2026-11-05T12:00:00Z', outcome: 'passed', exit_code: 0, backup_key: 'd1/studioos-db/backup-2026-11-05.sql' };
   const healthy = await readPlatformCapacity({
     DB: d1(300_000_000),
     JOB_QUEUE: queue({ backlogCount: 0, backlogBytes: 0 }),
     AGENT_QUEUE: queue({ backlogCount: 0, backlogBytes: 0 }),
+    BACKUPS: { get: async (k: string) => (k === 'drill-d1.json' ? { json: async () => drill } : null) },
   } as any, NOW);
   assert.equal(healthy.level, 'ok');
   assert.equal(healthy.observed_at, NOW.toISOString());

@@ -41,7 +41,8 @@ test('hours are shown against the cap the Worker compared with, not the weekly n
 test('a deliverable is only called unopened where opens are observable', () => {
   assert.match(deliverables, /const unopened = items\.filter\(\(r\) => r\.is_unopened === true\);/);
   assert.match(deliverables, /readsUnavailable = d\?\.read_tracking\?\.available === false/);
-  assert.match(deliverables, /Opens not recorded/);
+  // D4822: the canvas's words for the same absence.
+  assert.match(deliverables, /Read status unavailable/);
   assert.match(deliverables, /nr=\{readsUnavailable\}/, 'the Never opened tile is drawn as a number while opens are unobservable');
   assert.match(deliverables, /const isUnopened = row\.is_unopened === true;/, 'a not-recorded row is tinted as a failure');
   // Health states what it could not count rather than printing 0 of N.

@@ -119,6 +119,7 @@ export function inboxRows(reply) {
     who: it.who || 'Profile name not recorded',
     what: humanWhat(it.what),
     age: ageText(it.age_hours) || 'Age not recorded',
+    ageHours: Number.isFinite(Number(it.age_hours)) && it.age_hours !== null ? Number(it.age_hours) : null,
     sla: it.sla || 'unknown',
     band: slaBand(it.sla),
     assignee: assigneeOf(it),
@@ -296,8 +297,15 @@ export function workViewCounts(inbox) {
   };
 }
 
+/** D4814 part 5: an item waiting this long is stale backlog (the issue's ">30d"), drawn in its own band. */
+export const STALE_HOURS = 30 * 24;
+
 /** The band a row sits in, as the queue's band row says it (AP-01). */
 export const BAND_ROWS = {
+  // D4814 part 5: the live audit's oldest item waited 204 days, so every item
+  // read as one red band. Past 30 days an item is drawn apart, as backlog to
+  // check is still actionable, and the 72-hour bands stay for live work.
+  stale: { key: 'stale', text: '◌ Stale · waiting over 30 days · check each is still actionable', tone: 'bad' },
   past: { key: 'past', text: '! Overdue · over 72 hours', tone: 'bad' },
   due_soon: { key: 'due_soon', text: '◷ Due soon · 24–72 hours', tone: 'warn' },
   ok: { key: 'ok', text: 'Under 24 hours', tone: null },
@@ -313,7 +321,7 @@ export function bandedRows(rows, sort) {
   const out = [];
   let last = null;
   for (const row of rows) {
-    const b = row.sla || 'ok';
+    const b = row.sla === 'past' && row.ageHours != null && row.ageHours >= STALE_HOURS ? 'stale' : (row.sla || 'ok');
     if (b !== last) { out.push({ kind: 'band', band: BAND_ROWS[b] || BAND_ROWS.ok }); last = b; }
     out.push({ kind: 'row', row });
   }
@@ -821,6 +829,8 @@ export function decidedRows(reply) {
   return (Array.isArray(reply?.items) ? reply.items : []).map((r) => ({
     key: `${r.lane}:${r.item_id}:${r.decided_at}`,
     laneKey: r.lane,
+    itemId: Number.isInteger(Number(r.item_id)) ? Number(r.item_id) : null,
+    itemUid: r.item_uid || null,
     when: stampText(r.decided_at) || 'Not recorded',
     lane: laneLabelOf(r.lane, r.lane_label),
     who: r.who || 'Not recorded',

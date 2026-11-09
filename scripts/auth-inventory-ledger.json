@@ -2290,16 +2290,6 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "PUT /api/portfolio-updates/:uid": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "PUT /api/portfolio-updates/:uid/share": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "PUT /api/watchlist/:uid": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
