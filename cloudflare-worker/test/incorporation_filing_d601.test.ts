@@ -175,7 +175,8 @@ test('the founder\'s order read shows the packet and the filing date that were r
 });
 
 test('a ready packet also stops a refund', () => {
-  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_billing.ts'), 'utf8');
+  // D5037: the refund policy lives in services/refundReview.ts, shared by the review and the write.
+  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/refundReview.ts'), 'utf8');
   const set = src.slice(src.indexOf('const INCORPORATION_FILED_STATUSES'), src.indexOf(']);', src.indexOf('const INCORPORATION_FILED_STATUSES')));
   for (const s of ['packet_processing', 'packet_ready', 'filed']) assert.match(set, new RegExp(`'${s}'`), s);
 });
