@@ -5,11 +5,11 @@ import { Unreadable } from '../../../ui';
 import DataRoomDialog from './DataRoomDialog.jsx';
 import { ReportShareRows } from './ReportShares.jsx';
 import AdvisorGrantSection from '../AdvisorGrantSection.jsx';
-import { day } from './dataRoomModel';
+import { day, roomCan } from './dataRoomModel';
 import {
   COFOUNDER_LINE, FILTERS, NDA_LINE, NDA_WORD, REVOKE_LINE, STATE_WORD,
   accessRefusal, accessRows, candidateRows, canOpen, eventLine, eventsOf, filterRows, foldersWord, grantBody, grantBodyError,
-  isOwner, matrix, ndaOf, ndaUnlocks, shareEffect,
+  matrix, ndaOf, ndaUnlocks, shareEffect,
 } from './accessModel';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -159,14 +159,14 @@ function NdaDialog({ room, projectUid, grant, onClose, onDone }) {
 }
 
 /** DR7i: one investor's grant, what they open now, the NDA and their events. */
-function InvestorLightbox({ room, grant, owner, onClose, onAct }) {
+function InvestorLightbox({ room, grant, canShare, canNda, onClose, onAct }) {
   const nda = ndaOf(grant);
   const unlocks = ndaUnlocks(room, grant);
   const events = eventsOf(room, grant);
   const total = (room?.files || []).length;
   return (
     <Sheet label={grant.investor_name || 'Investor'} eyebrow="Investor · grant" title={grant.investor_name || grant.investor_email} onClose={onClose} width={600} testId="investor-lightbox"
-      footer={owner ? (
+      footer={canShare ? (
         <div className="flex flex-wrap justify-between gap-2">
           <button type="button" className={`${BTN} border-red-300 text-red-700 dark:border-red-800 dark:text-red-300`} onClick={() => onAct('revoke', grant)} data-testid="investor-revoke">Revoke access</button>
           <button type="button" className={BTN} onClick={() => onAct('change', grant)} data-testid="investor-change">Change</button>
@@ -182,7 +182,7 @@ function InvestorLightbox({ room, grant, owner, onClose, onAct }) {
         <section className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="investor-nda">
           <span className={EYEBROW}>NDA</span>
           <div className="flex flex-wrap items-center gap-2"><NdaPill state={nda} />
-            {owner && nda === 'none' ? <button type="button" className={BTN} onClick={() => onAct('nda', grant)} data-testid="investor-send-nda">Send the NDA</button> : null}
+            {canNda && nda === 'none' ? <button type="button" className={BTN} onClick={() => onAct('nda', grant)} data-testid="investor-send-nda">Send the NDA</button> : null}
           </div>
         </section>
         <section className="flex flex-col gap-1 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="investor-opens">
@@ -240,7 +240,7 @@ function Matrix({ room, phone }) {
 }
 
 /** DR8's strip: the NDA by investor, and what it unlocks, named for the founder only. */
-function NdaStrip({ room, owner, onAct }) {
+function NdaStrip({ room, canNda, onAct }) {
   const grants = (room?.grants || []).filter((g) => g.status === 'active');
   if (!grants.length) return null;
   const ndaFiles = (room?.files || []).filter((f) => f.visibility === 'nda');
@@ -251,7 +251,7 @@ function NdaStrip({ room, owner, onAct }) {
         <div key={g.uid} className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-2 dark:border-gray-800" data-testid={`nda-row-${g.uid}`}>
           <span className={`text-[13px] font-bold ${INK}`}>{g.investor_name || g.investor_email}</span>
           <span className="flex items-center gap-2"><NdaPill state={ndaOf(g)} />
-            {owner && ndaOf(g) === 'none' ? <button type="button" className={BTN} onClick={() => onAct('nda', g)} data-testid={`nda-send-${g.uid}`}>Send the NDA</button> : null}
+            {canNda && ndaOf(g) === 'none' ? <button type="button" className={BTN} onClick={() => onAct('nda', g)} data-testid={`nda-send-${g.uid}`}>Send the NDA</button> : null}
           </span>
         </div>
       ))}
@@ -266,7 +266,9 @@ function NdaStrip({ room, owner, onAct }) {
 
 /** DR6: Access, by investor or as the matrix. The room is the tab's read; a change re-reads it. */
 export default function DataRoomAccess({ room, projectUid, reload, phone = false }) {
-  const owner = isOwner(room);
+  // D5074: the controls are the Worker's capabilities for this caller (`roomCan`), never the role.
+  const canShare = roomCan(room, 'share');
+  const canNda = roomCan(room, 'send_nda');
   const [view, setView] = useState('list');
   const [f, setF] = useState({ q: '', nda: 'all', committed: 'all', state: 'active' });
   const [open, setOpen] = useState(null);
@@ -281,7 +283,7 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
   const shares = Array.isArray(room?.report_shares) ? room.report_shares : null;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="dataroom-access">
-      {!owner ? <p className={NOTE} data-testid="access-cofounder">{COFOUNDER_LINE}</p> : null}
+      {!canShare ? <p className={NOTE} data-testid="access-cofounder">{COFOUNDER_LINE}</p> : null}
       {said ? (
         <p role="status" className={`m-0 text-[12.5px] font-semibold ${INK}`} data-testid="access-said">
           {said.line}{said.link ? <> <a className="font-bold text-axal-violet dark:text-violet-300" href={said.link} target="_blank" rel="noopener noreferrer">Sign your part</a></> : null}
@@ -297,7 +299,7 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
                   className={`min-h-[28px] rounded-[7px] px-3 text-[12px] ${view === v ? `bg-axal-ground font-bold ${INK} dark:bg-gray-800` : `font-semibold ${MUTED}`}`}>{v === 'list' ? 'List' : 'Matrix'}</button>
               ))}
             </span>
-            {owner ? <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'share' })} data-testid="access-share">Share</button> : null}
+            {canShare ? <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'share' })} data-testid="access-share">Share</button> : null}
           </span>
         </div>
         <div className="px-4 py-3">
@@ -311,7 +313,7 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
                   </select>
                 ))}
               </div>
-              {!all.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="dataroom-access-none">The room is not shared with anyone yet.{owner ? ' Share it with an investor from Capital relationships.' : ''}</p>
+              {!all.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="dataroom-access-none">The room is not shared with anyone yet.{canShare ? ' Share it with an investor from Capital relationships.' : ''}</p>
                 : !rows.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="access-filtered-none">No grant matches these filters.</p> : (
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[880px] border-collapse" data-testid="dataroom-access-table">
@@ -341,7 +343,7 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
           )}
         </div>
       </section>
-      <NdaStrip room={room} owner={owner} onAct={act} />
+      <NdaStrip room={room} canNda={canNda} onAct={act} />
       <section className={`${CARD} flex flex-col gap-1.5 px-4 py-3`} data-testid="access-report-shares">
         <h3 className={`m-0 text-[14px] font-extrabold ${INK}`}>Scoring report shared with</h3>
         <p className={`m-0 text-[12px] ${MUTED}`}>Read only. These accounts can open the scoring report, not the files. Each link is made and revoked from the report’s Share button in Fundraising readiness.</p>
@@ -351,8 +353,8 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
       </section>
       {/* D1109 (#2989): the second grant type, moved from the retired files tool. An advisor's
           brief and document shares are made and revoked here; the advisor sees counts, never the files. */}
-      {owner && projectUid ? <section className={`${CARD} px-4 py-3`} data-testid="access-advisor-grants"><AdvisorGrantSection projectUid={projectUid} /></section> : null}
-      {open && grantOf(open) ? <InvestorLightbox room={room} grant={grantOf(open)} owner={owner} onClose={() => setOpen(null)} onAct={act} /> : null}
+      {canShare && projectUid ? <section className={`${CARD} px-4 py-3`} data-testid="access-advisor-grants"><AdvisorGrantSection projectUid={projectUid} /></section> : null}
+      {open && grantOf(open) ? <InvestorLightbox room={room} grant={grantOf(open)} canShare={canShare} canNda={canNda} onClose={() => setOpen(null)} onAct={act} /> : null}
       {dialog?.kind === 'share' ? <ShareDialog room={room} projectUid={projectUid} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === 'nda' ? <NdaDialog room={room} projectUid={projectUid} grant={dialog.grant} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === 'revoke' ? (

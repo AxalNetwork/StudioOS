@@ -17,6 +17,7 @@ import { FundAdminConsoleView } from '../src/pages/admin/fundAdmin/FundAdminCons
 import {
   BANKING_PARTS, LEGACY_TABS, TABS, WAITS, keepFund, legacyHref, tabOfView, viewFrom, viewHref,
 } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
+import { WORKSPACES } from '../src/pages/admin/fundAdmin/workspaceModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -123,14 +124,20 @@ test('every view with no read says why, and none says zero or none', () => {
  * Mounted
  * ------------------------------------------------------------------ */
 
-test('the tabs are links to their addresses; the open one is current, and Banking carries Reconciliation\'s flag', async () => {
+test('the workspaces are links to their first address; the open one is current, and Banking & Books carries Reconciliation\'s flag', async () => {
   const v = await mount('/admin/fund-admin/lps?fund=7');
   try {
-    assert.deepEqual(v.ids().filter((id) => id.startsWith('fund-admin-tab-')), TABS.map((t) => `fund-admin-tab-${t.key}`));
-    assert.deepEqual(v.current(), ['fund-admin-tab-lps']);
-    assert.equal(v.href('fund-admin-tab-fees'), '/admin/fund-admin/fees?fund=7');
+    // D4812: six workspaces over D1157's addresses.
+    assert.deepEqual(v.ids().filter((id) => id.startsWith('fund-admin-tab-')), WORKSPACES.map((w) => `fund-admin-tab-${w.key}`));
+    assert.deepEqual(v.current(), ['fund-admin-tab-investors']);
+    assert.equal(v.href('fund-admin-tab-reporting'), '/admin/fund-admin/reports?fund=7');
     assert.equal(v.text('fund-admin-flag-banking'), '3');
     assert.ok(!v.by('fund-admin-banking-parts'), 'the parts are Banking\'s alone');
+  } finally { await v.close(); }
+  const f = await mount('/admin/fund-admin/fees?fund=7');
+  try {
+    assert.deepEqual(f.current(), ['fund-admin-tab-reporting', 'fund-admin-part-fees'], 'Fees is a part of Reporting');
+    assert.equal(f.href('fund-admin-part-reports'), '/admin/fund-admin/reports?fund=7');
   } finally { await v.close(); }
 });
 
@@ -142,7 +149,7 @@ test('Funds keeps its panel and address, and draws the funds where the wait card
     assert.ok(v.by('fund-admin-panel-funds'));
     assert.ok(!v.by('fund-admin-wait-funds'), 'the wait card is gone');
     assert.ok(v.by('funds-row-7'));
-    assert.deepEqual(v.current(), ['fund-admin-tab-funds']);
+    assert.deepEqual(v.current(), [], 'D4812: Funds is context, not a workspace');
     assert.deepEqual([...new Set(v.calls)].sort(), ['access', 'funds', 'overview']);
   } finally { await v.close(); }
 });
@@ -152,19 +159,22 @@ test('Banking draws its three parts with the open one current; Reconciliation is
   try {
     assert.deepEqual(v.current(), ['fund-admin-tab-banking', 'fund-admin-part-reconciliation']);
     assert.deepEqual(v.ids().filter((id) => id.startsWith('fund-admin-part-')), BANKING_PARTS.map((b) => `fund-admin-part-${b.key}`));
+    assert.match(v.text('fund-admin-scope-entities'), /banking is read per entity/, 'D4812: an entity view names its scope, it does not pick a fund');
     assert.ok(v.by('fund-admin-panel-reconciliation'));
     assert.ok(v.calls.includes('matches'));
     assert.deepEqual(BANKING_PARTS.map((b) => v.href(`fund-admin-part-${b.key}`)), BANKING_PARTS.map((b) => viewHref(b.path)));
   } finally { await v.close(); }
 });
 
-test('NAV & performance reads the performance list there, and only there', async () => {
+test('the performance list is read on NAV & performance and, for NAV and distributions, on the Overview (D4812) — nowhere else', async () => {
   let v = await mount('/admin/fund-admin/performance');
   try {
     assert.ok(v.by('fund-admin-panel-performance'));
     assert.ok(v.calls.includes('performance'));
   } finally { await v.close(); }
   v = await mount('/admin/fund-admin');
+  try { assert.ok(v.calls.includes('performance')); } finally { await v.close(); }
+  v = await mount('/admin/fund-admin/lps');
   try { assert.ok(!v.calls.includes('performance')); } finally { await v.close(); }
 });
 
