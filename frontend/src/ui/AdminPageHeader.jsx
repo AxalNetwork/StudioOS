@@ -230,6 +230,8 @@ export default function AdminPageHeader({
         <>
           <nav aria-label="Breadcrumb" className="col-span-2 hidden items-center gap-1.5 font-mono text-[11px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400 sm:flex" data-testid="admin-page-crumb">
             <Link to={crumb.to} className="text-axal-muted hover:text-axal-violet dark:text-gray-400 dark:hover:text-violet-300">{crumb.label}</Link>
+            {/* D4814: an optional middle level, "Approvals › Lanes › Product testers". */}
+            {crumb.via ? <><span aria-hidden="true">›</span><Link to={crumb.via.to} className="text-axal-muted hover:text-axal-violet dark:text-gray-400 dark:hover:text-violet-300" data-testid="admin-page-crumb-via">{crumb.via.label}</Link></> : null}
             {crumb.current ? <><span aria-hidden="true">›</span><span>{crumb.current}</span></> : null}
           </nav>
           <Link to={crumb.to} className="col-span-2 inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet sm:hidden" data-testid="admin-page-back">
