@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { Card, Pill } from '../../ui';
 import { Unreadable, Unrecorded } from '../../ui/Honesty';
@@ -66,6 +66,29 @@ export const MARKET_SORTS = [
   { value: 'supplied_count:asc', label: 'Company count, lowest first' },
   { value: 'name:asc', label: 'Name, A to Z' },
 ];
+
+/**
+ * D3701 part 5 (RS-03): the search, the sort and the grouping live in the URL
+ * (`?q=`, `?sort=`, `?group=0`), so a market opened and Back returns to the
+ * same list, and a link carries the view. An unknown sort falls back to the
+ * first; the search is capped like the other directories' searches.
+ */
+export function readMarketQuery(params) {
+  const q = String(params?.get?.('q') || '').slice(0, 120);
+  const raw = params?.get?.('sort');
+  const sort = MARKET_SORTS.some((s) => s.value === raw) ? raw : MARKET_SORTS[0].value;
+  const grouped = params?.get?.('group') !== '0';
+  return { q, sort, grouped };
+}
+
+/** The params for a view; defaults are left out so the plain URL stays plain. */
+export function writeMarketQuery(params, { q, sort, grouped }) {
+  const next = new URLSearchParams(params);
+  if (q) next.set('q', q); else next.delete('q');
+  if (sort && sort !== MARKET_SORTS[0].value) next.set('sort', sort); else next.delete('sort');
+  if (grouped === false) next.set('group', '0'); else next.delete('group');
+  return next;
+}
 
 const fmt = (n) => (n == null ? null : Number(n).toLocaleString('en-US'));
 
@@ -152,9 +175,12 @@ function OpenSector({ group }) {
 }
 
 export function PrivatePanel({ markets, sectors = null }) {
-  const [query, setQuery] = useState('');
-  const [sort, setSort] = useState(MARKET_SORTS[0].value);
-  const [grouped, setGrouped] = useState(true);
+  const [params, setParams] = useSearchParams();
+  const { q: query, sort, grouped } = readMarketQuery(params);
+  const setView = (patch) => setParams((prev) => writeMarketQuery(prev, { ...readMarketQuery(prev), ...patch }), { replace: true });
+  const setQuery = (q) => setView({ q });
+  const setSort = (v) => setView({ sort: v });
+  const setGrouped = (g) => setView({ grouped: g });
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const [key, dir] = sort.split(':');
@@ -219,7 +245,15 @@ export function PrivatePanel({ markets, sectors = null }) {
         research_market_directory · Axal sector taxonomy{asOf ? ` · as of ${asOf}` : ''} · counts are not market size and are not independently verified
       </p>
       {visible.length === 0 ? (
-        <p className="mt-4 text-[12.5px] text-axal-muted">No market matches “{query.trim()}”.</p>
+        // D3701 RS-11 "Empty search": what happened, and the one way out.
+        <div className="mt-4 rounded-xl border border-axal-hairline px-4 py-3 dark:border-gray-800" data-testid="markets-no-match">
+          <p className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">No market matches “{query.trim()}”.</p>
+          <p className="mt-0.5 text-[12px] text-axal-muted dark:text-gray-400">Check the spelling, or search another sector.</p>
+          <button type="button" data-testid="markets-clear-search" onClick={() => setQuery('')}
+            className="mt-2 min-h-[36px] rounded-lg border border-axal-hairline px-3 text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">
+            Clear search
+          </button>
+        </div>
       ) : grouped ? (
         <div className="mt-4 space-y-2">
           {!searching && sectors?.status === 'loading' && !sectors.data ? <Loading what="the tracked sectors" /> : null}
