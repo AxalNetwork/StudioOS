@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, useSearchParams, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { contractsApi } from '../../../lib/api/contracts';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
@@ -10,6 +10,7 @@ import AdminTemplates from '../AdminTemplates';
 import AdminForms from '../AdminForms';
 import AgreementList from './AgreementList';
 import AgreementDetail from './AgreementDetail';
+import AgreementWorkspace from './AgreementWorkspace';
 import RelatedLists from './RelatedLists';
 import EnvelopeWizard from './EnvelopeWizard';
 import { BankAccountsLink, FundStructureDoor } from './FundStructureSheet';
@@ -38,13 +39,16 @@ export default function ContractsDesk({ section = null }) {
   const governance = section === 'governance';
   // D4811 part 10: a template's workspace, at /admin/contracts/templates/doc/:slug, under the Templates tab.
   const templateDoc = section === 'template';
-  const { slug: docSlug } = useParams();
-  const away = governance || templateDoc;
+  // D4811 part 14: one agreement's workspace at /admin/contracts/agreements/doc/:uid, under the Agreements tab.
+  const agreementDoc = section === 'agreement';
+  const { slug: docSlug, uid: docUid } = useParams();
+  const away = governance || templateDoc || agreementDoc;
   const hqDesk = !branchOfUser(user);
   const tab = params.get('tab') || 'agreements';
   const primary = templateDoc ? 'templates' : primaryOf(tab, { governance });
   const allowed = tabs.some(([id]) => id === tab) && (superAdmin || tab !== 'document-types');
-  const [selected, setSelected] = useState(null);
+  // D4811 part 14: ?agreement=<uid> opens the quick panel (the workspace's "Resend or void in the panel").
+  const [selected, setSelected] = useState(() => (section ? null : params.get('agreement')));
   const [linking, setLinking] = useState(null);
   const [revision, setRevision] = useState(0);
   const stats = useRead(() => contractsApi.stats(), [revision]);
@@ -91,14 +95,15 @@ export default function ContractsDesk({ section = null }) {
       <LibraryMenu items={LIBRARY_ITEMS.filter(([k]) => superAdmin || k !== 'document-types')} current={!away && isLibrary(tab) ? tab : null} onTab={(id) => navigate(id)} />
     </div>
     {!away && allowed && primaryOf(tab) === 'agreements' && <AgreementCategories tab={tab} onTab={(id) => navigate(id)} />}
-    {templateDoc ? <TemplateWorkspace slug={docSlug} /> : governance ? (hqDesk ? <GovernanceTab workspaceLink={(uid) => <Link to={`/admin/contracts/governance/doc/${encodeURIComponent(uid)}`} className="text-xs font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>} /> : <p>Corporate Governance is HQ's alone.</p>) : !allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} onLink={setLinking} revision={revision} />
+    {templateDoc ? <TemplateWorkspace slug={docSlug} /> : agreementDoc ? <AgreementWorkspace uid={docUid} /> : governance ? (hqDesk ? <GovernanceTab workspaceLink={(uid) => <Link to={`/admin/contracts/governance/doc/${encodeURIComponent(uid)}`} className="text-xs font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>} /> : <p>Corporate Governance is HQ's alone.</p>) : !allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} onLink={setLinking} revision={revision} />
       : tab === 'ndas' || tab === 'partner-deals' ? <RelatedLists key={tab} kind={tab} onOpen={setSelected} superAdmin={superAdmin} />
         : tab === 'templates' ? <AdminTemplates recordedPublication openSlug={params.get('open') || null} onOpenUsage={slug => navigate('agreements', { template: slug })}
             workspaceLink={(slug) => <Link to={`/admin/contracts/templates/doc/${encodeURIComponent(slug)}`} className="text-[11px] font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>} />
           : tab === 'forms' ? <AdminForms /> : <ContractRegistryTab />}
     <p className="text-xs text-axal-muted">Formation orders live in Programs › Spin-Out Lab. <Link to="/admin/programs/spinout-lab/formation" className="underline">Open its Formation tab.</Link></p>
     {linking && <LinkRecipient row={linking} onClose={() => setLinking(null)} onLinked={() => setRevision(n => n + 1)} />}
-    {selected && <AgreementDetail uid={selected} onClose={() => setSelected(null)} onChanged={() => setRevision(n => n + 1)} />}
+    {selected && <AgreementDetail uid={selected} onClose={() => setSelected(null)} onChanged={() => setRevision(n => n + 1)}
+      workspaceLink={(uid) => <Link to={`/admin/contracts/agreements/doc/${encodeURIComponent(uid)}`} className="text-xs font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>} />}
     {params.has('new') && <EnvelopeWizard onClose={() => { const next = new URLSearchParams(params); next.delete('new'); setParams(next); }} onTemplates={() => navigate('templates')} onSent={() => setRevision(n => n + 1)} />}
   </div></RailFrame>;
 }
