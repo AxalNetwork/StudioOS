@@ -64,10 +64,12 @@ type Query = { q?: string; filter?: string; sort?: string; page?: string };
  * without the parts: that was 31 of its 52 statements, every one of them a
  * read the overview never showed.
  */
-type ReadOpts = { parts: boolean; rows: boolean; query?: Query };
-const FULL: ReadOpts = Object.freeze({ parts: true, rows: true });
+type ReadOpts = { parts: boolean; rows: boolean; query?: Query;
+  /** #4603 part 2b: facts only the module page shows (Founding team's option pool), read from a store of their own. */
+  pageFacts: boolean };
+const FULL: ReadOpts = Object.freeze({ parts: true, rows: true, pageFacts: true });
 /** #4603 part 2: the overview needs no record rows from a module that says its counts in facts. */
-const OVERVIEW: ReadOpts = Object.freeze({ parts: false, rows: false });
+const OVERVIEW: ReadOpts = Object.freeze({ parts: false, rows: false, pageFacts: false });
 const PAGE_SIZE = 25;
 /** The page number exactly as `pageBuildRows` reads it. */
 function pageOf(raw: unknown): number {
@@ -720,7 +722,10 @@ async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; s
 async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // Vesting belongs to a holder, but its own row is user-keyed. Both keys
   // must agree; a founder's other company's schedule must never be joined.
-  const holders = rows(await env.DB.prepare(
+  // #4603 part 2b: founders only, the rows this reader keeps. The card draws
+  // every founder (a segment and a vesting bar each), so every founder is read;
+  // investors and option holders are not, nor is their agreement.
+  const founderRows = rows(await env.DB.prepare(
     `SELECT h.id, h.name, h.founder_role, h.ownership_pct, h.shares,
             v.start_date, v.cliff_months, v.total_months, v.vested_shares,
             (SELECT d.status FROM documents d
@@ -730,9 +735,8 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
              ORDER BY d.created_at DESC, d.id DESC LIMIT 1) AS agreement_status
        FROM cap_table_holders h
        LEFT JOIN cap_table_vesting v ON v.holder_id = h.id AND v.user_id = h.user_id
-      WHERE h.project_id = ? ORDER BY h.id`,
+      WHERE h.project_id = ? AND h.founder_role IS NOT NULL ORDER BY h.id`,
   ).bind(p.id).all<any>());
-  const founderRows = holders.filter(h => h.founder_role != null);
   const equityKnown = founderRows.length && founderRows.every(h => h.ownership_pct != null);
   const series: ChartSpec[] = [];
   if (equityKnown) series.push({ kind: 'stack', rows: [{ label: 'Equity', parts: founderRows.map(h => number(h.ownership_pct)) }], tones: founderRows.map((_, i) => ['v1', 'v2', 'v3', 'grey'][i % 4]), legend: founderRows.map((h, i) => ({ label: h.name, tone: ['v1', 'v2', 'v3', 'grey'][i % 4] })) });
@@ -752,7 +756,8 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
-    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source }))),
+    // #4603 part 2b: the option pool is a module-page fact (the overview and the phone read the card only), so the overview does not read the cap table.
+    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(opts.pageFacts ? await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source })) : {}),
       agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
     ...(opts.parts ? { parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
       founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } } : {}) };

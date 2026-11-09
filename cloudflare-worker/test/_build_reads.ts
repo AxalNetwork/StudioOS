@@ -71,6 +71,27 @@ function seed(db: DatabaseSync, n: number) {
   });
 }
 
+/**
+ * #4603 part 2b (Founding team): `n` cap-table holders, opt-in so the earlier
+ * parts' tables still reproduce. Three are founders (CEO, CTO, COO) with a
+ * vesting schedule; the rest are investors and option holders, which the
+ * Founding team module never lists.
+ */
+export function seedHolders(db: DatabaseSync, n: number) {
+  db.exec('BEGIN');
+  try {
+    const holder = db.prepare(`INSERT INTO cap_table_holders(user_id, project_id, name, security_type, shares, ownership_pct, founder_role, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    const vesting = db.prepare(`INSERT INTO cap_table_vesting(user_id, holder_id, project_id, start_date, cliff_months, total_months, vested_shares) VALUES (?, ?, ?, '2026-01-01', 12, 48, ?)`);
+    for (let i = 1; i <= n; i += 1) {
+      const founder = i <= 3;
+      const id = Number(holder.run(founder ? i : 100 + i, PROJECT, `Synthetic holder ${i}`, founder ? 'common' : i % 2 ? 'preferred' : 'options', 1000,
+        founder ? 30 : 0.1, founder ? ['CEO', 'CTO', 'COO'][i - 1] : null, founder ? 'founder' : i % 2 ? 'investor' : 'employee').lastInsertRowid);
+      if (founder) vesting.run(i, id, PROJECT, 250 * i);
+    }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
+
 export async function buildReads(n: number) {
   const scratch = mkdtempSync(join(tmpdir(), 'build-4603-'));
   const file = join(scratch, 'db.sqlite');
