@@ -53,6 +53,11 @@ const FIELDS = [
   ['blocks.queue.jobs.overdue', tileState('waiting')],
   ['blocks.queue.jobs.wait_not_recorded', tileState('waiting')],
   ['blocks.queue.jobs.oldest_wait_hours', tileState('waiting'), [null]],
+  // D4820 part 3: the wellbeing experts waiting to be verified, the third queue.
+  ['blocks.queue.experts.pending', tileState('waiting')],
+  ['blocks.queue.experts.overdue', tileState('waiting')],
+  ['blocks.queue.experts.oldest_wait_hours', tileState('waiting'), [null]],
+  ['blocks.queue.experts.pending', (r) => buildConsoles(r).wellbeing.state],
   // Upcoming, show-up and the funnel beneath it.
   ['blocks.events.upcoming.events', tileState('upcoming')],
   ['blocks.events.upcoming.seats_taken', tileState('upcoming')],
@@ -75,7 +80,8 @@ const FIELDS = [
   // The wellbeing experts, as the tile, the card and the consoles strip read them.
   ['blocks.wellbeing.experts.verified', tileState('experts')],
   ['blocks.wellbeing.experts.hidden', (r) => buildWellbeing(r).experts.state],
-  ['blocks.wellbeing.experts.unverified', (r) => buildConsoles(r).wellbeing.state],
+  // D4820 part 3: the consoles strip's Wellbeing figure is now the experts queue's; unverified is read by the tile.
+  ['blocks.wellbeing.experts.unverified', tileState('experts')],
   ['blocks.wellbeing.bookings.window', (r) => buildWellbeing(r).bookings.state],
   ['blocks.wellbeing.bookings.weekly.1.count', (r) => buildWellbeing(r).bookings.state],
   ['blocks.wellbeing.checkins.band.at_least', (r) => buildWellbeing(r).checkins.state],
