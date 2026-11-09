@@ -8,6 +8,7 @@ import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
 import { Unreadable } from '../../ui/Honesty';
 import { STOP_CHOICE, stopQuote, stopWords } from './stopSheet';
 import { useRailOption } from '../../ui/railCrumbs';
+import { clock, useDarkTheme } from './recordingClock';
 
 /**
  * The Recording View (D685 §5.7, #1588), full screen at `/validate/record/live`,
@@ -80,11 +81,8 @@ export function statusWord(l, phase, stageAt = -1) {
 }
 
 /** ms → hh:mm:ss, as the canvas draws it (§5.7.2), the hour always shown. */
-export function clock(ms) {
-  const t = Math.max(0, Math.floor((ms || 0) / 1000));
-  const p = (n) => String(n).padStart(2, '0');
-  return `${p(Math.floor(t / 3600))}:${p(Math.floor((t % 3600) / 60))}:${p(t % 60)}`;
-}
+// #4574 (H4): clock and useDarkTheme live in recordingClock.js (the pill imports them there) and are re-exported.
+export { clock, useDarkTheme };
 /** mm:ss, for a marked moment. */
 export const short = (ms) => clock(ms).replace(/^00:/, '');
 
@@ -274,18 +272,6 @@ function TabVideo({ stream }) {
 }
 
 /** The page's theme, followed as the root's `dark` class changes: the ring draws its palette from it. */
-export function useDarkTheme() {
-  const read = () => typeof document !== 'undefined' && !!document.documentElement?.classList?.contains?.('dark');
-  const [dark, setDark] = useState(read);
-  useEffect(() => {
-    if (typeof MutationObserver === 'undefined') return undefined;
-    const o = new MutationObserver(() => setDark(read()));
-    o.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => o.disconnect();
-  }, []);
-  return dark ? 'dark' : 'light';
-}
-
 export default function RecordingView({ st, now = Date.now(), theme = 'light', reduced = false, you = '', actions = {}, onExit, onOpen, ai = null }) {
   const exitRef = useRef(null);
   const stopRef = useRef(null);

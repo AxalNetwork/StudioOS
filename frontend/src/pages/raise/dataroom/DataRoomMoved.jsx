@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Info } from 'lucide-react';
-import { useMovedNotice } from '../../../ui';
+// #4574 (H4): from its own file. The `ui` barrel put Charts, SkillEnergy and FillSheet in the shell.
+import { useMovedNotice } from '../../../ui/AdminPageHeader';
 import { fireAnalytics } from '../../../lib/seo';
 import { redirectKey } from '../../../../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { MOVED_FROM, MOVED_NOTICES, movedTarget } from './dataRoomModel';

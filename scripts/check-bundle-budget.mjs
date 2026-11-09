@@ -28,12 +28,18 @@ export const BUDGET = Object.freeze({
    * 500.0 KiB with the one sidebar for every held licence (D4473, #5006), which App.jsx builds
    * for every member and so belongs in the shell; #4565's draft legal routes add 0.2 KiB. Raised
    * to 504 KiB by the owner's call: the same few KiB of room the baseline had.
+   *
+   * #4574 (H4, 2026-11-09): lowered so the gain is kept. Four eager imports no longer drag pages into
+   * the shell (the `ui` barrel via DataRoomMoved, the forecast models via a redirect, the full-screen
+   * Recording View via the pill, and the two checkout sheets via their hosts): measured 392.4 KiB
+   * brotli over 26 files (from 502.9 KiB over 90), the entry chunk 783.8 KiB raw (from 887.5). The
+   * budgets are that plus the same few KiB of room.
    */
-  criticalBrotli: 504 * 1024,
+  criticalBrotli: 404 * 1024,
   /** The files on it. */
-  criticalFiles: 95,
+  criticalFiles: 30,
   /** The entry chunk alone, raw bytes (what the browser parses before anything renders). */
-  entryRaw: 900 * 1024,
+  entryRaw: 800 * 1024,
 });
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
