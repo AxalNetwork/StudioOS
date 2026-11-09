@@ -29,6 +29,7 @@
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { AREA_LABEL, AREA_ORDER, NOT_ON_STUDIOOS, chipOf, fillLink, gapLine, valueText } from '../pitch/sourcesModel.js';
 import { dayLabel } from '../pitch/pitchStudioModel.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * The story's sections, as the Worker keeps them (`services/narrative/store.ts`
@@ -327,7 +328,7 @@ export function saveBody(writes, pending, read) {
 /** What a failed Save version says: the conflict's own sentence, or the refusal's. */
 export const saveFailure = (e) => (e?.status === 409 && e?.code === 'changed_since_open'
   ? { conflict: true, text: SAVE_CHANGED }
-  : { conflict: false, text: `${SAVE_FAILED} ${e?.message || 'The save was refused.'}` });
+  : { conflict: false, text: `${SAVE_FAILED} ${userFacingRaiseError(e, { fallback: 'The save was refused.', scope: 'raise:narrative' })}` });
 
 /* ------------------------------------------------------------------ *
  * Insert a figure (NAR3)
@@ -430,12 +431,12 @@ const TOKEN_CODES = new Set(['budget_user_day', 'budget_user_month', 'budget_org
  */
 export function runRefusal(e) {
   const code = e?.code || e?.data?.code || e?.data?.error || null;
-  const said = String(e?.data?.message || e?.data?.detail || e?.message || '').trim();
-  const sentence = said && !/^[a-z_]+$/.test(said) ? said : '';
   if (Number(e?.status) === 402 || TOKEN_CODES.has(code)) {
-    return { kind: 'tokens', text: sentence || 'Not enough AI tokens for this run.', sub: `${AI_DRAW} Nothing was charged.` };
+    // The budget refusals carry the Worker's own sentence (a code outside the taxonomy); a bare 402 does not.
+    const own = TOKEN_CODES.has(code) ? userFacingRaiseError(e, { fallback: '' }) : '';
+    return { kind: 'tokens', text: own || 'Not enough AI tokens for this run.', sub: `${AI_DRAW} Nothing was charged.` };
   }
   if (code === 'assist_off') return { kind: 'off', text: AI_OFF_LINE, sub: AI_OFF_SUB };
-  return { kind: 'other', text: sentence || 'Eadwyn could not write this just now. Nothing was charged. Try again.', sub: null };
+  return { kind: 'other', text: userFacingRaiseError(e, { fallback: 'Eadwyn could not write this just now. Nothing was charged. Try again.', scope: 'raise:narrative' }), sub: null };
 }
 

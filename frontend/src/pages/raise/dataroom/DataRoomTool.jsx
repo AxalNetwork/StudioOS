@@ -21,6 +21,7 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import {
   HOME_PATH, LINE, TABS, TITLE, projectUidOf, tabHref, tabSearch,
 } from './dataRoomModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1101 (#2456) — the Data room tool's tab bar and its tab pages. CycleRoute
@@ -95,7 +96,7 @@ function useRoom(projectId, reload) {
         return api.dataRoom(uid).then((room) => ({ room, uid }));
       })
       .then(({ room, uid }) => { if (alive) setState({ status: 'ready', room, uid, projectId }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', room: null, message: error?.message || '' }); });
+      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', room: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, reload]);
   return state;

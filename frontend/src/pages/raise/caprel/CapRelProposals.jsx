@@ -4,6 +4,7 @@ import { railProposalsApi } from '../../../lib/api/railProposals';
 import { Unreadable } from '../../../ui';
 import { ACCEPT_ALL_MAX, PROPOSABLE, proposalGroups, proposalLine } from './capRelTabsModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1193 (#3127, CRL11) — Eadwyn's proposals: next steps and stage moves from
@@ -32,7 +33,7 @@ function Proposal({ projectId, p, onDecided }) {
   const [edit, setEdit] = useState(p.payload.type === 'next_step' ? { text: p.payload.text || '', due: p.payload.due || '' } : { to: p.payload.to || 'meeting' });
   const go = async (fn) => {
     setBusy(true); setError('');
-    try { await fn(); setBusy(false); setMode(''); onDecided?.(); } catch (e) { setBusy(false); setError(e?.message || 'That could not be saved'); }
+    try { await fn(); setBusy(false); setMode(''); onDecided?.(); } catch (e) { setBusy(false); setError(userFacingRaiseError(e, { fallback: 'That could not be saved' })); }
   };
   const confirmLine = mode === 'dismiss' ? 'This proposal is thrown away. Nothing changes.'
     : p.payload.type === 'next_step' ? `The next step with ${p.investor || 'this investor'} becomes “${mode === 'edit' ? edit.text : p.payload.text}”${(mode === 'edit' ? edit.due : p.payload.due) ? `, due ${mode === 'edit' ? edit.due : p.payload.due}` : ''}.`
@@ -103,7 +104,7 @@ export default function CapRelProposals({ projectId, prospect = null, onClose, o
   const ask = async () => {
     setRun({ busy: true, error: '' });
     try { await capitalRelationshipsApi.proposeFromNote(projectId, { prospect_id: prospect.id }); setRun({ busy: false, error: '' }); reload(); }
-    catch (e) { setRun({ busy: false, error: e?.message || 'Eadwyn could not read that note just now. Try again.' }); }
+    catch (e) { setRun({ busy: false, error: userFacingRaiseError(e, { fallback: 'Eadwyn could not read that note just now. Try again.' }) }); }
   };
   const acceptAll = async (group) => {
     setAll({ busy: true, failed: 0, open: '' });
