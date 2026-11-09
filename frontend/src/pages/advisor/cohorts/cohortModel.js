@@ -430,7 +430,8 @@ export function attentionItems({ cycleId, cohortName, rows, guidance, calendar, 
         key: `question:${g.uid}`, kind: 'question', who: name ? `Question from ${name}` : 'A founder’s question',
         reason: text.length > 140 ? `“${text.slice(0, 139)}…”` : `“${text}”`,
         date: g.posted_at, state: 'needs_response',
-        action: { label: 'Answer', to: withCohort('/cohorts/guidance', cycleId) },
+        // D4813 package 2: straight to the Needs response filter.
+        action: { label: 'Answer', to: withCohort('/cohorts/guidance', cycleId, { filter: 'needs_response' }) },
       });
     }
   } else unknown.push('guidance');
@@ -477,7 +478,11 @@ export function guidanceActivity(guidance, limit = 6) {
   if (!guidance) return null;
   const ev = [];
   for (const g of guidance.items || []) {
-    const title = String(g.body || '').trim().slice(0, 60) + (String(g.body || '').trim().length > 60 ? '…' : '');
+    // D4813 package 2: a draft has not been said to anyone, so it is not
+    // activity. A title names the note; an older note is named by its body.
+    if (g.status === 'draft' || g.is_draft === true) continue;
+    const named = String(g.title || '').trim() || String(g.body || '').trim();
+    const title = named.slice(0, 60) + (named.length > 60 ? '…' : '');
     if (g.kind !== 'question' && g.posted_at) ev.push({ at: g.posted_at, text: `You posted “${title}”` });
     if (g.kind === 'question' && g.answered_at) ev.push({ at: g.answered_at, text: `You answered “${title}”` });
     for (const a of g.acted_by || []) {

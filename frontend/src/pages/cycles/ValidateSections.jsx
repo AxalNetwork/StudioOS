@@ -339,11 +339,12 @@ export function HypothesesSection({ parts, projectId, query, openDialog, onLoadL
   return (
     <section className={SECTION} data-testid="validate-section-hypotheses">
       <Strip testid="validate-hypotheses-strip" items={[
-        { label: 'Hypotheses', value: stats.hypotheses, note: nr(stats.hypotheses) ? null : `${stats.supported ?? 0} supported, ${stats.refuted ?? 0} refuted` },
+        // D4586: Contested (bar met, material contradiction) is said beside Supported whenever the Worker counts it.
+        { label: 'Hypotheses', value: stats.hypotheses, note: nr(stats.hypotheses) ? null : `${stats.supported ?? 0} supported${typeof stats.contested === 'number' ? `, ${stats.contested} contested` : ''}, ${stats.refuted ?? 0} refuted` },
         { label: 'Awaiting evidence', value: stats.awaiting, note: 'not yet at the bar either way' },
         { label: 'Bar per claim', value: stats.bar, note: 'ICP interviews to validate · not configurable yet' },
         // Absent, never 0, when none is withheld, as FVW drew it.
-        { label: 'Verdict withheld', value: stats.withheld || null, note: 'hypotheses whose evidence has no ICP fit recorded' },
+        { label: 'Verdict withheld', value: stats.withheld || null, note: 'hypotheses whose missing ICP fits could change their status' },
       ]} />
       <FitLine count={stats.fit_not_recorded} projectId={projectId} />
       <FitGap gap={parts?.fit_gap} />

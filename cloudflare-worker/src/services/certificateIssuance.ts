@@ -31,6 +31,8 @@
  */
 import type { Env } from '../types';
 import { credentialRefFor } from '../routes/spinout_certificates';
+import { branchOf } from '../util/branch';
+import { programRefusal } from './programEnforcement';
 
 export type IssueOutcome =
   | 'issued'
@@ -250,4 +252,155 @@ export async function backfillCertificates(
     console.error('[certificates] backfill failed', (e as Error)?.message);
   }
   return out;
+}
+
+/**
+ * D4663 (#4663, owner decision A) — THE SCHEDULED BACKFILL.
+ *
+ * Graduation closes the Lab, and the progress reconciler walks only founders
+ * whose Lab is on. A graduate whose final request died after the milestone
+ * insert and before the credential was issued would otherwise wait for an
+ * admin's "Issue all eligible". The every-minute cron runs this instead.
+ *
+ * WHO. A graduate by the programme rule with no certificate row at all: the
+ * admin desk's "awaiting" definition. A graduate holding a REVOKED credential
+ * is never picked: revocation is an admin's decision, and the scheduled path
+ * must not mint a replacement behind it.
+ *
+ * BOUNDED. At most CERT_BACKFILL_TICK_LIMIT graduates per tick, untried ones
+ * first. A graduate whose last try did not issue (no name on record, no
+ * venture chosen yet) waits CERT_BACKFILL_RETRY_MS before the next, so one who
+ * cannot be issued never holds the queue and is not retried every minute.
+ *
+ * IDEMPOTENT. Each graduate runs `issueOnGraduation` (pre-check, partial
+ * UNIQUE index, INSERT OR IGNORE) and, when it issued, `creditLabGraduation`
+ * (source ref `lab:<user>:graduation`). A second tick finds nobody: the
+ * credential now exists.
+ *
+ * FROZEN AND UNGRANTED BRANCHES ISSUE NOTHING, as the admin backfill route
+ * refuses: a suspended branch (D511) and a branch whose licence does not hold
+ * the Spin-Out Lab (D985) only record that the tick was held.
+ *
+ * RECORDED. Every graduate tried has a row in
+ * spinout_certificate_backfill_attempts; the tick's own result replaces the
+ * one row of spinout_certificate_backfill_tick. A failed candidate read
+ * throws, so the cron row reads `partial` rather than "nobody waiting".
+ */
+export const CERT_BACKFILL_TICK_LIMIT = 3;
+export const CERT_BACKFILL_RETRY_MS = 6 * 60 * 60_000;
+
+export type CertificateBackfillTick = {
+  status: 'done' | 'frozen' | 'not_granted' | 'grants_unreadable';
+  scanned: number;
+  issued: number;
+  skipped: number;
+  /** True when more graduates were due than this tick took. */
+  more_waiting: boolean;
+};
+
+const sqlTime = (ms: number) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
+
+async function branchSuspended(env: Env): Promise<boolean> {
+  if (!branchOf(env)) return false;
+  try {
+    const row = await env.DB.prepare('SELECT status FROM branch_licence WHERE id = 1').first<{ status: string }>();
+    return String(row?.status ?? '').toLowerCase() === 'suspended';
+  } catch {
+    // The posture of requireBranchNotSuspended: an unreadable copy is no claim from HQ.
+    return false;
+  }
+}
+
+export async function runCertificateBackfillTick(
+  env: Env, opts: { limit?: number; nowMs?: number } = {},
+): Promise<CertificateBackfillTick> {
+  const limit = Math.max(1, Math.min(10, Math.floor(Number(opts.limit ?? CERT_BACKFILL_TICK_LIMIT)) || CERT_BACKFILL_TICK_LIMIT));
+  const nowMs = opts.nowMs ?? Date.now();
+  const now = sqlTime(nowMs);
+  const out: CertificateBackfillTick = { status: 'done', scanned: 0, issued: 0, skipped: 0, more_waiting: false };
+
+  if (await branchSuspended(env)) out.status = 'frozen';
+  else {
+    const refused = await programRefusal(env, 'spinout-lab', now.slice(0, 10));
+    if (refused) out.status = refused.status === 503 ? 'grants_unreadable' : 'not_granted';
+  }
+
+  if (out.status === 'done') {
+    const rows = await env.DB.prepare(
+      `SELECT g.user_id
+         FROM spinout_lab_graduates g
+         LEFT JOIN spinout_certificate_backfill_attempts a ON a.user_id = g.user_id
+        WHERE g.by_rule = 1
+          AND NOT EXISTS (SELECT 1 FROM spinout_certificates c WHERE c.user_id = g.user_id)
+          AND (a.user_id IS NULL OR a.last_attempt_at <= ?)
+        ORDER BY (a.user_id IS NOT NULL), a.last_attempt_at, g.user_id
+        LIMIT ?`,
+    ).bind(sqlTime(nowMs - CERT_BACKFILL_RETRY_MS), limit + 1).all<{ user_id: number }>();
+    const ids = (rows.results || []).map((r) => Number(r.user_id));
+    out.more_waiting = ids.length > limit;
+    for (const id of ids.slice(0, limit)) {
+      out.scanned += 1;
+      const outcome = await issueOnGraduation(env, id);
+      let bonus: string | null = null;
+      if (outcome === 'issued') {
+        out.issued += 1;
+        // D541: a certificate the backfill issues pays the graduation bonus on the same terms.
+        const { creditLabGraduation } = await import('./labMilestoneCredits');
+        const b = await creditLabGraduation(env, id);
+        bonus = b.status === 'skipped' ? `skipped:${b.reason}` : String(b.status);
+      } else out.skipped += 1;
+      try {
+        await env.DB.prepare(
+          `INSERT INTO spinout_certificate_backfill_attempts
+             (user_id, attempts, last_outcome, bonus_outcome, first_attempt_at, last_attempt_at, issued_at)
+           VALUES (?, 1, ?, ?, ?, ?, ?)
+           ON CONFLICT(user_id) DO UPDATE SET
+             attempts = attempts + 1,
+             last_outcome = excluded.last_outcome,
+             bonus_outcome = excluded.bonus_outcome,
+             last_attempt_at = excluded.last_attempt_at,
+             issued_at = COALESCE(spinout_certificate_backfill_attempts.issued_at, excluded.issued_at)`,
+        ).bind(id, outcome, bonus, now, now, outcome === 'issued' ? now : null).run();
+      } catch (e) {
+        console.error('[certificates] backfill attempt not recorded', id, (e as Error)?.message);
+      }
+    }
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO spinout_certificate_backfill_tick (id, ran_at, status, scanned, issued, skipped, more_waiting)
+     VALUES (1, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET ran_at = excluded.ran_at, status = excluded.status, scanned = excluded.scanned,
+       issued = excluded.issued, skipped = excluded.skipped, more_waiting = excluded.more_waiting`,
+  ).bind(now, out.status, out.scanned, out.issued, out.skipped, out.more_waiting ? 1 : 0).run();
+  return out;
+}
+
+export type CertificateBackfillState = {
+  /** null: no tick has been recorded. That is "not recorded", never "nothing issued". */
+  last_tick: (CertificateBackfillTick & { ran_at: string }) | null;
+  /** Graduates the scheduled backfill tried and could not issue, by their last outcome. */
+  not_issued: Record<string, number>;
+};
+
+/** What the scheduled backfill last did. Throws when it cannot be read; the caller says "unreadable". */
+export async function readCertificateBackfillState(env: Env): Promise<CertificateBackfillState> {
+  const t = await env.DB.prepare(
+    `SELECT ran_at, status, scanned, issued, skipped, more_waiting FROM spinout_certificate_backfill_tick WHERE id = 1`,
+  ).first<any>();
+  const waiting = await env.DB.prepare(
+    `SELECT a.last_outcome, COUNT(*) AS n
+       FROM spinout_certificate_backfill_attempts a
+      WHERE NOT EXISTS (SELECT 1 FROM spinout_certificates c WHERE c.user_id = a.user_id)
+      GROUP BY a.last_outcome`,
+  ).all<{ last_outcome: string; n: number }>();
+  const not_issued: Record<string, number> = {};
+  for (const r of waiting.results || []) not_issued[String(r.last_outcome)] = Number(r.n);
+  return {
+    last_tick: t ? {
+      ran_at: String(t.ran_at), status: t.status, scanned: Number(t.scanned), issued: Number(t.issued),
+      skipped: Number(t.skipped), more_waiting: Number(t.more_waiting) === 1,
+    } : null,
+    not_issued,
+  };
 }

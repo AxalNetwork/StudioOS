@@ -15,7 +15,10 @@
  *   - repair:    a contradiction (marked signed with no execution evidence:
  *                no signature date, signed file, linked envelope or completed
  *                envelope; the rule `lib/contractLifecycle.js` draws), or a
- *                live row whose recipient is not linked to a company.
+ *                live row whose recipient is not linked to a company, in a
+ *                store that can carry one (documents, envelopes: part 11).
+ *                A pairwise NDA or partner deal has no company link to make,
+ *                so it is never a repair.
  *
  * The rows are the ones the page shows (`recorded=true`), so a count and the
  * list it opens always agree.
@@ -32,6 +35,10 @@ export type AttentionRow = {
   file_key?: string | null; file_sha256?: string | null; envelope_uuid?: string | null;
   project_name?: string | null;
 };
+
+/** D4811 part 11: the stores whose row can be linked to a company (`POST /api/admin/contracts/:uid/link`). */
+export const LINKABLE_SOURCES = ['documents', 'esign'] as const;
+export const canLinkCompany = (r: AttentionRow) => (LINKABLE_SOURCES as readonly string[]).includes(String(r.source ?? ''));
 
 const DAY = 86_400_000;
 const time = (v: unknown): number | null => {
@@ -58,7 +65,7 @@ export function stalledOf(r: AttentionRow, now: number): boolean | null {
 }
 
 export const needsEvidence = (r: AttentionRow) => r.status === 'signed' && !hasExecutionEvidence(r);
-export const isUnlinked = (r: AttentionRow) => r.status !== 'void' && r.status !== 'draft' && !r.project_name;
+export const isUnlinked = (r: AttentionRow) => canLinkCompany(r) && r.status !== 'void' && r.status !== 'draft' && !r.project_name;
 
 /** Whether one row belongs to a drill-down. */
 export function matchesAttention(r: AttentionRow, filter: AttentionFilter, now: number): boolean {

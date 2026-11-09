@@ -27,12 +27,15 @@ export function FileRows({ files }) {
   </li>)}</ul>;
 }
 
-const eventNames = { email_sent: 'Sent', provider_sent: 'Sent through DocuSign', email_resent: 'Sent again', envelope_created: 'Created', envelope_viewed: 'Viewed', envelope_signed: 'Signed', envelope_rejected: 'Declined', reminder_sent: 'Reminder sent', email_failed: 'Invitation failed' };
-export default function AgreementDetail({ uid, onClose, onChanged }) {
+export const EVENT_NAMES = { email_sent: 'Sent', provider_sent: 'Sent through DocuSign', email_resent: 'Sent again', envelope_created: 'Created', envelope_viewed: 'Viewed', envelope_signed: 'Signed', envelope_rejected: 'Declined', reminder_sent: 'Reminder sent', email_failed: 'Invitation failed' };
+export default function AgreementDetail({ uid, onClose, onChanged, workspaceLink = null }) {
   const detail = useRead(() => api.adminGetContract(uid), [uid]);
   const history = useRead(() => contractsApi.history(uid), [uid]);
   const pdf = useRead(() => contractsApi.signedPdf(uid), [uid]);
   const files = useRead(() => contractsApi.files(uid), [uid]);
+  // D4811 part 17 (CT-15): open cross-border checks hold a resend; the reason is shown, and the Worker refuses too.
+  const crossBorder = useRead(() => contractsApi.crossBorder(uid), [uid]);
+  const held = crossBorder.data?.open?.length ? crossBorder.data.open : null;
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -51,19 +54,22 @@ export default function AgreementDetail({ uid, onClose, onChanged }) {
   useRecordCrumb(row?.title || null, 'agreement', uid);
   return <SidePanel title={row?.title || 'Agreement'} onClose={onClose} testId="contract-agreement-sheet">
     <ReadState read={detail} what="Agreement">{row && <><p>{row.doc_type_label || row.doc_type} · <span className="font-mono">{row.source}</span> · {row.provider || 'Not recorded'}</p><AgreementState row={row} />
+      {/* D4811 part 14 (CT-02): the quick panel keeps quick actions; "Open workspace →" is for substantive work. */}
+      {workspaceLink && <p>{workspaceLink(uid)}</p>}
       <h3 className="font-bold">Parties</h3><p>Company: <Recorded value={row.project_name} reason="This agreement has no recorded company link." /></p>
       <p>Recipient: <Recorded value={row.recipient_name || row.recipient_email} reason="No recipient is recorded in this store." /></p>
       <ReadState read={history} what="Signing history">{history.data && <>
         <p>Sender: <Recorded value={history.data.sender?.name || history.data.sender?.email} reason="The sender account is not recorded in this store." /></p>
         {history.data.parties.length ? history.data.parties.map((party, i) => <div key={i}><Recorded value={party.name || party.email} reason="The signer name was not recorded." /> · {party.email}<p>Signed: <Recorded value={date(party.signed_at)} reason="No signature date has been recorded." /> · IP: <Recorded value={party.signer_ip} reason="The signer IP was not recorded." /></p></div>) : <Missing reason={history.data.reason || 'No signer parties were recorded.'} />}
-        <h3 className="font-bold">Timeline</h3>{history.data.timeline.length ? history.data.timeline.map((event, i) => <p key={i}>{eventNames[event.action] || event.action} · <Recorded value={date(event.ts)} reason="This event has no recorded time." /></p>) : <Missing reason={history.data.reason || 'No signing events were recorded.'} />}
+        <h3 className="font-bold">Timeline</h3>{history.data.timeline.length ? history.data.timeline.map((event, i) => <p key={i}>{EVENT_NAMES[event.action] || event.action} · <Recorded value={date(event.ts)} reason="This event has no recorded time." /></p>) : <Missing reason={history.data.reason || 'No signing events were recorded.'} />}
         {history.data.voids?.map((event, i) => <p key={i}>Voided · {date(event.ts)} · {event.reason}</p>)}
       </>}</ReadState>
       <h3 className="font-bold">Signed PDF</h3><ReadState read={pdf} what="Signed PDF">{pdf.data && (pdf.data.available ? <div><p className="font-mono break-all text-xs">SHA-256: {pdf.data.sha256}</p><button type="button" className={button} onClick={() => downloadPdf(pdf.data.pdf_base64, 'signed-agreement.pdf')}>Download signed PDF</button></div> : <Missing reason={pdf.data.reason} />)}</ReadState>
       <ReadState read={files} what="Recorded files">{files.data && (files.data.files?.length ? <FileRows files={files.data.files} /> : <Missing reason={files.data.reason || 'No rendered file is recorded for this envelope.'} />)}</ReadState>
       {row.void_reason && <p>Void reason: {row.void_reason}</p>}
-      <div className="flex gap-2">{row.can_resend && <button type="button" className={button} disabled={busy} onClick={() => act('resend')}>Resend</button>}
+      <div className="flex gap-2">{row.can_resend && <button type="button" className={button} disabled={busy || !!held} onClick={() => act('resend')}>Resend</button>}
         {['documents', 'esign'].includes(row.source) && !['signed', 'void'].includes(row.status) && <button type="button" className={button} disabled={busy} onClick={() => setVoiding(true)}>Void…</button>}</div>
+      {row.can_resend && held && <p role="status" className="text-amber-800 dark:text-amber-300" data-testid="agreement-cross-border-held">Resend is held: {held.length} cross-border {held.length === 1 ? 'check is' : 'checks are'} open ({held.join(', ')}). Resolve {held.length === 1 ? 'it' : 'them'} in the agreement's workspace.</p>}
       {voiding && <div className="space-y-2"><label>Reason for voiding<textarea className={input} value={reason} maxLength={1000} onChange={e => setReason(e.target.value)} /></label><p>Use at least five characters. This reason is recorded with the agreement. The recipient can no longer sign.</p><button type="button" className={button} disabled={reason.trim().length < 5 || busy} onClick={() => act('void')}>Confirm void</button><button type="button" className={button} onClick={() => setVoiding(false)}>Cancel</button></div>}
     </>}</ReadState>{message && <p role="status">{message}</p>}
   </SidePanel>;
