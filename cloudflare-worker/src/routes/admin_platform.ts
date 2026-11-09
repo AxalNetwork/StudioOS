@@ -87,7 +87,7 @@
 import { Hono } from 'hono';
 import { backfillMemberFileSizes } from '../services/memberFileSizeBackfill';
 import { ownBotTest, dispatchBotTest, validBotTestId } from '../services/meetingBotOperationsTest';
-import { readMeetingBotOperations, meetingBotPricePolicy } from '../services/meetingBotOperationsRead';
+import { readMeetingBotOperations, meetingBotPricePolicy, readRecentBotFailures } from '../services/meetingBotOperationsRead';
 import { startDiagnosis, readDiagnosis, readDiagnosisScreenshot } from '../services/meetingBotDiagnose';
 import { BotError } from '../services/meetingBots';
 import type { Env } from '../types';
@@ -418,7 +418,8 @@ r.get('/advisory-refunds-due', async (c) => {
 // D886 B10: aggregated HQ operations, never customer content.
 r.get('/meeting-bots', async (c) => {
   await requireSuperAdmin(c);
-  return c.json({ operations: await readMeetingBotOperations(c.env), pricing: meetingBotPricePolicy() });
+  // D5153: the recent failed runs, each with its startup stage, code and next step.
+  return c.json({ operations: await readMeetingBotOperations(c.env), pricing: meetingBotPricePolicy(), recent_failures: await readRecentBotFailures(c.env) });
 });
 
 // A test uses a fresh, consented session owned by the operator. It cannot
