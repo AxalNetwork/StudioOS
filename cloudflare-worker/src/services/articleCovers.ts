@@ -28,7 +28,9 @@ const READY = new WeakMap<object, boolean>();
  */
 export async function seedCoverBytes(env: Env, asset: string): Promise<Uint8Array | null> {
   if (!env.ASSETS) return null;
-  const res = await env.ASSETS.fetch(new Request(`https://assets.local${asset}`));
+  // A URL string, not a Request built from the caller's: this reads one static
+  // file and forwards nothing (the auth inventory reads `fetch(new Request` as a relay).
+  const res = await env.ASSETS.fetch(`https://assets.local${asset}`);
   if (!res.ok || !String(res.headers.get('content-type') || '').startsWith('image/jpeg')) return null;
   const bytes = new Uint8Array(await res.arrayBuffer());
   return bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? bytes : null;

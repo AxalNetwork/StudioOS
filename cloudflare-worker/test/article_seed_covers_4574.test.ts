@@ -43,8 +43,8 @@ function fixture(serve: 'files' | 'shell' | 'none') {
     DB: d1Over(db),
     FILES: { put: async (key: string, bytes: Uint8Array, o: any) => { puts.push({ key, size: bytes.length, type: o?.httpMetadata?.contentType }); } },
     ASSETS: serve === 'none' ? undefined : {
-      fetch: async (req: Request) => {
-        const path = new URL(req.url).pathname;
+      fetch: async (req: Request | string) => {
+        const path = new URL(typeof req === 'string' ? req : req.url).pathname;
         fetched.push(path);
         if (serve === 'shell' || !existsSync(fileOf(path))) return new Response('<!doctype html><title>Axal</title>', { headers: { 'content-type': 'text/html' } });
         return new Response(readFileSync(fileOf(path)), { headers: { 'content-type': 'image/jpeg' } });
