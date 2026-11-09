@@ -100,7 +100,7 @@ test('cap_table.read: the founder reads the record with its currency and units; 
 test('the preflight through the typed readers: complete, partial and withheld evidence give ready, conditional and not_ready', async () => {
   const f = fixture();
   try {
-    assert.equal(pathsFor('cash-runway-snapshot')!.default_context, 'unsupported', 'burn still has no typed reader');
+    assert.equal(pathsFor('board-meeting-brief')!.default_context, 'unsupported', 'board metrics still have no typed reader');
     const m = inputMatrix().find((x) => x.slug === 'safe-convertible-instrument-review')!;
     assert.equal(m.inputs.find((i) => i.read === 'cap_table.read')!.reader, 'built');
 

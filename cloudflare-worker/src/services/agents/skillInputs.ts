@@ -33,7 +33,7 @@ const need = (field: string, read: string, expects: Expects, required = true): N
 export const FIRST_TEN: readonly SkillInputs[] = Object.freeze([
   { slug: 'cash-runway-snapshot', needs: [
     need('recorded account balances and the balance date', 'mercury.balances', 'typed_record'),
-    need('monthly burn for the last three months', 'grow.records', 'typed_record'),
+    need('monthly burn for the last three months', 'grow.burn', 'typed_record'),
   ] },
   { slug: 'board-meeting-brief', needs: [
     need('the company or project profile', 'project.summary', 'project_profile'),
@@ -66,15 +66,15 @@ export const FIRST_TEN: readonly SkillInputs[] = Object.freeze([
     need('raise terms', 'raise.records', 'activity_summaries', false),
   ] },
   { slug: 'legal-due-diligence-coordination', needs: [
-    need('workstreams, evidence owners, dates and open questions', 'data_room.index', 'typed_record'),
+    need('workstreams, evidence owners, dates and open questions', 'raise.diligence', 'typed_record'),
     need('raise progress', 'raise.records', 'activity_summaries', false),
   ] },
   { slug: 'pipeline-health-diagnostics', needs: [
-    need('opportunities with stage, stage-change dates and a snapshot date', 'grow.records', 'typed_record'),
+    need('opportunities with stage, stage-change dates and a snapshot date', 'raise.pipeline', 'typed_record'),
     need('the target', 'raise.records', 'typed_record', false),
   ] },
   { slug: 'customer-interview-summary', needs: [
-    need('the transcript, speakers and consent status', 'validate.records', 'typed_record'),
+    need('the transcript, speakers and consent status', 'validate.transcripts', 'typed_record'),
   ] },
 ]);
 
@@ -163,6 +163,11 @@ async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<R
   if (provides[n.read] !== n.expects) {
     return { ...base, status: 'partial', reason: 'wrong_shape', note: `This reader gives ${(provides[n.read] ?? 'another shape').replace('_', ' ')}, not ${n.expects.replace('_', ' ')}.` };
   }
+  // A typed reader names the fields its source does not record; the skill gets the rest, and the brief says so.
+  const nothing = data?.coverage && Array.isArray(data.records) && data.coverage.total === 0;
+  if (!nothing && Array.isArray(data?.missing_fields) && data.missing_fields.length) {
+    return { ...base, status: 'partial', note: `Not recorded at the source: ${data.missing_fields.join(', ')}.` };
+  }
   const cov = data?.coverage;
   if (cov && Array.isArray(data.records)) {
     if (cov.total === null) return { ...base, status: 'partial', note: 'How many records exist could not be counted.' };
@@ -172,6 +177,9 @@ async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<R
     if (Number.isFinite(newest) && daysBetween(now, newest) > STALE_DAYS) return { ...base, status: 'stale', note: `The newest record is more than ${STALE_DAYS} days old.` };
   }
   if (out.truncated) return { ...base, status: 'partial', note: 'Part of the record was left out for length.' };
+  // Records whose words the source holds back (an interview without recording consent) leave the input partial.
+  const held = Array.isArray(data?.records) ? data.records.filter((r: any) => r && r.words_withheld).length : 0;
+  if (held) return { ...base, status: 'partial', note: `${held} record(s) carried without their words: ${data.records.find((r: any) => r.words_withheld).words_withheld}` };
   return { ...base, status: 'available', note: null };
 }
 

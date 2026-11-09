@@ -34,6 +34,7 @@ import { isTeamViewer } from '../mercury/growFeeds';
 import { atLeast, resolveAccess } from '../captableAccess';
 import { readRecord } from '../capTableRecord';
 import { heldLicences } from '../accountLicences';
+import { canWrite } from '../../routes/_founder_validate_helpers';
 
 export const READ_MAX = 8 * 1024;
 /**
@@ -209,8 +210,142 @@ const TYPED: Partial<Record<string, Reader>> = {
   },
 };
 
+/** The venture's founder and the sponsor, for a gate that reads the venture's own records. */
+async function ventureAndSponsor(env: Env, c: ReadContext) {
+  if (!c.projectId) return null;
+  const project = await env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(c.projectId).first<{ id: number; founder_id: number | null }>();
+  if (!project) return null;
+  return { project, who: await sponsorOf(env, c) };
+}
+
+const PIPELINE_LIMIT = 200;
+const SESSION_LIMIT = 3;
+const SEGMENT_LIMIT = 200;
+const centsOf = (cents: unknown, dollars: unknown) => (cents != null && Number.isFinite(Number(cents)) ? Number(cents)
+  : dollars != null && Number.isFinite(Number(dollars)) ? Math.round(Number(dollars) * 100) : null);
+
+/**
+ * D4667 (third slice, owner's answer A) — four read keys of their own, so an agent reads these records only when
+ * its rule book names them. Each is typed, scope-bound and gated as the sponsor. A field the source does not record
+ * is named in `missing_fields`, never filled in; the preflight then calls the input partial.
+ */
+const TYPED_MORE: Partial<Record<string, Reader>> = {
+  // Net burn from the venture's metrics (`project_metrics`: typed by the founder, or fed from Stripe or Mercury),
+  // by snapshot date, in a period (default the last twelve months). The team only, as Mercury's figures are.
+  'grow.burn': async (env, c) => {
+    if (!c.projectId) return null;
+    const who = await sponsorOf(env, c);
+    if (!who || !(await isTeamViewer(env, { id: Number(who.id), founder_id: who.founder_id ?? null }, c.projectId))) {
+      return withheld('Only the venture\'s team reads its burn.');
+    }
+    const page = c.page ?? {};
+    if ((page.from != null && !DAY.test(page.from)) || (page.to != null && !DAY.test(page.to))) throw new ReadPageError('invalid_page');
+    const from = page.from ?? monthsAgo(new Date(), MONTHS_BACK);
+    const to = page.to ?? new Date().toISOString().slice(0, 10);
+    if (from > to) throw new ReadPageError('invalid_page');
+    const rows = (await env.DB.prepare(
+      `SELECT id, snapshot_date, net_burn, source FROM project_metrics
+        WHERE project_id = ? AND net_burn IS NOT NULL AND snapshot_date >= ? AND snapshot_date <= ? ORDER BY snapshot_date DESC, id DESC LIMIT ?`,
+    ).bind(c.projectId, from, to, PIPELINE_LIMIT).all<{ id: number; snapshot_date: string; net_burn: number; source: string | null }>()).results ?? [];
+    const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM project_metrics WHERE project_id = ? AND net_burn IS NOT NULL AND snapshot_date >= ? AND snapshot_date <= ?')
+      .bind(c.projectId, from, to).first<{ n: number }>().catch(() => null);
+    const records = rows.map((r) => ({
+      ref: `project_metric:${r.id}`, at: r.snapshot_date, amount: centsOf(null, r.net_burn), unit: 'cents', currency: null,
+      source: r.source ?? 'typed',
+    }));
+    return {
+      records, coverage: coverageOf(records.length, n && Number.isFinite(Number(n.n)) ? Number(n.n) : null), period: { from, to },
+      source: 'project_metrics', currency_note: 'The metrics record no currency.',
+    };
+  },
+  // The venture's own raise pipeline (`raise_prospects`): each investor's stage, amount and next step, as of now.
+  // When a stage last changed is not recorded (only a line of activity text), so it is named missing, not guessed.
+  'raise.pipeline': async (env, c) => {
+    const v = await ventureAndSponsor(env, c);
+    if (!v) return null;
+    if (!v.who || !canWrite(v.project, v.who)) return withheld('Only the venture\'s own team reads its raise pipeline.');
+    const rows = (await env.DB.prepare(
+      `SELECT uid, firm, stage, amount, amount_cents, currency, commit_status, instrument, next_step_due, updated_at FROM raise_prospects
+        WHERE project_id = ? ORDER BY updated_at DESC, id DESC LIMIT ?`,
+    ).bind(v.project.id, PIPELINE_LIMIT).all<any>()).results ?? [];
+    const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM raise_prospects WHERE project_id = ?').bind(v.project.id).first<{ n: number }>().catch(() => null);
+    const records = rows.map((r) => ({
+      ref: `raise_prospect:${r.uid}`, firm: cut(r.firm, 120), stage: r.stage, commit_status: r.commit_status ?? null, instrument: r.instrument ?? null,
+      amount: centsOf(r.amount_cents, r.amount), unit: 'cents', currency: r.currency ? String(r.currency).toUpperCase() : null,
+      next_step_due: r.next_step_due ?? null, at: r.updated_at, stage_changed_at: null,
+    }));
+    return {
+      records, coverage: coverageOf(records.length, n && Number.isFinite(Number(n.n)) ? Number(n.n) : null),
+      as_of: new Date().toISOString(), missing_fields: ['stage_changed_at'], source: 'raise_prospects',
+    };
+  },
+  // Interview transcripts (`interview_sessions` and their segments: the final transcript when there is one, else the
+  // live one), newest first, with each session's consent. A session whose recording consent is not `given` carries
+  // its consent and speakers but none of its words.
+  'validate.transcripts': async (env, c) => {
+    const v = await ventureAndSponsor(env, c);
+    if (!v) return null;
+    if (!v.who || !canWrite(v.project, v.who)) return withheld('Only the venture\'s own team reads its interview transcripts.');
+    const sessions = (await env.DB.prepare(
+      `SELECT id, uid, consent_status, consent_method, consent_at, started_at, created_at FROM interview_sessions
+        WHERE project_id = ? ORDER BY id DESC LIMIT ?`,
+    ).bind(v.project.id, SESSION_LIMIT).all<any>()).results ?? [];
+    const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM interview_sessions WHERE project_id = ?').bind(v.project.id).first<{ n: number }>().catch(() => null);
+    const records = [];
+    for (const s of sessions) {
+      const segs = (await env.DB.prepare(
+        `SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
+          WHERE session_id = ? AND source = (SELECT CASE WHEN EXISTS (SELECT 1 FROM interview_transcript_segments WHERE session_id = ? AND source = 'final') THEN 'final' ELSE 'live' END)
+          ORDER BY start_ms, id LIMIT ?`,
+      ).bind(s.id, s.id, SEGMENT_LIMIT + 1).all<any>()).results ?? [];
+      const given = s.consent_status === 'given';
+      records.push({
+        ref: `interview_session:${s.uid}`, at: s.started_at ?? s.created_at,
+        consent: { status: s.consent_status, method: s.consent_method ?? null, at: s.consent_at ?? null },
+        speakers: [...new Set(segs.map((x: any) => String(x.speaker_label)))],
+        segments: given ? segs.slice(0, SEGMENT_LIMIT).map((x: any) => ({ start_ms: x.start_ms ?? null, end_ms: x.end_ms ?? null, speaker: x.speaker_label, text: cut(x.text, 600) })) : null,
+        ...(given ? {} : { words_withheld: 'Recording consent is not recorded as given.' }),
+        ...(given && segs.length > SEGMENT_LIMIT ? { segments_clipped: true } : {}),
+      });
+    }
+    return { records, coverage: coverageOf(records.length, n && Number.isFinite(Number(n.n)) ? Number(n.n) : null), source: 'interview_sessions' };
+  },
+  // Due diligence on the venture (`dd_cases` with subject the project): each workstream's status and whether it is
+  // assigned and blocking, and each request the venture was sent, with its dates. Open questions are the requests
+  // still `requested`. Only what the venture itself is shown: never a reviewer's notes, verdict or identity.
+  'raise.diligence': async (env, c) => {
+    const v = await ventureAndSponsor(env, c);
+    if (!v) return null;
+    if (!v.who || !canWrite(v.project, v.who)) return withheld('Only the venture\'s own team reads its diligence requests.');
+    const cases = (await env.DB.prepare(
+      `SELECT id, uid, status, target_ic_date, round_label, created_at FROM dd_cases
+        WHERE subject_type = 'project' AND subject_id = ? AND status <> 'archived' ORDER BY id DESC`,
+    ).bind(v.project.id).all<any>()).results ?? [];
+    const workstreams: any[] = [];
+    const records: any[] = [];
+    for (const k of cases) {
+      const secs = (await env.DB.prepare('SELECT section_key, title, status, assignee_user_id, blocking, completed_at FROM dd_sections WHERE case_id = ? ORDER BY id')
+        .bind(k.id).all<any>()).results ?? [];
+      for (const x of secs) workstreams.push({ case: `dd_case:${k.uid}`, key: x.section_key, title: cut(x.title, 200), status: x.status, assigned: x.assignee_user_id != null, blocking: Number(x.blocking) === 1, completed_at: x.completed_at ?? null });
+      const reqs = (await env.DB.prepare('SELECT id, title, state, due_date, responded_at, reviewed_at, withdrawn_at, created_at FROM dd_requests WHERE case_id = ? ORDER BY id')
+        .bind(k.id).all<any>()).results ?? [];
+      for (const r of reqs) {
+        records.push({
+          ref: `dd_request:${k.uid}:${r.id}`, case: `dd_case:${k.uid}`, title: cut(r.title, 200), state: r.withdrawn_at ? 'withdrawn' : r.state,
+          open: !r.withdrawn_at && r.state === 'requested', due: r.due_date ?? null, responded_at: r.responded_at ?? null, reviewed_at: r.reviewed_at ?? null, at: r.created_at,
+        });
+      }
+    }
+    return {
+      cases: cases.map((k) => ({ ref: `dd_case:${k.uid}`, status: k.status, target_ic_date: k.target_ic_date ?? null, round: cut(k.round_label, 120) })),
+      workstreams, records, coverage: coverageOf(records.length, records.length), source: 'dd_cases',
+    };
+  },
+};
+
 export const READERS: Partial<Record<string, Reader>> = {
   ...TYPED,
+  ...TYPED_MORE,
   'project.summary': async (env, c) => {
     if (!c.projectId) return null;
     const p = await env.DB.prepare(
@@ -255,6 +390,7 @@ export const readAvailable = (key: string) => typeof READERS[key] === 'function'
 export const READER_PROVIDES: Readonly<Record<string, 'project_profile' | 'company_profile' | 'roster' | 'activity_summaries' | 'typed_record'>> = Object.freeze({
   'project.summary': 'project_profile', 'company.profile': 'company_profile', 'team.roster': 'roster',
   'mercury.balances': 'typed_record', 'stripe.revenue': 'typed_record', 'cap_table.read': 'typed_record',
+  'grow.burn': 'typed_record', 'raise.pipeline': 'typed_record', 'validate.transcripts': 'typed_record', 'raise.diligence': 'typed_record',
   'validate.records': 'activity_summaries', 'build.records': 'activity_summaries', 'raise.records': 'activity_summaries', 'grow.records': 'activity_summaries',
 });
 

@@ -108,8 +108,8 @@ test('manual evidence: a well-formed record meets a manual input; a bad one is r
     assert.match(b.note!, /recorded date/);
 
     // A person's record where the platform has a reader for the input but nothing in it: partial, and the brief says so.
-    const pipe = await preflight(f.env, 'customer-interview-summary', f.ctx(), { 'validate.records': async () => null } as any, NOW, { 'validate.records': 'typed_record' } as any,
-      { 'validate.records': { ref: 'manual:call-notes', recorded_at: '2026-11-02', text: 'Synthetic notes.' } });
+    const pipe = await preflight(f.env, 'customer-interview-summary', f.ctx(), { 'validate.transcripts': async () => null } as any, NOW, { 'validate.transcripts': 'typed_record' } as any,
+      { 'validate.transcripts': { ref: 'manual:call-notes', recorded_at: '2026-11-02', text: 'Synthetic notes.' } });
     const t = pipe!.inputs[0];
     assert.deepEqual([t.status, t.reason, t.source], ['partial', 'manual', 'manual']);
     assert.equal(pipe!.state, 'conditional');

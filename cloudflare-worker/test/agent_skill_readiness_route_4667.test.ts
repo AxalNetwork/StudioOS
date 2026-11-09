@@ -37,7 +37,7 @@ test('the matrix lists the ten skills with each input\'s read and reader; the ty
     assert.equal(r.status, 200, r.text);
     assert.equal(r.body.skills.length, 10);
     const cash = r.body.skills.find((s: any) => s.slug === 'cash-runway-snapshot');
-    assert.deepEqual(cash.inputs.map((i: any) => [i.read, i.reader]), [['mercury.balances', 'built'], ['grow.records', 'built_other_shape']]);
+    assert.deepEqual(cash.inputs.map((i: any) => [i.read, i.reader]), [['mercury.balances', 'built'], ['grow.burn', 'built']]);
   } finally { w.close(); }
 });
 
