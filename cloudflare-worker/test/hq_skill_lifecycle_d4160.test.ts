@@ -144,6 +144,8 @@ test('HQ library reads 180 skills in a fixed number of queries and keeps the det
   const detail = await call(w, SUPER, 'GET', `${HQ}/${uid}`);
   assert.equal(detail.status, 200, detail.text);
   const hash = detail.body.skill.draft_hash;
+  // D4537: the detail names the skill's slug, its never-edited identity.
+  assert.match(detail.body.skill.slug, /^[a-z0-9-]+$/);
   const evidence = detail.body.freshness.evidence.evidence_hash;
   assert.notEqual(evidence, before);
   const record = w.db.prepare(`INSERT INTO agent_skill_eval_results (case_id, skill_id, draft_hash, model_id, result, run_by, run_at, evidence_hash)
