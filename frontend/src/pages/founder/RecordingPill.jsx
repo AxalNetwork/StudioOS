@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
 import { elapsedMs, finishLine, pillLabel, pillVariant, reviewPath } from '../../lib/activeRecording';
 import RingViz, { prefersReducedMotion } from '../../components/discovery/RingViz';
-// #4574 (H4): not from RecordingView.jsx, which would put the full-screen view in the shell.
 import { clock, useDarkTheme } from './recordingClock';
 
 /**

@@ -6,13 +6,13 @@
  * lays out the parts. Each part is a file in `./revenue/` (see its README),
  * and the rules they draw by are pure in `./revenue/revenueModel.js`.
  *
- * SEVEN READS, EACH ITS OWN FAILURE. The summary (D1: licence fees, token cost
+ * SIX READS, EACH ITS OWN FAILURE. The summary (D1: licence fees, token cost
  * and margin, promotion codes, branch report coverage), the statement ledger
  * twice (every statement, for receivables, which are point in time; and the
  * selected period's, for streams and subsidiaries), open disputes (Stripe),
- * refunds HQ issued (audit rows), the promo ceilings, and the licence list the
- * ceiling editor offers. Stripe being slow costs the dispute figures and
- * nothing else; a failed read says Unavailable with Retry, never 0.
+ * refunds HQ issued (audit rows) and the promo ceilings; the ceiling editor's
+ * licence picker reads its own page when it is opened (D5039 part 2). Stripe
+ * being slow costs the dispute figures and nothing else; a failed read says Unavailable with Retry, never 0.
  *
  * THE PERIOD. `?period=` on the summary (D5039): period figures follow it;
  * point-in-time figures (the run-rate, receivables, promotion codes), live
@@ -23,16 +23,14 @@
  * invoice-backed licence revenue and the reconciled ledger exist, with the
  * reason once, in the Data coverage drawer.
  *
- * WRITES, AS TODAY. This slice redesigns no write. The statement entry
- * (D453/D458/D514), the ceiling editor (D228) and the refund (D224, behind the
- * step-up) are today's controls, moved unchanged into the drawer and the
- * sections that own them; the governed flows the canvas draws are the next
- * slice. The licence list is still read whole, and only for the ceiling
- * editor's picker; the scoped picker is later work.
+ * WRITES. The statement drawer's Record a payment, Mark issued and Void are
+ * governed flows (D5039 part 2, `revenue/StatementActionFlow.jsx`); the
+ * dispute entry (D514), the ceiling editor (D228) and the refund (D224, behind
+ * the step-up) are today's controls in the sections that own them.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
-import { licenceLedgerApi } from '../../lib/api/licenceLedger';
+import { adminStatementActionsApi } from '../../lib/api/adminStatementActions';
 import { reportError } from '../../lib/log';
 import { RailFrame, WorkerRail, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
@@ -54,7 +52,7 @@ export {
 } from './revenue/revenueModel.js';
 export { BillingExceptions, refundAmountShape } from './revenue/BillingExceptions';
 export {
-  STATEMENT_PERIOD_RE, statementDrawPayload, statementPaidPayload, statementVoidPayload, statementDisputePayload,
+  STATEMENT_PERIOD_RE, statementDrawPayload, statementDisputePayload,
   statementAllowsIssue, licencesDrawableForStatements, floorsInCurrency, StatementFacts, StatementActions,
 } from './revenue/StatementActions';
 export { StatementDrawHeld } from './revenue/Receivables';
@@ -77,8 +75,6 @@ export default function RevenuePage() {
   const [ceilings, setCeilings] = useState(null);
   // H21 (D224) — the refunds HQ issued, from their audit rows. Its own read.
   const [refunds, setRefunds] = useState(null);
-  // D228 — the licences the ceiling editor offers. Its own read.
-  const [licences, setLicences] = useState(null);
   // The drawers: the coverage source to open at (`''` for the top), and the open statement.
   const [coverageAt, setCoverageAt] = useState(null);
   const [statementUid, setStatementUid] = useState(null);
@@ -126,31 +122,32 @@ export default function RevenuePage() {
       setRefunds(UNAVAILABLE);
     });
   }, []);
-  const loadLicences = useCallback(() => {
-    setLicences(null);
-    // #4700 — the ledger is paged now; the ceiling picker needs every licence,
-    // so this follows the pages, and a run that stops short of the end is
-    // unreadable rather than a shorter list.
-    licenceLedgerApi.all().then((r) => setLicences(r?.complete ? r.items : UNAVAILABLE), (e) => {
-      reportError('hq-revenue-licences', e);
-      setLicences(UNAVAILABLE);
-    });
-  }, []);
   const saveCeiling = useCallback(async (uid, body) => {
     const r = await api.promoCeilingSet(uid, body);
     loadCeilings();
     return r;
   }, [loadCeilings]);
+  // D5039 — the re-read after a statement write keeps the ledger on screen (no
+  // Loading in between), so the drawer and an action's receipt stay open.
+  const refreshStatements = useCallback(() => {
+    api.statements().then(setStatements, (e) => reportError('hq-revenue-statements', e));
+    loadPeriodStatements(period);
+  }, [loadPeriodStatements, period]);
   const updateStatement = useCallback(async (uid, body) => {
     const r = await api.statementUpdate(uid, body);
-    loadStatements();
-    loadPeriodStatements(period);
+    refreshStatements();
     return r;
-  }, [loadStatements, loadPeriodStatements, period]);
+  }, [refreshStatements]);
+  // D5039 — a governed action: Record a payment, Mark issued or Void.
+  const actOnStatement = useCallback((kind, uid, body) => (
+    kind === 'record_payment' ? adminStatementActionsApi.recordPayment(uid, body)
+      : kind === 'void' ? adminStatementActionsApi.void(uid, body)
+        : adminStatementActionsApi.issue(uid, body)
+  ), []);
 
   useEffect(() => {
-    load(null); loadDisputes(); loadStatements(); loadCeilings(); loadRefunds(); loadLicences();
-  }, [load, loadDisputes, loadStatements, loadCeilings, loadRefunds, loadLicences]);
+    load(null); loadDisputes(); loadStatements(); loadCeilings(); loadRefunds();
+  }, [load, loadDisputes, loadStatements, loadCeilings, loadRefunds]);
   // The period's own statements, once a period is known and each time it changes.
   useEffect(() => { loadPeriodStatements(period); }, [period, loadPeriodStatements]);
 
@@ -285,7 +282,7 @@ export default function RevenuePage() {
           coverage={usageCoverage}
           period={shownPeriod}
           licenceUid={scope}
-          licences={licences}
+          searchLicences={adminStatementActionsApi.licencePicker}
           onSave={saveCeiling}
           onRetry={loadCeilings}
           onWhy={why}
@@ -303,7 +300,13 @@ export default function RevenuePage() {
         />
       )}
       {openStatement && (
-        <StatementDrawer statement={openStatement} onClose={() => setStatementUid(null)} onUpdate={updateStatement} />
+        <StatementDrawer
+          statement={openStatement}
+          onClose={() => setStatementUid(null)}
+          onUpdate={updateStatement}
+          onAction={actOnStatement}
+          onChanged={refreshStatements}
+        />
       )}
     </RailFrame>
   );

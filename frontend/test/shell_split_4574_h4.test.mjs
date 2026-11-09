@@ -52,7 +52,7 @@ test('the moved helpers are the same functions at their old addresses', () => {
   assert.equal(clockMod.clock(3_723_000), '01:02:03');
   assert.equal(clockMod.clock(-5), '00:00:00');
   const view = src('pages/founder/RecordingView.jsx');
-  assert.match(view, /export \{ clock, useDarkTheme \};/, 'RecordingView still exports both for its other importers');
+  assert.match(view, /export \{ clock, short, useDarkTheme \};/, 'RecordingView still exports the timer, the short form and the theme hook');
 });
 
 test('a lazy sheet says it is opening, then draws the sheet with its props', async () => {

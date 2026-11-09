@@ -107,8 +107,10 @@ test('the pages draw Capital call, Distribute and Issue through FundActControl w
   // D1163 (#3070): New capital call's Issue is in callDialogs.jsx, Execute in DistributionsTab.jsx.
   const fundsPage = src('pages/FundsPage.jsx');
   assert.doesNotMatch(fundsPage, /function AdminFundsView|setShowCC|setShowDist|fundsCapitalCallV2\(/);
-  assert.match(src('pages/admin/fundAdmin/callDialogs.jsx'), /<FundActControl access=\{access\} act="capital_call\.issue"[^>]*>\s*<button type="button"[^>]*data-testid="calls-preview-issue"/);
-  assert.match(src('pages/admin/fundAdmin/DistributionsTab.jsx'), /<FundActControl access=\{access\} act="distribution\.execute"[^>]*>\s*<button type="button"[^>]*data-testid="distribution-execute"/);
+  // D4812 part 2: each act's final button is the money flow's ConfirmAct, still inside FundActControl.
+  assert.match(src('pages/admin/fundAdmin/callDialogs.jsx'), /<FundActControl access=\{access\} act="capital_call\.issue"[^>]*>\s*<ConfirmAct [^>]*testId="calls-confirm"/);
+  assert.match(src('pages/admin/fundAdmin/DistributionsTab.jsx'), /<FundActControl access=\{access\} act="distribution\.execute"[^>]*>\s*<button type="button"[^\n]*data-testid="distribution-execute"/);
+  assert.match(src('pages/admin/fundAdmin/DistributionsTab.jsx'), /<FundActControl access=\{access\} act="distribution\.execute"[^>]*>\s*<ConfirmAct [^>]*testId="distribution-confirm"/);
   const calls = src('pages/investor/InvestorFundCalls.jsx');
   assert.match(calls, /<FundActControl access=\{acts\} act="capital_call\.issue"[^>]*>\s*<button type="button" className="if2-issue" data-testid="button-issue-call"/);
   assert.equal(calls.split('data-testid="button-issue-call"').length, 2);

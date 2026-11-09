@@ -8,7 +8,10 @@ import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
 import { Unreadable } from '../../ui/Honesty';
 import { STOP_CHOICE, stopQuote, stopWords } from './stopSheet';
 import { useRailOption } from '../../ui/railCrumbs';
-import { clock, useDarkTheme } from './recordingClock';
+// #4574 H4: the timer and the theme hook live in recordingClock.js, so the minimised pill on every signed-in
+// page loads them without this whole view. Re-exported: every existing importer is unchanged.
+import { clock, short, useDarkTheme } from './recordingClock';
+export { clock, short, useDarkTheme };
 
 /**
  * The Recording View (D685 §5.7, #1588), full screen at `/validate/record/live`,
@@ -79,12 +82,6 @@ export function statusWord(l, phase, stageAt = -1) {
   if (l.paused) return 'Paused';
   return 'Recording';
 }
-
-/** ms → hh:mm:ss, as the canvas draws it (§5.7.2), the hour always shown. */
-// #4574 (H4): clock and useDarkTheme live in recordingClock.js (the pill imports them there) and are re-exported.
-export { clock, useDarkTheme };
-/** mm:ss, for a marked moment. */
-export const short = (ms) => clock(ms).replace(/^00:/, '');
 
 /** The language under the timer: a name from the session, never a default "English". */
 const LANGS = { en: 'English', fr: 'French', es: 'Spanish', de: 'German', it: 'Italian', pt: 'Portuguese', nl: 'Dutch', ja: 'Japanese', zh: 'Chinese', ko: 'Korean', hi: 'Hindi', ar: 'Arabic', ru: 'Russian', pl: 'Polish', sv: 'Swedish', tr: 'Turkish' };
@@ -272,6 +269,7 @@ function TabVideo({ stream }) {
 }
 
 /** The page's theme, followed as the root's `dark` class changes: the ring draws its palette from it. */
+
 export default function RecordingView({ st, now = Date.now(), theme = 'light', reduced = false, you = '', actions = {}, onExit, onOpen, ai = null }) {
   const exitRef = useRef(null);
   const stopRef = useRef(null);

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Info } from 'lucide-react';
-// #4574 (H4): from its own file. The `ui` barrel put Charts, SkillEnergy and FillSheet in the shell.
+// #4574 H4: the hook's own module, not the ui barrel, which would pull Charts, FillSheet and every primitive into the shell.
 import { useMovedNotice } from '../../../ui/AdminPageHeader';
 import { fireAnalytics } from '../../../lib/seo';
 import { redirectKey } from '../../../../../cloudflare-worker/src/services/redirectRoutes.ts';
