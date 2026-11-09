@@ -12,6 +12,14 @@
  *      or feedback row is filed under it.
  *   3. A link's Time per slide setting still holds.
  *
+ * Part 2 (#4598): `POST /api/decks/:id/preflight/link-cards` — the effective
+ * content a PROPOSED link (no `pitch_deck_share_tokens` row yet) would send,
+ * for Share's own check before it writes the link. It computes the SAME
+ * selection `linkSentCards` computes for a persisted one (a variant's order,
+ * less what "what is included" leaves out), through the same
+ * `effectiveSlidesFor` the two share, so the check the dialog ran and the
+ * card a reaction later attributes to are never two different lists.
+ *
  * In-memory SQLite: the baseline and every post-cutoff migration. Synthetic names only.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
@@ -29,6 +37,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import deckShareActions from '../src/routes/deck_share_actions.ts';
 import deckSlideAnalytics from '../src/routes/deck_slide_analytics.ts';
 import deckInvestorLinks from '../src/routes/deck_investor_links.ts';
+import deckPreflight from '../src/routes/deck_preflight.ts';
 import decks from '../src/routes/decks.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d4598-attribution-0123456789ab';
@@ -70,6 +79,7 @@ function fixture() {
 const app = new Hono<any>();
 app.route('/api/decks', deckSlideAnalytics);
 app.route('/api/decks', deckInvestorLinks);
+app.route('/api/decks', deckPreflight);
 app.route('/api/decks', decks);
 app.route('/api/decks', deckShareActions);
 app.onError((err: any, c) => {
@@ -182,4 +192,53 @@ test('D4598 3: a view of another deck is no view of this link, and Time per slid
   const view = await open(db, off);
   assert.deepEqual((await beat(db, off, view, 60, { 0: 20 })).body, { ok: true, counts_only: true });
   assert.equal(Number((db.prepare('SELECT COUNT(*) AS n FROM deck_view_slides').get() as any).n), 0);
+});
+
+const linkCards = (db: DatabaseSync, body: Record<string, unknown> = {}, as: number | null = ADMIN) =>
+  req(db, 'POST', `/api/decks/${DECK}/preflight/link-cards`, as, body);
+const uidsOf = (r: any) => (r.body?.slides ?? []).map((s: any) => s.uid);
+
+test('D4598 part 2: a proposed link\'s effective content matches linkSentCards exactly, and two links\' own checks never cross-contaminate', async () => {
+  const db = fixture();
+  // No variant, Sources left out: Traction stays hidden (always), Sources is excluded by choice.
+  const bare = await linkCards(db, { include: { sources: false } });
+  assert.equal(bare.status, 200, JSON.stringify(bare.body));
+  assert.deepEqual(uidsOf(bare), ['cover', 'market', 'ask']);
+
+  // Fund A's variant [ask, market, traction, cover]: Traction is still hidden; Sources defaults in.
+  const vA = await req(db, 'POST', `/api/decks/${DECK}/variants`, ADMIN, { name: 'For Fund A', slide_order: [3, 2, 1, 0] });
+  assert.equal(vA.status, 201, JSON.stringify(vA.body));
+  const tailoredA = await linkCards(db, { variant_uid: vA.body.variant.uid });
+  assert.deepEqual(uidsOf(tailoredA), ['ask', 'market', 'cover', 'sources']);
+
+  // It matches linkSentCards exactly, for the SAME variant and include, once that link is made: the
+  // uids the preview read are the uids the reaction is actually filed under.
+  const madeA = await make(db, { prospect_id: SAM, variant_uid: vA.body.variant.uid });
+  assert.equal((await feedback(db, madeA, await open(db, madeA), { 0: 'up', 1: 'down', 2: 'up', 3: 'down' })).status, 200);
+  assert.deepEqual(reactionsByUid(db), [{ ask: 'up', market: 'down', cover: 'up', sources: 'down' }]);
+
+  // Fund B's own variant and its own "what is included", checked in between Fund A's preview and its
+  // link: neither link's own combination is nudged by the other's.
+  const vB = await req(db, 'POST', `/api/decks/${DECK}/variants`, ADMIN, { name: 'For Fund B', slide_order: [0, 2, 3] });
+  assert.equal(vB.status, 201, JSON.stringify(vB.body));
+  const again = await linkCards(db, { variant_uid: vA.body.variant.uid });
+  assert.deepEqual(uidsOf(again), uidsOf(tailoredA), 'Fund A\'s own combination reads the same after Fund B\'s variant was made');
+  const tailoredB = await linkCards(db, { variant_uid: vB.body.variant.uid, include: { notes: true } });
+  assert.deepEqual(uidsOf(tailoredB), ['cover', 'market', 'ask', 'sources'], 'Fund B\'s own variant and include, unaffected by Fund A\'s check or its link');
+  const madeB = await make(db, { prospect_id: PAT, variant_uid: vB.body.variant.uid });
+  assert.equal((await feedback(db, madeB, await open(db, madeB), { 0: 'down', 3: 'up' })).status, 200);
+  assert.deepEqual(reactionsByUid(db).slice(-1), [{ cover: 'down', sources: 'up' }], 'Fund B\'s own reaction, on its own uids');
+});
+
+test('D4598 part 2: link-cards refuses a malformed include, and is as readable as the deck itself, never more', async () => {
+  const db = fixture();
+  const bad = await linkCards(db, { include: { sources: 'yes' } });
+  assert.equal(bad.status, 400, JSON.stringify(bad.body));
+  assert.equal(Object.keys(bad.body || {}).length > 0, true, 'a refusal, not a silent default');
+  // Another founder's project is not this one's to preview.
+  const forbidden = await linkCards(db, {}, OTHER);
+  assert.equal(forbidden.status, 403);
+  // Signed out reads nothing either.
+  const anon = await linkCards(db, {}, null);
+  assert.ok(anon.status === 401 || anon.status === 403, JSON.stringify(anon));
 });

@@ -2,7 +2,7 @@
  * D4586 (#4586) — Validate methodology v2, proposed. These pin the outcomes the
  * decision record tabulates, side by side with what v1 (`verdictFor`, the
  * shipped rule) gives today, so a reviewer reads each deliberate change as a
- * test rather than as prose. v2 is not wired into the product by this PR.
+ * test rather than as prose. Part 2 wires v2 into the decision bar only; claim status is still v1.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/validate_methodology_4586.test.ts
  */
@@ -122,9 +122,13 @@ test('a source linked in both directions counts once and appears on both sides',
   assert.deepEqual([r.counted, r.counted_supporting, r.counted_contradicting], [1, 1, 1]);
 });
 
-test('v2 is not wired: the shipped claim status and decision bar still use v1', () => {
-  // This PR proposes; it changes no calculation. A follow-up wires v2 after review.
-  for (const f of ['cloudflare-worker/src/services/cycleValidate.ts', 'cloudflare-worker/src/routes/founder_validate.ts', 'cloudflare-worker/src/services/verdict.ts']) {
-    assert.doesNotMatch(readFileSync(join(ROOT, f), 'utf8'), /validateMethodology/, `${f} imports the proposed methodology`);
+test('part 2 wires v2 into the decision bar; claim status is still v1 until its own slice', () => {
+  // D4586 part 2: `recordDecision` counts with `decisionEvidenceV2`
+  // (validate_decision_methodology_4586.test.ts covers it on the shipped path). The claim
+  // status (`verdictFor`, read by these two files) moves to `claimStatusV2` in the next slice,
+  // with the verdict history's methodology version; this assertion goes with that slice.
+  assert.match(readFileSync(join(ROOT, 'cloudflare-worker/src/services/verdict.ts'), 'utf8'), /from '\.\/validateMethodology'/);
+  for (const f of ['cloudflare-worker/src/services/cycleValidate.ts', 'cloudflare-worker/src/routes/founder_validate.ts']) {
+    assert.doesNotMatch(readFileSync(join(ROOT, f), 'utf8'), /validateMethodology/, `${f} reads claim status under v2 before its slice`);
   }
 });

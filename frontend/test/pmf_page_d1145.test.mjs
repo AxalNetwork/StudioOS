@@ -296,3 +296,11 @@ test('9. the wiring: an input is a bottom sheet on a phone, dark colours, phone 
   assert.ok(!/window\.(alert|confirm|prompt)/.test(src), 'no browser pop-up');
   assert.ok(!/Eadwyn/.test(src.replace(/\/\*[\s\S]*?\*\//g, '')), 'Eadwyn\'s reading is part 6');
 });
+
+test('D5071: a raise-kit gap links to the workflow the Worker names for that item, and only to an address inside the app', () => {
+  const rows = (fix) => ({ rows: [{ id: 'narrative', cells: { item: 'Investor narrative', missing: 'Not enough recorded · save an investor narrative version.', fix_href: fix } }] });
+  assert.equal(gapRows(null, rows('/raise/investor-narrative/new?project=3'))[0].href, '/raise/investor-narrative/new?project=3', 'not the readiness page');
+  for (const bad of [null, undefined, '', '//evil.example/x', 'https://evil.example/x', '\\\\evil', 'javascript:alert(1)']) {
+    assert.equal(gapRows(null, rows(bad))[0].href, null, String(bad));
+  }
+});

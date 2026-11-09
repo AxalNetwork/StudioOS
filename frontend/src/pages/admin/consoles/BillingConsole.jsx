@@ -3,7 +3,7 @@ import { api } from '../../../lib/api';
 import { Send, Search, RefreshCw, Loader2, ShieldAlert, AlertTriangle, CreditCard } from 'lucide-react';
 import { useToast } from '../../../components/useToast';
 import ToastMessage from '../../../components/ToastMessage';
-import { REFUND_REASON_MIN, refundReasonOk } from '../../../lib/refundReason';
+import RefundReviewFlow from '../../../components/RefundReviewFlow.jsx';
 import { ConsoleUnreadable } from './shared';
 
 /**
@@ -31,47 +31,6 @@ export function BillingPanel() {
   const inputCls = 'rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500 w-full';
   const cardCls = 'bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800';
   const headerCls = 'px-4 py-3 border-b border-gray-200 flex items-center gap-2 flex-wrap dark:border-gray-800';
-
-  // --- Refund state ---
-  const [refForm, setRefForm] = useState({ target: '', amount: '', reason: '', stripe_reason: '', target_user_id: '', override: false });
-  const [refBusy, setRefBusy] = useState(false);
-  const [refResult, setRefResult] = useState(null);
-  const setRef = (k, v) => setRefForm((f) => ({ ...f, [k]: v }));
-
-  const issueRefund = async (e) => {
-    e.preventDefault();
-    if (refBusy) return;
-    const target = refForm.target.trim();
-    if (!target) { showToast({ kind: 'err', msg: 'Enter a PaymentIntent (pi_…) or Charge (ch_…) id' }); return; }
-    if (!refundReasonOk(refForm.reason)) { showToast({ kind: 'err', msg: `Write the reason for this refund (at least ${REFUND_REASON_MIN} characters)` }); return; }
-    setRefBusy(true);
-    setRefResult(null);
-    try {
-      const body = {};
-      if (target.startsWith('ch_')) body.charge = target; else body.payment_intent = target;
-      if (refForm.amount) body.amount = Math.round(Number(refForm.amount) * 100);
-      body.reason = refForm.reason.trim();
-      if (refForm.stripe_reason) body.stripe_reason = refForm.stripe_reason;
-      if (refForm.target_user_id) body.target_user_id = Number(refForm.target_user_id);
-      if (refForm.override) body.override_policy = true;
-      const r = await api.adminBillingRefund(body);
-      setRefResult(r);
-      const claw = r.clawback?.outcome;
-      const clawMsg = claw && claw !== 'no_commission' ? ` · clawback: ${claw}` : '';
-      showToast({ kind: 'ok', msg: `Refund ${r.refund?.status || 'ok'}${clawMsg}` });
-    } catch (err) {
-      // Surface the structured policy block so the admin knows to override.
-      const data = err?.data || {};
-      if (data.code === 'refund_policy_blocked') {
-        setRefResult({ blocked: true, ...data });
-        showToast({ kind: 'err', msg: `Blocked by policy (${data.reason || data.kind}). Tick override to force.` });
-      } else {
-        showToast({ kind: 'err', msg: err.message || 'Refund failed' });
-      }
-    } finally {
-      setRefBusy(false);
-    }
-  };
 
   // --- Disputes state ---
   const [disputes, setDisputes] = useState([]);
@@ -145,68 +104,16 @@ export function BillingPanel() {
     <div className="space-y-6">
       <ToastMessage toast={toast} />
 
-      {/* Refund */}
+      {/* Refund — D5037: looked up and reviewed before money moves, the same flow as Revenue's. */}
       <div className={cardCls}>
         <div className={headerCls}>
           <RefreshCw size={16} className="text-gray-600" />
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Issue Refund</h3>
-          <span className="text-xs text-gray-500">Reverses the referral commission automatically · HQ's super admin only, after a step-up</span>
+          <span className="text-xs text-gray-500">Look up, review, confirm · reverses the referral commission automatically · HQ's super admin only, after a step-up</span>
         </div>
-        <form onSubmit={issueRefund} className="p-4 grid gap-3 sm:grid-cols-2">
-          <label className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
-            PaymentIntent or Charge id
-            <input className={inputCls} placeholder="pi_… or ch_…" value={refForm.target} onChange={(e) => setRef('target', e.target.value)} data-testid="refund-target" />
-          </label>
-          <label className="text-xs text-gray-600 dark:text-gray-400">
-            Amount (leave blank for full)
-            <input className={inputCls} type="number" step="0.01" min="0" placeholder="e.g. 49.00" value={refForm.amount} onChange={(e) => setRef('amount', e.target.value)} data-testid="refund-amount" />
-          </label>
-          {/* D224 — the written reason is required, and the Stripe category is
-              separate from it: "duplicate" says what Stripe files the refund
-              under, not why HQ issued it. */}
-          <label className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
-            Reason (required, at least {REFUND_REASON_MIN} characters)
-            <textarea className={inputCls} rows={2} required minLength={REFUND_REASON_MIN} placeholder="Why this money goes back" value={refForm.reason} onChange={(e) => setRef('reason', e.target.value)} data-testid="refund-reason" />
-          </label>
-          <label className="text-xs text-gray-600 dark:text-gray-400">
-            Stripe category (optional)
-            <select className={inputCls} value={refForm.stripe_reason} onChange={(e) => setRef('stripe_reason', e.target.value)}>
-              <option value="">—</option>
-              <option value="requested_by_customer">Requested by customer</option>
-              <option value="duplicate">Duplicate</option>
-              <option value="fraudulent">Fraudulent</option>
-            </select>
-          </label>
-          <label className="text-xs text-gray-600 dark:text-gray-400">
-            Target user id (optional, for audit)
-            <input className={inputCls} type="number" min="1" placeholder="123" value={refForm.target_user_id} onChange={(e) => setRef('target_user_id', e.target.value)} />
-          </label>
-          <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300 sm:col-span-2">
-            <input type="checkbox" checked={refForm.override} onChange={(e) => setRef('override', e.target.checked)} data-testid="refund-override" />
-            Override product refund policy (force a blocked refund — recorded in audit)
-          </label>
-          <div className="sm:col-span-2">
-            <button type="submit" disabled={refBusy}
-              className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm rounded-md inline-flex items-center gap-1.5" data-testid="refund-submit">
-              {refBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Issue refund
-            </button>
-          </div>
-        </form>
-        {refResult && (
-          <div className="px-4 pb-4 text-xs">
-            {refResult.blocked ? (
-              <div className="rounded-md bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-300">
-                <AlertTriangle size={12} className="inline mr-1" /> Blocked by policy: <strong>{refResult.reason}</strong> ({refResult.kind}). Tick override to force.
-              </div>
-            ) : (
-              <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 space-y-1">
-                <div>Refund <strong>{refResult.refund?.status}</strong> · {fmtMoney(refResult.refund?.amount, refResult.refund?.currency)} · {refResult.refund?.id}</div>
-                <div>Policy: {refResult.policy?.kind}{refResult.policy?.overridden ? ' (overridden)' : ''}{refResult.policy?.note ? ` — ${refResult.policy.note}` : ''}</div>
-                <div>Commission clawback: <strong>{refResult.clawback?.outcome}</strong>{refResult.clawback?.reversed_amount_cents != null ? ` (${fmtMoney(refResult.clawback.reversed_amount_cents)})` : ''}{refResult.clawback?.detail ? ` — ${refResult.clawback.detail}` : ''}</div>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="px-4 pb-4">
+          <RefundReviewFlow showStripeFields onDone={(r) => showToast({ kind: 'ok', msg: `Refund ${r.refund?.status || 'ok'}${r.clawback?.outcome && r.clawback.outcome !== 'no_commission' ? ` · clawback: ${r.clawback.outcome}` : ''}` })} />
+        </div>
       </div>
 
       {/* Disputes */}

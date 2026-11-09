@@ -485,6 +485,27 @@ export const DECIDED_PAGE_SIZE = 25;
 export const DECIDED_MAX_PAGE = 40;
 
 /** GET /api/admin/approvals/decided: the log, newest first, 25 a page, with an exact total or null. */
+/**
+ * D4814 (#4814, part 6, AP-07): a co-marketing row's `item_uid`, so Decided
+ * can open that pitch on its board (`/admin/approvals/co-marketing/<uid>`),
+ * which is addressed by uid where the log keeps the numeric id. One bound
+ * read for the page's pitches; a read that fails leaves the field out, and
+ * the row still opens the lane's page.
+ */
+async function withItemUids(env: Env, page: DecidedRow[]): Promise<Array<DecidedRow & { item_uid?: string }>> {
+  const ids = page.filter((r) => r.lane === 'comarketing').map((r) => r.item_id);
+  if (!ids.length) return page;
+  try {
+    const got = await env.DB.prepare('SELECT id, uid FROM comarketing_pitches WHERE id IN (SELECT value FROM json_each(?))')
+      .bind(JSON.stringify(ids)).all<{ id: number; uid: string }>();
+    const uid = new Map((got.results || []).map((r) => [Number(r.id), String(r.uid)]));
+    return page.map((r) => (r.lane === 'comarketing' && uid.has(r.item_id) ? { ...r, item_uid: uid.get(r.item_id)! } : r));
+  } catch (e) {
+    console.error('[approvals] decided item uids', (e as Error)?.message);
+    return page;
+  }
+}
+
 export async function decidedLog(env: Env, a: { lanes: readonly DecisionLane[]; filters?: Filters; page: number }) {
   const filters = a.filters ?? NO_FILTERS;
   const want = a.page * DECIDED_PAGE_SIZE;
@@ -513,12 +534,13 @@ export async function decidedLog(env: Env, a: { lanes: readonly DecisionLane[]; 
   rows.sort((x, y) => (x.decided_at < y.decided_at ? 1 : x.decided_at > y.decided_at ? -1
     : x.lane === y.lane ? y.item_id - x.item_id : x.lane < y.lane ? -1 : 1));
   const start = (a.page - 1) * DECIDED_PAGE_SIZE;
+  const page = await withItemUids(env, rows.slice(start, start + DECIDED_PAGE_SIZE));
   const notRecorded = lanes.filter((l) => !l.recorded).map((l) => l.label);
   // Only lanes that keep no decisions: there is no total to give, and an empty list would read as none decided.
   const noneRecorded = a.lanes.length > 0 && a.lanes.every((l) => !l.recorded);
   if (noneRecorded) total = null;
   return {
-    items: rows.slice(start, start + DECIDED_PAGE_SIZE),
+    items: page,
     total,
     ...(total == null ? {
       total_reason: noneRecorded

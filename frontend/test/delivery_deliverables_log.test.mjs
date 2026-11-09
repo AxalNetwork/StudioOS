@@ -123,7 +123,8 @@ test('the median is absent for a harder reason than the artboard’s', () => {
     'the canvas’s median tile has moved');
   const median = between(zone, '<ShipTile\n            label="Median days to open"', '/>');
   assert.match(median, /\bnr\b/, 'the median tile is being given a number');
-  assert.ok(median.includes('no opened_at is written anywhere, so there is no sample to take a median of'),
+  // D4822: the reason in product words (no column names): read time is unavailable because opens are not tracked.
+  assert.ok(median.includes('Read time unavailable · client opens are not currently tracked'),
     'the median tile no longer says why the sample is empty rather than small');
   // AND `opened_at` STAYS THE CLIENT'S. No route accepts it, on create or patch,
   // which is what makes the absence structural rather than a display choice.
@@ -190,14 +191,14 @@ test('the instNote carries the artboard’s argument and the harder absence', ()
   const note = INST.slice(INST.indexOf('note={'));
   assert.match(PD2, /both invoiced, neither reviewed — which is also why that engagement reads at risk on the board/,
     'the canvas’s instNote has moved');
-  assert.ok(note.includes('invoiced, unreviewed, and blocking the next milestone'),
-    'the instNote no longer says what an unopened deliverable costs');
-  assert.ok(note.includes('reads at risk on the board'),
-    'the instNote no longer connects an unopened row to the board’s rating');
-  assert.ok(note.includes('a median over a column nobody writes would be a number about our own silence'),
-    'the instNote no longer says why the median is absent here');
-  assert.ok(note.includes('never that the client ignored it'),
+  // D4822 shortened the note to the canvas's register; the argument it must keep is that silence is never read as
+  // the client ignoring the work, and that the median stays empty rather than averaged.
+  assert.ok(note.includes('only where opens can be observed'),
+    'the instNote no longer says unopened rows lead only where opens are observable');
+  assert.ok(note.includes('never \\u201cignored\\u201d') || note.includes('never “ignored”'),
     'the instNote no longer refuses the reading it exists to refuse');
+  assert.ok(note.includes('the median time to open stays empty rather than averaging a record nobody writes'),
+    'the instNote no longer says why the median is absent here');
 });
 
 test('the chip row is the artboard’s four, with Never opened first', () => {
