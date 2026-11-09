@@ -4,7 +4,7 @@ import { Shield, LogIn, KeyRound, Mail, ChevronDown, ChevronUp } from 'lucide-re
 import { api } from '../lib/api';
 import { googleSignInApi } from '../lib/api/googleSignIn.js';
 import { track } from '../lib/funnel';
-import { storePendingNext, sameOriginNextPath } from '../lib/pendingNext';
+import { signInContextFor, storePendingNext, sameOriginNextPath } from '../lib/pendingNext';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
 import {
@@ -117,8 +117,18 @@ function safeNextPath() {
   return null;
 }
 
+/**
+ * #4579 (D4579): the area the kept destination belongs to (Grow), so the page can say where signing in leads and what
+ * account it needs; and the sign-up link that keeps the same destination. Null for a direct visit, which keeps the
+ * generic page.
+ */
+function signInContext() {
+  try { return signInContextFor(safeNextPath()); } catch { return null; }
+}
+
 export default function LoginPage() {
   useForcedLightTheme();
+  const [context] = useState(signInContext);
   const [email, setEmail] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
@@ -580,11 +590,16 @@ export default function LoginPage() {
   const googleLabel = GOOGLE_LABELS[googleStage] || 'Continue with Google';
 
   return (
-    <AuthShell showApplyCard applyLabel="Create an account →" backgroundSrc="/auth/login-background.webp">
+    <AuthShell showApplyCard applyLabel="Create an account →" applyHref={context?.registerHref || '/register'} backgroundSrc="/auth/login-background.webp">
       <AuthCard>
         <h1 className="m-0 text-[25px] font-extrabold tracking-tight leading-tight text-[#241f38]">
-          Sign in
+          {context ? `Sign in to continue to ${context.area.name}` : 'Sign in'}
         </h1>
+        {context && (
+          <p className="mt-2 text-[13.5px] leading-relaxed text-[#3d3650]" data-testid="login-destination">
+            {context.area.what} {context.area.who}
+          </p>
+        )}
         <p className="mt-2 text-[13.5px] leading-relaxed text-[#6b6577]">
           Passwordless by default — we email you a one-time link.{' '}
           {`${alsoAvailable} are also available.`}
