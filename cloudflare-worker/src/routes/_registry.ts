@@ -23,6 +23,7 @@ import { mount as admin_influencersMount } from './admin_influencers';
 import { mount as admin_licence_agreement_policiesMount } from './admin_licence_agreement_policies';
 import { mount as admin_licence_agreementsMount } from './admin_licence_agreements';
 import { mount as admin_licence_exclusivityMount } from './admin_licence_exclusivity';
+import { mount as admin_licence_packagesMount } from './admin_licence_packages';
 import { mount as admin_licence_pricingMount } from './admin_licence_pricing';
 import { mount as admin_licence_pricing_applyMount } from './admin_licence_pricing_apply';
 import { mount as admin_persona_segment_scopesMount } from './admin_persona_segment_scopes';
@@ -89,6 +90,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_licence_agreement_policies', mount: admin_licence_agreement_policiesMount },
   { file: 'admin_licence_agreements', mount: admin_licence_agreementsMount },
   { file: 'admin_licence_exclusivity', mount: admin_licence_exclusivityMount },
+  { file: 'admin_licence_packages', mount: admin_licence_packagesMount },
   { file: 'admin_licence_pricing', mount: admin_licence_pricingMount },
   { file: 'admin_licence_pricing_apply', mount: admin_licence_pricing_applyMount },
   { file: 'admin_persona_segment_scopes', mount: admin_persona_segment_scopesMount },

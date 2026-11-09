@@ -172,6 +172,7 @@ async function mount(url, s = stubs()) {
     async choose(id) { const n = by(id); assert.ok(n, `no ${id}`); await act(async () => { pr(n).onChange?.({ target: { checked: true } }); }); await flush(); },
     async click(id) { const n = by(id); assert.ok(n, `no ${id}`); await act(async () => { pr(n).onClick?.({ preventDefault() {}, stopPropagation() {}, button: 0 }); }); await flush(); },
     async type(id, value) { const n = by(id); assert.ok(n, `no ${id}`); await act(async () => { pr(n).onChange({ target: { value } }); }); await flush(); },
+    async submit(id) { const n = by(id); assert.ok(n, `no ${id}`); await act(async () => { await pr(n).onSubmit?.({ preventDefault() {} }); }); await flush(); },
     async close() { await act(async () => root.unmount()); restore(); },
   };
 }
@@ -218,9 +219,15 @@ test('Record a mark: a future date is refused before any call; a valid mark is s
     await v.type('fund-mark-date', TODAY);
     const before = names(s.calls).filter((n) => n === 'positions').length;
     await v.click('fund-mark-save');
+    // D4812 part 5: Review, then Confirm with "Record $150,000.00 mark"; an Admin's act, so no code.
+    assert.ok(!names(s.calls).includes('recordValuation'), 'Review writes nothing');
+    await v.click('fund-mark-flow-continue');
+    assert.equal(v.text('fund-mark-flow-confirm-submit'), 'Record $150,000.00 mark');
+    await v.submit('fund-mark-flow-confirm');
     const call = s.calls.find((c) => c[0] === 'recordValuation');
     assert.deepEqual(call.slice(1), [42, { valuation_date: TODAY, value_cents: 15000000, source: 'Series A price' }]);
-    assert.ok(!v.has('fund-mark-dialog'), 'the dialog closes');
+    await v.click('fund-mark-flow-done-done');
+    assert.ok(!v.has('fund-mark-dialog') && !v.has('fund-mark-flow'), 'Done closes the dialog');
     assert.ok(names(s.calls).filter((n) => n === 'positions').length > before, 'the positions are read again');
   } finally { await v.close(); }
 });

@@ -15,6 +15,11 @@
  * level is never `ok` while a metric is unknown, so an outage of the source
  * cannot read as a healthy platform.
  *
+ * PART 3 SIGNALS. `platformCapacitySignals.ts` adds what other issues record for
+ * themselves: the agent sweep's eligible work and admissions (#4592) and its
+ * lifecycle repairs (#4593) from `system_metrics`, and the last verified restore
+ * (#4558) from the drill's marker in the backups bucket. Still bindings only.
+ *
  * NO PERSONAL DATA. Nothing here names a member, a company, a tenant or a file;
  * the scope of every metric is this deployment. Units are bytes, counts and
  * seconds; no arithmetic mixes them.
@@ -22,6 +27,7 @@
 import type { Env } from '../types';
 import { BINDINGS } from './topology';
 import { branchOf } from '../util/branch';
+import { readOperationalSignals, SIGNALS_NOT_READ_HERE } from './platformCapacitySignals';
 
 /** Decimal gigabyte: Cloudflare states D1 limits in GB. */
 export const GB = 1_000_000_000;
@@ -48,7 +54,15 @@ export const QUEUE_AGE_HYSTERESIS_S = 60;
 export const READ_TIMEOUT_MS = 5_000;
 
 export type Level = 'ok' | 'warning' | 'critical' | 'unknown';
-export type Availability = 'measured' | 'unavailable' | 'none_waiting';
+/**
+ * `measured`: a value was read. `unavailable`: the source did not answer (level `unknown`).
+ * `none_waiting`: measured, and nothing is waiting, so there is no age (level `ok`).
+ * `not_running` (part 3): the subsystem that produces the signal is off on this deployment,
+ * so there is nothing to read; never alerted on, never a recovery. `not_verified` (part 3):
+ * the source answered that there is no verified value (a failed or absent restore drill);
+ * its level is set by the reader, never `ok`.
+ */
+export type Availability = 'measured' | 'unavailable' | 'none_waiting' | 'not_running' | 'not_verified';
 
 export type Thresholds = { warning: number; critical: number; hysteresis: number; basis: string };
 
@@ -56,13 +70,19 @@ export type Metric = {
   key: string;
   label: string;
   source: string;
-  unit: 'bytes' | 'messages' | 'seconds' | 'ratio';
+  unit: 'bytes' | 'messages' | 'seconds' | 'ratio' | 'count';
   scope: 'deployment';
   value: number | null;
   availability: Availability;
   reason: string | null;
   level: Level;
   thresholds: Thresholds | null;
+  /** Part 3 signals: the span the value covers (one sweep, the latest drill). */
+  window?: string;
+  /** Part 3 signals: how and how often the source records it, and how this read samples it. */
+  sampling?: string;
+  /** Part 3 signals: when the source last produced the record this value comes from; null when none. */
+  last_success_at?: string | null;
 };
 
 /**
@@ -126,7 +146,7 @@ export function d1Policy(env: Partial<Env>) {
   };
 }
 
-async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+export async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -260,12 +280,13 @@ export const NOT_READ_HERE = [
 
 /** The whole read. Each part fails into its own unavailable state; none fails the read. */
 export async function readPlatformCapacity(env: Partial<Env>, now: Date = new Date(), timeoutMs = READ_TIMEOUT_MS) {
-  const [d1, job, agent] = await Promise.all([
+  const [d1, job, agent, signals] = await Promise.all([
     readD1Size(env, timeoutMs),
     readQueue(env, 'JOB_QUEUE', now, timeoutMs),
     readQueue(env, 'AGENT_QUEUE', now, timeoutMs),
+    readOperationalSignals(env, now, timeoutMs),
   ]);
-  const metrics = [d1.size, d1.used, ...job, ...agent];
+  const metrics = [d1.size, d1.used, ...job, ...agent, ...signals];
   return {
     observed_at: now.toISOString(),
     scope: branchOf(env as Env) ? 'branch' : 'hq',
@@ -275,6 +296,7 @@ export async function readPlatformCapacity(env: Partial<Env>, now: Date = new Da
     d1_policy_note: d1.policy.note,
     metrics,
     bindings: bindingPresence(env),
-    not_read_here: NOT_READ_HERE,
+    // Composed here, not in the constant: the two modules import each other.
+    not_read_here: [...NOT_READ_HERE, ...SIGNALS_NOT_READ_HERE],
   };
 }

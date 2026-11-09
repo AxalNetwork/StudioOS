@@ -22,6 +22,7 @@
  * audio is stored: the probe chunk the container sends is zeros, and only its
  * size is kept.
  */
+import { runtimeErrorCode, runtimeStage } from './meetingBotStartup';
 import type { Env, User } from '../types';
 import { BotError, botPlatform, type BotPlatform } from './meetingBots';
 import { runtimeKey, runtimeOrigin, runtimeUid } from './meetingBotRuntime';
@@ -267,6 +268,18 @@ export async function lastRunStage(env: Env, userId: number, platform: BotPlatfo
   const facts: Record<string, Fact> = { status: CODE.test(run.status) ? run.status : 'unknown', age_minutes: Math.max(0, Math.round((now - run.created_at) / 60_000)) };
   if (run.failure_code && CODE.test(run.failure_code)) facts.failure_code = run.failure_code;
   if (run.failure_detail && /^[a-z_]{1,40}(@[a-z_]{1,40}(:[a-z_]{1,20})?)?$/.test(run.failure_detail)) facts.failure_detail = run.failure_detail;
+  // D5153: where the runtime's startup stopped, from migration 202611090953. Absent before it.
+  try {
+    const startup = await env.DB.prepare(`SELECT runtime_stage, runtime_error_code, runtime_callback_seen_at FROM meeting_bots
+      WHERE user_id=? AND platform=? ORDER BY created_at DESC LIMIT 1`).bind(userId, platform)
+      .first<{ runtime_stage: string | null; runtime_error_code: string | null; runtime_callback_seen_at: number | null }>();
+    if (startup) {
+      const stage = runtimeStage(startup.runtime_stage), code = runtimeErrorCode(startup.runtime_error_code);
+      if (stage) facts.runtime_stage = stage;
+      if (code) facts.runtime_error_code = code;
+      facts.runtime_callback = startup.runtime_callback_seen_at === null ? 'never' : 'received';
+    }
+  } catch { /* before the migration: the run's own codes above still answer */ }
   return run.status === 'failed' ? { stage: 'last_run', result: 'fail', code: 'last_run_failed', facts, at: now }
     : { stage: 'last_run', result: 'pass', code: `last_run_${facts.status}`, facts, at: now };
 }

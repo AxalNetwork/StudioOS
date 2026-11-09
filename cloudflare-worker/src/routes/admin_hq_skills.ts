@@ -3,7 +3,8 @@
  * the lifecycle of Axal's own skills. Mounts itself at
  * `/api/admin/ai-agents/skills`. Super Admin only.
  *
- *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval
+ *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval;
+ *                                    D4536: `coverage`, the catalogue's counts (SKILL_ANALYTICS_METRICS.md)
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
@@ -70,6 +71,9 @@ import { campaignProgress, cancelCampaign, continueCampaign, evaluatePublished, 
 import { compareResults, type ResultRow } from '../services/agents/skillEvalCompare';
 import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
 import type { OutputKind, Tag } from '../services/agents/skills';
+import { ROLES } from '../services/agents/catalogue';
+import { SKILL_LIBRARY } from '../services/agents/skillLibrary.generated';
+import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
 
 type C = Context<{ Bindings: Env }>;
 const adminHqSkills = new Hono<{ Bindings: Env }>();
@@ -202,11 +206,13 @@ adminHqSkills.get('/', async (c) => {
     pinTokenMap(env, rows.filter((s) => s.current_version).map((s) => ({ skill_id: s.id, version: s.current_version }))),
   ]);
   const evals = new Map((evalResult.results ?? []).map((r) => [r.skill_id, r]));
+  let draftsUnevaluated = 0;
   const skills = drafts.map(({ row, draft, models, evidence }) => {
     const summary = evals.get(row.id);
     const pass = summary?.pass ?? 0;
     const total = row.live_cases * models.length;
     const notEvaluated = total - (summary?.recorded ?? 0);
+    if (row.status === 'draft' && notEvaluated > 0) draftsUnevaluated++;
     return {
       uid: row.uid, name: draft.name, ...areaAndLevel(draft, tax.category),
       status: lifecycleStatus(row.status, row.open_evidence ? { evidence_hash: row.open_evidence } : null, evidence),
@@ -215,8 +221,37 @@ adminHqSkills.get('/', async (c) => {
       golden: { pass, total, not_evaluated: notEvaluated, meets_bar: notEvaluated === 0 && meetsBar(pass, total) }, last_eval: summary?.last_run ?? null,
     };
   });
-  return c.json({ skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null });
+  // D4536: the catalogue's coverage, in two more fixed reads whatever the page.
+  const coverage = await libraryCoverage(env, tax.category, page == null ? draftsUnevaluated : null);
+  return c.json({ skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null, coverage });
 });
+
+/** D4536: every skill's scope, status and current published roles and tags, and HQ's pins, as two aggregate reads. */
+async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, draftsWithoutCurrentEvaluation: number | null) {
+  const [rows, adoption] = await Promise.all([
+    env.DB.prepare(`SELECT s.scope, s.status, s.current_version,
+        CASE WHEN s.scope = 'hq' THEN s.slug END AS slug,
+        CASE WHEN s.scope = 'hq' THEN v.roles_json END AS published_roles_json,
+        CASE WHEN s.scope = 'hq' THEN v.taxonomy_json END AS published_tags_json,
+        (SELECT COUNT(*) FROM agent_skill_cases k WHERE k.skill_id = s.id AND k.removed_at IS NULL) AS live_cases,
+        (SELECT COUNT(*) FROM agent_skill_roles r WHERE r.skill_id = s.id) AS draft_roles,
+        (SELECT COUNT(*) FROM agent_skill_tags t WHERE t.skill_id = s.id) AS draft_tags,
+        EXISTS (SELECT 1 FROM agent_skill_reviews q WHERE q.skill_id = s.id AND q.status = 'requested') AS review_requested
+      FROM agent_skills s LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version`).all<CoverageRow>(),
+    env.DB.prepare(`SELECT COUNT(l.id) AS links, COUNT(DISTINCT l.agent_id) AS agents,
+        COALESCE(SUM(CASE WHEN l.version < s.current_version THEN 1 ELSE 0 END), 0) AS behind_current,
+        (SELECT COUNT(*) FROM agent_skills p WHERE p.scope = 'hq' AND p.status = 'published' AND NOT EXISTS (
+          SELECT 1 FROM agent_skill_links l2 JOIN team_agents a2 ON a2.id = l2.agent_id WHERE l2.skill_id = p.id AND a2.status <> 'removed'
+        )) AS published_without_links
+      FROM agent_skill_links l JOIN agent_skills s ON s.id = l.skill_id AND s.scope = 'hq'
+      JOIN team_agents a ON a.id = l.agent_id AND a.status <> 'removed'`).first<AdoptionRow>(),
+  ]);
+  return catalogueCoverage(rows.results ?? [], {
+    category, roleKeys: ROLES.map((r) => r.key), librarySlugs: SKILL_LIBRARY.map((e) => e.slug),
+    adoption: adoption ?? { links: 0, agents: 0, behind_current: 0, published_without_links: 0 },
+    draftsWithoutCurrentEvaluation,
+  });
+}
 
 // D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.
 adminHqSkills.get('/library', async (c) => {

@@ -13,3 +13,13 @@ no database, member content or provider credential store is bound here.
 Deployment uses the root `wrangler.meeting-bot.toml`, independently of the
 site. Runtime image contents are explicitly allowlisted by the Dockerfile;
 this host directory is not copied into the running image.
+
+D5153 (#5153): `/start` answers with a startup fact, `{ok, code, stage,
+runtime_version}`. Before the signed command it waits for the runtime's
+`/healthz` (`ready: true`, and the host's own build when the runtime reports
+one), and it names the boundary a start stopped at: `image_unavailable`,
+`container_start_failed`, `runtime_no_answer`, `runtime_process_exited`,
+`runtime_health_failed`, `runtime_refused` or `runtime_command_timeout`. One
+`meeting_bot.runtime_stage` log line per transition, with codes only. The
+vocabulary and the time budgets live in
+`cloudflare-worker/src/services/meetingBotStartup.ts`.

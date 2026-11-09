@@ -82,9 +82,10 @@ test('D1165: a fee statement opens as a phone sheet; writes need the preview and
     while (form && !m.props(form).onSubmit) form = form.parentNode;
     await m.flush(() => m.props(form).onSubmit({ preventDefault() {} }));
     await m.click('fee-issue');
-    assert.ok(m.by('fee-confirmation'));
+    assert.ok(m.by('fee-flow'), 'D4812 part 5: Issue opens the money flow');
     assert.ok(!m.calls.some(([n]) => n === 'issuePeriod'));
-    await m.click('fee-confirm-submit');
+    await m.click('fee-flow-continue');
+    await m.flush(() => m.props(m.by('fee-flow-confirm')).onSubmit({ preventDefault() {} }));
     assert.deepEqual(m.calls.find(([n]) => n === 'issuePeriod'), ['issuePeriod', 7, '2026Q4', 'digest']);
   } finally { await m.close(); }
 });

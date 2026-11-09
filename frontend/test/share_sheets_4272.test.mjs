@@ -149,7 +149,10 @@ test('ps7n: a variant\'s link goes through the investor-links route with variant
     await v.choose('pitch-share-target', 'variant:var-climate');
     assert.match(v.text(), /the “\[Climate funds\]” variant of v3/);
     await makeLink(v);
-    const posts = v.seen.filter(([k]) => k.startsWith('POST'));
+    // D4598 (#4598) part 2: Create link now also reads the link's own effective content first
+    // (`POST .../preflight/link-cards`, a read, never the link writer) — this is about the ONE
+    // WRITE still going to the variant route, which that read is not.
+    const posts = v.seen.filter(([k]) => k.startsWith('POST') && !k.includes('/preflight/'));
     assert.deepEqual(posts.map(([k]) => k), ['POST /api/decks/6/investor-links'], 'one write, to the variant route');
     const body = posts[0][1];
     assert.equal(body.variant_uid, 'var-climate');
@@ -160,7 +163,7 @@ test('ps7n: a variant\'s link goes through the investor-links route with variant
   const plain = await mount(h(ShareDialog, { projectId: 5, deck: DECK, onClose() {} }), FORM_READS());
   try {
     await makeLink(plain);
-    const posts = plain.seen.filter(([k]) => k.startsWith('POST'));
+    const posts = plain.seen.filter(([k]) => k.startsWith('POST') && !k.includes('/preflight/'));
     assert.deepEqual(posts.map(([k]) => k), ['POST /api/cycles/raise/deck-links'], 'this version: the one link writer, as before');
     assert.equal('variant_uid' in posts[0][1], false);
   } finally { await plain.close(); }
