@@ -3598,9 +3598,11 @@ export const api = {
   // Canvas H7's privileged-action feed, unioned across the four stores that
   // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
   // client-side filter would quietly show a handful of rows and read as
-  // "that is all there is".
-  hqGovernance: (filter) =>
-    request(`/admin/security/governance?filter=${encodeURIComponent(filter || 'all')}`),
+  // "that is all there is". D4803 — the Events workspace's search, date,
+  // actor, outcome and source filters and the Load older cursor (`before`)
+  // go the same way: as query values, never applied to the page in the browser.
+  hqGovernance: (filter, params = {}) =>
+    request(`/admin/security/governance?${new URLSearchParams({ filter: filter || 'all', ...params })}`),
   hqSecurityForceReauth: (reason) =>
     request('/admin/security/force-reauth', { method: 'POST', body: JSON.stringify({ reason }) }),
   // D165 — ONE account, not every account. Same bar as the bulk revoke above
