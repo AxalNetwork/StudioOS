@@ -10,6 +10,7 @@
 export const GOVERNANCE_ACTIONS = Object.freeze([
   'governance_document_created', 'governance_document_viewed', 'governance_document_updated', 'governance_document_status',
   'governance_version_uploaded', 'governance_file_previewed', 'governance_file_downloaded',
+  'governance_relation_added', 'governance_relation_reviewed',
 ] as const);
 
 const STATUS_WORDS: Record<string, string> = { draft: 'Draft', review: 'In review', approved: 'Approved', executed: 'Executed', archived: 'Archived' };
@@ -38,6 +39,9 @@ export function eventOf(row: { action: string; details: unknown; created_at: str
     case 'governance_version_uploaded': line = version ? `Uploaded v${version}${d.signed ? ' as the signed copy' : ''}` : 'Uploaded a version'; break;
     case 'governance_file_previewed': line = version ? `Previewed v${version}` : 'Previewed a file'; break;
     case 'governance_file_downloaded': line = version ? `Downloaded v${version}` : 'Downloaded a file'; break;
+    // D4811 part 8: links to related documents, and a dependant checked against a version.
+    case 'governance_relation_added': line = d.kind === 'template' ? 'Linked a template it governs' : 'Linked a record it governs'; break;
+    case 'governance_relation_reviewed': line = version != null ? `Marked a related document reviewed against v${version}` : 'Marked a related document reviewed'; break;
     default: return null;
   }
   return { action: row.action, line, at: row.created_at ?? null, actor: row.actor_name || null, version };
