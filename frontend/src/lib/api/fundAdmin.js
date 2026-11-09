@@ -1,4 +1,4 @@
-import { request } from '../api.js';
+import { refusalError, request } from '../api.js';
 
 /**
  * D714 (#1779) — the fund administration console's reads. `access()` answers
@@ -38,6 +38,30 @@ export const fundAdminApi = {
    * `q` with their eligibility. Never an email.
    */
   people: (fundId, role, q = '') => request(`/fund-admin/funds/${fundId}/people?role=${encodeURIComponent(role)}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
+  /**
+   * D4812 part 4: Export view — the roster's own filters, every page, as a
+   * CSV file the Worker writes (`GET /api/fund-admin/lps/export`), audited
+   * there. A binary read with the bearer header, as other downloads are.
+   */
+  exportLps: async (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v === undefined || v === null || v === '' || v === false || k === 'page' || k === 'per_page') continue;
+      qs.set(k, v === true ? '1' : String(v));
+    }
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+    const res = await fetch(`/api/fund-admin/lps/export${qs.toString() ? `?${qs}` : ''}`, {
+      credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw await refusalError(res, 'The LP view could not be exported.');
+    const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '')?.[1] || 'fund-admin-lps.csv';
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    return { name };
+  },
   lps: (params = {}) => {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {

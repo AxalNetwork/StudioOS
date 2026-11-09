@@ -20,6 +20,9 @@
  * admins took, newest first, from `admin_audit_log` (`services/fundAdminActivity.ts`),
  * behind the same gate. `?fund=` keeps one fund; `?before=` pages back.
  *
+ * `GET /lps/export` (D4812 part 4) is Export view: the same rows and filters
+ * as `/lps`, every page, as CSV with no email, audited first.
+ *
  * `GET /funds/:id/people?role=gp|ledger&q=` (D4812 part 3) is the person
  * picker's read: who holds the role, by name, for any HQ admin; the
  * candidates with their eligibility for the Super Admin only
@@ -32,6 +35,7 @@ import { AUDIT_UNAVAILABLE, fundAdminOverview } from '../services/fundAdminOverv
 import { fundAdminLps, parseLpQuery } from '../services/fundAdminLps';
 import { fundAdminActivity, parseActivityQuery } from '../services/fundAdminActivity';
 import { fundPeople, parsePeopleQuery } from '../services/fundAdminPeople';
+import { lpsCsv } from '../services/fundAdminLpsCsv';
 import { isSuperAdmin } from '../auth';
 
 const fundAdmin = new Hono<{ Bindings: Env }>();
@@ -43,6 +47,22 @@ fundAdmin.get('/overview', async (c) => {
   const overview = await fundAdminOverview(c.env, user, new Date().toISOString().slice(0, 10));
   if (!overview) return c.json(AUDIT_UNAVAILABLE, 503);
   return c.json(overview);
+});
+
+// D4812 part 4: Export view — the roster's own rows and filters, every page, as CSV. Before `/lps` so the word is never read as a query.
+fundAdmin.get('/lps/export', async (c) => {
+  const user = await requireFundAdminReader(c);
+  const query = parseLpQuery((k) => (k === 'lp' || k === 'page' || k === 'per_page' ? undefined : c.req.query(k)));
+  if (typeof query === 'string') return c.json({ code: 'invalid_lp_query', detail: `The ${query} filter is not valid.` }, 400);
+  const today = new Date().toISOString().slice(0, 10);
+  const roster = await fundAdminLps(c.env, user, query, today, { all: true });
+  if (!roster) return c.json(AUDIT_UNAVAILABLE, 503);
+  if (roster === 'fund_not_administered') return c.json({ code: 'fund_not_administered', detail: 'This fund is not administered here.' }, 404);
+  return new Response(lpsCsv(roster.items), { headers: {
+    'Content-Type': 'text/csv; charset=utf-8',
+    'Content-Disposition': `attachment; filename="fund-admin-lps-${today}.csv"`,
+    'Cache-Control': 'no-store',
+  } });
 });
 
 fundAdmin.get('/lps', async (c) => {
