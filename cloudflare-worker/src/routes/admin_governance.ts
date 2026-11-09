@@ -189,7 +189,7 @@ async function relationView(c: any, r: RelationRow & { reviewer_name?: string | 
     else if (Number(d.confidential) === 1 && !superAdmin) restricted = true;
     else { title = d.title; status = d.status; entity = d.entity_key; category = d.category; }
   } else {
-    const t = await c.env.DB.prepare('SELECT title, category FROM legal_templates WHERE slug = ? AND is_active = 1').bind(ref).first<any>().catch(() => null);
+    const t = await c.env.DB.prepare('SELECT title, category FROM legal_templates WHERE slug = ? AND is_active = 1').bind(ref).first().catch(() => null);
     if (!t) missing = true; else { title = t.title; category = t.category ?? null; }
   }
   return {
