@@ -147,7 +147,7 @@ test("an admin's paths outside the data room keep their rules", async () => {
     for (const slug of ['cap-table', 'use-of-funds', 'capital-relationships']) {
       assert.equal((await f.call(ADMIN, 'GET', `/modules/${slug}?project=1`)).status, 200, slug);
     }
-    const r = await f.call(ADMIN, 'PUT', '/use-of-funds?project=1', { sections: [{ key: 'product', pct: 100 }] });
+    const r = await f.call(ADMIN, 'PUT', '/use-of-funds?project=1', { expected_revision: 0, sections: [{ key: 'product', pct: 100 }] });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal((await f.call(ADMIN, 'POST', '/readiness/rescore?project=1', {})).status, 200);
     assert.equal((await f.call(INVESTOR, 'GET', '/overview?project=1')).status, 403, 'an investor reaches nothing, as before');

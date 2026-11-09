@@ -11,7 +11,7 @@ import { gapLine, valueText, fillLink } from '../pitch/sourcesModel';
 import { BoundFigure, SectionDot, SourceKind, TypedClaim } from './StoryComponents';
 import {
   AI_OFF_LINE, AI_OFF_SUB, ASK_FOOT, ASK_MODES, BINDINGS_UNREADABLE, DRAFT_REMOVED, INSERT_FOOT, LIVE_DECK, NOTE_MAX, NOTHING_TO_SAVE, NOT_RECORDED,
-  PROPOSAL_NOTE, SAVE_FAILED, SECTION_COUNT, SECTION_OPTION, STORY_UNREADABLE,
+  PROPOSAL_NOTE, saveBody, saveFailure, SECTION_COUNT, SECTION_OPTION, STORY_UNREADABLE,
   audienceOf, bindingFromItem, bindingsBySection, boundChip, cannotInsert, draftOf, inlineSegments, insertAt, insertGroups, isLiveDeck,
   moveSection, runRefusal, saveDialog, savePlan, sectionDot, storySections, unplacedFigures,
 } from './storyModel';
@@ -308,29 +308,20 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   const figures = (cur?.bindings || []).map((b) => ({ binding: b, view: boundChip(b, srcState) }));
 
   const doSave = async () => {
-    setSaving({ open: true, busy: true, error: null });
-    for (const w of writes) {
-      try {
-        await narrativeApi.saveSection(projectId, version, w.section, w.body);
-      } catch (e) {
-        setSaving({ open: true, busy: false, error: `${SAVE_FAILED} ${w.label}: ${userFacingRaiseError(e, { fallback: 'the save was refused' })}.` });
-        return;
-      }
+    setSaving({ open: true, busy: true, error: null, conflict: false });
+    // D5069: one request — the sections and the answers they carry succeed or fail together.
+    const body = saveBody(writes, pending, read.data);
+    try {
+      await narrativeApi.saveVersion(projectId, version, body);
+    } catch (e) {
+      const f = saveFailure(e);
+      setSaving({ open: true, busy: false, error: f.text, conflict: f.conflict });
+      return;
     }
-    // An accepted "Answer it" draft, now saved, is that objection's answer (option A).
     const written = new Set(writes.map((w) => w.section));
-    const failed = [];
-    for (const [key, p] of Object.entries(pending)) {
-      if (!written.has(p.section)) continue;
-      try {
-        await narrativeApi.recordAnswer(projectId, key, { version, section: p.section, how: 'eadwyn' });
-      } catch (e) {
-        failed.push(`“${p.text}” (${userFacingRaiseError(e, { fallback: 'the write was refused' })})`);
-      }
-    }
     setPending((now) => Object.fromEntries(Object.entries(now).filter(([, p]) => !written.has(p.section))));
-    setAnswerNotice(failed.length ? `Saved, but which section answers ${failed.join(' and ')} was not recorded. Mark it answered from Objections heard.` : null);
-    setSaving({ open: false, busy: false, error: null });
+    setAnswerNotice(null);
+    setSaving({ open: false, busy: false, error: null, conflict: false });
     // The read again remounts the panel, which reads the objections again.
     retry();
   };

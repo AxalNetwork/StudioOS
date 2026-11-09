@@ -29,6 +29,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const WORKER = read('cloudflare-worker/src/routes/research.ts');
 const LIBRARY = codeOnly(read('frontend/src/pages/research/LibraryZone.jsx'));
+const STATES = codeOnly(read('frontend/src/pages/research/researchStates.js'));
 const API = codeOnly(read('frontend/src/lib/api.js'));
 
 /** The `GET /documents` handler, bounded at the next route declaration. */
@@ -84,7 +85,11 @@ test('“in Ask” is computed by the worker, and a shared document is never in 
     'the reach is no longer computed from BOTH the provenance and the index state');
   assert.match(WORKER, /read_only: source === 'client',/,
     'the read-only flag is gone from the payload');
-  assert.match(LIBRARY, /d\.in_ask/, 'the page no longer reads the computed reach');
+  // D3701: the page reads the reach through `answerabilityOf`, which reads only `in_ask`.
+  assert.match(LIBRARY, /answerabilityOf\(d\)/, 'the page no longer reads the computed reach');
+  assert.match(STATES, /const inAsk = d\?\.in_ask === true;/, 'answerability is no longer the worker’s verdict');
+  assert.doesNotMatch(STATES, /ANSWERABLE_STATES|index_state === 'indexed'/,
+    'the state module re-derives answerability from the index state and will call a shared document citable');
   assert.doesNotMatch(LIBRARY, /d\.index_state === 'indexed'/,
     'the page re-derives answerability from the index state and will call a shared document citable');
 });

@@ -279,8 +279,13 @@ export function inputsFromDraft(d) {
   };
 }
 
+/** D5069: the scenario changed after it was opened (another tab, another person). Nothing was written. */
+export const isChangedSinceOpen = (e) => e?.status === 409 && (e?.code === 'changed_since_open' || e?.data?.error === 'changed_since_open');
+export const SCENARIO_CHANGED = 'This scenario was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, or copy your inputs first to keep them.';
+
 /** The route's refusal, as the sentences it carries. */
 export function variantSaveErrors(e) {
+  if (isChangedSinceOpen(e)) return [SCENARIO_CHANGED];
   const list = raiseValidationErrors(e);
   if (list.length) return list;
   if (e?.status === 402) return ['Editing a scenario needs the Raise + Grow plan.'];

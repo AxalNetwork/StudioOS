@@ -218,6 +218,13 @@ function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
 }
 
 const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
+/** D5069: the plan changed after the dialog opened. Nothing was written. */
+export const isStale = (e) => e?.status === 409 && (e?.code === 'changed_since_open' || e?.data?.code === 'changed_since_open');
+/** Review latest: closes the dialog and reads the plan again; the person's typed values stay in their head, not in a stale save. */
+function ReviewLatest({ onReview }) {
+  return <button type="button" className="self-start rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-bold text-axal-ink hover:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" onClick={onReview} data-testid="uof-review-latest">Review latest</button>;
+}
+export const REVIEWED = 'Showing the latest plan. Your change was not saved; make it again from here.';
 
 /** UF3: the raise, the five shares with their amounts, the live total and the target runway. */
 export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api = useOfFundsApi }) {
@@ -228,6 +235,7 @@ export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api
   const [custom, setCustom] = useState(![18, 24].includes(Number(base?.target_runway_months ?? 18)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
   const check = splitCheck(shares);
   const cents = centsFromTyped(amount);
   const months = Number(target);
@@ -235,9 +243,9 @@ export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api
   const save = async () => {
     setBusy(true); setError('');
     try {
-      await api.saveSplit(projectId, { amount_to_raise_cents: cents, runway_months: months, sections: SECTIONS.map((s) => ({ key: s.key, pct: Number(shares[s.key]) })) });
+      await api.saveSplit(projectId, { amount_to_raise_cents: cents, runway_months: months, sections: SECTIONS.map((s) => ({ key: s.key, pct: Number(shares[s.key]) })), expected_revision: base?.revision });
       onSaved('The split is saved. The deck’s Ask slide is marked out of sync.');
-    } catch (e) { setError(refusal(e)); }
+    } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
     setBusy(false);
   };
   return (
@@ -285,27 +293,29 @@ export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api
         </fieldset>
         <p className={`m-0 text-[12px] ${MUTED}`}>The pitch deck’s Ask slide reads this split. Saving marks it out of sync.</p>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-split-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
       </div>
     </Sheet>
   );
 }
 
 /** UF6: a milestone names what a section's money pays for, by a month. An empty cost stays Not costed, never 0. */
-export function AddMilestoneDialog({ projectId, onClose, onSaved, api = useOfFundsApi }) {
+export function AddMilestoneDialog({ projectId, revision, onClose, onSaved, api = useOfFundsApi }) {
   const [label, setLabel] = useState('');
   const [section, setSection] = useState('product');
   const [by, setBy] = useState('');
   const [cost, setCost] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
   const cents = cost.trim() === '' ? null : centsFromTyped(cost);
   const byOk = by === '' || /^\d{4}-(0[1-9]|1[0-2])$/.test(by);
   const save = async () => {
     setBusy(true); setError('');
     try {
-      await api.createMilestone(projectId, { label: label.trim(), category_key: section, due_on: by || null, cost_cents: cents });
+      await api.createMilestone(projectId, { label: label.trim(), category_key: section, due_on: by || null, cost_cents: cents, expected_revision: revision });
       onSaved(cents == null ? 'The milestone is added. It stays Not costed until you add a cost.' : 'The milestone is added.');
-    } catch (e) { setError(refusal(e)); }
+    } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
     setBusy(false);
   };
   return (
@@ -323,6 +333,7 @@ export function AddMilestoneDialog({ projectId, onClose, onSaved, api = useOfFun
           <input className={`${FIELD} ${MONO}`} inputMode="decimal" placeholder="Leave empty to keep it Not costed" value={cost} onChange={(e) => setCost(e.target.value)} data-testid="uof-milestone-cost" />
           <span className={`text-[12px] ${MUTED}`}>An empty cost stays Not costed, never 0.</span></label>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-milestone-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
       </div>
     </Lightbox>
   );
@@ -335,13 +346,14 @@ export function RoundSizeDialog({ projectId, plan, onClose, onSaved, api = useOf
   const [pick, setPick] = useState(options.find((o) => o.chosen)?.key ?? options[0]?.key ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
   const chosen = options.find((o) => o.key === pick);
   const save = async () => {
     setBusy(true); setError('');
     try {
-      await api.updateScenario(projectId, base.id, { amount_to_raise_cents: chosen.cents });
+      await api.updateScenario(projectId, base.id, { amount_to_raise_cents: chosen.cents, expected_revision: base.revision });
       onSaved(`This plan now raises ${chosen.raise}. Your split keeps its shares.`);
-    } catch (e) { setError(refusal(e)); }
+    } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
     setBusy(false);
   };
   return (
@@ -356,6 +368,7 @@ export function RoundSizeDialog({ projectId, plan, onClose, onSaved, api = useOf
         )) : <p className={`m-0 text-[12.5px] ${MUTED}`}>No recorded round size to choose from.</p>}
         <p className={`m-0 text-[12px] ${MUTED}`}>Choosing a size changes this plan’s raise. Your split keeps its shares.</p>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-round-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
       </div>
     </Sheet>
   );

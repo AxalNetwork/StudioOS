@@ -33,7 +33,7 @@ export function AdditionalInsights({ lead }) {
   return (
     <section className="flex flex-col gap-2 rounded-[12px] border border-dashed border-axal-hairline px-[18px] py-3 dark:border-gray-700" data-testid="community-additional-insights">
       <button type="button" aria-expanded={open} aria-controls="community-insights-list" onClick={() => setOpen((x) => !x)}
-        className="flex min-h-[32px] w-full items-center justify-between gap-3 text-left text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="community-insights-toggle">
+        className="flex min-h-[32px] max-md:min-h-[44px] w-full items-center justify-between gap-3 text-left text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="community-insights-toggle">
         <span>{lead ? `${lead} · ${label}` : label}</span>
         <span className="text-[12px] text-axal-violet dark:text-violet-300">{open ? 'Hide ▴' : 'Show ▾'}</span>
       </button>

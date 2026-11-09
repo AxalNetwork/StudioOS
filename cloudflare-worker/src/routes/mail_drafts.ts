@@ -94,7 +94,7 @@ async function press(c: Context<any>, user: User, b: Record<string, unknown>, pa
     return refuse(c, 409, { code: 'estimate_required', message, extra: { reason: approved.why, estimate: await fresh() } });
   }
   // D1343: the run and the store are `runDraft`'s, shared with the MCP tool `mail_draft`.
-  const out = await runDraft(c.env, user, { ask, pack, sources, blocks, parent, rail: opts.rail });
+  const out = await runDraft(c.env, user, { ask, pack, sources, blocks, parent, rail: opts.rail, pinMicrousd: approved.quote.h });
   if (out.ok) return c.json({ draft: out.draft }, 201);
   if (out.refusal !== null) return refuseRun(c, { refusal: out.refusal, error: out.error }) ?? refuse(c, 503, { code: 'draft_unreadable', message: 'Eadwyn could not draft this email. Try again.' });
   return refuse(c, 503, { code: out.code, message: out.message });

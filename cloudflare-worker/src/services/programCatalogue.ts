@@ -38,7 +38,7 @@ import { ownScope, previousAxis, scopeLabel } from './adminInsights';
 import { SLA_PAST_HOURS, SLA_DUE_SOON_HOURS } from './approvalSources';
 import { branchRead } from './branches';
 import { countsOnly, insightsScopes } from './insightsScope';
-import { listPrograms, isRegistryKey, type ProgramKey, type ProgramRow, PROGRAM_STATUSES } from './programRegistry';
+import { extrasView, listPrograms, isRegistryKey, registryExtras, type ProgramKey, type ProgramRow, PROGRAM_STATUSES } from './programRegistry';
 import { grantFieldOf, grantStates, type GrantViewer } from './programGrantStates';
 
 export const PROGRAM_WEEKS = [4, 12, 52] as const;
@@ -584,7 +584,13 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
     mentors, coverage, notAdvisor, live, learning, testing,
     people, joinsReferrals, joinsLearning, joinsLab, credits, influencers,
   ] = await Promise.all([
-    block('The program registry', async () => ({ rows: await listPrograms(env, { superAdmin: viewer.superAdmin, licenceUid: viewer.licenceUid ?? null }) })),
+    // D4873: member access and modules ride beside the registry read; their own failure leaves the rows readable.
+    block('The program registry', async () => {
+      const [rows, extras] = await Promise.all([
+        listPrograms(env, { superAdmin: viewer.superAdmin, licenceUid: viewer.licenceUid ?? null }), registryExtras(env),
+      ]);
+      return { rows, extras };
+    }),
     block('Cohort applications', () => cohortQueue(env, nowMs)),
     block('Refer & Earn reviews', () => referralQueue(env, nowMs)),
     block('Perk listings in review', () => perkQueue(env, nowMs)),
@@ -654,6 +660,7 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
         rows: rows.map((r) => ({
           key: r.key, group: r.grp, name: r.name, purpose: r.purpose ?? null, who: r.who ?? null,
           join_method: r.join_method ?? null, status: r.status, position: Number(r.position),
+          ...extrasView(registry.extras, r.key),
           ...(grants ? { grant: grantFieldOf(grants, r.key) } : {}),
           ...cardFigures(r.key, viewer, q, {
             mentors, coverage, notAdvisor, live, learning, claims: claims.available ? { available: true, count: claims.count } : claims,

@@ -16,6 +16,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const DIR = resolve(process.cwd(), 'frontend/src/pages/advisor/advisory');
 const pages = () => readdirSync(DIR).filter((f) => f.endsWith('.jsx'));
@@ -122,9 +123,8 @@ test('an advisor reviews their counterparty, never themselves', () => {
   // else — but nothing an advisor writes may be aggregated into a number
   // presented as THEIR rating. Those are different claims and the schema can
   // already tell them apart.
-  const advisors = readFileSync(
-    resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors.ts'), 'utf8',
-  );
+  // #4715: the advisor router is advisors.ts plus the route modules it mounts.
+  const advisors = advisorRoutesSource();
   assert.match(advisors, /reviewer_role = isAdvisor && !isOwner \? 'advisor' : 'founder'/,
     'the worker must decide the reviewer role from the caller, never from the body');
 
@@ -156,9 +156,8 @@ test('an advisor reviews their counterparty, never themselves', () => {
 });
 
 test('the enriched booking list is scoped to the caller in the worker', () => {
-  const advisors = readFileSync(
-    resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors.ts'), 'utf8',
-  );
+  // #4715: the advisor router is advisors.ts plus the route modules it mounts.
+  const advisors = advisorRoutesSource();
   assert.match(
     advisors, /WHERE b\.advisor_id = \?/,
     '/me/bookings must filter by the resolved advisor id',

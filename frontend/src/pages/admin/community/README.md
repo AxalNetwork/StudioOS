@@ -21,7 +21,9 @@ keeps the query and hash and adds `?moved=held-community` for CM13's notice.
     (Manage Community's six doors stay in `AdminCommunity.jsx`, literal links
     the shell's reachability guards read there);
   - `RecentCard.jsx`: Recent activity and its own read;
-  - `useCommunityReads.js`: the page's one read, checked against its contract.
+  - `useCommunityReads.js`: the page's one read, checked against its contract;
+  - `PhoneDashboard.jsx`: D4820 part 2, CM09's phone hierarchy below 768px
+    (its pure lines in `model/phone.js`).
 - `model/` — the model, one module per domain (its README).
 - `communityModel.js` — the model's front door, re-exporting `model/`. Pure. Turns the Community read (D931) into tiles and
   cards, each `ready`, `loading`, `unreadable` or `unrecorded`; the copy the

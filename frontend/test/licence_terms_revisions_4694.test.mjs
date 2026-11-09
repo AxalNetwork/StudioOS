@@ -90,15 +90,17 @@ test('the schedule form sends only changed terms with the revision it read, and 
 
 // 4 ───────────────────────────────────────────────────────────────────────────
 test('the Terms editor is wired to the dirty-field form, not to a full-row save', () => {
-  // Mutations checked: the editor sending every field again; the reconcile effect removed; the reason box removed.
-  const page = readFileSync(new URL('../src/pages/admin/licences/CommercialTerms.jsx', import.meta.url), 'utf8');
-  const editor = page.slice(page.indexOf('function TermsEditor('), page.indexOf('function TermsEditor(') + 6000);
-  assert.match(editor, /buildCoreSave\(\{ form: st\.form, base: st\.base, revision: st\.revision, reason \}\)/);
-  assert.match(editor, /setSt\(\(cur\) => reconcileCoreForm\(cur, licence\)\)/);
-  assert.match(editor, /e\?\.code === 'terms_conflict'/);
-  assert.match(editor, /data-testid="licence-terms-reason"/);
-  assert.doesNotMatch(editor, /annual_fee_cents: f\.annual_fee === ''/, 'the old full-row body is gone');
-  assert.match(page, /disabled=\{busy \|\| dirty\.length === 0\}/, 'nothing to save until something changed');
+  // D4819: step 4's editor is now the Terms section (licences/TermsWorkspace.jsx), whose amendment is a snapshot
+  // session: instead of reconciling a refreshed licence into the open form, a stale write is refused and the
+  // conflict view shows start, now and yours (licence_terms_amend_d4819 mounts it). The rules pinned here stand.
+  // Mutations checked: the editor sending every field again; the conflict branch removed; the reason box removed.
+  const model = readFileSync(new URL('../src/pages/admin/licenceTermsAmendModel.js', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../src/pages/admin/licences/TermsWorkspace.jsx', import.meta.url), 'utf8');
+  assert.match(model, /buildCoreSave\(\{ form: session\.core\.form, base: session\.core\.base, revision: session\.core\.revision, reason: why \}\)/);
+  assert.match(page, /e\?\.code === 'terms_conflict'/);
+  assert.match(page, /data-testid="licence-terms-reason"/);
+  assert.doesNotMatch(page + model, /annual_fee_cents: f\.annual_fee === ''/, 'the old full-row body is gone');
+  assert.match(page, /disabled=\{!n\} onClick=\{review\}/, 'nothing to review until something changed');
 });
 
 // 5 ───────────────────────────────────────────────────────────────────────────

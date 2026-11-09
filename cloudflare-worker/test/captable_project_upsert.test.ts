@@ -244,7 +244,7 @@ test('Worker: PUT refuses to bind a second scenario to a project that already ha
 
   const res = await req(env, token, '/scenarios/uid-free', {
     method: 'PUT',
-    body: JSON.stringify({ name: 'Free', project_id: PROJECT_ID, inputs: INPUTS_V1 }),
+    body: JSON.stringify({ name: 'Free', project_id: PROJECT_ID, inputs: INPUTS_V1, expected_revision: NOW }),
   });
   assert.equal(res.status, 409);
   const body = (await res.json()) as any;
