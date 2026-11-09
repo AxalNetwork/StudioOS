@@ -37,6 +37,8 @@ import { sha256Hex } from '../src/rpc/secret.ts';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
 const MIG_263 = read('cloudflare-worker/sql/migrations/263_branch_invitations.sql');
+// D5043 — the destination keeps one invitation per HQ move (`move_ref`).
+const MIG_MOVE_REF = read('cloudflare-worker/sql/migrations/202611091211_branch_invitation_move_ref.sql');
 
 const HQ_SECRET = 'hq-rpc-secret-value-for-tests';
 const MOVER = 51;
@@ -75,6 +77,7 @@ function branchDb() {
                                 actor TEXT, user_id INTEGER);
   `);
   db.exec(MIG_263);
+  db.exec(MIG_MOVE_REF);
   const u = db.prepare('INSERT INTO users (id, role, is_active, name, email) VALUES (?,?,?,?,?)');
   u.run(MOVER, 'founder', 1, 'Remy Blanc', 'remy@fr.example');
   u.run(GONE, 'founder', 0, 'Already Gone', 'gone@fr.example');
@@ -97,6 +100,7 @@ function destinationDb() {
                                 actor TEXT, user_id INTEGER);
   `);
   db.exec(MIG_263);
+  db.exec(MIG_MOVE_REF);
   return db;
 }
 

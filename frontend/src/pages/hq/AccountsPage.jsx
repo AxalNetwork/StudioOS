@@ -12,6 +12,7 @@ import { useAuth } from '../../hooks/useAuthSync';
 import { reportError } from '../../lib/log';
 import { branchCoverageLine } from './hqTeamBranchModel';
 import { leaveHq } from './handoverNote';
+import { useTeamInvalidation } from './team/teamInvalidation';
 
 /**
  * HQ · Team — the cross-tenant people desk (canvas H4, H9 since D138, H20 since D221).
@@ -45,7 +46,9 @@ export default function HqAccountsPage({ onImpersonate }) {
   // Granting or revoking the elevation changes a badge in the Team table, so
   // the two are kept in step rather than left to disagree until a reload. The
   // `onSaved` idiom D134's `AdminsEditor` already uses, one level up.
-  const [reloadKey, setReloadKey] = useState(0);
+  // D5044 — every act on this page names what it changed (`team/teamInvalidation.js`) and the
+  // page re-reads exactly those: the roster, the directory, or both. Never a page reload.
+  const { keys, invalidate } = useTeamInvalidation();
   // D221 — what the Team table read, handed up so the rail can say it. The
   // table's own three states: undefined loading, null unreadable, an object.
   const [team, setTeam] = useState(undefined);
@@ -121,12 +124,13 @@ export default function HqAccountsPage({ onImpersonate }) {
           </p>
         ) : (
           <SuperAdminHolders
-            onChanged={() => setReloadKey((n) => n + 1)}
+            onChanged={() => invalidate('holder_change')}
+            viewerId={user?.id ?? null}
             onTransferred={(name) => leaveHq({ name, user, setUser, refresh, onRefreshError: (e) => reportError('hq-team:handover-refresh', e) })}
           />
         )}
 
-        <HqTeamTable reloadKey={reloadKey} onLoaded={setTeam} />
+        <HqTeamTable reloadKey={keys.roster} onLoaded={setTeam} onChanged={invalidate} />
 
         <HqTeamActions viewAs={viewAs} />
 
@@ -137,7 +141,7 @@ export default function HqAccountsPage({ onImpersonate }) {
               read the same word on every line. A branch&rsquo;s accounts live on its own database and are
               asked for through the Team search above.
             </p>
-            <UsersConsole onImpersonate={onImpersonate} />
+            <UsersConsole onImpersonate={onImpersonate} reloadKey={keys.directory} onChanged={() => invalidate('directory_change')} />
           </>
         )}
       </div>

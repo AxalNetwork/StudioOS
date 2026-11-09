@@ -28,14 +28,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import { supportNoticeOutcome, SupportNoticeOutcome } from '../src/pages/hq/HqTeamTable.jsx';
 
-const TEAM = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/HqTeamTable.jsx'), 'utf8'));
+// D5044 — the Support form is its own file, `team/SupportSessionAction.jsx` (HqTeamTable re-exports
+// the two names imported above). The form's body is its default export.
+const SUPPORT = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/team/SupportSessionAction.jsx'), 'utf8'));
 
-/** `MoveHit`'s own body, bounded by the next top-level function. */
+/** The Support form's own body. */
 function moveHit() {
-  const a = TEAM.indexOf('export function MoveHit(');
-  assert.ok(a >= 0, 'MoveHit is gone');
-  const b = TEAM.indexOf('\nfunction ', a + 1);
-  return TEAM.slice(a, b > a ? b : TEAM.length);
+  const a = SUPPORT.indexOf('export default function SupportSessionAction(');
+  assert.ok(a >= 0, 'the Support form is gone');
+  return SUPPORT.slice(a);
 }
 
 const line = (told) => renderToStaticMarkup(React.createElement(SupportNoticeOutcome, { told }));
@@ -94,7 +95,9 @@ test('D530: the form keeps the route\'s target_notified as answered and draws th
   // Starts as nothing reported, never as told.
   assert.match(body, /const \[supportTold, setSupportTold\] = useState\(undefined\);/);
   // Set from the route's own answer, in the same success branch as the URL.
-  const submit = body.slice(body.indexOf('api.hqSupportSession('), body.indexOf('} catch (ex) {', body.indexOf('api.hqSupportSession(')));
+  // D5044 — the request runs inside the shared action model's `perform`; its success path is that
+  // function's body, up to the value it returns.
+  const submit = body.slice(body.indexOf('api.hqSupportSession('), body.indexOf('return res;', body.indexOf('api.hqSupportSession(')));
   assert.match(submit, /setSupportUrl\(res\.open_url\);\s*setSupportTold\(res\?\.target_notified\);/,
     'the form does not keep target_notified from the answer that opened the session');
   assert.doesNotMatch(body, /setSupportTold\((?!res\?\.target_notified\))/, 'something else writes supportTold');
