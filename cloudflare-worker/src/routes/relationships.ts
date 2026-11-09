@@ -17,6 +17,8 @@
  *   PUT  /intro-requests/:uid/follow-up    { due_on } — my own follow-up on it
  *   POST /intro-requests/:uid/follow-up/done
  *   POST /intro-requests/:uid/follow-up/snooze { until }
+ *   POST /intro-requests/:uid/delivery/reconcile  D4604: the teammate records a delivery the mail server already
+ *        accepted as made, from that send operation; nothing is sent. 409 while the send is unconfirmed or did not go out
  * Made is recorded when the teammate sends the intro from the Email composer
  * (`POST /api/mail/send` with `intro_uid`, D4329), never by a press here.
  *
@@ -33,8 +35,8 @@ import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import {
-  decideIntro, followUpDone, introRequests, myTeams, recordOutcome, RelationshipRefusal, requestIntro, setFollowUp, setShare, snoozeFollowUp,
-  relationshipSummary, whoKnows, whoKnowsQuery, withdrawIntro,
+  decideIntro, followUpDone, introRequests, myTeams, reconcileIntroDelivery, recordOutcome, RelationshipRefusal, requestIntro, setFollowUp, setShare,
+  snoozeFollowUp, relationshipSummary, whoKnows, whoKnowsQuery, withdrawIntro,
 } from '../services/relationships';
 import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
@@ -189,6 +191,12 @@ relationships.post('/intro-requests/:uid/follow-up/snooze', async (c) => {
   const user = await member(c);
   if (user instanceof Response) return user;
   try { return c.json({ request: await snoozeFollowUp(c.env, user, c.req.param('uid'), await body(c)) }); } catch (e) { return failure(c, e); }
+});
+
+relationships.post('/intro-requests/:uid/delivery/reconcile', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try { return c.json({ request: await reconcileIntroDelivery(c.env, user, c.req.param('uid')) }); } catch (e) { return failure(c, e); }
 });
 
 // D4330: one press of a draft button. The input is read under the access rule first, so a request or a

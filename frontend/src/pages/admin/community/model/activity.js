@@ -57,6 +57,36 @@ export function buildActivity(reads) {
     chart: { type: 'lines', series, labels, currentIndex: current },
     missing: missing.length ? `${missing.join(', ')} could not be read, so ${missing.length === 1 ? 'it is' : 'they are'} not drawn. That is not the same as none.` : null,
     sentence: biggestChange(totals, o.data.weeks),
+    // D4820 part 6 (CM01, CM03): the lead sentence, total participation against the period before.
+    insight: participationInsight(totals, missing, o.data.weeks),
+  };
+}
+
+/**
+ * D4820 part 6 (CM01, CM03) — total participation (registrations, applications
+ * and expert bookings together) against the same weeks before, in one
+ * sentence. When a series could not be read the total is withheld and the
+ * sentence says why: leaving it out would understate it, so no total is
+ * drawn. A period before with none gets no percentage, never one from a zero.
+ */
+export function participationInsight(totals, missing, weeks) {
+  if (missing.length) {
+    const what = missing.map((m) => m.toLowerCase()).join(' and ');
+    return { kind: 'withheld', text: `Total participation isn’t shown: ${what} couldn’t be read, and leaving ${missing.length === 1 ? 'it' : 'them'} out would understate it.` };
+  }
+  if (!totals.length) return null;
+  const now = totals.reduce((t, x) => t + x.window, 0);
+  const before = totals.reduce((t, x) => t + x.previous, 0);
+  if (before === 0) {
+    return now === 0
+      ? { kind: 'none', text: `No participation was recorded in these ${weeks} weeks or ${beforeLabel(weeks)}.` }
+      : { kind: 'new', text: `${nf(now)} registrations, applications and bookings in these ${weeks} weeks; none in ${beforeLabel(weeks)}.` };
+  }
+  const p = Math.round(((now - before) / before) * 100);
+  if (p === 0) return { kind: 'same', text: `Participation held level with ${beforeLabel(weeks)}: ${nf(now)} this period, this week so far.` };
+  return {
+    kind: p > 0 ? 'up' : 'down',
+    text: `Participation ${p > 0 ? 'increased' : 'decreased'} ${Math.abs(p)}% compared with ${beforeLabel(weeks)}: ${nf(now)} against ${nf(before)}, this week so far.`,
   };
 }
 
