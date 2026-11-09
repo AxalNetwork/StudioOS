@@ -32,8 +32,9 @@ import { toUtcInstant } from '../../lib/notices';
 import { agreementOf } from './licenceTermsAmendModel';
 import { renewalApproaching, renewalCell, territoryCell } from './licenceLedgerModel';
 import { money } from './licenceFeeInvoicesModel';
+import { NOT_RECORDED } from '../../lib/absence';
 
-export const NOT_RECORDED = 'Not recorded';
+export { NOT_RECORDED };
 export const UNAVAILABLE = 'Unavailable';
 export const NOT_INSTRUMENTED = 'Not instrumented';
 export const READING = 'Reading…';
