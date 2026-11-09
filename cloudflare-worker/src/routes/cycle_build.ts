@@ -220,7 +220,13 @@ const FEATURE_COLS = `SELECT f.id, f.title, f.added_value, f.effort, f.pain_grou
  * search, or a sort on anything but an ordinal key reads every record and
  * pages in memory, as before.
  */
-type ListSql = { keys: Record<string, string>; orders: Record<string, readonly string[]>; defaultSort: string; readOrder: string };
+type ListSql = { keys: Record<string, string>; orders: Record<string, readonly string[]>; defaultSort: string; readOrder: string;
+  /**
+   * A key whose filter is not its sort expression: `pageBuildRows` lowercases a
+   * filtered value but ranks it as stored. `values` are the only filter values
+   * SQL answers; any other value pages in memory.
+   */
+  filters?: Record<string, { sql: string; values: readonly string[] }> };
 type PageSql = { where: string; binds: string[]; order: string; page: number };
 
 /** The SQL that answers this query's page, or null when it must be paged in memory. */
@@ -230,10 +236,11 @@ function listPageSql(list: ListSql, query: Query): PageSql | null {
   for (const part of (query.filter ?? '').split(',').filter(Boolean)) {
     const at = part.indexOf(':');
     if (at <= 0) continue;
-    const key = part.slice(0, at);
-    if (!Object.hasOwn(list.keys, key)) return null;
-    where.push(' AND COALESCE(' + list.keys[key] + ", '') = ?");
-    binds.push(part.slice(at + 1).toLocaleLowerCase());
+    const key = part.slice(0, at), wanted = part.slice(at + 1).toLocaleLowerCase();
+    const own = list.filters && Object.hasOwn(list.filters, key) ? list.filters[key] : null;
+    if (own ? !own.values.includes(wanted) : !Object.hasOwn(list.keys, key)) return null;
+    where.push(' AND COALESCE(' + (own ? own.sql : list.keys[key]) + ", '') = ?");
+    binds.push(wanted);
   }
   const sort = query.sort || list.defaultSort;
   const desc = sort.startsWith('-'); const key = desc ? sort.slice(1) : sort;
@@ -532,44 +539,104 @@ async function prototypeGithub(env: Env, p: Project) {
   }
 }
 
-async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
-  const items = rows(await env.DB.prepare(
+/**
+ * #4603 part 2b (D4603): Product roadmap's items. Column sorts by its stored
+ * value (`pageBuildRows` ranks the key as stored) and filters by it lowercased
+ * (as `pageBuildRows` compares). SQL's `LOWER` is ASCII-only, so only the four
+ * column values filter in SQL: no non-ASCII character lowercases to a letter
+ * of now, next, later or done, so `LOWER` and `toLocaleLowerCase` agree on them.
+ * Theme and KPI are free text and filter in memory.
+ */
+/** The four columns, in board order: the list's ordinal sort, and what the writers accept (D690). */
+const ROADMAP_COLUMNS = ['now', 'next', 'later', 'done'] as const;
+const ROADMAP_FROM = `FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id
+      WHERE o.project_id = ?`;
+const ROADMAP_COLS = 'SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id, u.name AS owner';
+const ROADMAP_LIST: ListSql = {
+  keys: { column: 'o.kanban_status' }, orders: { column: ROADMAP_COLUMNS }, defaultSort: 'column', readOrder: 'o.sort_order, o.id',
+  filters: { column: { sql: 'LOWER(o.kanban_status)', values: ROADMAP_COLUMNS } },
+};
+const isPosthogKpi = (k: unknown) => typeof k === 'string' && k.startsWith('posthog-');
+function roadmapRow(i: any, kpiWords: (k: unknown) => unknown): RecordRow {
+  // Moves reads the feedback theme an item answers and the KPI it moves.
+  return record(i.id,
+    { item: i.objective, column: i.kanban_status, moves: [i.feedback_theme, kpiWords(i.kpi_key)].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
+    { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
+    { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
+      kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null });
+}
+/** Every roadmap item, in read order. The in-memory path, and what part 2b's tests compare the SQL page against. */
+export async function roadmapItemRows(env: Env, projectId: number): Promise<RecordRow[]> {
+  const items = await roadmapItems(env, projectId);
+  const kpiWords = await roadmapKpiWords(env, projectId, items.some(x => isPosthogKpi(x.kpi_key)));
+  return items.map(i => roadmapRow(i, kpiWords));
+}
+async function roadmapItems(env: Env, projectId: number): Promise<any[]> {
+  // A literal, so the schema guard reads its columns (the paged read is built and is not read by it).
+  return rows(await env.DB.prepare(
     `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id,
             u.name AS owner
        FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id
       WHERE o.project_id = ? ORDER BY o.sort_order, o.id`,
-  ).bind(p.id).all<any>());
-  const moves = rows(await env.DB.prepare(
-    `SELECT m.okr_id, m.to_status, m.moved_at FROM okr_column_moves m
+  ).bind(projectId).all<any>());
+}
+/** D1606: a PostHog KPI reads its value and source, or why it has none, never its key. Read when any item names one, as before. */
+async function roadmapKpiWords(env: Env, projectId: number, posthogNamed: boolean): Promise<(k: unknown) => unknown> {
+  const posthog = posthogNamed ? await posthogKpiTexts(env, projectId) : new Map<string, string>();
+  return (k: unknown) => (isPosthogKpi(k) ? posthog.get(k as string) ?? 'PostHog metric · Not recorded: no longer tracked' : k);
+}
+
+async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+  // #4603 part 2b: the card and facts are aggregates; neither the overview nor the card reads an item row.
+  // One row per stored column value: the Now/Next/Later/Done counts, the total, and whether any item names a PostHog KPI.
+  const byColumn = rows(await env.DB.prepare(
+    `SELECT kanban_status, COUNT(*) AS n, MAX(CASE WHEN substr(kpi_key, 1, 8) = 'posthog-' THEN 1 ELSE 0 END) AS posthog
+       FROM roadmap_okrs WHERE project_id = ? GROUP BY kanban_status`,
+  ).bind(p.id).all<{ kanban_status: string; n: number; posthog: number }>());
+  const itemCount = byColumn.reduce((t, r) => t + number(r.n), 0);
+  const buckets = ROADMAP_COLUMNS.map(s => byColumn.filter(r => r.kanban_status === s).reduce((t, r) => t + number(r.n), 0));
+  const posthogNamed = byColumn.some(r => number(r.posthog) === 1);
+  // Items shipped per month: each month's distinct items moved to Done, one row per month.
+  const months = new Map(rows(await env.DB.prepare(
+    `SELECT substr(m.moved_at, 1, 7) AS month, COUNT(DISTINCT m.okr_id) AS n FROM okr_column_moves m
        JOIN roadmap_okrs o ON o.id = m.okr_id AND o.project_id = m.project_id
-      WHERE m.project_id = ? AND m.to_status = 'done' AND datetime(m.moved_at) <= datetime('now') ORDER BY m.moved_at`,
-  ).bind(p.id).all<any>());
-  const buckets = ['now', 'next', 'later', 'done'].map(s => items.filter(i => i.kanban_status === s).length);
-  const months = new Map<string, Set<number>>();
-  for (const m of moves) {
-    const month = String(m.moved_at).slice(0, 7);
-    if (!months.has(month)) months.set(month, new Set());
-    months.get(month)!.add(number(m.okr_id));
-  }
+      WHERE m.project_id = ? AND m.to_status = 'done' AND datetime(m.moved_at) <= datetime('now')
+      GROUP BY substr(m.moved_at, 1, 7)`,
+  ).bind(p.id).all<{ month: string; n: number }>()).map(r => [String(r.month), number(r.n)]));
   const trend = [...months.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  const series: ChartSpec[] = items.length ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later', 'Done'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
-  if (trend.length) series.push({ kind: 'vbars', values: trend.map(([, ids]) => ids.size), labels: trend.map(([month], at) => ({ at, label: month })) });
+  const series: ChartSpec[] = itemCount ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later', 'Done'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
+  if (trend.length) series.push({ kind: 'vbars', values: trend.map(([, n]) => n), labels: trend.map(([month], at) => ({ at, label: month })) });
   const thisMonth = new Date().toISOString().slice(0, 7);
-  // D1606: a PostHog KPI reads its value and source, or why it has none, never its key.
-  const posthog = items.some(i => typeof i.kpi_key === 'string' && i.kpi_key.startsWith('posthog-')) ? await posthogKpiTexts(env, p.id) : new Map<string, string>();
-  const kpiWords = (k: unknown) => (typeof k === 'string' && k.startsWith('posthog-') ? posthog.get(k) ?? 'PostHog metric · Not recorded: no longer tracked' : k);
-  // Moves reads the feedback theme an item answers and the KPI it moves.
-  const itemRows = items.map(i => record(i.id,
-    { item: i.objective, column: i.kanban_status, moves: [i.feedback_theme, kpiWords(i.kpi_key)].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
-    { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
-    { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
-      kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null }));
-  return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items yet. Now, Next and Later appear here.', items.length ? next(p, 'product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null) : { text: 'Add item', href: `/build/roadmap?project_id=${p.id}` }),
+  let itemRows: RecordRow[] = [];
+  let themes: Filter['options'] = [], kpis: Filter['options'] = [];
+  let paged: ModuleRead['paged'];
+  if (opts.rows) {
+    const sql = opts.query ? listPageSql(ROADMAP_LIST, opts.query) : null;
+    const kpiWords = await roadmapKpiWords(env, p.id, posthogNamed);
+    if (sql) {
+      const read = await sqlPage(env, ROADMAP_COLS, ROADMAP_FROM, sql, p.id, itemCount);
+      itemRows = read.found.map(i => roadmapRow(i, kpiWords));
+      paged = read.paged;
+      // The Theme and KPI filters offer every item's values, not the page's: one row per distinct value.
+      const values = rows(await env.DB.prepare(
+        `SELECT 'theme' AS key, feedback_theme AS value FROM roadmap_okrs WHERE project_id = ? AND feedback_theme IS NOT NULL GROUP BY feedback_theme
+         UNION ALL
+         SELECT 'kpi' AS key, kpi_key AS value FROM roadmap_okrs WHERE project_id = ? AND kpi_key IS NOT NULL GROUP BY kpi_key`,
+      ).bind(p.id, p.id).all<{ key: string; value: unknown }>());
+      const of = (key: string) => optionsOf(values.filter(v => v.key === key).map((v, at) => record(at, {}, { [key]: v.value as any })), key);
+      themes = of('theme'); kpis = of('kpi');
+    } else {
+      itemRows = (await roadmapItems(env, p.id)).map(i => roadmapRow(i, kpiWords));
+      themes = optionsOf(itemRows, 'theme'); kpis = optionsOf(itemRows, 'kpi');
+    }
+  }
+  return { card: card('product-roadmap', itemCount ? 'ok' : 'empty', series, 'All time', itemCount ? null : 'No roadmap items yet. Now, Next and Later appear here.', itemCount ? next(p, 'product-roadmap', buckets[1] ? 'Move the next planned item into Now' : null) : { text: 'Add item', href: `/build/roadmap?project_id=${p.id}` }),
     cols: [['item', 'Item'], ['column', 'Column'], ['moves', 'Moves'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
     rows: itemRows,
-    list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
-      sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
-    facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 },
+    list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: themes }, { key: 'kpi', label: 'KPI', options: kpis }],
+      sort: { key: 'column', label: 'Column' }, orders: { column: [...ROADMAP_COLUMNS] } },
+    ...(paged ? { paged } : {}),
+    facts: { items: itemCount, shipped_this_month: months.get(thisMonth) ?? 0 },
     ...(opts.parts ? { parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } } : {}) };
 }
 
@@ -1430,7 +1497,6 @@ app.patch('/risks/:id', async c => {
 // D690 (#1695 decision 4). An item's KPI is one of the venture's, read
 // through `growKpis.ts`: another venture's `custom-<uid>` is a 404 (decision
 // 16), any other key off the list a 400. Old rows keep the key they hold.
-const ROADMAP_COLUMNS = ['now', 'next', 'later', 'done'] as const;
 async function kpiChecked(c: WriteCall, p: Project, body: Record<string, unknown>): Promise<string | null | undefined | Response> {
   if (!Object.hasOwn(body, 'kpi_key')) return undefined;
   if (body.kpi_key == null || body.kpi_key === '') return null;

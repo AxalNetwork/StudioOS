@@ -610,6 +610,16 @@ function ledgerLabel(ref: string): string | null {
   return m ? `${m[1] === 'issue' ? 'issue' : 'pull request'} #${m[2]}` : null;
 }
 
+/**
+ * #4603 part 2b (D4603) names the roadmap record page's two list ceilings, at
+ * the values they have always had. #5067 owns changing them (a total and a
+ * complete retrieval path); until then each is this one constant.
+ */
+/** The newest feedback rows "Feedback it answers" lists. */
+export const ROADMAP_FEEDBACK_SHOWN = 20;
+/** The other roadmap items the Add a dependency picker offers, in board order. */
+export const ROADMAP_DEPENDENCY_CHOICES = 200;
+
 const prototypeMvp: ModuleSpec = {
   read: 'read', write: 'write', store: 'mvp_must_haves',
   // Decision 15: a feature and its must-have show one history.
@@ -817,8 +827,8 @@ const productRoadmap: ModuleSpec = {
       // The sender's name and date only: the email is never read.
       const feedback = rowsOf(await ctx.env.DB.prepare(
         `SELECT body, from_name, theme, created_at FROM product_feedback
-          WHERE project_id = ? AND roadmap_item_ref = ? ORDER BY created_at DESC, id DESC LIMIT 20`,
-      ).bind(ctx.projectId, String(numericId(id))).all<Any>());
+          WHERE project_id = ? AND roadmap_item_ref = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+      ).bind(ctx.projectId, String(numericId(id)), ROADMAP_FEEDBACK_SHOWN).all<Any>());
       return { rows: feedback.map(f => ({ a: `“${f.body}”`, b: [f.from_name || 'Unnamed', dateText(f.created_at)].filter(Boolean).join(' · '),
         ...(f.theme ? { c: f.theme, tone: 'vio' } : {}) })), empty: 'No feedback answered by this item.' };
     } },
@@ -857,8 +867,8 @@ const productRoadmap: ModuleSpec = {
       'SELECT objective, kanban_status, kpi_key, feedback_theme, owner_user_id, target_date, feature_id FROM roadmap_okrs WHERE id = ? AND project_id = ?',
     ).bind(itemId, ctx.projectId).first<Any>();
     if (!o) throw new Error('Build roadmap item vanished after its ownership check');
-    const others = rowsOf(await ctx.env.DB.prepare('SELECT id, objective FROM roadmap_okrs WHERE project_id = ? AND id <> ? ORDER BY sort_order, id LIMIT 200')
-      .bind(ctx.projectId, itemId).all<Any>()).map(x => ({ value: String(x.id), label: x.objective }));
+    const others = rowsOf(await ctx.env.DB.prepare('SELECT id, objective FROM roadmap_okrs WHERE project_id = ? AND id <> ? ORDER BY sort_order, id LIMIT ?')
+      .bind(ctx.projectId, itemId, ROADMAP_DEPENDENCY_CHOICES).all<Any>()).map(x => ({ value: String(x.id), label: x.objective }));
     const actions: RecordAction[] = [];
     if (others.length) {
       actions.push({ key: 'add-dependency', label: 'Add', kind: 'form',
