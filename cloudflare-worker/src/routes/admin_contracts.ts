@@ -31,6 +31,7 @@ import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/leg
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
+import { checksOf, recordOf, sendRefusal } from '../services/crossBorder';
 import { confirmationFor } from '../services/governanceHighRisk';
 import { SEARCH_LIMIT, rank, searchAgreements, searchGovernance, searchQuery, searchTemplates, type SearchResult } from '../services/contractSearch';
 import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON, isRestrictedSlug } from '../services/templateSafety';
@@ -1633,6 +1634,10 @@ adminContracts.post('/:uid/resend', async (c) => {
     // single recipient or signing token, so resend is not meaningful.
     // Return a deterministic 400 (action_not_supported) so the UI can
     // surface a clear toast instead of a 500.
+    // D4811 part 17 (CT-15): an agreement with open cross-border checks is not sent for signature.
+    const crossBorder = sendRefusal(await c.env.DB.prepare('SELECT * FROM agreement_cross_border WHERE agreement_uid = ?').bind(uid).first<any>() ?? null);
+    if (crossBorder) return refuse(c, 409, { code: crossBorder.code, message: crossBorder.message, extra: { open: crossBorder.open } });
+
     if (ref.source === 'pairwise_nda' || ref.source === 'partner_deal') {
       return c.json(
         { error: 'Resend is not supported for this contract source', source: ref.source },
@@ -1694,6 +1699,43 @@ adminContracts.post('/:uid/resend', async (c) => {
   } finally {
     await sql.end();
   }
+});
+
+// D4811 (#4811) part 17 — the cross-border record (board CT-15): seven checks
+// on an agreement with a foreign counterparty. Governing law is what was
+// entered, never defaulted. While a check is open, resend refuses (below).
+adminContracts.get('/:uid/cross-border', async (c) => {
+  await requireAdmin(c);
+  const uid = c.req.param('uid');
+  const row = await c.env.DB.prepare('SELECT * FROM agreement_cross_border WHERE agreement_uid = ?').bind(uid).first<any>();
+  const blocked = sendRefusal(row ?? null);
+  return c.json({ uid, record: row ?? null, checks: checksOf(row ?? null), open: blocked?.open ?? [] });
+});
+
+adminContracts.put('/:uid/cross-border', async (c) => {
+  const admin = await requireAdmin(c);
+  const uid = c.req.param('uid') ?? '';
+  const sql = getSQL(c.env);
+  let ref;
+  try { ref = await findContractByUid(sql, uid); } finally { await sql.end(); }
+  if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available. Nothing was saved.' });
+  const parsed = recordOf(await c.req.json().catch(() => ({})));
+  if (!parsed.ok) return refuse(c, parsed.refusal.status, { code: parsed.refusal.code, message: parsed.refusal.message });
+  const v = parsed.value;
+  await c.env.DB.prepare(`INSERT INTO agreement_cross_border (agreement_uid, counterparty_jurisdiction, governing_law, performance_countries,
+      tax_status, tax_note, data_transfer_status, data_transfer_note, local_counsel_status, local_counsel_note, sanctions_status, sanctions_note, updated_by, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(agreement_uid) DO UPDATE SET counterparty_jurisdiction = excluded.counterparty_jurisdiction, governing_law = excluded.governing_law,
+      performance_countries = excluded.performance_countries, tax_status = excluded.tax_status, tax_note = excluded.tax_note,
+      data_transfer_status = excluded.data_transfer_status, data_transfer_note = excluded.data_transfer_note,
+      local_counsel_status = excluded.local_counsel_status, local_counsel_note = excluded.local_counsel_note,
+      sanctions_status = excluded.sanctions_status, sanctions_note = excluded.sanctions_note, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
+    .bind(uid, v.counterparty_jurisdiction, v.governing_law, v.performance_countries, v.tax_status, v.tax_note, v.data_transfer_status, v.data_transfer_note,
+      v.local_counsel_status, v.local_counsel_note, v.sanctions_status, v.sanctions_note, Number(admin.id), new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')).run();
+  const row = await c.env.DB.prepare('SELECT * FROM agreement_cross_border WHERE agreement_uid = ?').bind(uid).first<any>();
+  const blocked = sendRefusal(row);
+  await logAdminAction(c.env, Number(admin.id), String(admin.email ?? ''), 'contract_cross_border_saved', { uid, source: ref.source, open: blocked?.open.length ?? 0 });
+  return c.json({ uid, record: row, checks: checksOf(row), open: blocked?.open ?? [] });
 });
 
 // POST /api/admin/contracts/:uid/void — UNION dispatch.
