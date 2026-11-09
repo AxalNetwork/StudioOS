@@ -9,6 +9,7 @@ import DataRoomSearch from './DataRoomSearch.jsx';
 import {
   GATES, OWNER_ONLY, endCopy, fileHref, folderChoices, gateCopy, matchCopy, moveCopy, removeCopy, tableRows, treeRows,
 } from './filesModel.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { roomCan } from './dataRoomModel.js';
 
 /**
@@ -97,7 +98,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   if (dialog?.kind === 'move') {
     const copy = moveCopy(room, files, dialog.target);
     open = (
-      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-move"
+      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-move"
         onConfirm={async () => { await patchAll(copy.patch); finish(`Moved ${files.length} file${files.length === 1 ? '' : 's'}.`); }}>
         <label className="flex flex-col gap-1"><span className="text-[11px] font-bold uppercase tracking-[.06em] text-axal-muted">To</span>
           <select className={INPUT} value={dialog.target} onChange={(e) => setDialog({ ...dialog, target: e.target.value })} data-testid="dataroom-move-target">
@@ -109,7 +110,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   } else if (dialog?.kind === 'gate') {
     const copy = gateCopy(room, files, dialog);
     open = (
-      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-gate"
+      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-gate"
         onConfirm={async () => { await patchAll(copy.patch); finish(`Gate set on ${files.length} file${files.length === 1 ? '' : 's'}.`); }}>
         <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0"><legend className="sr-only">Who it is for</legend>
           {GATES.map((g) => (
@@ -123,7 +124,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   } else if (dialog?.kind === 'end') {
     const copy = endCopy(room, files, dialog.until || null);
     open = (
-      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-end"
+      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-end"
         onConfirm={async () => { await patchAll(copy.patch); finish(dialog.until ? 'End date set.' : 'End date removed.'); }}>
         <label className="flex flex-col gap-1"><span className="text-[11px] font-bold uppercase tracking-[.06em] text-axal-muted">Access ends on</span>
           <input type="date" className={INPUT} value={dialog.until} onChange={(e) => setDialog({ ...dialog, until: e.target.value })} data-testid="dataroom-end-date" /></label>
@@ -134,7 +135,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
     const copy = chosen ? matchCopy(files, chosen.label) : { title: `Mark ${files.length === 1 ? files[0].name : `${files.length} files`} as answering…`, body: 'Who can open it does not change.', action: 'Match' };
     const body = (v) => (v.startsWith('request-') ? { dd_request_id: Number(v.slice(8)) } : { checklist_item: v.slice(5) });
     open = (
-      <DataRoomDialog copy={copy} disabled={!chosen} onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-match"
+      <DataRoomDialog copy={copy} disabled={!chosen} onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-match"
         onConfirm={async () => { await patchAll(body(dialog.answer)); finish(`Marked as answering ${chosen.label}.`); }}>
         {dialog.options === null ? <span className={`text-[12px] ${MUTED}`}>Reading the checklist…</span> : null}
         {dialog.options === 'unreadable' ? <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="dataroom-match-unreadable">The checklist and the open requests could not be read. That is not a claim there are none.</p> : null}
@@ -149,7 +150,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   } else if (dialog?.kind === 'remove') {
     const copy = removeCopy(files);
     open = (
-      <DataRoomDialog copy={copy} danger onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-remove"
+      <DataRoomDialog copy={copy} danger onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-remove"
         onConfirm={async () => { await eachFile(files, (f) => api.dataRoomDeleteFile(projectUid, f.uid)); finish(`Removed ${files.length} file${files.length === 1 ? '' : 's'}.`); }}>
         <p className={`m-0 rounded-[8px] border border-axal-hairline px-3 py-2 text-[12.5px] ${MUTED} dark:border-gray-700`} data-testid="dataroom-remove-trash">{copy.trash}</p>
       </DataRoomDialog>

@@ -12,6 +12,7 @@ import {
   forecastGap, forecastSeries, forecastTiles, fundedBySection, makeBaseView, movedNotice, scenarioBody, scenarioCard, sensitivityRows,
 } from './scenariosForecastModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1178 (#3105) — Use of funds part 5: Runway › Forecast (UF8), Scenarios
@@ -69,7 +70,7 @@ function useWrite(onDone) {
   const [stale, setStale] = useState(false);
   const run = async (fn) => {
     setBusy(true); setError(''); setStale(false);
-    try { const out = await fn(); setBusy(false); onDone?.(out); } catch (e) { setBusy(false); setError(e?.message || 'It was not saved. Read the plan again before retrying.'); setStale(e?.status === 409 && (e?.code === 'changed_since_open' || e?.data?.code === 'changed_since_open')); }
+    try { const out = await fn(); setBusy(false); onDone?.(out); } catch (e) { setBusy(false); setError(userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.' })); setStale(e?.status === 409 && (e?.code === 'changed_since_open' || e?.data?.code === 'changed_since_open')); }
   };
   return { busy, error, stale, run, reviewLatest: () => onDone?.(null) };
 }
@@ -143,7 +144,7 @@ export function Forecast({ projectId, search = '', api = useOfFundsApi }) {
   const sens = d ? sensitivityRows(d) : null;
   const exportIt = async () => {
     setExportError('');
-    try { await legacyApi.downloadFinancialModelXlsx(projectId); } catch (e) { setExportError(e?.message || 'The export could not be made. Save the forecast first.'); }
+    try { await legacyApi.downloadFinancialModelXlsx(projectId); } catch (e) { setExportError(userFacingRaiseError(e, { fallback: 'The export could not be made. Save the forecast first.' })); }
   };
   return (
     <div className="flex flex-col gap-3" data-testid="uof-forecast">

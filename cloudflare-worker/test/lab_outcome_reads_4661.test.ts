@@ -115,7 +115,8 @@ test('#4661 a failed read of the application name is not "no name": the list is 
     insertRow(db, 'spinout_applications', { user_id: ACTIVE, company_name: 'Application Active Co' });
     assert.deepEqual((await get(readable(db), '/graduates')).body.map((g: any) => g.name), ['Application Grad Co'], 'the fallback works when it can be read');
     assert.deepEqual((await get(readable(db), '/cohort')).body.map((m: any) => m.name).sort(), ['Application Active Co', 'Application Grad Co']);
-    const down = failing(db, /FROM spinout_applications WHERE user_id/);
+    // D4663: the fallback is a subquery of the one bounded read, so the read fails whole.
+    const down = failing(db, /FROM spinout_applications/);
     for (const path of ['/graduates', '/cohort']) {
       const r = await get(down, path);
       assert.equal(r.status, 503, `${path}: a graduate dropped because its name could not be read must not read as "no graduates"`);
@@ -124,12 +125,14 @@ test('#4661 a failed read of the application name is not "no name": the list is 
   } finally { db.close(); }
 });
 
-test('#4661 a company that already has a name never reads the application', async () => {
+test('#4661/D4663 a company named by its venture keeps that name; the application is only the fallback', async () => {
   const db = world();
   try {
-    // The fallback's table is down, but every company here is named by its project: nothing needs it.
-    const down = failing(db, /FROM spinout_applications WHERE user_id/);
-    assert.equal((await get(down, '/graduates')).status, 200);
-    assert.equal((await get(down, '/cohort')).status, 200);
+    // D4663 folded the per-row application read into the bounded statement (COALESCE, so it is
+    // evaluated only for a row with no venture name). A venture's name always wins.
+    insertRow(db, 'spinout_applications', { user_id: GRAD, company_name: 'Not This Grad Name' });
+    insertRow(db, 'spinout_applications', { user_id: ACTIVE, company_name: 'Not This Active Name' });
+    assert.deepEqual((await get(readable(db), '/graduates')).body.map((g: any) => g.name), ['Graduate Co']);
+    assert.deepEqual((await get(readable(db), '/cohort')).body.map((m: any) => m.name).sort(), ['Active Co', 'Graduate Co']);
   } finally { db.close(); }
 });

@@ -145,3 +145,44 @@ export const LIFECYCLE_LINE = 'Approving does not publish. Publishing happens fr
 
 /** Wellbeing's register note (AP-13): lookups are by hand. */
 export const REGISTER_NOTE = 'Register lookups aren’t automated. Check the licence against the issuing register before verifying.';
+
+/**
+ * D4814 (#4814, part 5, AP-18e): the refusals that mean another decision got
+ * there first. Each is refused before anything is written (the Worker's
+ * conditional writes), so the dialog can say nothing was recorded by you.
+ */
+export const CHANGED_CODES = new Set(['tester_changed', 'pitch_decided', 'review_changed', 'already_decided']);
+export const isChanged = (e) => Number(e?.status) === 409 && CHANGED_CODES.has(e?.code);
+export const CHANGED_LEAD = 'This item changed while you were reviewing it.';
+export const CHANGED_REST = 'The latest state has been loaded. Nothing was recorded by you.';
+
+/**
+ * D4814 (AP-18d, AP-18f): what a board says after a decision. The Worker
+ * answers `notified: false` when the decision is recorded but the notice did
+ * not go out; then the line says so and asks for a check before any retry.
+ * `notified: null` (nobody was due a notice) or a reply without the field is
+ * the ordinary line.
+ */
+export function afterDecision(line, reply, who) {
+  if (reply && reply.notified === false) {
+    return {
+      warn: true,
+      text: 'The decision was recorded, but the notification could not be delivered.',
+      sub: `Check the item before trying again — ${who || 'they'} may not know yet.`,
+    };
+  }
+  return { warn: false, text: line };
+}
+
+/**
+ * D4814 (#4814, part 6, AP-09/11/13): where a board's drawer stands in the
+ * tab it was opened from — "2 of 6", with the rows before and after it, in
+ * the tab's own order and filters. Null when the item is not in that list
+ * (opened from a link), so no position is invented.
+ */
+export function boardStep(rows, key) {
+  const list = Array.isArray(rows) ? rows : [];
+  const i = list.findIndex((r) => String(r.key) === String(key));
+  if (i < 0) return null;
+  return { pos: `${(i + 1).toLocaleString('en-US')} of ${list.length.toLocaleString('en-US')}`, prev: list[i - 1] || null, next: list[i + 1] || null };
+}

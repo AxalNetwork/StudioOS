@@ -77,6 +77,11 @@ when adding a kind.
   cancelled registration or event, rechecking source state before deletion.
 - `syncState.ts`: fixed sync-error codes and retained-copy/disconnection state;
   no provider response text is stored as an error.
+- `growDates.ts`: #5131 (D1486 §e), Grow's dated plans and sends, family
+  `grow`, page only, for the venture's readers by `canAccessProject`'s read
+  rule: `grow_campaign` and `ad_flight` (all day over a plan's own days),
+  `newsletter_send` (a Beehiiv post's send time, unless §b already shows its
+  Publish send) and `sequence_step` (the step an active enrolment stands on).
 
 Add readers beside the source they represent and test member boundaries with
 synthetic data. Tests stub provider calls. Never log feed tokens, provider

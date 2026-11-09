@@ -86,3 +86,22 @@ export function aboutHistory(notes) {
     'Open ↗ goes to the page that decides that lane, where the item is if it still exists.',
   ];
 }
+
+/**
+ * D4814 (#4814, part 6, AP-07): where Decided's Open ↗ goes for a row. A
+ * product tester opens on its board by id; a co-marketing pitch by the uid
+ * the Worker now sends (`item_uid`). Every other lane has no address for one
+ * decided item, so its row opens the lane's page (null here).
+ */
+export function decidedItemPath(row) {
+  if (row?.laneKey === 'product_testers' && Number.isInteger(row.itemId)) return `/admin/approvals/product-testers/${row.itemId}`;
+  if (row?.laneKey === 'comarketing' && row.itemUid) return `/admin/approvals/co-marketing/${encodeURIComponent(row.itemUid)}`;
+  return null;
+}
+
+/** D4814 (#4814, part 6, AP-05): the Assign dialog's reviewer search, on names, ignoring case. */
+export function matchReviewers(choices, q) {
+  const needle = String(q || '').trim().toLowerCase();
+  if (!needle) return choices;
+  return choices.filter((c) => String(c.name || '').toLowerCase().includes(needle));
+}

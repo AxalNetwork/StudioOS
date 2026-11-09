@@ -911,6 +911,8 @@ const COOL_OFF_ROUTES = [
   '/api/admin/branches/:code/support-session',
   '/api/admin/branches/:code/accounts/:userId/move',
   '/api/admin/branches/:code/admins/:userId/unbind',
+  // D5043 — finishing a move is the move's second leg, paused as the move is.
+  '/api/admin/account-moves/:uid/retry-invitation',
   '/api/admin/users/:userId/demote-admin',
   // D714 — the three fund routes that are wholly Super Admin acts: issuing a
   // capital call, executing a distribution, and assigning a fund's ledger

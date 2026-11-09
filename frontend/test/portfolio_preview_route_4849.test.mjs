@@ -85,8 +85,10 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
   const root = createRoot(host);
   const { error, warn } = console; console.error = () => {}; console.warn = () => {};
   const tick = async (n = 40) => { for (let i = 0; i < n; i += 1) await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5)))); };
-  // A lazy route can still be loading after the fixed rounds on a busy runner (its Suspense fallback has no heading),
-  // which read as "no heading" and failed shard frontend-2 on 2026-11-09. Keep going, boundedly, until a heading is drawn.
+  // #4574 (H4): a page's lazy chunk now carries modules the shell used to hold, so its first draw can take longer than a
+  // fixed 40 ticks on a busy machine. A lazy route can still be loading after those rounds (its Suspense fallback has
+  // no heading), which read as "no heading" and failed shard frontend-2 on 2026-11-09. Keep going, boundedly, until a
+  // heading is drawn; a page that never draws still fails below.
   const settle = async () => { await tick(); for (let i = 0; i < 400 && !select(dom.document, 'h1').length; i += 1) await tick(1); };
   const read = () => ({
     path: at?.pathname,

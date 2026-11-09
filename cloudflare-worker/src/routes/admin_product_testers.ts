@@ -142,16 +142,20 @@ for (const action of Object.keys(TRANSITIONS) as TesterAction[]) {
     }
     const reapply = action === 'decline' && decidedAt ? reapplyAfter(decidedAt) : null;
     const message = messageFor(action, reason, reapply);
+    // D4814 (AP-18f): the decision is recorded by now, so a notice that does
+    // not go out is reported, never thrown: `notified: false` tells the page
+    // the member may not know yet.
+    let notified = false;
     try {
       // No category: critical, so it skips the digest and quiet hours.
-      await notify(c.env, {
+      notified = (await notify(c.env, {
         userId: tester.user_id, type: `product_tester_${t.event}`, title: message.title, body: message.body,
         link: '/studio', channels: ['in_app', 'email'],
-      });
+      })) !== null;
     } catch (e) { console.warn('[admin/product-testers] notify failed', e); }
     // D1132: a removal says how many open program places it ended.
     return c.json({
-      tester: await readTester(c.env, id).catch(() => null), action: t.event, reapply_after: reapply,
+      tester: await readTester(c.env, id).catch(() => null), action: t.event, reapply_after: reapply, notified,
       ...(action === 'remove' ? { places_ended: placesEnded } : {}),
     });
   });

@@ -166,6 +166,11 @@ const KINDS = [
   { id: 'external_microsoft', label: 'Outlook event', from: 'Outlook' },
   // #3957: a scheduled AI agent work session; its work comes back as proposals in Approvals.
   { id: 'agent_session', label: 'AI agent session', from: 'Team › Agents' },
+  // #5131 (D1486 §e): Grow's campaign plans, ad flights, newsletter sends and sequence steps, page only.
+  { id: 'grow_campaign', label: 'Campaign', from: 'Grow › Campaigns' },
+  { id: 'ad_flight', label: 'Ad flight', from: 'Grow › Ads' },
+  { id: 'newsletter_send', label: 'Newsletter send', from: 'Grow › Newsletter' },
+  { id: 'sequence_step', label: 'Sequence step', from: 'Grow › Sequences' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 
