@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React from 'react';
+import React, { act } from 'react';
 import { api, contractsApi } from '../src/lib/api.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import Desk from '../src/pages/admin/contracts/ContractsDesk.jsx';
@@ -123,7 +123,7 @@ test('D647 tabs display a reason for data that was never recorded', async () => 
   for (const [tab, legacy, domain, missing] of cases) {
     setup(legacy, { stats: async () => ({ total: 1, pending_signature: 1, by_status: { signed: 0 }, avg_days_to_sign: null, signed_last_30d: 0 }), ...domain });
     const view = await mountContracts(element(), `/admin/contracts?tab=${tab}`, user);
-    try { await view.flush(); if (tab === 'templates') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'D717: the template card carries its missing editor on hover'); else if (tab === 'document-types') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'registry missing-data reason is available on hover'); else assert.match(view.text(), missing); assert.match(view.text(), /No signed agreement has both a recorded sent and signed date/); }
+    try { await view.flush(); if (tab === 'templates') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'D717: the template card carries its missing editor on hover'); else if (tab === 'document-types') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'registry missing-data reason is available on hover'); else assert.match(view.text(), missing); assert.match(view.text(), /The attention counts were not returned\. The agreements below are unaffected\./, 'D4811: a stats answer without the strip says so; it never draws zeros'); }
     finally { await view.unmount(); restore(); }
   }
 });
@@ -183,10 +183,14 @@ test('D647 deleting a template requires confirmation and preserves the cancelled
 });
 
 test('D647 clicking a count opens the matching Worker filter', async () => {
-  const calls = setup({}, { stats: async () => ({ total: 251, pending_signature: 4, by_status: { signed: 247 }, avg_days_to_sign: 2, signed_last_30d: 7 }), agreements: empty });
+  // D4811 part 3: the five counters became the six-cell strip (board CT-01); each cell still opens its records.
+  const attention = { awaiting: 4, executed: { total: 247, this_year: 9, this_month: 2, undated: 0 }, stalled: { count: 1, unknown: 0, days: 30 },
+    repair: { count: 3, evidence: 1, unlinked: 2 }, legal_review: { templates: 1, governance: 0, governance_scope: 'hq' }, restricted: { templates: 1, governance: 0, governance_scope: 'hq' } };
+  const calls = setup({}, { stats: async () => ({ total: 251, pending_signature: 4, by_status: { signed: 247 }, avg_days_to_sign: 2, signed_last_30d: 7, attention }), agreements: empty });
   const view = await mountContracts(element(), '/admin/contracts?tab=forms', user);
   try {
-    await view.flush(); await view.click('Awaiting signature4'); await view.flush(); assert.equal(calls.filter(([key]) => key === 'agreements').at(-1)[1][0].status, 'awaiting_signature');
-    await view.click('Signed, last 30 days7'); await view.flush(); assert.equal(calls.filter(([key]) => key === 'agreements').at(-1)[1][0].signed_recent, 'true');
+    const press = async (label) => { const b = view.nodes().find((n) => n.tagName === 'BUTTON' && String(view.props(n)?.['aria-label'] || '').startsWith(label)); assert.ok(b, label); await act(async () => { view.props(b).onClick({}); }); await view.flush(); };
+    await view.flush(); await press('Awaiting signature: 4'); assert.equal(calls.filter(([key]) => key === 'agreements').at(-1)[1][0].status, 'awaiting_signature');
+    await press('Stalled / overdue: 1'); assert.equal(calls.filter(([key]) => key === 'agreements').at(-1)[1][0].attention, 'stalled');
   } finally { await view.unmount(); restore(); }
 });

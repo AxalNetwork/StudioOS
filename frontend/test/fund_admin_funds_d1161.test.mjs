@@ -290,11 +290,15 @@ test('an Admin sees the economics sentence where Change would be, and the people
     assert.ok(v.by('fund-providers-edit'), 'service providers are an Admin\'s');
     assert.ok(v.by('fund-lpa-regenerate'));
     assert.equal(v.text('fund-carry'), '20.00%');
-    assert.match(v.text('fund-tile-outstanding'), /\$280,000\.00 3 lines overdue/);
+    // D4812 part 3 (FA-04): six key figures, and overdue lines said beneath them.
+    assert.match(v.text('fund-figures'), /Target size .* Committed .* Called .* NAV .* Distributed .* LPs/);
+    assert.match(v.text('fund-overdue'), /3 lines overdue/);
     assert.match(v.text('fund-waterfall'), /Not recorded: the distribution job has no hurdle or tiers\./);
     assert.match(v.text('fund-lpa-state'), /Version 3/);
     assert.equal(v.text('fund-admin-primary'), 'Edit fund facts');
-    assert.equal(v.text('fund-admin-tab-funds').startsWith('Funds'), true);
+    // D4812: Funds is no peer tab; a fund's page carries a crumb back to Fund administration.
+    assert.ok(!v.by('fund-admin-tab-funds'));
+    assert.match(v.text('admin-page-crumb'), /Fund administration/);
     assert.equal(named(s, 'get')[0][1], 7);
   } finally { await v.close(); }
 });
@@ -307,10 +311,10 @@ test('a fund with no carry reads Not recorded on its page; the outside GP fund s
     assert.match(v.text('fund-gp-none'), /No general partner of record/);
     assert.match(v.text('fund-lpa-state'), /No LPA is drafted until the fund has a general partner of record/);
     assert.ok(!v.by('fund-lpa-view'), 'nothing to view');
-    assert.equal(v.text('fund-tile-fund-size'), 'Fund size Not recorded');
+    assert.equal(v.text('fund-figure-target'), 'Target size — Not recorded');
   } finally { await v.close(); }
   const o = await mount(ADMIN, as(ADMIN).apis, '/admin/fund-admin/funds/9');
-  try { assert.doesNotMatch(o.text('fund-tiles'), /\$0\.00/); } finally { await o.close(); }
+  try { assert.doesNotMatch(o.text('fund-figures'), /\$0\.00/); } finally { await o.close(); }
 });
 
 test('the Super Admin\'s Change asks a reason, then sends it with both rates', async () => {

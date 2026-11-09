@@ -29,7 +29,7 @@ export const LEDGER_STATUSES = Object.freeze([
 export const STATUS_KEYS = Object.freeze(LEDGER_STATUSES.map(([k]) => k));
 export const statusFromParam = (param) => (STATUS_KEYS.includes(param) ? param : '');
 
-/** The canvas's sections, in its order. The detail slice draws them; today each opens the tab below. */
+/** The canvas's sections, in its order. Each opens on its first tab (`SECTION_TAB` below; part 3 draws them). */
 export const LICENCE_SECTIONS = Object.freeze(['overview', 'terms', 'agreement', 'access', 'operations', 'history']);
 
 /**
@@ -190,11 +190,11 @@ export function ledgerIsEmpty({ total, filtered, summaryTotal }) {
 
 /**
  * Canvas section (or an existing tab key) → the tab the detail pane opens.
- * The canvas's six sections are the detail slice's; until then each opens the
- * nearest existing tab, and a tab's own key opens itself.
+ * Part 3 draws the six sections; each opens on its first tab
+ * (`licenceNavModel.js` `LICENCE_TABS`), and a tab's own key opens itself.
  */
 const SECTION_TAB = Object.freeze({
-  overview: 'entity',
+  overview: 'overview',
   terms: 'terms',
   agreement: 'contract',
   access: 'admins',

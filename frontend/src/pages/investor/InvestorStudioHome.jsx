@@ -33,6 +33,8 @@ export default function InvestorStudioHome({
   dashboardUnavailable = '',
   onRetryDashboard,
   onRetryLifecycle,
+  // D4474 (#4474): a block on a multi-licence Studio. The page owns the "Studio" h1, so the home leaves out its own.
+  embedded = false,
 }) {
   const [advisorAvailable, setAdvisorAvailable] = useState(null);
   // #4622: each source is read, committed and retried on its own (`useInvestorSources`).
@@ -68,7 +70,7 @@ export default function InvestorStudioHome({
   return (
     <section className="is-root sm-tokens" data-testid="investor-studio-home">
       <header className="is-context">
-        <div className="is-title"><h1 data-testid="text-investor-studio-title">Studio</h1><span className="is-role" data-testid="badge-investor-studio-role">Investor</span><p>{previewing ? 'Investor workspace preview · private investor records are withheld' : PURPOSE.investor}</p></div>
+        <div className="is-title">{!embedded && <h1 data-testid="text-investor-studio-title">Studio</h1>}<span className="is-role" data-testid="badge-investor-studio-role">Investor</span><p>{previewing ? 'Investor workspace preview · private investor records are withheld' : PURPOSE.investor}</p></div>
         <div className="is-date"><span data-testid="text-investor-studio-date">{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date())}</span><CustomiseButton studio={studio} primary /></div>
       </header>
       {previewing && <div className="is-source-note" role="status" data-testid="status-investor-preview"><CircleAlert size={15} />You are previewing the Investor workspace as an administrator. Investor-scoped values are withheld because this session is not an investor identity.</div>}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowUpRight, Landmark, Radar, RefreshCw, Search } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
@@ -6,6 +6,10 @@ import { Unreadable, WorkerRail } from '../../ui';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import { zonePillClass } from './deskZoneNav';
 import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
+import ResearchHome from '../research/ResearchHome';
+import { EXAMPLES } from '../research/researchHome.js';
+import { tokensRefusal } from '../research/researchStates.js';
+import { openAddTokens } from '../../lib/aiTokens.js';
 import './founderResearchDesk.css';
 import { LensNavLink } from '../../workspaces/lens';
 import { useRailOption } from '../../ui/railCrumbs';
@@ -54,6 +58,7 @@ export default function FounderResearchDesk() {
   const [projects, setProjects] = useState(() => seed?.projects || []);
   const [projectId, setProjectId] = useState(() => requestedId || seed?.projectId || null);
   const [question, setQuestion] = useState('');
+  const questionRef = useRef(null);
   // The last answer asked from this desk: `{ question, answer, reason,
   // citations, cost_usd, indexed_documents }` as `/research/ask` returns it.
   const [asked, setAsked] = useState(null);
@@ -61,6 +66,7 @@ export default function FounderResearchDesk() {
   // D771 (#2097): while a question is at the model, the rail is that option's.
   useRailOption(asking ? 'ask:research' : null, 'Ask');
   const [askError, setAskError] = useState('');
+  const [askStop, setAskStop] = useState(null);
   const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState('');
   // WHICH sources failed, not just THAT some did. Task #107's batch: every card
@@ -124,13 +130,16 @@ export default function FounderResearchDesk() {
     event.preventDefault();
     const q = question.trim();
     if (!q || asking) return;
-    setAsking(true); setAskError('');
+    setAsking(true); setAskError(''); setAskStop(null);
     try {
       // D778 part 11: the press names its option on the run, keeping the rail's page.
       setAsked(await api.research.ask(q, undefined, railPressHeaders('ask:research')));
     } catch (cause) {
       setAsked(null);
-      setAskError(cause?.message || 'That question could not be answered right now.');
+      // D3701 part 4: a budget stop is RS-11's card, not an error line.
+      const stop = tokensRefusal(cause);
+      if (stop) setAskStop(stop);
+      else setAskError(cause?.message || 'That question could not be answered right now.');
     } finally { setAsking(false); }
   };
 
@@ -191,12 +200,38 @@ export default function FounderResearchDesk() {
   return <main className="a7-research" data-testid="founder-research-desk">
     <div className="a7-canvas">
       <div className="a7-main">
-        <header className="a7-hero"><div className="ask-hero-top"><h1>Go deep on a market or company</h1><HeaderAsk /></div><p>The page opens as a question, not a menu.</p>
-          <form className="a7-question" onSubmit={ask}><Search size={16} /><input data-testid="input-research-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about a market or company" maxLength={1000} /><button type="submit" data-testid="button-research-ask" disabled={asking || !question.trim()}>{asking ? 'Asking…' : 'Ask'}</button></form>
-          <div className="a7-honesty">Eadwyn answers only from the documents in your research library, and cites each one. Every question joins your thread on the Ask page.</div>
-          <AskResult asked={asked} error={askError} />
+        {/* D3701 RS-01: the house header — eyebrow, title, purpose, Ask Eadwyn
+            and the one violet primary. There is no research-project store, so
+            New research starts the question below rather than creating one. */}
+        <header className="a7-hero">
+          <div className="ask-hero-top rh-header">
+            <div>
+              <span className="rh-eyebrow">Research intelligence</span>
+              <h1>Research with evidence, not assumptions</h1>
+              <p>Explore markets, companies and investors. Turn reliable sources into actionable research.</p>
+            </div>
+            <div className="rh-actions">
+              <HeaderAsk />
+              <button type="button" className="rh-primary" data-testid="button-new-research" onClick={() => questionRef.current?.focus?.()}>New research</button>
+            </div>
+          </div>
+          <section className="a7-card rh-question">
+            <label htmlFor="research-question" className="rh-label">What would you like to investigate?</label>
+            <form className="a7-question" onSubmit={ask}><Search size={16} /><input id="research-question" ref={questionRef} data-testid="input-research-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="e.g. Analyze the European AI infrastructure market" maxLength={1000} /><button type="submit" data-testid="button-research-ask" disabled={asking || !question.trim()}>{asking ? 'Asking…' : 'Start research'}</button></form>
+            {/* An example fills the field. It never runs: Start research is the press. */}
+            <div className="rh-examples">{EXAMPLES.map((text, index) => <button key={text} type="button" data-testid={`button-research-example-${index}`} onClick={() => { setQuestion(text); questionRef.current?.focus?.(); }}>{text}</button>)}</div>
+            <div className="a7-honesty">Eadwyn answers only from the documents in your research library, and cites each one. Every question joins your thread on the Ask page.</div>
+            <AskResult asked={asked} error={askError} />
+            {askStop ? <div className="a7-answer is-tokens" role="status" data-testid="status-research-out-of-tokens"><p><strong>{askStop.title}</strong></p><p>{askStop.body}</p><p>{askStop.note}</p><button type="button" className="rh-secondary" data-testid="button-research-add-tokens" onClick={() => openAddTokens({ from: 'Research' })}>Add tokens</button></div> : null}
+          </section>
           <nav className="a7-anchors" aria-label="Research sections">{SECTIONS.map(([label, to], index) => <LensNavLink data-testid={`link-research-anchor-${index}`} key={label} to={`${to}${query}`} state={state} className={zonePillClass}>{label}</LensNavLink>)}</nav>
         </header>
+        <ResearchHome />
+        {/* D3701 RS-01: operational detail sits in a collapsed Source coverage
+            panel — the directories, the market sources, the cache and the
+            fund and library counts. Every card and its own states are kept. */}
+        <details className="rh-coverage" data-testid="research-source-coverage">
+          <summary><strong>Source coverage</strong><span>Directories, library indexing and last refresh — operational detail</span></summary>
         {error && <div className="a7-error" data-testid="status-research-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-research" type="button" onClick={() => setRetry((value) => value + 1)}><RefreshCw size={13} />Retry</button></div>}
         {/* D536 — the Research overview (Research · Main canvas, D546): the
             directory totals, the split, the sector grid, the competition, the
@@ -212,6 +247,7 @@ export default function FounderResearchDesk() {
           <section className="a7-card" id="a7-companies"><SectionHead title="Company profiles" meta={sourceMeta('companies', `${data.companies.length} returned`)} /><p>{data.companies.length ? 'These are the companies on the platform, not the research directory; the directory is under Companies.' : companiesLoaded ? 'No company on the platform is visible to you yet; the research directory is under Companies.' : 'The company source is temporarily unavailable.'}</p><Link className="a7-link" to="/research/companies" state={state}>Open competitor analysis <ArrowUpRight size={13} /></Link></section>
           <section className="a7-card" id="a7-library"><SectionHead title="Document library" meta={sourceMeta('library', `${data.library.length} document${data.library.length === 1 ? '' : 's'}`)} /><p data-testid="text-research-library">{libraryLine(records.library, failedKeys.has('library'))}</p><Link className="a7-link" data-testid="link-open-research-library" to={`/research/library${query}`} state={state}>Open library <ArrowUpRight size={13} /></Link></section>
         </div>
+        </details>
       </div>
       <WorkerRail
         workspace="Research"

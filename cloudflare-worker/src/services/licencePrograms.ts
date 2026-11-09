@@ -23,11 +23,15 @@
  */
 import type { Env } from '../types';
 import { PROGRAMS, TERM_KEYS, presentGrant, readDefaults, type LicenceLite } from './programGrants';
+import { legalWaitingByProgram } from './agreementPolicies';
 
 /** The grant columns the copy carries, and the studio reads. */
 export const COPY_COLUMNS = [
   'uid', 'program_key', 'state', ...TERM_KEYS,
   'schedule_contract_uid', 'schedule_signed_at', 'note', 'paused_at', 'ended_at', 'set_at',
+  // D5052: not a column. HQ computes it from the licence's frozen agreement policy (`programCopy`): 1 while a
+  // required agreement is unsigned, 0 when not, null when HQ did not compute it.
+  'legal_waiting',
 ];
 
 export type ProgramCopy = { grants: Array<Record<string, unknown>>; offered: Record<string, boolean> };
@@ -38,6 +42,15 @@ export async function programCopy(env: Env, licenceId: number): Promise<ProgramC
   const rows = ((await env.DB.prepare("SELECT * FROM program_grants WHERE licence_id = ? AND state <> 'draft' ORDER BY id")
     .bind(licenceId).all<Record<string, unknown>>()).results || [])
     .map((row) => Object.fromEntries(COPY_COLUMNS.map((k) => [k, row[k] ?? null])));
+  // D5052 (#5052): each grant carries whether the licence's frozen agreement policy still holds it out of force,
+  // so a branch never reads a program as in force while its required agreement is unsigned. A read that fails
+  // throws, and the push reports the section unreadable (#4686) rather than sending grants without it.
+  const licence = await env.DB.prepare('SELECT id, uid, licence_ref, brand_name, kind, status, renews_on FROM territory_licences WHERE id = ?')
+    .bind(licenceId).first<LicenceLite & { id: number }>();
+  if (licence && rows.length) {
+    const waiting = await legalWaitingByProgram(env, licence, new Date().toISOString().slice(0, 10));
+    for (const row of rows) row.legal_waiting = waiting.get(String(row.program_key)) ?? 0;
+  }
   const offered = Object.fromEntries((await readDefaults(env)).map((d) => [d.program_key, d.grantable]));
   return { grants: rows, offered };
 }
