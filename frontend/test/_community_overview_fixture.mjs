@@ -26,6 +26,8 @@ export function full() {
         jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, oldest_wait_hours: 30, review: [
           { posting_id: 3, title: 'Backend Engineer', company: 'Acme', waiting_since: at(-30), waiting_hours: 30, overdue: false },
         ] },
+        // D4820 part 3: no expert waits in the whole fixture, so the totals the older tests pin do not move.
+        experts: { available: true, pending: 0, overdue: 0, oldest_wait_hours: null, rows: [] },
       },
       events: {
         weekly: { available: true, registrations: { window: 60, previous: 40 }, weekly: WEEKS.map((w, i) => ({ week: w, registrations: 15, checkins: 2, to_date: i === 3 })) },

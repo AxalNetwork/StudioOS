@@ -14,6 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
+import { ROOM_CAPS } from './_data_room_capabilities.mjs'; // D5074: the Worker's maps, pinned to it by its own test
 import {
   accessRows, deleteFolderCopy, effectLine, folderNdaCopy, gainLose, gateCopy, grantOn, inScope, makeCurrentCopy, moveCopy, needsYou,
   queueEntry, recentFiles, removeCopy, storageLine, tableRows, treeRows, uploadRefusal, whoCanOpen,
@@ -25,7 +26,7 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 
 const ROOM = {
   project: { uid: 'p3uid', name: 'Harbor Ledger' },
-  role: 'owner',
+  role: 'owner', capabilities: ROOM_CAPS.owner,
   folders: [
     { id: 1, uid: 'f1', name: 'Financials', parent_id: null, visibility: 'nda', display_order: 0 },
     { id: 2, uid: 'f2', name: 'Bank', parent_id: 1, visibility: 'open', display_order: 0 },
@@ -216,7 +217,7 @@ test('Files: Remove says there is no Trash and then deletes; a co-founder cannot
     await v.click('dataroom-remove-go');
     assert.deepEqual(v.writes().map((w) => w.slice(0, 2)), [['DELETE', '/api/data-room/p3uid/files/a1'], ['DELETE', '/api/data-room/p3uid/files/a2']]);
   } finally { await v.close(); }
-  const co = await mounted('/raise/data-room/files?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder' }) });
+  const co = await mounted('/raise/data-room/files?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder', capabilities: ROOM_CAPS.cofounder }) });
   try {
     await co.change('dataroom-pick-a1', {});
     assert.equal(co.prop('dataroom-bulk-gate', 'disabled'), true);
@@ -306,7 +307,7 @@ test('Upload at /new: the queue in states, a large file refused before sending, 
     assert.deepEqual(body, { name: 'Pipeline.xlsx', data: 'data:text/plain;base64,aGVsbG8=', folder_uid: 'f3', visibility: 'nda', access_tier: 'invited', access_expires_at: null, checklist_item: 'financial_model' });
     assert.ok(v.has('dataroom-upload-state-done'));
   } finally { await v.close(); }
-  const co = await mounted('/raise/data-room/new?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder' }) });
+  const co = await mounted('/raise/data-room/new?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder', capabilities: ROOM_CAPS.cofounder }) });
   try {
     assert.ok(co.has('dataroom-upload-cofounder') && !co.has('dataroom-upload-nda'), 'a co-founder sets no gate');
     await co.change('dataroom-upload-pick', { files: [new File(['hi'], 'Notes.txt', { type: 'text/plain' })] });
