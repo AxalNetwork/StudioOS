@@ -37,6 +37,7 @@ async function fixture(state='sent',migration=readFileSync('cloudflare-worker/sq
   db.exec(readFileSync('cloudflare-worker/sql/migrations/456_round_call_counsel_terms.sql','utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/410_safe_issuances.sql','utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/437_share_an_update.sql','utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/202611091055_update_versions_deliveries.sql','utf8')); // D4636
   db.exec("INSERT INTO founders(id,name,email) VALUES(1,'Owner','owner@example.test'),(2,'Other','other@example.test')");
   const user=db.prepare('INSERT INTO users(id,name,email,role,founder_id,kyc_status,is_active) VALUES(?,?,?,?,?,?,?)');
   for(const row of [[1,'Owner','owner@example.test','founder',1,'approved',1],[2,'Other','other@example.test','founder',2,'approved',1],
