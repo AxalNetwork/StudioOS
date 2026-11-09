@@ -4,7 +4,7 @@ import { positiveCents, validClose, counselApproved, termsHash, deckContentHash,
 import type { RoundCallTerms, InvestorThesis } from './roundCallPolicy';
 import { notify } from './notify';
 import { hashEmail } from '../util/hashEmail';
-import { activeGrant, ndaActive } from '../routes/data_room';
+import { activeGrant, projectNdaActive } from '../routes/data_room';
 import { roundCallPipelineStatements } from '../routes/contacts';
 import { roundCallRequestStatement } from './dataRoomRequests';
 import { investorEvidence, RaiseEvidenceError } from './raiseEvidence';
@@ -355,7 +355,8 @@ export async function investorPage(env: Env, call: CallRow, investor: User) {
   let deck: Awaited<ReturnType<typeof currentDeck>> | {unreadable:true};
   try { deck=await currentDeck(env,call); } catch(e) { if(!(e instanceof RoundCallError)||e.code!=='approved_deck_changed')throw e; deck={unreadable:true}; }
   const active=call.data_room_project_uid!=null?await activeGrant(env,call.project_id,investor.id):null;
-  const nda=call.data_room_project_uid!=null && await ndaActive(env,active?.granted_by_user_id ?? call.created_by,investor.id);
+  // D4631 part 2: the venture's NDA by the shared rule (services/dealAccess.ts), whoever granted the room.
+  const nda=call.data_room_project_uid!=null && await projectNdaActive(env,call.project_id,investor.id);
   const grant=nda?active:null;
   const questions=await env.DB.prepare('SELECT uid,question,answer,asked_at,answered_at FROM round_call_questions WHERE call_id=? AND investor_user_id=? ORDER BY asked_at,id').bind(call.id,investor.id).all();
   // D1226: the company whose call this is, for CLS13's header. Its name only, never the founder's.
@@ -387,8 +388,7 @@ export async function respond(env: Env, call: CallRow, investor: User, input: Re
   if(action==='question') question=text(input.question,2000);
   if(action==='data_room') {
     if(!call.data_room_project_uid) throw new RoundCallError('data_room_not_recorded',409);
-    const grant=await activeGrant(env,call.project_id,investor.id);
-    if(!await ndaActive(env,grant?.granted_by_user_id ?? call.created_by,investor.id)) throw new RoundCallError('nda_required',409);
+    if(!await projectNdaActive(env,call.project_id,investor.id)) throw new RoundCallError('nda_required',409);
   }
   const at=now(),claim=crypto.randomUUID();
   const statements=[

@@ -28,10 +28,37 @@ export const DECISION_EVIDENCE_BAR = 5;
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 const FOR_VALUE = /^(venture|h-[1-9][0-9]{0,9})$/;
 
-/** "<n> of 5 needed before a verdict is given. Below that it is withheld.", n the checks now. */
-export const evidenceNote = (values) => {
-  const n = Array.isArray(values?.evidence) ? values.evidence.length : 0;
-  return `${n} of ${DECISION_EVIDENCE_BAR} needed before a verdict is given. Below that it is withheld.`;
+/**
+ * D4586 (methodology v2) — how many of the checked links count toward the bar,
+ * as the Worker's `decisionEvidenceV2` counts them: each underlying source
+ * once (the option's `source`), only the chosen hypothesis's evidence, and an
+ * experiment only once it has an observed result (`observed: false`). Without
+ * the Worker's options every check is its own source. This only draws the
+ * note; the Worker decides given or withheld.
+ */
+export function countedEvidence(values, options) {
+  const checked = Array.isArray(values?.evidence) ? values.evidence.map(String) : [];
+  const byValue = new Map((Array.isArray(options) ? options : []).map((o) => [String(o?.value), o]));
+  const scope = /^h-([1-9][0-9]{0,9})$/.exec(String(values?.for ?? ''));
+  const sources = new Set();
+  for (const v of checked) {
+    const o = byValue.get(v);
+    if (o && scope && Number(o.hypothesis_id) !== Number(scope[1])) continue;
+    if (o && o.observed === false) continue;
+    sources.add(o?.source ? String(o.source) : 'link:' + v);
+  }
+  return { links: checked.length, counted: sources.size };
+}
+
+/**
+ * "<n> of 5 needed before a verdict is given. Below that it is withheld.", n
+ * the checks that count now. When fewer count than are checked, it says so.
+ */
+export const evidenceNote = (values, field) => {
+  const { links, counted } = countedEvidence(values, field?.options);
+  const base = `${counted} of ${DECISION_EVIDENCE_BAR} needed before a verdict is given. Below that it is withheld.`;
+  return links === counted ? base
+    : `${base} ${links} checked: a source counts once, and only this hypothesis's evidence and observed results count.`;
 };
 
 /**

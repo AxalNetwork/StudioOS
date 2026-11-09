@@ -2140,6 +2140,12 @@ export type InviteRequest = {
   /** Where they are arriving from, so the destination sees a move, not an application. */
   moved_from_code?: string | null;
   reason?: string | null;
+  /**
+   * D5043 — HQ's move operation uid (`mvop_…`). When it names an invitation
+   * this branch already stored for the same move, that invitation is answered
+   * again (`reused: true`) instead of a second row being written.
+   */
+  move_ref?: string | null;
 };
 
 export type InviteResult = BranchAnswer<{
@@ -2160,66 +2166,26 @@ export type InviteResult = BranchAnswer<{
    * because then it is in the one place it belongs, which is their inbox.
    */
   invite_link?: string;
+  /** D5043 — true when this answers an invitation stored earlier for the same `move_ref`. */
+  reused?: boolean;
+  /** D5043 — the reused invitation has already been accepted: the person is here. */
+  accepted?: boolean;
 }>;
 
+/** D5043 — HQ's move operation uid, as `services/accountMoves.ts` mints it. */
+export const MOVE_REF_RE = /^mvop_[0-9a-f]{20}$/;
+
+/** A fresh invitation token. Prefixed so it cannot be mistaken for its own digest (below). */
+const newInvitationToken = () => `invt_${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
+
 /**
- * Invite an email onto this branch (migration 263).
- *
- * `email_sent` IS REPORTED, NEVER ASSUMED. Every sender in `services/email.ts`
- * returns `false` when the Gmail credentials are unset rather than throwing, and
- * a branch that has not had its mail configured is a real and likely state
- * during provisioning. An invitation nobody was told about is a different thing
- * from one that is merely unanswered — migration 236 says exactly that, and HQ
- * needs to see which so it can pass the link on by hand.
+ * Send the invitation message and record what the mailer did. Never throws:
+ * a send failure leaves the invitation stored, and says so.
  */
-export async function inviteAccount(
-  env: Env, secret: string, req: InviteRequest,
-): Promise<InviteResult> {
-  const branch = await authenticateHq(env, secret);
-
-  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
-  if (!actor) throw new Error('rpc: an invitation needs the name of the HQ operator sending it');
-
-  // Normalised HERE as well as at the caller, because this is the side that
-  // writes the row the unique index and the accept-time match both read.
-  const email = String(req?.email ?? '').trim().toLowerCase().slice(0, 320);
-  if (!email || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
-    throw new Error('rpc: an invitation needs a valid email address');
-  }
-
-  const existing = await env.DB.prepare(
-    'SELECT id FROM users WHERE email = ? AND is_active = 1',
-  ).bind(email).first<{ id: number }>();
-  if (existing) {
-    throw new Error(`rpc: ${email} already has an active account on ${branch}`);
-  }
-
-  // PREFIXED SO IT CANNOT BE MISTAKEN FOR ITS OWN DIGEST. Two UUIDs with the
-  // dashes stripped are exactly 64 hex characters — the same shape a SHA-256
-  // hex digest has — so a bug that stored the raw token instead of the hash
-  // would look completely correct in the table AND pass any assertion that
-  // checked the column's shape. That is not hypothetical: the first version
-  // of this code was mutated to store the raw token and the test could not
-  // tell. The prefix makes the two distinguishable at a glance and in an
-  // assertion, and costs nothing.
-  const rawToken = `invt_${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
-  const uid = newInvitationUid();
-  const row = await env.DB.prepare(
-    `INSERT INTO branch_invitations
-       (uid, email, name, role, token_hash, moved_from_code, reason, invited_by_name, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?))
-     RETURNING expires_at`,
-  ).bind(
-    uid, email,
-    req?.name == null ? null : String(req.name).slice(0, 200),
-    String(req?.role ?? 'exploring').slice(0, 40),
-    await sha256Hex(rawToken),
-    req?.moved_from_code == null ? null : String(req.moved_from_code).trim().toLowerCase().slice(0, 32),
-    req?.reason == null ? null : String(req.reason).slice(0, 300),
-    actor,
-    `+${INVITATION_TTL_DAYS} days`,
-  ).first<{ expires_at: string }>();
-
+async function sendInvitation(
+  env: Env, branch: string, actor: string, uid: string, email: string, rawToken: string,
+  movedFrom: string | null, reused: boolean,
+): Promise<{ sent: boolean; emailReason?: string; link: string }> {
   const base = String(env.APP_URL || '').replace(/\/+$/, '');
   // /join/:token, NOT /invite/:token. The second path is the events RSVP
   // page (App.jsx), and the Worker's only /invite/:token handler is the
@@ -2250,20 +2216,131 @@ export async function inviteAccount(
       `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, NULL)`,
     ).bind(
       'hq_account_invited',
-      JSON.stringify({ uid, branch, moved_from: req?.moved_from_code ?? null, email_sent: sent }),
+      JSON.stringify({ uid, branch, moved_from: movedFrom, email_sent: sent, ...(reused ? { reused: true } : {}) }),
       `hq:${actor}`.slice(0, 200),
     ).run();
   } catch (e) {
     console.warn('[rpc:inviteAccount] post-send write failed', (e as Error).message);
   }
+  return { sent, emailReason, link };
+}
+
+/**
+ * Invite an email onto this branch (migration 263).
+ *
+ * `email_sent` IS REPORTED, NEVER ASSUMED. Every sender in `services/email.ts`
+ * returns `false` when the Gmail credentials are unset rather than throwing, and
+ * a branch that has not had its mail configured is a real and likely state
+ * during provisioning. An invitation nobody was told about is a different thing
+ * from one that is merely unanswered — migration 236 says exactly that, and HQ
+ * needs to see which so it can pass the link on by hand.
+ *
+ * D5043 — ONE INVITATION PER MOVE. With a `move_ref`, an invitation this
+ * branch already stored for that move is answered again rather than a second
+ * one written, and that lookup runs BEFORE the active-account refusal: a
+ * person who accepted our own invitation is active here because of it, which
+ * is the move finished, not a conflict. A pending one whose message left is
+ * returned as it is (its link is in their inbox, and a new token would break
+ * it). A pending one whose message did not leave gets a new token and a new
+ * send: its only link went out in an answer HQ did not keep, or never heard.
+ */
+export async function inviteAccount(
+  env: Env, secret: string, req: InviteRequest,
+): Promise<InviteResult> {
+  const branch = await authenticateHq(env, secret);
+
+  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
+  if (!actor) throw new Error('rpc: an invitation needs the name of the HQ operator sending it');
+
+  // Normalised HERE as well as at the caller, because this is the side that
+  // writes the row the unique index and the accept-time match both read.
+  const email = String(req?.email ?? '').trim().toLowerCase().slice(0, 320);
+  if (!email || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
+    throw new Error('rpc: an invitation needs a valid email address');
+  }
+
+  const movedFrom = req?.moved_from_code == null ? null : String(req.moved_from_code).trim().toLowerCase().slice(0, 32);
+  const moveRef = MOVE_REF_RE.test(String(req?.move_ref ?? '')) ? String(req.move_ref) : null;
+
+  if (moveRef) {
+    const prior = await env.DB.prepare(
+      `SELECT uid, email, status, email_sent, expires_at, datetime(expires_at) > datetime('now') AS live
+         FROM branch_invitations WHERE move_ref = ? ORDER BY id DESC LIMIT 1`,
+    ).bind(moveRef).first<{ uid: string; email: string; status: string; email_sent: number; expires_at: string; live: number }>();
+    if (prior && prior.email === email && prior.status === 'accepted') {
+      return {
+        uid: prior.uid, email, expires_at: prior.expires_at, email_sent: Number(prior.email_sent) === 1,
+        reused: true, accepted: true, branch, as_of: nowIso(),
+      };
+    }
+    if (prior && prior.email === email && prior.status === 'pending' && Number(prior.live) === 1) {
+      if (Number(prior.email_sent) === 1) {
+        return {
+          uid: prior.uid, email, expires_at: prior.expires_at, email_sent: true,
+          reused: true, branch, as_of: nowIso(),
+        };
+      }
+      // The active-account refusal still holds before a new token is issued.
+      const activeNow = await env.DB.prepare(
+        'SELECT id FROM users WHERE email = ? AND is_active = 1',
+      ).bind(email).first<{ id: number }>();
+      if (activeNow) throw new Error(`rpc: ${email} already has an active account on ${branch}`);
+      const rawToken = newInvitationToken();
+      await env.DB.prepare('UPDATE branch_invitations SET token_hash = ?, updated_at = ? WHERE uid = ?')
+        .bind(await sha256Hex(rawToken), nowIso(), prior.uid).run();
+      const out = await sendInvitation(env, branch, actor, prior.uid, email, rawToken, movedFrom, true);
+      return {
+        uid: prior.uid, email, expires_at: prior.expires_at, email_sent: out.sent,
+        ...(out.emailReason ? { email_reason: out.emailReason } : {}),
+        ...(out.sent ? {} : { invite_link: out.link }),
+        reused: true, branch, as_of: nowIso(),
+      };
+    }
+  }
+
+  const existing = await env.DB.prepare(
+    'SELECT id FROM users WHERE email = ? AND is_active = 1',
+  ).bind(email).first<{ id: number }>();
+  if (existing) {
+    throw new Error(`rpc: ${email} already has an active account on ${branch}`);
+  }
+
+  // PREFIXED SO IT CANNOT BE MISTAKEN FOR ITS OWN DIGEST. Two UUIDs with the
+  // dashes stripped are exactly 64 hex characters — the same shape a SHA-256
+  // hex digest has — so a bug that stored the raw token instead of the hash
+  // would look completely correct in the table AND pass any assertion that
+  // checked the column's shape. That is not hypothetical: the first version
+  // of this code was mutated to store the raw token and the test could not
+  // tell. The prefix makes the two distinguishable at a glance and in an
+  // assertion, and costs nothing.
+  const rawToken = newInvitationToken();
+  const uid = newInvitationUid();
+  const row = await env.DB.prepare(
+    `INSERT INTO branch_invitations
+       (uid, email, name, role, token_hash, moved_from_code, reason, invited_by_name, expires_at, move_ref)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?), ?)
+     RETURNING expires_at`,
+  ).bind(
+    uid, email,
+    req?.name == null ? null : String(req.name).slice(0, 200),
+    String(req?.role ?? 'exploring').slice(0, 40),
+    await sha256Hex(rawToken),
+    movedFrom,
+    req?.reason == null ? null : String(req.reason).slice(0, 300),
+    actor,
+    `+${INVITATION_TTL_DAYS} days`,
+    moveRef,
+  ).first<{ expires_at: string }>();
+
+  const out = await sendInvitation(env, branch, actor, uid, email, rawToken, movedFrom, false);
 
   return {
     uid,
     email,
     expires_at: row?.expires_at ?? '',
-    email_sent: sent,
-    ...(emailReason ? { email_reason: emailReason } : {}),
-    ...(sent ? {} : { invite_link: link }),
+    email_sent: out.sent,
+    ...(out.emailReason ? { email_reason: out.emailReason } : {}),
+    ...(out.sent ? {} : { invite_link: out.link }),
     branch,
     as_of: nowIso(),
   };

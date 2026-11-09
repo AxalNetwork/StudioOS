@@ -463,13 +463,19 @@ async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject
     return alreadyDecided(c, now ?? p, target);
   }
   await logActorAct(c.env, user, `comarketing_${next}`, { pitch_uid: p.uid, partner_id: p.partner_id });
-  await notify(c.env, {
-    userId: p.submitter_user_id, type: `comarketing_${next}`, title: `Co-marketing pitch ${next === 'rejected' ? 'declined' : next}`,
-    body: `Your pitch “${p.title}” was ${next === 'rejected' ? 'declined' : next}.${next === 'rejected' ? ` Reason: ${reviewNotes}` : ''}${next === 'published' ? ` ${publishedUrl}` : ''}`,
-    link: '/comarketing', channels: ['in_app', 'email'], payload: { pitch_uid: p.uid, status: next },
-  });
-  return c.json(pitchDto({ ...p, status: next, review_notes: reviewNotes, reviewed_by_user_id: user.id,
-    reviewed_at: reviewedAt, attribution_code: setAttribCode, published_at: publishedAt, published_url: publishedUrl, updated_at: reviewedAt }, counts));
+  // D4814 (AP-18f): the decision is committed above, so a notice that does
+  // not go out is reported (`notified: false`), never thrown as a failure
+  // that would invite a second decision.
+  let notified = false;
+  try {
+    notified = (await notify(c.env, {
+      userId: p.submitter_user_id, type: `comarketing_${next}`, title: `Co-marketing pitch ${next === 'rejected' ? 'declined' : next}`,
+      body: `Your pitch “${p.title}” was ${next === 'rejected' ? 'declined' : next}.${next === 'rejected' ? ` Reason: ${reviewNotes}` : ''}${next === 'published' ? ` ${publishedUrl}` : ''}`,
+      link: '/comarketing', channels: ['in_app', 'email'], payload: { pitch_uid: p.uid, status: next },
+    })) !== null;
+  } catch (e) { console.warn('[comarketing] notify failed', e); }
+  return c.json({ ...pitchDto({ ...p, status: next, review_notes: reviewNotes, reviewed_by_user_id: user.id,
+    reviewed_at: reviewedAt, attribution_code: setAttribCode, published_at: publishedAt, published_url: publishedUrl, updated_at: reviewedAt }, counts), notified });
 }
 
 r.post('/admin/pitches/:uid/approve', (c) => adminTransition(c, 'approve'));

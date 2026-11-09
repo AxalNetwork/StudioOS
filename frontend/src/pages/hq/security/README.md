@@ -4,8 +4,9 @@ The pieces of HQ › Security v2 at `/admin/security`, from the landed canvas
 (`design/incoming/Security v2 Page.dc.html` and `Security v2 · Boards.dc.html`,
 boards SE01 to SE12, spec boards SEA to SEE; D4803). `../SecurityPage.jsx` is
 the host: it makes the page's three reads once, draws the shell and holds the
-`workspaces` map. Each workspace that Security v2 rebuilds gets its own file
-here; until then its entry in that map holds today's zones for its area.
+`workspaces` map. Each of the seven workspaces has its own file here (D4803
+slices 1 to 4); the zones each one replaced stay whole inside it, behind
+"How this is measured".
 
 | File | What it is |
 | --- | --- |
@@ -27,10 +28,16 @@ here; until then its entry in that map holds today's zones for its area.
 | `privacyModel.js` | D4803, pure. What Privacy says from `/overview`'s `dsr`: dates (`dayOf`, `whenOf`, `dueDayOf`), `remainingOf` (Overdue, Due today, n days, Unknown — never 0 for unknown), `openState` and `closedState`, `dsrRows` (open first, soonest due first, then closed in the window), `dsrSummary` (each figure `null` when unread), `nextAction`, `historyOf`, `OUTCOMES` (Fulfilled, Denied — never Withdrawn), and `closeResultOf` (done, unconfirmed, changed, refused). |
 | `PrivacyWorkspace.jsx` | D4803. The Privacy workspace (SE06a, SE06b, SE11d): the four figures, the requests table (phone cards from the same rows), `DsrDetail` (lifecycle, facts, the no-erase warning, Record outcome, history; on phone it replaces the list), and "How this is measured". |
 | `PrivacyActions.jsx` | D4803. Record outcome (SE06c, SE06d) in the `ActionDialog` shell: Fulfilled or Denied with a reason, Review, then only the server's answer; one close key per outcome and reason, resent on every retry (D4675); changed underneath keeps the reason and offers Reload. The one way HQ closes a data-subject request. |
+| `trustModel.js` | D4803, pure. What Trust says from `/overview`'s `sanctions` and `kyc` and the Trust Center admin read: `sanctionsBlock`, `kycBlock` (separate, each with its unreadable state), `bodyLines` and `lineDiff` (a draft against what is published, line by line), `publishSections` (the review's sections, with the subprocessor list's own changes), `publishingBlock`, `noticesBlock` (per notice: queued, sending, sent, failed, not sent before start; mail not configured) and `publishResultOf` (done, stale, unconfirmed, refused). |
+| `TrustWorkspace.jsx` | D4803. The Trust workspace (SE07a): sanctions, KYC, Trust Center publishing with Review changes…, subprocessor notices, obligations linked. It makes its own Trust Center read (`trustCenterAdminApi.read`), which fails on its own. |
+| `TrustActions.jsx` | D4803. Publish (SE07b, SE07c) in the `ActionDialog` shell: what publishing does, the per-block diff against the published revision with the change note, then only the server's answer. D4675's review token goes with it, so changed drafts publish nothing; one key per Publish, a new one when the note changes. |
 | `eventsModel.js` | D4803, pure. The Events words: `eventLabel` (a human label for each stored action, the raw id kept, an unknown action drawn from its own id), `outcomeState` (Refused, Allowed, Recorded, Live, Ended, Not closed, in the shared vocabulary), `byDay` (UTC day groups), the date ranges and outcomes the server filters on, `feedQuery` (an untouched bar sends nothing), `actorOptions`, `mergePages`. |
 | `EventsWorkspace.jsx` | D4803. The Events workspace (SE03, SE11b): the filter bar (search, date range, actor, outcome, source, branch disabled with why), the six quick categories, sources with Retry, the day-grouped table (phone cards from the same rows), Load older on the server's cursor, the event drawer (`EventDrawer`, read-only, raw row behind a disclosure) and "How this is measured". Every filter is the server's. |
 | `SourceAvailability.jsx` | "n of n sources read" from the ledger's `sources[]`, with a failed source named and Retry beside the count, and the store names and implementation notes behind Source details. |
 
+Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs`, `frontend/test/security_privacy_4803.test.mjs` and `frontend/test/security_trust_4803.test.mjs`; the zones that stay
+Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs` and `frontend/test/security_privacy_4803.test.mjs`; the zones that stay
+Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs` and `frontend/test/security_resilience_ai_4803.test.mjs`; the zones that stay
 Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/security_overview_recent_4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs` and `frontend/test/security_privacy_4803.test.mjs`; the zones that stay
 in `../SecurityPage.jsx` keep their own tests (`hq_security*.test.mjs`,
 `hq_governance_h7.test.mjs`).

@@ -129,7 +129,7 @@ test('a refused run says what happened: out of tokens with nothing charged, the 
   assert.deepEqual([t.kind, t.text], ['tokens', 'Not enough AI tokens. Add AI tokens or wait for next month’s allowance.']);
   assert.match(t.sub, /allowance first, then your AI tokens\. Nothing was charged\./);
   assert.equal(runRefusal({ status: 403, code: 'assist_off' }).kind, 'off');
-  assert.equal(runRefusal({ status: 422, data: { detail: 'There are no words in Traction to shorten yet.' } }).text, 'There are no words in Traction to shorten yet.');
+  assert.equal(runRefusal({ status: 422, code: 'nothing_to_shorten', data: { detail: 'There are no words in Traction to shorten yet.' } }).text, 'There are no words in Traction to shorten yet.');
   assert.doesNotMatch(runRefusal({ status: 500, message: 'ai_unavailable' }).text, /ai_unavailable/, 'never a code');
 });
 

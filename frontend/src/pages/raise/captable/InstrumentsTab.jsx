@@ -11,6 +11,7 @@ import {
   convertBody, convertView, filterInstruments, instrumentHref, instrumentView, over100, recordInstruments,
 } from './instrumentsModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1023 (#2860, CT3, CT3b, CT4) — Instruments at `/raise/cap-table/instruments`:
@@ -48,7 +49,7 @@ function useRead(load, projectId, reload) {
     setState({ status: 'loading', data: null });
     Promise.resolve().then(() => load(projectId))
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((e) => { if (alive) setState({ status: [403, 404].includes(e?.status) ? 'refused' : 'error', data: null, message: e?.message || '' }); });
+      .catch((e) => { if (alive) setState({ status: [403, 404].includes(e?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(e, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [load, projectId, reload]);
   return state;
@@ -155,7 +156,7 @@ function ConvertAt({ projectId, today, compare, instruments, onResult }) {
       const sim = await capTableScenariosApi.simulate(projectId, out.body);
       onResult(convertView(sim, instruments, out.label));
     } catch (e) {
-      setSentence(e?.message || 'The round could not be run. Nothing was saved.');
+      setSentence(userFacingRaiseError(e, { fallback: 'The round could not be run. Nothing was saved.' }));
     } finally { setBusy(false); }
   };
   const radio = (value, label) => (

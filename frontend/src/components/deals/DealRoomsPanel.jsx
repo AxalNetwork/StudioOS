@@ -10,9 +10,9 @@ import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from './DealRo
  * D630 (#1388) — canvas `dr-pipeline`: the deal rooms an investor can join,
  * on `/deals`.
  *
- * WHERE IT LIVES. `/deals` already serves the investor's Deals bucket board
- * (`InvestorDealsRoutes`), so this is a panel under the board rather than a
- * new address. Deal flow's Mine stays the investor's own work board (only
+ * WHERE IT LIVES. On `/deals`, collapsed under Deal flow's "Other deal
+ * activity" line (D4815), whose Deal rooms entry opens it. It has no address
+ * of its own yet. Deal flow's Mine stays the investor's own work board (only
  * the deals they are invited to or committed on, `scope=mine`; D1243 retired
  * `/deals/pipeline` into it); joining is about the deals they are NOT yet in, so this list is the unscoped one, with
  * the Worker's `is_member` deciding Join or Leave.
@@ -120,7 +120,11 @@ export function DealRoomsList({ dealsState, quotaState, onRetryDeals, onRetryQuo
                       {round ? <span className="font-mono">{round}</span> : <NotRecorded reason={STATES.pipeline.nrRound} />}
                     </div>
                   </div>
-                  <JoinLeaveButton dealId={d.id} member={member} quotaState={quotaState} onChanged={onChanged} compact />
+                  {/* D4815 (canvas DX1b): access that could not be read is not access refused,
+                      so it never offers Request an invitation; it offers Try again. */}
+                  {d.can_read === true || d.can_read === false
+                    ? <JoinLeaveButton dealId={d.id} member={member} quotaState={quotaState} onChanged={onChanged} compact />
+                    : <button type="button" onClick={onRetryDeals} className="min-h-[44px] rounded-[9px] border border-axal-hairline px-3 text-[13px] font-semibold md:min-h-0 md:py-1.5 dark:border-gray-700" data-testid="dr-access-retry">Try again</button>}
                 </li>
               );
             })}

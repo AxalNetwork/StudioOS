@@ -64,6 +64,8 @@ export const OPTION_LISTS = [
   { file: 'investor.js', name: 'INVESTOR_ASK_CHIPS', profile: 'Investor' },
   { file: 'partner.js', name: 'PARTNER_ASK_CHIPS', profile: 'Operating Partner' },
   { file: 'superAdmin.js', name: 'SUPER_ADMIN_RAIL_OPTIONS', profile: 'Super Admin' },
+  // D5084 (#5084): Revenue's contextual tasks, no-model Ask chips.
+  { file: 'superAdmin.js', name: 'SUPER_ADMIN_ASK_CHIPS', profile: 'Super Admin' },
 ];
 
 /** Every option the profiles' lists register, tagged with its profile. Each list is pure data. */

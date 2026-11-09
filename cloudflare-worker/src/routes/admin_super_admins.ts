@@ -21,6 +21,8 @@
  * is how one of them comes to check only two.
  *
  *   GET    /            every holder
+ *   GET    /candidates  D5044: who the elevation may be handed to — active
+ *                       admins who do not hold it, id, name and email only
  *   POST   /:userId     grant — the target must already be an admin, because
  *                       the Super Admin is an elevation on admin, not a role;
  *                       with `?transfer=1` the holder hands the platform on,
@@ -182,6 +184,30 @@ export function parseUserId(raw: string): number | null {
 r.get('/', async (c) => {
   await requireSuperAdmin(c);
   return c.json({ holders: await holders(c.env) });
+});
+
+/**
+ * D5044 (#5044) — THE TRANSFER PICKER'S OWN READ. The holder console used to
+ * fill its `<select>` from `GET /api/admin/hq/admins`, HQ Team's supervision
+ * read (licence bindings, the compliance ladder, holder state, the deployment
+ * registry, branch state), and filtered it in the browser — so the page made
+ * that read twice on load, and a failure of the picker's half discarded the
+ * holder list beside it. This answers exactly what the picker draws, filtered
+ * HERE by the rules the transfer route enforces: role admin, active (the
+ * route refuses `not_active`), and not already a holder. No LIMIT, for the
+ * reason D138 gave: the query has a predicate, and administrators are one per
+ * licence plus HQ, not a directory.
+ */
+r.get('/candidates', async (c) => {
+  await requireSuperAdmin(c);
+  const res = await c.env.DB.prepare(
+    `SELECT u.id, u.name, u.email
+       FROM users u
+       LEFT JOIN super_admins s ON s.user_id = u.id
+      WHERE LOWER(u.role) = 'admin' AND u.is_active = 1 AND s.user_id IS NULL
+      ORDER BY COALESCE(u.name, u.email), u.id`,
+  ).all<{ id: number; name: string | null; email: string }>();
+  return c.json({ candidates: res.results ?? [] });
 });
 
 r.post('/:userId', async (c) => {

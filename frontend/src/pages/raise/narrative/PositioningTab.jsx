@@ -9,6 +9,7 @@ import {
   MOVED_NOTICE, NOT_RECORDED, NO_FIGURES_READ, PROPOSAL_NOTE, PROPOSE_FOOT, REMOVED_LINE, WITHHELD_LINE,
   coreRows, isMoved, partItems, proposalRows, saveLine, tabSearch, versionRows,
 } from './narrativeModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D911 (#2695) — the Positioning tab: NAR4's core positioning and "This
@@ -38,7 +39,7 @@ const TAG = 'rounded-full border border-axal-hairline bg-axal-ground px-2.5 py-0
 const NOT_SET = 'rounded-full border border-dashed border-gray-300 bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400';
 const LAVENDER = 'rounded-[10px] border border-axal-lavender-edge bg-axal-lavender dark:border-violet-800 dark:bg-violet-950/40';
 
-const errText = (e, fallback) => String(e?.detail || e?.message || '').trim() || fallback;
+const errText = (e, fallback) => userFacingRaiseError(e, { fallback, scope: 'raise:narrative' });
 
 /** One read, again when `key` changes or on `reload`. */
 function useRead(load, key) {

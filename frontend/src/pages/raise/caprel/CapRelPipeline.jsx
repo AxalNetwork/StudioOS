@@ -12,6 +12,7 @@ import {
 import CapRelProposals from './CapRelProposals';
 import Sheet from '../../../ui/Sheet.jsx';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1192 (#3126) — Capital relationships' Pipeline (CRL2 the board, CRL3 the
@@ -39,7 +40,7 @@ const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 
 const LABEL = 'flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200';
 const NR = 'rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400';
 
-export const errText = (e, fallback) => (e?.status === 409 ? 'Already in the pipeline: this venture tracks an investor with that email.' : (e?.message || fallback));
+export const errText = (e, fallback) => (e?.status === 409 ? 'Already in the pipeline: this venture tracks an investor with that email.' : userFacingRaiseError(e, { fallback }));
 export const nameOf = (p) => [p?.name, p?.firm && p.firm !== p.name ? p.firm : null].filter(Boolean).join(' · ') || 'Investor';
 
 /** The prospects read, with a reload. */
@@ -263,7 +264,7 @@ export function ImportDialog({ projectId, onClose, onDone }) {
     const answers = [];
     for (const part of chunks(parsed.rows, IMPORT_CHUNK)) {
       try { answers.push(await cyclesWrite.raise.prospectsImport(projectId, part)); }
-      catch (e) { answers.push({ failed: true, count: part.length, reason: e?.message || 'This part of the file could not be sent' }); }
+      catch (e) { answers.push({ failed: true, count: part.length, reason: userFacingRaiseError(e, { fallback: 'This part of the file could not be sent' }) }); }
     }
     setBusy(false);
     setResult(mergeImport(answers, IMPORT_CHUNK));

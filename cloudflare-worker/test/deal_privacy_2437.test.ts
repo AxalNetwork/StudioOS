@@ -140,7 +140,8 @@ test('syndicate roster: creator/member/admin only; no member emails',async()=>{
 test('deal detail and list both apply the shared serializer; recommendations select no email',()=>{
  const source=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/routes/deals.ts'),'utf8');
  // D4631: both apply it by the caller's staff licence (admin, or the partner licence), not their primary role.
- assert.match(source,/map\(row => serializeDeal\(row, isDealStaff\(user\) \? 'admin' : 'member'\)\)/);
+ // D4631 part 2: the list strips its internal audience key first, then serializes by the staff licence.
+ assert.match(source,/map\(\(\{ row_founder_id: _founder, \.\.\.row \}\) => serializeDeal\(row, isDealStaff\(user\) \? 'admin' : 'member'\)\)/);
  assert.match(source,/const deal = serializeDeal\(rows\[0\], isDealStaff\(user\) \? 'admin' : 'member'\)/);
  const net=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/routes/networkfx.ts'),'utf8');
  const recs=net.slice(net.indexOf("networkfx.post('/syndicates/:id/recommendations'"),net.indexOf('// MARKETPLACE'));

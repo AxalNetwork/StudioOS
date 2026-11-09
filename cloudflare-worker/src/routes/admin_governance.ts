@@ -8,6 +8,7 @@
  *   GET   /api/admin/governance/linkable            → { templates: [{ slug, title, category }], envelopes: [{ id, title, completed_at }] }
  *   POST  /api/admin/governance/documents           { entity_key, category, title, effective_date?, confidential?, template_slug?, envelope_id? } → { document }
  *   GET   /api/admin/governance/documents/:uid      → { document, versions }
+ *   GET   /api/admin/governance/documents/:uid/activity → { uid, events: [{ action, line, at, actor, version }] }   D4811 part 5
  *   PATCH /api/admin/governance/documents/:uid      { title?, effective_date?, status?, confidential?, template_slug?, envelope_id? } → { document }
  *         D4811 part 6: status executed or archived also needs { reason, confirm: 'EXECUTED'|'ARCHIVE' } and a recent step-up;
  *         executed needs { evidence: { kind: 'version', version } | { kind: 'envelope' } } (`services/governanceHighRisk.ts`).
@@ -35,6 +36,7 @@ import {
   templateExists, versionKey, versionView, type DocRow, type GovernanceEntity,
 } from '../services/governance';
 import { entityAttention, groupOf, type DocFacts } from '../services/governanceAttention';
+import { GOVERNANCE_ACTIONS, eventOf } from '../services/governanceActivity';
 import { confirmationOf, evidenceOf, isHighRisk } from '../services/governanceHighRisk';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
@@ -147,6 +149,29 @@ governance.get('/documents/:uid', async (c) => {
   const versions = await readVersions(c.env, doc.uid);
   if (Number(doc.confidential) === 1) await audit(c, user, 'governance_document_viewed', { uid: doc.uid, entity: doc.entity_key, category: doc.category });
   return c.json({ document: docView(doc, versions[0] ?? null, versions.length), versions: versions.map(versionView) });
+});
+
+/**
+ * D4811 part 5 — GET /api/admin/governance/documents/:uid/activity: the
+ * record's audit trail for its workspace (`services/governanceActivity.ts`),
+ * newest first, at most 200. The same visibility as the record: a
+ * confidential one is the Super Admin's alone (404 for anyone else), and
+ * reading its trail is logged as a view, as reading the record is.
+ */
+governance.get('/documents/:uid/activity', async (c) => {
+  const { user, superAdmin } = await hq(c);
+  const doc = await visible(c, superAdmin);
+  if (doc instanceof Response) return doc;
+  const rows = (await c.env.DB.prepare(
+    `SELECT a.action, a.details, a.created_at, a.user_id, u.name AS actor_name
+       FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id
+      WHERE a.action IN (SELECT value FROM json_each(?))
+        AND CASE WHEN json_valid(a.details) = 1 THEN json_extract(a.details, '$.uid') END = ?
+      ORDER BY a.id DESC LIMIT 200`,
+  ).bind(JSON.stringify(GOVERNANCE_ACTIONS), doc.uid).all<any>()).results || [];
+  if (Number(doc.confidential) === 1) await audit(c, user, 'governance_document_viewed', { uid: doc.uid, entity: doc.entity_key, category: doc.category });
+  const events = rows.map(eventOf).filter(Boolean);
+  return c.json({ uid: doc.uid, events, limit: 200 });
 });
 
 governance.patch('/documents/:uid', async (c) => {
