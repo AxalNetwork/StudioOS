@@ -48,7 +48,7 @@ import { indexHmac } from '../services/columnCipher';
 import { configOf, customMcpEnabled, customRowFor, isConnectionUid } from '../integrations/customMcp';
 import { refuse } from '../util/refusal';
 import { admit, discard, fingerprintOf, opByKey, opByUid, opView, OP_KEY, settleTo, SENDS_PER_HOUR as OPS_PER_HOUR, type OpRow } from '../services/mail/sendOps';
-import { introForSend, markMadeOnSend, RelationshipRefusal } from '../services/relationships';
+import { claimIntroDelivery, introForSend, introHeldBy, markMadeOnSend, RelationshipRefusal } from '../services/relationships';
 
 const mailAccounts = new Hono<{ Bindings: Env }>();
 
@@ -265,10 +265,13 @@ mailAccounts.post('/send', async (c) => {
   // D4329 (#4329): an intro written for an accepted introduction request. Checked before anything goes
   // out: only the teammate on that request, while it is accepted. The send then records it as made.
   const introUid = b.intro_uid == null || b.intro_uid === '' ? null : String(b.intro_uid);
+  // D4604: an intro already made still lets a replay of the operation that made it recover (below); any other send is refused.
+  let introMade: RelationshipRefusal | null = null;
   if (introUid) {
     try { await introForSend(c.env, user, introUid); } catch (e) {
-      if (e instanceof RelationshipRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
-      throw e;
+      if (e instanceof RelationshipRefusal && e.code === 'intro_already_made') introMade = e;
+      else if (e instanceof RelationshipRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+      else throw e;
     }
   }
   // D4493 (#4493): a sequence step's draft must still be due, go to that prospect's own
@@ -302,12 +305,14 @@ mailAccounts.post('/send', async (c) => {
     const logged = await log(op, messageId, null).then(() => true).catch(() => false);
     if (logged) await settleTo(c.env, op, 'accepted', ['accepted'], { sentUid: op.uid }).catch(() => false);
     if (logged && sequence) await sequenceAdvance(c.env, sequence).catch(() => null);
-    return logged && introUid ? await markMadeOnSend(c.env, user, introUid, op.uid).catch(() => null) : null;
+    // D4604: the accepted operation is itself the proof of delivery, so a sent-log write that failed does not hold the
+    // introduction's record back. Each call is conditional and safe to repeat.
+    return introUid ? await introRecord(c.env, user, introUid, op.uid) : null;
   };
-  const acceptedBody = async (op: OpRow, intro: Awaited<ReturnType<typeof markMadeOnSend>> | null) => ({
+  const acceptedBody = async (op: OpRow, intro: IntroRecord | null) => ({
     operation: opView(op),
     sent: { uid: op.uid, account_uid: row.uid, to, subject, provider_message_id: op.provider_message_id, draft_uid: draftUid, refs, intro_uid: introUid },
-    ...(introUid ? { intro: intro ? { uid: introUid, status: intro.status } : { uid: introUid, status: 'accepted', recorded: false } } : {}),
+    ...(introUid ? { intro: intro ?? { uid: introUid, status: 'accepted', recorded: false } } : {}),
   });
 
   // A replay of an operation this member already made recovers it: no nonce, no provider.
@@ -319,11 +324,21 @@ mailAccounts.post('/send', async (c) => {
       return c.json({ ...(await acceptedBody({ ...op, sent_uid: op.uid }, intro)), recovered: true }, 200);
     });
   }
+  if (introMade) return refuse(c, introMade.status, { code: introMade.code, message: introMade.sentence });
 
   const admission = await admit(c.env, user, row.id, opKey, fingerprint);
   if (admission.kind === 'limited') return refuse(c, 429, { code: 'send_rate_limited', message: `You have sent ${SENDS_PER_HOUR} emails in the last hour. Try again later.` });
   if (admission.kind === 'existing') return recovered(c, admission.op, async () => c.json({ operation: opView(admission.op), recovered: true }, 200));
   const op = admission.op;
+  // D4604: this operation claims the intro's delivery before the nonce is spent or the provider is reached. Another
+  // operation that is unconfirmed or already delivered holds it: nothing is sent, and the place is freed.
+  if (introUid) {
+    try { await claimIntroDelivery(c.env, user, introUid, op.uid); } catch (e) {
+      await discard(c.env, op).catch(() => null);
+      if (e instanceof RelationshipRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+      throw e;
+    }
+  }
   // The composer's pressed Send: a one-use nonce, spent before anything goes out. A wrong one frees the place.
   if (!await spendSendNonce(c.env, user, b.nonce)) {
     await discard(c.env, op).catch(() => null);
@@ -372,6 +387,20 @@ mailAccounts.post('/send', async (c) => {
   return c.json(await acceptedBody(accepted, intro), 201);
 });
 
+/**
+ * D4604: the introduction's record after its delivery was accepted, as stored. `made` when this send (or an earlier
+ * reconcile of it) made it; otherwise `accepted` with `recorded: false`, which the desk reconciles without sending again.
+ */
+type IntroRecord = { uid: string; status: string; recorded?: false };
+async function introRecord(env: Env, user: User, introUid: string, opUid: string): Promise<IntroRecord> {
+  const made = await markMadeOnSend(env, user, introUid, opUid).catch(() => null);
+  if (made) return { uid: introUid, status: made.status };
+  const row = await env.DB.prepare("SELECT status, mail_sent_uid FROM relationship_interactions WHERE uid = ? AND teammate_user_id = ? AND kind = 'intro_requested'")
+    .bind(introUid, user.id).first<{ status: string; mail_sent_uid: string | null }>().catch(() => null);
+  if (row?.status === 'made' && row.mail_sent_uid === opUid) return { uid: introUid, status: 'made' };
+  return { uid: introUid, status: 'accepted', recorded: false };
+}
+
 /** Answers for an operation that already exists, by its recorded state. `accepted` hands the recovery to the caller. */
 async function recovered(c: Context<any>, op: OpRow, whenAccepted: (op: OpRow) => Promise<Response>): Promise<Response> {
   if (op.state === 'accepted') return whenAccepted(op);
@@ -405,11 +434,16 @@ mailAccounts.post('/send/operations/:uid/resolve', async (c) => {
   if (op.state !== 'uncertain') return refuse(c, 409, { code: 'operation_settled', message: 'This email’s outcome is already recorded.' });
   const to = b.outcome === 'arrived' ? 'accepted' : 'refused';
   await settleTo(c.env, op, to, ['uncertain'], { code: `member_${b.outcome}` });
+  // D4604: the intro this operation was delivering, if any. Arrived records it as made (no resend); not arrived
+  // releases the claim, so the intro can be written again.
+  const introUid = await introHeldBy(c.env, user, op.uid).catch(() => null);
+  let intro: IntroRecord | null = null;
   if (to === 'accepted') {
     await c.env.DB.prepare('UPDATE mail_sent SET sent_at = ?, error = NULL WHERE uid = ? AND user_id = ? AND sent_at IS NULL')
       .bind(new Date().toISOString(), op.uid, user.id).run().catch(() => null);
-  }
-  return c.json({ operation: opView((await opByUid(c.env, user, op.uid)) ?? op) });
+    if (introUid) intro = await introRecord(c.env, user, introUid, op.uid);
+  } else if (introUid) intro = { uid: introUid, status: 'accepted' };
+  return c.json({ operation: opView((await opByUid(c.env, user, op.uid)) ?? op), ...(intro ? { intro } : {}) });
 });
 
 // D1344 (#3552, EM7): the member's own sent log. A row names its recipient to the member who sent it
