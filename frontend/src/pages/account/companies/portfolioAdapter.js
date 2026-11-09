@@ -27,7 +27,6 @@ import { accountPortfolioApi } from '../../../lib/api/accountPortfolio.js';
 import { companyLegalApi } from '../../../lib/api/companyLegal.js';
 import { companyDocumentsApi } from '../../../lib/api/companyDocuments.js';
 import { slugsApi } from '../../../lib/api/slugs.js';
-import { listAgents } from '../../team/agentsAdapter.js';
 
 /** What a seam answers before its route exists: the reason and the issue it waits on. */
 export const unavailable = (reason, waitsOn = null) => ({ available: false, reason, waitsOn });
@@ -95,6 +94,9 @@ export const slugCheck = (q) => through(() => slugsApi.check(q));
 
 /** A project's agents (PF6c "Agents"), as Team's seam reads them: unavailable while agents are switched off. */
 export async function projectAgents(id) {
+  // #4574 H4: loaded when asked. A static import put Team's agents, skills and assessment models in the shell through
+  // CompanySwitcher, which reads `switcher` from this file on every signed-in page.
+  const { listAgents } = await import('../../team/agentsAdapter.js');
   const out = await listAgents('project', id);
   if (!out.available) return out;
   const agents = Array.isArray(out.value?.agents) ? out.value.agents : null;

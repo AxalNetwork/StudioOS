@@ -25,6 +25,11 @@ import { register } from 'node:module';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+// #4574 H4: the ui barrel and the recording view left the shell, so App no longer loads them at start-up; the first
+// route that needs them evaluates them then. This suite settles each load with a fixed number of ticks, so it loads
+// them first, as a browser has them once their chunks arrive (the same move as H5's _cycleSteps.mjs). No assertion changes.
+await import('../src/ui/index.js');
+await import('../src/pages/founder/RecordingView.jsx');
 
 const h = React.createElement;
 const APP = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');

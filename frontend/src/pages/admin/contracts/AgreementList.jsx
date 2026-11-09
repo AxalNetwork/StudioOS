@@ -2,6 +2,7 @@ import React from 'react';
 import { contractsApi } from '../../../lib/api/contracts';
 import { ReadState, useRead, Recorded, Missing, button, input, card, Pagination } from './parts';
 import { agreementRowSemantics } from '../../../lib/contractLifecycle';
+import { attentionLabel } from './contractMetrics';
 import { InconsistencyFlag, LifecycleBadge } from './LifecycleBadge';
 import { Link } from 'react-router-dom';
 import {
@@ -73,6 +74,9 @@ export default function AgreementList({ filters, onFilters, onOpen, revision }) 
       <label>Sort<select className={input} value={`${filters.sort || 'sent_at'}:${filters.direction || 'desc'}`} onChange={e => { const [sort, direction] = e.target.value.split(':'); onFilters({ ...filters, sort, direction, offset: 0 }); }}>{[['sent_at:desc', 'Sent, newest'], ['sent_at:asc', 'Sent, oldest'], ['title:asc', 'Title'], ['recipient:asc', 'Recipient'], ['signed_at:desc', 'Signed, newest'], ['days_to_sign:asc', 'Days to sign']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <button type="button" className={button} onClick={() => onFilters({})}>Clear filters</button></div>
     {filters.template && <p className="px-3">Template: {filters.template}</p>}
+    {/* D4811 part 3: a metric strip cell's records, named, with a way back to all agreements. */}
+    {attentionLabel(filters.attention) && <p role="status" className="flex flex-wrap items-center gap-2 px-3 text-[12.5px]" data-testid="agreement-attention-filter">Showing: <b>{attentionLabel(filters.attention)}</b>
+      <button type="button" className={button} onClick={() => onFilters({ ...filters, attention: '', offset: 0 })}>Show all agreements</button></p>}
     <ReadState read={read} what="Agreements">{read.data && <>
       {!read.data.items.length ? <p className="p-6">No agreement matches these filters. Use New envelope to send an agreement.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[840px] text-left text-xs"><thead className="border-y border-axal-hairline text-axal-muted"><tr>{['Agreement · store', 'Company · recipient', 'Where it stands', 'Provider', 'Lifecycle'].map(label => <th className="p-3 font-semibold" key={label}>{label}</th>)}</tr></thead><tbody>{read.data.items.map(row => <tr key={`${row.source}:${row.id}`} className="border-b border-axal-hairline align-top">
         <td className="p-3">{['licence_agreement', 'licence_contract'].includes(row.source)
