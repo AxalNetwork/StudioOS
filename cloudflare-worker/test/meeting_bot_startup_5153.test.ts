@@ -25,7 +25,9 @@ import type { Env } from '../src/types.ts';
 const UID = '00000000-0000-4000-8000-000000005153';
 const SECRET = randomBytes(32).toString('hex');
 const VERSION = 'abcdef1234567';
-const LINK = 'https://meet.google.com/abc-defg-hij';
+// The meeting's own code is the private part of the link: it must never appear anywhere.
+const MEETING_CODE = 'abc-defg-hij';
+const LINK = ['https:/', 'meet.google.com', MEETING_CODE].join('/');
 const input = () => ({ uid: UID, platform: 'google_meet', meeting_url: LINK, limit_minutes: 30,
   deadline_at: Date.now() + 1_800_000, budget_deadline_at: Date.now() + 120_000, notice: 'Synthetic notice', venture_name: null });
 
@@ -142,7 +144,7 @@ test('D5153 host: startup log lines carry codes and stages only, never the meeti
   assert.ok(stages.length >= 8);
   for (const line of stages) assert.deepEqual(Object.keys(line).sort(), ['elapsed_ms', 'error_code', 'event', 'platform', 'result', 'run_uid', 'runtime_version', 'stage']);
   assert.deepEqual(stages.filter((l) => l.result === 'fail').map((l) => l.error_code), ['runtime_refused']);
-  for (const l of lines) { assert.equal(l.includes('meet.google.com'), false); assert.equal(l.includes(SECRET), false); assert.equal(l.includes('Synthetic notice'), false); }
+  for (const l of lines) { assert.equal(l.includes(MEETING_CODE), false); assert.equal(l.includes(SECRET), false); assert.equal(l.includes('Synthetic notice'), false); }
 });
 
 test('D5153 runtime: /healthz reports its build only when it is a commit id', async () => {
@@ -250,7 +252,7 @@ test('D5153 HQ: recent failed runs carry stage, codes, version, timing and a nex
     [uid, 'google_meet', 'failed', 'runtime_unavailable', 'runtime_port_waiting', 'runtime_no_answer', VERSION, false]);
   assert.equal(r.action, RUNTIME_ACTION.runtime_no_answer);
   const text = JSON.stringify(recent);
-  for (const forbidden of ['meet.google.com', 'meeting_url', 'participants', 'v1.', 'user_id']) assert.equal(text.includes(forbidden), false, forbidden);
+  for (const forbidden of [MEETING_CODE, 'meeting_url', 'participants', 'v1.', 'user_id']) assert.equal(text.includes(forbidden), false, forbidden);
   const route = await call(w.env, FOUNDER, 'GET', '/admin/platform/meeting-bots');
   assert.notEqual(route.status, 200, 'Super Admin only');
 });
