@@ -66,7 +66,9 @@ test('D1486 §a: the member\'s own runs only; a second user sees none, and no st
     assert.deepEqual(await botCallEvents(env, 3, FROM, TO), [], 'a member with no runs reads none');
     assert.ok((PERSONAL_ONLY_KINDS as readonly string[]).includes('bot_call'), 'no staff scope has a reader for it');
     const { events, sources } = await fetchUserEventsWithSources(env, 1, 'founder', FROM, TO, ['bot_call']);
-    assert.deepEqual(sources, [{ kind: 'bot_call', ok: true, error: null }]);
+    // D5202 (#5202): a source row also carries safe health (reason, latency_ms, items, at), so these compare
+    // the fields this test is about rather than the whole row.
+    assert.deepEqual(sources.map(({ kind, ok, error }) => ({ kind, ok, error })), [{ kind: 'bot_call', ok: true, error: null }]);
     assert.equal(events.length, 3);
   } finally { db.close(); }
 });

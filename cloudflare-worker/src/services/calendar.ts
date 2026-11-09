@@ -960,6 +960,17 @@ export interface CalendarSourceStatus {
   error: 'unreadable' | 'not_configured' | 'reconnect' | 'rate_limited' | null;
   /** D1485: a connected calendar that stopped at its page cap. */
   truncated?: true;
+  /**
+   * D5202 (#5202) — SAFE SOURCE HEALTH. Why it failed, how long it took, how many items it gave and when. A
+   * read that is Connected but not healthy is the state this page could not show before: the rail said
+   * Connected while the events were missing. Support reads these to tell a provider-wide outage from one
+   * account's problem. Fixed words and numbers only: never a title, an attendee, an address, a join link, a
+   * token or a provider's body.
+   */
+  reason?: string;
+  latency_ms?: number;
+  items?: number;
+  at?: string;
 }
 
 /**
@@ -990,17 +1001,26 @@ async function gather(
   const external = await import('./calendar/externalReaders');
   for (const kind of KNOWN_KINDS) {
     if (!wanted.has(kind)) continue;
+    // D5202: every source is timed, so a slow provider is visible as a number rather than as a blank agenda.
+    const began = Date.now();
+    const took = () => Math.max(0, Date.now() - began);
     try {
       const read = await READERS[kind](env, userId, fromIso, toIso, opts) as CalendarEvent[] & { truncated?: boolean };
       events.push(...read);
-      sources.push({ kind, ok: true, error: null, ...(read.truncated ? { truncated: true as const } : {}) });
+      sources.push({
+        kind, ok: true, error: null, ...(read.truncated ? { truncated: true as const } : {}),
+        latency_ms: took(), items: read.length, at: new Date().toISOString(),
+      });
     } catch (e) {
       // D1485: a member with no Google or Outlook connection has no such source at all.
       if (e instanceof external.NoSource) continue;
       const error = e instanceof external.ExternalReadError ? e.code
         : isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
-      console.warn('[calendar] source failed', { kind, outcome: error });
-      sources.push({ kind, ok: false, error });
+      // D5202: the reason is the reader's own word where it has one, else the shape of the failure.
+      const reason = e instanceof external.ExternalReadError ? e.reason
+        : isMissingTableError(e) || isMissingColumnError(e) ? 'schema_missing' : 'threw';
+      console.warn('[calendar] source failed', { kind, outcome: error, reason, latency_ms: took() });
+      sources.push({ kind, ok: false, error, reason, latency_ms: took(), items: 0, at: new Date().toISOString() });
     }
   }
   events.sort((a, b) => a.start_at.localeCompare(b.start_at));

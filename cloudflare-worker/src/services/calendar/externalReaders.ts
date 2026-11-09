@@ -37,13 +37,34 @@ export const isExternalKind = (kind: string): kind is ExternalKind => (EXTERNAL_
 export const PROVIDER_OF: Readonly<Record<ExternalKind, ExternalProvider>> = { external_google: 'google', external_microsoft: 'microsoft' };
 export const PAGE_SIZE = 250;
 export const MAX_PAGES = 4;
+/** One page's own deadline. A read of 4 pages may take up to 4 of these. */
+export const READ_TIMEOUT_MS = 10000;
 
 /** The member has no such connection: the source is not listed at all. */
 export class NoSource extends Error { constructor() { super('no_source'); } }
-/** A source that failed, with the code the page shows. */
+/**
+ * Why a read did not answer (D5202, #5202). `reason` is for support: it tells a provider-wide outage from an
+ * account's own problem without naming an event, an address or a provider body. Every value is a fixed word.
+ *
+ *   scope_missing    the stored grant names no calendar scope
+ *   refresh_refused  the saved refresh token would not exchange
+ *   http_4xx         the provider refused the request (not 401, 403 or 429, which are their own codes)
+ *   http_5xx         the provider itself failed
+ *   rate_limited     429
+ *   timeout          no answer inside the read's own deadline
+ *   network          the request did not complete
+ *   bad_body         the answer was not the JSON object the reader expects
+ */
+export type ExternalReadReason =
+  | 'scope_missing' | 'refresh_refused' | 'http_4xx' | 'http_5xx' | 'rate_limited' | 'timeout' | 'network' | 'bad_body';
+
+/** A source that failed, with the code the page shows and the reason support reads. */
 export class ExternalReadError extends Error {
   code: 'reconnect' | 'rate_limited' | 'unreadable';
-  constructor(code: 'reconnect' | 'rate_limited' | 'unreadable') { super(code); this.code = code; }
+  reason: ExternalReadReason;
+  constructor(code: 'reconnect' | 'rate_limited' | 'unreadable', reason: ExternalReadReason) {
+    super(code); this.code = code; this.reason = reason;
+  }
 }
 
 /** What a reader returns: the events, and whether it stopped at the page cap. */
@@ -67,32 +88,36 @@ async function storedToken(env: Env, provider: ExternalProvider, userId: number)
     ? await env.DB.prepare('SELECT scope, google_email AS address FROM google_oauth_tokens WHERE user_id = ?').bind(userId).first<{ scope: string | null; address: string | null }>()
     : await env.DB.prepare('SELECT scope, microsoft_email AS address FROM microsoft_oauth_tokens WHERE user_id = ?').bind(userId).first<{ scope: string | null; address: string | null }>();
   if (!row) return null;
-  if (provider === 'google' && !String(row.scope || '').split(/[\s,]+/).some((s) => READONLY.includes(s))) throw new ExternalReadError('reconnect');
+  if (provider === 'google' && !String(row.scope || '').split(/[\s,]+/).some((s) => READONLY.includes(s))) throw new ExternalReadError('reconnect', 'scope_missing');
   const stored = await loadRefreshTokenExport(env, table, userId);
   if (!stored?.raw) return null;
   let access: string;
   try {
     access = provider === 'google' ? await refreshGoogleAccessToken(env, stored.raw) : await refreshMicrosoftAccessToken(env, stored.raw);
   } catch {
-    throw new ExternalReadError('reconnect');
+    throw new ExternalReadError('reconnect', 'refresh_refused');
   }
   if (stored.wasPlaintext) await reencryptRefreshTokenExport(env, table, userId, stored.raw);
   return { access, address: row.address ?? null };
 }
 
 function failure(status: number): ExternalReadError {
-  if (status === 401 || status === 403) return new ExternalReadError('reconnect');
-  if (status === 429) return new ExternalReadError('rate_limited');
-  return new ExternalReadError('unreadable');
+  if (status === 401 || status === 403) return new ExternalReadError('reconnect', 'http_4xx');
+  if (status === 429) return new ExternalReadError('rate_limited', 'rate_limited');
+  return new ExternalReadError('unreadable', status >= 500 ? 'http_5xx' : 'http_4xx');
 }
 
 async function getJson(fetcher: typeof fetch, url: string, headers: Record<string, string>): Promise<any> {
   let res: Response;
-  try { res = await fetcher(url, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(10000), headers }); }
-  catch { throw new ExternalReadError('unreadable'); }
+  try { res = await fetcher(url, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(READ_TIMEOUT_MS), headers }); }
+  catch (e) {
+    // D5202: a deadline that ran out and a request that never completed are different things to support.
+    const timedOut = (e as Error)?.name === 'TimeoutError' || /timed? ?out/i.test(String((e as Error)?.message || ''));
+    throw new ExternalReadError('unreadable', timedOut ? 'timeout' : 'network');
+  }
   if (!res.ok) throw failure(res.status);
   const body: any = await res.json().catch(() => null);
-  if (!body || typeof body !== 'object') throw new ExternalReadError('unreadable');
+  if (!body || typeof body !== 'object') throw new ExternalReadError('unreadable', 'bad_body');
   return body;
 }
 

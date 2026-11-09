@@ -108,7 +108,7 @@ import AgentSessionSheet, { ScheduleAgentSheet } from './CalendarAgentSessions';
 import { AGENT_KIND } from './calendarAgentModel';
 import AskButton from './team/AskButton.jsx';
 import { ConnectedPanel, ConnectedSummary, GooglePanel, SubscribeDialog } from './CalendarConnected';
-import { CONNECTED_PATH, connectedOf, externalReadError, stripLabel, weekStrip } from './calendarConnectedModel';
+import { CONNECTED_PATH, connectedOf, externalReadError, readHealth, stripLabel, weekStrip } from './calendarConnectedModel';
 import CalendarSourcesPanel from './CalendarSourcesPanel';
 import { SOURCES_PATH, coloursOf, sourcesOpen } from './calendarSourcesModel';
 import { calendarSourcesApi } from '../lib/api/calendarSources';
@@ -498,6 +498,33 @@ function PersonalCalendar({ scopes = [] }) {
     setLoading(false);
   }, [window_.from, window_.to]);
 
+  /**
+   * D5202 (#5202): re-read ONE external provider's events, and nothing else. A rate-limited or unreadable
+   * Google read is not a reason to ask every other source again, and the member is waiting on this one. The
+   * provider's own events replace its own, and its source row replaces its own: no other source is touched.
+   */
+  const reloadProvider = useCallback(async (provider) => {
+    const kind = provider === 'google' ? 'external_google' : 'external_microsoft';
+    setSources((was) => (Array.isArray(was) ? was.map((s) => (s?.kind === kind ? { ...s, ok: true, error: null, reading: true } : s)) : was));
+    try {
+      const r = await api.listCalendarEvents({ from: window_.from.toISOString(), to: window_.to.toISOString(), kinds: kind });
+      const got = Array.isArray(r?.items) ? r.items : [];
+      const row = (Array.isArray(r?.sources) ? r.sources : []).find((x) => x?.kind === kind) ?? null;
+      setItems((was) => [...(Array.isArray(was) ? was.filter((e) => e?.kind !== kind) : []), ...got]
+        .sort((x, y) => String(x?.start_at).localeCompare(String(y?.start_at))));
+      setSources((was) => {
+        const rest = Array.isArray(was) ? was.filter((s) => s?.kind !== kind) : [];
+        return row ? [...rest, row] : rest;
+      });
+    } catch (e) {
+      // The re-read itself did not answer: this source alone says so, and the rest of the calendar is untouched.
+      setSources((was) => {
+        const rest = Array.isArray(was) ? was.filter((s) => s?.kind !== kind) : [];
+        return [...rest, { kind, ok: false, error: 'unreadable', reason: 'retry_failed' }];
+      });
+    }
+  }, [window_.from, window_.to]);
+
   const loadGoogle = useCallback(async () => {
     // D332 — a failed STATUS READ used to set `available: false`, the exact
     // shape `providerState` reads as "this server has no OAuth credentials
@@ -597,6 +624,10 @@ function PersonalCalendar({ scopes = [] }) {
 
   const gState = providerState(google, googleResult, externalReadError(sources, 'google'));
   const mState = providerState(microsoft, microsoftResult, externalReadError(sources, 'microsoft'));
+  // D5202: the read's health is its own dimension, so a connected provider whose events did not load is shown
+  // as exactly that, instead of a green Connected over a gap in the agenda.
+  const gHealth = readHealth(sources, 'google', { loading });
+  const mHealth = readHealth(sources, 'microsoft', { loading });
   // A provider whose sync was just refused cannot take a push either — the
   // canvas is explicit about this, drawing C6's expired Google as no provider
   // at all and putting the reconnect wording in place of the push control.
@@ -867,6 +898,7 @@ function PersonalCalendar({ scopes = [] }) {
       {showCk && <NewCheckinDialog role={role} meetAvailable={gState === 'connected'} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
       {connected === 'list' && (
         <ConnectedPanel google={google} microsoft={microsoft} gState={gState} mState={mState}
+                        gHealth={gHealth} mHealth={mHealth} rereadProvider={reloadProvider}
                         reloadGoogle={loadGoogle} reloadMicrosoft={loadMicrosoft} onClose={() => navigate(behind)} />
       )}
       {sourcesPanel && (
