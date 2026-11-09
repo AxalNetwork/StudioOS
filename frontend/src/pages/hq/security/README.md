@@ -36,6 +36,7 @@ slices 1 to 4); the zones each one replaced stay whole inside it, behind
 | `SourceAvailability.jsx` | "n of n sources read" from the ledger's `sources[]`, with a failed source named and Retry beside the count, and the store names and implementation notes behind Source details. |
 
 Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs`, `frontend/test/security_privacy_4803.test.mjs` and `frontend/test/security_trust_4803.test.mjs`; the zones that stay
+Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs` and `frontend/test/security_privacy_4803.test.mjs`; the zones that stay
 Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs` and `frontend/test/security_resilience_ai_4803.test.mjs`; the zones that stay
 in `../SecurityPage.jsx` keep their own tests (`hq_security*.test.mjs`,
 `hq_governance_h7.test.mjs`).

@@ -42,7 +42,7 @@
  * and traction's reads carry `parts.from_beehiiv` (`services/beehiiv/grow.ts`),
  * for anyone who may read the module (decision D1); a failed read is
  * `unreadable` and the module still loads. Durable company-building's Updates
- * rows carry `newsletter`, null until #2407 part 3. Every route below refuses a
+ * rows carry `newsletter`, its Beehiiv post's figures (#2407 part 3). Every route below refuses a
  * support session; the logs carry counts only.
  *   GET    /beehiiv/publications?project=          the caller's own Beehiiv publications and the venture's link
  *   PUT    /beehiiv/publication                    { project, publication_id | null } link, change or unlink
@@ -95,7 +95,7 @@ import { projectEnabled } from '../integrations/companyScope';
 import type { IntegrationRow } from '../integrations/registry';
 import { BeehiivReadError, beehiivId, beehiivReadsFor } from '../services/beehiiv/reads';
 import {
-  BEEHIIV_SLUGS, NEWSLETTER_NOT_LINKED, SENTENCES as BEEHIIV_SENTENCES, acceptChannelProposal, beehiivPart as beehiivModulePart, deleteBeehiivRow,
+  BEEHIIV_SLUGS, NEWSLETTER_NOT_LINKED, NEWSLETTER_UNREADABLE, newsletterByUpdate, SENTENCES as BEEHIIV_SENTENCES, acceptChannelProposal, beehiivPart as beehiivModulePart, deleteBeehiivRow,
   dismissChannelProposal, linkOf as beehiivLinkOf, linkPublication, syncBeehiiv, unlinkPublication, type BeehiivSlug,
 } from '../services/beehiiv/grow';
 import { workspaceContext, workspaceMember } from './google_workspace';
@@ -342,6 +342,8 @@ async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|nul
     for (const row of recipients.results || []) byRecipients.set(row.update_id, [...(byRecipients.get(row.update_id) || []), row]);
     const byAsks = new Map<number, any[]>();
     for (const row of asks.results || []) byAsks.set(row.update_id, [...(byAsks.get(row.update_id) || []), row]);
+    // D2407 part 3: a sent update's Beehiiv post's figures; null (with the reason) when there is none.
+    const newsletters = await newsletterByUpdate(env, projectId);
     return { updates: updates.map((u) => {
       const base = { uid: u.uid, title: u.title, period: u.period_start ? null : u.period,
         period_start: u.period_start, period_end: u.period_end, sent_at: u.sent_at,
@@ -357,9 +359,9 @@ async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|nul
         opened: rs.reduce((n, r) => n + Number(r.opened || 0), 0), asks: as.length,
         replies: as.reduce((n, a) => n + Number(a.replies || 0), 0),
         asks_to_ask_again: as.filter((a) => canAskAgain(u.sent_at, Number(a.replies || 0), a.asked_again_at, x.now)).length,
-        // D2407: the update's Beehiiv post's figures, once #2407 part 3 links a sent update to it.
-        newsletter: null };
-    }), updates_reason: null, newsletter_reason: NEWSLETTER_NOT_LINKED };
+        // D2407 part 3: the figures of the Beehiiv post this update's draft became.
+        newsletter: newsletters?.get(u.uid) ?? null };
+    }), updates_reason: null, newsletter_reason: newsletters ? NEWSLETTER_NOT_LINKED : NEWSLETTER_UNREADABLE };
   } catch (e) {
     console.warn('[cycle_grow] updates history unreadable', (e as Error).message);
     return { updates: null, updates_reason: 'Unreadable: Updates history could not be read' };
