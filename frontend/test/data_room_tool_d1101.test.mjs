@@ -15,7 +15,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
-  TABS, fileRows, grantRows, isDataRoomTab, isOldFileAddress, movedKind, projectUidOf, tabHref, tabSearch,
+  TABS, fileRows, grantRows, isDataRoomTab, isOldFileAddress, movedKind, tabHref, tabSearch,
 } from '../src/pages/raise/dataroom/dataRoomModel.js';
 
 const h = React.createElement;
@@ -26,6 +26,7 @@ const NOW = Date.parse('2026-10-25T12:00:00Z');
 const FAR = '2099-01-01';
 // `routes/data_room.ts` GET /:projectUid, founder side.
 const ROOM = {
+  project_uid: 'p3uid', // D5072: the room by id names its venture's uid
   project: { uid: 'p3uid', name: 'Harbor Ledger' },
   folders: [{ id: 1, uid: 'f1', name: 'Financials', parent_id: null, visibility: 'nda' }],
   files: [
@@ -48,7 +49,7 @@ const PROJECTS = [{ id: 3, uid: 'p3uid', name: 'Harbor Ledger' }, { id: 4, uid: 
 const MODULE = { module: { slug: 'data-room', name: 'Data room', records_title: 'Files' }, card: { state: 'empty', reason: 'No files yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } };
 
 function handler(url) {
-  if (/\/data-room\/p3uid(\?|$)/.test(url)) return response(ROOM);
+  if (/\/data-room\/(p3uid|by-project\/3)(\?|$)/.test(url)) return response(ROOM);
   if (/\/api\/projects(\?|$)/.test(url)) return response(PROJECTS);
   if (/\/records\/[^/?]+\?/.test(url)) return response({ title: 'Model.xlsx', sections: [], actions: [] });
   if (url.includes('/cycles/raise/modules/')) return response(MODULE);
@@ -96,9 +97,6 @@ test('seven tabs, and only their words are tabs; a file is still a record; the v
   assert.ok(!isDataRoomTab('cap-table', 'files'), 'only the Data room has these words');
   assert.equal(tabSearch('?project=7&mode=workspace#x'), '?project_id=7');
   assert.equal(tabHref(TABS[2], '?project_id=3&version=2'), '/raise/data-room/access?project_id=3');
-  assert.equal(projectUidOf(PROJECTS, 3), 'p3uid');
-  assert.equal(projectUidOf({ items: PROJECTS }, '4'), 'p4uid');
-  assert.equal(projectUidOf(PROJECTS, 9), null);
 });
 
 test('D1109: only the two old modes forward, and only a file\'s number is its old page', () => {
@@ -139,7 +137,11 @@ test('grants: in force, ended or revoked; NDA, committed and who granted; a miss
 test('Files, Access and Activity read the founder\'s room by the venture\'s uid, never a record called by the tab word', async () => {
   const v = await mounted('/raise/data-room/files?project_id=3');
   try {
-    assert.ok(v.requests.some((u) => /\/data-room\/p3uid/.test(u)));
+    // D5072: the room is read ONCE, by the venture's id, and the projects directory is never read to find a uid.
+    const roomReads = v.requests.filter((u) => /\/data-room\/by-project\/3(\?|$)/.test(u));
+    assert.equal(roomReads.length, 1, 'one room read for the tab');
+    assert.ok(!v.requests.some((u) => /\/api\/projects(\?|$)/.test(u)), 'the whole project directory is not read to resolve a uid');
+    assert.ok(!v.requests.some((u) => /\/data-room\/p3uid(\?|$)/.test(u)), 'and the uid route is not called for the room itself');
     assert.ok(!v.requests.some((u) => /\/records\/files/.test(u)), 'a tab word is not a record');
     assert.ok(v.testIds().includes('dataroom-files-page') && v.testIds().includes('dataroom-tabs'));
     assert.equal(v.count('dataroom-file-row'), 2);
@@ -188,7 +190,7 @@ test('Home is the module page with the tabs; a file\'s old page forwards to its 
 });
 
 test('a failed room read says so where the block would be, and a refusal is not an empty room', async () => {
-  const fail = await mounted('/raise/data-room/files?project_id=3', { handle: (u) => (/\/data-room\/p3uid/.test(u) ? response({ detail: 'boom' }, 500) : handler(u)) });
+  const fail = await mounted('/raise/data-room/files?project_id=3', { handle: (u) => (/\/data-room\/(p3uid|by-project\/3)/.test(u) ? response({ detail: 'boom' }, 500) : handler(u)) });
   try {
     assert.ok(fail.testIds().includes('dataroom-files-unreadable'));
     assert.ok(!fail.testIds().includes('dataroom-files-none'));

@@ -41,6 +41,7 @@ const FAR = '2099-01-01';
 
 // The founder's room read (routes/data_room.ts GET /:projectUid): it holds names the preview must never show.
 const ROOM = {
+  project_uid: 'p3uid', // D5072: the room by id names its venture's uid
   project: { uid: 'p3uid', name: 'Harbor Ledger' },
   folders: [
     { id: 1, uid: 'f1', name: 'Financials', parent_id: null, visibility: 'open' },
@@ -131,7 +132,7 @@ function handler(url) {
   if (/\/data-room\/p3uid\/checklist$/.test(url)) return response(CHECKLIST);
   if (/\/data-room\/p3uid\/preview\?grant=g1$/.test(url)) return response(PREVIEW);
   if (/\/data-room\/p3uid\/preview\?grant=g2$/.test(url)) return response(ENDED);
-  if (/\/data-room\/p3uid(\?|$)/.test(url)) return response(ROOM);
+  if (/\/data-room\/(p3uid|by-project\/3)(\?|$)/.test(url)) return response(ROOM);
   if (/\/api\/projects(\?|$)/.test(url)) return response(PROJECTS);
   if (url.includes('/cycles/raise/modules/')) return response(MODULE);
   return response({});
@@ -437,7 +438,7 @@ test('mounted Preview: as the grant in force, nothing the grant cannot open is n
     assert.ok(!v.has('dataroom-preview-file'), 'an ended grant names no file');
     assert.deepEqual(writes(v.requests), []);
   } finally { await v.close(); }
-  const unshared = await mounted('/raise/data-room/preview?project_id=3', { handle: (u) => (/\/data-room\/p3uid(\?|$)/.test(u) ? response({ ...ROOM, grants: [] }) : handler(u)) });
+  const unshared = await mounted('/raise/data-room/preview?project_id=3', { handle: (u) => (/\/data-room\/(p3uid|by-project\/3)(\?|$)/.test(u) ? response({ ...ROOM, grants: [] }) : handler(u)) });
   try {
     assert.ok(unshared.has('dataroom-preview-none'));
     assert.ok(!unshared.requests.some((r) => /preview\?/.test(r.url)), 'no grant, no preview read');

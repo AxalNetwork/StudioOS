@@ -100,13 +100,6 @@ export function movedTarget(kind, search = '', hash = '', id = null) {
 /** True for a file record's number under the module: the old record page, never a tab word. */
 export const isOldFileAddress = (slug, id) => slug === SLUG && /^[1-9]\d*$/.test(String(id ?? ''));
 
-/** The venture's uid, which the founder's data-room read is keyed on, from the projects list. */
-export function projectUidOf(projects, projectId) {
-  const list = Array.isArray(projects) ? projects : (projects?.items || []);
-  const hit = list.find((p) => String(p?.id) === String(projectId));
-  return hit?.uid ? String(hit.uid) : null;
-}
-
 /** "24 Oct 2026" from an ISO date or stamp; anything else is "Not recorded". */
 export function day(s) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));

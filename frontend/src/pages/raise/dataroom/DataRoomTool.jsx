@@ -19,7 +19,7 @@ import DataRoomPreview from './DataRoomPreview.jsx';
 import { noPermission } from './accessModel';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  HOME_PATH, LINE, TABS, TITLE, projectUidOf, tabHref, tabSearch,
+  HOME_PATH, LINE, TABS, TITLE, tabHref, tabSearch,
 } from './dataRoomModel';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -77,8 +77,8 @@ function Skeleton({ testId }) {
 }
 
 /**
- * The founder's room, read once for the tab: the venture's uid from the
- * projects list, then `GET /api/data-room/:projectUid`. Loading, ready,
+ * The founder's room, read once for the tab: `GET /api/data-room/by-project/:projectId`,
+ * whose answer names the venture's uid (D5072; it used to read the whole projects list first). Loading, ready,
  * refused (403 or 404) or error, never an empty room by default.
  */
 function useRoom(projectId, reload) {
@@ -89,11 +89,12 @@ function useRoom(projectId, reload) {
     // A re-read after a change keeps the room drawn until the new one arrives (D1106), so a
     // dialog's result line is not lost and nothing flashes. Another venture's room is never kept.
     setState((s) => (s.status === 'ready' && s.projectId === projectId ? { ...s, refreshing: true } : { status: 'loading', room: null }));
-    Promise.resolve().then(() => api.listProjects())
-      .then((projects) => {
-        const uid = projectUidOf(projects, projectId);
+    // D5072: one request, by the id the page already has. The answer carries the venture's uid for the room's later calls.
+    Promise.resolve().then(() => api.dataRoomByProject(projectId))
+      .then((room) => {
+        const uid = room?.project_uid || null;
         if (!uid) { const e = new Error('This venture’s data room was not found.'); e.status = 404; throw e; }
-        return api.dataRoom(uid).then((room) => ({ room, uid }));
+        return { room, uid };
       })
       .then(({ room, uid }) => { if (alive) setState({ status: 'ready', room, uid, projectId }); })
       .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', room: null, message: userFacingRaiseError(error, { fallback: '' }) }); });

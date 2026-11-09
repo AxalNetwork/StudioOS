@@ -3427,6 +3427,9 @@ export const api = {
   // project uid; investor methods take the same uid but resolve through a
   // grant rather than ownership.
   dataRoom: (projectUid) => request(`/data-room/${encodeURIComponent(projectUid)}`),
+  // D5072: the founder's room by the venture's numeric id, with `project_uid` in the answer, so a page that
+  // has the id does not read the whole projects directory to find the uid.
+  dataRoomByProject: (projectId) => request(`/data-room/by-project/${encodeURIComponent(projectId)}`),
   dataRoomCreateFolder: (projectUid, data) =>
     request(`/data-room/${encodeURIComponent(projectUid)}/folders`, { method: 'POST', body: JSON.stringify(data || {}) }),
   dataRoomUpdateFolder: (projectUid, uid, data) =>

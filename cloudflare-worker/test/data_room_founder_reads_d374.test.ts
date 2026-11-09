@@ -251,3 +251,23 @@ test('the carried visibility is refused outside the caller’s room and for a va
   assert.equal(bad.status, 400);
   assert.equal(vis(db, 'data_room_files', 'f-model'), 'open');
 });
+
+// D5072 — the room by the venture's numeric id: same answer, same gates, no directory read first.
+test('GET /by-project/:id is the room by uid plus project_uid, behind the same gates, and a refusal is the same 404 as a missing venture', async () => {
+  const db = freshDb();
+  const byUid = await call(db, FOUNDER, 'GET', '/p-room');
+  const roomId = (db.prepare("SELECT id FROM projects WHERE uid = 'p-room'").get() as any).id;
+  const byId = await call(db, FOUNDER, 'GET', `/by-project/${roomId}`);
+  assert.equal(byId.status, 200);
+  assert.equal(byId.body.project_uid, 'p-room', 'the uid the room\'s later calls use');
+  const { project_uid: _u, ...rest } = byId.body;
+  assert.deepEqual(rest, byUid.body, 'the same room, nothing more');
+  // Another founder, an investor with a grant, and a venture that does not exist: one answer.
+  const rival = await call(db, RIVAL, 'GET', `/by-project/${roomId}`);
+  const investor = await call(db, SIGNED, 'GET', `/by-project/${roomId}`);
+  const missing = await call(db, FOUNDER, 'GET', '/by-project/99999');
+  for (const r of [rival, investor, missing]) assert.deepEqual([r.status, r.body.detail], [404, 'Project not found']);
+  assert.deepEqual([rival.body, investor.body], [missing.body, missing.body], 'a refused venture is indistinguishable from a missing one');
+  for (const bad of ['0', '-1', 'abc', '1e3', '12345678901']) assert.equal((await call(db, FOUNDER, 'GET', `/by-project/${bad}`)).status, 404, bad);
+  db.close();
+});

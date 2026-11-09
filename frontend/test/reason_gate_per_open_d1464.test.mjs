@@ -88,7 +88,7 @@ test('the founder\'s row: who and as what, the reason, when and one open; nothin
 
 test('RR11: an admin on the Data room meets the per-open gate, never the bare sentence or the room; the reason opens it read only', async () => {
   for (const tab of ['files', 'activity']) {
-    const fetch = stubFetch((m, p) => (p === '/projects' ? [200, [{ id: 3, uid: 'synthetic-room' }]]
+    const fetch = stubFetch((m, p) => (p === '/data-room/by-project/3' ? [200, { ...SUMMARY, project_uid: 'synthetic-room' }]
       : m === 'POST' && p === '/data-room/synthetic-room/support-read' ? [200, ROOM] : [200, SUMMARY]));
     const opened = [];
     const page = await mounted(h(DataRoomTabPage, { tab, projectId: 3, search: '?project_id=3', onSupportRead: (v) => opened.push(v) }));
@@ -117,7 +117,7 @@ test('RR11: an admin on the Data room meets the per-open gate, never the bare se
 
 test('RR18 and a failed save: 409 draws the muted line with no form; 503 keeps the field with the save sentence', async () => {
   for (const [status, body] of [[409, { error: 'support_owner_unresolved', message: 'Support access cannot be recorded for this venture owner.' }], [503, { error: 'support_read_unavailable' }]]) {
-    const fetch = stubFetch((m, p) => (p === '/projects' ? [200, [{ id: 3, uid: 'synthetic-room' }]] : m === 'POST' ? [status, body] : [200, SUMMARY]));
+    const fetch = stubFetch((m, p) => (p === '/data-room/by-project/3' ? [200, { ...SUMMARY, project_uid: 'synthetic-room' }] : m === 'POST' ? [status, body] : [200, SUMMARY]));
     const page = await mounted(h(DataRoomTabPage, { tab: 'files', projectId: 3, search: '?project_id=3' }));
     try {
       await type(page, 'dataroom-support', 'Support request');

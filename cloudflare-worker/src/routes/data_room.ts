@@ -693,19 +693,38 @@ export async function roomSummary(env: Env, project: { id: number; uid: string }
   return { mode: 'summary', read_only: true, project: { uid: project.uid }, files: fileCounts, folders, coverage, grants };
 }
 
-r.get('/:projectUid', async (c) => {
+/** The room read for one venture, by uid. The founder and co-founder routes share it with `/by-project/:projectId`. */
+async function serveRoom(c: any, uid: string, extra: Record<string, unknown> = {}) {
+  const user = await requireAuth(c);
+  if (user.role === 'admin') {
+    await requireAdmin(c);
+    const project = await summaryProject(c.env, uid);
+    if (!project) return c.json({ detail: 'Project not found' }, 404);
+    return c.json({ ...await roomSummary(c.env, project), ...extra });
+  }
+  const room = await roomProject(c, user, uid);
+  if (!room) return c.json({ detail: 'Project not found' }, 404);
+  return c.json({ ...await roomDetails(c.env, room.project, room.role), ...extra });
+}
+
+// D5072 (#5072): the room by the venture's NUMERIC id, which the page already has. The Raise pages
+// used to read the whole projects directory just to turn that id into the uid this route takes.
+// The id only finds the uid; every gate (ownership, company scope, co-founder, admin) then runs on
+// the uid exactly as for `/:projectUid`, so a venture the caller may not read is the same 404 as one
+// that does not exist. The answer carries `project_uid` for the room's later calls.
+r.get('/by-project/:projectId', async (c) => {
   try {
-    const user = await requireAuth(c);
-    if (user.role === 'admin') {
-      await requireAdmin(c);
-      const project = await summaryProject(c.env, c.req.param('projectUid'));
-      if (!project) return c.json({ detail: 'Project not found' }, 404);
-      return c.json(await roomSummary(c.env, project));
-    }
-    const room = await roomProject(c, user, c.req.param('projectUid'));
-    if (!room) return c.json({ detail: 'Project not found' }, 404);
-    return c.json(await roomDetails(c.env, room.project, room.role));
+    const raw = c.req.param('projectId');
+    if (!/^[1-9][0-9]{0,9}$/.test(raw)) return c.json({ detail: 'Project not found' }, 404);
+    const found = await c.env.DB.prepare('SELECT uid FROM projects WHERE id = ? AND deleted_at IS NULL').bind(Number(raw)).first<{ uid: string }>();
+    if (!found?.uid) return c.json({ detail: 'Project not found' }, 404);
+    return await serveRoom(c, found.uid, { project_uid: found.uid });
   } catch (e) { return mapError(c, e); }
+});
+
+r.get('/:projectUid', async (c) => {
+  try { return await serveRoom(c, c.req.param('projectUid')); }
+  catch (e) { return mapError(c, e); }
 });
 
 // D1464 (#4021): the founder's list of who opened the room with a reason —

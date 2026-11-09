@@ -62,7 +62,7 @@ test('D1101, D1464: Files, Access and Activity draw the reason gate for an admin
       globalThis.fetch=async(url,init={})=>{
         seen.push(init.method||'GET');
         const projects=String(url).includes('/api/projects');
-        const body=projects?[{id:3,uid:'synthetic-room'}]:{mode:'summary',read_only:true,project:{uid:'synthetic-room'},
+        const body=projects?[{id:3,uid:'synthetic-room'}]:{mode:'summary',read_only:true,project_uid:'synthetic-room',project:{uid:'synthetic-room'},
           files:{available:true,total:2},folders:{available:true,total:1},coverage:{available:true,covered_items:1,total_items:7},grants:{available:true,total:3}};
         return new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});
       };

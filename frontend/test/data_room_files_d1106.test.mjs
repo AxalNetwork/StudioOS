@@ -24,6 +24,7 @@ const NOW = Date.parse('2026-10-25T12:00:00Z');
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
 
 const ROOM = {
+  project_uid: 'p3uid', // D5072: the room by id names its venture's uid
   project: { uid: 'p3uid', name: 'Harbor Ledger' },
   role: 'owner',
   folders: [
@@ -138,7 +139,7 @@ function handlerFor(room = ROOM, fail = {}) {
     // D1284: D1104's queue, read by Home's Needs you.
     if (/\/data-room\/p3uid\/requests$/.test(url)) return fail.requests ? response({ detail: 'x' }, 503) : response(fail.requestsBody || { requests: [], open: 2, can_answer: true });
     if (/\/data-room\/p3uid\/files\/[^/]+\/versions/.test(url)) return fail.versions ? response({ detail: 'x' }, 500) : response(VERSIONS);
-    if (/\/data-room\/p3uid(\?|$)/.test(url)) return fail.room ? response({ detail: 'x' }, 500) : response(room);
+    if (/\/data-room\/(p3uid|by-project\/3)(\?|$)/.test(url)) return fail.room ? response({ detail: 'x' }, 500) : response(room);
     if (/\/form-options/.test(url)) return response({ project_uid: 'p3uid', folders: [], requests: [{ value: 7, label: 'Burn and runway' }], checklist: [{ value: 'financial_model', label: 'Financial model' }] });
     if (/\/records\/11\?/.test(url)) return fail.record ? response({ detail: 'x' }, 500) : response(RECORD);
     if (url.includes('/cycles/raise/modules/')) return response({ module: { slug: 'data-room', name: 'Data room', records_title: 'Files' }, card: { state: 'empty', reason: 'No files yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } });
@@ -320,6 +321,12 @@ test('Home: Needs you, who has access, what was added; a failed room read is Unr
   // Mutation checked: Home drawing its blocks from nothing when the read fails → no Unreadable.
   const v = await mounted('/raise/data-room?project_id=3');
   try {
+    // D5072, measured on this mount: Home opened with 13 requests (a projects-directory read, then the room by uid, and
+    // the module read twice); it now opens with 11, none a duplicate, and the room read starts at once.
+    const gets = v.calls.filter((c) => c.method === 'GET').map((c) => c.url.replace(/^.*\/api/, ''));
+    assert.deepEqual(gets.filter((u, i) => gets.indexOf(u) !== i), [], 'no read is repeated');
+    assert.ok(!gets.some((u) => /^\/projects/.test(u)), 'the project directory is not read');
+    assert.equal(gets.filter((u) => /^\/data-room\/by-project\/3$/.test(u)).length, 1);
     assert.match(v.of('dataroom-needs'), /Bluefern Capital’s access ends 30 Oct 2026.*1 investor needs an NDA/s);
     // D1284: the open access requests from D1104's queue, the caller's to answer, with the door to Requests.
     assert.equal(v.of('dataroom-needs-requests'), '2 access requests wait for your answerShare the room or decline, on Requests.Open Requests');
@@ -327,7 +334,10 @@ test('Home: Needs you, who has access, what was added; a failed room read is Unr
     assert.ok(!v.of('dataroom-needs').includes('not read here yet'), 'the wait that named the gap is gone');
     assert.match(v.of('dataroom-who'), /Juniper Angels.*NDA needed · Legal · No end date/s);
     assert.match(v.of('dataroom-recent'), /Contract\.pdf/);
-    assert.match(v.of('dataroom-90-wait'), /part 4/);
+    // D5072: no implementation language under the last ninety days; it names Activity and links to it.
+    assert.doesNotMatch(v.of('dataroom-90'), /part 4|D1105|need the activity read/);
+    assert.match(v.of('dataroom-90-note'), /on Activity\.$/);
+    assert.equal(v.prop('dataroom-90-link', 'href'), '/raise/data-room/activity?project_id=3');
     assert.ok(v.has('cycle-module'));
   } finally { await v.close(); }
   const f = await mounted('/raise/data-room?project_id=3', { handle: handlerFor(ROOM, { room: true }) });
