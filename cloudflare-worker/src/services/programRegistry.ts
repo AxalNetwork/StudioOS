@@ -50,6 +50,23 @@ export type ProgramStatus = typeof PROGRAM_STATUSES[number];
 /** The canvas's six groups (dc:358). */
 export const PROGRAM_GROUPS = ['Ventures', 'Access', 'Network and referrals', 'Rewards', 'Learning', 'Product'] as const;
 
+/**
+ * D4873 (#4873, part 2): MEMBER ACCESS, a registry fact of its own (migration 202611082300). Whether members can
+ * get into a program today, and how; NULL is "Not recorded". It is a record, as `join_method` is: each program's
+ * own gate still decides what a member reaches.
+ */
+export const MEMBER_ACCESS = ['open', 'apply', 'request', 'invite', 'assigned', 'not_open', 'closed'] as const;
+export type MemberAccess = typeof MEMBER_ACCESS[number];
+
+/**
+ * D4873: the capability modules a program's page may open beside its core sections. The registry's `modules`
+ * column lists the ones a program has; the seed names only the modules that already have an operating screen.
+ */
+export const PROGRAM_MODULES = [
+  'applications', 'hosts', 'cohorts', 'referral_queue', 'perk_queue', 'learners', 'influencers', 'offers', 'nda_signature',
+] as const;
+export type ProgramModule = typeof PROGRAM_MODULES[number];
+
 /** The registry and playbook writes, as `admin_audit_log.action`. */
 export const REGISTRY_ACTIONS = {
   update: 'program.registry.update',
@@ -160,6 +177,52 @@ export function programView(p: ProgramRow) {
   };
 }
 
+/**
+ * D4873: a row's member access and modules, as one read beside the registry's. A database the migration has not
+ * reached yet, or a read that fails, answers `{ available: false }`: the page says the two were not read, never
+ * that a program has no modules or that its access is not recorded.
+ */
+export type RegistryExtras =
+  | { available: true; byKey: Map<string, { member_access: MemberAccess | null; modules: ProgramModule[] }> }
+  | { available: false; reason: string };
+
+export const EXTRAS_UNREAD = 'Member access and modules could not be read.';
+
+export function modulesOf(raw: unknown): ProgramModule[] {
+  try {
+    const v = JSON.parse(String(raw ?? '[]'));
+    return Array.isArray(v) ? v.filter((x): x is ProgramModule => (PROGRAM_MODULES as readonly unknown[]).includes(x)) : [];
+  } catch {
+    return [];
+  }
+}
+
+const accessOf = (v: unknown): MemberAccess | null =>
+  ((MEMBER_ACCESS as readonly unknown[]).includes(v) ? v as MemberAccess : null);
+
+export async function registryExtras(env: Env): Promise<RegistryExtras> {
+  try {
+    const r = await env.DB.prepare('SELECT key, member_access, modules FROM programs')
+      .all<{ key: string; member_access: string | null; modules: string | null }>();
+    return {
+      available: true,
+      byKey: new Map((r.results || []).map((x) => [x.key, { member_access: accessOf(x.member_access), modules: modulesOf(x.modules) }])),
+    };
+  } catch {
+    return { available: false, reason: EXTRAS_UNREAD };
+  }
+}
+
+/**
+ * The two facts for one row, as the reads send them: `member_access` (null is Not recorded) and `modules`, or
+ * `extras: { available: false, reason }` when they were not read.
+ */
+export function extrasView(extras: RegistryExtras, key: string) {
+  if (!extras.available) return { extras: { available: false as const, reason: extras.reason } };
+  const x = extras.byKey.get(key);
+  return { member_access: x?.member_access ?? null, modules: x?.modules ?? [] };
+}
+
 export type Actor = { id: number; email: string };
 
 /** A trimmed string up to `max`; `null` clears it; `undefined` leaves it. Anything else is a 400. */
@@ -188,13 +251,23 @@ export async function updateProgram(env: Env, key: string, body: unknown, actor:
     }
     status = b.status as ProgramStatus;
   }
-  const fields = { purpose, who, join_method: join, status };
+  // D4873: member access is one of MEMBER_ACCESS, or null for Not recorded.
+  let access: MemberAccess | null | undefined;
+  if ('member_access' in b) {
+    if (b.member_access !== null && !(MEMBER_ACCESS as readonly unknown[]).includes(b.member_access)) {
+      throw new ProgramError(400, 'bad_member_access', `member_access is one of ${MEMBER_ACCESS.join(', ')}, or null.`);
+    }
+    access = b.member_access as MemberAccess | null;
+  }
+  const fields = { purpose, who, join_method: join, status, member_access: access };
   const changed = Object.keys(fields).filter((k) => fields[k as keyof typeof fields] !== undefined);
   if (!changed.length) {
-    throw new ProgramError(400, 'nothing_to_change', 'Send at least one of purpose, who, join_method or status.');
+    throw new ProgramError(400, 'nothing_to_change', 'Send at least one of purpose, who, join_method, status or member_access.');
   }
-  // Each column is written only when it was sent: `? = 1` says whether it was.
-  await env.DB.prepare(
+  // Each column is written only when it was sent: `? = 1` says whether it was. A request that does not send
+  // member_access names no column of D4873's, so it writes on a database the migration has not reached.
+  const t = new Date().toISOString();
+  const core = env.DB.prepare(
     `UPDATE programs SET
        purpose = CASE WHEN ? = 1 THEN ? ELSE purpose END,
        who = CASE WHEN ? = 1 THEN ? ELSE who END,
@@ -207,10 +280,13 @@ export async function updateProgram(env: Env, key: string, body: unknown, actor:
     who !== undefined ? 1 : 0, who ?? null,
     join !== undefined ? 1 : 0, join ?? null,
     status !== undefined ? 1 : 0, status ?? null,
-    new Date().toISOString(), p.key,
-  ).run();
+    t, p.key,
+  );
+  if (access !== undefined) {
+    await env.DB.batch([core, env.DB.prepare('UPDATE programs SET member_access = ? WHERE key = ?').bind(access, p.key)]);
+  } else await core.run();
   await logAdminAction(env, actor.id, actor.email, REGISTRY_ACTIONS.update, { program_key: p.key, fields: changed });
-  return programView(await programByKey(env, p.key));
+  return { ...programView(await programByKey(env, p.key)), ...extrasView(await registryExtras(env), p.key) };
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +353,8 @@ export async function programDetail(env: Env, key: string, superAdmin: boolean, 
   const latest = await latestVersion(env, p.key);
   const published = latest ? await sectionsOf(env, p.key, Number(latest.version)) : [];
   const out: Record<string, unknown> = {
-    program: programView(p),
+    // D4873: the row's member access and modules beside it, or that they were not read.
+    program: { ...programView(p), ...extrasView(await registryExtras(env), p.key) },
     ...(p.key === 'spinout-lab' ? { section_catalogue: LAB_PLAYBOOK_SECTIONS } : {}),
     playbook: latest
       ? { published: true, version: Number(latest.version), published_at: latest.published_at, sections: published.map(sectionView) }
@@ -444,15 +521,17 @@ export async function checkNewKey(env: Env, key: string) {
 
 /**
  * The statements that write a `proposed` registry row at the end of the
- * catalogue and its unpublished draft, for a caller's `DB.batch`. Call
+ * catalogue and its unpublished draft, for a caller's `DB.batch`. D4873: a
+ * proposed program has nothing to join, so its member access is `not_open`
+ * and it has no modules (the column's default). Call
  * `checkNewKey` first; the key's UNIQUE constraint still refuses a race.
  */
 export function insertProgramStatements(env: Env, p: NewProgram, actorId: number) {
   const t = new Date().toISOString();
   return [
     env.DB.prepare(
-      `INSERT INTO programs (key, grp, name, purpose, who, join_method, status, position, licence_uid, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'proposed', (SELECT COALESCE(MAX(position), 0) + 1 FROM programs), ?, ?, ?)`,
+      `INSERT INTO programs (key, grp, name, purpose, who, join_method, status, position, licence_uid, created_at, updated_at, member_access)
+       VALUES (?, ?, ?, ?, ?, ?, 'proposed', (SELECT COALESCE(MAX(position), 0) + 1 FROM programs), ?, ?, ?, 'not_open')`,
     ).bind(p.key, p.grp, p.name, p.purpose, p.who, p.join_method, p.licence_uid, t, t),
     ...p.sections.map((s, i) => env.DB.prepare(
       `INSERT INTO program_playbook_sections
@@ -473,8 +552,8 @@ export function insertProgramStatementsOnApproval(env: Env, p: NewProgram, actor
   const t = new Date().toISOString();
   return [
     env.DB.prepare(
-      `INSERT INTO programs (key, grp, name, purpose, who, join_method, status, position, licence_uid, created_at, updated_at)
-       SELECT ?, ?, ?, ?, ?, ?, 'proposed', (SELECT COALESCE(MAX(position), 0) + 1 FROM programs), ?, ?, ?
+      `INSERT INTO programs (key, grp, name, purpose, who, join_method, status, position, licence_uid, created_at, updated_at, member_access)
+       SELECT ?, ?, ?, ?, ?, ?, 'proposed', (SELECT COALESCE(MAX(position), 0) + 1 FROM programs), ?, ?, ?, 'not_open'
         WHERE EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?)`,
     ).bind(p.key, p.grp, p.name, p.purpose, p.who, p.join_method, p.licence_uid, t, t, gate.proposalId, gate.decidedAt, actorId),
     ...p.sections.map((s, i) => env.DB.prepare(

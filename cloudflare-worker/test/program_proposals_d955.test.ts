@@ -47,6 +47,8 @@ function built(): DatabaseSync {
   db.exec(readFileSync(resolve(MIGRATIONS, '202611031502_influencer_program.sql'), 'utf8'));
   // D4808: the frozen record of what an approval was made from.
   db.exec(readFileSync(resolve(MIGRATIONS, '202611072010_program_approved_specs.sql'), 'utf8'));
+  // D4873: a new program's row names member_access, which this migration adds.
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611082300_programs_member_access_modules_4873.sql'), 'utf8'));
   return db;
 }
 const BUILT = built();
