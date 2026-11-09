@@ -42,7 +42,6 @@ and StudioHome at `/raise/pitch`).
 | `__screenshots__/` | The baselines, committed. One PNG per screenshot name |
 | `pricing_journey_4651.spec.mjs` | #4651: a plan chosen on Pricing through Back, another plan, the email link and the Google return to its checkout sheet, at desktop and phone width; no screenshots |
 | `approvals.a11y.spec.mjs` | D4814 (#4814, part 7): Approvals (Inbox, an item, Lanes, Decided, the three boards) at 1440 and 390 — zero serious or critical axe violations, no page wider than a phone, the keyboard path through ⋯, Assign and the sheets, 44px phone targets, the lane chart inside its box; part 8: the boards' selection bar and ⋯, and a last row's ⋯ clickable; no screenshots |
-| `approvals.a11y.spec.mjs` | D4814 (#4814, part 7): Approvals (Inbox, an item, Lanes, Decided, the three boards) at 1440 and 390 — zero serious or critical axe violations, no page wider than a phone, the keyboard path through ⋯, Assign and the sheets, 44px phone targets, the lane chart inside its box; no screenshots |
 | `_approvals.mjs` | The reads Approvals makes, answered for that spec: the glance, inbox, item, weekly, Decided and the boards, as the Worker answers them; made-up names |
 
 ### Run it
