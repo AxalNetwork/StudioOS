@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { cyclesWrite } from '../../../lib/api/cycles';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { cardStatus } from './deckV2Adapter';
@@ -9,12 +9,16 @@ import PublishPanel from './PublishPanel.jsx';
 import { preShareGate } from './commentsModel';
 import { statusLabel } from './cardStatusModel';
 import { OFF_KEEPS, TIME_PER_SLIDE } from './slideAnalyticsModel.js';
+import { effectiveDeck } from './preflightUiModel';
+import { GateBody, PreflightMeasure } from './PreflightPanel';
+import useSendCheck from './useSendCheck';
 import {
   DEFAULT_SHARE, EXPIRIES, INCLUDE_ROWS, NDA_SWITCH, NEVER_SHARED, NO_LIMIT, SHARE_CTA, SHARE_TITLE, SHOWN_ONCE, TYPED,
   frozenLine, shareBody, shareFailure, shareProblem, shareUrl, whatShareDoes,
   THIS_VERSION, VARIANTS_UNREAD, WATERMARK_LINE, linkTargets, variantOf,
 } from './shareModel';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks';
+import { deckPreflightApi } from '../../../lib/api/deckPreflight';
 
 /**
  * D902 (#2681) — the share dialog (PD18), from Share in the editor and from
@@ -47,6 +51,20 @@ import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks';
  * the same one link writer and then sets the variant. The watermark row is
  * drawn on and fixed: every link names its investor (D1565), so it is never a
  * choice. A failed variants read still offers this version, and says so.
+ *
+ * D4598 (#4598) part 2 — the check before the link is made now reads the link's
+ * OWN effective content: this version's cards in the picked variant's order
+ * (D1565), less what "What is included" leaves out — not the saved version as a
+ * whole, which may show a card the link itself would never send, or miss a
+ * problem on a card only a variant's reordering, or dropping the Sources
+ * appendix, brings forward. `POST /api/decks/:id/preflight/link-cards` computes
+ * that content the same way `linkSentCards` does for a link once it exists
+ * (`deck_preflight.ts`, `decks.ts`'s `effectiveSlidesFor`), so the check here and
+ * the card a reaction later attributes never drift apart. Picking another
+ * variant, or flipping "What is included", is a new combination: the earlier
+ * check no longer counts, and this one re-runs before Create link — which stays
+ * disabled until it is clean, or its warnings are confirmed through "Send
+ * anyway" (`useSendCheck`, shared with `ExportDialog.jsx`'s own check).
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -66,7 +84,7 @@ function Toggle({ label, on, onChange, testId }) {
   );
 }
 
-export default function ShareDialog({ projectId, deck, onClose, onCreated, onReviewCards = null }) {
+export default function ShareDialog({ projectId, deck, kit = null, refresh = null, onClose, onCreated, onReviewCards = null }) {
   const [state, setState] = useState({ ...DEFAULT_SHARE, include: { ...DEFAULT_SHARE.include } });
   const [prospects, setProspects] = useState({ status: 'loading', rows: [] });
   const [busy, setBusy] = useState(false);
@@ -112,6 +130,36 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
   const variantUid = variantOf(state.target);
   const variantName = variantUid ? variants.rows.find((v) => v.uid === variantUid)?.name ?? null : null;
 
+  // D4598 (#4598) part 2: the link's own effective content — this version's cards in the
+  // picked variant's order, less what "What is included" leaves out — read fresh for each
+  // combination and cached by it, so switching back to one already read never re-reads it.
+  const comboKey = `${variantUid || ''}::${JSON.stringify(state.include)}`;
+  const [contentByCombo, setContentByCombo] = useState({});
+  const [contentFailedKey, setContentFailedKey] = useState(null);
+  const [contentTry, setContentTry] = useState(0);
+  useEffect(() => {
+    if (!deck?.id || contentByCombo[comboKey]) return undefined;
+    let live = true;
+    setContentFailedKey(null);
+    deckPreflightApi.linkCards(deck.id, { variantUid, include: state.include }).then((r) => {
+      if (!live) return;
+      setContentByCombo((m) => (m[comboKey] ? m : {
+        ...m, [comboKey]: { slides: Array.isArray(r?.slides) ? r.slides : [], theme: r?.theme ?? null, version: r?.version ?? deck.version ?? null },
+      }));
+    }, (e) => {
+      reportError('ShareDialog:linkCards', e);
+      if (live) setContentFailedKey(comboKey);
+    });
+    return () => { live = false; };
+  }, [deck?.id, comboKey, contentTry]); // eslint-disable-line react-hooks/exhaustive-deps
+  const linkContent = contentByCombo[comboKey] || null;
+  const linkContentFailed = contentFailedKey === comboKey && !linkContent;
+  const eDeck = useMemo(() => effectiveDeck(deck?.id, linkContent?.version, linkContent?.slides, linkContent?.theme), [deck?.id, linkContent]);
+  const send = useSendCheck({ kind: 'share', deck: eDeck, kit, refresh });
+  // D4598 part 2: "Send anyway" is this check's own confirm — it unblocks Create link, it
+  // does not create the link by itself.
+  const sendAnyway = () => send.confirm();
+
   const problem = shareProblem(state, deck);
   const investorName = state.investor === TYPED ? String(state.label || '').trim() : prospects.rows.find((p) => String(p.value) === String(state.investor))?.label;
   const url = shareUrl(made);
@@ -119,7 +167,7 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
   // D1570: read the gate first; anything to say opens the confirm, else the link is made.
   // D1579: the approval and the card status are read together, for the one confirm.
   const share = async () => {
-    if (problem || busy) return;
+    if (problem || busy || send.blocked) return;
     setBusy(true); setFailed(null);
     const readApproval = async () => {
       try { return { status: 'ok', ...(await deckCommentsApi.approval(deck.id)) }; }
@@ -144,7 +192,7 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
 
   const create = async () => {
     // Held by an approver: the Worker would refuse the link, so it is not asked for.
-    if (problem || busy || gate?.held) return;
+    if (problem || busy || gate?.held || send.blocked) return;
     setGate(null);
     setBusy(true); setFailed(null);
     try {
@@ -181,19 +229,25 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
         <div className="flex justify-end gap-2">
           <button type="button" className={GHOST} onClick={gate ? () => setGate(null) : onClose} disabled={busy}>{made ? 'Done' : gate ? 'Back' : 'Cancel'}</button>
           {!made && gate ? (
-            <button type="button" className={PRIMARY} onClick={create} disabled={busy || gate.held} title={gate.held ? 'Share opens once every approver has approved this version.' : undefined}
+            <button type="button" className={PRIMARY} onClick={create} disabled={busy || gate.held || send.blocked}
+              title={gate.held ? 'Share opens once every approver has approved this version.' : send.blocked ? 'The check on this link\'s own content is not yet clean or confirmed.' : undefined}
               data-testid="pitch-share-anyway">
               {busy ? 'Creating…' : 'Share'}
             </button>
           ) : null}
           {!made && !gate ? (
-            <button type="button" className={PRIMARY} onClick={share} disabled={busy || Boolean(problem)} data-testid="pitch-share-create">
+            <button type="button" className={PRIMARY} onClick={share} disabled={busy || Boolean(problem) || send.blocked} data-testid="pitch-share-create">
               {busy ? 'Creating…' : SHARE_CTA}
             </button>
           ) : null}
         </div>
       )}
     >
+      {/* D4598 (#4598) part 2: off-screen, like the editor's own check (`PreflightPanel.jsx`). */}
+      {send.pf.running ? (
+        <PreflightMeasure key={send.pf.running.done} card={send.pf.running.snapshot.slides[send.pf.running.done]} index={send.pf.running.done}
+          theme={send.pf.running.snapshot.theme} kit={kit} onMeasured={send.pf.onMeasured} />
+      ) : null}
       {/* D1565 (#3812, pd35): this version's links, one row per investor, above the new one. */}
       <div className="mb-3"><InvestorLinksTable deck={deck} projectId={projectId} refreshKey={made ? 1 : 0} /></div>
       {gate && !made ? (
@@ -301,6 +355,31 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
             </div>
             <span className={MUTED}>{NEVER_SHARED}</span>
           </div>
+          {/*
+            D4598 (#4598) part 2: this link's own effective content — the variant and "What is
+            included" picked above — is checked fresh for each combination; Create link stays
+            disabled (above) until it is clean or confirmed below.
+          */}
+          {linkContentFailed ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" role="alert" data-testid="pitch-share-content-failed">
+              <span className="text-[12.5px] font-semibold text-axal-destructive dark:text-red-300">This link's content could not be read, so it could not be checked.</span>
+              <button type="button" className={GHOST} onClick={() => setContentTry((t) => t + 1)} data-testid="pitch-share-content-retry">Try again</button>
+            </div>
+          ) : !send.ready ? (
+            <span role="status" className={MUTED} data-testid="pitch-share-checking">
+              {send.pf.running ? `Checking this link's content · slide ${Math.min(send.pf.progress.done + 1, send.pf.progress.total)} of ${send.pf.progress.total}` : 'Checking this link\'s content…'}
+            </span>
+          ) : send.gate?.open ? (
+            <div className="flex flex-col gap-2 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" role="alertdialog" aria-label="Before you share" data-testid="pitch-share-gate-check">
+              <GateBody gate={send.gate} prefix="pitch-share-gate-check" />
+              {send.gate.anyway && !send.confirmed ? (
+                <button type="button" className={`${GHOST} self-start`} onClick={sendAnyway} data-testid="pitch-share-gate-check-anyway">{send.gate.anyway}</button>
+              ) : null}
+              {send.confirmed ? (
+                <span role="status" className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="pitch-share-confirmed">Sharing with the warnings above confirmed.</span>
+              ) : null}
+            </div>
+          ) : null}
           <p className={`m-0 ${MUTED}`} data-testid="pitch-share-what">{problem || whatShareDoes(state, deck, investorName, variantName)}</p>
           {failed ? (
             <div role="alert" className="rounded-[10px] bg-red-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-destructive dark:bg-red-950/40 dark:text-red-300" data-testid="pitch-share-failed">{failed}</div>

@@ -28,6 +28,9 @@ const FAILURES = Object.freeze({
   platform_blocked: 'The meeting platform did not allow Eadwyn AI to join.',
   obf_unavailable: 'Zoom authorization is required. Reconnect Zoom and join the meeting before sending Eadwyn AI.',
 });
+// D5153 (#5153): the runtime never reported, so the meeting provider was never contacted.
+// Said plainly, with no provider cause; the operator's code stays in HQ.
+export const INFRASTRUCTURE_FAILURE = 'Eadwyn AI’s recording service did not start, so the meeting was not contacted and nothing was recorded. Try again in a few minutes.';
 const REFUSALS = Object.freeze({
   bot_unavailable: 'Eadwyn AI is not available on this deployment yet. You can choose Record this device.',
   bot_price_unavailable: 'Eadwyn AI is not available until its price has been measured.',
@@ -119,8 +122,10 @@ export function botView(read, { unreadable = false, now = Date.now() } = {}) {
     failure: bot.status === 'stopped' && ['tokens','time_limit','access_revoked'].includes(bot.failure_code)
       ? ({ tokens:'Eadwyn AI stopped because there are not enough AI tokens to continue.',time_limit:'Eadwyn AI stopped at this plan’s call time limit.',access_revoked:'Eadwyn AI stopped because recording permission ended.' }[bot.failure_code])
       : bot.status === 'failed'
-      ? (own(FAILURES, bot.failure_code) ? FAILURES[bot.failure_code] : 'Eadwyn AI could not record this call. Check the meeting before trying again.')
+      ? (bot.failure_category === 'infrastructure' ? INFRASTRUCTURE_FAILURE
+        : own(FAILURES, bot.failure_code) ? FAILURES[bot.failure_code] : 'Eadwyn AI could not record this call. Check the meeting before trying again.')
       : null,
+    infrastructure: bot.status === 'failed' && bot.failure_category === 'infrastructure',
   };
 }
 

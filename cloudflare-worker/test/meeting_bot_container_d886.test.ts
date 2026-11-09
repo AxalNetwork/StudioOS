@@ -8,6 +8,7 @@ import { MeetingBotContainer } from '../../meeting-bot/worker/container.ts';
 import { meetingBotRuntime, runtimeKey, runtimeHeaders } from '../src/services/meetingBotRuntime.ts';
 import { validBotCallback } from '../src/durable-objects/meeting-bot-run.ts';
 import { botConfigured } from '../src/services/meetingBots.ts';
+import { TRANSPORT_START_MS } from '../src/services/meetingBotStartup.ts';
 import { RuntimeHost } from '../../meeting-bot/src/runtime.ts';
 import { FakeAdapter } from '../../meeting-bot/src/fakeAdapter.ts';
 import type { Env } from '../src/types.ts';
@@ -29,17 +30,22 @@ function harness(Class:Host=MeetingBotContainer) {
   let lock=Promise.resolve<any>(undefined);
   let alarm=0,destroys=0,refuse=false,crash=false,transient=0;
   let forward: ((r:Request)=>Promise<Response>)|undefined;
-  const container={running:false,images:{runtime:'registry.cloudflare.com/synthetic/runtime@sha256:'+'a'.repeat(64)},
+  // D5153: the runtime's /healthz is answered apart from the signed commands, and the process can exit.
+  let health: (r:Request)=>Promise<Response> = async()=>Response.json({ready:true});
+  const healths:Request[]=[];let exit!:()=>void;
+  const container={running:false,images:{runtime:'registry.cloudflare.com/synthetic/runtime@sha256:'+'a'.repeat(64)} as Record<string,string|undefined>,
     start(opts:ContainerStartupOptions){starts.push(opts);this.running=true;if(crash)throw new Error('SYNTHETIC_PRIVATE_ERROR');},
-    async destroy(){destroys++;this.running=false;},signal(n:number){signals.push(n);},monitor:async()=>{},
+    async destroy(){destroys++;this.running=false;},signal(n:number){signals.push(n);},monitor:()=>new Promise<void>(r=>{exit=()=>{container.running=false;r();};}),
     async setInactivityTimeout(ms:number){timeouts.push(ms);},getTcpPort(port:number){assert.equal(port,8080);return {fetch:async(r:Request)=>{
+      if (new URL(r.url).pathname==='/healthz') { healths.push(r); return health(r); }
       commands.push(r.clone());if(transient-->0)throw new Error('cold');return forward?forward(r):Response.json({}, {status:refuse?503:202});
     }};}};
   const state={container,waitUntil:()=>{},blockConcurrencyWhile:(f:any)=>{const next=lock.then(f);lock=next.catch(()=>{});return next;},storage:{
     get:async(k:string)=>structuredClone(rows.get(k)),put:async(k:string,v:any)=>rows.set(k,structuredClone(v)),setAlarm:async(t:number)=>{alarm=t;}}};
   const env={APP_URL:'https://worker.example.test',MEETING_BOT_SECRET:SECRET} as Env;
   let host=new Class(state as any,env);
-  return {rows,starts,commands,signals,timeouts,container,env,state,
+  return {rows,starts,commands,signals,timeouts,container,env,state,healths,
+    health(fn:(r:Request)=>Promise<Response>){health=fn;},exit:()=>exit(),
     get alarm(){return alarm;},get destroys(){return destroys;},
     refuse(){refuse=true;},crash(){crash=true;},cold(n:number){transient=n;},forward(fn:(r:Request)=>Promise<Response>){forward=fn;},
     revive(){host=new Class(state as any,env);},alarmCall:()=>host.alarm(),
@@ -154,7 +160,7 @@ const mutants=[['instance:\'standard-2\'','instance:\'lite\''],['env:{MEETING_BO
   ['lease.fingerprint!==fingerprint','false'],['if (lease?.stopped)','if (false)'],['lease.started && container.running','lease.started'],
   ['body.budget_deadline_at<lease.funded','false'],['body.deadline_at!==lease.deadline','false'],['body.budget_deadline_at>lease.deadline','false'],
   ['instance:\'standard-2\',enableInternet:true','instance:\'standard-2\',enableInternet:false'],
-  ['await this.destroy(lease); return reply(503','return reply(503'],['container.signal(15)','container.signal(9)'],['!current || current.stopped','!current']];
+  ['catch { await this.destroy(lease); return failed(','catch { return failed('],['container.signal(15)','container.signal(9)'],['!current || current.stopped','!current']];
 for(const [index,[before,after]] of mutants.entries())test('B8 host mutation '+index+' is caught',async()=>{
   for(const scenario of Object.values(cases))await scenario(MeetingBotContainer);
   assert.ok(source.includes(before));
@@ -192,6 +198,6 @@ test('binding startup waits beyond readiness while heartbeat and Stop retain sho
     await runtime.start(run);
     await runtime.heartbeat!({uid:UID,deadline_at:run.deadline_at,budget_deadline_at:run.budget_deadline_at});
     await runtime.stop({uid:UID});
-    assert.deepEqual(limits,[23000,9000,9000]);
+    assert.deepEqual(limits,[TRANSPORT_START_MS,9000,9000]);
   } finally {AbortSignal.timeout=original;}
 });

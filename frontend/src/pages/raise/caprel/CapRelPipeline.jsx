@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { Lightbox, Unreadable } from '../../../ui';
@@ -45,16 +45,19 @@ export const nameOf = (p) => [p?.name, p?.firm && p.firm !== p.name ? p.firm : n
 /** The prospects read, with a reload. */
 export function useProspects(projectId) {
   const [n, setN] = useState(0);
-  const [read, setRead] = useState({ status: 'loading', items: null });
+  const [read, setRead] = useState({ status: 'loading', items: null, projectId });
   useEffect(() => {
     let alive = true;
-    setRead((r) => ({ status: 'loading', items: r.items }));
+    // D5073: a re-read of the SAME venture keeps its investors drawn until the new answer lands; another venture's never are.
+    setRead((r) => ({ status: 'loading', items: r.projectId === projectId ? r.items : null, projectId }));
     Promise.resolve().then(() => api.raiseProspects(projectId))
-      .then((d) => { if (alive) setRead({ status: 'ready', items: Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [] }); })
-      .catch(() => { if (alive) setRead({ status: 'unreadable', items: null }); });
+      .then((d) => { if (alive) setRead({ status: 'ready', items: Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [], projectId }); })
+      .catch(() => { if (alive) setRead({ status: 'unreadable', items: null, projectId }); });
     return () => { alive = false; };
   }, [projectId, n]);
-  return { ...read, reload: () => setN((x) => x + 1) };
+  // The frame before the effect runs still holds the previous venture's state: never draw it.
+  const own = read.projectId === projectId ? read : { status: 'loading', items: null };
+  return { status: own.status, items: own.items, reload: () => setN((x) => x + 1) };
 }
 
 /* ------------------------------------------------------------------ *
@@ -419,6 +422,11 @@ function Board({ cols, onOpen, onMove, phone }) {
 function List({ items, onOpen, onBulk }) {
   const [picked, setPicked] = useState(() => new Set());
   const toggle = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  // D5073: a pick is an investor's stable id. After a re-read, a pick whose investor is gone is dropped, never acted on.
+  useEffect(() => {
+    const here = new Set(items.map((p) => p.id));
+    setPicked((s) => (s.size && [...s].some((id) => !here.has(id)) ? new Set([...s].filter((id) => here.has(id))) : s));
+  }, [items]);
   return (
     <div className="flex flex-col gap-2" data-testid="caprel-list">
       {picked.size ? (
@@ -469,11 +477,26 @@ const usePhone = () => {
 export default function CapRelPipeline({ projectId, search = '' }) {
   const read = useProspects(projectId);
   const phone = usePhone();
-  const [view, setView] = useState('board');
-  const [open, setOpen] = useState(null);
+  // D5073: the view and the open investor are in the address, so refresh, Back and Forward land on the same screen.
+  // The open investor is its stable id; the investor itself is looked up in the LATEST read, never kept as a snapshot.
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'list' ? 'list' : 'board';
+  const openId = /^[1-9][0-9]{0,9}$/.test(params.get('investor') || '') ? Number(params.get('investor')) : null;
+  const setView = (v) => setParams((p) => { const n = new URLSearchParams(p); if (v === 'list') n.set('view', 'list'); else n.delete('view'); return n; }, { replace: true });
+  const setOpen = (p) => setParams((cur) => { const n = new URLSearchParams(cur); if (p) n.set('investor', String(p.id)); else n.delete('investor'); return n; });
   const [dialog, setDialog] = useState(null);
   const reload = useCallback(() => read.reload(), [read]);
   const items = read.items || [];
+  const byId = useMemo(() => new Map(items.map((p) => [p.id, p])), [items]);
+  const open = openId != null ? byId.get(openId) || null : null;
+  // Another venture has other investors: nothing of this one's is left open or half-done.
+  const lastProject = useRef(projectId);
+  useEffect(() => {
+    if (lastProject.current === projectId) return;
+    lastProject.current = projectId;
+    setDialog(null);
+    setParams((p) => { const n = new URLSearchParams(p); n.delete('investor'); return n; }, { replace: true });
+  }, [projectId, setParams]);
   const cols = useMemo(() => boardColumns(items), [items]);
   const onMove = (p, to) => setDialog({ kind: 'move', prospects: [p], to });
   return (
@@ -507,7 +530,13 @@ export default function CapRelPipeline({ projectId, search = '' }) {
       {items.length && view === 'list' ? <List items={items} onOpen={setOpen} onBulk={(ps) => setDialog({ kind: 'move', prospects: ps, to: '' })} /> : null}
       {cols.unknown.length ? <p className={`m-0 text-[12px] ${MUTED}`} data-testid="caprel-unknown-stage">{cols.unknown.length} {cols.unknown.length === 1 ? 'investor has' : 'investors have'} a stage the board does not draw; the list shows them.</p> : null}
 
-      {open ? <InvestorLightbox projectId={projectId} prospect={items.find((p) => p.id === open.id) || open} search={search} onClose={() => setOpen(null)} onChanged={reload} /> : null}
+      {open ? <InvestorLightbox key={`${projectId}:${open.id}`} projectId={projectId} prospect={open} search={search} onClose={() => setOpen(null)} onChanged={reload} /> : null}
+      {openId != null && !open && read.status === 'ready' ? (
+        <Sheet label="Investor" testId="caprel-investor-gone" onClose={() => setOpen(null)} width={520} title="No longer in this view">
+          <p className={`m-0 text-[13px] ${INK}`} data-testid="caprel-investor-gone-line">This investor is no longer in this pipeline. It may have been removed or belongs to another venture.</p>
+          <button type="button" className={`${BTN_S} mt-3 w-fit`} onClick={() => setOpen(null)} data-testid="caprel-investor-gone-close">Close</button>
+        </Sheet>
+      ) : null}
       {dialog?.kind === 'move' ? <MoveDialog projectId={projectId} prospects={dialog.prospects} to={dialog.to} onClose={() => setDialog(null)} onDone={reload} /> : null}
       {dialog?.kind === 'add' ? <AddDialog projectId={projectId} onClose={() => setDialog(null)} onDone={reload} /> : null}
       {dialog?.kind === 'import' ? <ImportDialog projectId={projectId} onClose={() => setDialog(null)} onDone={reload} /> : null}
