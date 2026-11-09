@@ -25,6 +25,7 @@ and is not kept in sync.
 | `migrations/202611081919_skill_release_evidence.sql` | D4533 (#4533): the release evidence of Axal's skills: a draft's declared required models, the evidence hash a review and an eval result were given on, and an HQ version's manifest in its own row. Triggers keep versions, cases, results and decided reviews as written. Additive, nothing backfilled. |
 | `migrations/202611082048_ticket_filing_snapshot.sql` | D5030 (#5030): `tickets.filed_persona`, `filed_role`, `filed_licence_uid`, `filed_branch_code`, the support context a ticket was filed in, written once by the INSERT. Additive, nothing backfilled. |
 | `migrations/202611082049_support_sla_policy_version.sql` | D5032 (#5032): `support_sla_policy_state`, the version of the ticket SLA tiers on this database (HQ's own, or the copy a branch applied). New table, re-runnable, no seed. |
+| `migrations/202611090932_shared_licences.sql` | D5057 (#5057): `licences`, the shared licence identity for the operator (territory, white_label, master_franchise) and user (founder, investor, operating_partner, advisor) families. One row per territory licence, under its own uid and ref, backfilled re-runnably and written by trigger on every new one; `licence_program_agreements` must name a shared licence. No territory, contract or invoice row changes. |
 
 ## Adding a change
 
