@@ -92,6 +92,60 @@ export function seedHolders(db: DatabaseSync, n: number) {
   } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
+/**
+ * #4603 part 2b (Company creation): filings on every source, opt-in like
+ * `seedHolders`. Each formation step gets a due date relative to today (some
+ * overdue, some due soon, most later; one in four undated), and the entity gets
+ * a paid Lab order and four open obligations, of which the module reads three.
+ */
+export function seedFilings(db: DatabaseSync) {
+  db.exec(`UPDATE formation_steps SET due_date = CASE WHEN id % 4 = 0 THEN NULL ELSE date('now', ((id % 120) - 20) || ' days') END WHERE project_id = ${PROJECT};
+    INSERT INTO incorporations(user_id, project_id, jurisdiction_id, company_name, amount_cents, status, paid_at, packet_ready_at, created_at)
+      VALUES (1, ${PROJECT}, 'DE', 'Synthetic Inc', 50000, 'paid', '2026-01-05', NULL, '2026-01-04');
+    INSERT INTO entity_obligations(uid, entity_id, kind, title, cadence, due_date, status, resolved_on) VALUES
+      ('ob-1', 501, 'franchise_tax', 'Synthetic franchise tax', 'annual', date('now', '+40 days'), 'open', NULL),
+      ('ob-2', 501, 'annual_report', 'Synthetic annual report', 'annual', date('now', '+10 days'), 'open', NULL),
+      ('ob-3', 501, 'registered_agent', 'Synthetic agent renewal', 'annual', date('now', '-3 days'), 'open', NULL),
+      ('ob-4', 501, 'other', 'Synthetic later filing', 'one_time', date('now', '+200 days'), 'open', NULL),
+      ('ob-5', 501, 'other', 'Synthetic filed filing', 'one_time', date('now', '-90 days'), 'filed', date('now', '-91 days'));`);
+}
+
+/**
+ * #4603 part 2b (Operating systems): `n` tools enabled for the venture's company
+ * (company 10), opt-in like `seedHolders`. Each is its own member's connection,
+ * so the company's tools grow with `n`. Providers cycle through known
+ * connectors, an unknown one and Google Calendar (a personal connection, never
+ * a tool). Statuses cycle active, active, error, paused. Every tenth is
+ * disabled for the company, and one more belongs to someone outside it. Bank
+ * and CRM are mapped core systems, and eight weekly reviews are on record.
+ */
+export function seedTools(db: DatabaseSync, n: number) {
+  db.exec('BEGIN');
+  try {
+    db.exec(`INSERT INTO user_company_links(uid, company_id, user_id) VALUES ('link-founder', 10, 1)`);
+    const user = db.prepare(`INSERT INTO users(id, role, name, email, is_active) VALUES (?, 'founder', ?, ?, 1)`);
+    const link = db.prepare(`INSERT INTO user_company_links(uid, company_id, user_id) VALUES (?, 10, ?)`);
+    const integration = db.prepare(`INSERT INTO integrations(uid, user_id, provider_key, status, auth_type, last_synced_at, last_error_at) VALUES (?, ?, ?, ?, 'oauth2', '2026-11-01 08:00:00', ?)`);
+    const enable = db.prepare(`INSERT INTO integration_companies(integration_id, company_id, enabled) VALUES (?, 10, ?)`);
+    const providers = ['hubspot', 'stripe', 'slack', 'notion', 'figma', 'calendly', 'synthetic_unknown', 'google_calendar'];
+    const statuses = ['active', 'active', 'error', 'paused'];
+    for (let i = 1; i <= n + 1; i += 1) {
+      const id = 1000 + i, status = statuses[i % 4];
+      user.run(id, `Synthetic member ${i}`, `member${i}@example.invalid`);
+      if (i <= n) link.run(`link-${i}`, id);
+      const integ = Number(integration.run(`int-${i}`, id, providers[i % providers.length], status, status === 'error' ? `2026-11-0${1 + (i % 8)} 09:00:00` : null).lastInsertRowid);
+      enable.run(integ, i % 10 === 0 ? 0 : 1);
+    }
+    db.exec(`INSERT INTO project_core_systems(project_id, kind, integration_id, used_by, updated_by)
+        SELECT ${PROJECT}, 'bank', id, 'Finance', 1 FROM integrations WHERE uid = 'int-1';
+      INSERT INTO project_core_systems(project_id, kind, integration_id, used_by, updated_by)
+        SELECT ${PROJECT}, 'crm', id, NULL, 1 FROM integrations WHERE uid = 'int-8';`);
+    const ritual = db.prepare(`INSERT INTO ritual_runs(project_id, ritual_id, run_date, state) VALUES (?, 1, date('now', ?), ?)`);
+    for (let w = 1; w <= 8; w += 1) ritual.run(PROJECT, `-${7 * w} days`, w % 3 ? 'done' : 'missed');
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
+
 export async function buildReads(n: number) {
   const scratch = mkdtempSync(join(tmpdir(), 'build-4603-'));
   const file = join(scratch, 'db.sqlite');
