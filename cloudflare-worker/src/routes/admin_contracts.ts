@@ -1716,7 +1716,7 @@ adminContracts.put('/:uid/cross-border', async (c) => {
   const admin = await requireAdmin(c);
   const uid = c.req.param('uid') ?? '';
   const sql = getSQL(c.env);
-  let ref;
+  let ref: ContractRowRef = null;
   try { ref = await findContractByUid(sql, uid); } finally { await sql.end(); }
   if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available. Nothing was saved.' });
   const parsed = recordOf(await c.req.json().catch(() => ({})));
