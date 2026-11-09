@@ -522,7 +522,7 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
   }
   .fwr-spine-spend[data-state="figure"] { color: var(--fwr-ink); font-weight: 700; }
   .fwr-spine-spend[data-state="loading"] { color: var(--fwr-faint); }
-  .fwr-spine-spend[data-state="not_recorded"] { color: var(--fwr-faint); font-style: italic; }
+  .fwr-spine-spend[data-state="not_recorded"] { color: var(--fwr-muted); font-style: italic; }
   .fwr-spine-spend[data-state="unreadable"] { color: #b91c1c; font-weight: 700; }
 }
 .dark .fwr-spine-dot { background: #6f6a80; }

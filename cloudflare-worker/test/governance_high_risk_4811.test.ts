@@ -47,7 +47,7 @@ async function call(f: F, method: string, path: string, body?: unknown, form?: F
   const res = await f.app.request(`/api/admin/governance${path}`, { method, headers, body: form ?? (body === undefined ? undefined : JSON.stringify(body)) }, f.env);
   return { status: res.status, body: (res.headers.get('content-type') || '').includes('json') ? await res.json() as any : null };
 }
-const upload = (signed: boolean) => { const fd = new FormData(); fd.append('file', new File([PDF_BYTES], 'x.pdf')); if (signed) fd.append('signed', 'true'); return fd; };
+const upload = (signed: boolean) => { const fd = new FormData(); fd.append('file', new File([PDF_BYTES], 'x.pdf')); if (signed) { fd.append('signed', 'true'); fd.append('signed_on', '2026-11-01'); fd.append('signatory', 'S. Example, Manager'); fd.append('attest', 'true'); } return fd; };
 async function approved(f: F, o: { envelope?: number } = {}) {
   const made = await call(f, 'POST', '/documents', { entity_key: 'gp', category: 'resolution', title: 'GP resolution', ...(o.envelope ? { envelope_id: o.envelope } : {}) });
   const uid = made.body.document.uid;
