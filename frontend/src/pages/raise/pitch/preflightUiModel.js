@@ -327,6 +327,22 @@ export const notCheckedLine = (version, checkedVersion) => `${version != null ? 
 /** The deck the editor holds now, as `runPreflight` reads a version. */
 export const workingDeck = (deck, cards, theme) => ({ id: deck?.id ?? null, version: deck?.version ?? null, slides: cards, theme: theme ?? null });
 
+/**
+ * D4598 (#4598) part 2 — a hidden card is in no export (mirrors the Worker's own rule,
+ * `visibleCards` in `services/decks/slideModel.ts`): the export dialog's check reads the
+ * picked version's cards through this, so a finding's slide number is the export's, not
+ * the editor's.
+ */
+export const exportableCards = (slides) => (Array.isArray(slides) ? slides.filter((s) => !(s && typeof s === 'object' && s.hidden === true)) : []);
+
+/**
+ * D4598 (#4598) part 2 — the effective deck Export or Share is about to check: `slides`
+ * is the artifact's own content (`exportableCards`'s for Export, `preflight/link-cards`'s
+ * for Share), not the saved version's as a whole. Null while that content is still being
+ * read, so the caller shows "Checking…" rather than a result for the wrong combination.
+ */
+export const effectiveDeck = (id, version, slides, theme) => (Array.isArray(slides) ? { id: id ?? null, version: version ?? null, slides, theme: theme ?? null } : null);
+
 /** Previous and Next over the findings (pf5g): "Findings · 1 of 8". */
 export function stepOf(rows, id) {
   const i = rows.findIndex((r) => r.id === id);
