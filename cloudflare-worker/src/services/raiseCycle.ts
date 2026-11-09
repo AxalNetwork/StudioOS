@@ -134,7 +134,7 @@ export const EVIDENCE_LEGEND = [
   { label: 'Measured', tone: 'v1' }, { label: 'Stated', tone: 'v4' }, { label: 'Pattern', tone: 'v2' }, { label: 'Anecdote', tone: 'v3' },
 ] as const;
 
-export type ScoreRow = { item_id: number; item_key: string; score: number | null; evidence: string | null; missing: string | null; source: string; scored_at: string };
+export type ScoreRow = { item_id: number; item_key: string; score: number | null; evidence: string | null; missing: string | null; source: string; scored_at: string; input_hash?: string | null };
 export type ItemRow = { id: number; item_key: string; label: string; position: number };
 
 export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; scores: ScoreRow[] }> {
@@ -142,7 +142,7 @@ export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; score
     `SELECT id, item_key, label, position FROM readiness_items WHERE project_id = ? ORDER BY position, id`,
   ).bind(ctx.projectId).all<ItemRow>();
   const scores = await ctx.env.DB.prepare(
-    `SELECT s.item_id, i.item_key, s.score, s.evidence, s.missing, s.source, s.scored_at
+    `SELECT s.item_id, i.item_key, s.score, s.evidence, s.missing, s.source, s.scored_at, s.input_hash
        FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
       WHERE s.project_id = ? ORDER BY s.scored_at, s.id`,
   ).bind(ctx.projectId).all<ScoreRow>();
@@ -179,7 +179,27 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing' | 'Unreadable' | 'Shown'; tone: 'ok' | 'amb' | 'bad' | 'muted'; note?: string; next?: { text: string; href: string } };
-export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[] };
+export type ComputedScore = {
+  compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[];
+  /** D5071: SHA-256 of the canonical JSON of the exact inputs this check read. Null where the check has none (Team, PMF). */
+  input_hash?: string | null;
+};
+
+/** Canonical JSON: object keys sorted at every depth, so equal inputs always serialise to the same text. */
+export function canonicalJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).sort().filter((k) => o[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v === undefined ? null : v) ?? 'null';
+}
+/** D5071: the fingerprint of what a check read. Two runs over the same inputs give the same hash. */
+export async function inputHash(inputs: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(canonicalJson(inputs));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'muted' });
 /** Display current or previously stored source labels without storage identifiers. */
 const sourceWords = (source: string | null | undefined) => String(source ?? 'source not recorded')
@@ -291,10 +311,8 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const p = await env.DB.prepare(
     `SELECT use_of_funds, funding_needed, mrr, paying_customers, revenue FROM projects WHERE id = ?`,
   ).bind(projectId).first<{ use_of_funds: string | null; funding_needed: number | null; mrr: number | null; paying_customers: number | null; revenue: number | null }>();
-  const decks = await env.DB.prepare('SELECT COUNT(*) AS n FROM pitch_decks WHERE project_id = ?').bind(projectId).first<{ n: number }>();
-  const scen = await env.DB.prepare(
-    'SELECT COUNT(*) AS n FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0',
-  ).bind(projectId).first<{ n: number }>();
+  const deckRows = (await env.DB.prepare('SELECT id, version, is_current, created_at, slides FROM pitch_decks WHERE project_id = ? ORDER BY id')
+    .bind(projectId).all<{ id: number; version: number; is_current: number | null; created_at: string | null; slides: string | null }>()).results || [];
   const accessible = await readableRoomFiles(env, projectId);
   const mapped = { results: accessible.filter(f => f.checklist_item != null) };
   const latestVersion = await env.DB.prepare(
@@ -304,11 +322,22 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
 
   // Each check says what it read beside its score (decision 8); no score changes.
   const out: ComputedScore[] = [];
-  const deckCount = Number(decks?.n ?? 0);
-  const hasDeck = deckCount > 0;
+  // D5071. Pitch: 10 only while the CURRENT saved version holds at least one card. A deck row alone
+  // (no current version, or an empty one) is 3: it exists, an investor could not read it. The deck's
+  // preflight findings are computed per request and not stored, so they are not part of this score.
+  const cardsOf = (raw: string | null) => { try { const v = JSON.parse(String(raw ?? '[]')); return Array.isArray(v) ? v.length : 0; } catch { return 0; } };
+  const deckCount = deckRows.length;
+  const current = deckRows.filter((d) => Number(d.is_current) === 1).sort((x, y) => Number(y.version) - Number(x.version))[0] ?? null;
+  const cards = current ? cardsOf(current.slides) : 0;
+  const deckReady = cards > 0;
   out.push({
-    key: 'deck', score: hasDeck ? 10 : 0, evidence: 'measured', missing: hasDeck ? null : 'Build the pitch deck.',
-    reads: [{ a: 'Pitch decks', b: hasDeck ? `${plural(deckCount, 'deck saved', 'decks saved')} · Typed` : 'none saved', ...met(hasDeck) }],
+    key: 'deck', score: deckReady ? 10 : deckCount > 0 ? 3 : 0, evidence: 'measured',
+    missing: deckReady ? null : deckCount === 0 ? 'Build the pitch deck.' : current ? 'Add cards to the current deck.' : 'Make a saved version the current deck.',
+    reads: [
+      { a: 'Pitch decks', b: deckCount ? `${plural(deckCount, 'deck saved', 'decks saved')} · Typed` : 'none saved', ...met(deckCount > 0) },
+      { a: 'Current version', b: current ? `v${Number(current.version)} · ${plural(cards, 'card', 'cards')}` : 'none is current', ...met(deckReady, deckCount > 0) },
+    ],
+    input_hash: await inputHash({ decks: await Promise.all(deckRows.map(async (d) => ({ id: d.id, version: d.version, current: Number(d.is_current) === 1, created_at: d.created_at, slides: await inputHash(d.slides ?? '') }))) }),
   });
 
   const hasAlloc = parseUseOfFundsValue(p?.use_of_funds).length > 0;
@@ -320,14 +349,32 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
       { a: 'Raise target', b: hasTarget ? `${usd(Number(p!.funding_needed))} · Typed` : 'not set', ...met(hasTarget) },
       { a: 'Allocation', b: hasAlloc ? 'split stored · Typed' : 'Not recorded', ...met(hasAlloc) },
     ],
+    input_hash: await inputHash({ use_of_funds: p?.use_of_funds ?? null, funding_needed: p?.funding_needed ?? null }),
   });
 
-  const scenarios = Number(scen?.n ?? 0);
-  const hasCap = scenarios > 0;
-  out.push({
-    key: 'cap_table', score: hasCap ? 10 : 0, evidence: 'measured', missing: hasCap ? null : 'Set up the cap table.',
-    reads: [{ a: 'Cap table', b: hasCap ? 'a base scenario is saved · Typed' : 'no scenario saved', ...met(hasCap) }],
-  });
+  // D5071. Cap table: 10 for a RECORDED ownership (holders with shares, from the issuance record); 6 for a
+  // saved model with founders and shares but no recorded holders (the record is what investors diligence);
+  // 3 for a scenario with no usable ownership in it; 0 for none. A read that fails is Unavailable, not 0.
+  let capScore: ComputedScore;
+  try {
+    const cap = await readCapTable(env, projectId);
+    const sharesOf = (rows: unknown) => (Array.isArray(rows) ? rows.filter((h: any) => Number(h?.shares) > 0).length : 0);
+    const recorded = cap.source === 'record' ? sharesOf((cap as any).today?.founding) : 0;
+    const modelHolders = cap.source === 'model' ? Math.max(sharesOf((cap as any).model?.result?.founding), sharesOf((cap as any).model?.inputs?.founders)) : 0;
+    const score = recorded > 0 ? 10 : modelHolders > 0 ? 6 : cap.source === 'model' ? 3 : 0;
+    capScore = {
+      key: 'cap_table', score, evidence: recorded > 0 ? 'measured' : cap.source === 'none' ? 'measured' : 'stated',
+      missing: recorded > 0 ? null : cap.source === 'none' ? 'Set up the cap table.' : modelHolders > 0 ? 'Record your holders so investors see a recorded ownership, not a model.' : 'Add founders and shares to the cap table.',
+      reads: [
+        { a: 'Recorded ownership', b: recorded > 0 ? `${plural(recorded, 'holder', 'holders')} with shares · Typed` : 'no holders recorded', ...met(recorded > 0, cap.source === 'model') },
+        { a: 'Cap table model', b: cap.source === 'model' ? (modelHolders > 0 ? `${plural(modelHolders, 'holder', 'holders')} with shares in the saved scenario · Typed` : 'a scenario is saved, with no shares in it') : cap.source === 'record' ? 'the record is the start' : 'no scenario saved', ...met(modelHolders > 0, cap.source === 'model') },
+      ],
+      input_hash: await inputHash({ source: cap.source, recorded: (cap as any).today?.founding ?? null, model: (cap as any).model?.inputs ?? null }),
+    };
+  } catch {
+    capScore = { key: 'cap_table', score: null, evidence: null, missing: 'Unavailable · the cap table could not be read.', reads: [{ a: 'Cap table', b: 'Could not be read · Try again', c: 'Unreadable', tone: 'bad' }], input_hash: null };
+  }
+  out.push(capScore);
 
   const fieldOf = (v: unknown) => (num(v) ?? 0) > 0;
   const verifiedRevenue = await verifiedMonthlyRevenue(env, projectId);
@@ -342,8 +389,17 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     return f ? { a: `${label} · From PostHog`, b: `${f.unit === 'pct' ? `${Math.round(f.value * 10) / 10}%` : Math.round(f.value).toLocaleString('en-US')} · ${f.name} · as of ${f.as_of}`, c: 'Shown' as const, tone: 'muted' as const, note: 'Shown beside the score; it does not change it.' } : null;
   }))).filter((x): x is NonNullable<typeof x> => x !== null);
   const traction = measured || revenueRows.some(r => r.cents > 0) || metricRows.some(r => r.fresh && r.value > 0) || fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
+  // D5071. Traction is scored by the quality of its proof, not by a signal being present:
+  //   10  measured: connector-verified revenue (Stripe or Mercury) or a fresh measured MRR / paying-accounts figure;
+  //    8  documented: revenue backed by a proof document or a Mercury receipt;
+  //    5  stated: a typed figure or an unverified entry. It is a claim; it can be recorded but not scored as proof;
+  //    0  nothing recorded.
+  // PostHog's figures are shown beside the score and never count (D1607).
+  const tractionScore = measured ? 10 : documented ? 8 : traction ? 5 : 0;
   out.push({
-    key: 'traction', score: traction ? 10 : 0, evidence: measured ? 'measured' : documented ? 'pattern' : 'stated', missing: traction ? null : 'Log revenue or update your proof fields.',
+    key: 'traction', score: tractionScore, evidence: measured ? 'measured' : documented ? 'pattern' : 'stated',
+    missing: measured ? null : traction ? (documented ? 'Connect Stripe or Mercury to measure it.' : 'Connect Stripe or Mercury, or attach a proof document, to raise this above a stated figure.') : 'Log revenue or update your proof fields.',
+    input_hash: await inputHash({ fields: { revenue: p?.revenue ?? null, mrr: p?.mrr ?? null, paying_customers: p?.paying_customers ?? null }, revenue: revenueRows, metrics: metricRows }),
     reads: [
       { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month} · ${[...new Set(revenueRows.filter(r => r.verification === 'verified').map(revenueSource))].join(', ')}` : 'not recorded', ...met(measuredRevenue) },
       ...revenueRows.map(r => ({ a: `Revenue entries · ${revenueSource(r)}`, b: `${usd(r.cents / 100)} · ${r.month} · received on ${r.observed_on} · ${sourceWords(r.verification)} · ${r.has_document ? 'proof document recorded' : 'no proof document recorded'}`, ...met(r.cents > 0) })),
@@ -367,6 +423,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
       { a: 'Files investors can download', b: files ? `${files} in ${plural(Number(staged?.folders ?? 0), 'folder', 'folders')} · Document` : 'none downloadable', ...met(files > 0) },
       { a: 'Diligence checklist covered', b: `${known.size} of ${DILIGENCE_CHECKLIST.length} items${known.size ? ' · Document' : ''}`, ...met(open === 0, known.size > 0) },
     ],
+    input_hash: await inputHash({ files: accessible.map((f: any) => ({ id: f.id, checklist_item: f.checklist_item ?? null, folder_id: f.folder_id ?? null, visibility: f.visibility ?? null, updated_at: f.updated_at ?? null })).sort((x: any, y: any) => Number(x.id) - Number(y.id)) }),
   });
 
   const v = num(latestVersion?.v);
@@ -374,6 +431,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     out.push({
       key: 'narrative', score: null, evidence: null, missing: 'Not enough recorded · save an investor narrative version.',
       reads: [{ a: 'Narrative versions', b: 'none saved', ...met(false) }],
+      input_hash: await inputHash({ version: null }),
     });
   } else {
     const inputs = await checkInputs(env, projectId, v);
@@ -386,6 +444,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     // mismatch list is not proof that a version agrees with today's figures.
     const mismatches = consistencyCheck(stated, metrics).length;
     out.push({
+      input_hash: await inputHash({ version: v, stated: stated.map((x) => ({ figure: x.figure, value: x.value })), metrics: Object.fromEntries(Object.entries(metrics).map(([k, m]) => [k, (m as any)?.value ?? null])) }),
       compared_count: compared, key: 'narrative', score: compared > 0 ? Math.max(0, 10 - 2 * mismatches) : null, evidence: compared > 0 ? 'measured' : null,
       missing: compared === 0 ? 'Not enough recorded' : mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
       reads: [
@@ -398,40 +457,74 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
 }
 
 /**
- * The newest write to the stores each computed check reads (D691 decision 8),
- * one fixed statement per item. `null` marks a check that reads `projects`
- * fields, which keep no write time, so it always re-scores.
- */
-const LATEST_WRITE: Record<Exclude<ReadinessKey, 'team' | 'pmf'>, string | null> = {
-  deck: 'SELECT MAX(created_at) AS at FROM pitch_decks WHERE project_id = ?',
-  use_of_funds: null,
-  cap_table: 'SELECT MAX(updated_at) AS at FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0',
-  traction: null,
-  data_room: 'SELECT MAX(updated_at) AS at FROM data_room_files WHERE project_id = ?',
-  narrative: `SELECT MAX(at) AS at FROM (
-      SELECT MAX(updated_at) AS at FROM spinout_deck_overrides WHERE project_id = ? AND version > 0
-      UNION ALL SELECT MAX(checked_at) FROM narrative_checks WHERE project_id = ?
-      UNION ALL SELECT MAX(updated_at) FROM narrative_version_meta WHERE project_id = ?)`,
-};
-
-/**
- * `since: 'last'`: whether a computed item needs a new score. It does when it
- * has none, when a store its check reads has a row written after its newest
- * score, when its check reads `projects` fields, or when the check now finds
- * something other than that score (a deleted row leaves no newer write).
+ * `since: 'last'`: whether a computed item needs a new score. D5071: it does when it has none, when
+ * its newest score kept no input hash (a score from before the hash, or from a person), when a fresh
+ * run of the check reads other inputs (its hash differs), or when the check now finds something other
+ * than that score. The hash is of the exact rows and fields the check read, so this no longer rests on
+ * a table's newest timestamp: a deleted row, a typed `projects` field and a date window all change it.
  */
 export async function changedSinceScored(
-  env: Env, projectId: number, c: ComputedScore, newest: { score: number | null; missing: string | null; scored_at: string } | undefined,
+  _env: Env, _projectId: number, c: ComputedScore, newest: { score: number | null; missing: string | null; scored_at: string; input_hash?: string | null } | undefined,
 ): Promise<boolean> {
   if (!newest) return true;
   if (newest.score !== c.score || (newest.missing ?? null) !== c.missing) return true;
-  const sql = LATEST_WRITE[c.key as Exclude<ReadinessKey, 'team' | 'pmf'>];
-  if (sql == null) return true;
-  // Each statement names the venture once per store it reads.
-  const binds = Array.from({ length: (sql.match(/\?/g) ?? []).length }, () => projectId);
-  const row = await env.DB.prepare(sql).bind(...binds).first<{ at: string | null }>();
-  return !!row?.at && String(row.at) > String(newest.scored_at);
+  if (!newest.input_hash || !c.input_hash) return true;
+  return newest.input_hash !== c.input_hash;
 }
+
+/**
+ * D5071: where a readiness item is fixed. The destination comes from here, from the item's key and what
+ * its score says is missing, never from the readiness page the item is listed on.
+ */
+export type FixTarget = { module_slug: ModuleSlug; href: string; label: string };
+export function readinessFix(ctx: Ctx, key: string, score?: { score: number | null; missing: string | null } | null): FixTarget | null {
+  const base = (slug: ModuleSlug) => href(ctx, slug);
+  const q = `project=${ctx.projectId}`;
+  switch (key) {
+    case 'narrative': {
+      const missing = String(score?.missing ?? '');
+      // No saved version: New version. A version that disagrees with the metrics: the Check tab.
+      if (score == null || score.score == null && /save an investor narrative version/i.test(missing)) return { module_slug: 'investor-narrative', href: `/raise/investor-narrative/new?${q}`, label: 'Save a narrative version' };
+      if (/differ|compared|enough recorded/i.test(missing)) return { module_slug: 'investor-narrative', href: `/raise/investor-narrative/check?${q}`, label: 'Open the narrative check' };
+      return { module_slug: 'investor-narrative', href: base('investor-narrative'), label: 'Open the investor narrative' };
+    }
+    case 'deck': return { module_slug: 'pitch-deck', href: pitchHref(ctx), label: 'Open the Pitch Studio' };
+    case 'data_room': return { module_slug: 'data-room', href: `/raise/data-room/checklist?${q}`, label: 'Open the data room checklist' };
+    case 'cap_table': return { module_slug: 'cap-table', href: base('cap-table'), label: 'Open the cap table' };
+    case 'use_of_funds': return { module_slug: 'use-of-funds', href: base('use-of-funds'), label: 'Open Use of funds' };
+    case 'traction': return { module_slug: 'fundraising-readiness', href: `${TOOL_HREF.metrics}?${q}`, label: 'Open Metrics' };
+    case 'team': return { module_slug: 'fundraising-readiness', href: `/build/founding-team?${q}`, label: 'Open the founding team' };
+    case 'pmf': return { module_slug: 'fundraising-readiness', href: base('fundraising-readiness'), label: 'Open Product-market fit' };
+    default: return null;
+  }
+}
+
+/**
+ * D5071: whether each computed item's newest score still matches the inputs it was scored from.
+ *   current        a fresh run of the check reads the same inputs (same hash)
+ *   stale          it reads other inputs; re-score it
+ *   not_recorded   the newest score kept no hash (older than the column, or no check has scored it)
+ *   unavailable    the check could not be run just now: neither current nor stale is known
+ * Team and PMF are not hashed, so they are absent from the map. Not scored is its own state (no entry).
+ */
+export type Freshness = 'current' | 'stale' | 'not_recorded' | 'unavailable';
+export async function readinessFreshness(ctx: Ctx, latest: Map<number, ScoreRow>, items: ItemRow[]): Promise<Map<string, Freshness>> {
+  const out = new Map<string, Freshness>();
+  let computed: ComputedScore[] | null = null;
+  try { computed = await computeReadiness(ctx.env, ctx.projectId); } catch { computed = null; }
+  for (const i of items) {
+    const s = latest.get(Number(i.id));
+    if (!s || i.item_key === 'team' || i.item_key === 'pmf') continue;
+    if (computed == null) { out.set(i.item_key, 'unavailable'); continue; }
+    const c = computed.find((x) => x.key === i.item_key);
+    if (!c || !c.input_hash) { out.set(i.item_key, 'unavailable'); continue; }
+    out.set(i.item_key, !s.input_hash ? 'not_recorded' : s.input_hash === c.input_hash ? 'current' : 'stale');
+  }
+  return out;
+}
+export const FRESHNESS_WORDS: Record<Freshness, string> = {
+  current: 'Current', stale: 'Stale · its inputs changed', not_recorded: 'Not recorded', unavailable: 'Unavailable',
+};
 
 export async function readinessCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('fundraising-readiness', 'All time', 'Each readiness item by its score out of 10, shaded by evidence; the overall score over time.', 'Readiness scores'), async (): Promise<CardBody> => {
@@ -463,9 +556,12 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
     const team = await teamReadiness(ctx.env, ctx.projectId);
     series.push({ kind: 'rows', items: team.reads.map(r => ({ label: r.a, value: r.b, tone: r.tone, ...(r.note ? { note: r.note } : {}), ...(r.next ? { next: r.next } : {}) })) });
     const unscored = items.filter((i) => !latest.has(Number(i.id)));
-    const gap = items.map((i) => latest.get(Number(i.id))).find((s) => s && s.missing);
+    const gapItem = items.find((i) => { const s = latest.get(Number(i.id)); return !!(s && s.missing); });
+    const gap = gapItem ? latest.get(Number(gapItem.id)) : undefined;
+    // D5071: the step opens the workflow that fixes that item, not the readiness page it is listed on.
+    const gapFix = gapItem && gap ? readinessFix(ctx, gapItem.item_key, { score: gap.score != null ? Number(gap.score) : null, missing: gap.missing ?? null }) : null;
     const next = gap
-      ? { text: String(gap.missing), href: href(ctx, 'fundraising-readiness') }
+      ? { text: String(gap.missing), href: gapFix?.href ?? href(ctx, 'fundraising-readiness') }
       : unscored.length > 0
         ? { text: `Score ${plural(unscored.length, 'item', 'items')} no check can measure`, href: href(ctx, 'fundraising-readiness') }
         : null;
@@ -512,14 +608,19 @@ async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   else if (state === 'not_scored') rows = rows.filter(({ s }) => s?.score == null);
   // Score, highest first, is the default; an item no one scored comes last.
   if (rq.sort !== 'order') rows.sort((a, b) => (b.s?.score ?? -1) - (a.s?.score ?? -1));
+  const fresh = await readinessFreshness(ctx, latest, items);
   return paged(
-    [col('item', 'Item'), col('score', 'Score'), col('evidence', 'Evidence'), col('missing', 'Missing'), col('updated', 'Updated')],
+    [col('item', 'Item'), col('score', 'Score'), col('evidence', 'Evidence'), col('missing', 'Missing'), col('freshness', 'Freshness'), col('updated', 'Updated')],
     rows.map(({ i, s }) => ({
       // D691 decision 3: the item's key, the same in every list, record and write.
       id: READINESS_KEYS.includes(i.item_key) ? i.item_key : null,
       cells: {
         item: i.label, score: s?.score != null ? Number(s.score) : null, evidence: s?.score != null ? s.evidence : null,
         missing: s ? s.missing ?? '' : null, updated: s ? day(s.scored_at) : null,
+        // D5071: Stale / Current / Not recorded / Unavailable; an item no check scored has none (it is Not scored).
+        freshness: fresh.has(i.item_key) ? FRESHNESS_WORDS[fresh.get(i.item_key)!] : null,
+        // D5071: the workflow that fixes this item, from the domain table, never inferred from this page.
+        fix_href: readinessFix(ctx, i.item_key, s ? { score: s.score != null ? Number(s.score) : null, missing: s.missing ?? null } : null)?.href ?? null,
       },
     })),
     rq.page,
@@ -1893,16 +1994,7 @@ export function capTablePlan(user: User): CardPlan {
 // D1610 W2: next steps, from the readiness scores
 // ---------------------------------------------------------------------------
 
-/** Where each readiness item is fixed, and the Raise module it belongs to. Team is never a step. */
-const STEP_TARGET: Record<Exclude<ReadinessKey, 'team'>, { module_slug: ModuleSlug; href: (ctx: Ctx) => string }> = {
-  narrative: { module_slug: 'investor-narrative', href: (ctx) => href(ctx, 'investor-narrative') },
-  deck: { module_slug: 'pitch-deck', href: pitchHref },
-  data_room: { module_slug: 'data-room', href: (ctx) => href(ctx, 'data-room') },
-  cap_table: { module_slug: 'cap-table', href: (ctx) => href(ctx, 'cap-table') },
-  use_of_funds: { module_slug: 'use-of-funds', href: (ctx) => href(ctx, 'use-of-funds') },
-  traction: { module_slug: 'fundraising-readiness', href: (ctx) => `${TOOL_HREF.metrics}?project=${ctx.projectId}` },
-  pmf: { module_slug: 'fundraising-readiness', href: (ctx) => href(ctx, 'fundraising-readiness') },
-};
+/** Where each readiness item is fixed is `readinessFix` (D5071), the one table. Team is never a step. */
 
 export type NextStep = { item_key: string; label: string; text: string; module_slug: string; href: string; gain_points: number | null };
 export type NextSteps = { state: 'ok' | 'empty' | 'unreadable'; items: NextStep[] };
@@ -1926,7 +2018,7 @@ export async function nextSteps(ctx: Ctx): Promise<NextSteps> {
     const order = (k: string) => READINESS_KEYS.indexOf(k);
     const steps: NextStep[] = [];
     for (const i of items) {
-      if (i.item_key === 'team' || !(i.item_key in STEP_TARGET)) continue;
+      if (i.item_key === 'team' || !READINESS_KEYS.includes(i.item_key)) continue;
       const s = latest.get(Number(i.id));
       const score = s?.score != null && Number.isFinite(Number(s.score)) ? Number(s.score) : null;
       if (score != null && score >= 10) continue;
@@ -1934,11 +2026,12 @@ export async function nextSteps(ctx: Ctx): Promise<NextSteps> {
       withTen.set(Number(i.id), { ...(s ?? { item_id: i.id, item_key: i.item_key, evidence: null, missing: null, source: 'computed', scored_at: ctx.today }), score: 10 });
       const gain = (overallReadiness(withTen.values()) as number) - now;
       if (!(gain > 0)) continue;
-      const target = STEP_TARGET[i.item_key as keyof typeof STEP_TARGET];
+      const target = readinessFix(ctx, i.item_key, s ? { score: s.score != null ? Number(s.score) : null, missing: s.missing ?? null } : null);
+      if (!target) continue;
       steps.push({
         item_key: i.item_key, label: READINESS_ITEMS.find((r) => r.key === i.item_key)!.label,
         text: s?.missing ? String(s.missing) : score == null ? 'Not scored yet' : `Scored ${score} of 10`,
-        module_slug: target.module_slug, href: target.href(ctx), gain_points: gain,
+        module_slug: target.module_slug, href: target.href, gain_points: gain,
       });
     }
     steps.sort((a, b) => (b.gain_points as number) - (a.gain_points as number) || order(a.item_key) - order(b.item_key));

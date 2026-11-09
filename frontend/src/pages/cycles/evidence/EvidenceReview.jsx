@@ -16,19 +16,27 @@ import { Link } from 'react-router-dom';
 import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence';
 import { AREAS, BASE, SHARING, SOURCES } from './evidenceModel';
 import {
-  ACCEPT_ALL_CAP, acceptAllOffer, acceptAllPlan, day, itemFigure, itemTitle, outcomeWord, sourceWord,
+  ACCEPT_ALL_CAP, acceptAllOffer, acceptAllPlan, acceptAllScope, day, itemFigure, itemTitle, outcomeWord, sourceWord,
 } from './evidenceView';
 import {
   BTN_L, BTN_S, BlockUnreadable, CARD, ChangeDialog, H2, LINK, MUTED, SharingPill, SourcePill, StalePill, StatePill, StrengthMark,
 } from './EvidenceParts';
 
-const decide = async (projectId, p, verb) => {
-  try {
-    if (verb === 'accept') await raiseEvidenceApi.accept(projectId, p.uid, p.snapshot_hash);
-    else await raiseEvidenceApi.dismiss(projectId, p.uid);
-    return { uid: p.uid, ok: true };
-  } catch (e) { return { uid: p.uid, ok: false, code: e?.code || null }; }
-};
+/**
+ * D5073: the decisions of a press, in ONE request (`POST /evidence/items/batch`), one outcome per proposal in the
+ * order pressed. A refusal on one (a changed source, already decided) is that row's outcome and the others still
+ * land. If the request itself fails, every row says so; nothing is reported as accepted that the server did not say.
+ */
+export async function decideMany(projectId, rows, verb) {
+  const items = rows.map((p) => (verb === 'accept' ? { id: p.uid, snapshot_hash: p.snapshot_hash } : { id: p.uid }));
+  let answer = null;
+  try { answer = await raiseEvidenceApi.batch(projectId, verb, items); } catch { answer = null; }
+  const byId = new Map((Array.isArray(answer?.results) ? answer.results : []).map((r) => [r.id, r]));
+  return rows.map((p) => {
+    const r = byId.get(p.uid);
+    return r ? { uid: p.uid, ok: r.ok === true, code: r.ok ? null : r.code || null } : { uid: p.uid, ok: false, code: null };
+  });
+}
 /** One proposal's row in words: the record, where it came from and what it would back. */
 export function ProposalRow({ p, canDecide, onAccept, onDismiss, selected, onSelect }) {
   return (
@@ -65,8 +73,7 @@ export function DecisionDialog({ action, projectId, onDone, onClose }) {
     <ChangeDialog title={verb === 'accept' ? (one ? 'Accept this evidence?' : `Accept ${rows.length} items?`) : (one ? 'Dismiss this evidence?' : `Dismiss ${rows.length} items?`)}
       confirm={verb === 'accept' ? 'Accept' : 'Dismiss'} says={says} onClose={onClose} testId="evidence-decision"
       onConfirm={async () => {
-        const out = [];
-        for (const p of rows) out.push({ ...(await decide(projectId, p, verb)), title: itemTitle(p) });
+        const out = (await decideMany(projectId, rows, verb)).map((r, i) => ({ ...r, title: itemTitle(rows[i]) }));
         if (one && !out[0].ok) { await onDone?.(out); const e = new Error(outcomeWord(out[0])); throw e; }
         await onDone?.(out);
       }} />
@@ -98,7 +105,7 @@ export function ReviewQueue({ model, read, search = '', projectId, onChanged }) 
         <div className="flex flex-col gap-1">
           <button type="button" className={`${BTN_S} w-fit`} data-testid="evidence-accept-all"
             onClick={() => setAction({ verb: 'accept', rows: acceptAllPlan(model.proposals, offer).take })}>{offer.label} [{Math.min(offer.count, ACCEPT_ALL_CAP)}]</button>
-          <p className={MUTED}>At most {ACCEPT_ALL_CAP} per press. Each outcome is listed after.</p>
+          <p className={MUTED} data-testid="evidence-accept-all-scope">{acceptAllScope(model.proposals, offer, read?.proposals?.has_more)}</p>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -157,8 +164,12 @@ export function ShareDialog({ items, projectId, onClose, onDone }) {
     <ChangeDialog title={`Share ${items.length === 1 ? itemTitle(items[0]) : `${items.length} items`}`} confirm="Share" onClose={onClose} testId="evidence-share"
       says={`${items.length === 1 ? 'This item becomes' : `All ${items.length} become`} ${SHARING[to]}.`}
       onConfirm={async () => {
-        const failed = [];
-        for (const i of items) { if (i.visibility === to) continue; try { await raiseEvidenceApi.update(projectId, i.uid, i.version, { visibility: to }); } catch { failed.push(itemTitle(i)); } }
+        // D5073: one request for every item that changes; a refusal on one names that item and the rest are shared.
+        const changing = items.filter((i) => i.visibility !== to);
+        let answer = null;
+        if (changing.length) { try { answer = await raiseEvidenceApi.batch(projectId, 'share', changing.map((i) => ({ id: i.uid, version: i.version, visibility: to }))); } catch { answer = null; } }
+        const okIds = new Set((Array.isArray(answer?.results) ? answer.results : []).filter((r) => r.ok === true).map((r) => r.id));
+        const failed = changing.filter((i) => !okIds.has(i.uid)).map(itemTitle);
         await onDone?.();
         if (failed.length) throw new Error(`Not shared: ${failed.join(', ')}. The source may have changed; look again and confirm it first.`);
       }}>
