@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Skeleton } from '../../../ui';
 import { useAuth } from '../../../hooks/useAuthSync';
@@ -386,7 +386,8 @@ export function BoardBulkBar({ pick, rows, onAssign, testId }) {
  */
 export function usePopoverPlace(trigger, open, height = 96) {
   const [place, setPlace] = useState(null);
-  useEffect(() => {
+  // Before paint, so the popover is never drawn once inside the scroller first.
+  useLayoutEffect(() => {
     if (!open) { setPlace(null); return undefined; }
     const at = () => {
       const r = trigger.current?.getBoundingClientRect?.();

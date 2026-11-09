@@ -216,15 +216,19 @@ test.describe('the boards\' queue grammar (D4814 part 8: AP-08, AP-10, AP-12)', 
   test('a last row\'s ⋯ opens where its actions can be clicked, on a board and on the Inbox', async ({ page, request }) => {
     const onTop = (id) => page.evaluate((id) => {
       const b = document.querySelector(`[data-testid="${id}"]`).getBoundingClientRect();
-      return document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)?.closest(`[data-testid="${id}"]`) != null;
+      // What is on top instead, if anything is, so a failure names it.
+      const e = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2);
+      return e?.closest(`[data-testid="${id}"]`) ? true : `${e?.tagName}[${e?.dataset?.testid || ''}] at ${Math.round(b.x)},${Math.round(b.y)}`;
     }, id);
     await open(page, request, '/admin/approvals/product-testers');
     await page.getByTestId('tester-more-3-button').click();
+    await expect(page.getByTestId('tester-more-3-pop')).toHaveCSS('position', 'fixed');
     expect(await onTop('tester-more-3-copy'), 'not clipped by the queue\'s scroller').toBe(true);
     await page.goto('/admin/approvals');
     const last = page.getByRole('button', { name: 'More actions for Person E' });
     await last.scrollIntoViewIfNeeded();
     await last.click();
+    await expect(page.getByTestId('approvals-pop-exploring:77')).toHaveCSS('position', 'fixed');
     expect(await onTop('approvals-menu-exploring:77-copy')).toBe(true);
   });
 });
