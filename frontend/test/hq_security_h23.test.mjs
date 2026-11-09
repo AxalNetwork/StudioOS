@@ -44,24 +44,20 @@ const DRILL_PASSED = { ...DRILL_FAILED, state: 'last_run_passed', step: 'teardow
 
 // ─────────────────────────────────────────────────────────── the ledger ──
 
-test('the whole ledger is set in one monospace face, and no cell opts out of it', () => {
-  const at = PAGE.indexOf('data-testid="hq-gov-feed"');
+test('the ledger keeps its forensic face where it matters: time and stored action in monospace, the label first', () => {
+  // D4803 — RE-AIMED. H23 set every cell in one monospace face, with the raw
+  // action as the event. Security v2's SE03 makes the human label primary and
+  // keeps the stored action beneath it; the two values an investigator copies
+  // and compares (the time and the raw id) stay monospace.
+  const SRC = readFileSync(new URL('../src/pages/hq/security/EventsWorkspace.jsx', import.meta.url), 'utf8');
+  const at = SRC.indexOf('data-testid="hq-gov-feed"');
   assert.ok(at > 0, 'the ledger table lost its test id');
-  const table = PAGE.slice(PAGE.lastIndexOf('<table', at), PAGE.indexOf('</table>', at));
-  const tableClass = /^<table className="([^"]*)"/.exec(table);
-  assert.ok(tableClass, 'the ledger table no longer carries a literal className');
-  const inherited = /\bfont-mono\b/.test(tableClass[1]);
-
-  const body = table.slice(table.indexOf('<tbody>'), table.indexOf('</tbody>'));
-  assert.ok(body.length > 0, 'the ledger has no <tbody> — this scan would be vacuous');
-  const cells = [...body.matchAll(/<td className=(\{`[^`]*`\}|"[^"]*")/g)].map((m) => m[1]);
-  assert.equal(cells.length, 5, 'a ledger row no longer has H23\'s five cells');
-  // Monospace is what a cell RENDERS: the table's face when it sets one, or
-  // the cell's own. A cell may never set a proportional face over it.
-  cells.forEach((c, i) => {
-    assert.ok(inherited || /\bfont-mono\b/.test(c), `ledger cell ${i + 1} is not monospace`);
-  });
-  assert.doesNotMatch(body, /\bfont-(?:sans|serif)\b/, 'a ledger cell set a proportional face over the monospace ledger');
+  const table = SRC.slice(SRC.lastIndexOf('<table', at), SRC.indexOf('</table>', at));
+  const cells = [...table.matchAll(/<td className=(\{`[^`]*`\}|"[^"]*")/g)].map((m) => m[1]);
+  assert.equal(cells.length, 6, 'a ledger row no longer has SE03\'s six cells');
+  assert.match(cells[0], /\bfont-mono\b/, 'the time is not monospace');
+  assert.match(table, /<small className="[^"]*\bfont-mono\b[^"]*">\{raw\}<\/small>/, 'the stored action is not monospace, or is gone');
+  assert.doesNotMatch(table, /\bfont-(?:serif)\b/);
 });
 
 test('the bar has three states, and none of them is a count it did not measure', () => {
