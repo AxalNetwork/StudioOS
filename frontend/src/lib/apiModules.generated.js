@@ -239,6 +239,7 @@ export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
 export * from './api/researchOverview.js';
+export * from './api/researchProjects.js';
 export * from './api/researchSectors.js';
 export * from './api/roundCalls.js';
 export * from './api/safeIssuances.js';
