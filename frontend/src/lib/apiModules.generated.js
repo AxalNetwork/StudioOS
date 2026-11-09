@@ -167,6 +167,7 @@ export * from './api/growResults.js';
 export * from './api/growSequences.js';
 export * from './api/growTalent.js';
 export * from './api/helpCenter.js';
+export * from './api/hqAccountMoves.js';
 export * from './api/hqDeckStageNorms.js';
 export * from './api/incorporationQuote.js';
 export * from './api/influencer.js';

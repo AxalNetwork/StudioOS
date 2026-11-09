@@ -7,6 +7,8 @@ import { daysTo, rungRank } from '../../lib/notices';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import { TEAM_SEARCH_MAX, branchQueryFor, searchStatus } from './teamSearchPolicy';
 import { branchCoverageLine, branchStateText, registryUnreadable, wholeTeamEstablished } from './hqTeamBranchModel';
+import OpenAccountMoves, { MoveOutcome } from './AccountMoveRecovery';
+import { moveView } from './accountMoveModel';
 
 /**
  * HQ · Team — the first screen whose SUBJECT is the administrators (H9, D138).
@@ -208,11 +210,13 @@ export function MoveHit({ hit, from, destinations, onMoved, viewAs }) {
       </li>
     );
   }
+  // D5043 — once the source has closed the account, the hit shows the move's outcome and never
+  // the Move control again: the two legs, the records note, and Retry invitation while the second
+  // leg is open. A refresh finds the same move under Moves to finish (`AccountMoveRecovery.jsx`).
   if (done) {
     return (
-      <li className="py-1.5 text-[12px] text-axal-muted">
-        {hit.name || hit.email} closed on {from}
-        {done.invited?.ok ? ` and invited on ${to}.` : `. The invitation did not land — retry from the destination, do not move again.`}
+      <li className="py-1.5" data-testid="hq-team-moved">
+        <MoveOutcome view={moveView(done)} />
       </li>
     );
   }
@@ -757,6 +761,8 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
         </p>
       )}
 
+      {!viewAs && <OpenAccountMoves reloadKey={reloadKey} />}
+
       {!ladderReadable && !viewAs && (
         <p className="mt-3" data-testid="hq-team-ladder-unreadable">
           <Unreadable what="The compliance ladder" claim={data.ladder_reason || 'No rung is shown for any administrator.'} onRetry={load} />
@@ -899,7 +905,9 @@ export default function HqTeamTable({ reloadKey = 0, onLoaded }) {
         Moving an account between branches closes it where it lives and re-invites it where it is
         going — records stay put. Move appears on a branch hit only when another branch code exists.
         It needs a step-up and TOTP; a refusal names the reason. HQ-held rows have no source branch,
-        so they are not movable from this table. Support opens a session on an active branch account,
+        so they are not movable from this table. When the invitation on the destination does not land,
+        the move stays under Moves to finish with Retry invitation, which invites the address the source
+        recorded and nothing typed here. Support opens a session on an active branch account,
         on that branch&rsquo;s own site, with the same step-up and a reason; the branch sends the person a
         security notice when the session is authorised, and the Support form shows whether it was stored.
         An administrator&rsquo;s hit shows Unbind instead of Move: an administrator is unbound, not moved,
