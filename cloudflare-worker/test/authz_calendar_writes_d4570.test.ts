@@ -291,8 +291,8 @@ test('the six record writes answer a non-party exactly as they answer a record t
     [COUNTERPART, 'PATCH', `/events/%`, { title: 'Overwritten' }], [COUNTERPART, 'DELETE', `/events/%`, undefined],
   ] as const) {
     const record = path.startsWith('/founder') ? CHECKIN : path.startsWith('/ic') ? IC : ROW;
-    const real = await call(method, path.replace('%', String(record)), who, body);
-    const none = await call(method, path.replace('%', String(MISSING)), who, body);
+    const real = await call(method, path.replaceAll('%', String(record)), who, body);
+    const none = await call(method, path.replaceAll('%', String(MISSING)), who, body);
     assert.deepEqual([real.status, real.text], [none.status, none.text], `${method} ${path} as ${WHO[who]}`);
   }
   // An invitee sees the meeting on their list, so their refusal to cancel or move it is still its own.
