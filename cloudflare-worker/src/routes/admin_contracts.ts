@@ -108,6 +108,8 @@ adminContracts.post('/published-templates/:slug/publish', async (c) => {
   // D4811 part 13 (CT-16 "Activate template"): publishing makes a version approved for use, so it is a
   // high-risk action: a reason, the typed word PUBLISH, then a recent step-up (after the form checks,
   // so a mistyped word never asks for a code). The reason is kept in the publication's audit row.
+  // D4811 part 15 (CT-16, owner's answer 2026-11-09): Activate is the Super Admin's alone.
+  if (!isSuperAdmin(admin as any)) return refuse(c, 403, { code: 'super_admin_only', message: 'Only the Super Admin publishes a template. Nothing was published.' });
   const confirmed = confirmationFor('PUBLISH', input);
   if (!confirmed.ok) return refuse(c, confirmed.refusal.status, { code: confirmed.refusal.code, message: confirmed.refusal.message.replace('saved', 'published') });
   await requireStepUp(c);
