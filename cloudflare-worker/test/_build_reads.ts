@@ -92,6 +92,24 @@ export function seedHolders(db: DatabaseSync, n: number) {
   } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
+/**
+ * #4603 part 2b (Company creation): filings on every source, opt-in like
+ * `seedHolders`. Each formation step gets a due date relative to today (some
+ * overdue, some due soon, most later; one in four undated), and the entity gets
+ * a paid Lab order and four open obligations, of which the module reads three.
+ */
+export function seedFilings(db: DatabaseSync) {
+  db.exec(`UPDATE formation_steps SET due_date = CASE WHEN id % 4 = 0 THEN NULL ELSE date('now', ((id % 120) - 20) || ' days') END WHERE project_id = ${PROJECT};
+    INSERT INTO incorporations(user_id, project_id, jurisdiction_id, company_name, amount_cents, status, paid_at, packet_ready_at, created_at)
+      VALUES (1, ${PROJECT}, 'DE', 'Synthetic Inc', 50000, 'paid', '2026-01-05', NULL, '2026-01-04');
+    INSERT INTO entity_obligations(uid, entity_id, kind, title, cadence, due_date, status, resolved_on) VALUES
+      ('ob-1', 501, 'franchise_tax', 'Synthetic franchise tax', 'annual', date('now', '+40 days'), 'open', NULL),
+      ('ob-2', 501, 'annual_report', 'Synthetic annual report', 'annual', date('now', '+10 days'), 'open', NULL),
+      ('ob-3', 501, 'registered_agent', 'Synthetic agent renewal', 'annual', date('now', '-3 days'), 'open', NULL),
+      ('ob-4', 501, 'other', 'Synthetic later filing', 'one_time', date('now', '+200 days'), 'open', NULL),
+      ('ob-5', 501, 'other', 'Synthetic filed filing', 'one_time', date('now', '-90 days'), 'filed', date('now', '-91 days'));`);
+}
+
 export async function buildReads(n: number) {
   const scratch = mkdtempSync(join(tmpdir(), 'build-4603-'));
   const file = join(scratch, 'db.sqlite');

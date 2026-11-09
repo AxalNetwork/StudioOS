@@ -837,12 +837,18 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
       return record(`obligation-${o.id}`, { filing: o.title, jurisdiction: o.jurisdiction, due: o.due_date, state: filingText(state, o.due_date), proof: proofText(o.proof_file_key, state) },
         filingKeys(state, o.due_date), { title: o.title, due_date: o.due_date ?? null, status: o.status }); }),
   ];
+  // #4603 part 2b: the phone index's Company creation row, as facts: how many
+  // filings there are, and the earliest open filing's date (#1693's keys, as the
+  // index read them from the rows). The overview then reads no record rows here;
+  // the steps are still read, since the card's timeline draws every one.
+  const nextFilingDue = combined.filter(r => r.keys?.state !== 'filed' && typeof r.keys?.due === 'string').map(r => String(r.keys!.due)).sort()[0] ?? null;
   return { card: card('company-creation', combined.length ? 'ok' : 'empty', series, 'Next filings', combined.length ? null : 'No filings yet. Formation steps and their dates appear here.', combined.length ? next(p, 'company-creation', steps.find(s => s.state !== 'done')?.title ? `Complete ${steps.find(s => s.state !== 'done')!.title}` : null) : next(p, 'company-creation', 'Add filing', true)),
-    cols: [['filing', 'Filing'], ['jurisdiction', 'Jurisdiction'], ['due', 'Due'], ['state', 'State'], ['proof', 'Proof']].map(([key, label]) => ({ key, label })), rows: combined,
+    cols: [['filing', 'Filing'], ['jurisdiction', 'Jurisdiction'], ['due', 'Due'], ['state', 'State'], ['proof', 'Proof']].map(([key, label]) => ({ key, label })), rows: opts.rows ? combined : [],
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(FILING_LABEL)) },
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
-    facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null },
+    facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
+      filings: combined.length, next_filing_due: nextFilingDue },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
