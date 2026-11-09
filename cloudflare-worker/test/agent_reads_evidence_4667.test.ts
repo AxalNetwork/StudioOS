@@ -131,17 +131,21 @@ test('the ten skills: an input matrix, and a preflight through the actual reader
       assert.notEqual(full.state, 'ready', `${slug}: the built readers do not carry its typed evidence, so it is not ready`);
       assert.equal(none.state, 'not_ready', `${slug}: with no project it cannot run`);
       assert.ok(full.limits.length > 0, `${slug}: what is missing is named`);
-      assert.equal(full.paths.default_context, 'unsupported', `${slug}: the default and scheduled path cannot supply its required evidence`);
+      // D4667 second slice: the typed revenue reader carries the one required input of the investor update; every
+      // other skill still has a required input no built reader gives.
+      const carried = slug === 'monthly-investor-update';
+      assert.equal(full.paths.default_context, carried ? 'supported' : 'unsupported', `${slug}: which paths can supply its required evidence`);
       assert.equal(full.paths.manual, 'approved_tool_reads_not_exercised_here');
     }
-    // The three skills whose required evidence has no reader at all say exactly that.
+    // Balances have a typed reader now (agent_typed_readers_4667); this fixture's agent has no sponsor, so they are
+    // withheld, and burn is still only activity summaries.
     const cash = (await preflight(f.env, 'cash-runway-snapshot', f.ctx(), READERS, NOW))!;
-    assert.deepEqual(cash.inputs.map((i) => [i.read, i.status]), [['mercury.balances', 'unavailable_reader'], ['grow.records', 'partial']]);
+    assert.deepEqual(cash.inputs.map((i) => [i.read, i.status]), [['mercury.balances', 'withheld'], ['grow.records', 'partial']]);
     assert.match(cash.inputs[1].note!, /activity summaries, not typed record/);
     const interview = (await preflight(f.env, 'customer-interview-summary', f.ctx(), READERS, NOW))!;
     assert.equal(interview.state, 'not_ready', 'summaries are not a transcript with consent');
     const risk = (await preflight(f.env, 'contract-risk-issue-spotting', f.ctx(), READERS, NOW))!;
-    assert.ok(risk.inputs.find((i) => i.read === 'manual:review_policy')!.note!.includes('Supplied by the person'));
+    assert.ok(risk.inputs.find((i) => i.read === 'manual:review_policy')!.note!.includes('A person supplies this'));
     // The gate is not hard-wired shut: readers that DECLARE typed records, answering fresh and complete, make it ready.
     const typed: any = { ...READERS };
     for (const read of ['mercury.balances', 'grow.records']) typed[read] = async () => ({ records: [{ ref: 'x', at: '2026-11-05 10:00:00' }], coverage: coverageOf(1, 1) });

@@ -14,13 +14,14 @@
  *                      or a reader that gives summaries where the skill needs typed fields
  *   stale              the newest record is older than the window
  *   unavailable_reader no reader is built for this key
+ *   withheld           the sponsor may not read this source for this venture (its own rule, checked as them)
  *   unreadable         the reader threw
  *
  * Nothing here is a model call, a network read or a write. Native readers only: an approved MCP adapter or a
  * manually supplied record is a different path, named in `paths`, and is not exercised by this module.
  */
 import type { Env } from '../../types';
-import { READERS, READER_PROVIDES, readOne, type ReadContext } from './reads';
+import { isWithheld, READERS, READER_PROVIDES, readOne, type ReadContext } from './reads';
 
 export type Expects = 'project_profile' | 'company_profile' | 'activity_summaries' | 'typed_record' | 'document_text' | 'manual_evidence';
 export type Need = { field: string; read: string; expects: Expects; required: boolean };
@@ -79,9 +80,36 @@ export const FIRST_TEN: readonly SkillInputs[] = Object.freeze([
 
 export const FIRST_TEN_SLUGS = Object.freeze(FIRST_TEN.map((s) => s.slug));
 
-export type InputStatus = 'available' | 'empty' | 'missing' | 'absent_optional' | 'partial' | 'stale' | 'unavailable_reader' | 'unreadable';
+export type InputStatus = 'available' | 'empty' | 'missing' | 'absent_optional' | 'partial' | 'stale' | 'unavailable_reader' | 'withheld' | 'unreadable';
 /** `wrong_shape`: the reader answers, but not what the skill needs (summaries where it needs typed fields). */
-export type InputReport = { field: string; read: string; required: boolean; status: InputStatus; note: string | null; reason?: 'wrong_shape' };
+export type InputReport = {
+  field: string; read: string; required: boolean; status: InputStatus; note: string | null; reason?: 'wrong_shape' | 'manual' | 'supplied_invalid';
+  /** Where the evidence came from: a native reader, or a person (`manual`, with its reference). */
+  source?: 'native' | 'manual'; ref?: string;
+};
+
+/**
+ * D4667 (second slice) — evidence a person supplies for one input, by read key: what it is, when it was recorded,
+ * its own reference and its text. A `manual:` input (the review policy) is met by it. Any other input it stands in
+ * for stays `partial`: the brief says the figure came from a person, not from a record the platform read.
+ */
+export type SuppliedEvidence = { ref: string; recorded_at: string; text: string };
+export type Supplied = Readonly<Record<string, SuppliedEvidence>>;
+const SUPPLIED_REF = /^manual:[a-z0-9][a-z0-9_-]{0,63}$/;
+const SUPPLIED_DAY = /^\d{4}-\d{2}-\d{2}$/;
+export const SUPPLIED_TEXT_MAX = 20_000;
+
+/** Why supplied evidence cannot be used, or null when it can. Checked before any model operation. */
+export function suppliedProblem(e: unknown, now = Date.now()): string | null {
+  if (!e || typeof e !== 'object') return 'It is not a record.';
+  const v = e as Record<string, unknown>;
+  if (typeof v.ref !== 'string' || !SUPPLIED_REF.test(v.ref)) return 'Its reference is not a manual reference.';
+  if (typeof v.recorded_at !== 'string' || !SUPPLIED_DAY.test(v.recorded_at) || !Number.isFinite(Date.parse(`${v.recorded_at}T00:00:00Z`))) return 'It has no recorded date.';
+  if (Date.parse(`${v.recorded_at}T00:00:00Z`) > now + 86_400_000) return 'Its recorded date is in the future.';
+  if (typeof v.text !== 'string' || !v.text.trim()) return 'It is empty.';
+  if (v.text.length > SUPPLIED_TEXT_MAX) return `It is longer than ${SUPPLIED_TEXT_MAX} characters.`;
+  return null;
+}
 /** `ready`: every input available. `conditional`: the required inputs are there, in part or stale, or an optional one is not; the brief states its `limits`. `not_ready`: a required input cannot be supplied. */
 export type Readiness = 'ready' | 'conditional' | 'not_ready';
 export type PathSupport = { default_context: 'supported' | 'unsupported'; scheduled: 'supported' | 'unsupported'; manual: 'approved_tool_reads_not_exercised_here' };
@@ -128,6 +156,7 @@ async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<R
   if (typeof readers[n.read] !== 'function') return { ...base, status: 'unavailable_reader', note: 'No reader is built for this evidence yet.' };
   let out;
   try { out = await readOne(env, n.read, c, readers); } catch { return { ...base, status: 'unreadable', note: 'The source could not be read.' }; }
+  if (isWithheld(out.data)) return { ...base, status: 'withheld', note: out.data.reason };
   if (out.incomplete) return { ...base, status: 'partial', note: 'The record is larger than a run may carry, so none of it is supplied.' };
   const data: any = out.data;
   if (data === null || data === undefined) return { ...base, status: absent, note: 'No such record.' };
@@ -151,18 +180,29 @@ async function inputReport(env: Env, n: Need, c: ReadContext, readers: Partial<R
  * `available` make it `not_ready` when they are absent or unreadable, and `conditional` when some of the
  * evidence is there (partial or stale): a conditional result must state its `limits`.
  */
-export async function preflight(env: Env, slug: string, c: ReadContext, readers: Partial<Record<string, Reader>> = READERS, now = Date.now(), provides: Provides = READER_PROVIDES): Promise<SkillPreflight | null> {
+export async function preflight(env: Env, slug: string, c: ReadContext, readers: Partial<Record<string, Reader>> = READERS, now = Date.now(), provides: Provides = READER_PROVIDES, supplied: Supplied = {}): Promise<SkillPreflight | null> {
   const skill = FIRST_TEN.find((s) => s.slug === slug);
   if (!skill) return null;
   const inputs: InputReport[] = [];
   for (const n of skill.needs) {
+    const base = { field: n.field, read: n.read, required: n.required };
+    const given = Object.prototype.hasOwnProperty.call(supplied, n.read) ? supplied[n.read] : undefined;
+    const problem = given === undefined ? null : suppliedProblem(given, now);
     if (n.read.startsWith('manual:')) {
-      inputs.push({ field: n.field, read: n.read, required: n.required, status: 'unavailable_reader', note: 'Supplied by the person, not read from a record.' });
-    } else inputs.push(await inputReport(env, n, c, readers, now, provides));
+      if (given === undefined) inputs.push({ ...base, status: n.required ? 'missing' : 'absent_optional', note: 'A person supplies this; none was supplied.', source: 'manual' });
+      else if (problem) inputs.push({ ...base, status: n.required ? 'missing' : 'absent_optional', reason: 'supplied_invalid', note: `The supplied evidence cannot be used: ${problem}`, source: 'manual' });
+      else inputs.push({ ...base, status: 'available', note: null, source: 'manual', ref: given!.ref });
+      continue;
+    }
+    const native = await inputReport(env, n, c, readers, now, provides);
+    // A person's record stands in only where the platform has nothing to read, and the brief says so.
+    if (given !== undefined && !problem && ['unavailable_reader', 'missing', 'absent_optional', 'empty'].includes(native.status)) {
+      inputs.push({ ...base, status: 'partial', reason: 'manual', source: 'manual', ref: given.ref, note: `Supplied by a person (recorded ${given.recorded_at}), not read from a record.` });
+    } else inputs.push({ ...native, source: 'native' });
   }
   // A required input the reader cannot give at all (absent, empty, unreadable, or the wrong shape) leaves nothing to
   // brief from. Some of it (a page of many rows, a stale newest record) leaves a brief that must state its limits.
-  const hard = inputs.some((i) => i.required && (['unavailable_reader', 'missing', 'empty', 'unreadable'].includes(i.status) || i.reason === 'wrong_shape'));
+  const hard = inputs.some((i) => i.required && (['unavailable_reader', 'missing', 'empty', 'withheld', 'unreadable'].includes(i.status) || i.reason === 'wrong_shape'));
   const lacking = inputs.filter((i) => i.status !== 'available');
   const state: Readiness = hard ? 'not_ready' : lacking.length ? 'conditional' : 'ready';
   const limits = lacking.map((i) => `${i.field}: ${i.note ?? i.status}`);
