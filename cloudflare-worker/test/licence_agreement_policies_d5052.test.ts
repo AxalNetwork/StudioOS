@@ -113,6 +113,8 @@ const send = (db: DatabaseSync, uid: string, revision: number) => call(db, 'POST
 const version = (db: DatabaseSync, uid: string) => ({ ...(db.prepare('SELECT * FROM licence_program_agreements WHERE uid = ?').get(uid) as any) });
 const count = (db: DatabaseSync, sql: string, ...a: any[]) => Number((db.prepare(sql).get(...a) as any).n);
 
+// The completion is stamped now, after the draft and send (which the routes stamp with the real clock): a fixed time
+// here sorted before them once the day passed it, and history's oldest-first order read wrong.
 async function sign(db: DatabaseSync, uuid: string, fileSha: string, at = new Date().toISOString()) {
   const e = db.prepare('SELECT id FROM esign_envelopes WHERE envelope_uuid = ?').get(uuid) as any;
   db.prepare("UPDATE esign_recipients SET status = 'signed', signed_at = ? WHERE envelope_id = ?").run(at, e.id);

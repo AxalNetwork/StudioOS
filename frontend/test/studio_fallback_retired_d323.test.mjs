@@ -69,7 +69,8 @@ test('StatusBadge and WeekBadge moved, not deleted, and their importers follow',
 });
 
 test('no tour step points at an anchor only the retired page had', () => {
-  const tour = codeOnly(read('components/ProductTour.jsx'));
+  // D4623: the steps moved to the tour's model file.
+  const tour = codeOnly(read('components/productTourModel.js'));
   const anchors = [...tour.matchAll(/anchor: '([^']+)'/g)].map((m) => m[1]);
   assert.ok(anchors.length >= 3, 'the tour still has its steps');
   assert.ok(!anchors.includes('search') && !anchors.includes('notifications'));

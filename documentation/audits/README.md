@@ -62,6 +62,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | `SIGNUP_FRICTION_AUDIT_2026-07-08.md` | Signup funnel friction. |
 | `DOCS_VISIBILITY_AUDIT.md` | Help Center coverage. |
 | `MIGRATION_LFS_AUDIT.md` | Git LFS migration. |
+| `PORTFOLIO_UX_AUDIT_2026-11-09.md`, `portfolio-ux-2026-11-09/` | #4816: the investor Portfolio's screens, journeys and states captured from the current build with synthetic data, findings graded against the evidence, the proposed information architecture and state model, and the gaps in the Portfolio v2 canvas (D4817). The folder holds the capture script, its fixtures and the screenshots. |
 
 ## Adding one
 

@@ -119,6 +119,8 @@ async function token(userId: number): Promise<string> {
 /** Stripe, as far as this route reads it. Every call is recorded. */
 function stubStripe() {
   const calls: Array<{ url: string; method: string }> = [];
+  // D5037: the charge is unrefunded until a refund lands, so the review sees what is left to refund.
+  let refunded = 0;
   const real = globalThis.fetch;
   globalThis.fetch = (async (input: any, init: any = {}) => {
     const url = String(input);
@@ -126,28 +128,35 @@ function stubStripe() {
     calls.push({ url, method });
     const json = (o: unknown) => new Response(JSON.stringify(o), { status: 200, headers: { 'content-type': 'application/json' } });
     if (url.includes('/v1/refunds')) {
+      refunded = 4900;
       return json({ id: 're_1', object: 'refund', amount: 4900, currency: 'eur', charge: 'ch_1', payment_intent: 'pi_1', status: 'succeeded', reason: null });
     }
     if (url.includes('/v1/payment_intents/')) {
       return json({ id: 'pi_1', amount: 4900, amount_received: 4900, currency: 'eur', latest_charge: 'ch_1', metadata: {} });
     }
     if (url.includes('/v1/charges/')) {
-      return json({ id: 'ch_1', amount: 4900, amount_refunded: 4900, currency: 'eur', paid: true, payment_intent: 'pi_1', metadata: {} });
+      return json({ id: 'ch_1', amount: 4900, amount_refunded: refunded, currency: 'eur', paid: true, payment_intent: 'pi_1', metadata: {} });
     }
     return json({});
   }) as any;
   return { calls, restore: () => { globalThis.fetch = real; }, refunds: () => calls.filter((x) => x.url.includes('/v1/refunds')).length };
 }
 
+/**
+ * D5037: a refund is a review, then a confirmation. The target goes to `/refund/review`; everything else, with the
+ * review's token, goes to `/refund`. A review that refuses is the answer.
+ */
 async function refund(e: any, actor: number, body: Record<string, unknown>) {
-  const res = await app.request('/refund', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${await token(actor)}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }, e);
-  let json: any = null;
-  try { json = await res.json(); } catch { /* empty */ }
-  return { status: res.status, body: json };
+  const auth = { Authorization: `Bearer ${await token(actor)}`, 'Content-Type': 'application/json' };
+  const read = async (res: Response) => { let json: any = null; try { json = await res.json(); } catch { /* empty */ } return { status: res.status, body: json }; };
+  const { payment_intent, charge, amount, ...rest } = body as any;
+  const review = await read(await app.request('/refund/review', {
+    method: 'POST', headers: auth, body: JSON.stringify({ payment_intent, charge, amount }),
+  }, e));
+  if (review.status !== 200) return review;
+  return read(await app.request('/refund', {
+    method: 'POST', headers: auth, body: JSON.stringify({ ...rest, review_token: review.body.review_token }),
+  }, e));
 }
 
 const auditRows = (db: InstanceType<typeof DatabaseSync>) =>
@@ -192,7 +201,7 @@ test('the holder with a stale step-up is refused, and Stripe is never called', a
     const r = await refund(env(db), SUPER, { payment_intent: 'pi_1', reason: REASON });
     assert.equal(r.status, 403);
     assert.equal(r.body?.detail, 'step_up_required');
-    assert.equal(s.calls.length, 0);
+    assert.equal(s.refunds(), 0, 'a stale step-up moved money');
   } finally { s.restore(); }
 });
 
@@ -216,7 +225,7 @@ test('a missing, blank or short reason is refused before Stripe is called', asyn
       assert.equal(r.status, 400, `reason ${JSON.stringify(reason)} was accepted`);
       assert.equal(r.body?.code, 'reason_required');
     }
-    assert.equal(s.calls.length, 0, 'a refused reason still reached Stripe');
+    assert.equal(s.refunds(), 0, 'a refused reason still refunded');
     assert.equal(auditRows(db).length, 0);
     // The boundary itself is accepted.
     const ok = await refund(env(db), SUPER, { payment_intent: 'pi_1', reason: 'y'.repeat(REFUND_REASON_MIN) });

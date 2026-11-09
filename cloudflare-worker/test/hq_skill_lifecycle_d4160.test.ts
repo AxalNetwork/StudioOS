@@ -538,3 +538,45 @@ test('#4531 slice 3: draft results name their evaluator, and the compare route r
   assert.equal(r.body.current_evaluator_version, EVALUATOR.version);
   assert.equal((await call(w, SUPER, 'GET', `${HQ}/${uid}/evals/compare?from=v9&to=draft`)).body.error, 'version_unknown');
 });
+
+test('D4536: the library response carries the catalogue coverage, read from published versions, pins and the library files', async () => {
+  const w = world();
+  const skill = w.db.prepare(`INSERT INTO agent_skills (uid, scope, company_id, slug, name, purpose, output_kind, status, current_version, created_by)
+    VALUES (?, ?, ?, ?, ?, 'A fixture.', 'brief', ?, ?, ${SUPER})`);
+  const version = w.db.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
+    VALUES (?, ?, '---', 'n', 'p', '[]', '[]', 'brief', ?, ?, ${SUPER})`);
+  const tags = JSON.stringify([{ slug: 'investor_reporting', level: 'proficient' }]);
+  const pub = Number(skill.run('s-pub', 'hq', null, 'cash-runway-snapshot', 'Runway', 'published', 2).lastInsertRowid);
+  version.run(pub, 1, tags, JSON.stringify(['ceo']));
+  version.run(pub, 2, tags, JSON.stringify(['cfo']));
+  skill.run('s-draft', 'hq', null, 'own-draft', 'Own draft', 'draft', 0);
+  const retired = Number(skill.run('s-old', 'hq', null, 'old', 'Old', 'retired', 1).lastInsertRowid);
+  version.run(retired, 1, tags, JSON.stringify(['cto']));
+  skill.run('s-co', 'company', 1, 'acme-private', 'Acme private', 'published', 0);
+  const agent = (w.db.prepare('SELECT id FROM team_agents WHERE uid = ?').get(CFO) as { id: number }).id;
+  w.db.prepare(`INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by) VALUES (?, ?, 1, ${EDITOR})`).run(agent, pub);
+
+  const r = await call(w, SUPER, 'GET', HQ);
+  assert.equal(r.status, 200, r.text);
+  const c = r.body.coverage;
+  assert.deepEqual(c.by_scope, { hq: { draft: 1, published: 1, retired: 1, review_requested: 0 }, company: { draft: 0, published: 1, retired: 0, review_requested: 0 } });
+  // The current version (v2) lists cfo; v1's ceo and the retired skill's cto cover nothing.
+  // Mutation checked: joining every version instead of `v.version = s.current_version` counts ceo and this fails.
+  assert.deepEqual(c.by_role.filter((x: any) => x.published).map((x: any) => x.role), ['cfo']);
+  assert.equal(c.by_area.find((a: any) => a.area === 'finance_ops').published_primary, 1);
+  assert.deepEqual(c.adoption, { links: 1, agents: 1, pinned_behind_current: 1, published_without_links: 0 });
+  assert.equal(c.sources.seeded, 1, 'cash-runway-snapshot is a library file in the store');
+  assert.equal(c.sources.authored_in_store, 2, 'own-draft and old are HQ skills with no library file');
+  assert.ok(!r.text.includes('acme-private'), 'a company skill\'s slug never reaches the response');
+  assert.equal(c.drafts.without_current_evaluation, 0, 'the full list computes it');
+  assert.equal(c.executions.available, false);
+
+  const paged = await call(w, SUPER, 'GET', `${HQ}?page=1`);
+  assert.equal(paged.body.coverage.drafts.without_current_evaluation.available, false, 'a page cannot say it for the catalogue');
+  assert.deepEqual(paged.body.coverage.by_scope, c.by_scope, 'the counts are the catalogue\'s, whatever the page');
+
+  // A removed agent's pin is not adoption.
+  w.db.prepare("UPDATE team_agents SET status = 'removed' WHERE id = ?").run(agent);
+  assert.deepEqual((await call(w, SUPER, 'GET', HQ)).body.coverage.adoption, { links: 0, agents: 0, pinned_behind_current: 0, published_without_links: 1 });
+  assert.equal((await call(w, ADMIN, 'GET', HQ)).status, 403, 'HQ analytics are Super Admin only');
+});
