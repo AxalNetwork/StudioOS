@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { LogIn, LogOut, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { JOIN_NOTE, ROOM_REQUEST_CONFIRM, ROOM_LEAVE_CONFIRM, STATES, quotaLine, quotaFullLine } from './dealRoomCopy';
+import { JOIN_NOTE, ROOM_LEFT, ROOM_REQUEST_CONFIRM, ROOM_LEAVE_CONFIRM, STATES, quotaLine, quotaFullLine } from './dealRoomCopy';
 import { BTN } from './DealRoomKit';
 import { Lightbox } from '../../ui';
 
@@ -71,8 +71,13 @@ export function JoinNote() {
  * it — from the quota read, so the plan and its cap are the server's. The
  * join's 402 carries no `required` field, so the global paywall does not
  * open over it (lib/api.js, Task #82).
+ *
+ * D4815: Scope → Review → Result. The press opens the dialog (scope and
+ * review); a completed Leave says so under the button (`ROOM_LEFT`), as a
+ * completed request already did, and `onDone('left' | 'requested')` tells a
+ * list whose filter may drop the row which result to say at its top.
  */
-export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact = false }) {
+export function JoinLeaveButton({ dealId, member, quotaState, onChanged, onDone, compact = false }) {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(null);
   const [refusal, setRefusal] = useState('');
@@ -85,10 +90,11 @@ export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact
     const leaving = confirming === 'leave';
     setBusy(true); setRefusal(''); setNotice('');
     try {
-      if (leaving) await api.dealroomLeave(dealId);
+      if (leaving) { await api.dealroomLeave(dealId); setNotice(ROOM_LEFT); }
       else { await api.dealroomJoin(dealId); setNotice('Your invitation request is recorded. Access starts after an invitation or commitment.'); }
       await onChanged?.();
       setConfirming(null);
+      onDone?.(leaving ? 'left' : 'requested');
     } catch (e) {
       if (e?.code === 'quota_dealrooms_exhausted') {
         // The quota moved under the page (another tab joined). Re-read it so

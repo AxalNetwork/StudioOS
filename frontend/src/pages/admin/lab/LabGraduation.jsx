@@ -4,7 +4,7 @@ import { Unrecorded, actionPrimary } from '../../../ui';
 import {
   BACKFILL_LIMIT, CERTS_CAP, CERT_REFUSALS, CERT_STATUSES, GRAD_SORTS, NOT_DOWNLOADED, NOT_EMAILED, NO_REISSUE, PUBLIC_PAGE_FILTERS,
   REVOKE_BODY, REVOKE_REASON_MAX, awaitingCount, backfillLine, dataOf, filterGrads, gradRows, gradTiles, pageOf, plural, refusalText,
-  verifyHref,
+  scheduledBackfillLine, verifyHref,
 } from './labDesksModel';
 import {
   CARD, Dialog, Field, INPUT, LINK, MONO, Pager, Pill, ReadState, SUB, Select, TD, TH, Tile, hasRows, useRead, useWrite,
@@ -18,7 +18,8 @@ import {
  * the graduate's browser. Issue, Issue all eligible and Revoke each open a
  * dialog that says what it changes; Revoke needs a reason, and its refusal or
  * result stays in the dialog. There is no browser pop-up. On a phone each
- * graduate is a card.
+ * graduate is a card. D4663: under Issue all eligible, what the every-minute
+ * backfill last did, "Not recorded" until a tick has run here.
  */
 
 function IssueDialog({ row, onClose, onChanged }) {
@@ -74,6 +75,7 @@ export default function LabGraduation({ now = Date.now() }) {
   }));
   const data = dataOf(read);
   const waiting = awaitingCount(read);
+  const scheduled = scheduledBackfillLine(data);
   const rows = filterGrads(gradRows(data, now), { q, status, publicPage, sort });
   const shown = pageOf(rows, page);
   const set = (fn) => (v) => { fn(v); setPage(1); };
@@ -101,6 +103,11 @@ export default function LabGraduation({ now = Date.now() }) {
         </span>
         <button type="button" className={actionPrimary}
           disabled={!waiting} onClick={() => setDialog({ kind: 'all' })} data-testid="lab-grad-issue-all-open">Issue all eligible</button>
+        {scheduled ? (
+          <p className={`m-0 w-full ${SUB}`} data-testid="lab-grad-scheduled" data-state={scheduled.state}>
+            {scheduled.state === 'unrecorded' ? <Unrecorded reason={scheduled.text} /> : scheduled.text}
+          </p>
+        ) : null}
       </section>
 
       <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} aria-label="Graduates">

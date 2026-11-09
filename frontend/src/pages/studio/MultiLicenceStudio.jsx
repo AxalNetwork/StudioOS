@@ -110,17 +110,23 @@ function BlockStudio({ held, user, homes }) {
       );
     }
     if (block.key === 'investor') {
+      // D4815 (#4815): the investor's My tasks moved here from /deals. It is the
+      // same list as the Founder block's (every task given to me, across my
+      // Teams), so it is drawn once: here only when Founder is not held.
       return (
-        <Home
-          user={user}
-          embedded
-          previewing={false}
-          dashboard={investor.dashboard}
-          lifecycle={investor.lifecycle}
-          dashboardUnavailable={investor.dashboard === null ? SUMMARY_UNREADABLE : ''}
-          onRetryDashboard={investor.readDashboard}
-          onRetryLifecycle={investor.readLifecycle}
-        />
+        <div className="space-y-6">
+          <Home
+            user={user}
+            embedded
+            previewing={false}
+            dashboard={investor.dashboard}
+            lifecycle={investor.lifecycle}
+            dashboardUnavailable={investor.dashboard === null ? SUMMARY_UNREADABLE : ''}
+            onRetryDashboard={investor.readDashboard}
+            onRetryLifecycle={investor.readLifecycle}
+          />
+          {!held.includes('founder') && <MyTasks licence="investor" testId="studio-investor-my-tasks" />}
+        </div>
       );
     }
     return <Home user={user} embedded previewing={false} />;

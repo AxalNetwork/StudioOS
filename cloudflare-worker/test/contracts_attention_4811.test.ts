@@ -76,8 +76,12 @@ test('the rules: stalled only from a recorded send; an unrecorded send is unknow
   assert.equal(matchesAttention({ status: 'signed' }, 'repair_evidence', now), true);
   assert.equal(matchesAttention({ status: 'signed', source: 'esign', raw_status: 'completed' }, 'repair_evidence', now), false);
   assert.equal(matchesAttention({ status: 'signed', signed_at: '2026-01-01' }, 'repair_evidence', now), false);
-  assert.equal(matchesAttention({ status: 'sent', project_name: null }, 'repair_unlinked', now), true);
-  assert.equal(matchesAttention({ status: 'void', project_name: null }, 'repair_unlinked', now), false, 'a voided row needs no repair');
+  assert.equal(matchesAttention({ status: 'sent', source: 'esign', project_name: null }, 'repair_unlinked', now), true);
+  assert.equal(matchesAttention({ status: 'sent', source: 'documents', project_name: null }, 'repair_unlinked', now), true);
+  assert.equal(matchesAttention({ status: 'void', source: 'esign', project_name: null }, 'repair_unlinked', now), false, 'a voided row needs no repair');
+  // D4811 part 11: a store with no company link to make is never a repair.
+  assert.equal(matchesAttention({ status: 'sent', source: 'pairwise_nda', project_name: null }, 'repair_unlinked', now), false);
+  assert.equal(matchesAttention({ status: 'sent', source: 'partner_deal', project_name: null }, 'repair', now), false);
   const c = contractAttention([
     { status: 'signed', signed_at: '2026-11-02T10:00:00Z', project_name: 'A' },
     { status: 'signed', signed_at: '2026-03-02T10:00:00Z', project_name: 'A' },

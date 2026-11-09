@@ -207,6 +207,11 @@ const STATE_EXTRA = {
   needs_response: { label: 'Needs response', glyph: '▲', tone: 'warn' },
   upcoming: { label: 'Upcoming', glyph: '◷', tone: 'info' },
   deadline: { label: 'Deadline', glyph: '⚑', tone: 'info' },
+  // D4813 package 2: guidance status, in words and a shape.
+  published: { label: 'Published', glyph: '✓', tone: 'ok' },
+  draft: { label: 'Draft', glyph: '✎', tone: 'info' },
+  retired: { label: 'Retired', glyph: '⦸', tone: 'neutral' },
+  answered: { label: 'Answered', glyph: '✓', tone: 'ok' },
 };
 
 const TONE_CLASS = {

@@ -2,7 +2,7 @@
 // /admin/contracts/governance/doc/:uid: the six tabs, the Overview facts
 // (unknowns said, never blank), Versions with In force / Latest / Signed copy
 // markers, the Activity trail read only when its tab opens, and Legal Review
-// and Related saying Not recorded and why. Made-up data.
+// saying Not recorded and why, and Related (part 8) saying no link is recorded. Made-up data.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
@@ -47,7 +47,8 @@ test('the rules: six tabs in the canvas order; version markers; executed evidenc
 
 test('mounted: Overview says each fact or why it is unknown; Versions marks In force; Activity is read only when opened', async () => {
   const calls = stub({ list: async () => listing, read: async () => ({ document: doc(), versions: [v(2), v(1, { signed: true })] }),
-    activity: async () => ({ uid: 'g1', events: [{ action: 'governance_document_status', line: 'Moved from Approved to Executed', at: '2026-10-02 10:00:00', actor: 'Alex Made-up', version: null }] }) });
+    activity: async () => ({ uid: 'g1', events: [{ action: 'governance_document_status', line: 'Moved from Approved to Executed', at: '2026-10-02 10:00:00', actor: 'Alex Made-up', version: null }] }),
+    related: async () => ({ uid: 'g1', dependants: [], governed_by: [], banner: { affected: 0, version: null, dismissed: false } }) });
   const view = await mountContracts(page(), '/admin/contracts/governance/doc/g1', admin);
   try {
     await view.flush();
@@ -73,7 +74,8 @@ test('mounted: Overview says each fact or why it is unknown; Versions marks In f
     await act(async () => { view.props(tab('legal-review')).onClick({}); }); await view.flush();
     assert.match(view.text(), /Not recorded.*waits on who records counsel approval/);
     await act(async () => { view.props(tab('related')).onClick({}); }); await view.flush();
-    assert.match(view.text(), /Not recorded.*Nothing is guessed from titles/);
+    // D4811 part 8: Related reads the links; with none recorded it says so, and guesses nothing from titles.
+    assert.match(view.text(), /No document is linked to this record yet.*nothing is inferred from titles/);
   } finally { await view.unmount(); restore(); }
 });
 

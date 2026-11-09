@@ -47,6 +47,8 @@ export const contractsApi = {
   search: ({ q, historical = false } = {}) => request(`/admin/contracts/search?${query({ q, historical: historical ? 'true' : '' })}`),
   recipients: params => request(`/admin/contracts/recipients?${query(params)}`),
   deals: params => request(`/admin/contracts/deal-options?${query(params)}`),
+  // D4811 part 11: the Link recipient repair (POST /:uid/link { deal_id }): an unlinked documents row or envelope takes a deal's company.
+  link: (uid, dealId) => request(`/admin/contracts/${encodeURIComponent(uid)}/link`, { method: 'POST', body: JSON.stringify({ deal_id: dealId }) }),
   published: () => request('/admin/contracts/published-templates'),
   publish: () => request('/admin/contracts/published-templates/publish', { method: 'POST', body: JSON.stringify({}) }),
   providers: () => request('/admin/contracts/envelope-providers'),
@@ -64,7 +66,8 @@ export const contractsApi = {
   // D717 (#1782): publish one template at the version the editor saved, withdraw
   // its publication, push the recorded publications to every branch, and the
   // bundled documents not in the catalog.
-  publishOne: (slug, version) => request(`/admin/contracts/published-templates/${encodeURIComponent(slug)}/publish`, { method: 'POST', body: JSON.stringify({ version }) }),
+  // D4811 part 13: publishing is high-risk (CT-16): the reason and the typed word PUBLISH go with it, and the Worker asks for a step-up.
+  publishOne: (slug, version, { reason = '', confirm = '' } = {}) => request(`/admin/contracts/published-templates/${encodeURIComponent(slug)}/publish`, { method: 'POST', body: JSON.stringify({ version, reason, confirm }) }),
   withdraw: slug => request(`/admin/contracts/published-templates/${encodeURIComponent(slug)}/withdraw`, { method: 'POST', body: JSON.stringify({}) }),
   push: () => request('/admin/contracts/published-templates/push', { method: 'POST', body: JSON.stringify({}) }),
   outside: () => request('/admin/contracts/templates/outside'),

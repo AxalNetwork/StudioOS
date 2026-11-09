@@ -208,7 +208,8 @@ test('the For/Against asymmetry holds against rows', () => {
     { icp_fit: 'none', groups: new Set([20]) },     // anyone at all can contradict
     { icp_fit: null, groups: new Set([20]) },       // including an unknown fit
   ]);
-  assert.deepEqual(e, { supporting: 2, contradicting: 2, fitUnrecorded: 1 });
+  // D4586: coverage rides beside the three counts. No names on these rows, so breadth is not recorded (null), never 0.
+  assert.deepEqual(e, { supporting: 2, contradicting: 2, fitUnrecorded: 1, both: 0, interviews: 6, interviewees: null, organizations: null });
   // The `none` interview is the one that must not be confused with a NULL:
   // "we checked, they were not our customer" is a recorded fact.
   assert.equal(isIcp('none'), false);
@@ -223,7 +224,7 @@ test('rows with no fit recorded make the verdict unknowable, not "unproven"', ()
   const e = evidenceFor(links, Array.from({ length: 5 }, () => ({
     icp_fit: null, groups: new Set([10]),
   })));
-  assert.deepEqual(e, { supporting: 0, contradicting: 0, fitUnrecorded: 5 });
+  assert.deepEqual(e, { supporting: 0, contradicting: 0, fitUnrecorded: 5, both: 0, interviews: 5, interviewees: null, organizations: null });
   assert.equal(verdictFor(e), null,
     'five unknown-fit supporters is not evidence of absence');
 });
@@ -231,7 +232,7 @@ test('rows with no fit recorded make the verdict unknowable, not "unproven"', ()
 test('an interview that touches nothing is not evidence either way', () => {
   const links = [{ pain_group_id: 10, direction: 'supports' }];
   const e = evidenceFor(links, [{ icp_fit: null, groups: new Set([99]) }]);
-  assert.deepEqual(e, { supporting: 0, contradicting: 0, fitUnrecorded: 0 },
+  assert.deepEqual(e, { supporting: 0, contradicting: 0, fitUnrecorded: 0, both: 0, interviews: 0, interviewees: 0, organizations: 0 },
     'an unrelated interview must not inflate the unknown count either');
   assert.equal(verdictFor(e), 'unproven', 'with nothing touching it, unproven is honest');
 });

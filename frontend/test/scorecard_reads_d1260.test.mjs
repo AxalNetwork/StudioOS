@@ -18,7 +18,6 @@ import { NOT_REVIEWED, riskLayerOf, scopeOf, scopesOf } from '../src/components/
 import { ScopeDrawer } from '../src/components/scoring/scorecard/Scorecard.jsx';
 import VentureRiskPanel, { layerReviewBody } from '../src/components/VentureRiskPanel.jsx';
 import { liveLine } from '../src/pages/scoring/ScoringMethodPage.jsx';
-import investorDealsBoard from '../src/workspaces/boards/investorDeals.js';
 import { ventureScoresApi } from '../src/lib/api/ventureScores.js';
 import { api } from '../src/lib/api.js';
 
@@ -28,11 +27,11 @@ const walk = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); 
 
 /** Every score read that is not the scorecard's: the Lab scorer, its cohort benchmark, venture risk's automatic layers, founder risk. */
 const OTHER_SCORE_READS = [/\bgetScores\(/, /\bgetCohortBenchmark\(/, /\bventureRiskByProject\b/, /\bventureRiskRecompute\b/, /\bgetFounderRisk/, /['`]\/scoring\/(?!method)/, /\/venture-risk\/by-project/, /\btotal_score\b/, /\bscore_snapshots\b/];
-/** The pages and parts an investor reads: their own pages, the deal room, the scorecard, venture risk and the deals board. */
+/** The pages and parts an investor reads: their own pages, the deal room, the scorecard and venture risk (the deals board retired with D4815). */
 const INVESTOR_FILES = [
   ...walk('frontend/src/pages/investor').filter((p) => /\.(jsx?|mjs)$/.test(p)),
   ...walk('frontend/src/components/scoring').filter((p) => /\.(jsx?|mjs)$/.test(p)),
-  'frontend/src/components/VentureRiskPanel.jsx', 'frontend/src/pages/DealRoomPage.jsx', 'frontend/src/workspaces/boards/investorDeals.js',
+  'frontend/src/components/VentureRiskPanel.jsx', 'frontend/src/pages/DealRoomPage.jsx',
 ];
 
 test('no investor page reads a score outside /api/venture-scores', () => {
@@ -154,7 +153,7 @@ test('the venture-risk panel reads the scorecard\'s Risk scope and layers; refus
   assert.deepEqual(layerReviewBody({ score: '', note: 'watch the churn' }).body, { analyst_score: null, status: 'open', analyst_note: 'watch the churn' });
 });
 
-test('the method page names the model in force; the deals board lists Screening\'s deals with no score', () => {
+test('the method page names the model in force', () => {
   assert.equal(liveLine({ live: { version: '1.0', published_at: null, default_live: true } }),
     'Model v1.0 is in force. It has scored every venture since the scorecard shipped; no later version is published.');
   assert.equal(liveLine({ live: { version: '1.1', published_at: '2026-10-26 09:00:00', default_live: false } }), 'Model v1.1 is in force, published 2026-10-26.');
@@ -164,9 +163,4 @@ test('the method page names the model in force; the deals board lists Screening\
   assert.match(method, /ventureScoresApi\.models\(\)/);
   assert.doesNotMatch(method, /It is not published yet/);
   assert.match(method, /reads \$\{i\.source\}/, 'an input no longer cites the store it reads');
-  const section = investorDealsBoard('investor', {}).sections.find((s) => s.slug === 'screening');
-  const desk = { desk: { available: true, rows: [{ deal_id: 1, company: 'Synthetic', sector: 'fintech', deal_status: 'active' }] } };
-  assert.deepEqual(section.columns, ['Company', 'Sector', 'Deal status']);
-  assert.deepEqual(section.rows(desk)[0][0], 'Synthetic');
-  assert.doesNotMatch(JSON.stringify(section.rows(desk)), /score|tier/i);
 });
