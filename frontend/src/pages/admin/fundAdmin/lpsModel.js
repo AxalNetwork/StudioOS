@@ -172,7 +172,37 @@ export function typeSummary(bars) {
 }
 
 /** The row menu (FND5). Set LP type and Log a contact are `fund.write`, an Admin's act. */
-export const ROW_MENU = [['open', 'Open'], ['type', 'Set LP type'], ['contact', 'Log a contact']];
+// D4812 part 4 (FA-02): Open is the LP's name itself, never hidden in the menu; the menu keeps the secondary acts.
+export const ROW_MENU = [['type', 'Set LP type'], ['contact', 'Log a contact']];
+
+const label = (list, v) => list.find(([k]) => k === v)?.[1] || v;
+
+/**
+ * FA-02's active-filter chips: one per filter the address holds, each saying
+ * what it keeps and how to remove it. The fund scope is the header's, so it
+ * is not a chip here.
+ */
+export function activeChips(query) {
+  const out = [];
+  if (query.q) out.push({ key: 'q', label: `Search: ${query.q}` });
+  if (query.lpa) out.push({ key: 'lpa', label: label(FILTERS.lpa, query.lpa) });
+  if (query.identity) out.push({ key: 'identity', label: `Identity: ${label(FILTERS.identity, query.identity)}` });
+  if (query.booklet) out.push({ key: 'booklet', label: `Booklet: ${label(FILTERS.booklet, query.booklet)}` });
+  if (query.outstanding) out.push({ key: 'outstanding', label: 'Has outstanding' });
+  if (query.overdue) out.push({ key: 'overdue', label: 'Overdue' });
+  return out;
+}
+
+/** "42 LPs · $12,400,000.00 committed · showing 1–25", every figure the filters keep, none guessed. */
+export function resultLine(roster) {
+  const n = Number(roster?.total_rows ?? 0);
+  const t = roster?.totals || {};
+  const missing = Number(t.not_recorded?.commitment_cents || 0);
+  const committed = t.commitment_cents == null ? 'commitment not recorded' : `${money(t.commitment_cents)} committed${missing ? ` (${plural(missing, 'LP')} with none recorded)` : ''}`;
+  const from = n ? (roster.page - 1) * roster.per_page + 1 : 0;
+  const to = Math.min(n, roster.page * roster.per_page);
+  return `${plural(n, 'LP')} · ${committed}${n ? ` · showing ${from}–${to}` : ''}`;
+}
 
 // ───────────────────────────────────────────────────── Add LP (FND5a, FND5s)
 

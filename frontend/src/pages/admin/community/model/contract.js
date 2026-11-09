@@ -56,6 +56,8 @@ export const OVERVIEW_BLOCKS = {
   'queue.events': { counts: ['count', 'overdue', 'waiting_from_created_at'], hours: ['oldest_hours'] },
   'queue.event_rows': { counts: ['total'], rows: { key: 'rows', text: ['title'], hours: ['waiting_hours'] } },
   'queue.jobs': { counts: ['pending', 'overdue', 'wait_not_recorded'], hours: ['oldest_wait_hours'], rows: { key: 'review', text: ['title'], hours: ['waiting_hours'] } },
+  // D4820 part 3: the wellbeing experts waiting to be verified, as Approvals counts them. A row carries no name; its headline may be null.
+  'queue.experts': { counts: ['pending', 'overdue'], hours: ['oldest_wait_hours'], rows: { key: 'rows', counts: ['expert_id'], hours: ['waiting_hours'] } },
   'events.weekly': { totals: ['registrations'], weekly: { key: 'weekly', count: 'registrations' } },
   'events.show_up': { counts: ['events', 'seats_taken', 'attended'], optional: ['confirmed'], share: ['rate'] },
   'events.upcoming': { counts: ['events', 'seats_taken'] },

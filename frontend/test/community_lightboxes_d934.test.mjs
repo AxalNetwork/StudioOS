@@ -527,7 +527,8 @@ test('CM6 Recent activity: D932\'s read, a page at a time, each filter on the ad
     await v.click('community-box-activity-next');
     assert.equal(reads().at(-1), '/api/admin/community/activity?limit=25&offset=25');
     assert.equal(range(v, 'activity'), '26–50 of 60');
-    await v.change('community-box-activity-filter-kind', 'jobs');
+    // D4820 part 5 (CM08): the kind is a chip now, not a select.
+    await v.click('community-box-activity-chip-jobs');
     assert.equal(reads().at(-1), '/api/admin/community/activity?limit=25&offset=0&kind=jobs', 'a filter goes back to page 1');
     await v.change('community-box-activity-from', '2026-10-01');
     await v.change('community-box-activity-to', '2026-10-24');

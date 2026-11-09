@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { PLAN_CARDS } from '../src/lib/sitePricing.js';
 import { planCards } from '../src/lib/pricingModel.js';
@@ -266,4 +266,57 @@ test('back on Pricing: a different price is said before the sheet; a plan no lon
       }
     } finally { await act(async () => root.unmount()); Object.assign(publicPricingApi, savedP); Object.assign(checkoutApi, savedC); Object.assign(billingAlertsApi, savedB); restore(); }
   }
+});
+
+// ------------------------------------------------- journeys (second slice)
+// The browser journeys themselves (desktop and phone, Back, another plan, the email link and the Google return) are
+// `frontend/tests/visual/pricing_journey_4651.spec.mjs`; these two hold the fixes it found inside test:drift too.
+
+test('an unreadable catalogue on registration offers Try again, which reads it again and shows the chosen plan', async () => {
+  const restore = installDocument('?plan=founder%3Astudio&interval=yearly&lane=founder');
+  let calls = 0;
+  let up = false;
+  const api = { plansAndPacks: async () => { calls += 1; if (!up) throw new Error('down'); return READ; } };
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
+  const settle = async () => { for (let i = 0; i < 5; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+  try {
+    await act(async () => root.render(h(MemoryRouter, null, h(Page, { search: '?plan=founder%3Astudio&interval=yearly&lane=founder', api }))));
+    await settle();
+    assert.equal(props(by('register-plan'))['data-state'], 'unreadable');
+    assert.ok(by('register-plan-retry'), 'an unreadable plan can be read again in place');
+    const before = calls;
+    up = true;
+    await act(async () => { props(by('register-plan-retry')).onClick(); });
+    await settle();
+    assert.ok(calls > before, 'Try again read the catalogue again');
+    assert.equal(props(by('register-plan'))['data-state'], 'ready');
+    assert.match(text(by('register-plan-price')), /\$960 billed yearly/);
+  } finally { await act(async () => root.unmount()); restore(); }
+});
+
+test('signed out, Pricing leaves a checkout ask in the address for the member page that follows a Google return', async () => {
+  const restore = installDocument();
+  const createEl = document.createElement.bind(document);
+  document.createElement = (tag) => { const n = createEl(tag); n.querySelector = () => null; return n; };
+  const savedP = { ...publicPricingApi };
+  publicPricingApi.plansAndPacks = async () => READ;
+  publicPricingApi.aiModels = async () => ({ models: [] });
+  const container = document.createElement('div'); const root = createRoot(container);
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
+  let where = null;
+  const Probe = () => { const l = useLocation(); where = `${l.pathname}${l.search}`; return null; };
+  const ask = '/pricing?for=founder&checkout=founder%3Astudio&interval=yearly&seen=96000&google=ok';
+  try {
+    await act(async () => root.render(h(MemoryRouter, { initialEntries: [ask] }, h(PricingBody, null), h(Probe))));
+    for (let i = 0; i < 8; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    assert.equal(where, ask, 'the ask is not spent on a visitor\'s cards');
+    assert.ok(!['price', 'interval', 'gone'].some((k) => by(`pricing-returned-${k}`)), 'no "no longer offered" for a plan that is on sale');
+    assert.ok(!by('checkout-sheet'));
+  } finally { await act(async () => root.unmount()); Object.assign(publicPricingApi, savedP); restore(); }
 });
