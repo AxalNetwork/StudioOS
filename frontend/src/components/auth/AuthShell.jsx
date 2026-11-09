@@ -12,7 +12,7 @@ export default function AuthShell({
   platformNote = 'Platform sign-in',
   showApplyCard = false,
   applyHref = '/register',
-  applyLabel = 'Apply to Axal VC →',
+  applyLabel = 'Create an account →',
   compact = false,
   /** Full-page background image (e.g. /auth/login-background.webp on /login). */
   backgroundSrc = null,
@@ -89,7 +89,11 @@ export default function AuthShell({
               style={{ background: '#fff', borderColor: '#e8e6ee' }}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="text-[13px] font-bold text-[#241f38]">Not a member yet?</div>
+                <div>
+                  <div className="text-[13px] font-bold text-[#241f38]">New to Axal VC?</div>
+                  {/* #4578: this creates an account; membership is a later, reviewed step. */}
+                  <div className="mt-0.5 text-[12px] text-[#6b6680]" data-testid="auth-apply-note">Free. Your membership is reviewed after you sign up.</div>
+                </div>
                 <Link
                   to={applyHref}
                   className="text-[13px] font-bold whitespace-nowrap flex-none no-underline hover:underline"

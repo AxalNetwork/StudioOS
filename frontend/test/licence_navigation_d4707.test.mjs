@@ -32,7 +32,7 @@ test('every tab has a URL key that round-trips to the page step it opens', () =>
   assert.equal(new Set(LICENCE_TABS.map((t) => t.key)).size, LICENCE_TABS.length);
   assert.equal(new Set(LICENCE_TABS.map((t) => t.step)).size, LICENCE_TABS.length);
   // The model's numbers are the page's: STEPS has six, then the named steps.
-  const named = { history: 'HISTORY_STEP', admins: 'ADMINS_STEP', notices: 'NOTICES_STEP', brand: 'BRAND_STEP', schedule: 'SCHEDULE_STEP', 'fee-invoices': 'FEE_INVOICES_STEP' };
+  const named = { history: 'HISTORY_STEP', admins: 'ADMINS_STEP', notices: 'NOTICES_STEP', brand: 'BRAND_STEP', schedule: 'SCHEDULE_STEP', 'fee-invoices': 'FEE_INVOICES_STEP', overview: 'OVERVIEW_STEP' };
   for (const [key, constant] of Object.entries(named)) {
     const m = PAGE.match(new RegExp(`const ${constant} = STEPS\\.length \\+ (\\d+);`));
     assert.ok(m, constant);
@@ -42,9 +42,10 @@ test('every tab has a URL key that round-trips to the page step it opens', () =>
 
 test('a URL tab the licence does not have falls back to the first tab; the brand tab is white-label only', () => {
   assert.equal(tabFromParam('history', 'subsidiary').key, 'history');
-  assert.equal(tabFromParam('brand', 'subsidiary').key, 'entity');
+  // D4819 part 3: the first tab is the Overview.
+  assert.equal(tabFromParam('brand', 'subsidiary').key, 'overview');
   assert.equal(tabFromParam('brand', 'white_label').key, 'brand');
-  assert.equal(tabFromParam('nonsense', 'subsidiary').key, 'entity');
+  assert.equal(tabFromParam('nonsense', 'subsidiary').key, 'overview');
   assert.ok(!tabsFor('subsidiary').some((t) => t.key === 'brand'));
   assert.equal(kindFromParam('white_label'), 'white_label');
   assert.equal(kindFromParam('<script>'), 'all');

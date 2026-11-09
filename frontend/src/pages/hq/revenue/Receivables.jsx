@@ -4,6 +4,7 @@ import Sheet from '../../../ui/Sheet.jsx';
 import { StateShape } from '../security/StatusBadge.jsx';
 import { Figure, StateMark, Section, When, Why, TABLE, TD, TH, NUM, BTN } from './RevenueStates.jsx';
 import { StatementActions } from './StatementActions.jsx';
+import { StatementActionFlow } from './StatementActionFlow.jsx';
 import {
   RECEIVABLE_STATUSES, STATEMENT_DRAW_HELD, UNAVAILABLE, UNRECORDED_CURRENCY, countFigure, isReady, outstandingByCurrency,
   periodLabel, receivableCounts, receivableRows, receivableStatus, statementFacts,
@@ -181,10 +182,14 @@ export function ReceivablesSection({ statements, licenceUid, onOpen, onRetry, on
 /**
  * RV05 — one statement, explained: what the branch reported, the share, what
  * HQ is owed, what HQ recorded as paid and what is outstanding; its source;
- * and its history as far as the row records one. Today's entry controls are
- * the footer, unchanged (see `StatementActions.jsx`).
+ * and its history as far as the row records one. The footer offers the
+ * governed actions (RV05b; `StatementActions.jsx`), and an action's flow
+ * (`StatementActionFlow.jsx`) takes the drawer's body until it is done.
+ * Escape closes the flow first, and does nothing while its request is out.
  */
-export function StatementDrawer({ statement: s, onClose, onUpdate }) {
+export function StatementDrawer({ statement: s, onClose, onUpdate, onAction, onChanged }) {
+  const [flow, setFlow] = useState(null);
+  const [flowBusy, setFlowBusy] = useState(false);
   const f = statementFacts(s);
   if (!s || !f) return null;
   const who = s.brand_name || s.licence_ref || s.licence_uid || s.uid;
@@ -203,11 +208,23 @@ export function StatementDrawer({ statement: s, onClose, onUpdate }) {
     <Sheet
       eyebrow="Receivable · revenue-share statement"
       title={`${who} · ${periodLabel(s.period) || s.period}`}
-      onClose={onClose}
+      onClose={() => { if (!flowBusy) onClose(); }}
+      onEscape={flow ? () => { if (!flowBusy) setFlow(null); } : undefined}
       width={560}
       testId="hq-revenue-statement-drawer"
-      footer={<StatementActions statement={s} onUpdate={onUpdate} />}
+      footer={flow ? null : <StatementActions statement={s} onUpdate={onUpdate} onStart={onAction ? setFlow : undefined} />}
     >
+      {flow ? (
+        <StatementActionFlow
+          key={flow}
+          kind={flow}
+          statement={s}
+          onSubmit={onAction}
+          onChanged={onChanged}
+          onBusy={setFlowBusy}
+          onClose={() => setFlow(null)}
+        />
+      ) : (
       <div className="flex flex-col gap-5 px-5 py-4 text-[13.5px]">
         <div className="flex flex-wrap items-center gap-2"><ReceivableStatus status={receivableStatus(s)} /><span className="text-[13px] text-axal-muted dark:text-gray-400">Due date not recorded</span></div>
         <section>
@@ -237,9 +254,10 @@ export function StatementDrawer({ statement: s, onClose, onUpdate }) {
           {history.length
             ? <ul className="divide-y divide-dashed divide-axal-hairline dark:divide-gray-800">{history.map(([d, t]) => <li key={`${d}${t}`} className="grid grid-cols-[110px_minmax(0,1fr)] gap-2 py-1.5"><span className="font-mono text-[12.5px] text-axal-muted dark:text-gray-400">{d}</span>{t}</li>)}</ul>
             : <StateMark state="not_recorded" />}
-          <p className="mt-1 text-[12.5px] text-axal-muted dark:text-gray-400">The row keeps when it was drawn, last changed and paid; who did each is not recorded on it.</p>
+          <p className="mt-1 text-[12.5px] text-axal-muted dark:text-gray-400">The row keeps when it was drawn, last changed and paid. Since D5039 each governed action also keeps who, why and the before and after, in the action record and the audit log.</p>
         </section>
       </div>
+      )}
     </Sheet>
   );
 }
