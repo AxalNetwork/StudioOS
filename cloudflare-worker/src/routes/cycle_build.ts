@@ -4,7 +4,7 @@ import { lovableHandler } from '../services/lovable/launch';
 import { readCapTable } from '../services/capTableToday';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
+import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
@@ -907,10 +907,13 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     const editable = k !== 'workspace' && (row?.integration_id == null || row.integration_user_id === viewer.id);
     return { used_by: row?.used_by ?? null, feeds, ...(editable ? { sync: row?.integration_id == null ? row?.sync_request ?? null : syncOf(row.config_json) } : {}) };
   };
-  const viewerMember = p.company_id != null && !!await env.DB.prepare(
+  // #4603 part 2b: the company's tools are listed only in the Tools part. Without
+  // it (the overview) they are counted, and only the failing ones are read, for
+  // the card's Reconnect; who the viewer is to the company is read only for it too.
+  const viewerMember = opts.parts && p.company_id != null && !!await env.DB.prepare(
     'SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?',
   ).bind(viewer.id, p.company_id).first();
-  const tools = p.company_id == null ? [] : rows(await env.DB.prepare(
+  const tools = !opts.parts || p.company_id == null ? [] : rows(await env.DB.prepare(
     `SELECT i.id, i.user_id, i.provider_key, i.status, i.last_synced_at, i.last_error_at, u.name AS owner_name
        FROM integrations i
        JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
@@ -918,6 +921,26 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
        LEFT JOIN users u ON u.id = i.user_id
       WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') ORDER BY i.id`,
   ).bind(p.company_id).all<any>());
+  const toolCounts = p.company_id == null ? null : opts.parts
+    ? { total: tools.length, connected: tools.filter(tool => tool.status === 'active').length, failing: tools.filter(tool => tool.status === 'error').length }
+    : await env.DB.prepare(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN i.status = 'active' THEN 1 ELSE 0 END), 0) AS connected,
+              COALESCE(SUM(CASE WHEN i.status = 'error' THEN 1 ELSE 0 END), 0) AS failing
+         FROM integrations i
+         JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
+         JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
+        WHERE i.provider_key NOT IN ('google_calendar','microsoft_365')`,
+    ).bind(p.company_id).first<{ total: number; connected: number; failing: number }>().then(r => ({ total: number(r?.total), connected: number(r?.connected), failing: number(r?.failing) }));
+  // The card's Reconnect names the first failing tool the registry knows (`getDescriptor`, an exact
+  // lookup over REGISTRY's keys), in the list's order: one row, the keys bound as a JSON list.
+  const failingTools = opts.parts ? tools.filter(tool => tool.status === 'error') : p.company_id == null ? [] : rows(await env.DB.prepare(
+    `SELECT i.id, i.provider_key, i.status, i.last_error_at
+       FROM integrations i
+       JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
+       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
+      WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') AND i.status = 'error'
+        AND i.provider_key IN (SELECT value FROM json_each(?)) ORDER BY i.id LIMIT 1`,
+  ).bind(p.company_id, JSON.stringify(REGISTRY.map(d => d.key))).all<any>());
   const toolRows = tools.map((tool, index) => {
     const descriptor = getDescriptor(tool.provider_key);
     const metadata = CONNECTOR_METADATA[tool.provider_key];
@@ -932,7 +955,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
       action: href ? { text: 'Open', href } : null,
     });
   });
-  const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));
+  const failingTool = failingTools.find(tool => getDescriptor(tool.provider_key));
   // Code and Hosting are shown only in the Tools part, so the overview (OVERVIEW) does not read them.
   const code = !opts.parts || p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
   // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
@@ -954,7 +977,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
   const failing = SYSTEM_KINDS.find(k => byKind.get(k)?.status === 'error');
   const failedSystem = failing ? byKind.get(failing) : null;
   const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at, p.id) : null;
-  const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && tools.length === 0;
+  const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && toolCounts!.total === 0;
   return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
     // Used by shows the recorded Used by, else what the system feeds.
@@ -963,8 +986,8 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
         used_by: (edit.used_by as string | null) ?? ((edit.feeds as string[]).map(key => FEEDS_LABEL[key]).join(' · ') || null) }, { state }, edit); }),
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(SYSTEM_STATE)) }], sort: { key: 'state', label: 'State' },
       orders: { state: ['failing', 'connected', 'not_connected'] } },
-    facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
-      tools_failing: p.company_id == null ? null : tools.filter(tool => tool.status === 'error').length, tools_total: p.company_id == null ? null : tools.length },
+    facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: toolCounts?.connected ?? null,
+      tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null },
     ...(opts.parts ? { parts: { tools: {
       cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
