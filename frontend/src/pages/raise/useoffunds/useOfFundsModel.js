@@ -18,8 +18,9 @@
  * the venture kept, and the old addresses land there.
  */
 
-export const SLUG = 'use-of-funds';
-export const HOME_PATH = `/raise/${SLUG}`;
+// #4574 (H4): the addresses live in their own small file so a redirect can import them without this model.
+import { SLUG, HOME_PATH } from './useOfFundsPaths.js';
+export { SLUG, HOME_PATH };
 export const TITLE = 'Use of funds';
 export const LINE = 'What the raise pays for, by section, and how long it lasts.';
 

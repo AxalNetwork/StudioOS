@@ -78,6 +78,7 @@ import {
 } from '../services/programGrants';
 import { exportCsv, readAllHistory } from '../services/programGrantsHistory';
 import { csvResponse, stamp } from '../services/csv';
+import { decisionStatement, planProgramPricing, validatePricingBody } from '../services/programPricing';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -364,7 +365,25 @@ r.post('/licences/:uid/:program', async (c) => {
     if (terms.capacity_cap != null && terms.capacity_uncapped === 1) {
       return refuse(c, 400, 'invalid_terms', 'capacity_uncapped cannot be set with a capacity cap.');
     }
+    // D5018: the price. With `pricing`, the fee is the country-adjusted recommendation, accepted or overridden with
+    // a reason; without it, a fee the grant sets is HQ's own and is recorded as an override. Either way one
+    // program_pricing_decisions row commits with the grant, so the accepted price and where it came from stay together.
+    const pv = validatePricingBody(b?.pricing);
+    if (!pv.ok) return refuse(c, 400, 'invalid_pricing', 'The pricing has fields to fix.', { errors: pv.errors });
+    if (pv.value && v.terms.fee_cents !== undefined) return refuse(c, 400, 'fee_from_pricing', 'Name the fee in pricing or in the terms, not both.');
+    const priced = await planProgramPricing(c.env, {
+      licenceUid: licence.uid, programKey, pricing: pv.value, termsFee: (terms.fee_cents ?? null) as number | null,
+      termsCurrency: (terms.currency ?? null) as string | null, writeReason: reason,
+      startsOn: (terms.starts_on ?? null) as string | null, endsOn: (terms.ends_on ?? null) as string | null, today: today(),
+    });
+    if (!priced.ok) return refuse(c, 400, priced.code, priced.sentence);
+    if (priced.plan) { terms.fee_cents = priced.plan.fee_cents; terms.currency = priced.plan.currency; }
     const at = nowIso();
+    const pricingUid = crypto.randomUUID();
+    const grantUid = existing ? String(existing.uid) : newUid();
+    const pricingRow = priced.plan
+      ? [decisionStatement(c.env, { uid: pricingUid, licenceUid: licence.uid, programKey, grantUid, plan: priced.plan, reason, grantTermsRevision: existing ? Number(existing.terms_revision ?? 1) + 1 : 1, actor: `user:${admin.id}`, now: at })]
+      : [];
     // D5052: the policy this grant will hold is the program's LATEST version, frozen in the grant's own batch
     // (a package the licence already holds keeps the version it froze). Under `required_before_grant` the grant
     // is refused until every required agreement is executed; the schedule is not one of them (it is built from
@@ -405,6 +424,7 @@ r.post('/licences/:uid/:program', async (c) => {
         c.env.DB.prepare(fromDraft ? GRANT_DRAFT : REGRANT).bind(...termValues(terms), note.note ?? null, admin.id, at, existing.id, existing.terms_revision ?? 1),
         decisionGuard(c.env),
         history,
+        ...pricingRow,
         ...voidSupersededSchedules(c.env, existing.id),
         supersedeSchedules(c.env, existing.id),
         // D5048: the grant's canonical schedule agreements stop being current with it.
@@ -417,8 +437,9 @@ r.post('/licences/:uid/:program', async (c) => {
     } else {
       try {
         await c.env.DB.batch([
-          c.env.DB.prepare(INSERT_GRANT).bind(newUid(), licence.id, programKey, ...termValues(terms), note.note ?? null, admin.id, at),
+          c.env.DB.prepare(INSERT_GRANT).bind(grantUid, licence.id, programKey, ...termValues(terms), note.note ?? null, admin.id, at),
           history,
+          ...pricingRow,
           ...freezeStatements,
           queuePushStatement(c.env, licence.id),
         ]);
@@ -431,7 +452,7 @@ r.post('/licences/:uid/:program', async (c) => {
     const saved = await grantRow(c.env, licence.id, programKey);
     if (policy.ready) await syncLegalGate(c.env, licence.uid, { actorId: admin.id, reason });
     const pushed = await pushLicenceToBranch(c.env, licence.id);
-    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pushed }, existing ? 200 : 201);
+    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pricing_decision: priced.plan ? { uid: pricingUid, decision: priced.plan.decision } : null, pushed }, existing ? 200 : 201);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -454,6 +475,22 @@ r.patch('/licences/:uid/:program', async (c) => {
     if (after.capacity_cap != null && after.capacity_uncapped === 1) {
       return refuse(c, 400, 'invalid_terms', 'capacity_uncapped cannot be set with a capacity cap.');
     }
+    // D5018: a change of price is a new pricing decision. A change that leaves the fee alone records none, so a
+    // new market recommendation, a pause or a resume never reprices a grant.
+    const pv = validatePricingBody(b?.pricing);
+    if (!pv.ok) return refuse(c, 400, 'invalid_pricing', 'The pricing has fields to fix.', { errors: pv.errors });
+    if (pv.value && v.terms.fee_cents !== undefined) return refuse(c, 400, 'fee_from_pricing', 'Name the fee in pricing or in the terms, not both.');
+    const feeTouched = pv.value !== null || v.terms.fee_cents !== undefined || v.terms.currency !== undefined;
+    const priced = feeTouched
+      ? await planProgramPricing(c.env, {
+        licenceUid: licence.uid, programKey, pricing: pv.value, termsFee: (after.fee_cents ?? null) as number | null,
+        termsCurrency: (after.currency ?? null) as string | null, writeReason: reason,
+        startsOn: (after.starts_on ?? null) as string | null, endsOn: (after.ends_on ?? null) as string | null, today: today(),
+      })
+      : { ok: true as const, plan: null };
+    if (!priced.ok) return refuse(c, 400, priced.code, priced.sentence);
+    if (priced.plan) { after.fee_cents = priced.plan.fee_cents; after.currency = priced.plan.currency; }
+    const pricingUid = crypto.randomUUID();
     const changed = termsDiff(before, after);
     const noteChanged = note.note !== undefined && (note.note ?? null) !== (existing.note ?? null);
     if (!changed.length && !noteChanged) return refuse(c, 400, 'no_change', 'Nothing changes: these are the terms the grant already has.');
@@ -468,6 +505,10 @@ r.patch('/licences/:uid/:program', async (c) => {
         .bind(...termValues(after), note.note === undefined ? (existing.note ?? null) : note.note, admin.id, nowIso(), existing.id, existing.terms_revision ?? 1),
       decisionGuard(c.env),
       programEvent(c.env, licence.id, admin.id, { action: 'terms_changed', program_key: programKey, changed, note_changed: noteChanged, reason }, reason),
+      ...(priced.plan ? [decisionStatement(c.env, {
+        uid: pricingUid, licenceUid: licence.uid, programKey, grantUid: String(existing.uid), plan: priced.plan, reason,
+        grantTermsRevision: Number(existing.terms_revision ?? 1) + 1, actor: `user:${admin.id}`, now: nowIso(),
+      })] : []),
       ...(policyReady ? [replacementOnTermsChangeStatement(c.env, {
         licenceUid: licence.uid, programKey, newRevision: Number(existing.terms_revision ?? 1) + 1, actorId: admin.id, at: nowIso(), reason,
       })] : []),
@@ -482,7 +523,7 @@ r.patch('/licences/:uid/:program', async (c) => {
     const saved = await grantRow(c.env, licence.id, programKey);
     if (policyReady) await syncLegalGate(c.env, licence.uid, { actorId: admin.id, reason });
     const pushed = await pushLicenceToBranch(c.env, licence.id);
-    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), changed, pushed });
+    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), changed, pricing_decision: priced.plan ? { uid: pricingUid, decision: priced.plan.decision } : null, pushed });
   } catch (e) { return mapError(c, e); }
 });
 

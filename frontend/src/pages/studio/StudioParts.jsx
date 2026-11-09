@@ -27,7 +27,7 @@ export function StudioFixedLock() {
 export function CustomiseButton({ studio, primary = false }) {
   if (!studio?.canCustomise || studio.editing) return null;
   return (
-    <button type="button" className={`sm-btn ${primary ? 'sm-btn-p' : 'sm-btn-s'}`} onClick={studio.customise} data-testid="button-studio-customise">
+    <button type="button" className={`sm-btn ${primary ? 'sm-btn-p' : 'sm-btn-s'}`} onClick={studio.customise} data-testid="button-studio-customise" data-tour="studio-customise">
       <SlidersHorizontal size={14} aria-hidden="true" /> Customise
     </button>
   );

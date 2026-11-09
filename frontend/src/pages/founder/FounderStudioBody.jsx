@@ -15,11 +15,17 @@
  * home draws this body under the phone chat with `phone`: no header and no
  * chat here, then the strip, the profile card and the modules, and a bottom
  * bar with Customise.
+ *
+ * D4619 (#4619): a `project_id` the member has no access to draws
+ * `ProjectUnavailable` above the zones (which are Unreadable, with the same
+ * reason), and a link to Studio without the ID. No other venture is shown in
+ * its place.
  */
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { Unrecorded } from '../../ui';
-import { LOADING, UNREADABLE, READY, headerOf, summaryOf, profileOf } from './founderStudioModel';
+import { LOADING, UNREADABLE, READY, headerOf, summaryOf, profileOf, isUnavailableProject } from './founderStudioModel';
 import StudioModules from '../studio/StudioModules';
 import { CustomiseButton, StudioFixedLock } from '../studio/StudioParts';
 import { founderNoStoreTiles, founderTiles } from '../studio/tiles/founderTiles';
@@ -46,7 +52,7 @@ export default function FounderStudioBody({
               {header.phaseState === UNREADABLE && <span className="text-[11px] text-axal-muted"><Unrecorded reason="The Lab state could not be read.">Phase unreadable</Unrecorded></span>}
             </div>
             <p className="mt-1.5 max-w-[640px] text-[13.5px] text-axal-muted" data-testid="text-founder-studio-context">
-              {header.company || (header.companyState === LOADING ? '…' : 'No company record yet')}
+              {header.company || (header.companyState === LOADING ? '…' : isUnavailableProject(reads.project) ? 'Venture not available' : 'No company record yet')}
               {' · '}{header.founderLine}: everything you have built across the platform, what it unlocked, and what to do next.
             </p>
           </div>
@@ -60,6 +66,8 @@ export default function FounderStudioBody({
           {advisorAvailable === false && <AdvisorUnavailable />}
         </div>
       )}
+
+      {isUnavailableProject(reads.project) && <ProjectUnavailable />}
 
       <div className={`sm-fixed mb-4 ${dim}`} data-testid="founder-studio-strip">
         <StudioFixedLock />
@@ -119,6 +127,18 @@ export default function FounderStudioBody({
 }
 
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** D4619: the venture the link named is not one of this member's; nothing from another venture is drawn in its place. */
+export function ProjectUnavailable() {
+  return (
+    <section className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status" data-testid="status-founder-project-unavailable">
+      <p className="font-bold">This venture is not available to your account.</p>
+      <p className="mt-1">The link names a venture you cannot open, so no venture&apos;s records are shown here.{' '}
+        <Link to="/studio" className="font-semibold underline" data-testid="link-founder-project-unavailable-studio">Open your Studio</Link>
+      </p>
+    </section>
+  );
+}
 
 export function AdvisorUnavailable() {
   return (

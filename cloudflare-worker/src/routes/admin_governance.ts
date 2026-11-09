@@ -8,7 +8,10 @@
  *   GET   /api/admin/governance/linkable            → { templates: [{ slug, title, category }], envelopes: [{ id, title, completed_at }] }
  *   POST  /api/admin/governance/documents           { entity_key, category, title, effective_date?, confidential?, template_slug?, envelope_id? } → { document }
  *   GET   /api/admin/governance/documents/:uid      → { document, versions }
+ *   GET   /api/admin/governance/documents/:uid/activity → { uid, events: [{ action, line, at, actor, version }] }   D4811 part 5
  *   PATCH /api/admin/governance/documents/:uid      { title?, effective_date?, status?, confidential?, template_slug?, envelope_id? } → { document }
+ *         D4811 part 6: status executed or archived also needs { reason, confirm: 'EXECUTED'|'ARCHIVE' } and a recent step-up;
+ *         executed needs { evidence: { kind: 'version', version } | { kind: 'envelope' } } (`services/governanceHighRisk.ts`).
  *   POST  /api/admin/governance/documents/:uid/versions   multipart: file (PDF or .docx, ≤ 25 MB), signed?, note? → { document, version }
  *   GET   /api/admin/governance/documents/:uid/versions/:n/file[?download=1]   the file (inline for preview, attachment to download)
  *   GET   /api/admin/governance/ownership           → { entities: [{ key, name, ownership, updated_at }] }        Super Admin only
@@ -25,14 +28,16 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { isSuperAdmin, requireHqAuthoring } from '../auth';
+import { isSuperAdmin, requireHqAuthoring, requireStepUp } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import {
   DOCX, GOVERNANCE_CATEGORIES, GOVERNANCE_ENTITIES, GOVERNANCE_STATUSES, MAX_FILE_BYTES, PDF, canMove, dateOf, docView, entityName,
-  envelopeExists, executedEvidence, isCategory, isEntity, isStatus, ownershipOf, readDoc, readVersions, sha256Hex, sniffDocument,
+  envelopeExists, isCategory, isEntity, isStatus, ownershipOf, readDoc, readVersions, sha256Hex, sniffDocument,
   templateExists, versionKey, versionView, type DocRow, type GovernanceEntity,
 } from '../services/governance';
 import { entityAttention, groupOf, type DocFacts } from '../services/governanceAttention';
+import { GOVERNANCE_ACTIONS, eventOf } from '../services/governanceActivity';
+import { confirmationOf, evidenceOf, isHighRisk } from '../services/governanceHighRisk';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 
@@ -92,6 +97,11 @@ governance.get('/linkable', async (c) => {
   return c.json({ templates, envelopes: envelopes.map((e: any) => ({ id: Number(e.id), title: e.title, completed_at: e.completed_at })) });
 });
 
+/** Whether an envelope has completed: the only envelope that can show a record was executed. */
+async function envelopeCompleted(env: Env, id: number): Promise<boolean> {
+  return !!(await env.DB.prepare("SELECT 1 AS ok FROM esign_envelopes WHERE id = ? AND status = 'completed'").bind(id).first().catch(() => null));
+}
+
 /** The link fields of a body, checked; an unknown template or envelope is refused, never stored. */
 async function linksOf(c: any, b: any): Promise<{ template_slug?: string | null; envelope_id?: number | null } | Response> {
   const out: { template_slug?: string | null; envelope_id?: number | null } = {};
@@ -141,6 +151,29 @@ governance.get('/documents/:uid', async (c) => {
   return c.json({ document: docView(doc, versions[0] ?? null, versions.length), versions: versions.map(versionView) });
 });
 
+/**
+ * D4811 part 5 — GET /api/admin/governance/documents/:uid/activity: the
+ * record's audit trail for its workspace (`services/governanceActivity.ts`),
+ * newest first, at most 200. The same visibility as the record: a
+ * confidential one is the Super Admin's alone (404 for anyone else), and
+ * reading its trail is logged as a view, as reading the record is.
+ */
+governance.get('/documents/:uid/activity', async (c) => {
+  const { user, superAdmin } = await hq(c);
+  const doc = await visible(c, superAdmin);
+  if (doc instanceof Response) return doc;
+  const rows = (await c.env.DB.prepare(
+    `SELECT a.action, a.details, a.created_at, a.user_id, u.name AS actor_name
+       FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id
+      WHERE a.action IN (SELECT value FROM json_each(?))
+        AND CASE WHEN json_valid(a.details) = 1 THEN json_extract(a.details, '$.uid') END = ?
+      ORDER BY a.id DESC LIMIT 200`,
+  ).bind(JSON.stringify(GOVERNANCE_ACTIONS), doc.uid).all<any>()).results || [];
+  if (Number(doc.confidential) === 1) await audit(c, user, 'governance_document_viewed', { uid: doc.uid, entity: doc.entity_key, category: doc.category });
+  const events = rows.map(eventOf).filter(Boolean);
+  return c.json({ uid: doc.uid, events, limit: 200 });
+});
+
 governance.patch('/documents/:uid', async (c) => {
   const { user, superAdmin } = await hq(c);
   const doc = await visible(c, superAdmin);
@@ -174,16 +207,31 @@ governance.patch('/documents/:uid', async (c) => {
   if (links.template_slug !== undefined) { next.template_slug = links.template_slug; changed = true; }
   if (links.envelope_id !== undefined) { next.envelope_id = links.envelope_id; changed = true; }
   let status = doc.status;
+  let highRisk: { reason: string; evidence: string | null } | null = null;
   if (b.status !== undefined) {
     if (!isStatus(b.status)) return c.json({ error: `status must be one of ${GOVERNANCE_STATUSES.join(', ')}` }, 400);
     if (!canMove(doc.status, b.status)) return refuse(c, 409, { code: 'status_move_refused', message: `A ${doc.status} document cannot move to ${b.status}. Nothing was saved.` });
-    if (b.status === 'executed' && doc.status !== 'executed') {
-      // An unsigned draft is never marked executed: a signed version, or a completed envelope (the one being linked counts), names what was signed.
-      const evidence = await executedEvidence(c.env, { ...doc, envelope_id: links.envelope_id !== undefined ? links.envelope_id : doc.envelope_id }, await readVersions(c.env, doc.uid));
-      if (!evidence) return refuse(c, 409, { code: 'not_signed', message: 'Upload the signed copy, or link the signed envelope, before marking this document executed. Nothing was saved.' });
-      next.executed_version = evidence.version;
-      if (evidence.envelope != null && links.envelope_id === undefined) next.envelope_id = evidence.envelope;
+    // D4811 part 6: executing or archiving is high-risk: a reason, the typed word, and a recent step-up, checked here.
+    if (isHighRisk(b.status) && b.status !== doc.status) {
+      const confirmed = confirmationOf(b.status, b);
+      if (!confirmed.ok) return refuse(c, confirmed.refusal.status, { code: confirmed.refusal.code, message: confirmed.refusal.message });
+      highRisk = { reason: confirmed.reason, evidence: null };
     }
+    if (b.status === 'executed' && doc.status !== 'executed') {
+      // An unsigned draft is never marked executed, and the evidence is the admin's explicit choice (CT-12), never picked here.
+      const versions = await readVersions(c.env, doc.uid);
+      const envelopeId = links.envelope_id !== undefined ? links.envelope_id : (doc.envelope_id == null ? null : Number(doc.envelope_id));
+      if (!versions.some((v) => Number(v.signed) === 1) && !(envelopeId != null && await envelopeCompleted(c.env, envelopeId))) {
+        return refuse(c, 409, { code: 'not_signed', message: 'Upload the signed copy, or link the signed envelope, before marking this document executed. Nothing was saved.' });
+      }
+      const chosen = evidenceOf(b.evidence, versions, envelopeId, envelopeId != null && await envelopeCompleted(c.env, envelopeId));
+      if (!chosen.ok) return refuse(c, chosen.refusal.status, { code: chosen.refusal.code, message: chosen.refusal.message });
+      next.executed_version = chosen.evidence.version;
+      if (chosen.evidence.envelope != null) next.envelope_id = chosen.evidence.envelope;
+      highRisk!.evidence = chosen.evidence.version != null ? `v${chosen.evidence.version}` : `envelope #${chosen.evidence.envelope}`;
+    }
+    // The step-up comes after every form check, so a mistyped word never asks for a code; a missing step-up answers 403 step_up_required.
+    if (highRisk) await requireStepUp(c);
     next.status = b.status; changed = true;
     status = b.status;
   }
@@ -194,7 +242,9 @@ governance.patch('/documents/:uid', async (c) => {
   ).bind(next.title, next.effective_date, next.confidential, next.template_slug, next.envelope_id,
     next.executed_version, next.status, Number(user.id), now(), doc.uid).run();
   await audit(c, user, b.status !== undefined && b.status !== doc.status ? 'governance_document_status' : 'governance_document_updated', {
-    uid: doc.uid, entity: doc.entity_key, category: doc.category, from: doc.status, status, fields: Object.keys(b).filter((k) => b[k] !== undefined),
+    uid: doc.uid, entity: doc.entity_key, category: doc.category, from: doc.status, status,
+    fields: Object.keys(b).filter((k) => b[k] !== undefined && !['reason', 'confirm', 'evidence'].includes(k)),
+    ...(highRisk ? { reason: highRisk.reason, evidence: highRisk.evidence } : {}),
   });
   const saved = (await readDoc(c.env, doc.uid))!;
   const versions = await readVersions(c.env, doc.uid);

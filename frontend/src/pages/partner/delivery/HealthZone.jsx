@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutations, useZoneRead, signature } from './useZoneMutations';
+import { EngagementFocusBar, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
@@ -526,7 +527,10 @@ export default function PartnerHealthZone() {
   }, [runMutation, load]);
 
   const d = state.data;
-  const items = Array.isArray(d?.items) ? d.items : [];
+  // D4822 part 2: `?engagement=` narrows Health to the one engagement the Sheet opened it for.
+  const focus = useEngagementFocus();
+  const allItems = Array.isArray(d?.items) ? d.items : [];
+  const items = allItems.filter((r) => matchesFocus(r, focus.key));
   const roster = state.people || [];
   const counts = items.reduce((acc, r) => {
     acc[r.health || 'unrated'] = (acc[r.health || 'unrated'] || 0) + 1;
@@ -628,16 +632,15 @@ export default function PartnerHealthZone() {
       notice={unlinked ? <NoPartnerProfile /> : null}
       isEmpty={unlinked || (items.length === 0)}
       empty={(
+        <div className="space-y-3">
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel(allItems, focus.key)} shown={0} total={allItems.length} noun="engagements" onClear={focus.clear} />
+        {/* D4822 (canvas `No engagement health yet`): one state, no 0-of-0 commentary. */}
         <NothingYet
-          title="No engagement to rate yet"
-          body={
-            'Health is read across milestones, blockers, deliverables and the '
-            + 'retainer record. Win a quote and the engagement appears here — '
-            + 'unrated until one of those carries something, because nothing '
-            + 'recorded is not the same as nothing wrong.'
-          }
-          action={<Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open proposals</Link>}
+          title="No engagement health yet"
+          body="Health appears once Delivery records contain enough evidence."
+          action={<Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open Pipeline</Link>}
         />
+        </div>
       )}
     >
       <div className="space-y-6" aria-busy={read.refreshing || undefined}>
@@ -646,19 +649,17 @@ export default function PartnerHealthZone() {
             The delivery record could not be refreshed just now, so what is shown may be out of date. {read.refreshError}
           </p>
         )}
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel(allItems, focus.key)} shown={items.length} total={allItems.length} noun="engagements" onClear={focus.clear} />
         <ZoneHeading
-          title="Engagement health"
-          blurb={
-            'The renewal early-warning page: scope drift, utilisation, '
-            + 'satisfaction, blockage. Utilisation here is a read of the retainer '
-            + 'record on Pipeline · Retainers — the same number, not a second one '
-            + 'computed from a different source.'
-          }
+          title="Renewal and delivery risk"
+          blurb="Find delivery, scope and relationship risks early enough to act. Utilisation is read from Pipeline · Retainers — the same number, not a second one."
         />
 
         {/* ══ THE `pd5` STRIP ═══════════════════════════════════════════════
             `At risk · Scope drift · Lowest utilisation · Firm satisfaction
             avg`, each over the whole book rather than the chip-narrowed list. */}
+        {/* D4822 part 2: these are firm-wide figures, so they are not drawn over one focused engagement. */}
+        {!focus.key && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <HealthTile
             label="At risk"
@@ -679,7 +680,7 @@ export default function PartnerHealthZone() {
             value={`${d?.lowest_utilisation_pct ?? 0}%`}
             nr={d?.lowest_utilisation_pct == null}
             note={d?.lowest_utilisation_client
-              ? `${d.lowest_utilisation_client} · read from retainer record`
+              ? `${d.lowest_utilisation_client} · read from Pipeline · Retainers`
               : 'no retainer records hours yet'}
           />
           {/* REFUSED WHILE ANY LIVE ENGAGEMENT IS UNSCORED. Averaging the rest
@@ -692,6 +693,7 @@ export default function PartnerHealthZone() {
               || `every engagement scored · ${d?.satisfaction_scored_count ?? 0} of ${d?.satisfaction_scored_count ?? 0}`}
           />
         </div>
+        )}
 
         {d?.unrated_note && (
           <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.unrated_note}</p>

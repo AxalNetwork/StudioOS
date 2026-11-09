@@ -83,6 +83,10 @@ jobs:
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The reviewer's outcome, for the `alert` job below (budget_refused,
+    # configuration_error, reviewed, ...).
+    outputs:
+      outcome: ${{ steps.review.outputs.outcome }}
     permissions:
       contents: read
       pull-requests: read
@@ -263,3 +267,38 @@ jobs:
           path: ${{ runner.temp }}/claude-review/openai/
           retention-days: 90
           if-no-files-found: ignore
+
+  # Slack (via scripts/github-alerts.mjs): when the reviewer called no model
+  # because of its setup (budget_refused, configuration_error), its check still
+  # reads green, so PRs go unreviewed unnoticed. This job opens one issue,
+  # `[alert] the PR reviewer is not reviewing`, and posts once; a later
+  # `reviewed` closes it and posts once. Its own job so the job that reads PR
+  # content never holds `issues: write`. It runs only the base commit's script.
+  alert:
+    name: claude review (alert)
+    needs: review
+    if: ${{ always() && needs.review.result != 'skipped' && needs.review.outputs.outcome != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      # The base commit runs it, so a base from before the script reports nothing.
+      - run: |
+          if [ -f scripts/github-alerts.mjs ]; then node scripts/github-alerts.mjs review-blocked
+          else echo 'scripts/github-alerts.mjs is not on the base commit yet; no alert.'; fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+          OUTCOME: ${{ needs.review.outputs.outcome }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

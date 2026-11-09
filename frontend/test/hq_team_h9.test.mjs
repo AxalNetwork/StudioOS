@@ -23,10 +23,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { teamRaw } from './_hqTeamSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
-const TEAM_RAW = read('frontend/src/pages/hq/HqTeamTable.jsx');
+// D5044 — HQ Team is the composer and its parts in `pages/hq/team/`, read together.
+const TEAM_RAW = teamRaw();
 const TEAM = codeOnly(TEAM_RAW);
 const PAGE_RAW = read('frontend/src/pages/hq/AccountsPage.jsx');
 const PAGE = codeOnly(PAGE_RAW);
@@ -51,8 +53,17 @@ const require = createRequire(import.meta.url);
 test('the grant picker reads the role-filtered route, not a page of accounts', () => {
   // The whole point of D138's route. A picker fed a page is not a display
   // problem: you cannot grant the elevation to somebody who is not in the list.
-  assert.match(HOLDERS, /api\.hqAdmins\(\)/,
+  // D5044 — re-aimed: the picker has its own server-filtered read (role admin, active, not a
+  // holder, no LIMIT), so it no longer makes HQ Team's whole supervision read a second time.
+  assert.match(HOLDERS, /superAdminCandidatesApi\.list\(\)/,
     'SuperAdminHolders does not read the server-filtered admin list');
+  assert.ok(!/api\.hqAdmins\(/.test(HOLDERS),
+    'SuperAdminHolders still reads HQ Team\'s supervision read for its picker');
+  const WORKER = codeOnly(read('cloudflare-worker/src/routes/admin_super_admins.ts'));
+  const route = WORKER.slice(WORKER.indexOf("r.get('/candidates'"));
+  assert.match(route, /WHERE LOWER\(u\.role\) = 'admin' AND u\.is_active = 1 AND s\.user_id IS NULL/,
+    'the candidate read is not filtered on the server');
+  assert.ok(!/LIMIT/.test(route.slice(0, route.indexOf('});'))), 'the candidate read is a page, not the whole set');
   assert.ok(!/api\.adminListUsers\(\s*\)/.test(HOLDERS),
     'SuperAdminHolders still reads the unpaginated flat array, which is the newest 100 accounts');
   // And the browser-side role filter is gone with it — the route has the
@@ -134,7 +145,7 @@ test('the Branch column says HQ-held rather than nothing', () => {
 test('the rows sort worst-first, through the shared ordering', () => {
   assert.match(TEAM, /rungRank\(a\.rung\) - rungRank\(b\.rung\)/,
     'the team is not sorted worst-first');
-  assert.match(TEAM, /from '\.\.\/\.\.\/lib\/notices'/,
+  assert.match(TEAM, /from '(\.\.\/){2,3}lib\/notices'/,
     'the ordering is a second copy rather than the shared one');
   // The shared ordering must agree with the worker's rung precedence, or the
   // screen sorts by one rule and the payload was computed under another.
@@ -179,11 +190,12 @@ test('the page composes the three in H9\'s order and keeps the directory', () =>
   const directory = PAGE.indexOf('<UsersConsole');
   assert.ok(holders > 0 && team > holders, 'the Team table is not below the holder console');
   assert.ok(directory > team, 'the Team table replaced the directory instead of sitting above it');
-  assert.match(PAGE, /<UsersConsole onImpersonate=\{onImpersonate\} \/>/, 'the Admin Console users panel was dropped');
+  assert.match(PAGE, /<UsersConsole onImpersonate=\{onImpersonate\} reloadKey=\{keys\.directory\} onChanged=\{\(\) => invalidate\('directory_change'\)\} \/>/, 'the Admin Console users panel was dropped');
 });
 
 test('granting the elevation refreshes the badge rather than leaving it stale', () => {
-  assert.match(PAGE, /onChanged=\{\(\) => setReloadKey/,
+  // D5044 — the grant names what it changed, and the page re-reads exactly that.
+  assert.match(PAGE, /onChanged=\{\(\) => invalidate\('holder_change'\)\}/,
     'the page does not hear about a grant');
   // D221 gave the table a second prop (`onLoaded`, so the page's rail reads
   // what the table read). The pin is therefore on the TAG rather than on its
@@ -192,7 +204,7 @@ test('granting the elevation refreshes the badge rather than leaving it stale', 
   const tagAt = PAGE.indexOf('<HqTeamTable');
   assert.ok(tagAt >= 0, 'the Team table is not mounted');
   const tag = PAGE.slice(tagAt, PAGE.indexOf('/>', tagAt) + 2);
-  assert.ok(tag.includes('reloadKey={reloadKey}'), 'the Team table is not told to reload');
+  assert.ok(tag.includes('reloadKey={keys.roster}'), 'the Team table is not told to reload');
   assert.match(HOLDERS, /onChanged\?\.\(\)/, 'the holder console never tells anyone');
 });
 

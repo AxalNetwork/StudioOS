@@ -51,5 +51,7 @@ export const capitalRelationshipsApi = {
   acceptProposal: (projectId, uid, edited = null) => request(`/cycles/raise/capital-relationships/proposals/${encodeURIComponent(String(uid))}/accept?${project(projectId)}`, {
     method: 'POST', body: JSON.stringify(edited ? { edited } : {}),
   }),
+  // D5073: the proposals of one note accepted in one request, one result per proposal (`{ uid, ok, code?, message? }`), at most 50.
+  acceptProposals: (projectId, uids) => request(`/cycles/raise/capital-relationships/proposals/accept-batch?${project(projectId)}`, { method: 'POST', body: JSON.stringify({ uids }) }),
   draft: (projectId, body) => request(`/cycles/raise/capital-relationships/drafts?${project(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
 };

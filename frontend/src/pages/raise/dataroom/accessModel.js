@@ -23,6 +23,7 @@ import { NOT_RECORDED } from '../../../lib/absence.js';
 import { grantIsActive } from '../dataRoomRead.js';
 import { grantOn } from './filesModel.js';
 import { day } from './dataRoomModel.js';
+import { isSentence } from '../../../lib/raiseErrors.js';
 
 const DAY_MS = 86_400_000;
 export const ENDING_SOON_DAYS = 14;
@@ -198,8 +199,10 @@ export function grantBodyError({ until = '', scope = 'all', chosen = [] } = {}, 
 /** A Worker refusal on Access or Requests, as one sentence. */
 export function accessRefusal(e) {
   const code = e?.data?.code || e?.code || null;
-  const said = String(e?.data?.detail || e?.data?.message || '').trim();
   const status = Number(e?.status);
+  // Only a Worker refusal (4xx) that reads as a sentence is repeated; anything else is ours.
+  const raw = String(e?.data?.detail || e?.data?.message || '').trim();
+  const said = status >= 400 && status < 500 && isSentence(raw) ? raw : '';
   if (code === 'owner_only') return 'Only the venture’s owner can do that.';
   if (code === 'no_email') return said || 'This investor has no email in Capital relationships. Add one there to share the room.';
   if (code === 'request_decided') return 'This request has already been answered.';

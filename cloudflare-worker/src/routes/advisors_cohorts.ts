@@ -211,6 +211,9 @@ advisors.get('/me/cohort/:cycleId/founders', async (c) => {
       // Seam-marked: this is the founder's own record, shown to an advisor an
       // admin put in front of it. It is not the practice's data.
       source: 'spinout_lab',
+      // D4813: the read stops at 200 founders. `truncated` says when it did, so
+      // a page never presents a capped list as the cohort's total.
+      truncated: (rows.results || []).length >= 200,
       items: (rows.results || []).filter((r) => !hidden.has(Number(r.user_id))).map((r) => ({
         user_id: r.user_id, name: r.name ?? null, email: r.email ?? null,
       })),
@@ -283,6 +286,8 @@ advisors.get('/me/cohort/:cycleId/weeks', async (c) => {
         `SELECT w.user_id AS user_id, w.week_number AS week_number, w.status AS status,
                 w.deliverables_done AS deliverables_done,
                 w.deliverables_required AS deliverables_required,
+                w.grace_until AS grace_until, w.grace_reason AS grace_reason,
+                w.decided_at AS decided_at, w.decision_reason AS decision_reason,
                 u.name AS name
            FROM company_week_status w
            LEFT JOIN users u ON u.id = w.user_id
@@ -292,6 +297,8 @@ advisors.get('/me/cohort/:cycleId/weeks', async (c) => {
       ).bind(cycleId).all<{
         user_id: number; week_number: number; status: string;
         deliverables_done: number; deliverables_required: number; name: string | null;
+        grace_until: string | null; grace_reason: string | null;
+        decided_at: string | null; decision_reason: string | null;
       }>();
 
       const byFounder = new Map<number, any>();
@@ -304,6 +311,13 @@ advisors.get('/me/cohort/:cycleId/weeks', async (c) => {
           status: r.status,
           deliverables_done: r.deliverables_done,
           deliverables_required: r.deliverables_required,
+          // D4813: the Lab's own decision record for the week (migration 156),
+          // so the Founders board can say WHY a founder is in grace or failed
+          // and until when, rather than only that they are.
+          grace_until: r.grace_until ?? null,
+          grace_reason: r.grace_reason ?? null,
+          decided_at: r.decided_at ?? null,
+          decision_reason: r.decision_reason ?? null,
         };
       }
 
@@ -428,6 +442,9 @@ advisors.get('/me/cohort/:cycleId/guidance', async (c) => {
 
     return c.json({
       cohort_cycle_id: cycleId,
+      // D4813: the counts are over the newest 200 rows. `truncated` says when
+      // the read stopped there, so an open-question count is never a total.
+      truncated: items.length >= 200,
       counts: guidanceCounts(items),
       oldest_open_hours: oldestOpenHours(items, nowIso()),
       // Named so no reader mistakes its absence for zero.
@@ -589,6 +606,13 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
     // advisor PROFILE row, which is what `POST /me/slots` binds (`m.id` from
     // `myAdvisor`). Passing the user id would return an empty calendar for
     // every advisor whose two ids differ, which is all of them.
+    //
+    // D4813: FROM NOW ON, in SQL. The read used to take the advisor's first 200
+    // bookings ever, oldest first, and only then keep the next 14 days — so an
+    // advisor with 200 past sessions saw no upcoming ones at all. The window
+    // filter below (`withinDays`) still decides what is shown; this only stops
+    // history from spending the cap. `sessions_truncated` says when the cap
+    // was still reached.
     const me = await myAdvisor(c.env, user as User);
     const booked = me ? await c.env.DB.prepare(
       `SELECT s.id AS slot_id, s.starts_at AS starts_at, s.ends_at AS ends_at,
@@ -598,9 +622,10 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
          LEFT JOIN users u ON u.id = b.founder_user_id
         WHERE s.advisor_id = ? AND s.is_cancelled = 0
           AND b.status IN ('pending', 'confirmed')
+          AND datetime(s.starts_at) >= datetime(?)
         ORDER BY s.starts_at ASC
         LIMIT 200`
-    ).bind(me.id).all<{
+    ).bind(me.id, nowIso()).all<{
       slot_id: number; starts_at: string; ends_at: string;
       topic: string | null; founder_name: string | null;
     }>() : { results: [] as Array<{
@@ -621,6 +646,7 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
     return c.json({
       cohort_cycle_id: cycleId,
       windows_recorded: weekRows.length > 0,
+      sessions_truncated: (booked.results || []).length >= 200,
       items: upcoming,
       collisions: clashes.map(([a, b]) => ({ a: upcoming[a].ref, b: upcoming[b].ref })),
       counts: {

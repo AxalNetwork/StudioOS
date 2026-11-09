@@ -9,6 +9,7 @@ import { shortMoment } from '../advisor/practice/deliveryTrail';
 // and when. The route that reads it answers the founder who owns the project,
 // which is why it is read here and not on the advisor's page.
 import { ClientCompanyAccessLog } from '../advisor/practice/ClientAccessLog';
+import { userFacingRaiseError } from '../../lib/raiseErrors.js';
 
 /**
  * Who among your advisors can read this startup's record, and how much of it.
@@ -92,14 +93,14 @@ function DocumentShares({ projectUid, grants, busyOuter }) {
       setDocUid(''); setNote('Sent.');
       await load();
     } catch (e) {
-      setNote(e?.detail || e?.message || 'That did not save.');
+      setNote(userFacingRaiseError(e, { fallback: 'That did not save.' }));
     } finally { setBusy(false); }
   };
 
   const unshare = async (shareUid) => {
     setBusy(true); setNote(null);
     try { await api.advisorUnshareDocument(projectUid, shareUid); await load(); }
-    catch (e) { setNote(e?.detail || e?.message || 'That did not save.'); }
+    catch (e) { setNote(userFacingRaiseError(e, { fallback: 'That did not save.' })); }
     finally { setBusy(false); }
   };
 
@@ -220,7 +221,7 @@ function ReceivedWorkProducts() {
     } catch (e) {
       setState({
         loading: false,
-        error: e?.detail || e?.message || 'Work products from your advisors did not load.',
+        error: userFacingRaiseError(e, { fallback: 'Work products from your advisors did not load.' }),
         items: [], totals: null,
       });
     }
@@ -348,7 +349,7 @@ export default function AdvisorGrantSection({ projectUid }) {
       const res = await api.advisorGrants(projectUid);
       setState({ loading: false, error: null, items: res?.items || [] });
     } catch (e) {
-      setState({ loading: false, error: e?.detail || e?.message || 'Advisor access did not load.', items: [] });
+      setState({ loading: false, error: userFacingRaiseError(e, { fallback: 'Advisor access did not load.' }), items: [] });
     }
   }, [projectUid]);
   useEffect(() => { load(); }, [load]);
@@ -362,14 +363,14 @@ export default function AdvisorGrantSection({ projectUid }) {
       setEmail(''); setNote('Shared.');
       await load();
     } catch (e) {
-      setNote(e?.detail || e?.message || 'That did not save.');
+      setNote(userFacingRaiseError(e, { fallback: 'That did not save.' }));
     } finally { setBusy(false); }
   };
 
   const revoke = async (grantUid) => {
     setBusy(true); setNote(null);
     try { await api.advisorGrantRevoke(projectUid, grantUid); await load(); }
-    catch (e) { setNote(e?.detail || e?.message || 'That did not save.'); }
+    catch (e) { setNote(userFacingRaiseError(e, { fallback: 'That did not save.' })); }
     finally { setBusy(false); }
   };
 

@@ -10,6 +10,7 @@ import BucketBoard from '../BucketBoard';
 import { boardFor } from '../boards';
 import { api } from '../../lib/api';
 import { ADVISOR_COPY } from '../noStoreCopy';
+import { CohortSectionNav, CohortWorkspaceProvider } from '../../pages/advisor/cohorts/CohortWorkspace';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
@@ -28,6 +29,8 @@ const ExpertiseThinkingZone = lazy(() => import('../../pages/advisor/expertise/T
 const ExpertiseVisibilityZone = lazy(() => import('../../pages/advisor/expertise/VisibilityZone'));
 const CohortsGuidanceZone = lazy(() => import('../../pages/advisor/cohorts/GuidanceZone'));
 const CohortsCalendarZone = lazy(() => import('../../pages/advisor/cohorts/CalendarZone'));
+// D4813 (#4813, package 1): `/cohorts` is the command centre, not a directory.
+const CohortsOverviewZone = lazy(() => import('../../pages/advisor/cohorts/OverviewZone'));
 
 /**
  * Practice, Cohorts and Expertise — one component, three buckets.
@@ -253,6 +256,14 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     // Bucket root: render the canvas overview — the zone grid that says what
     // this bucket holds and opens each zone from there. The sidebar row must
     // land here, not on the first zone.
+    // D4813: THE COHORTS ROOT IS ITS OVERVIEW. It used to be the bucket grid —
+    // five cards labelled WORK BOARD, FEED and COLLECTION that described the
+    // zones instead of the cohort. Board C1 replaces it with what the advisor
+    // opens the workspace for: who needs them, the four-week progress, the
+    // next seven days and recorded activity.
+    if (isRoot && prefix === '/cohorts') {
+      return <Suspense fallback={<Loading />}><CohortsOverviewZone /></Suspense>;
+    }
     if (isRoot) {
       // `unbuilt` is derived from COPY — the same object each zone page
       // renders — so a card cannot describe a store the page denies having.
@@ -294,7 +305,8 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   // and Thinking each told the reader how the market finds them.
   const INTRO = {
     '/practice': 'One practice. What is coming in, what is committed, and what has been delivered.',
-    '/cohorts': 'One cohort at a time. Founder data comes from the Lab and is read-only to you.',
+    // D4813: the canvas's own subtitle, on every Cohorts section.
+    '/cohorts': 'Guide founders from milestones to outcomes.',
     '/expertise': 'How the market finds you, and what it finds when it does.',
   };
 
@@ -386,10 +398,16 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     },
   }[prefix];
 
-  return (
+  // D4813: Cohorts draws its own header row — the one cohort selector and six
+  // section tabs (Overview first), every link carrying `?cohort=` — through
+  // the shell's `sectionNav`, under a provider every section reads the
+  // selection from.
+  const cohorts = prefix === '/cohorts';
+  const shell = (
     <WorkspaceShell
       role="advisor"
-      title={isRoot ? bucketTitle(bucket) : zoneHead?.h1}
+      title={cohorts ? 'Cohorts' : (isRoot ? bucketTitle(bucket) : zoneHead?.h1)}
+      sectionNav={cohorts ? <CohortSectionNav /> : undefined}
       // NO `scope` PROP. It read `scope={prefix === '/cohorts' ? 'One cohort'
       // : 'One practice'}` — a conditional literal the frame contract's
       // attribute-only pattern missed. The shell fills that slot from
@@ -442,4 +460,5 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       )}
     </WorkspaceShell>
   );
+  return cohorts ? <CohortWorkspaceProvider preview={preview}>{shell}</CohortWorkspaceProvider> : shell;
 }

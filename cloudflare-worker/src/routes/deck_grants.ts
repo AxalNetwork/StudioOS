@@ -17,6 +17,13 @@
  * grant is matched on that deal, that investor and that firm exactly. A
  * support session is refused, as on every investor deal read.
  *
+ * THE DEAL AUDIENCE (D4631 part 2, services/dealAccess.ts). The investor read
+ * is the deal's `investor` audience narrowed to one firm: it ends with the
+ * investor licence or the invitation/commitment, and a grant for another firm
+ * is not this firm's. The founder's three routes are the `owner` relationship
+ * (or the admin), and the investors they may grant to are exactly that
+ * `investor` audience: an active account holding the investor licence now.
+ *
  * WHAT LEAVES. The granted version only, through the share link's rules:
  * `publicDeckOf` (no audience, round, author, hash or speaker notes) and
  * `shareSlides` with what the founder ticked (`include_json`, D902), which
@@ -37,7 +44,9 @@
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { canAccessFounderResource, requireAuth, selectJwt } from '../auth';
+import { requireAuth, selectJwt } from '../auth';
+import { isDealOwner } from '../services/dealAccess';
+import { heldLicences } from '../services/accountLicences';
 import { refuse } from '../util/refusal';
 import { context as investorDealContext } from './deal_context';
 import { publicDeckOf } from './decks';
@@ -116,20 +125,35 @@ async function founderDeal(c: any): Promise<{ user: User; deal: { id: number; pr
     `SELECT d.id, d.project_id, p.founder_id FROM deals d JOIN projects p ON p.id = d.project_id
       WHERE d.id = ? AND p.deleted_at IS NULL`,
   ).bind(Number(raw)).first<{ id: number; project_id: number; founder_id: number | null }>();
-  if (!deal || !canAccessFounderResource(user, deal.founder_id)) return refuse(c, 404, { code: 'deal_not_found', message: 'Deal not found.' });
+  // D4631 part 2: the deal audience policy's `owner` (services/dealAccess.ts), or the admin.
+  if (!deal || !(user.role === 'admin' || isDealOwner(user, deal.founder_id))) return refuse(c, 404, { code: 'deal_not_found', message: 'Deal not found.' });
   return { user, deal };
 }
 
-/** The investors on the deal who may receive a grant: an invitation or a commitment, with the firm it names. */
+/**
+ * The investors on the deal who may receive a grant: the deal's `investor` audience (D4631 part 2), so exactly the
+ * people the investor read would let in. An invitation or a commitment, with the firm it names, held by an active
+ * account that holds the investor licence now; a deactivated account or a revoked licence drops out of the picker
+ * and is refused a grant.
+ */
 async function eligible(env: Env, dealId: number) {
   const rows = await env.DB.prepare(
-    `SELECT x.investor_user_id AS user_id, x.company_id, u.name AS name, cp.company_name AS company_name FROM (
+    `SELECT x.investor_user_id AS user_id, x.company_id, u.name AS name, u.role AS role, cp.company_name AS company_name FROM (
         SELECT investor_user_id, company_id FROM deal_invitations WHERE deal_id = ?
         UNION SELECT investor_user_id, company_id FROM commitments WHERE deal_id = ?
-     ) x JOIN users u ON u.id = x.investor_user_id LEFT JOIN company_profiles cp ON cp.id = x.company_id
+     ) x JOIN users u ON u.id = x.investor_user_id AND COALESCE(u.is_active, 1) = 1
+     LEFT JOIN company_profiles cp ON cp.id = x.company_id
      ORDER BY u.name COLLATE NOCASE, x.investor_user_id`,
-  ).bind(dealId, dealId).all<{ user_id: number; company_id: number | null; name: string | null; company_name: string | null }>();
-  return (rows.results || []).map((r) => ({ user_id: Number(r.user_id), company_id: r.company_id == null ? null : Number(r.company_id), name: r.name ?? null, firm: r.company_name ?? null }));
+  ).bind(dealId, dealId).all<{ user_id: number; company_id: number | null; name: string | null; role: string; company_name: string | null }>();
+  const out: Array<{ user_id: number; company_id: number | null; name: string | null; firm: string | null }> = [];
+  const licensed = new Map<number, boolean>();
+  for (const r of rows.results || []) {
+    const id = Number(r.user_id);
+    if (!licensed.has(id)) licensed.set(id, (await heldLicences(env.DB, { id, role: r.role })).includes('investor'));
+    if (!licensed.get(id)) continue;
+    out.push({ user_id: id, company_id: r.company_id == null ? null : Number(r.company_id), name: r.name ?? null, firm: r.company_name ?? null });
+  }
+  return out;
 }
 
 r.get('/:id/deck-grants', async (c) => {

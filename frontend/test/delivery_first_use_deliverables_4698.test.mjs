@@ -17,8 +17,9 @@ test('a firm with engagements and an empty log can log its first deliverable fro
   const view = await mountZone(Zone, '/delivery/deliverables');
   try {
     await view.settle();
-    assert.match(view.text(), /Nothing logged yet/);
-    await view.press('Log a deliverable');
+    assert.match(view.text(), /No deliverables yet/); // D4822: canvas empty-state title
+    assert.doesNotMatch(view.text(), /Nothing logged yet/);
+    await view.press('Log first deliverable'); // D4822: the canvas's empty-state action
     await view.type('Engagement', '1');
     await view.type('Title', 'First deck');
     await view.press('Log it');
@@ -40,7 +41,7 @@ test('a refused create keeps what was typed, announces the refusal, and the retr
   const view = await mountZone(Zone, '/delivery/deliverables');
   try {
     await view.settle();
-    await view.press('Log a deliverable');
+    await view.press('Log first deliverable'); // D4822: the canvas's empty-state action
     await view.type('Engagement', '2');
     await view.type('Title', 'Keep me');
     await view.type('Version', 'v2');
@@ -68,7 +69,7 @@ test('repeated presses while a create is out send one request', async () => {
   const view = await mountZone(Zone, '/delivery/deliverables');
   try {
     await view.settle();
-    await view.press('Log a deliverable');
+    await view.press('Log first deliverable'); // D4822: the canvas's empty-state action
     await view.type('Engagement', '1');
     await view.type('Title', 'Once');
     // Two presses in the SAME tick, then a third after the render.
@@ -160,7 +161,7 @@ test('an unreadable store never offers the log form', async () => {
   try {
     await view.settle();
     assert.match(view.text(), /This did not load/);
-    assert.equal(view.buttons('Log a deliverable').length, 0);
+    assert.equal(view.buttons('Log first deliverable').length + view.buttons('Log deliverable').length, 0);
     assert.doesNotMatch(view.text(), /Nothing logged yet/);
   } finally { await view.unmount(); restoreApi(); }
 });

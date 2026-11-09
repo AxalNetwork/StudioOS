@@ -157,6 +157,46 @@ on #4566 or #4594:
    check `residual.sql` reads zero (bar ledger-kept people); purge the preview
    queues; set `AGENT_ENGINE="off"` in preview again.
 
+## Lifecycle and recovery harness (#4594, D4594)
+
+Mode (a) has a second fixture for #4594's Stage A and B:
+`cloudflare-worker/test/_agent_lifecycle_fixture.ts`, used by
+`agent_lifecycle_4594.test.ts`. It differs from the simulator above in one way.
+The run goes through the **real** `agentRun` and `aiRouter.run()`, so holds,
+settlement, usage rows and charges are the production code's. Only `env.AI` is
+stubbed (a deterministic answer, a timeout, a 429 or a throw).
+
+Every result it gives is labelled `LOCAL SIMULATION · … · STUBBED INFERENCE`. It
+is never a hosted result and says nothing about an upstream provider.
+
+| Stage | What it proves locally | Test |
+| --- | --- | --- |
+| A1 | An authorized start, then admission, queue dispatch, the loop, a proposal, a person's accept through the queue route, and a done task. Exactly one model call on the agent's model, one proposal tied to its usage row, and one hold named by the run and settled at what was charged. | `A1` |
+| A2 | The manual sponsor run route, separately: one proposal, one settled hold, and no engine run, Workflow or queue message. | `A2` |
+| A3 | Each of these refuses with nothing admitted, queued, held, charged or proposed: wrong tenant, missing permission, engine off, a stranger's manual run, a duplicate start, and a revoked sponsor (refused at the run step). | `A3` |
+| B1 | A duplicated message and a late redelivery start one Workflow and take one hold. | `B1` |
+| B2 | When the model times out or answers 429, its fallback included, the hold is refunded and nothing is proposed or charged. A fresh start then completes once. | `B2` |
+| B3 | An ambiguous commit (charged, proposal write failed): the retry runs nothing, charges nothing more, and ends `step_lost`. | `B3` |
+| B4 | An interrupted Workflow replays with one model call, one hold and one proposal. | `B4` |
+| B5 | When the decision wait runs out, a late decision still completes the task once, with no new charge. | `B5` |
+| B6 | A run cancelled while waiting stays cancelled when its proposal is decided later. | `B6` |
+| B7 | A scope move or the halt key after admission stops the run before the model. | `B7` |
+| B8 | A message that never starts goes to the DLQ, is repaired before it is acknowledged, and a replay starts nothing. | `B8` |
+
+After every case, `assertClean` checks the invariants:
+
+- no pending hold;
+- at most one proposal and one settled hold per run key;
+- what the holds settled equals what the usage rows charged;
+- no live slot for an ended run.
+
+These deduplicate **effects**; the tests deliver the same message more than once. B8
+records a finding: the DLQ repair leaves the run in the scope object's live view until a rebuild (D4594 §4).
+
+**Still not covered here:** the hosted Stage A, Stage B on hosted resources, and Stage C load. Each needs
+the owner's approval, resource and spend ceilings, and a passed preflight above;
+Stage C also waits on #4573 and #4567.
+
 ## Evidence
 
 - **Store aggregates only** in a PR's artifacts: counts, durations, statuses,

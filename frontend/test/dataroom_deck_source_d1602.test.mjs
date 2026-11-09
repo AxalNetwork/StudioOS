@@ -76,7 +76,7 @@ test('typed quote remains in the dialog, holds are shown before confirmation, an
 
 test('withdraw confirms first; failed save stays in the dialog and the deck seam uses the real client', async () => {
   const real = dataRoomApi.setDeckSource; const calls = [];
-  dataRoomApi.setDeckSource = async (...args) => { calls.push(args); throw new Error('Try this again.'); };
+  dataRoomApi.setDeckSource = async (...args) => { calls.push(args); throw Object.assign(new Error('Try this again.'), { status: 409, code: 'deck_source_busy' }); };
   const ui = await mount({ role: 'owner', capabilities: ROOM_CAPS.owner, deck_sources_available: true }, { deck_source: true, extraction: { state: 'done' } });
   try {
     await ui.do('dataroom-deck-source-toggle', 'onChange');

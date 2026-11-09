@@ -288,6 +288,9 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   'draft:expiry-consequences': 'CA4',
   // HQ
   'draft:publication-summary': 'AD1',
+  // D5084: Revenue's Ask chips put a question in the Ask composer, which Ask Eadwyn answers; the chip runs no model.
+  'summarise:period': 'ST1', 'explain:incomplete-sources': 'ST1', 'show:overdue-receivables': 'ST1',
+  'review:open-disputes': 'ST1', 'compare:subsidiary-reporting': 'ST1', 'explain:ai-margin': 'ST1',
 });
 
 /**

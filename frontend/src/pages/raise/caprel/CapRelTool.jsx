@@ -16,6 +16,7 @@ import { CapRelOverviewBlocks, MovedNotice } from './CapRelOverview';
 import CapRelSupport from './CapRelSupport';
 import SupportReadsCard from '../SupportReadsCard';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1188 (#2457) — the Capital relationships tool's tab bar and tab pages.
@@ -70,7 +71,7 @@ function useModule(projectId) {
     setRead({ status: 'loading', data: null });
     Promise.resolve().then(() => cyclesApi.module('raise', projectId, SLUG, query))
       .then((data) => { if (alive) setRead({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setRead({ status: 'unreadable', data: null, message: error?.message || '' }); });
+      .catch((error) => { if (alive) setRead({ status: 'unreadable', data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, query, reload]);
   return { ...read, query, setQuery, retry: () => setReload((n) => n + 1) };

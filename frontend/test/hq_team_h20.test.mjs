@@ -50,12 +50,14 @@ import HqTeamActions, { HQ_ONLY_ACTIONS, ADMIN_ACTIONS, SUPPORT_SESSION_CEILING_
 import { drawsAccountControls } from '../src/lib/accountControls.js';
 import { UserDetailModal } from '../src/pages/admin/consoles/UsersConsole.jsx';
 import { adminConsoleSource } from './_adminConsoles.mjs';
+import { teamRaw } from './_hqTeamSource.mjs';
 import { accountDialog } from '../src/pages/admin/accounts/accountDrawerModel.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
 const PAGE = codeOnly(raw('frontend/src/pages/hq/AccountsPage.jsx'));
-const TABLE_RAW = raw('frontend/src/pages/hq/HqTeamTable.jsx');
+// D5044 — HQ Team is the composer and its parts in `pages/hq/team/`, read together.
+const TABLE_RAW = teamRaw();
 const TABLE = codeOnly(TABLE_RAW);
 const ACTIONS = codeOnly(raw('frontend/src/pages/hq/HqTeamActions.jsx'));
 const CONTROLS = codeOnly(raw('frontend/src/lib/accountControls.js'));
@@ -554,11 +556,17 @@ test('the transfer offers only an active administrator, because the route refuse
   // picker must not draw one, and the card must not describe a gate the route
   // does not have. Both halves are read, because either alone can drift.
   assert.ok(WORKER_HOLDERS.includes("code: 'not_active'"), 'the route no longer refuses a deactivated successor');
-  assert.match(HOLDERS, /const candidates = admins\.filter\(\(a\) => !holderIds\.has\(a\.id\) && Number\(a\.is_active\) === 1\);/,
+  // D5044 — re-aimed, not loosened: the filter moved to the SERVER. The picker reads
+  // `GET /api/admin/super-admins/candidates`, whose query keeps only active administrators who
+  // do not hold the elevation, and the browser still drops a holder in case the two reads were
+  // taken either side of a change. (`hq_transfer_candidates_5044.test.ts` runs the query.)
+  const candidatesRoute = WORKER_HOLDERS.slice(WORKER_HOLDERS.indexOf("r.get('/candidates'"));
+  assert.ok(candidatesRoute.length > 0 && WORKER_HOLDERS.includes("r.get('/candidates'"), 'the candidate read is gone');
+  assert.match(candidatesRoute, /WHERE LOWER\(u\.role\) = 'admin' AND u\.is_active = 1 AND s\.user_id IS NULL/,
     'the picker offers a deactivated admin the route will refuse');
-  // The flag has to survive the normalisation, or the filter reads undefined
-  // and offers nobody at all — which fails closed, but says the wrong thing.
-  assert.ok(HOLDERS.includes('is_active: x.is_active'), 'the admin list drops the active flag before the picker reads it');
+  assert.match(HOLDERS, /superAdminCandidatesApi\.list\(\)/, 'the picker does not read the server-filtered candidates');
+  assert.match(HOLDERS, /const candidates = \(pickable \|\| \[\]\)\.filter\(\(a\) => !holderIds\.has\(a\.id\)\);/,
+    'the picker can offer an account that already holds the elevation');
   const row = HQ_ONLY_ACTIONS.find((a) => a.key === 'transfer');
   assert.ok(row.gate.includes('an administrator whose account is active'),
     'the card does not say the successor must be active');

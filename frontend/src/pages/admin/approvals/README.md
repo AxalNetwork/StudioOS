@@ -58,3 +58,15 @@ inbox filtered to the board's lane, joined on each item's numeric id), the
 four-cell summary and Co-marketing's lifecycle. `boardParts.jsx` draws it:
 `BoardStrip`, `OwnerBox`, `useBoardOwners`, and a `DecisionDialog` that states
 what changes, who is told and what is recorded before any field.
+
+D4814 part 5: a decision another admin got to first (`isChanged`) shows "This
+item changed while you were reviewing it… Nothing was recorded by you." and
+View latest; one recorded but not delivered (the Worker's `notified: false`,
+read by `afterDecision`) is an amber line with Check item; an ordinary one
+ends with View in Decided. Items waiting over 30 days are a Stale band, and
+every Approvals page uses the operations rail (collapsed until opened).
+
+D4814 part 6: Decided's Open ↗ opens a product tester or a co-marketing pitch
+(by the Worker's `item_uid`) on its board; the Assign dialog searches
+reviewers; each board drawer shows "2 of 6" with ‹ › in its tab's order
+(`boardStep`, `DrawerStep`).

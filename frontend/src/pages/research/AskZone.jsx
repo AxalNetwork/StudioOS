@@ -18,6 +18,8 @@ import {
   citationAvailability, indexStateOf, tokensRefusal,
 } from './researchStates.js';
 import { openAddTokens } from '../../lib/aiTokens.js';
+import Sheet from '../../ui/Sheet.jsx';
+import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 
 const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
 
@@ -152,6 +154,10 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const [pricing, setPricing] = useState(null);
   const [savingUid, setSavingUid] = useState('');
   const [copiedUid, setCopiedUid] = useState('');
+  // D3701 part 6 (RS-10B): on a phone a citation opens as a bottom sheet with
+  // its passage; wider screens list every passage inline.
+  const phone = usePhoneWidth();
+  const [openCite, setOpenCite] = useState(null);
   // D3701 RS-07: the answer and its numbered sources, as recorded. Nothing is
   // sent anywhere; a browser without clipboard access says so.
   const copyAnswer = async (t) => {
@@ -482,30 +488,42 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                   // whether its document is still in the library.
                   <div className="w-full" data-testid={`ask-sources-${t.uid}`}>
                     <Eyebrow className="!text-[9px]">Sources used · {(t.citations || []).length}</Eyebrow>
+                    {phone ? (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid={`ask-source-buttons-${t.uid}`}>
+                        {(t.citations || []).map((ct, i) => (
+                          <button key={`${ct.title}-${ct.chunk}-${i}`} type="button" data-testid={`ask-source-open-${t.uid}-${i}`}
+                            onClick={() => setOpenCite({ t, i })}
+                            className="min-h-[44px] max-w-full truncate rounded-[10px] border border-axal-hairline px-3 text-left text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">
+                            {`[${ct.n || i + 1}] `}{ct.title || 'Untitled document'}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
                     <ol className="mt-1.5 space-y-1.5">
-                      {(t.citations || []).map((ct, i) => {
-                        const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids)];
-                        return (
-                          <li key={`${ct.title}-${ct.chunk}-${i}`} className="rounded-[8px] border border-axal-hairline p-2 dark:border-gray-700">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Pill tone="cite" className="!text-[9.5px]">
-                                {ct.document_uid ? <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`}>{`[${ct.n || i + 1}] `}{ct.title}</Link> : <>{`[${ct.n || i + 1}] `}{ct.title}</>}
-                                {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
-                              </Pill>
-                              {ct.page != null ? <span className="text-[10px] text-gray-600 dark:text-gray-400">page {ct.page}</span> : null}
-                              {avail ? <Pill tone={avail.tone} className="!text-[9.5px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
-                            </div>
-                            {ct.passage ? (
-                              <blockquote className="mt-1.5 border-l-2 border-violet-500 pl-2 text-[11.5px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid={`ask-passage-${t.uid}-${i}`}>
-                                {ct.passage}{ct.passage_truncated ? '…' : ''}
-                              </blockquote>
-                            ) : (
-                              <p className="mt-1 text-[10.5px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ol>
+                        {(t.citations || []).map((ct, i) => {
+                          const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids)];
+                          return (
+                            <li key={`${ct.title}-${ct.chunk}-${i}`} className="rounded-[8px] border border-axal-hairline p-2 dark:border-gray-700">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Pill tone="cite" className="!text-[9.5px]">
+                                  {ct.document_uid ? <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`}>{`[${ct.n || i + 1}] `}{ct.title}</Link> : <>{`[${ct.n || i + 1}] `}{ct.title}</>}
+                                  {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
+                                </Pill>
+                                {ct.page != null ? <span className="text-[10px] text-gray-600 dark:text-gray-400">page {ct.page}</span> : null}
+                                {avail ? <Pill tone={avail.tone} className="!text-[9.5px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
+                              </div>
+                              {ct.passage ? (
+                                <blockquote className="mt-1.5 border-l-2 border-violet-500 pl-2 text-[11.5px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid={`ask-passage-${t.uid}-${i}`}>
+                                  {ct.passage}{ct.passage_truncated ? '…' : ''}
+                                </blockquote>
+                              ) : (
+                                <p className="mt-1 text-[10.5px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    )}
                   </div>
                 ) : null}
                 {t.reason === 'no_source' ? <Unrecorded>No retrievable source</Unrecorded> : null}
@@ -591,6 +609,31 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
           nothingToDraft="Ask a question first — there is nothing in this session to gather yet."
         />
       </ZoneBody>
+
+      {openCite ? (() => {
+        const ct = openCite.t.citations?.[openCite.i] || {};
+        const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids)];
+        return (
+          <Sheet label="Source" eyebrow={`Source ${ct.n || openCite.i + 1}`} title={ct.title || 'Untitled document'}
+            onClose={() => setOpenCite(null)} phone="sheet" width={480} testId="ask-source-sheet">
+            <p className="text-[12px] text-gray-600 dark:text-gray-400">
+              {[ct.page != null ? `page ${ct.page}` : null, ct.chunk != null ? `passage ${ct.chunk + 1}` : null].filter(Boolean).join(' · ') || 'Page not recorded'}
+            </p>
+            {avail ? <Pill tone={avail.tone} className="mt-2 !text-[10px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
+            {ct.passage ? (
+              <blockquote className="mt-3 border-l-2 border-violet-500 pl-3 text-[13px] leading-relaxed text-gray-800 dark:text-gray-200" data-testid="ask-source-sheet-passage">
+                {ct.passage}{ct.passage_truncated ? '…' : ''}
+              </blockquote>
+            ) : <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>}
+            {ct.document_uid && citationAvailability(ct, libraryUids) !== 'gone' ? (
+              <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`} data-testid="ask-source-sheet-open"
+                className="mt-4 flex min-h-[44px] items-center justify-center rounded-[10px] border border-axal-hairline text-[13px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100">
+                Open in Library
+              </Link>
+            ) : null}
+          </Sheet>
+        );
+      })() : null}
 
       <StatedLimit title="What Ask will not do">
         <p>
