@@ -322,6 +322,25 @@ export async function pendingReviewToken(env: Env): Promise<string> {
   return sha256Hex(await pendingFingerprint(env));
 }
 
+/**
+ * D4803 (SE07) — the published revision: how many changes are on the public
+ * record (the change log is append-only, so the count is the revision
+ * number), and when the newest went out. `revision: 0` is a measured "never
+ * published". Who published is left out: the public change log does not name
+ * an operator, and the admin audit log is where that lives.
+ */
+export async function publishedRevision(env: Env): Promise<{ available: true; revision: number; published_at: string | null } | { available: false; reason: string }> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS n, (SELECT published_at FROM trust_content_changes ORDER BY published_at DESC, id DESC LIMIT 1) AS at
+         FROM trust_content_changes`,
+    ).first<{ n: number; at: string | null }>();
+    return { available: true, revision: Number(row?.n) || 0, published_at: row?.at ?? null };
+  } catch {
+    return { available: false, reason: 'The change log could not be read, so the published revision is unknown.' };
+  }
+}
+
 /** A Publish key: made once by the editor for one Publish, reused on its retries. */
 export const PUBLISH_KEY_RE = /^[A-Za-z0-9_-]{16,100}$/;
 
