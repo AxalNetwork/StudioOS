@@ -837,7 +837,7 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
     // deadlines — the page had nothing to say but "could not be read". Now
     // `sources` says which half answered and the page draws what it has.
     const labItems: CalendarItem[] = [];
-    let labDates: 'ok' | 'not_recorded' | 'error' = 'ok';
+    let labDates: 'ok' | 'not_recorded' | 'error';
     let weekRows: Array<{ week_number: number; unlock_at: string; deadline_at: string }> = [];
 
     // The Lab's half. A cycle predating migration 156 has no windows at all,
