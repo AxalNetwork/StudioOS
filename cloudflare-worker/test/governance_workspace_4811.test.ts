@@ -52,7 +52,7 @@ async function call(f: F, who: number, method: string, path: string, body?: unkn
   const type = res.headers.get('content-type') || '';
   return { status: res.status, body: type.includes('json') ? await res.json() as any : null };
 }
-const upload = (o: { signed?: boolean } = {}) => { const fd = new FormData(); fd.append('file', new File([PDF_BYTES], 'up.pdf')); if (o.signed) fd.append('signed', 'true'); return fd; };
+const upload = (o: { signed?: boolean } = {}) => { const fd = new FormData(); fd.append('file', new File([PDF_BYTES], 'up.pdf')); if (o.signed) { fd.append('signed', 'true'); fd.append('signed_on', '2026-11-01'); fd.append('signatory', 'S. Example, Manager'); fd.append('attest', 'true'); } return fd; };
 
 test('the words: each governance action as a sentence; anything else is not this record\'s', () => {
   const e = (action: string, details: unknown) => eventOf({ action, details: JSON.stringify(details), created_at: '2026-11-09 10:00:00', actor_name: 'Alex' });

@@ -81,7 +81,7 @@ async function call(f: F, who: number, method: string, path: string, body?: unkn
 const upload = (bytes: Uint8Array, o: { signed?: boolean; note?: string } = {}) => {
   const fd = new FormData();
   fd.append('file', new File([bytes], 'up.bin'));
-  if (o.signed) fd.append('signed', 'true');
+  if (o.signed) { fd.append('signed', 'true'); fd.append('signed_on', '2026-11-01'); fd.append('signatory', 'S. Example, Manager'); fd.append('attest', 'true'); }
   if (o.note) fd.append('note', o.note);
   return fd;
 };
