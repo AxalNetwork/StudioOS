@@ -43,7 +43,7 @@ import { railFor, refuseRun } from '../util/railContext';
 import {
   ASK_MAX_PLACES, ASK_MAX_TOKENS, ASK_SYSTEM, PUBLISH_ASK_OPTION, PUBLISH_ASK_PAGE, askLimit, askPrompt, screenPost, type AskPlace,
 } from '../services/publishAsk';
-import { isTeamViewer } from '../services/mercury/growFeeds';
+import { isTeamViewer } from '../services/mercury/teamViewer';
 import { decideRail, getRail } from '../services/railProposals';
 import {
   PublishRefusal, canPublish, checkSend, confirmSend, markNotSent, markRemoved, previewFor, refused, releaseStrandedSends,

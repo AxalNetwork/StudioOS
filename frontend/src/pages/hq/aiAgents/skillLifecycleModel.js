@@ -5,7 +5,7 @@
  * calls `adminHqSkillsApi`; nothing here reads or writes.
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
-import { REASON_MIN, REASON_MAX } from './refusals.js';
+import { REASON_MIN, REASON_MAX, SKILL_REFUSALS } from './refusals.js';
 
 export const CASES_MAX = 20;
 export const OUTPUT_KINDS = Object.freeze([
@@ -135,4 +135,33 @@ export const diffChoices = (versions = []) => [...versions.map((v) => `v${v.vers
 export function evalLine(evals) {
   if (!evals || !Number.isFinite(evals.total) || evals.total === 0) return NOT_RECORDED;
   return `${evals.pass} of ${evals.total} passed${evals.meets_bar ? ', at or above the bar' : ', below the bar'}`;
+}
+
+// ─── Publishing and release notes (D4533, B1) ───────────────────────────────
+
+/** The longest release note a version keeps (`RELEASE_NOTE_MAX` in the Worker's `skillPublish.ts`). */
+export const RELEASE_NOTE_MAX = 2000;
+
+/** The publish body's note: blank is no note (null), never an empty string; too long is told before sending. */
+export function releaseNotePayload(text) {
+  const note = String(text ?? '').replace(/\r\n?/g, '\n').trim();
+  if (note.length > RELEASE_NOTE_MAX) return { ok: false, problem: `Keep the release note to ${RELEASE_NOTE_MAX} characters.` };
+  return { ok: true, note: note || null };
+}
+
+/** A version's note as written, or "Not recorded" for one published without a note (every version before D4533 B1). */
+export const releaseNoteText = (version) => (typeof version?.release_note === 'string' && version.release_note.trim() ? version.release_note : NOT_RECORDED);
+
+/**
+ * What the server's release decision (`freshness`, D4533 §4) says about publishing now: ready, or
+ * the first blocking reason in the refusal's own sentence. No decision read is "unknown", never
+ * "ready": the button stays and the Worker decides.
+ */
+export function publishState(freshness) {
+  if (!freshness || typeof freshness.ready !== 'boolean') return { known: false, ready: false, why: null };
+  if (freshness.ready) return { known: true, ready: true, why: null };
+  const code = Array.isArray(freshness.blocking) ? freshness.blocking[0] : null;
+  const own = code ? SKILL_REFUSALS[code] : null;
+  const why = typeof own === 'function' ? own(freshness.evaluation) : own;
+  return { known: true, ready: false, why: why || 'The release decision does not allow publishing yet.' };
 }

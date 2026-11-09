@@ -12,6 +12,7 @@
 //   GET  /admin/ai-agents/skills/library            D4225: the source library files → { skills: [{ slug, name, area, level, cases,
 //                                                        check: { ok } | { ok: false, code, message }, in_store: status | null }] }
 //   GET  /admin/ai-agents/skills/:uid               → { skill, review: { open, approved, history }, cases, evals, versions, retired }
+//                                                    D4533 (B1): versions[].release_note, the publisher's note, null when none was written
 //   GET  /admin/ai-agents/skills/:uid/diff?from=vN&to=draft|vM → { from, to, frontmatter: [{ field, from, to }], steps: [{ op, text }] }
 //   POST /admin/ai-agents/skills/:uid/review         { reviewer_uid } → 201 { status: 'in_review', review };
 //                                                    422 reviewer_invalid | reviewer_is_author; 409 review_open | retired
