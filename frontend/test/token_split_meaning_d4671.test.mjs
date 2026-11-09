@@ -21,9 +21,10 @@ test('no label, in any surface that names the split, gives it to HQ', () => {
 });
 
 test('the console, history and branch page read their labels from the one module', () => {
-  const terms = read('src/pages/admin/licences/CommercialTerms.jsx');
+  // D4819: step 4's terms editor became the Terms section; its field labels live in the section's model.
+  const terms = read('src/pages/admin/licenceTermsAmendModel.js');
   const detail = read('src/pages/admin/licences/LicenceDetail.jsx');
-  assert.match(terms, /\{TOKEN_SPLIT_HQ_INPUT\}/);
+  assert.match(terms, /label: TOKEN_SPLIT_HQ_LABEL, input: TOKEN_SPLIT_HQ_INPUT/);
   assert.match(detail, /label=\{TOKEN_SPLIT_HQ_LABEL\}/);
   assert.doesNotMatch(terms + detail, /[Tt]oken split to HQ/);
   assert.match(read('src/pages/admin/licenceHistoryModel.js'), /token_split_bps: TOKEN_SPLIT_HISTORY_LABEL/);

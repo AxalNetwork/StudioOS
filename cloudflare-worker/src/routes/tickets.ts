@@ -31,6 +31,8 @@ import { bountySummaries } from '../services/bugBounties';
 import { parseTicketCategory } from '../services/ticketCategories';
 import { readSlaTiers } from '../services/supportSlaPolicy';
 import { reviewsForTickets, slaForTicket, threadEntry } from '../services/ticketScreens';
+import { filingSnapshot } from '../services/supportQueues';
+import { branchOf } from '../util/branch';
 
 const tickets = new Hono<{ Bindings: Env }>();
 
@@ -233,8 +235,26 @@ tickets.post('/', async (c) => {
   if (!category.ok) return c.json({ error: category.error }, 400);
   const sql = getSQL(c.env);
   await ensureTicketSyncSchema(c.env);
+  // D5030 (#5030) — the requester's standing AS FILED, read before the INSERT
+  // so a change to the account afterwards cannot reach it.
+  const filed = await filingSnapshot(c.env, Number(user.id), branchOf(c.env));
 
   const [ticket] = await sql`INSERT INTO tickets (title, description, priority, type, category, submitted_by, user_id, project_id, github_sync_status, github_sync_attempted_at) VALUES (${data.title}, ${data.description}, ${data.priority}, ${data.type}, ${category.value}, ${user.name || user.email}, ${user.id}, ${data.project_id}, 'syncing', datetime('now')) RETURNING *`;
+
+  // D5030 — written once, onto the row just inserted and only while it holds
+  // no filing record. Its own statement and best-effort: a database that has
+  // not applied the 202611082048 migration still files the ticket, which then
+  // reads as having no filing context — true — rather than failing to save.
+  if (filed.filed_persona) {
+    try {
+      await c.env.DB.prepare(
+        `UPDATE tickets SET filed_persona = ?, filed_role = ?, filed_licence_uid = ?, filed_branch_code = ?
+          WHERE id = ? AND filed_persona IS NULL`,
+      ).bind(filed.filed_persona, filed.filed_role, filed.filed_licence_uid, filed.filed_branch_code, ticket.id).run();
+    } catch (e) {
+      console.warn('[tickets] recording the filing context failed', (e as Error).message);
+    }
+  }
 
   let githubIssue: any = null;
   let githubSyncError: string | null = null;

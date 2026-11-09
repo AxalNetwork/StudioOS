@@ -23,6 +23,8 @@ and is not kept in sync.
 | `migrations/202611071547_advisor_engagement_events.sql` | D4695 (#4695): `advisor_engagement_events`, an engagement's append-only renewal history (`signed`, `renewed`, `ended`), with unique indexes that make a repeated decision on one term a no-op. New table, re-runnable. |
 | `migrations/202611072219_security_events_support_actor.sql` | D4691 (#4691): nullable `security_events.support_user_id`, the operator behind a gate refusal or step-up made inside a support session (0 for a branch session). Additive, nothing backfilled. |
 | `migrations/202611081919_skill_release_evidence.sql` | D4533 (#4533): the release evidence of Axal's skills: a draft's declared required models, the evidence hash a review and an eval result were given on, and an HQ version's manifest in its own row. Triggers keep versions, cases, results and decided reviews as written. Additive, nothing backfilled. |
+| `migrations/202611082048_ticket_filing_snapshot.sql` | D5030 (#5030): `tickets.filed_persona`, `filed_role`, `filed_licence_uid`, `filed_branch_code`, the support context a ticket was filed in, written once by the INSERT. Additive, nothing backfilled. |
+| `migrations/202611082049_support_sla_policy_version.sql` | D5032 (#5032): `support_sla_policy_state`, the version of the ticket SLA tiers on this database (HQ's own, or the copy a branch applied). New table, re-runnable, no seed. |
 
 ## Adding a change
 

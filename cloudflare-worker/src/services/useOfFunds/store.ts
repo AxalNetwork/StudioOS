@@ -7,6 +7,8 @@ export type Scope = { projectId: number; user: User; founderUserId: number; read
 export class PlanError extends Error {
   status:number; code:string; sentence:string;
   recovery?: {method:'PUT';route:string};
+  /** D5069: for `changed_since_open`, the revision the scenario is at now. */
+  currentRevision?: number;
   constructor(status: number, code: string, sentence: string) { super(sentence); this.status=status;this.code=code;this.sentence=sentence; }
 }
 export const obj = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -80,13 +82,48 @@ function legacyRepair(conflict=false) {
   error.recovery={method:'PUT',route:'/api/projects/:id'};
   return error;
 }
-async function planBatch(env:Env,statements:D1PreparedStatement[]) {
+/**
+ * D5069: a write says which revision of its scenario it was made from. The check
+ * runs twice. Before the batch, a plain read gives the readable refusal. Inside
+ * it, `claim` makes the same check as the batch's first statement: it aborts the
+ * whole batch (D1 runs a batch as one transaction) when the revision moved after
+ * that read, then takes the next revision. Nothing else in the batch is written.
+ */
+export const CHANGED_SINCE_OPEN='This scenario was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.';
+export function expectedRevision(b:Record<string,unknown>|undefined,required=true):number|null {
+  const v=b?.expected_revision;
+  if (v===undefined||v===null) {
+    if (required) throw new PlanError(400,'expected_revision_required','Say which revision you are editing (expected_revision), as read with the scenario. Nothing was saved.');
+    return null;
+  }
+  if (typeof v!=='number'||!Number.isSafeInteger(v)||v<0) throw new PlanError(400,'expected_revision_required','expected_revision is the whole-number revision the scenario was read at. Nothing was saved.');
+  return v;
+}
+const staleError=(current:number)=>{ const e=new PlanError(409,'changed_since_open',CHANGED_SINCE_OPEN); e.currentRevision=current; return e; };
+/** Refuse a stale write before the batch; `null` expected means the caller sent none. */
+function checkRevision(row:any,expected:number|null) {
+  if (expected!==null&&Number(row.revision??0)!==expected) throw staleError(Number(row.revision??0));
+}
+function claim(env:Env,s:Scope,scenarioId:number,expected:number|null):D1PreparedStatement[] {
+  if (expected===null) return [env.DB.prepare('UPDATE uof_scenarios SET revision=revision+1 WHERE id=? AND project_id=?').bind(scenarioId,s.projectId)];
+  return [
+    // abs() of the smallest integer is an integer overflow: an error, which rolls the batch back.
+    env.DB.prepare('SELECT abs(-9223372036854775807 - 1) WHERE NOT EXISTS (SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND revision=?)').bind(scenarioId,s.projectId,expected),
+    env.DB.prepare('UPDATE uof_scenarios SET revision=revision+1 WHERE id=? AND project_id=? AND revision=?').bind(scenarioId,s.projectId,expected),
+  ];
+}
+async function planBatch(env:Env,statements:D1PreparedStatement[],stale?:()=>Promise<number>) {
   try { return await env.DB.batch(statements); }
   catch(e) {
+    if(stale&&e instanceof Error&&/integer overflow/i.test(e.message)) throw staleError(await stale());
     // Only the fixed JSON assertion below parses JSON inside these batches.
     if(e instanceof Error && /malformed JSON/i.test(e.message)) throw legacyRepair(true);
     throw e;
   }
+}
+async function currentRevision(env: Env, s: Scope, id: number): Promise<number> {
+  const r = await env.DB.prepare('SELECT revision FROM uof_scenarios WHERE id=? AND project_id=?').bind(id, s.projectId).first<{ revision: number | null }>();
+  return Number(r?.revision ?? 0);
 }
 export async function scenario(env: Env, s: Scope, id: number) {
   const r = await env.DB.prepare('SELECT * FROM uof_scenarios WHERE project_id = ? AND id = ?').bind(s.projectId, id).first<any>();
@@ -227,13 +264,17 @@ export async function saveScenario(env: Env, s: Scope, id: number | null, b: Rec
   await base(env, s);
   const from = b.from_id == null ? null : await scenario(env, s, idOf(b.from_id));
   if (id !== null && has(b, 'from_id')) throw bad();
-  const input = { ...b }; delete input.from_id;
-  const old = id === null ? { name: '', currency: 'usd', amount_to_raise_cents: null, target_runway_months: null, start_month: null, raise_month: null, cash_cents: null, legacy_copied_at: null, ...from, id: undefined, uid: crypto.randomUUID(), is_base: 0 } : await scenario(env, s, id);
+  // D5069: an edit says which revision it read; a new scenario has none to name.
+  const expected = id === null ? null : expectedRevision(b);
+  const input = { ...b }; delete input.from_id; delete input.expected_revision;
+  const old = id === null ? { name: '', currency: 'usd', amount_to_raise_cents: null, target_runway_months: null, start_month: null, raise_month: null, cash_cents: null, legacy_copied_at: null, ...from, id: undefined, uid: crypto.randomUUID(), is_base: 0, revision: 0 } : await scenario(env, s, id);
+  if (id !== null) checkRevision(old, expected);
   const r = mergeScenario(old, input); if (!r.name) throw bad();
   const parts = id !== null || from ? await scenarioParts(env, id ?? from.id) : { lines: SECTION_KEYS.map(category_key => ({ category_key, share_pct: null, sublabel: null, source_label: null })), milestones: [] };
   const lines = has(input, 'lines') ? readLines(input.lines) : parts.lines;
   if(r.is_base&&has(input,'lines')&&!hasCompleteSplit(lines)) throw incompleteBase();
   const uid = r.uid;
+  const pre = id === null ? [] : claim(env, s, id, expected);
   const stmts = id === null
     ? [env.DB.prepare(`INSERT INTO uof_scenarios(uid,project_id,name,is_base,currency,amount_to_raise_cents,target_runway_months,start_month,raise_month,cash_cents,legacy_copied_at,created_by,updated_by)
         SELECT ?,?,?,0,?,?,?,?,?,?,?,?,? WHERE ? IS NULL OR EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=?)`).bind(uid, s.projectId, r.name, r.currency, r.amount_to_raise_cents, r.target_runway_months, r.start_month, r.raise_month, r.cash_cents, r.legacy_copied_at, s.user.id, s.user.id,from?.id??null,from?.id??null,s.projectId)]
@@ -250,8 +291,8 @@ export async function saveScenario(env: Env, s: Scope, id: number | null, b: Rec
     SELECT id,?,?,?,?,?,?,?,?,? FROM uof_scenarios WHERE uid=? AND project_id=?`).bind(m.category_key,m.label,m.due_on,m.cost_cents,m.okr_id,m.source_label,m.source_kind,m.source_ref,s.user.id,uid,s.projectId));
   if (r.is_base) stmts.push(...await legacyStatements(env, s, r, lines, parts.milestones));
   stmts.push(scenarioAudit(env, s, id === null ? 'uof_scenario_created' : 'uof_scenario_updated',uid,r.is_base));
-  const written=await planBatch(env,stmts);
-  if (!written[0].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
+  const written=await planBatch(env,[...pre,...stmts],id===null?undefined:()=>currentRevision(env,s,id));
+  if (!written[pre.length].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
   const saved = await env.DB.prepare('SELECT * FROM uof_scenarios WHERE uid=? AND project_id=?').bind(uid,s.projectId).first<any>();
   return view(env, s, saved);
 }
@@ -261,8 +302,8 @@ export async function makeBase(env: Env, s: Scope, id: number) {
   if (r.currency !== 'usd') throw new PlanError(409, 'base_currency', 'The Base uses USD because its legacy readers record dollars.');
   // Clearing and assigning the unique Base happen in the same transaction.
   const written=await planBatch(env,[
-    env.DB.prepare('UPDATE uof_scenarios SET is_base=0 WHERE project_id=? AND is_base=1 AND EXISTS(SELECT 1 FROM uof_scenarios target WHERE target.id=? AND target.project_id=?)').bind(s.projectId,id,s.projectId),
-    env.DB.prepare("UPDATE uof_scenarios SET is_base=1,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=?").bind(s.user.id,id,s.projectId),
+    env.DB.prepare('UPDATE uof_scenarios SET is_base=0,revision=revision+1 WHERE project_id=? AND is_base=1 AND EXISTS(SELECT 1 FROM uof_scenarios target WHERE target.id=? AND target.project_id=?)').bind(s.projectId,id,s.projectId),
+    env.DB.prepare("UPDATE uof_scenarios SET is_base=1,revision=revision+1,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=?").bind(s.user.id,id,s.projectId),
     ...await legacyStatements(env,s,r,parts.lines,parts.milestones), scenarioAudit(env,s,'uof_scenario_made_base',r.uid,1),
   ]);
   if (!written[1].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
@@ -288,10 +329,13 @@ export async function milestone(env: Env,s:Scope,id:number) {
   if (!r) throw new PlanError(404,'not_found','Milestone not found.'); return r;
 }
 export async function saveMilestone(env:Env,s:Scope,id:number|null,b:Record<string,unknown>,remove=false) {
-  fields(b,['scenario_id','category_key','label','due_on','cost_cents','okr_id']);
+  fields(b,['scenario_id','category_key','label','due_on','cost_cents','okr_id','expected_revision']);
   const old = id === null ? { uid:crypto.randomUUID(),scenario_id: idOf(b.scenario_id ?? await base(env,s)),category_key:null,label:'',due_on:null,cost_cents:null,okr_id:null } : await milestone(env,s,id);
   if (id !== null && has(b,'scenario_id') && b.scenario_id !== old.scenario_id) throw bad();
   const sc = await scenario(env,s,old.scenario_id); const r = {...old};
+  // D5069: a milestone is part of its scenario; the scenario's revision is the one read.
+  const expected = expectedRevision(b);
+  checkRevision(sc, expected);
   if (has(b,'category_key')) r.category_key=key(b.category_key);
   if (has(b,'label')) r.label=text(b.label);
   if (has(b,'due_on')) r.due_on=due(b.due_on);
@@ -309,11 +353,13 @@ export async function saveMilestone(env:Env,s:Scope,id:number|null,b:Record<stri
     stmts.push(...await legacyStatements(env,s,sc,parts.lines,ms));
   }
   stmts.push(scenarioAudit(env,s,remove?'uof_milestone_deleted':id===null?'uof_milestone_created':'uof_milestone_updated',sc.uid,sc.is_base,r.uid));
-  const written=await planBatch(env,stmts);
-  if (!written[0].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
-  if (remove) return {ok:true};
+  const pre=claim(env,s,sc.id,expected);
+  const written=await planBatch(env,[...pre,...stmts],()=>currentRevision(env,s,sc.id));
+  if (!written[pre.length].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
+  const revision=await currentRevision(env,s,sc.id);
+  if (remove) return {ok:true,scenario_revision:revision};
   const saved=await env.DB.prepare('SELECT * FROM uof_milestones WHERE uid=? AND scenario_id=?').bind(r.uid,sc.id).first<any>();
-  return {...saved,source:'Typed',cost_state:saved.cost_cents===null?'not_costed':'recorded'};
+  return {...saved,source:'Typed',cost_state:saved.cost_cents===null?'not_costed':'recorded',scenario_revision:revision};
 }
 export async function saveHire(env:Env,s:Scope,id:number,b:Record<string,unknown>,remove=false) {
   fields(b,['category_key','role','start_month','annual_cents','currency']);
@@ -336,8 +382,9 @@ export async function saveHire(env:Env,s:Scope,id:number,b:Record<string,unknown
 }
 
 /** Compatibility PUT: five shares, target and section milestones change together. */
-export async function saveSplit(env:Env,s:Scope,b:Record<string,unknown>) {
-  fields(b,['amount_to_raise_cents','runway_months','sections']);
+export async function saveSplit(env:Env,s:Scope,b:Record<string,unknown>,requireRevision=false) {
+  fields(b,['amount_to_raise_cents','runway_months','sections','expected_revision']);
+  const expected=expectedRevision(b,requireRevision);
   if (!Array.isArray(b.sections)||!b.sections.length) throw bad();
   const seen=new Set<string>();
   const sections:Record<string,any>[]=b.sections.map(x=>{
@@ -350,11 +397,13 @@ export async function saveSplit(env:Env,s:Scope,b:Record<string,unknown>) {
   });
   const lines=readLines(SECTION_KEYS.map(k=>({key:k,share_pct:sections.find(x=>x.key===k)?.pct??0})));
   const sc=await scenario(env,s,await base(env,s));
+  checkRevision(sc,expected);
   const input:Record<string,unknown>={};
   if (has(b,'amount_to_raise_cents')) input.amount_to_raise_cents=b.amount_to_raise_cents;
   if (has(b,'runway_months')) input.target_runway_months=b.runway_months;
   const r=mergeScenario(sc,input); const parts=await scenarioParts(env,sc.id);
   const ms=parts.milestones.slice();
+  const pre=claim(env,s,sc.id,expected);
   const stmts=[env.DB.prepare("UPDATE uof_scenarios SET amount_to_raise_cents=?,target_runway_months=?,legacy_copied_at=?,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=? AND is_base=1")
     .bind(r.amount_to_raise_cents,r.target_runway_months,r.legacy_copied_at,s.user.id,sc.id,s.projectId)];
   for (const l of lines) stmts.push(env.DB.prepare("UPDATE uof_scenario_lines SET share_pct=?,source_kind=NULL,source_ref=NULL,source_label='typed',prior_value=CAST(share_pct AS TEXT),updated_by=?,updated_at=datetime('now') WHERE scenario_id=? AND category_key=? AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=1)").bind(l.share_pct,s.user.id,sc.id,l.category_key,sc.id,s.projectId));
@@ -370,7 +419,7 @@ export async function saveSplit(env:Env,s:Scope,b:Record<string,unknown>) {
   }
   stmts.push(...await legacyStatements(env,s,r,lines,ms));
   for (const section of sections) stmts.push(scenarioAudit(env,s,'split_saved',sc.uid,1,section.key));
-  const written=await planBatch(env,stmts);
-  if (!written[0].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
-  return {ok:true,use_of_funds:SECTION_KEYS.map(k=>({label:SECTION_LABELS[k],pct:lines.find(l=>l.category_key===k)!.share_pct})),runway_months:r.target_runway_months};
+  const written=await planBatch(env,[...pre,...stmts],()=>currentRevision(env,s,sc.id));
+  if (!written[pre.length].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
+  return {ok:true,revision:await currentRevision(env,s,sc.id),use_of_funds:SECTION_KEYS.map(k=>({label:SECTION_LABELS[k],pct:lines.find(l=>l.category_key===k)!.share_pct})),runway_months:r.target_runway_months};
 }

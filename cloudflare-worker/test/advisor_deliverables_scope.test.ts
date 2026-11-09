@@ -202,7 +202,8 @@ test('the only writer of opened_at is the client\'s own route', () => {
   // file is split at that handler: everything before it is the advisor's side
   // and may not touch either stamp, and the one writer after it must be the
   // founder's route and must be guarded so a reload cannot move the stamp.
-  const src = readFileSync(resolve(HERE, '../src/routes/advisors.ts'), 'utf8');
+  // #4715: the advisor routes split into routes/advisors_*.ts; this code lives in advisors_deliverables.ts.
+  const src = readFileSync(resolve(HERE, '../src/routes/advisors_deliverables.ts'), 'utf8');
   const CLIENT_ROUTE = "advisors.post('/received/deliverables/:uid/open'";
   const at = src.indexOf(CLIENT_ROUTE);
   assert.ok(at > 0, 'the client\'s open route must exist, or this file has no writer at all');

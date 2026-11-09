@@ -247,29 +247,37 @@ export function AttentionCard({ needs, onRetry }) {
   );
 }
 
+/**
+ * The activity chart and its table, the current week hollow (CM1 row 3, CM7). D4820 part 2: the body of the
+ * Community activity card, and what the phone's View chart opens in place of the summary (CM09).
+ */
+export function ActivityChart({ activity, onOpen, testId = 'community-activity-toggle' }) {
+  const [table, setTable] = useState(false);
+  return (<>
+    <span className="flex justify-end"><TableToggle table={table} onToggle={() => setTable((x) => !x)} testId={testId} /></span>
+    {table ? (
+      <div data-testid="community-activity-table"><ChartTable chart={activity.chart} caption="Community activity by week" /></div>
+    ) : (<>
+      <div role="group" aria-label={`Community activity by week: ${activity.chart.series.map((x) => x.label).join(', ')}. ${activity.sentence || ''}`} data-testid="community-activity-chart">
+        <Chart chart={activity.chart} onSelect={(key) => { const s = activity.chart.series.find((x) => x.key === key); if (s?.opens) onOpen(s.opens); }} />
+      </div>
+      <Legend items={[...activity.chart.series.map((x) => ({ label: x.label, tone: x.tone, mark: x.dash ? 'dashed' : 'line' })), { label: 'This week, so far', tone: 'hollow' }]} />
+      <span className={SUB}>The current week is not finished, so its point is hollow and its row says so far. A week with no value breaks the line. A point on Event registrations opens the events.</span>
+    </>)}
+  </>);
+}
+
 /** CM1 row 3 and CM7: three series by week, the current week hollow, then the biggest change in one sentence. D4820: no chart when no week has activity. */
 export function ActivityCard({ activity, span = 7, onRetry, onOpen }) {
-  const [table, setTable] = useState(false);
   const empty = activityEmpty(activity);
   return (
     <Card id="activity" title="Community activity" span={span} state={activity.state} reason={activity.reason} onRetry={onRetry}>
       {() => (<>
-        <span className="flex items-baseline justify-between gap-2">
-          <span className={SUB} data-testid="community-activity-sentence">{activity.sentence}</span>
-          {empty ? null : <TableToggle table={table} onToggle={() => setTable((x) => !x)} testId="community-activity-toggle" />}
-        </span>
+        <span className={SUB} data-testid="community-activity-sentence">{activity.sentence}</span>
         {activity.missing ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400" data-testid="community-activity-missing">{activity.missing}</span> : null}
         {empty ? (
           <span className={SUB} data-testid="community-activity-empty">The weekly chart appears once a week has registrations, applications or bookings.</span>
-        ) : table ? (
-          <div data-testid="community-activity-table"><ChartTable chart={activity.chart} caption="Community activity by week" /></div>
-        ) : (<>
-          <div role="group" aria-label={`Community activity by week: ${activity.chart.series.map((x) => x.label).join(', ')}. ${activity.sentence || ''}`} data-testid="community-activity-chart">
-            <Chart chart={activity.chart} onSelect={(key) => { const s = activity.chart.series.find((x) => x.key === key); if (s?.opens) onOpen(s.opens); }} />
-          </div>
-          <Legend items={[...activity.chart.series.map((x) => ({ label: x.label, tone: x.tone, mark: x.dash ? 'dashed' : 'line' })), { label: 'This week, so far', tone: 'hollow' }]} />
-          <span className={SUB}>The current week is not finished, so its point is hollow and its row says so far. A week with no value breaks the line. A point on Event registrations opens the events.</span>
-        </>)}
+        ) : <ActivityChart activity={activity} onOpen={onOpen} />}
       </>)}
     </Card>
   );

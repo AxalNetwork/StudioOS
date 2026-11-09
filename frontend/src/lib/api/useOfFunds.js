@@ -1,4 +1,6 @@
 // D1176: Use of funds' mounted Worker routes. Project scope is explicit on every call.
+// D5069: every write to a scenario, its split or its milestones carries `expected_revision`, the
+// `revision` it was read at; a plan that moved since answers 409 `changed_since_open`.
 import { request } from '../api.js';
 const q = (project, values = {}) => new URLSearchParams({ ...values, project: String(project) }).toString();
 const seg = value => encodeURIComponent(String(value));
@@ -19,7 +21,8 @@ export const useOfFundsApi = {
   milestone: (project, id) => request(`/cycles/raise/use-of-funds/milestones/${seg(id)}?${q(project)}`),
   createMilestone: (project, body) => request(`/cycles/raise/use-of-funds/milestones?${q(project)}`, { method: 'POST', body: JSON.stringify(body) }),
   updateMilestone: (project, id, body) => request(`/cycles/raise/use-of-funds/milestones/${seg(id)}?${q(project)}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  deleteMilestone: (project, id) => request(`/cycles/raise/use-of-funds/milestones/${seg(id)}?${q(project)}`, { method: 'DELETE' }),
+  // D5069: a DELETE has no body, so the scenario revision it read travels in the query.
+  deleteMilestone: (project, id, revision) => request(`/cycles/raise/use-of-funds/milestones/${seg(id)}?${q(project, revision == null ? {} : { expected_revision: String(revision) })}`, { method: 'DELETE' }),
   hires: project => request(`/cycles/raise/use-of-funds/hires?${q(project)}`),
   updateHire: (project, id, body) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteHire: (project, id) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project)}`, { method: 'DELETE' }),

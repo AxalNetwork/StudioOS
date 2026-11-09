@@ -301,7 +301,33 @@ export function saveDialog(writes, version) {
 const listOf = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /** What a failed save says. The text stays in the editor (NAR17d). */
-export const SAVE_FAILED = 'Save failed. Your text is kept here; nothing after the failed section was saved.';
+export const SAVE_FAILED = 'Save failed. Your text is kept here; nothing of this save was written.';
+
+/** The version moved after it was opened (D5069): nothing was written, and the text stays. */
+export const SAVE_CHANGED = 'This version was changed somewhere else after you opened it. Nothing of yours was saved and your text is kept here. Reload to read the latest, then make your change again.';
+
+/**
+ * The one request a Save version makes (D5069): every changed section, and the
+ * answer for each accepted "Answer it" draft whose section is among them, with
+ * the revision the version was read at. Never one request per section.
+ */
+export function saveBody(writes, pending, read) {
+  const written = new Set(writes.map((w) => w.section));
+  const body = {
+    sections: writes.map((w) => ({ section: w.section, ...w.body })),
+    answers: Object.entries(pending || {})
+      .filter(([, p]) => written.has(p.section))
+      .map(([objection, p]) => ({ objection, section: p.section, how: 'eadwyn' })),
+  };
+  const rev = read?.meta?.revision;
+  if (Number.isSafeInteger(rev)) body.expected_revision = rev;
+  return body;
+}
+
+/** What a failed Save version says: the conflict's own sentence, or the refusal's. */
+export const saveFailure = (e) => (e?.status === 409 && e?.code === 'changed_since_open'
+  ? { conflict: true, text: SAVE_CHANGED }
+  : { conflict: false, text: `${SAVE_FAILED} ${e?.message || 'The save was refused.'}` });
 
 /* ------------------------------------------------------------------ *
  * Insert a figure (NAR3)
