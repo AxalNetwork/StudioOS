@@ -17,7 +17,9 @@
  *  - `callTool` refuses, before any request, a tool off `read_tools`, a tool
  *    the server does not list, a tool the server annotates as not read-only
  *    or destructive, a tool whose schema differs from its pin, and every
- *    write tool (they need #2400's ticket, which does not exist yet).
+ *    write tool without a live publish ticket (`mintMcpPublishTicket`,
+ *    D2407 part 3): one write tool, one call, minted only where the founder's
+ *    confirm already ran (`publishCore` → the provider's `publish`).
  *
  * TOOL DRIFT. Each session compares the server's `tools/list` against the
  * record. A listed tool off the record (`unknown`), a pinned tool whose
@@ -334,10 +336,19 @@ export interface McpSession {
   readonly drift: readonly McpToolDrift[];
   /** D856: the listed setup tools this server offers, after the record, the pins and the annotations. */
   readonly setup_offered: readonly string[];
+  /**
+   * D2407 part 3: the listed write tools this server offers, after the record
+   * (a `publish_issue` and `write_tools`), the pins and the annotations. Each
+   * still needs a live publish ticket to be called.
+   */
+  readonly write_offered: readonly string[];
   /** POSTs made so far, the probe and the handshake included. */
   readonly requests: number;
-  /** A setup tool needs its step's ticket (`mintMcpSetupTicket`), and spends that tool's use of it. */
-  callTool(name: string, args?: Record<string, unknown>, ticket?: McpSetupTicket): Promise<unknown>;
+  /**
+   * A setup tool needs its step's ticket (`mintMcpSetupTicket`), a write tool
+   * its publish ticket (`mintMcpPublishTicket`); each spends its one use.
+   */
+  callTool(name: string, args?: Record<string, unknown>, ticket?: McpSetupTicket | McpPublishTicket): Promise<unknown>;
 }
 
 /**
@@ -360,10 +371,39 @@ export function mintMcpSetupTicket(provider: McpProvider, tools: readonly string
 }
 
 /** Spend `name`'s use of `ticket` for `provider`; false when the ticket is not live for it. */
-function spendTicket(provider: McpProvider, name: string, ticket: McpSetupTicket | undefined): boolean {
-  const live = ticket ? LIVE_TICKETS.get(ticket) : undefined;
+function spendTicket(provider: McpProvider, name: string, ticket: McpSetupTicket | McpPublishTicket | undefined): boolean {
+  const live = ticket ? LIVE_TICKETS.get(ticket as McpSetupTicket) : undefined;
   if (!live || live.provider !== provider.key || !live.left.has(name)) return false;
   live.left.delete(name);
+  return true;
+}
+
+/**
+ * D2407 (#2407 part 3) — a one-time PUBLISH ticket: one provider, one write
+ * tool, one call. A write tool is callable only with one, so the record's
+ * `write_tools` stay unreachable to every read, sync, cron and Eadwyn path.
+ * Only this module knows which tickets are live, so a copied or hand-built
+ * object is not one. The minter is the provider's publish call, which
+ * `publishCore` reaches only inside the founder's confirm or retry
+ * (`beehiiv_publish_2407.test.ts` holds `services/beehiiv/drafts.ts` to being
+ * the only minter outside this file).
+ */
+export interface McpPublishTicket { readonly provider: string; readonly tool: string; readonly kind: 'publish' }
+const LIVE_PUBLISH_TICKETS = new WeakMap<McpPublishTicket, { provider: string; tool: string; spent: boolean }>();
+
+/** Mint a publish ticket for `tool`, a write tool on a record that names its publishing issue. */
+export function mintMcpPublishTicket(provider: McpProvider, tool: string): McpPublishTicket {
+  if (provider.publish_issue == null || !provider.write_tools.includes(tool)) throw new McpClientError('path_not_allowed');
+  const ticket: McpPublishTicket = Object.freeze({ provider: provider.key, tool, kind: 'publish' as const });
+  LIVE_PUBLISH_TICKETS.set(ticket, { provider: provider.key, tool, spent: false });
+  return ticket;
+}
+
+/** Spend `ticket` on `name` for `provider`; false when it is not live for them, or already spent. */
+function spendPublishTicket(provider: McpProvider, name: string, ticket: McpSetupTicket | McpPublishTicket | undefined): boolean {
+  const live = ticket ? LIVE_PUBLISH_TICKETS.get(ticket as McpPublishTicket) : undefined;
+  if (!live || live.spent || live.provider !== provider.key || live.tool !== name) return false;
+  live.spent = true;
   return true;
 }
 
@@ -574,27 +614,47 @@ export async function openMcpSession(provider: McpProvider, opts: McpSessionOpti
     params.set(name, mirrored);
     setupOffered.push(name);
   }
+  // D2407 part 3: a write tool is offered only on a record that names its
+  // publishing issue, only as listed, never one the server calls destructive,
+  // and only with its pinned schema. Offered is not callable: each call still
+  // needs a live publish ticket.
+  const writeOffered: string[] = [];
+  for (const name of provider.publish_issue == null ? [] : provider.write_tools) {
+    const tool = listed.get(name);
+    if (!tool || provider.read_tools.includes(name) || setupTools.includes(name)) continue;
+    if (obj(tool.annotations)?.destructiveHint === true) { drift.push({ tool: name, why: 'annotated' }); continue; }
+    const mirrored = headerParams(tool.inputSchema);
+    if (!mirrored) { drift.push({ tool: name, why: 'invalid' }); continue; }
+    if (provider.tool_pins && provider.tool_pins[name] !== await toolFingerprint(tool)) { drift.push({ tool: name, why: 'changed' }); continue; }
+    params.set(name, mirrored);
+    writeOffered.push(name);
+  }
   if (drift.length) {
     const line = JSON.stringify({ event: 'mcp_tool_drift', provider: provider.key, tools: drift.slice(0, 50) });
     (opts.log ?? ((l: string) => console.warn(l)))(line);
   }
   const frozenOffered = Object.freeze(offered);
   const frozenSetup = Object.freeze(setupOffered);
+  const frozenWrite = Object.freeze(writeOffered);
 
   return {
     get era() { return era; },
     offered: frozenOffered,
     setup_offered: frozenSetup,
+    write_offered: frozenWrite,
     drift: Object.freeze(drift),
     get requests() { return requests; },
-    async callTool(name: string, args: Record<string, unknown> = {}, ticket?: McpSetupTicket): Promise<unknown> {
-      // Refused before any request: a write tool (no ticket exists yet), a name
-      // off the record, or one this server does not offer as the record allows.
-      // D856: a setup tool also needs its step's live ticket, spent here.
-      const setup = setupTools.includes(name) && frozenSetup.includes(name);
-      if (provider.write_tools.includes(name) || (setup ? !spendTicket(provider, name, ticket) : !provider.read_tools.includes(name) || !frozenOffered.includes(name))) {
-        throw new McpClientError('path_not_allowed');
-      }
+    async callTool(name: string, args: Record<string, unknown> = {}, ticket?: McpSetupTicket | McpPublishTicket): Promise<unknown> {
+      // Refused before any request: a name off the record, or one this server
+      // does not offer as the record allows. D856: a setup tool also needs its
+      // step's live ticket; D2407 part 3: a write tool its live publish ticket.
+      // Either is spent here, before the request, so it buys one call.
+      const write = provider.write_tools.includes(name);
+      const setup = !write && setupTools.includes(name) && frozenSetup.includes(name);
+      const allowed = write ? frozenWrite.includes(name) && spendPublishTicket(provider, name, ticket)
+        : setup ? spendTicket(provider, name, ticket)
+          : provider.read_tools.includes(name) && frozenOffered.includes(name);
+      if (!allowed) throw new McpClientError('path_not_allowed');
       const extra = era === 'modern' ? { 'Mcp-Name': headerValue(name), ...paramHeaders(params.get(name) ?? [], args) } : {};
       return toolData(await request('tools/call', { name, arguments: args }, extra));
     },

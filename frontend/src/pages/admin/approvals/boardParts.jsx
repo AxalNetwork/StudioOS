@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Lightbox } from '../../../ui';
+import { Lightbox, Skeleton } from '../../../ui';
+import { useAuth } from '../../../hooks/useAuthSync';
 import { reportError } from '../../../lib/log';
+import { adminApprovalsApi } from '../../../lib/api/adminApprovals';
 import { refusalLine } from './approvalsModel';
+import { assignItems, refusalToast } from './inboxModel';
+import { BOARD_LANE, ownersOf, readLaneOwners, rowOwner } from './boardGrammar';
 
 /**
  * D1046 (#2894) — what the three lane boards share: the card and type styles,
@@ -96,7 +100,8 @@ export function useLoad(fn, key, { enabled = true, what = 'approvals:board' } = 
 
 /**
  * The one decision dialog. It says what changes (`copy.changes`), who is told
- * (`copy.told`) and what is recorded (`copy.recorded`); `blocked` is a refusal
+ * (`copy.told`) and what is recorded (`copy.recorded`) — D4814 (AP-09b): as
+ * three labelled lines, before any field; `blocked` is a refusal
  * known before sending (an unverified email, an expired licence), and a refusal
  * after sending is the Worker's own sentence. Nothing here uses alert or confirm.
  */
@@ -115,7 +120,7 @@ export function DecisionDialog({ copy, testId, onClose, onSend, ready = true, bl
     }
   };
   return (
-    <Lightbox label={copy.title} title={copy.title} sub={copy.changes} onClose={onClose} testId={testId} width={520}
+    <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId={testId} width={520}
       footer={(
         <div className={FOOT}>
           <button type="button" className={BTN} onClick={onClose} data-testid={`${testId}-cancel`}>Cancel</button>
@@ -125,10 +130,13 @@ export function DecisionDialog({ copy, testId, onClose, onSend, ready = true, bl
         </div>
       )}>
       <div className="flex flex-col gap-3 px-5 py-4" data-testid={`${testId}-fields`}>
+        <dl className="m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-[10px] border border-axal-hairline px-3.5 py-3 text-[13px] dark:border-gray-700" data-testid={`${testId}-explain`}>
+          <dt className={EYE}>What changes</dt><dd className="m-0 text-axal-ink dark:text-gray-100" data-testid={`${testId}-changes`}>{copy.changes}</dd>
+          <dt className={EYE}>Who is told</dt><dd className="m-0 text-axal-ink dark:text-gray-100" data-testid={`${testId}-told`}>{copy.told}</dd>
+          <dt className={EYE}>What is recorded</dt><dd className="m-0 text-axal-ink dark:text-gray-100" data-testid={`${testId}-recorded`}>{copy.recorded}</dd>
+        </dl>
         {children}
         {blocked ? <p role="alert" className="m-0 text-[13px] font-semibold text-axal-destructive dark:text-red-300" data-testid={`${testId}-blocked`}>{blocked}</p> : null}
-        <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid={`${testId}-told`}>{`◉ ${copy.told}`}</p>
-        <p className={`m-0 ${SUB}`} data-testid={`${testId}-recorded`}>{copy.recorded}</p>
         {error ? <p role="alert" className="m-0 text-[13px] font-semibold text-axal-destructive dark:text-red-300" data-testid={`${testId}-refused`}>{error}</p> : null}
       </div>
     </Lightbox>
@@ -179,5 +187,88 @@ export function Fact({ k, v, sub, testId }) {
       <dd className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{v == null || v === '' ? <span className={SUB}>Not recorded</span> : v}</dd>
       {sub ? <dd className={`m-0 ${SUB}`}>{sub}</dd> : null}
     </div>
+  );
+}
+
+/**
+ * D4814 (AP-08, AP-10, AP-12): the four-cell summary every board shares, from
+ * `boardStrip` — a figure, "Could not be read" with why, or a skeleton.
+ */
+export function BoardStrip({ cells, testId = 'board-strip' }) {
+  return (
+    <section aria-label="Summary" className={`${CARD} grid grid-cols-2 lg:grid-cols-4`} data-testid={testId}>
+      {cells.map((c) => {
+        const tone = c.tone === 'bad' ? 'text-axal-destructive dark:text-red-300' : c.tone === 'warn' ? 'text-axal-amber-deep dark:text-amber-200' : 'text-axal-ink dark:text-gray-100';
+        return (
+          <div key={c.key} className="flex min-w-0 flex-col gap-0.5 border-axal-hairline px-4 py-3 dark:border-gray-700 max-lg:[&:nth-child(-n+2)]:border-b max-lg:odd:border-r lg:[&:not(:last-child)]:border-r" data-testid={`${testId}-${c.key}`}>
+            <span className={EYE}>{c.label}</span>
+            {c.state === 'loading' ? <Skeleton h={22} w="40%" />
+              : c.state === 'unreadable' ? <span title={c.reason} className="cursor-help text-[13px] font-bold text-axal-destructive dark:text-red-300">Could not be read</span>
+                : <span className={`text-[22px] font-extrabold tracking-[-.02em] ${MONO} ${tone}`} data-testid={`${testId}-${c.key}-value`}>{c.value}</span>}
+            {c.state === 'unreadable' ? <span className={SUB}>{c.reason}</span> : c.sub ? <span className={SUB}>{c.sub}</span> : null}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/**
+ * D4814: who owns each item on a board — the inbox read filtered to the
+ * board's lane (`readLaneOwners`), the caller, whether they can take an item
+ * (only an admin the Worker lists as a reviewer can be assigned), and Assign.
+ * `onDone(text)` hears each outcome; the owners are read again after it.
+ */
+export function useBoardOwners(board, onDone) {
+  const lane = BOARD_LANE[board];
+  const read = useLoad(() => readLaneOwners((page) => adminApprovalsApi.inbox(page, { lane })), `owners-${lane}`, { what: `approvals:${board}:owners` });
+  const owners = ownersOf(read);
+  const auth = useAuth();
+  const callerId = auth?.user?.id ?? null;
+  const reviewers = owners.first && Array.isArray(owners.first.reviewers) ? owners.first.reviewers : [];
+  const canTake = callerId != null && reviewers.some((r) => Number(r.id) === Number(callerId)) ? callerId : null;
+  const [assignFor, setAssignFor] = useState(null);
+  const of = (id) => rowOwner(owners, id);
+  const asRow = (r) => ({ ...r, lane, assignee: of(r.id) });
+  const assign = (rows) => setAssignFor(rows.map((r) => ({ lane, id: r.id, who: r.who || r.name || r.title, laneLabel: r.laneLabel || '' })));
+  const take = async (row) => {
+    try {
+      await adminApprovalsApi.assign(canTake, assignItems([{ lane, id: row.id }]));
+      onDone(`${row.who || row.name || row.title} is now assigned to you.`);
+    } catch (e) {
+      onDone(refusalToast(e));
+    }
+    read.reload();
+  };
+  const finish = (text) => { setAssignFor(null); onDone(text); read.reload(); };
+  return { lane, owners, of, asRow, callerId, canTake, assign, take, assignFor, finish, close: () => setAssignFor(null), inbox: { reply: owners.first } };
+}
+
+/**
+ * D4814 (AP-09a, AP-11a, AP-13a): the drawer's owner, first — Unassigned in
+ * amber with "Nobody owns this item yet", or the owner's name; Assign to me
+ * (only when the caller can be assigned and does not own it) and Change….
+ * An owner that was not read says so and offers nothing.
+ */
+export function OwnerBox({ owner, callerId, canTake, onTake, onAssign, testId }) {
+  const mine = owner.kind === 'person' && callerId != null && Number(owner.id) === Number(callerId);
+  return (
+    <section className="flex flex-col gap-1.5" data-testid={testId}>
+      <h3 className={`m-0 ${EYE}`}>Owner</h3>
+      <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-axal-hairline px-3 py-2.5 dark:border-gray-700">
+        <div className="min-w-0 flex-1">
+          {owner.kind === 'none' ? <><span className="text-[13px] font-bold text-axal-amber-deep dark:text-amber-200">Unassigned</span><span className={`block ${SUB}`}>Nobody owns this item yet</span></>
+            : owner.kind === 'person' ? <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{owner.text}{mine ? <span className={SUB}> · you</span> : null}</span>
+              : owner.kind === 'loading' ? <span className={SUB}>Reading the owner…</span>
+                : <><span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Not read</span><span className={`block ${SUB}`}>The assignment record could not be read for this item.</span></>}
+        </div>
+        {owner.kind === 'none' || owner.kind === 'person' ? (
+          <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
+            {canTake && !mine ? <button type="button" className={BTN} onClick={onTake} data-testid={`${testId}-take`}>Assign to me</button> : null}
+            <button type="button" className={BTN} onClick={onAssign} data-testid={`${testId}-change`}>Change…</button>
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }

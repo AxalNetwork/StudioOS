@@ -40,6 +40,7 @@ and StudioHome at `/raise/pitch`).
 | `editor.a11y.spec.mjs` | Zero serious or critical axe violations in every state; the keyboard path and the dialog's focus |
 | `fonts/` | Inter, Roboto Mono and Space Grotesk (variable, latin; OFL, licences beside them) |
 | `__screenshots__/` | The baselines, committed. One PNG per screenshot name |
+| `pricing_journey_4651.spec.mjs` | #4651: a plan chosen on Pricing through Back, another plan, the email link and the Google return to its checkout sheet, at desktop and phone width; no screenshots |
 
 ### Run it
 

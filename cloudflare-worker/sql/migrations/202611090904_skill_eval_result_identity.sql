@@ -1,0 +1,14 @@
+-- 202611090904 — D4531 slice 3 (#4531): a draft evaluation result names the evaluator that judged it.
+-- Its published twin is 202611090905_skill_version_eval_identity.sql: one table each, so each applies where its table exists.
+-- Named by its UTC minute (D4106).
+--
+-- WHY. #4531 asks every result to record "draft hash or immutable version, case revision, model ID,
+-- evaluator version". A draft result already carries the evaluator only inside its evidence hash
+-- (D4533), which cannot be read back, and a published result carries neither: its `case_key` names
+-- the starter case, whose text ships with the code and can change between versions, or an HQ case
+-- uid. Without these, a candidate and its baseline cannot be told to be "the same case, judged the
+-- same way", so a regression report cannot tell a quality change from an evaluator or case change.
+--
+-- NULL IS "NOT RECORDED". Rows from before this migration keep NULL and are reported as such; they
+-- are never read as matching the current evaluator or case. No backfill: the value was never stored.
+ALTER TABLE agent_skill_eval_results ADD COLUMN evaluator_version INTEGER CHECK (evaluator_version IS NULL OR evaluator_version >= 1);

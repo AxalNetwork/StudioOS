@@ -745,8 +745,19 @@ export function withinBudget(passages: EligiblePassage[], budget = ASK_CONTEXT_B
   return kept;
 }
 
+/**
+ * D3701 (Research v2, RS-07): how much of the cited passage a citation keeps,
+ * so the answer can show "its exact passage" without the page re-reading the
+ * index. The excerpt is the start of the text the model was given for that
+ * citation, never a summary of it, and `passage_truncated` says when it is
+ * cut. It is stored in the answer's citations JSON (migration 221), which is
+ * read only by the answer's owner, about the owner's own document.
+ */
+export const CITATION_PASSAGE_CHARS = 600;
+
 /** D4605: a citation names the document, the index run, the chunk and its page. */
-function citationOf(p: EligiblePassage, documentUid: string) {
+export function citationOf(p: EligiblePassage, documentUid: string) {
+  const text = String(p.text || '').trim();
   return {
     title: p.hit.title,
     document_uid: documentUid,
@@ -754,6 +765,9 @@ function citationOf(p: EligiblePassage, documentUid: string) {
     chunk: p.hit.chunk ?? null,
     page: p.hit.page ?? null,
     score: Number(p.hit.score.toFixed(3)),
+    // D3701: the passage itself. Null, not '', when the index gave no text.
+    passage: text ? text.slice(0, CITATION_PASSAGE_CHARS) : null,
+    passage_truncated: text.length > CITATION_PASSAGE_CHARS,
   };
 }
 
@@ -852,6 +866,13 @@ research.post('/ask', async (c) => {
   let answer: string | null = null;
   let usage: { model?: string; prompt_tokens?: number; completion_tokens?: number; cached?: boolean; est_cost_usd?: number } | null = null;
   let off = false;
+  // D3701 part 4 (RS-11): a run the router refused before it ran (out of AI
+  // tokens, a spend limit, a review hold, the guard). Answered in the shared
+  // refusal's words and status (D766, `refuseRun`), and NOT recorded as
+  // `model_unavailable`: that said "the model didn't respond" about a run
+  // that never started, and sent the reader to try again instead of to Add
+  // tokens. Nothing ran, so nothing is charged or stored.
+  let refused: { refusal?: string | null; error?: string } | null = null;
   try {
     const out = await runAI(c.env, {
       task: 'research_ask',
@@ -870,6 +891,7 @@ research.post('/ask', async (c) => {
     });
     answer = out.ok && out.output ? out.output.trim() : null;
     off = out.refusal === 'assist_off';
+    if (!out.ok && out.refusal && out.refusal !== 'assist_off') refused = { refusal: out.refusal, error: out.error };
     // The router's own receipt, already written to `ai_usage_logs`. Taken
     // whether or not the answer arrived — a model that ran and returned
     // nothing still cost what it cost, and hiding that would make the session
@@ -881,6 +903,12 @@ research.post('/ask', async (c) => {
 
   // D765: off on this page, nothing ran, so no answer is recorded either.
   if (off) return refuseAssistOff(c);
+  // D3701 part 4: refused before running. `refuseRun` is null for a model that
+  // could not be reached, which stays `model_unavailable` below.
+  if (refused) {
+    const r = refuseRun(c, refused);
+    if (r) return r;
+  }
 
   const receipt = {
     model: usage?.model ?? null,

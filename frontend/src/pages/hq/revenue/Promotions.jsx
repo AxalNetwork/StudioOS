@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Unreadable } from '../../../ui';
 import { currencyCode, parseMinor } from '../../../lib/money.js';
 import { StateMark, Section, When, Why, TABLE, TD, TH, NUM } from './RevenueStates.jsx';
@@ -18,7 +18,10 @@ import {
  * (D5028). "Enforced" is read from an accepted push; the branch reports no
  * enforcement back, which the coverage drawer says once.
  *
- * The ceiling editor (D228) is today's write, moved here unchanged.
+ * The ceiling editor (D228) is today's write. Since D5039 part 2 it picks its
+ * licence from the scoped picker (`GET /api/admin/licence-picker`: uid, name
+ * and territory, searched and paged), asked only once "Set a ceiling…" is
+ * opened, instead of reading the whole licence ledger with the page.
  */
 
 /**
@@ -53,25 +56,117 @@ export const CEILING_ENFORCEMENT = Object.freeze([
 ]);
 
 /**
- * D228 — the promo-ceiling editor. `licences` is null (loading), UNAVAILABLE
- * (the read failed) or the licence list; `onSave(licenceUid, body)` is the
- * worker call. The route's own gate and audit apply: super admin, and a
- * branch-action mirror row for the push.
+ * D5039 (#5039 part 2) — the scoped licence picker: a search box and a page of
+ * licences (name and territory), with Show more while the Worker has another
+ * page. `search({ q, cursor })` is `GET /api/admin/licence-picker`. It asks on
+ * mount, which is when "Set a ceiling…" is opened, and again 250ms after the
+ * search changes. Loading, unreadable (with Try again), no match and no
+ * licence at all are four different sentences.
  */
-export function CeilingEditor({ licences, currentPeriod, onSave }) {
+export function LicencePicker({ search, value, onChange }) {
+  const [q, setQ] = useState('');
+  const [read, setRead] = useState({ status: 'loading', items: [], next: null, more: false });
+  const seq = useRef(0);
+
+  const load = (query, cursor = null) => {
+    const n = (seq.current += 1);
+    setRead((r) => (cursor ? { ...r, more: true } : { status: 'loading', items: [], next: null, more: false }));
+    Promise.resolve(search({ q: query, cursor })).then((res) => {
+      if (n !== seq.current) return;
+      const items = Array.isArray(res?.items) ? res.items : null;
+      if (!items) { setRead({ status: 'unavailable', items: [], next: null, more: false }); return; }
+      setRead((r) => ({ status: 'ready', items: cursor ? [...r.items, ...items] : items, next: res.next_cursor || null, more: false }));
+    }, () => {
+      if (n !== seq.current) return;
+      setRead((r) => (cursor ? { ...r, more: false, moreFailed: true } : { status: 'unavailable', items: [], next: null, more: false }));
+    });
+  };
+
+  useEffect(() => {
+    const t = setTimeout(() => load(q.trim()), q ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <LicencePickerView
+      q={q}
+      onQ={setQ}
+      read={read}
+      value={value}
+      onChange={onChange}
+      onMore={() => load(q.trim(), read.next)}
+      onRetry={() => load(q.trim())}
+    />
+  );
+}
+
+/** The picker drawn from its read; pure, so each state can be rendered in a test. */
+export function LicencePickerView({ q, onQ, read, value, onChange, onMore, onRetry }) {
+  return (
+    <fieldset className="min-w-0 sm:col-span-4" data-testid="hq-revenue-licence-picker">
+      <legend className="mb-1 text-[13px] font-semibold text-axal-ink dark:text-gray-100">Licence</legend>
+      <input
+        type="search"
+        className="w-full rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[13px] dark:border-gray-700 dark:bg-gray-950"
+        placeholder="Search by name, reference or country code"
+        value={q}
+        onChange={(e) => onQ(e.target.value)}
+        aria-label="Search licences"
+      />
+      <div aria-live="polite" className="mt-1.5">
+        {read.status === 'loading' && <p className="text-[13px] text-axal-muted dark:text-gray-400">Loading the licences…</p>}
+        {read.status === 'unavailable' && (
+          <Unreadable what="The licence list" claim="No ceiling can be set until it is read; this is not a claim that there are no licences." onRetry={onRetry} />
+        )}
+        {read.status === 'ready' && read.items.length === 0 && (
+          <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="hq-revenue-ceiling-no-licences">
+            {q.trim() ? `No licence matches “${q.trim()}”.` : 'No territory licence exists yet, so there is nothing to set a ceiling for.'}
+          </p>
+        )}
+      </div>
+      {read.status === 'ready' && read.items.length > 0 && (
+        <ul className="mt-1 max-h-56 overflow-y-auto rounded-lg border border-axal-hairline dark:border-gray-700">
+          {read.items.map((l) => (
+            <li key={l.uid} className="border-b border-axal-hairline last:border-0 dark:border-gray-800">
+              <label className="flex min-h-[40px] cursor-pointer items-center gap-2 px-2.5 py-1.5 text-[13.5px]">
+                <input type="radio" name="hq-ceiling-licence" value={l.uid} checked={value === l.uid} onChange={() => onChange(l.uid)} />
+                <span className="min-w-0 flex-1 truncate font-semibold">{l.name || l.uid}</span>
+                <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">
+                  {Array.isArray(l.territory) && l.territory.length ? l.territory.join(' · ') : 'No territory recorded'}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      {read.status === 'ready' && read.next && (
+        <button type="button" disabled={read.more} onClick={onMore} className="mt-1.5 min-h-[36px] rounded-lg border border-axal-hairline px-3 text-[13px] font-semibold disabled:opacity-50 dark:border-gray-700">
+          {read.more ? 'Loading…' : 'Show more'}
+        </button>
+      )}
+      {read.moreFailed && <p role="alert" className="mt-1 text-[13px] text-red-700 dark:text-red-300">The next page could not be read. Show more to try again.</p>}
+    </fieldset>
+  );
+}
+
+/**
+ * D228 — the promo-ceiling editor. `searchLicences` is the scoped picker's
+ * read (D5039); `onSave(licenceUid, body)` is the worker call. The route's own
+ * gate and audit apply: super admin, and a branch-action mirror row for the
+ * push. The picker carries no currency, so the currency is typed: the Worker
+ * refuses one that is not a listed ISO 4217 code.
+ */
+export function CeilingEditor({ searchLicences, currentPeriod, onSave }) {
   const [f, setF] = useState({ licenceUid: '', period: currentPeriod || '', amount: '', currency: '' });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
-  const list = licences && licences !== UNAVAILABLE ? licences : null;
   const period = f.period || currentPeriod || '';
-  const picked = list ? list.find((l) => l.uid === f.licenceUid) : null;
-  const currency = f.currency || picked?.currency || '';
 
   const submit = async (e) => {
     e.preventDefault();
     if (busy) return;
-    const p = ceilingPayload({ licenceUid: f.licenceUid, period, amount: f.amount, currency });
+    const p = ceilingPayload({ licenceUid: f.licenceUid, period, amount: f.amount, currency: f.currency });
     if (p.error) { setMsg({ err: true, text: p.error }); return; }
     setBusy(true); setMsg(null);
     try {
@@ -95,40 +190,24 @@ export function CeilingEditor({ licences, currentPeriod, onSave }) {
       <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-revenue-ceiling-enforcement">
         {CEILING_ENFORCEMENT.map((line) => <li key={line}>{line}</li>)}
       </ul>
-      {licences === UNAVAILABLE && (
-        <div className="mt-2">
-          <Unreadable what="The licence list" claim="No ceiling can be set until it is read; this is not a claim that there are no licences." />
+      <form onSubmit={submit} className="mt-2 grid gap-2 sm:grid-cols-4">
+        {searchLicences
+          ? <LicencePicker search={searchLicences} value={f.licenceUid} onChange={(uid) => set('licenceUid', uid)} />
+          : null}
+        <input className={input} value={period} onChange={(e) => set('period', e.target.value)} placeholder="YYYY-Qn" aria-label="Period" />
+        <input className={input} value={f.currency} onChange={(e) => set('currency', e.target.value)} placeholder="EUR" maxLength={3} aria-label="Currency" />
+        <input className={`${input} sm:col-span-2`} type="text" inputMode="decimal" autoComplete="off" value={f.amount} onChange={(e) => set('amount', e.target.value)} placeholder="Ceiling for the period" aria-label="Ceiling" />
+        <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+          <button type="submit" disabled={busy || !f.licenceUid} className="rounded-lg bg-axal-violet px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50">
+            {busy ? 'Saving…' : 'Save ceiling'}
+          </button>
         </div>
-      )}
-      {licences === null && <p className="mt-2 text-[12px] text-axal-faint">Loading the licences…</p>}
-      {list && list.length === 0 && (
-        <p className="mt-2 text-[12px] text-axal-muted" data-testid="hq-revenue-ceiling-no-licences">
-          No territory licence exists yet, so there is nothing to set a ceiling for.
-        </p>
-      )}
-      {list && list.length > 0 && (
-        <form onSubmit={submit} className="mt-2 grid gap-2 sm:grid-cols-4">
-          <select className={`${input} sm:col-span-2`} value={f.licenceUid} onChange={(e) => set('licenceUid', e.target.value)} aria-label="Licence">
-            <option value="">Licence…</option>
-            {list.map((l) => (
-              <option key={l.uid} value={l.uid}>{l.brand_name || l.licence_ref || l.uid}{l.status && l.status !== 'active' ? ` · ${l.status}` : ''}</option>
-            ))}
-          </select>
-          <input className={input} value={period} onChange={(e) => set('period', e.target.value)} placeholder="YYYY-Qn" aria-label="Period" />
-          <input className={input} value={currency} onChange={(e) => set('currency', e.target.value)} placeholder="EUR" maxLength={3} aria-label="Currency" />
-          <input className={`${input} sm:col-span-2`} type="text" inputMode="decimal" autoComplete="off" value={f.amount} onChange={(e) => set('amount', e.target.value)} placeholder="Ceiling for the period" aria-label="Ceiling" />
-          <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
-            <button type="submit" disabled={busy} className="rounded-lg bg-axal-violet px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50">
-              {busy ? 'Saving…' : 'Save ceiling'}
-            </button>
-          </div>
-          {msg && (
-            <p role="status" className={`sm:col-span-4 text-[12px] ${msg.err ? 'text-red-700 dark:text-red-300' : (msg.warn ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300')}`}>
-              {msg.text}
-            </p>
-          )}
-        </form>
-      )}
+        {msg && (
+          <p role="status" className={`sm:col-span-4 text-[12px] ${msg.err ? 'text-red-700 dark:text-red-300' : (msg.warn ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300')}`}>
+            {msg.text}
+          </p>
+        )}
+      </form>
     </div>
   );
 }
@@ -153,7 +232,9 @@ function enforcementBadge(facts) {
   return <span className={PLAIN} title={facts.enforced.label}><span aria-hidden="true">○</span> Not enforced</span>;
 }
 
-export function PromotionsSection({ summary, ceilings, coverage, period, licenceUid, licences, onSave, onRetry, onWhy }) {
+export function PromotionsSection({ summary, ceilings, coverage, period, licenceUid, searchLicences, onSave, onRetry, onWhy }) {
+  // D5039: the editor, and so the picker's read, mounts only once "Set a ceiling…" is opened.
+  const [editing, setEditing] = useState(false);
   const promos = isReady(summary) ? summary.promos : null;
   const ready = isReady(ceilings) && ceilings.available;
   const currentPeriod = ready ? ceilings.current_period : null;
@@ -244,9 +325,9 @@ export function PromotionsSection({ summary, ceilings, coverage, period, licence
       <p className="mt-2 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="hq-revenue-issued-note">
         Remaining is shown only beside a reported Issued figure: an absent figure is not the same as having issued nothing. <Why source="promotions" onOpen={onWhy} />
       </p>
-      <details className="mt-3 rounded-lg border border-axal-hairline px-3 py-2 dark:border-gray-700">
+      <details className="mt-3 rounded-lg border border-axal-hairline px-3 py-2 dark:border-gray-700" onToggle={(e) => setEditing(e.currentTarget.open)}>
         <summary className="cursor-pointer text-[13px] font-bold text-axal-ink dark:text-gray-100">Set a ceiling…</summary>
-        <CeilingEditor licences={licences} currentPeriod={currentPeriod || ''} onSave={onSave} />
+        {editing && <CeilingEditor searchLicences={searchLicences} currentPeriod={currentPeriod || ''} onSave={onSave} />}
       </details>
     </Section>
   );

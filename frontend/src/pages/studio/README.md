@@ -24,6 +24,8 @@ file map and the owner's answers are in
 | `StudioParts.jsx` | The fixed lock, Customise, the notices (SM8), SM12a, the locked sheet (SM12b), the edit bar and the reset confirm (SM5). |
 | `studioProposalsAdapter.js` | The seam for Eadwyn's layout proposals (SM9, SM10), unavailable until #3864. |
 | `studioModules.css` | The canvas's light and dark tokens and the grid. |
+| `MultiLicenceStudio.jsx` | D4474 (#4474, part 3 of #3704): `/studio` for a member who holds two or more licences. One block per held licence, in licence order, each the licence's own home from `../StudioHomesLazy.jsx` with `embedded`; one licence is `Dashboard`, as before. |
+| `LicenceBlocks.jsx` | D4474: one block per held licence, each with its title, its own error boundary (fixed words and Try again, never the error's message) and its own loading state. `MultiLicenceStudio` and `../spinout/MultiLicenceSpinoutLab.jsx` both draw with it. No block header switches licence. |
 | `tiles/` | One builder per profile: each module's body and state over the reads its home already makes. The advisor's specs are built in its home. |
 
 ## The rule for adding here

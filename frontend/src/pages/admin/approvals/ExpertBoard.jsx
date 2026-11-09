@@ -4,11 +4,12 @@ import { api } from '../../../lib/api';
 import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { safeExternalUrl } from '../../../lib/url';
 import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
-import { BandPill } from './AdminApprovals';
+import { AssignDialog, BandPill, OwnerCell, UrgencyPill } from './AdminApprovals';
+import { DECIDED_HERE, REGISTER_NOTE, boardCrumb, boardStrip, slaOfBand } from './boardGrammar';
 import { BOARDS, EXPERT_TABS, dayText, decisionCopy, doneLine, expertBoard, expertState, reasonReady, tabPath } from './approvalsModel';
 import {
-  BTN, BTN_PRIMARY, CARD, DecisionDialog, FOOT, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
-  TD, TH, Tile, WARN_PILL, nf, useLoad,
+  BTN, BTN_PRIMARY, BoardStrip, CARD, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
+  TD, TH, WARN_PILL, nf, useBoardOwners, useLoad,
 } from './boardParts';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -21,7 +22,7 @@ import Sheet from '../../../ui/Sheet.jsx';
  * toggles did is lost when /admin/wellbeing stops deciding.
  */
 
-const CRUMB = { to: '/admin/approvals', label: 'Approvals', current: 'Wellbeing experts' };
+const CRUMB = boardCrumb('Wellbeing experts');
 const NEW_PILL = { label: 'New lane', tone: 'held' };
 export const EXPERT_READ_PAGES = 5;
 
@@ -63,7 +64,7 @@ function ExpertDialog({ kind, expert, onClose, onDone }) {
       {kind === 'verify' ? (
         <label className="flex items-start gap-2 text-[13px] font-semibold text-axal-ink dark:text-gray-100">
           <input type="checkbox" checked={checked} onChange={(e) => setChecked(!!e.target.checked)} data-testid="expert-dialog-checked" />
-          <span>I checked their credentials. <span className={SUB}>Required</span></span>
+          <span><b>I have checked their licence</b> against the issuing register and the documents in this drawer. <span className={SUB}>Required to verify.</span></span>
         </label>
       ) : null}
       {kind === 'decline' ? <DialogField label="Reason · required · at least 10 characters · they see this" value={reason} onChange={setReason} testId="expert-dialog-reason" placeholder="Write a reason…" /> : null}
@@ -78,12 +79,12 @@ const ACTIONS = {
   declined: ['hide'],
   hidden: ['restore'],
 };
-const ACTION_LABEL = { hide: 'Hide from the directory…', decline: 'Decline…', verify: 'Verify…', unverify: 'Remove verification…', restore: 'Restore to the directory…' };
+const ACTION_LABEL = { hide: 'Hide from the directory…', decline: 'Decline…', verify: 'Verify expert…', unverify: 'Remove verification…', restore: 'Restore to the directory…' };
 const DECISION_WORD = { verified: 'Verified', unverified: 'Verification removed', declined: 'Declined', hidden: 'Hidden', restored: 'Restored' };
-const STATE_EYEBROW = { verify: 'To verify', incomplete: 'Profile incomplete', verified: 'Verified', declined: 'Declined', hidden: 'Hidden' };
+const STATE_EYEBROW = { verify: 'Needs verification', incomplete: 'Profile incomplete', verified: 'Verified', declined: 'Declined', hidden: 'Hidden' };
 
 /** One expert at their own address (APR8d), over the board. */
-function ExpertDrawer({ uid, onClose, onDecided }) {
+function ExpertDrawer({ uid, onClose, onDecided, own }) {
   const read = useLoad(() => approvalBoardsApi.expert(uid), `expert-${uid}`, { what: 'approvals:expert' });
   const profile = useLoad(() => api.wellbeingExpertGet(uid), `expert-profile-${uid}`, { what: 'approvals:expert:profile' });
   const [dialog, setDialog] = useState(null);
@@ -101,10 +102,13 @@ function ExpertDrawer({ uid, onClose, onDecided }) {
       <Sheet label={ready ? `${e.name}, wellbeing expert` : 'Wellbeing expert'} eyebrow={ready ? `Wellbeing expert · ${STATE_EYEBROW[state] || 'Expert'}` : 'Wellbeing expert'}
         title={ready ? (e.name || 'Name not recorded') : 'Wellbeing expert'} sub={ready ? (e.headline || 'Esc to close') : null} onClose={onClose} testId="expert-drawer" width={600}
         footer={ready && ACTIONS[state] ? (
-          <div className={`${FOOT} flex-wrap items-center`}>
-            {ACTIONS[state].map((a) => (
-              <button key={a} type="button" className={a === 'verify' || a === 'restore' ? BTN_PRIMARY : BTN} onClick={() => setDialog(a)} data-testid={`expert-action-${a}`}>{ACTION_LABEL[a]}</button>
-            ))}
+          <div className="flex flex-col gap-2">
+            <div className={`${FOOT} flex-wrap items-center`}>
+              {ACTIONS[state].map((a) => (
+                <button key={a} type="button" className={a === 'verify' || a === 'restore' ? BTN_PRIMARY : BTN} onClick={() => setDialog(a)} data-testid={`expert-action-${a}`}>{ACTION_LABEL[a]}</button>
+              ))}
+            </div>
+            <p className={`m-0 ${SUB}`} data-testid="expert-decided-here">{DECIDED_HERE}</p>
           </div>
         ) : null}>
         <div className="flex flex-col gap-4 px-5 py-4" data-testid="expert-drawer-content">
@@ -117,6 +121,21 @@ function ExpertDrawer({ uid, onClose, onDecided }) {
           ) : null}
           {ready ? (
             <>
+              {/* D4814 (AP-13a): credentials and evidence first, then the owner. */}
+              <section className="flex flex-col gap-1.5" data-testid="expert-credentials">
+                <h3 className={H2}>Credentials and evidence</h3>
+                {licence ? <p className={`m-0 text-[12.5px] text-axal-ink dark:text-gray-100 ${MONO}`}>{licence}</p> : <p className={`m-0 ${SUB}`}>No licence recorded.</p>}
+                {expiredOn(c) ? <p className="m-0 text-[12.5px] font-semibold text-axal-destructive dark:text-red-300" data-testid="expert-expired">{`This credential expired on ${dayText(c.expires_on)}.`}</p> : null}
+                {(c.files || []).length ? c.files.map((f) => (
+                  <p key={f.uid} className="m-0 flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100"><span aria-hidden="true">▤</span>{f.file_name || 'A file'}
+                    <a className={LINK} href={f.url} target="_blank" rel="noreferrer" data-testid={`expert-file-${f.uid}`}>Open</a></p>
+                )) : <p className={`m-0 ${SUB}`}>No credential file given.</p>}
+                <p className={`m-0 ${SUB}`} data-testid="expert-register-note">{REGISTER_NOTE}</p>
+              </section>
+              {state === 'verify' ? (
+                <OwnerBox owner={own.of(e.id)} callerId={own.callerId} canTake={own.canTake} testId="expert-owner"
+                  onTake={() => own.take({ id: e.id, name: e.name })} onAssign={() => own.assign([{ id: e.id, name: e.name }])} />
+              ) : null}
               <div className="flex flex-wrap items-center gap-1.5">
                 {e.profile_completion_pct != null ? <span className={PILL}>{`${Math.round(e.profile_completion_pct)}% complete`}</span> : null}
                 {(pro?.categories || []).map((cat) => <span key={cat} className={PILL}>{cat}</span>)}
@@ -133,15 +152,6 @@ function ExpertDrawer({ uid, onClose, onDecided }) {
                     <Fact k="Website" v={pro?.website_url ? <a className={LINK} href={safeExternalUrl(pro.website_url)} target="_blank" rel="noreferrer">{pro.website_url}</a> : null} />
                   </dl>
                 )}
-              <section className="flex flex-col gap-1.5" data-testid="expert-credentials">
-                <h3 className={H2}>Credentials</h3>
-                {licence ? <p className={`m-0 text-[12.5px] text-axal-ink dark:text-gray-100 ${MONO}`}>{licence}</p> : <p className={`m-0 ${SUB}`}>No licence recorded.</p>}
-                {expiredOn(c) ? <p className="m-0 text-[12.5px] font-semibold text-axal-destructive dark:text-red-300" data-testid="expert-expired">{`This credential expired on ${dayText(c.expires_on)}.`}</p> : null}
-                {(c.files || []).length ? c.files.map((f) => (
-                  <p key={f.uid} className="m-0 flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100"><span aria-hidden="true">▤</span>{f.file_name || 'A file'}
-                    <a className={LINK} href={f.url} target="_blank" rel="noreferrer" data-testid={`expert-file-${f.uid}`}>Open</a></p>
-                )) : <p className={`m-0 ${SUB}`}>No credential file given.</p>}
-              </section>
               {e.decline_reason ? <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="expert-decline-reason"><span className={EYE}>What they were told · </span>{e.decline_reason}</p> : null}
               <section className="flex flex-col gap-1.5" data-testid="expert-history">
                 <h3 className={H2}>History</h3>
@@ -179,26 +189,24 @@ export default function ExpertBoard({ at }) {
   // Literal paths, so the reachability walk finds every tab.
   const tabs = (
     <>
-      <HeaderTab to="/admin/approvals/wellbeing-experts" count={count('verify')} data-testid="experts-tab-verify">To verify</HeaderTab>
+      <HeaderTab to="/admin/approvals/wellbeing-experts" count={count('verify')} data-testid="experts-tab-verify">Needs verification</HeaderTab>
       <HeaderTab to="/admin/approvals/wellbeing-experts/incomplete" count={count('incomplete')} data-testid="experts-tab-incomplete">Profile incomplete</HeaderTab>
       <HeaderTab to="/admin/approvals/wellbeing-experts/verified" count={count('verified')} data-testid="experts-tab-verified">Verified</HeaderTab>
       <HeaderTab to="/admin/approvals/wellbeing-experts/declined" count={count('declined')} data-testid="experts-tab-declined">Declined</HeaderTab>
       <HeaderTab to="/admin/approvals/wellbeing-experts/hidden" count={count('hidden')} data-testid="experts-tab-hidden">Hidden</HeaderTab>
     </>
   );
-  const tileValue = (k) => (board && !board.partial ? board.counts[k] : null);
   const decided = (line) => { setDone(line); read.reload(); };
+  const own = useBoardOwners('wellbeing-experts', setDone);
+  const strip = boardStrip({ status: read.status, label: 'Needs verification', total: verifyBoard && !verifyBoard.partial ? verifyBoard.counts.verify : null,
+    rows: verifyBoard ? verifyBoard.rows : [], complete: !!verifyBoard && !verifyBoard.partial, owners: own.owners, noun: 'experts' });
   const rows = board ? board.rows.slice(page * PAGE, page * PAGE + PAGE) : [];
   const decidedTab = tab.key === 'verified' || tab.key === 'declined';
   return (
     <div className="flex flex-col gap-5" data-testid="approvals-board-wellbeing-experts">
       <AdminPageHeader crumb={CRUMB} title={b.title} pills={[NEW_PILL]} line={b.line} scope tabs={tabs} data-testid="approvals-board-header" />
       <DoneLine text={done} onDismiss={() => setDone(null)} />
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-        <Tile label="To verify" testId="experts-tile-verify" sub={verifyBoard?.oldest ? `oldest ${verifyBoard.oldest}` : null}><Figure status={read.status} value={tileValue('verify')} /></Tile>
-        <Tile label="Verified" testId="experts-tile-verified"><Figure status={read.status} value={tileValue('verified')} /></Tile>
-        <Tile label="Declined" testId="experts-tile-declined"><Figure status={read.status} value={tileValue('declined')} /></Tile>
-      </div>
+      <BoardStrip cells={strip} testId="experts-strip" />
       {read.status === 'error' ? <Failed what="The experts" onRetry={read.reload} testId="experts-failed" />
         : read.status === 'loading' ? <Skeleton.Text lines={4} />
           : (
@@ -207,6 +215,25 @@ export default function ExpertBoard({ at }) {
               {board.rows.length ? (
                 <section className={`${CARD} flex flex-col`} data-testid="experts-table">
                   <div className="overflow-x-auto">
+                    {tab.key === 'verify' ? (
+                      // D4814 (AP-12): Expert · Credentials · Waiting · Owner · Review, which reads Verify →.
+                      <table className="w-full min-w-[820px]">
+                        <thead><tr className="border-b border-axal-hairline dark:border-gray-700">
+                          <th className={TH}>Expert</th><th className={TH}>Credentials</th><th className={TH}>Waiting</th><th className={TH}>Owner</th><th className={TH}>Review</th>
+                        </tr></thead>
+                        <tbody>
+                          {rows.map((r) => (
+                            <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`expert-${r.key}`}>
+                              <td className={TD}><b>{r.name}</b>{r.headline ? <div className={SUB}>{r.headline}</div> : null}</td>
+                              <td className={TD}>{r.credentials ? <span className={MONO}>{r.credentials}</span> : <span className={WARN_PILL}>! None given</span>}</td>
+                              <td className={TD}><span className={MONO}>{r.age || 'Not recorded'}</span><UrgencyPill sla={slaOfBand(r.band)} /></td>
+                              <td className={TD}><OwnerCell row={own.asRow({ ...r, who: r.name })} callerId={own.callerId} onAssign={own.assign} prefix="expert" /></td>
+                              <td className={TD}><Link className={`${BTN} sm:min-h-[30px]`} to={`/admin/approvals/wellbeing-experts/${encodeURIComponent(r.key)}`} state={{ from }} data-testid={`expert-open-${r.key}`}>Verify →</Link></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
                     <table className="w-full min-w-[760px]">
                       <thead><tr className="border-b border-axal-hairline dark:border-gray-700">
                         <th className={TH}>Waiting</th><th className={TH}>Expert</th><th className={TH}>Profile complete</th><th className={TH}>Credentials</th>
@@ -225,13 +252,15 @@ export default function ExpertBoard({ at }) {
                         ))}
                       </tbody>
                     </table>
+                    )}
                   </div>
                   <Pager page={page} total={board.rows.length} onPage={setPage} testId="experts-pager" />
                 </section>
               ) : <p className={`m-0 ${SUB}`} data-testid="experts-empty">{`No expert is in ${tab.label}.`}</p>}
             </>
           )}
-      {at.item ? <ExpertDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} /> : null}
+      {at.item ? <ExpertDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} /> : null}
+      {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={own.finish} /> : null}
     </div>
   );
 }

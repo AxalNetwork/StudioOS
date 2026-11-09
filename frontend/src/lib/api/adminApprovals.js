@@ -8,7 +8,8 @@
 import { request } from '../api.js';
 
 const INBOX_KEYS = ['q', 'lane', 'group', 'age', 'assigned', 'sort'];
-const DECIDED_KEYS = ['lane', 'outcome', 'decided_by', 'from', 'to'];
+// D4814: `hq=0` leaves HQ's lanes out (a Super Admin's "Include HQ lanes" off).
+const DECIDED_KEYS = ['lane', 'outcome', 'decided_by', 'from', 'to', 'hq'];
 
 function queryOf(keys, filters) {
   const qs = new URLSearchParams();
