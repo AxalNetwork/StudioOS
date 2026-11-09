@@ -12,6 +12,8 @@ import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
 import { AgentRadar } from '../../team/SkillParts';
 import { radarVector } from '../../team/skillsModel';
+import { DefinitionEditor } from './DefinitionEditor.jsx';
+import { definitionEditable } from './definitionModel';
 import {
   COMPANY_COLUMNS, FROM_AXAL_VC, NOT_RECORDED, REASON_MIN,
   ROSTER_COLUMNS, SUBTITLE, areaTiles, skillRow, viewFor,
@@ -557,6 +559,7 @@ export function Editor({ view, viewerUid }) {
         <h3 className={H2}>Allowed tools</h3><p className={MUTED}>{data.skill.tools == null ? 'Not recorded' : data.skill.tools.join(' · ') || 'No tools'}</p>
         <h3 className={H2}>Output kind</h3><p className={MUTED}>{show(data.skill.output_kind)}</p>
       </Card>
+      {definitionEditable(data.skill.status) ? <DefinitionEditor skill={data.skill} onSaved={() => setAttempt(n => n + 1)} /> : null}
       {[['Golden cases', data.cases], ['Evaluation results', data.evals], ['Review', data.review], ['Published versions', data.versions], ...(data.retired ? [['Retirement', data.retired]] : [])].map(([title, value]) => <Card key={title} className="space-y-2 px-4 py-4">
         <h3 className={H2}>{title}</h3>
         <div className={MUTED}><SkillRecord value={value} /></div>
