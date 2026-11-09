@@ -13,10 +13,12 @@
 // `lib/money.js`): 1234 JPY is 1234, 1.005 KWD is 1005. A licence with no usable currency
 // shows its stored count of minor units and cannot have a money term edited, rather than being read as euros.
 // A cleared field saves `null`, which every reader shows as "Not recorded".
-import { LICENCE_TERM_FIELDS } from '../../../cloudflare-worker/src/services/licenceTerms.ts';
+import { DEFAULT_TERM_SECTIONS, LICENCE_TERM_FIELDS } from '../../../cloudflare-worker/src/services/licenceTerms.ts';
 import { currencyCode, exponentOf, parseMinor, toMajorString } from './money';
 
-export { LICENCE_TERM_FIELDS };
+// D4819: the canvas's default contract sections, which every stored schedule
+// reads under its own overrides; a licence with no schedule row reads them too.
+export { DEFAULT_TERM_SECTIONS, LICENCE_TERM_FIELDS };
 
 /**
  * The canvas's section titles (board L9), by D797 group. A group D797 adds later

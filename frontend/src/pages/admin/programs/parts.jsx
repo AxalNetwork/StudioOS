@@ -92,6 +92,53 @@ export function Tile({ t, onRetry }) {
   );
 }
 
+/**
+ * D4873 (#4873, part 2): one of the four headline cards (PG01, PG06), in its state, each announced by its
+ * word, not only its style: Loading, Incomplete (drawn dashed, with what it covers; never a plain number),
+ * Overdue, Could not be read (with Try again), or Not read here yet / Not recorded with its reason. `c` is
+ * `overviewModel.headlineCards`'.
+ */
+export function HeadlineCard({ c, onRetry }) {
+  const dashed = c.state === 'ready' && c.incomplete;
+  return (
+    <section aria-labelledby={`programs-tile-${c.key}-h`} aria-busy={c.state === 'loading' || undefined} data-testid={`programs-tile-${c.key}`}
+      className={`flex min-w-0 flex-col gap-1.5 rounded-[12px] border bg-white px-4 py-3.5 dark:bg-gray-900 ${dashed ? 'border-dashed border-amber-500 dark:border-amber-500' : 'border-axal-hairline dark:border-gray-700'}`}>
+      <span className="flex flex-wrap items-center gap-2">
+        <h3 id={`programs-tile-${c.key}-h`} className={`m-0 ${EYE}`}>{c.label}</h3>
+        {dashed ? <Pill tone="amber" testId={`programs-tile-${c.key}-partial`}><span aria-hidden="true">◐</span>Incomplete</Pill> : null}
+      </span>
+      {c.state === 'loading' ? (
+        <>
+          <span aria-hidden="true" className="block h-6 w-3/5 rounded-md bg-axal-hairline dark:bg-gray-800" />
+          <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400"><span aria-hidden="true">{READING}</span><span className="sr-only">{`Loading ${c.label}`}</span></span>
+        </>
+      ) : null}
+      {c.state === 'ready' ? (
+        <>
+          <span className="flex flex-wrap items-baseline gap-2">
+            <span className="font-mono text-[24px] font-medium tracking-[-.02em] text-axal-ink dark:text-gray-100" data-testid={`programs-tile-${c.key}-value`}>
+              {String(c.value).split(' ')[0]}
+              {String(c.value).includes(' ') ? <span className="text-[14px] font-semibold tracking-normal text-axal-muted dark:text-gray-400">{` ${String(c.value).split(' ').slice(1).join(' ')}`}</span> : null}
+            </span>
+            {c.delta ? <span className="font-mono text-[12px] font-semibold text-axal-muted dark:text-gray-400" data-testid={`programs-tile-${c.key}-delta`}>{c.delta}</span> : null}
+          </span>
+          {c.parts?.length ? <span className={SUB} data-testid={`programs-tile-${c.key}-parts`}>{c.parts.join(' · ')}</span> : null}
+          {c.note ? <span className={SUB} data-testid={`programs-tile-${c.key}-note`}>{c.note}</span> : null}
+          {c.overdue ? <span className="self-start"><Pill tone="amber" testId={`programs-tile-${c.key}-overdue`}><span aria-hidden="true">!</span>Overdue</Pill></span> : null}
+        </>
+      ) : null}
+      {c.state === 'unreadable' ? (
+        <>
+          <span role="alert" className="text-[15px] font-bold leading-snug text-red-700 dark:text-red-300">Could not be read</span>
+          <span className={SUB}>{c.reason || NONE_CLAIM}</span>
+          {onRetry ? <button type="button" onClick={onRetry} className="self-start text-[12px] font-semibold text-red-700 underline dark:text-red-300">Try again</button> : null}
+        </>
+      ) : null}
+      {c.state === 'placeholder' ? <Unread word={c.word} reason={c.reason} /> : null}
+    </section>
+  );
+}
+
 /** D4807: the last answer stays while the next one reads, and says so. */
 export function StaleNote({ stale }) {
   return stale ? <span role="status" className={SUB} data-testid="programs-catalogue-stale">Showing the last reading while the new one loads.</span> : null;
@@ -251,7 +298,7 @@ export function Field({ label, value, onChange, max, rows = 0, placeholder, sub,
   );
 }
 
-const SHOW_AS = [{ value: 'chart', label: 'Chart' }, { value: 'table', label: 'Table' }];
+export const SHOW_AS = [{ value: 'chart', label: 'Chart' }, { value: 'table', label: 'Table' }];
 
 /**
  * D4873 (#4873): a single choice among a few (the period, Chart or Table),
@@ -329,15 +376,19 @@ export function ChartCard({ title, b, onRetry, testId, children }) {
  * inside a `role="img"` wrapper that carries its sentence, with Chart and
  * Table, its legend, what is named under it and its foot.
  */
-export function ChartBlock({ b, shape = 'lines', onRetry, children, testId }) {
-  const [table, setTable] = useState(false);
+export function ChartBlock({ b, shape = 'lines', onRetry, children, testId, view = null }) {
+  const [own, setOwn] = useState(false);
+  // D4873: a section that holds several charts (Activity) passes one `view` for all of them, and draws the one
+  // Chart / Table control itself; a chart on its own keeps its own.
+  const table = view ? view === 'table' : own;
+  const setTable = setOwn;
   const id = testId || `programs-chart-${b.key}`;
   const ready = b.state === 'ready';
   return (
     <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} aria-labelledby={`${id}-h`} data-testid={id}>
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         <h2 id={`${id}-h`} className={H2}>{b.title}</h2>
-        {ready ? (
+        {ready && !view ? (
           <ChoiceGroup label={`${b.title}: show as`} value={table ? 'table' : 'chart'} onPick={(v) => setTable(v === 'table')}
             options={SHOW_AS} testId={(v) => `${id}-as-${v}`} />
         ) : null}

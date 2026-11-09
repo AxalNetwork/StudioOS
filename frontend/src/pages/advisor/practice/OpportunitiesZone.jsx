@@ -232,7 +232,7 @@ export default function OpportunitiesZone() {
                   </label>
                   <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">
                     The reason is stored on the request and shown in the log below. A decline with a
-                    reason keeps the relationship; the artboard&rsquo;s point is that saying nothing does not.
+                    reason keeps the relationship; saying nothing does not.
                   </p>
                   <button type="button" className={`${buttonClass} mt-2`} disabled={busy === r.raw.id}
                     onClick={() => decide(r, 'decline')}>Record the decline</button>
@@ -317,20 +317,18 @@ export default function OpportunitiesZone() {
 
       <StatedLimit title="What this log cannot say">
         <p>
-          <strong>Every requester is a founder.</strong> `advisor_bookings` records the counterparty as
-          `founder_user_id` and there is no investor path to a booking, so the artboard&rsquo;s
-          investor-side request — an expert call bought by a fund — has no row to be. The kind is shown
-          rather than hidden, because it is the only kind there is.
+          <strong>Every requester is a founder.</strong> Only founders can book you today; an investor
+          buying an expert call is not a booking Axal takes yet. The kind is shown rather than hidden,
+          because it is the only kind there is.
         </p>
         <p className="mt-2">
-          <strong>Nothing records where a request came from.</strong> No column carries a referral or a
-          cohort, so &ldquo;Referred by&rdquo; and &ldquo;From the Lab cohort&rdquo; are drawn on the artboard and cannot be
-          drawn here. Accepting also attaches no terms: <em>Accept</em> confirms the booking, and the
+          <strong>Nothing records where a request came from.</strong> A request does not carry a
+          referral or a cohort, so this log cannot say who sent it. Accepting also attaches no terms: <em>Accept</em> confirms the booking, and the
           template you would have sent stays a template.
         </p>
         <p className="mt-2">
-          <strong>A template carries no usage count.</strong> The artboard marks each one &ldquo;used 6&times;&rdquo;;
-          no booking references a service, so there is nothing to count. Times are the slot&rsquo;s, not the
+          <strong>A template carries no usage count.</strong> No booking records which service it was
+          answered with, so there is nothing to count. Times are the slot&rsquo;s, not the
           request&rsquo;s: a request has no deadline of its own, so it expires when its slot starts.
         </p>
       </StatedLimit>

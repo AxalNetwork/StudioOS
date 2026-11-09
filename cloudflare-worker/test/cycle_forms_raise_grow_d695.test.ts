@@ -285,13 +285,16 @@ test('11: Edit split opens with the stored split, sends a milestone per section 
   const db = await fixture();
   db.exec(`UPDATE projects SET funding_needed = 1200000, use_of_funds = '[{"label":"Product & engineering","pct":30},{"label":"GTM: sales and marketing","pct":50},{"label":"Hiring / runway reserve","pct":20}]',
            use_of_funds_meta = '{"runway_months":12,"milestones":{"product":{"label":"Launch v2","by":"2027-03"}},"keep":"me"}' WHERE id = ${P}`);
-  const { w } = writesAs(db);
+  const { w, calls } = writesAs(db);
   const form = formFor('raise', 'use-of-funds');
   const { values } = await opened(form, w);
   assert.deepEqual([values.amount_to_raise, values['pct.product'], values['pct.go-to-market'], values['pct.reserve'], values['milestone_label.product'], values.runway, values.runway_months],
     ['1,200,000', '30', '50', '20', 'Launch v2', 'custom', '12'], 'it opens with the stored split');
   assert.match(validate(form, { ...values, 'pct.reserve': '15' })['pct.product'], /^The split adds up to 95%\. It must add up to 100%\.$/);
   await form.submit(w, P, { ...values, amount_to_raise: '$1.5M', 'milestone_by.reserve': '2027-09', 'milestone_label.reserve': 'Nine months of buffer', runway: '24' });
+  // D5069: the form sends the Base revision it opened at, and a form opened before that save is refused.
+  assert.equal(calls.filter((c) => c.method === 'PUT' && c.path.includes('/use-of-funds'))[0].body.expected_revision, 0);
+  await assert.rejects(() => form.submit(w, P, { ...values, amount_to_raise: '$2M' }), /changed somewhere else/);
   const p = db.prepare('SELECT funding_needed, use_of_funds, use_of_funds_meta FROM projects WHERE id = ?').get(P) as any;
   assert.equal(p.funding_needed, 1500000);
   const meta = JSON.parse(p.use_of_funds_meta);

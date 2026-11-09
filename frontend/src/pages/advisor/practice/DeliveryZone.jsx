@@ -501,21 +501,16 @@ export default function DeliveryZone() {
         <Card padding="md" variant="sunken">
           <ZoneHeading
             title="Follow-ups from sessions"
-            blurb="The artboard drafts one per recorded session, consent-gated. Nothing here can, and the gate is not the reason."
+            blurb="Not available for advisory sessions yet."
           />
           <p className="text-[12px] leading-relaxed text-axal-muted">
             A summary of a session needs a transcript, a transcript needs a recording, and a recording
-            needs consent recorded before it is made. <strong>None of those three exists for an advisory
-            session.</strong> `advisor_bookings` carries thirteen columns and has been widened once, for
-            money. The two stores in this product with the full recording-to-transcript shape belong to
-            other people: one is investor deal-diligence and has answered 501 since it was written, the
-            other is a founder&rsquo;s own customer-discovery work and is walled off three separate ways.
+            needs consent agreed before it is made. <strong>Axal does not record advisory sessions, so
+            none of those three exists yet.</strong>
           </p>
           <p className="mt-2 text-[12px] leading-relaxed text-axal-muted">
-            Five pieces would have to be built first — the columns, a consent step taken before the
-            session, an audio upload path, transcription, and only then a summary. The artboard&rsquo;s
-            own note says the consent gate working <em>is</em> the feature; a batch button over no
-            recordings would be the gate switched off and dressed as on.
+            Follow-ups will appear here once a session can be recorded with both sides&rsquo; consent and
+            transcribed. Until then there is nothing to summarise, so no button offers to.
           </p>
         </Card>
       </div>
@@ -525,8 +520,8 @@ export default function DeliveryZone() {
         <p>
           <strong>A work product can only be sent to a client with an Axal account.</strong> An
           engagement may name a company that has not joined, and a version sent to one could never be
-          recorded as opened — so it would sit unopened for ever and drag the median with it. The
-          store refuses the send rather than keeping a figure that quietly means nothing.
+          recorded as opened — so it would sit unopened for ever and drag the median with it. Axal
+          refuses the send rather than keeping a figure that quietly means nothing.
         </p>
         <p className="mt-2">
           <strong>Nothing here marks a work product opened.</strong> That is the client&rsquo;s to say,
@@ -540,9 +535,8 @@ export default function DeliveryZone() {
         </p>
         <p className="mt-2">
           <strong>There is no consent-gated session summary,</strong> and the gap is five pieces deep
-          rather than one control short — see the card above. The artboard also shows a time spent
-          reading (&ldquo;9 min on retention&rdquo;); a first-open stamp is all a receipt can carry,
-          and page-level attention is not recorded anywhere.
+          rather than one control short — see the card above. Nor is reading time recorded: a receipt
+          says when a version was first opened, not how long it was read.
         </p>
       </StatedLimit>
     </ZoneBody>

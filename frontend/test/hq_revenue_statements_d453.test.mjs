@@ -23,9 +23,10 @@ import {
   statementDisputePayload,
   licencesDrawableForStatements,
 } from '../src/pages/hq/RevenuePage.jsx';
+import { revenuePageSource } from './_revenuePage.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = codeOnly(raw('frontend/src/pages/hq/RevenuePage.jsx'));
+const PAGE = codeOnly(revenuePageSource());
 const API = codeOnly(raw('frontend/src/lib/api.js'));
 const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
@@ -68,7 +69,8 @@ test('D514 — the draw editor is replaced by the hold sentence', () => {
   const h = renderToStaticMarkup(React.createElement(StatementDrawHeld));
   assert.ok(renderedText(h).includes(STATEMENT_DRAW_HELD), renderedText(h));
   assert.match(STATEMENT_DRAW_HELD, /held for the owner's decision/);
-  assert.match(STATEMENT_DRAW_HELD, /brief item 7/);
+  // D5039 (canvas RV05) words the hold as a policy state and names its decision, D514.
+  assert.match(STATEMENT_DRAW_HELD, /\(D514\)/);
   assert.doesNotMatch(h, /<form|<select|Draw draft/, 'the draw form is back');
 });
 

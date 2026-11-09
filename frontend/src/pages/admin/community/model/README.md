@@ -30,6 +30,9 @@ place.
 - `empty.js` — D4820: whether Community is genuinely empty
   (`isEmptyCommunity`; an unreadable source is never empty), and the one-line
   collapses of each card with nothing to draw.
+- `phone.js` — D4820 part 2: the phone dashboard's own hierarchy (CM09): the
+  queue at three rows, the activity summary's totals, and the one-line
+  summary of each More analytics row.
 
 ## The rules
 

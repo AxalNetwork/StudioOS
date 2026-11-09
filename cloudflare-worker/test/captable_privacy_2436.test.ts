@@ -93,7 +93,8 @@ test('a write that gates the same project twice reuses its membership answer and
  const f=fixture();try{
   let reads=0;const prepare=f.env.DB.prepare.bind(f.env.DB);
   f.env.DB.prepare=(sql:string)=>{if(sql.includes('SELECT role FROM project_members'))reads++;return prepare(sql);};
-  const r=await call(f,5,'/scenarios/main','PUT',{project_id:10,name:'Synthetic',inputs});
+  const rev=(f.db.prepare("SELECT updated_at FROM cap_table_scenarios WHERE uid='main'").get() as any).updated_at;
+  const r=await call(f,5,'/scenarios/main','PUT',{project_id:10,name:'Synthetic',inputs,expected_revision:rev});
   assert.equal(r.status,200);assert.equal(reads,3);
   assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='captable_member_write_authorized'").get() as any).n,1);
  }finally{f.db.close();}

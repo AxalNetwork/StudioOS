@@ -818,7 +818,8 @@ test('activity: Mentor reads D960\'s assign and end rows, naming the cohort and 
   ], 'Learning\'s row is Learning\'s');
   assert.ok(!JSON.stringify(r.body).includes('target_user_id'), 'the mentor is a person and is never named');
   // The action names are the ones the route writes.
-  const route = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors.ts'), 'utf8');
+  // #4715: the advisor routes split into routes/advisors_*.ts; this code lives in advisors_cohorts.ts.
+  const route = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors_cohorts.ts'), 'utf8');
   for (const a of MENTOR_ACCESS_ACTIONS) assert.ok(route.includes(`'${a}'`), a);
 });
 
