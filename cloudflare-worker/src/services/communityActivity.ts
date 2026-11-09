@@ -11,6 +11,10 @@
  * account id or an audit row id, and a registration is never one row per
  * person: it is one row per event per day.
  *
+ * D4820 part 5 (#4820, CM08): with no kind chosen, `by_kind` counts each
+ * kind (events with their registration rows, jobs, circles, wellbeing) under
+ * the same dates and search; a kind whose source failed is null.
+ *
  * EACH SOURCE ANSWERS ALONE. A source whose store failed is listed in
  * `unreadable` with its reason, its rows are absent and its count is not in
  * `total`. Nothing is invented to fill the gap.
@@ -393,7 +397,19 @@ export async function communityActivity(env: Env, q: ActivityQuery) {
   const merged = answers.flatMap((a) => (a.ok ? a.rows.map((r) => ({ ...r, src: a.src })) : []))
     .sort((x, y) => (y.row.at.localeCompare(x.row.at)) || (ACTIVITY_SOURCES.indexOf(x.src) - ACTIVITY_SOURCES.indexOf(y.src)) || (y.tie - x.tie));
   const ok = answers.filter((a) => a.ok);
+  // D4820 part 5 (#4820, CM08): each kind's count under the same dates and search, for the lightbox's kind
+  // chips. Only when no kind is chosen: then every source was read and its count is already here, so this adds no
+  // statement. A kind whose source failed is null, never 0. Admin actions cut across the kinds and are not counted.
+  const n = (src: ActivitySource) => {
+    const a = answers.find((x) => x.src === src);
+    return a && a.ok ? a.n : null;
+  };
+  const sum = (...xs: Array<number | null>) => (xs.some((x) => x === null) ? null : xs.reduce((t: number, x) => t + (x as number), 0));
+  const byKind = q.kind === null
+    ? { events: sum(n('events'), n('event_registrations')), jobs: n('jobs'), circles: n('circles'), wellbeing: n('wellbeing') }
+    : undefined;
   return {
+    ...(byKind ? { by_kind: byKind } : {}),
     rows: merged.slice(q.offset, q.offset + q.limit).map((m) => m.row),
     total: ok.reduce((t, a) => t + (a.ok ? a.n : 0), 0),
     limit: q.limit,

@@ -8,19 +8,9 @@
 import React from 'react';
 import { RotateCw } from 'lucide-react';
 import { Field } from './licenceShared';
+import { syncFailureSentence } from '../licenceOverviewModel';
 
-const SYNC_FAILURE_SENTENCES = {
-  not_bound: 'HQ has no connection to this branch yet.',
-  unreachable: 'The branch did not answer.',
-  refused: 'The branch refused the copy.',
-  partial: 'The branch holds the licence but not every section of it.',
-  stale_revision: 'The branch already holds a later revision.',
-  assemble_failed: 'HQ could not assemble the copy.',
-  licence_unreadable: 'HQ could not read the licence to send it.',
-  deployment_unreadable: 'HQ could not tell which branch to send it to.',
-  termination: 'The termination copy has not reached the branch yet.',
-};
-const syncFailureSentence = (code) => (code ? SYNC_FAILURE_SENTENCES[code] || 'It has not landed yet.' : null);
+// D4819 part 3: the failure sentences moved to `licenceOverviewModel.js`, which the Overview's Branch fact reads too.
 
 const TERMINATION_STEP_SENTENCE = {
   notices: 'compliance notices were not withdrawn',
@@ -30,12 +20,19 @@ const TERMINATION_STEP_SENTENCE = {
   unbind: 'the branch administrators were not unbound',
 };
 
-export function LicenceSyncStrip({ sync, busy, onResume }) {
+/**
+ * D4819 part 3: `part` draws one half where the detail puts it: 'strip' on
+ * Operations › Branch and domain, 'termination' above the sections (it carries
+ * an action that cannot wait for a tab). Without it, both, as before.
+ */
+export function LicenceSyncStrip({ sync, busy, onResume, part }) {
   if (!sync) return null;
   const t = sync.termination;
+  const strip = part !== 'termination';
+  const termination = part !== 'strip';
   return (
     <>
-      {sync.available !== false && (
+      {strip && sync.available !== false && (
         <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950" data-testid="licence-sync-strip">
           <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-500 dark:text-gray-400">Branch sync</div>
           <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -51,7 +48,7 @@ export function LicenceSyncStrip({ sync, busy, onResume }) {
           </div>
         </div>
       )}
-      {t && t.status !== 'complete' && (
+      {termination && t && t.status !== 'complete' && (
         <div
           className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
           data-testid="licence-termination-incomplete"
