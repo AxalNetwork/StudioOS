@@ -65,15 +65,18 @@ test('objects D1 or SQLite make on their own are never compared', () => {
 test('counting refuses a table name it would have to quote its way around', () => {
   const [q, ...more] = rowCountQueries(['users', 'projects', '_cf_KV', 'sqlite_sequence']);
   assert.equal(more.length, 0);
-  assert.match(q, /FROM "projects"/);
+  assert.match(q, /\(SELECT COUNT\(\*\) FROM "projects"\) AS "projects"/);
   assert.ok(!q.includes('_cf_KV') && !q.includes('sqlite_sequence'), 'engine-owned tables are never counted');
   assert.throws(() => rowCountQueries(['users"; DROP TABLE users; --']), /plain identifier/);
   assert.throws(() => rowCountQueries([]), /no tables/);
-  // Batched below SQLite's compound-SELECT limit, which one query over every table exceeds.
+  // One wide row per batch, never a compound SELECT (D1 refuses six UNION terms).
   const many = Array.from({ length: 450 }, (_, i) => `t${i}`);
   const qs = rowCountQueries(many);
-  assert.equal(qs.length, 5);
-  for (const x of qs) assert.ok(x.split(' UNION ALL ').length <= 100);
+  assert.equal(qs.length, 9, '450 tables in batches of 50');
+  for (const x of qs) {
+    assert.ok(x.split('(SELECT COUNT(*)').length - 1 <= 50, 'D1 refuses a row of 101 columns; batches stay at 50');
+    assert.ok(!/UNION/i.test(x), 'no compound SELECT: D1 caps it at a handful of terms');
+  }
 });
 
 /** A database built from the committed files in node:sqlite: the shape the hosted run compares. */

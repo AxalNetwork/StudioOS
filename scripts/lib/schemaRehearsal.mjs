@@ -79,23 +79,27 @@ export function schemaMap(rows) {
 }
 
 /**
- * Queries counting every table, a batch of tables per query. One UNION ALL over
- * every table runs past SQLite's limit on compound SELECT terms (500 by
- * default, and D1's engine is SQLite), which the schema's 400-odd tables reach.
+ * Queries counting every table: one WIDE row per batch, each column a scalar
+ * subquery (`SELECT (SELECT COUNT(*) FROM "a") AS "a", …`). Not UNION ALL: D1
+ * caps a compound SELECT at a handful of terms (six already fail with "too
+ * many terms in compound SELECT"; stock SQLite allows 500), so a union of
+ * table counts cannot run there at any useful batch size. A row may carry at
+ * most 100 columns on D1 (measured locally: 100 runs, 101 fails "too many
+ * columns in result set"), so a batch is 50: half the limit, never at it.
  */
-export function rowCountQueries(tables, perQuery = 100) {
+export function rowCountQueries(tables, perQuery = 50) {
   const names = [...tables].filter((t) => !ENGINE_OWNED.test(t)).sort();
   for (const t of names) if (!IDENT.test(t)) throw new Error(`not counting a table whose name is not a plain identifier: ${JSON.stringify(t)}`);
   if (!names.length) throw new Error('no tables to count');
   const out = [];
   for (let i = 0; i < names.length; i += perQuery) {
-    out.push(names.slice(i, i + perQuery).map((t) => `SELECT '${t}' AS t, COUNT(*) AS n FROM "${t}"`).join(' UNION ALL '));
+    out.push(`SELECT ${names.slice(i, i + perQuery).map((t) => `(SELECT COUNT(*) FROM "${t}") AS "${t}"`).join(', ')}`);
   }
   return out;
 }
 
-/** `{ t, n }` rows into a Map. */
-export const countMap = (rows) => new Map((rows || []).map((r) => [String(r.t), Number(r.n)]));
+/** The wide rows `rowCountQueries` returns, merged into one Map of table → count. */
+export const countMap = (rows) => new Map((rows || []).flatMap((r) => Object.entries(r).map(([t, n]) => [t, Number(n)])));
 
 /**
  * Restored against source: every object with the same SQL, every table with

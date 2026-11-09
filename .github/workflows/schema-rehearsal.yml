@@ -22,7 +22,9 @@ name: Schema rehearsal (hosted provisioning and restore)
 # drill's heartbeat, a branch or a Worker.
 #
 # DISPATCH ONLY. No schedule and no push trigger: each run creates two
-# databases, so each is a decision. Cost is a few hundred D1 row writes.
+# databases, so each is a decision. Cost is a few thousand D1 row writes.
+# Provisioning applies each post-cutoff migration as its own execute, as a
+# branch provision does: about 40 minutes locally, hence the long timeout.
 #
 # Its result is a HOSTED REHEARSAL over synthetic data. It is not a production
 # observation and not a Time Travel restore (documentation/operations/SCHEMA_DRIFT.md §5).
@@ -41,7 +43,7 @@ jobs:
   rehearse:
     name: provision, seed, export, restore, compare
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
