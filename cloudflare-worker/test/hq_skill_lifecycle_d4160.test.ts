@@ -49,6 +49,7 @@ function world() {
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: assign reads the moderation table
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql'));
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(sql('migrations/202611081919_skill_release_evidence.sql')); // D4533: release evidence
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
@@ -495,4 +496,45 @@ test('#4531 slice 2: the draft evaluation judges structure, evidence, refusal an
   const put = await call(w, SUPER, 'PUT', `${HQ}/${uid}/cases`, { reason: 'A case citing a made-up record.', cases: [bad] });
   assert.deepEqual([put.status, put.body.error], [400, 'case_invalid']);
   assert.match(put.text, /citation of stripe\.read\.burn_usd, which its records do not hold/);
+});
+
+test('#4531 slice 3: draft results name their evaluator, and the compare route reports a version against the draft per case and model', async () => {
+  const { EVALUATOR, caseSha, checkCase } = await import('../src/services/agents/skillLifecycle.ts');
+  const w = world();
+  stubRun();
+  const uid = await newSkill(w);
+  await setCases(w, uid, [...Array(10).fill('MRR 41,200')]);
+  await approve(w, uid);
+  assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] })).status, 200);
+  // Mutation checked: the draft INSERT without evaluator_version → null here and this fails.
+  const drafts = w.db.prepare('SELECT DISTINCT evaluator_version AS v FROM agent_skill_eval_results').all() as any[];
+  assert.deepEqual(drafts.map((r) => r.v), [EVALUATOR.version]);
+  assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).status, 200);
+
+  // The published history: one result per live case on v1, as the evaluation board would record it.
+  if (!(w.db.prepare("SELECT name FROM sqlite_master WHERE name = 'agent_skill_version_evals'").get())) {
+    w.db.exec(readFileSync(new URL('../sql/migrations/202611022313_agent_skill_runs.sql', import.meta.url), 'utf8'));
+    w.db.exec(readFileSync(new URL('../sql/migrations/202611090905_skill_version_eval_identity.sql', import.meta.url), 'utf8'));
+  }
+  const skillId = (w.db.prepare('SELECT id FROM agent_skills WHERE uid = ?').get(uid) as any).id;
+  const cases = w.db.prepare('SELECT uid, name, input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id').all(skillId) as any[];
+  const ins = w.db.prepare(`INSERT INTO agent_skill_version_evals (skill_id, version, case_key, case_name, model_id, result, run_by, evaluator_version, case_sha256)
+    VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const [i, k] of cases.entries()) {
+    const checked = checkCase({ name: k.name, input: JSON.parse(k.input_json), expect: JSON.parse(k.expect_json) });
+    assert.ok(checked.ok);
+    ins.run(skillId, k.uid, k.name, anyModel(w), i === 0 ? 'fail' : 'pass', SUPER, EVALUATOR.version, await caseSha(checked as any));
+  }
+
+  assert.equal((await call(w, ADMIN, 'GET', `${HQ}/${uid}/evals/compare?from=v1&to=draft`)).status, 403, 'Super Admin only');
+  const r = await call(w, SUPER, 'GET', `${HQ}/${uid}/evals/compare?from=v1&to=draft`);
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual([r.body.baseline.history, r.body.candidate.history], ['published', 'draft'], 'each side read from its own history');
+  assert.equal(r.body.pairs.length, 10, 'one report per case and model');
+  // The draft case and the published case are the same text, so they compare: one fail turned pass, nine still pass.
+  // Mutation checked: the draft side's case_sha256 taken from the raw input_json string → every pair `case_changed`.
+  assert.deepEqual([r.body.totals.improved, r.body.totals.still_pass, r.body.totals.case_changed], [1, 9, 0]);
+  assert.equal(r.body.attribution.quality_only, true);
+  assert.equal(r.body.current_evaluator_version, EVALUATOR.version);
+  assert.equal((await call(w, SUPER, 'GET', `${HQ}/${uid}/evals/compare?from=v9&to=draft`)).body.error, 'version_unknown');
 });
