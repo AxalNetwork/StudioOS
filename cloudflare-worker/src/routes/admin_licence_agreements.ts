@@ -100,8 +100,9 @@ r.get('/licences/:licenceUid', async (c) => {
     const now = today();
     return c.json({
       licence_uid: licence.uid,
-      // #5057 has not built the shared licence identity, so this is the territory licence's uid (D5048 §2).
-      licence_identity: 'territory_licence',
+      // D5057: the shared licence identity (`licences.uid`). A territory licence's shared uid is its own uid,
+      // so the value is unchanged; what it names is the shared registry row.
+      licence_identity: 'shared_licence',
       agreements: rows,
       slots: slotsOf(rows).map((s) => ({ ...s, executed: s.executed?.uid ?? null, in_flight: s.in_flight?.uid ?? null })),
       programs: (grants.results || []).map((g) => programLegalState(g, rows, { grantInForce: presentGrant(g, licence, now).in_force })),

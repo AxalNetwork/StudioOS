@@ -19,6 +19,7 @@ import ContractSearch from './ContractSearch';
 import TemplateWorkspace from './TemplateWorkspace';
 import { AgreementCategories, LIBRARY_ITEMS, LibraryMenu, isLibrary, primaryOf, tabClass } from './ContractsNav';
 import MetricStrip from './MetricStrip';
+import { contractRailSteps } from './contractRailSteps';
 import GovernanceTab from './GovernanceTab';
 
 const tabs = [['agreements', 'Agreements'], ['ndas', 'NDAs'], ['partner-deals', 'Partner deals'], ['templates', 'Templates'], ['forms', 'Forms'], ['document-types', 'Document types']];
@@ -63,7 +64,10 @@ export default function ContractsDesk({ section = null }) {
   };
   // D4811 part 3: the six-cell strip (board CT-01) opens the records behind each count.
   const drill = (target) => (target.kind === 'tab' ? navigate(target.tab) : navigate('agreements', target.filters));
-  const railProps = { stance: 'Agreements and templates', note: 'Recorded agreements and the templates behind them. Resending or voiding requires an explicit action.' };
+  // D4811 part 9 (CT-07 "Eadwyn"): the rail starts collapsed, shows what needs a person instead of models and prices,
+  // and leaves usage and top-up to Account › AI tokens.
+  const railProps = { stance: 'Agreements and templates', note: 'Recorded agreements and the templates behind them. Resending or voiding requires an explicit action.',
+    steps: contractRailSteps(stats), operations: true, usageAt: '/account/ai-tokens' };
   const rail = superAdmin ? <WorkerRail {...railProps} workspace="Contracts" role="super_admin" data-testid="hq-contracts-rail" /> : <WorkerRail {...railProps} workspace="Contracts" role="admin" data-testid="admin-contracts-rail" />;
   return <RailFrame rail={rail} data-testid="hq-contracts-page"><div className="space-y-5 text-axal-ink dark:text-gray-100">
     <header className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">{superAdmin ? 'HQ' : 'Admin'} · Contracts</p><h1 className="text-2xl font-extrabold tracking-tight">Contracts</h1><p className="mt-1 text-[12.5px] text-axal-muted">Every agreement the platform sends, signs or keeps, and the templates behind them.</p></div><div className="flex flex-wrap items-center gap-2">{!branchOfUser(user) && <FundStructureDoor />}{superAdmin && !branchOfUser(user) && <BankAccountsLink />}<button type="button" className={`${button} bg-violet-600 text-white`} onClick={() => { const next = new URLSearchParams(params); next.set('new', ''); setParams(next); }}>New envelope</button><HeaderAsk /></div></header>

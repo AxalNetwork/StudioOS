@@ -9,6 +9,8 @@
 //   6. Retire needs a replacement and a reason, and answers the pinned-agent count.
 //   7. A reason is required; every change is audited with it; no email anywhere.
 //   8. The diff, and bulk actions that are done or refused one by one.
+//   9. D4533 step 5: an approval releases one version; a restore is a new reviewed version that moves no
+//      version row, pointer or pin; the pins view; a draft save is audited.
 //
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/hq_skill_lifecycle_d4160.test.ts
@@ -379,8 +381,10 @@ test('D4160: a reason is required, every change is audited with it, and no email
   await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [anyModel(w)] });
   await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`);
   const actions = audits(w).map((a) => a.action);
-  assert.deepEqual(actions, ['agent_skill_models_set', 'agent_skill_cases_set', 'agent_skill_review_requested', 'agent_skill_review_approved', 'agent_skill_evals_run', 'agent_skill_published']);
-  const cases = audits(w)[1].details;
+  // D4533 (F1): creating the draft is audited too, with its definition hash.
+  assert.deepEqual(actions, ['agent_skill_draft_created', 'agent_skill_models_set', 'agent_skill_cases_set', 'agent_skill_review_requested', 'agent_skill_review_approved', 'agent_skill_evals_run', 'agent_skill_published']);
+  assert.match(audits(w)[0].details.after.definition_hash, /^[0-9a-f]{64}$/);
+  const cases = audits(w)[2].details;
   assert.equal(cases.reason, 'The golden cases for this skill.');
   assert.deepEqual([cases.before, cases.after], [{ cases: 0 }, { cases: 1 }]);
   const pub = audits(w).at(-1)!.details;
@@ -539,6 +543,187 @@ test('#4531 slice 3: draft results name their evaluator, and the compare route r
   assert.equal(r.body.attribution.quality_only, true);
   assert.equal(r.body.current_evaluator_version, EVALUATOR.version);
   assert.equal((await call(w, SUPER, 'GET', `${HQ}/${uid}/evals/compare?from=v9&to=draft`)).body.error, 'version_unknown');
+});
+
+// ── D4533 step 5 (#4533): recovery and rollback ─────────────────────────────
+
+/** A published HQ skill at v1, then v2 with another step; the CFO agent pinned to v1. */
+async function twoVersions(w: W) {
+  stubRun();
+  const uid = await newSkill(w);
+  await setCases(w, uid, ['MRR 41,200']);
+  await approve(w, uid);
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, {});
+  assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).status, 200);
+  assert.equal((await call(w, EDITOR, 'POST', `/api/teams/skills/${uid}/assign`, { agent_uids: [CFO] })).body.added, 1);
+  await call(w, SUPER, 'PATCH', `/api/teams/skills/${uid}`, { steps: ['Read the recorded metrics', 'Write the highlights', 'Guess next quarter'] });
+  await approve(w, uid);
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, {});
+  assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).status, 200);
+  return uid;
+}
+const versionRows = (w: W) => (w.db.prepare('SELECT * FROM agent_skill_versions ORDER BY skill_id, version').all() as any[]).map((r) => ({ ...r }));
+const links = (w: W) => (w.db.prepare('SELECT agent_id, skill_id, version FROM agent_skill_links ORDER BY id').all() as any[]).map((r) => ({ ...r }));
+const pointer = (w: W, uid: string) => ({ ...(w.db.prepare('SELECT status, current_version FROM agent_skills WHERE uid = ?').get(uid) as any) });
+const RESTORE = 'v2 guesses figures; go back to v1.';
+
+test('D4533 step 5: an approval releases one version; publishing the same draft again needs a new review', async () => {
+  const w = world();
+  stubRun();
+  const uid = await newSkill(w);
+  await setCases(w, uid, ['MRR 41,200']);
+  await approve(w, uid);
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, {});
+  assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).status, 200);
+  // Mutation checked: `approvalFor` without its NOT EXISTS → the same approval publishes v2 and this is 200.
+  const again = await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`);
+  assert.deepEqual([again.status, again.body.error], [409, 'needs_approval']);
+  assert.match(again.body.message, /already released v1/);
+  // Mutation checked: `released_version` always null → these two fail.
+  assert.equal(again.body.freshness.review.released_version, 1);
+  const f = (await call(w, SUPER, 'GET', `${HQ}/${uid}`)).body.freshness;
+  assert.deepEqual([f.ready, f.review.approved, f.review.released_version, f.evaluation.not_evaluated], [false, false, 1, 0]);
+  assert.deepEqual(f, again.body.freshness, 'the gate and GET /:uid answer one decision');
+  // A new review by a second Super Admin releases the next version.
+  await approve(w, uid);
+  assert.equal((await call(w, SUPER, 'GET', `${HQ}/${uid}`)).body.freshness.review.released_version, null);
+  const v2 = await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`);
+  assert.equal(v2.status, 200, v2.text);
+  assert.equal(pointer(w, uid).current_version, 2);
+});
+
+test('D4533 step 5: a bad release is recovered as a NEW reviewed version; history and pins never move', async () => {
+  const w = world();
+  const uid = await twoVersions(w);
+  const before = versionRows(w);
+  const pins = links(w);
+  assert.deepEqual(pins.map((l: any) => l.version), [1]);
+
+  // Refusals: the reason, an unknown version, and Super Admin only.
+  assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/restore`, { from_version: 1, reason: 'short' })).body.error, 'reason_required');
+  assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/restore`, { from_version: 9, reason: RESTORE })).body.error, 'version_unknown');
+  assert.equal((await call(w, ADMIN, 'POST', `${HQ}/${uid}/restore`, { from_version: 1, reason: RESTORE })).status, 403);
+
+  // Restore v1: the draft takes v1's definition; the pointer, the versions and the pins stay.
+  const r = await call(w, SUPER3, 'POST', `${HQ}/${uid}/restore`, { from_version: 'v1', reason: RESTORE });
+  assert.equal(r.status, 200, r.text);
+  const v1Manifest = JSON.parse((before as any[]).find((v) => v.version === 1).evidence_json);
+  assert.deepEqual([r.body.from_version, r.body.current_version, r.body.next_version, r.body.discarded], [1, 2, 3, false]);
+  // Mutation checked: the draft written from the current version instead of vK → the hash differs and this fails.
+  assert.equal(r.body.definition_hash, v1Manifest.definition_hash);
+  // Mutation checked: the restore writing a version row or moving the pointer → these fail.
+  assert.deepEqual(versionRows(w), before, 'no version row written, changed or deleted');
+  assert.deepEqual(pointer(w, uid), { status: 'published', current_version: 2 });
+  assert.deepEqual(links(w), pins, 'no agent re-pinned');
+  // The same evidence as v1, so v1's results still count; v1's approval does not: it released v1.
+  assert.deepEqual([r.body.freshness.ready, r.body.freshness.blocking, r.body.freshness.review.released_version], [false, ['needs_approval'], 1]);
+  const diff = (await call(w, SUPER, 'GET', `${HQ}/${uid}/diff?from=v1&to=draft`)).body;
+  assert.deepEqual([diff.frontmatter, diff.steps.every((s: any) => s.op === 'same')], [[], true]);
+  const audit = audits(w).filter((a) => a.action === 'agent_skill_restore_proposed');
+  assert.equal(audit.length, 1);
+  assert.deepEqual([audit[0].details.reason, audit[0].details.from_version, audit[0].details.next_version, audit[0].details.after.definition_hash], [RESTORE, 1, 3, v1Manifest.definition_hash]);
+  assert.equal(await call(w, SUPER3, 'POST', `${HQ}/${uid}/restore`, { from_version: 1, reason: RESTORE }).then((x) => x.body.error), 'already_restored');
+
+  // The restorer is now the draft's author: they cannot review or approve it.
+  assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/review`, { reviewer_uid: 'u-super3' })).body.error, 'reviewer_is_author');
+  assert.equal((await call(w, SUPER3, 'POST', `${HQ}/${uid}/review`, { reviewer_uid: 'u-super2' })).status, 201);
+  assert.equal((await call(w, SUPER3, 'POST', `${HQ}/${uid}/review/approve`, {})).body.error, 'self_approval');
+  assert.equal((await call(w, SUPER2, 'POST', `${HQ}/${uid}/review/approve`, { comment: 'v1 again, as v3.' })).status, 200);
+
+  // A bad evaluation: a failing run blocks; a new run supersedes it, and the failing rows stay as written.
+  stubRun();
+  EVAL_DEPS.run = async () => ({ ok: true, output: 'MRR unknown', usageLogId: null } as any);
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, {});
+  const failing = await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`);
+  assert.deepEqual([failing.status, failing.body.error], [409, 'golden_cases_failing']);
+  const fails = Number((w.db.prepare("SELECT COUNT(*) AS n FROM agent_skill_eval_results WHERE result = 'fail'").get() as any).n);
+  assert.equal(fails, 1);
+  stubRun();
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, {});
+
+  // A failed promotion: the version row cannot be written. Nothing moves, and the approval is not spent.
+  w.db.exec(`CREATE TEMP TRIGGER fail_version BEFORE INSERT ON agent_skill_versions BEGIN SELECT RAISE(ABORT, 'disk full'); END;`);
+  const failed = await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`);
+  w.db.exec('DROP TRIGGER fail_version');
+  assert.deepEqual([failed.status, failed.body.error], [409, 'publish_conflict']);
+  assert.deepEqual(pointer(w, uid), { status: 'published', current_version: 2 });
+  assert.equal((await call(w, SUPER, 'GET', `${HQ}/${uid}`)).body.freshness.ready, true);
+
+  // A partly completed publish: the version lands, its audit row does not. The detail says so.
+  w.db.exec(`CREATE TEMP TRIGGER fail_audit BEFORE INSERT ON admin_audit_log WHEN NEW.action = 'agent_skill_published' BEGIN SELECT RAISE(ABORT, 'audit down'); END;`);
+  const v3 = await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`);
+  w.db.exec('DROP TRIGGER fail_audit');
+  assert.equal(v3.status, 200, v3.text);
+  const d = (await call(w, SUPER, 'GET', `${HQ}/${uid}`)).body;
+  // Mutation checked: `publish_audited` read as true for every version → v3 reads true and this fails.
+  assert.deepEqual(d.versions.map((v: any) => [v.version, v.publish_audited]), [[3, false], [2, true], [1, true]]);
+
+  // v3 is v1's definition under a new number; v1 and v2 are as they were; still nobody moved.
+  assert.deepEqual(versionRows(w).slice(0, 2), before);
+  const rows = versionRows(w) as any[];
+  for (const f of ['name', 'purpose', 'steps_json', 'allowed_tools_json', 'output_kind', 'taxonomy_json', 'roles_json']) assert.equal(rows[2][f], rows[0][f], f);
+  assert.deepEqual(links(w), pins);
+  assert.throws(() => w.db.prepare('UPDATE agent_skill_versions SET name = ? WHERE version = 1').run('rewritten'), /immutable/);
+  assert.throws(() => w.db.prepare('DELETE FROM agent_skill_versions WHERE version = 2').run());
+  assert.equal(versionRows(w).length, 3);
+
+  // The operator sees who holds which version before a team re-pins.
+  assert.equal((await call(w, ADMIN, 'GET', `${HQ}/${uid}/pins`)).status, 403);
+  const p = (await call(w, SUPER, 'GET', `${HQ}/${uid}/pins`)).body;
+  assert.deepEqual(p.versions.map((v: any) => [v.version, v.agents, v.current]), [[3, 0, true], [2, 0, false], [1, 1, false]]);
+  assert.deepEqual([p.current_version, p.agents_total, p.agents.length], [3, 1, 1]);
+  assert.deepEqual([p.agents[0].uid, p.agents[0].name, p.agents[0].pinned_version, p.agents[0].update_available, p.agents[0].team.company_name], [CFO, 'Carla', 1, true, 'Acme']);
+  // Re-pinning is an explicit act on the agent's skills, with the version named (the team's managers, `canManage`).
+  const put = await call(w, EDITOR, 'PUT', `/api/teams/agents/${CFO}/skills`, { skills: [{ uid, version: 3 }] });
+  assert.equal(put.status, 200, put.text);
+  assert.deepEqual([put.body.skills[0].pinned_version, put.body.skills[0].update_available], [3, false]);
+});
+
+test('D4533 step 5: restore keeps unpublished edits unless told to discard them, and refuses a retired skill', async () => {
+  const w = world();
+  const uid = await twoVersions(w);
+  await call(w, SUPER, 'PATCH', `/api/teams/skills/${uid}`, { purpose: 'An unpublished change of purpose, for the record.' });
+  // Mutation checked: the `draft_has_changes` refusal dropped → the edit is overwritten and this fails.
+  const no = await call(w, SUPER, 'POST', `${HQ}/${uid}/restore`, { from_version: 1, reason: RESTORE });
+  assert.deepEqual([no.status, no.body.error], [409, 'draft_has_changes']);
+  assert.equal((w.db.prepare('SELECT purpose FROM agent_skills WHERE uid = ?').get(uid) as any).purpose, 'An unpublished change of purpose, for the record.');
+  const yes = await call(w, SUPER, 'POST', `${HQ}/${uid}/restore`, { from_version: 1, reason: RESTORE, discard_draft: true });
+  assert.equal(yes.status, 200, yes.text);
+  assert.equal(yes.body.discarded, true);
+  // The discarded draft is kept in the audit row, since the draft table is not a history.
+  const row = audits(w).filter((a) => a.action === 'agent_skill_restore_proposed').at(-1)!;
+  assert.equal(row.details.before.discarded_draft.purpose, 'An unpublished change of purpose, for the record.');
+  // An open review on the replaced draft is withdrawn in the same batch.
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/review`, { reviewer_uid: 'u-super2' });
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/restore`, { from_version: 2, reason: RESTORE, discard_draft: true });
+  assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM agent_skill_reviews WHERE status = 'requested'").get() as any).n, 0);
+  // A version today's rules no longer accept is refused, and the draft is untouched.
+  w.db.exec("UPDATE skills SET is_active = 0 WHERE slug = 'investor_reporting'");
+  const stale = await call(w, SUPER, 'POST', `${HQ}/${uid}/restore`, { from_version: 1, reason: RESTORE, discard_draft: true });
+  assert.equal(stale.status, 400, stale.text);
+  w.db.exec("UPDATE skills SET is_active = 1 WHERE slug = 'investor_reporting'");
+  // Retired: no restore; the pinned agent keeps v1.
+  const other = await newSkill(w, { name: 'Replacement skill' });
+  await setCases(w, other, ['MRR 41,200']);
+  await approve(w, other);
+  await call(w, SUPER, 'POST', `${HQ}/${other}/evals`, {});
+  assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${other}/publish`)).status, 200);
+  assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/retire`, { reason: REASON, replacement_uid: other })).status, 200);
+  assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/restore`, { from_version: 1, reason: RESTORE, discard_draft: true })).body.error, 'retired');
+  const p = (await call(w, SUPER, 'GET', `${HQ}/${uid}/pins`)).body;
+  assert.deepEqual([p.agents[0].pinned_version, p.agents[0].update_available], [1, false]);
+});
+
+test('D4533 (F1): a draft save is audited with its definition hash before and after; a save that changes nothing is not', async () => {
+  const w = world();
+  const uid = await newSkill(w, {}, null);
+  await call(w, SUPER, 'PATCH', `/api/teams/skills/${uid}`, { purpose: 'From recorded metrics, a draft update for investors.' }); // unchanged
+  await call(w, SUPER, 'PATCH', `/api/teams/skills/${uid}`, { purpose: 'From recorded metrics, a monthly draft for investors.' });
+  const rows = audits(w).filter((a) => a.action.startsWith('agent_skill_draft_'));
+  // Mutation checked: the `before !== after` guard dropped → three rows and this fails.
+  assert.deepEqual(rows.map((r) => r.action), ['agent_skill_draft_created', 'agent_skill_draft_saved']);
+  assert.equal(rows[1].details.before.definition_hash, rows[0].details.after.definition_hash);
+  assert.notEqual(rows[1].details.after.definition_hash, rows[1].details.before.definition_hash);
 });
 
 test('D4536: the library response carries the catalogue coverage, read from published versions, pins and the library files', async () => {

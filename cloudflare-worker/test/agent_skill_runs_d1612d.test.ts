@@ -287,3 +287,21 @@ test('#4531 slice 3: each published result names the evaluator and the case text
   w.db.prepare("UPDATE agent_skill_version_evals SET evaluator_version = NULL, case_sha256 = NULL WHERE id = (SELECT MIN(id) FROM agent_skill_version_evals)").run();
   assert.equal(compareResults([rows()[0]], [rows()[1]]).pairs[0].outcome, 'not_recorded');
 });
+
+test('D4533 step 5: a newer version and a retirement move no pin; the run still reads the pinned version', async () => {
+  const w = world();
+  // A recovery published v3 (v1's definition under a new number), then HQ retired the skill. The agent was never re-pinned.
+  w.db.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
+    VALUES (1, 3, 'md', 'Board meeting brief v3', 'From recorded figures, a runway note.', ?, '["mercury.read"]', 'brief', '[]', '["cfo"]', ?)`).run(JSON.stringify(['A restored step under v3']), SUPER);
+  w.db.prepare("UPDATE agent_skills SET current_version = 3, status = 'retired' WHERE id = 1").run();
+  const r = await agentRun(w.env, { agent: agent(w), ...STEP, skill: SKILL_UID });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const sys = w.prompts.join('\n');
+  // Mutation checked: the skill read at `current_version` → v3's step is in the turn and these fail.
+  assert.match(sys, /\(version 1\)/);
+  assert.doesNotMatch(sys, /A restored step under v3|A newer step/);
+  const rows = w.db.prepare('SELECT skill_version FROM ai_usage_logs WHERE skill_id = 1').all() as any[];
+  assert.ok(rows.length >= 1);
+  assert.ok(rows.every((x) => x.skill_version === 1));
+  assert.equal((w.db.prepare('SELECT version FROM agent_skill_links WHERE agent_id = 1 AND skill_id = 1').get() as any).version, 1);
+});

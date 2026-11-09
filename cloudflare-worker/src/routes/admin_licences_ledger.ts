@@ -103,8 +103,11 @@ r.post('/', async (c) => {
     if (!ref || !legalName) {
       return c.json({ error: 'licence_ref and legal_entity_name are required' }, 400);
     }
-    const clash = await c.env.DB.prepare('SELECT 1 AS x FROM territory_licences WHERE licence_ref = ?')
-      .bind(ref).first<{ x: number }>();
+    // D5057: a reference is unique across every licence family, so a user licence holding it is a clash too
+    // (the insert trigger would otherwise refuse the shared identity with a 500).
+    const clash = await c.env.DB.prepare(
+      'SELECT 1 AS x FROM territory_licences WHERE licence_ref = ? UNION ALL SELECT 1 FROM licences WHERE licence_ref = ? LIMIT 1',
+    ).bind(ref, ref).first<{ x: number }>();
     if (clash) return c.json({ error: `${ref} is already in use` }, 409);
 
     // KIND IS STEP 1 (H26), AND IT IS REFUSED HERE RATHER THAN COERCED.
@@ -119,6 +122,8 @@ r.post('/', async (c) => {
     }
 
     const uid = newUid();
+    // D5057: this insert also writes the licence's shared identity (`licences`, same uid and ref), in the same
+    // statement, through migration 202611090932's `territory_licences_shared_identity` trigger.
     await c.env.DB.prepare(
       `INSERT INTO territory_licences (uid, licence_ref, entity_id, legal_entity_name,
                                        brand_name, registered_address, signatory_name,

@@ -22,8 +22,7 @@ import { revokeAllGrants } from '../mcp/grants';
 import { Hono, type Context } from 'hono';
 import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
-import type { Env, UserSessionRow } from '../types';
-import { decodeJwt } from 'jose';
+import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken, selectJwt, bumpJwtMinIat, jwtMinIatFloor } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
@@ -47,6 +46,7 @@ import {
 } from '../services/userSettings';
 import { canWrite } from './_founder_validate_helpers';
 import {
+  effectiveDisplayName,
   ensureProfileExpansionSchema,
   getPersonalProfile,
   updatePersonalProfile,
@@ -60,7 +60,7 @@ import {
 import { hashEmail } from '../util/hashEmail';
 import { requestErasure, cancelErasure, loadOwnDsrOutcome } from '../services/dsrRequests';
 import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
-import { revokeUserSession } from '../services/userSessions';
+import { countOwnActiveSessions, listOwnSessions, revokeUserSession } from '../services/userSessions';
 import {
   LinkedInImportError,
   decodePdfDataUri,
@@ -229,12 +229,16 @@ const WRONG_TOTP_CODE = {
 
 // --- GET /api/settings ------------------------------------------------------
 
-function currentJtiFromRequest(c: Context<{ Bindings: Env }>): string | null {
-  const auth = c.req.header('authorization') || '';
-  if (!auth.startsWith('Bearer ')) return null;
+/**
+ * D4616 (#4616) — the caller's own session id (`jti`), from the token
+ * authentication itself chose: `selectJwt` applies `getCurrentUser`'s rules
+ * (cookie or Bearer, and which wins when both are sent). Reading the Bearer
+ * header alone left a cookie-signed-in browser with no "This device" row.
+ */
+async function currentJtiFromRequest(c: Context<{ Bindings: Env }>): Promise<string | null> {
   try {
-    const payload = decodeJwt(auth.slice(7)) as { jti?: unknown };
-    return typeof payload.jti === 'string' ? payload.jti : null;
+    const picked = await selectJwt(c);
+    return typeof picked?.payload?.jti === 'string' ? picked.payload.jti : null;
   } catch { return null; }
 }
 
@@ -247,10 +251,13 @@ function currentJtiFromRequest(c: Context<{ Bindings: Env }>): string | null {
 // "Could not load your settings: Not found".
 const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
   await ensureSchema(c.env);
+  // D4616 — `display_name` is a profile-expansion column (a no-op in production,
+  // where the migration owns it).
+  await ensureProfileExpansionSchema(c.env);
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   const rows = await sql`
-    SELECT id, uid, email, name, role, email_verified, kyc_status, access_level,
+    SELECT id, uid, email, name, display_name, role, email_verified, kyc_status, access_level,
            bio, headline, headshot_r2_key, jurisdictions, socials,
            notification_prefs, privacy_prefs, role_prefs,
            deletion_requested_at, last_active_at, created_at,
@@ -312,6 +319,10 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     uid: u.uid,
     email: u.email,
     name: u.name,
+    // D4616 — the identity contract's display name, as stored (null when
+    // unset), and the name other members see, by the public profile's rule.
+    display_name: u.display_name || null,
+    public_name: effectiveDisplayName(u),
     role: u.role,
     email_verified: !!u.email_verified,
     totp_configured: !!u.totp_configured,
@@ -345,7 +356,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
       const arr = safeJson<string[]>(u.totp_recovery_codes, []);
       return Array.isArray(arr) ? arr.length : 0;
     })(),
-    current_jti: currentJtiFromRequest(c),
+    current_jti: await currentJtiFromRequest(c),
   });
 };
 settings.get('', getRootSettings);
@@ -999,28 +1010,15 @@ settings.get('/data-export', async (c) => {
 settings.get('/sessions', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
-  const sql = getSQL(c.env);
-  const rows = await sql`
-    SELECT id, jti, user_agent, ip, created_at, last_seen_at, revoked_at
-    FROM user_sessions
-    WHERE user_id = ${user.id}
-    ORDER BY last_seen_at DESC
-    LIMIT 100
-  ` as unknown as UserSessionRow[];
-  await sql.end();
-  const currentJti = currentJtiFromRequest(c);
-  return c.json({
-    sessions: rows.map((r) => ({
-      id: r.id,
-      jti: r.jti,
-      user_agent: r.user_agent,
-      ip: r.ip,
-      created_at: r.created_at,
-      last_seen_at: r.last_seen_at,
-      revoked_at: r.revoked_at,
-      is_current: !!currentJti && r.jti === currentJti,
-    })),
-  });
+  // D4616 — the shared rule (services/sessionStatus.ts), scoped to the caller:
+  // each row says whether it still opens a door, and `active_count` counts only
+  // those, as /security and HQ do.
+  const currentJti = await currentJtiFromRequest(c);
+  const [sessions, activeCount] = await Promise.all([
+    listOwnSessions(c.env, user.id, currentJti),
+    countOwnActiveSessions(c.env, user.id),
+  ]);
+  return c.json({ sessions, active_count: activeCount });
 });
 
 settings.post('/sessions/:id/revoke', async (c) => {
@@ -2032,11 +2030,10 @@ settings.get('/security', async (c) => {
   if (rows.length) {
     rows[0].totp_configured = (await hasTotpConfigured(c.env, user.id)) ? 1 : 0;
   }
-  const sessions = await sql`
-    SELECT COUNT(*) AS active FROM user_sessions
-     WHERE user_id = ${user.id} AND revoked_at IS NULL
-  `;
   await sql.end();
+  // D4616 — the same count as the session list's: not revoked, inside its
+  // token's lifetime, and minted after the account's sign-out floor.
+  const activeSessions = await countOwnActiveSessions(c.env, user.id);
   if (!rows.length) return c.json({ error: 'User not found' }, 404);
   const remaining = (() => {
     try { return (JSON.parse(rows[0].totp_recovery_codes || '[]') || []).length; }
@@ -2053,7 +2050,7 @@ settings.get('/security', async (c) => {
     totp_configured: !!rows[0].totp_configured,
     totp_paired_at: totpPairedAt,
     totp_recovery_codes_remaining: remaining,
-    active_sessions: Number(sessions[0]?.active || 0),
+    active_sessions: activeSessions,
     sms_configured: !!smsRow,
     sms_last4: smsRow?.last4 || null,
     sms_country: smsRow?.country || null,

@@ -13,7 +13,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, getCurrentUser } from '../auth';
 import { effectiveVisibilityFor, visibleToViewer } from '../services/userSettings';
-import { ensureProfileExpansionSchema } from '../services/profileExpansion';
+import { effectiveDisplayName, ensureProfileExpansionSchema } from '../services/profileExpansion';
 import { ensureFollowsSchema } from './follows';
 import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -356,8 +356,8 @@ export async function publicPersonCard(env: Env, handle: string, viewer: PublicV
     handle: row.uid,
     role,
     joined_at: row.created_at || null,
-    name: flags.name ? (row.display_name || row.name || null) : null,
-    display_name: flags.name ? (row.display_name || row.name || null) : null,
+    name: flags.name ? effectiveDisplayName(row) : null,
+    display_name: flags.name ? effectiveDisplayName(row) : null,
     headline: row.headline || null,
     bio: flags.bio ? (row.bio || null) : null,
     headshot_url: flags.headshot && row.headshot_r2_key ? `/api/settings/headshot/${row.uid}` : null,
