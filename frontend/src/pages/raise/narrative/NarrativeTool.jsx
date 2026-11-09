@@ -15,6 +15,7 @@ import PositioningTab from './PositioningTab';
 import { ObjectionsCard } from './ObjectionsPanel';
 import ClaimsTab from './ClaimsTab';
 import CheckTab from './CheckTab';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 
 /**
@@ -81,7 +82,7 @@ function useVersions(projectId, reload) {
     setState({ status: 'loading', versions: [] });
     cyclesWrite.formOptions('raise', projectId, SLUG)
       .then((data) => { if (alive) setState({ status: 'ready', versions: versionsOf(data) }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', versions: [], message: error?.message || '' }); });
+      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', versions: [], message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, reload]);
   return state;
@@ -109,7 +110,7 @@ function useHomeRead(projectId, reload) {
     setState({ status: 'loading', data: null });
     cyclesApi.module('raise', projectId, SLUG)
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: 'error', data: null, message: error?.message || '' }); });
+      .catch((error) => { if (alive) setState({ status: 'error', data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, reload]);
   return state;
@@ -139,7 +140,7 @@ function DuplicateDialog({ projectId, version, next, onClose, onDone }) {
     setState({ busy: true, error: '' });
     cyclesApi.recordAction('raise', projectId, SLUG, version.version, 'duplicate')
       .then(() => { onDone(); onClose(); })
-      .catch((e) => setState({ busy: false, error: e?.message || 'The copy was not made.' }));
+      .catch((e) => setState({ busy: false, error: userFacingRaiseError(e, { fallback: 'The copy was not made.' }) }));
   };
   return (
     <Lightbox label={`Duplicate v${version.version}`} title={`Duplicate v${version.version}?`} onClose={onClose} width={480} testId="narrative-duplicate-dialog"

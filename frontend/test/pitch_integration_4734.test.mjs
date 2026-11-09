@@ -141,7 +141,6 @@ const AREA_ROUTES_WITHOUT_A_ROW = new Set([
   // D4473 (#4473): Account › Licences has no canvas (#3704's two switcher designs were rejected, and none was drawn
   // for the page); its route is described in route-map section 0255.
   'account_licences.jsx /account/licences',
-  'adminGovernance.jsx /admin/contracts/governance',
   'adminInfluencers.jsx /admin/programs/influencer', 'adminInfluencers.jsx /admin/programs/influencer/how-it-runs',
   'adminInfluencers.jsx /admin/programs/influencer/applications', 'adminInfluencers.jsx /admin/programs/influencer/influencers',
   'adminInfluencers.jsx /admin/programs/influencer/offers', 'adminInfluencers.jsx /admin/programs/influencer/payouts',

@@ -22,6 +22,7 @@ import {
   HOME_NOTE, HOME_PATH, LINE, MOVED_NOTICES, PHONE_ROOT, SLUG, TABS, TITLE,
   tabHref, tabSearch,
 } from './capTableModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import './capTable.css';
 
 /**
@@ -110,7 +111,7 @@ export function useRead(load, projectId, reload) {
     setState({ status: 'loading', data: null });
     Promise.resolve().then(() => load(projectId))
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: error?.message || '' }); });
+      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [load, projectId, reload]);
   return state;

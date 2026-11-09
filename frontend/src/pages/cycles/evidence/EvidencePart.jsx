@@ -15,6 +15,7 @@ import { BASE, claimHref, itemHref } from './evidenceModel';
 import { claimTitle, claimWhere, itemFigure, itemTitle, statedFigure } from './evidenceView';
 import { SOURCES_TITLE, deckChecked, moduleEvidence, slideClaims, sourcesLines } from './moduleEvidence';
 import { BTN_S, BlockUnreadable, CARD, ChangeDialog, H2, LINK, MUTED, SharingPill, SourcePill, StatePill } from './EvidenceParts';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /** One read of the venture's evidence, or `refused` for a reader it is not for. */
 export function useEvidenceRead(projectId) {
@@ -25,7 +26,7 @@ export function useEvidenceRead(projectId) {
     setState({ status: 'loading' });
     raiseEvidenceApi.read(projectId, { limit: 100 })
       .then((read) => { if (alive) setState({ status: 'ready', read }); })
-      .catch((e) => { if (alive) setState(e?.status === 403 || e?.status === 404 ? { status: 'refused' } : { status: 'error', message: e?.message || '' }); });
+      .catch((e) => { if (alive) setState(e?.status === 403 || e?.status === 404 ? { status: 'refused' } : { status: 'error', message: userFacingRaiseError(e, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId]);
   useEffect(() => load(), [load]);
