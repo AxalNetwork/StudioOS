@@ -183,7 +183,7 @@ test('an active version is immutable — at the route and at the database — fo
 });
 
 test('retiring a package changes no other row — the only honest answer while no licence can hold one yet', async () => {
-  const { db, call, all } = fixture();
+  const { call, all } = fixture();
   const before = {
     licences: all('SELECT * FROM territory_licences'),
     other_packages: all("SELECT * FROM program_packages WHERE package_key <> 'core_network'"),
