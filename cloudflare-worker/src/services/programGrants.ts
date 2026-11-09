@@ -211,6 +211,9 @@ export function presentGrant(row: Record<string, any>, licence: LicenceLite, tod
     // `Number(null)` is 0, so the rule is read as off only when it was recorded as 0.
     const ruleOff = row.requires_signed_schedule != null && Number(row.requires_signed_schedule) === 0;
     if (!ruleOff && !row.schedule_signed_at) waiting.push('schedule_signed');
+    // D5052: the licence's frozen agreement policy holds the program until its required agreement is
+    // executed. HQ computes it (`legalWaitingByProgram`) and sends it on the branch copy as `legal_waiting`.
+    if (row.legal_waiting != null && Number(row.legal_waiting) === 1) waiting.push('agreement_executed');
     if (row.starts_on && String(row.starts_on) > today) waiting.push('start_date');
     if (end && end < today) waiting.push('ended_by_date');
   }
@@ -314,7 +317,12 @@ async function readRequestFigures(env: Env, today: string) {
  * grants by program, the tiles and the two series. A draft or terminated
  * licence is left out, as the page leaves it out (D981 §2).
  */
-export async function readGrid(env: Env, today: string) {
+/**
+ * `legalWaiting` (D5052) answers, per licence and program, whether the licence's frozen agreement policy still
+ * holds the grant out of force; the route computes it (`legalWaitingByProgram`) so a required unsigned agreement
+ * never counts as in force on the grid. Absent: no gate is applied (the grid as before D5052).
+ */
+export async function readGrid(env: Env, today: string, legalWaiting?: Map<number, Map<string, number>>) {
   const licences = ((await env.DB.prepare(
     `SELECT id, uid, licence_ref, brand_name, kind, status, renews_on FROM territory_licences
       WHERE status NOT IN ('draft', 'terminated') ORDER BY licence_ref, id`,
@@ -326,7 +334,8 @@ export async function readGrid(env: Env, today: string) {
     const l = lic.get(Number(g.licence_id));
     if (!l) continue;
     const list = byLicence.get(l.id) || [];
-    list.push(presentGrant(g, l, today));
+    const waiting = legalWaiting?.get(l.id)?.get(String(g.program_key));
+    list.push(presentGrant(waiting == null ? g : { ...g, legal_waiting: waiting }, l, today));
     byLicence.set(l.id, list);
   }
   const all = [...byLicence.values()].flat();
