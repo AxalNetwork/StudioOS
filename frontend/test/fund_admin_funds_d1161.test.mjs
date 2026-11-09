@@ -73,6 +73,7 @@ function stubs(over = {}) {
   return {
     calls,
     apis: {
+      auth: { stepUp: rec('stepUp', async () => ({ ok: true })) },
       fundAdmin: {
         access: rec('access', async () => access(false)),
         overview: rec('overview', async () => OVERVIEW()),
@@ -330,8 +331,15 @@ test('the Super Admin\'s Change asks a reason, then sends it with both rates', a
     assert.equal(named(s, 'update').length, 0);
     await v.type('fund-economics-reason', 'Side letter agreed at first close.');
     await v.submit('fund-economics-submit');
+    // D4812 part 5: Review shows each rate before → after; the act runs only from Confirm.
+    assert.equal(named(s, 'update').length, 0);
+    assert.match(v.text('fund-economics-flow-effects'), /Carry 20\.00% → 25\.00%/);
+    await v.click('fund-economics-flow-continue');
+    if (v.by('fund-economics-flow-confirm-code')) await v.type('fund-economics-flow-confirm-code', '123456');
+    await v.submit('fund-economics-flow-confirm');
     assert.deepEqual(named(s, 'update')[0].slice(1), [7, { carried_interest: 0.25, management_fee: 0.02, reason: 'Side letter agreed at first close.' }]);
-    assert.ok(!v.by('fund-economics-dialog'));
+    await v.click('fund-economics-flow-done-done');
+    assert.ok(!v.by('fund-economics-dialog') && !v.by('fund-economics-flow'));
     assert.match(v.text('fund-notice'), /reason is kept on the audit record/);
     assert.equal(named(s, 'get').length, 2, 'the fund is read again');
   } finally { await v.close(); }

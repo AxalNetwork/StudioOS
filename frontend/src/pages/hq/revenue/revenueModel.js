@@ -213,6 +213,57 @@ export const LEDGER_REASON =
   + 'monthly trend are not recorded. They need invoice-backed licence revenue and a reconciled revenue ledger, '
   + 'which are separate work. This is not a claim that nothing was invoiced.';
 
+/**
+ * D5082 (#5082) — the four ledger positions once the Worker sends `licence_invoices` (D5036, #5132): licence-fee
+ * invoices per native currency, never summed. Invoiced and Collected are the invoices issued in the period;
+ * Outstanding and Overdue are the receivable as at today, whatever period issued it. Before that field exists the
+ * positions stay Not recorded; an unreadable ledger is Unavailable. Neither is ever 0. A currency the readable
+ * ledger has no invoice in, beside one it has, is a measured zero.
+ */
+export function ledgerPosition(summary) {
+  if (!isReady(summary)) return { state: pendingState(summary), currencies: [] };
+  const inv = summary.licence_invoices;
+  if (!inv || typeof inv !== 'object') return { state: 'not_recorded', currencies: [] };
+  if (!inv.available) return { state: 'unavailable', reason: inv.reason || 'The licence-fee invoice ledger could not be read.', currencies: [] };
+  const period = Array.isArray(inv.by_currency) ? inv.by_currency : [];
+  const open = Array.isArray(inv.receivable_by_currency) ? inv.receivable_by_currency : [];
+  const set = new Set();
+  for (const r of [...period, ...open]) set.add(currencyCode(r.currency) || UNRECORDED_CURRENCY);
+  const zero = (cur) => ({ state: 'zero', text: money(0, cur) });
+  const currencies = [...set].sort().map((cur) => {
+    const p = period.find((r) => (currencyCode(r.currency) || UNRECORDED_CURRENCY) === cur);
+    const o = open.find((r) => (currencyCode(r.currency) || UNRECORDED_CURRENCY) === cur);
+    return {
+      currency: cur,
+      invoiced: p ? moneyFigure(p.invoiced_cents, cur) : zero(cur),
+      invoices: p ? finite(p.invoices) : 0,
+      collected: p ? moneyFigure(p.collected_cents, cur) : zero(cur),
+      outstanding: o ? moneyFigure(o.outstanding_cents, cur) : zero(cur),
+      openInvoices: o ? finite(o.open_invoices) : 0,
+      overdue: o ? moneyFigure(o.overdue_cents, cur) : zero(cur),
+      overdueInvoices: o ? finite(o.overdue_invoices) : 0,
+    };
+  });
+  return {
+    state: 'recorded',
+    currencies,
+    asOf: dayOf(inv.as_of),
+    expectedNotInvoiced: Array.isArray(inv.expected_not_invoiced) ? inv.expected_not_invoiced.length : 0,
+    cannotInvoice: Array.isArray(inv.cannot_invoice) ? inv.cannot_invoice.length : 0,
+  };
+}
+
+/** The ledger's one explanation once it is read: licence fees only, and what is still outside it. */
+export function ledgerReason(position) {
+  const gaps = [];
+  if (position.expectedNotInvoiced) gaps.push(`${position.expectedNotInvoiced} licence ${position.expectedNotInvoiced === 1 ? 'year has' : 'years have'} started without an invoice`);
+  if (position.cannotInvoice) gaps.push(`${position.cannotInvoice} billable ${position.cannotInvoice === 1 ? 'licence cannot' : 'licences cannot'} be invoiced (no fee or no start date)`);
+  return 'Licence-fee invoices only (D5036). Invoiced and Collected are the invoices issued in the period; Outstanding '
+    + 'and Overdue are every open invoice as at today, whatever period issued it. Collected is what HQ recorded, not '
+    + 'reconciled against a bank. Subscription revenue and revenue-share statements are not in this ledger, and no '
+    + 'monthly series is recorded.' + (gaps.length ? ` ${gaps.join('; ')}.` : '');
+}
+
 export const TREND_REASON =
   'No monthly revenue series is recorded: the trend needs the reconciled revenue ledger. Nothing is drawn rather '
   + 'than a line of zeros.';
@@ -625,7 +676,15 @@ export function coverageSources({ summary, statements, disputes, refunds, ceilin
     });
   }
 
-  out.push({ key: 'ledger', name: 'Invoices and payments ledger', state: 'not_recorded', reason: LEDGER_REASON });
+  // D5082: the licence-fee invoice ledger once the Worker sends it. Before that, or while the summary is out, Not recorded.
+  const ledger = ledgerPosition(summary);
+  if (ledger.state === 'recorded') {
+    out.push({ key: 'ledger', name: 'Invoices and payments ledger', state: 'partial', reason: ledgerReason(ledger) });
+  } else if (ledger.state === 'unavailable' && isReady(summary)) {
+    out.push({ key: 'ledger', name: 'Invoices and payments ledger', state: 'unavailable', reason: `${ledger.reason} This is not a claim that nothing was invoiced.` });
+  } else {
+    out.push({ key: 'ledger', name: 'Invoices and payments ledger', state: 'not_recorded', reason: LEDGER_REASON });
+  }
 
   // Revenue-share statements.
   if (!isReady(statements)) out.push({ key: 'statements', name: 'Revenue-share statements', ...failed(statements, 'The statement ledger') });

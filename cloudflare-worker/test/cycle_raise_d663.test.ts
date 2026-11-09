@@ -56,6 +56,7 @@ function fixture() {
   }
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(MIG442);
+  db.exec(sqlOf('202611091000_readiness_input_hash.sql')); // D5071
   db.exec(MIG463);
   // D912: the check reads Solution, Business model and Team from migration 544's `narrative_sections`.
   db.exec(sqlOf('544_narrative_sections.sql'));
@@ -899,7 +900,7 @@ test('D1610 W3: when no connection can be read the list as a whole is unreadable
 test('D1610 W4: the readiness legend has four shades, and a Stated score is shaded apart from Pattern (owner pick D1)', async () => {
   const db = fixture();
   db.exec('ALTER TABLE readiness_scores RENAME TO rs_old');
-  db.exec(`CREATE TABLE readiness_scores (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, project_id INTEGER, score INTEGER, evidence TEXT, missing TEXT, source TEXT, scored_at TEXT)`);
+  db.exec(`CREATE TABLE readiness_scores (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, project_id INTEGER, score INTEGER, evidence TEXT, missing TEXT, source TEXT, scored_at TEXT, input_hash TEXT)`);
   scored(db, [['deck', 6, 'stated', null], ['narrative', 6, 'pattern', null], ['data_room', 6, 'measured', null], ['cap_table', 6, 'anecdote', null]]);
   const c = card((await overview(db)).body, 'fundraising-readiness');
   const bars = c.series.find((s: any) => s.kind === 'hbar');

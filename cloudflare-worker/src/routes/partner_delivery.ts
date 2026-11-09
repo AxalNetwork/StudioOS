@@ -689,7 +689,8 @@ partnerDelivery.get('/health', async (c) => {
         : null,
       satisfaction_scored_count: scored.length,
       satisfaction_unscored_count: live.length - scored.length,
-      satisfaction_note: live.length && scored.length === live.length
+      // D4822: no live engagement, no sentence — "0 of 0 have no score" is commentary on nothing.
+      satisfaction_note: !live.length || scored.length === live.length
         ? null
         : `${live.length - scored.length} of ${live.length} engagement${live.length === 1 ? '' : 's'} ${live.length - scored.length === 1 ? 'has' : 'have'} no score, and averaging the rest would present ${scored.length} opinion${scored.length === 1 ? '' : 's'} as a firm-wide fact.`,
     });
@@ -1076,7 +1077,8 @@ partnerDelivery.get('/deliverables', async (c) => {
       // unopened — which makes the count TRUE and the median MEANINGLESS.
       median_days_to_open: null,
       median_days_to_open_note:
-        'No median: `opened_at` is the client\'s to set and no surface in this product sets it yet, so every sent deliverable reads unopened. A median over a column nobody writes would be a number about our own silence.',
+        // D4822: product copy, so no column names. Read time is the client's to record, and nowhere lets them yet.
+        'Read time unavailable: client opens are not currently tracked. Whether a deliverable was opened is the client\'s to set, and nowhere lets them set it yet, so no median is taken.',
       unopened_note: !readTracking.available
         ? (sent.length
           ? `${sent.length} sent. ${readTracking.reason} Read it as "we do not know", not as "the client ignored it".`
@@ -1422,7 +1424,8 @@ partnerDelivery.get('/capacity', async (c) => {
       period_cap_hours: periodCapHours(firmCap, period),
       cap_source: firmCap === null ? null : 'firm',
       cap_note: firmCap === null
-        ? 'No capacity cap is recorded anywhere in this product. Hours are real; a threshold to be over is not, so nothing here is marked over-committed.'
+        // D4822: the canvas's state for an unconfigured firm, in product words, with what setting one unlocks.
+        ? 'Capacity limits not set. Set available hours to identify over-allocation; until then nobody is marked over-committed.'
         : firmCapNote,
       over_committed_count: firmCap === null && personCap.size === 0
         ? null

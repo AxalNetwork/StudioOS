@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { googleWorkspace } from '../../../lib/api/googleWorkspace';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
 import { versionRows } from './pitchStudioModel';
-import { notCheckedLine } from './preflightUiModel';
+import { effectiveDeck, exportableCards } from './preflightUiModel';
+import { GateBody, PreflightMeasure } from './PreflightPanel';
+import useSendCheck from './useSendCheck';
 import {
   EXPORT_TITLE, FORMATS, OPTIONS_WHERE, GOOGLE_CONNECT, GOOGLE_CONNECT_HREF, GOOGLE_CONNECT_LINK, GOOGLE_STATE_UNREADABLE, OPEN_LINK,
   chartsAsTextLine, exportButton, exportDiagnostic, exportFailure, exportFileName, exportedLine, googleCreatedLine, googleOpenHref, googleState,
@@ -31,6 +33,16 @@ import {
  * `POST /api/decks/:id/export/odp` (#3882, on main), with the same two
  * options, the same ledger row and the same failure sentence. Opened from the
  * header's Share ▾ › Export….
+ *
+ * D4598 (#4598) part 2 — the version picker names which version Export reads,
+ * and this dialog now checks THAT version's own effective content itself
+ * (`exportableCards`: a hidden card is in no export, as `visibleCards` already
+ * rules on the Worker), instead of only saying it was not the version the
+ * editor's own gate checked (part 1). Picking another version invalidates
+ * whatever the check found and runs it again (`useSendCheck`); Export stays
+ * disabled until that check is clean or its warnings are confirmed through
+ * "Export anyway" — the same confirm the editor's own gate already offers,
+ * not a second one.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -50,7 +62,7 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export default function ExportDialog({ versions, current, checked = null, onClose }) {
+export default function ExportDialog({ versions, current, kit = null, refresh = null, onClose }) {
   const rows = versionRows(versions);
   const [format, setFormat] = useState('pdf');
   const [versionId, setVersionId] = useState(current?.id ?? rows[0]?.id ?? null);
@@ -64,6 +76,33 @@ export default function ExportDialog({ versions, current, checked = null, onClos
   const [google, setGoogle] = useState({ status: 'idle', state: null });
   const [created, setCreated] = useState(null);
   const version = versions.find((v) => String(v.id) === String(versionId)) || current || null;
+
+  // D4598 (#4598) part 2: the picked version's own cards (less any hidden one), read
+  // once per version and cached, so switching back to a version already read never
+  // refetches it. `base.cards`/`base.theme` are the editor's own, in memory; this read
+  // is Export's own, so the dialog checks correctly even opened without an editor.
+  const [contentById, setContentById] = useState({});
+  const [contentFailed, setContentFailed] = useState(null);
+  const [contentTry, setContentTry] = useState(0);
+  useEffect(() => {
+    const id = version?.id ?? null;
+    if (id == null || contentById[id]) return;
+    let live = true;
+    setContentFailed(null);
+    Promise.resolve(api.deckGet(id)).then((r) => {
+      const d = r?.deck || r;
+      if (live) setContentById((m) => (m[id] ? m : { ...m, [id]: { slides: Array.isArray(d?.slides) ? d.slides : [], theme: d?.theme ?? null } }));
+    }, (e) => {
+      reportError('ExportDialog:content', e);
+      if (live) setContentFailed(id);
+    });
+    return () => { live = false; };
+  }, [version?.id, contentById, contentTry]);
+  const content = version?.id != null ? contentById[version.id] : null;
+  const contentUnreadable = contentFailed != null && contentFailed === version?.id && !content;
+  const cards = useMemo(() => (content ? exportableCards(content.slides) : null), [content]);
+  const eDeck = useMemo(() => effectiveDeck(version?.id, version?.version, cards, content?.theme), [version?.id, version?.version, cards, content?.theme]);
+  const send = useSendCheck({ kind: 'export', deck: eDeck, kit, refresh });
 
   const readLedger = useCallback(() => {
     if (!versionId) return;
@@ -121,6 +160,10 @@ export default function ExportDialog({ versions, current, checked = null, onClos
     } finally { setBusy(false); }
   };
 
+  // D4598 (#4598) part 2: "Export anyway" is the gate's own confirm — the warnings
+  // found for the CURRENT combination are confirmed, which unblocks Export; it does
+  // not export by itself, so a press never exports twice.
+  const anyway = () => send.confirm();
   const apply = optionsApply(format);
   return (
     <Lightbox
@@ -132,13 +175,18 @@ export default function ExportDialog({ versions, current, checked = null, onClos
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={GHOST} onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="button" className={PRIMARY} onClick={run} disabled={busy || !version?.id || connectFirst || (isGoogle && google.status === 'loading')} data-testid="pitch-export-run">
+          <button type="button" className={PRIMARY} onClick={run} disabled={busy || !version?.id || connectFirst || (isGoogle && google.status === 'loading') || contentUnreadable || send.blocked} data-testid="pitch-export-run">
             {busy ? 'Exporting…' : exportButton(format)}
           </button>
         </div>
       )}
     >
       <div className="flex flex-col gap-3.5">
+        {/* D4598 (#4598) part 2: off-screen, like the editor's own check (`PreflightPanel.jsx`). */}
+        {send.pf.running ? (
+          <PreflightMeasure key={send.pf.running.done} card={send.pf.running.snapshot.slides[send.pf.running.done]} index={send.pf.running.done}
+            theme={send.pf.running.snapshot.theme} kit={kit} onMeasured={send.pf.onMeasured} />
+        ) : null}
         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Format">
           {FORMATS.map((f) => {
             const on = f.id === format;
@@ -171,9 +219,30 @@ export default function ExportDialog({ versions, current, checked = null, onClos
             {rows.map((r) => <option key={r.id} value={r.id}>{r.label} · saved {r.saved}{r.current ? ' · current' : ''}</option>)}
           </select>
         </label>
-        {/* D4598: the check before Export read one saved version. Picking another is said, never passed off as checked. */}
-        {checked && version?.id != null && String(version.id) !== String(checked.id) ? (
-          <span role="status" className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="pitch-export-not-checked">{notCheckedLine(version.version, checked.version)}</span>
+        {/*
+          D4598 (#4598) part 2: Export checks the picked version's own effective content
+          (`useSendCheck`). Picking another version is a new combination: the check runs
+          again, and Export stays disabled until it is clean or confirmed below.
+        */}
+        {contentUnreadable ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" role="alert" data-testid="pitch-export-content-failed">
+            <span className="text-[12.5px] font-semibold text-axal-destructive dark:text-red-300">This version's content could not be read, so it could not be checked.</span>
+            <button type="button" className={GHOST} onClick={() => setContentTry((t) => t + 1)} data-testid="pitch-export-content-retry">Try again</button>
+          </div>
+        ) : !send.ready ? (
+          <span role="status" className={MUTED} data-testid="pitch-export-checking">
+            {send.pf.running ? `Checking before export · slide ${Math.min(send.pf.progress.done + 1, send.pf.progress.total)} of ${send.pf.progress.total}` : 'Checking before export…'}
+          </span>
+        ) : send.gate?.open ? (
+          <div className="flex flex-col gap-2 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" role="alertdialog" aria-label="Before you export" data-testid="pitch-export-gate">
+            <GateBody gate={send.gate} prefix="pitch-export-gate" />
+            {send.gate.anyway && !send.confirmed ? (
+              <button type="button" className={`${GHOST} self-start`} onClick={anyway} data-testid="pitch-export-gate-anyway">{send.gate.anyway}</button>
+            ) : null}
+            {send.confirmed ? (
+              <span role="status" className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="pitch-export-confirmed">Exporting with the warnings above confirmed.</span>
+            ) : null}
+          </div>
         ) : null}
         <div className="flex flex-col gap-2 text-[12.5px]">
           <label className={`flex items-center gap-2 ${apply ? INK : 'text-axal-muted dark:text-gray-500'}`}>

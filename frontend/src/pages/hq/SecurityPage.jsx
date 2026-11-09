@@ -12,6 +12,7 @@ import AccessWorkspace from './security/AccessWorkspace.jsx';
 import EventsWorkspace from './security/EventsWorkspace.jsx';
 import { activeCount, feedQuery } from './security/eventsModel.js';
 import ResilienceWorkspace from './security/ResilienceWorkspace.jsx';
+import { otherNotRecorded } from './security/resilienceModel.js';
 import AiSafetyWorkspace from './security/AiSafetyWorkspace.jsx';
 import PrivacyWorkspace from './security/PrivacyWorkspace.jsx';
 import StatusBadge from './security/StatusBadge.jsx';
@@ -1067,9 +1068,10 @@ export function SecurityConsole({
     // D4803 slice 2: SE09 leads; the previous zone stays whole behind "How this is measured".
     resilience: (
       <ResilienceWorkspace block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} onRetry={load}>
-        <Zone title="Backup / DR drill" sub="two facts, each its own state">
+        <Zone title="Backup / DR drill" sub="the backup heartbeat and the restore drill, each read from its own record">
           <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
-          {ready && <NotRecordedList items={data.backup_dr?.not_recorded} testid="hq-dr-not-recorded" />}
+          {/* #5046: failover is drawn above as Unsupported, so it is not listed here as "Not recorded". */}
+          {ready && <NotRecordedList items={otherNotRecorded(data.backup_dr)} testid="hq-dr-not-recorded" />}
         </Zone>
       </ResilienceWorkspace>
     ),
