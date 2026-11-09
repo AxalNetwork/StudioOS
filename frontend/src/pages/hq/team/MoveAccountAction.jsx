@@ -13,12 +13,14 @@ import React, { useState } from 'react';
 import { api } from '../../../lib/api';
 import { useGovernedAction } from './governedAction';
 import ActionNotice from './ActionNotice';
+import { escapeCloses, useFocusOnMount } from './actionFocus';
 
 export const MOVE_REASON_MIN = 10;
 
-export default function MoveAccountAction({ hit, from, destinations, onMoved }) {
+export default function MoveAccountAction({ hit, from, destinations, onMoved, onCancel }) {
   const [to, setTo] = useState(destinations[0] || '');
   const [reason, setReason] = useState('');
+  const firstField = useFocusOnMount();
   const move = useGovernedAction(
     (body) => api.hqMoveAccount(from, hit.id, body),
     { fallback: 'The move was refused.', tag: 'hq-team-move', initial: 'open' },
@@ -29,6 +31,7 @@ export default function MoveAccountAction({ hit, from, destinations, onMoved }) 
       className="mt-2 grid gap-2 rounded-lg border border-axal-hairline bg-axal-ground p-2"
       data-testid="hq-team-move"
       data-state={move.state}
+      onKeyDown={escapeCloses(move.busy, onCancel)}
       onSubmit={async (e) => {
         e.preventDefault();
         const out = await move.submit({ destination_code: to, reason: reason.trim() });
@@ -37,7 +40,7 @@ export default function MoveAccountAction({ hit, from, destinations, onMoved }) 
     >
       <label className="text-[11px] text-axal-muted">
         Destination
-        <select className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" value={to} disabled={move.busy} onChange={(e) => setTo(e.target.value)}>
+        <select className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" ref={firstField} value={to} disabled={move.busy} onChange={(e) => setTo(e.target.value)}>
           {destinations.map((code) => <option key={code} value={code}>{code}</option>)}
         </select>
       </label>

@@ -16,12 +16,7 @@ export { supportNoticeOutcome, SupportNoticeOutcome } from './team/SupportSessio
 /**
  * HQ · Team — the first screen whose SUBJECT is the administrators (H9, D138).
  *
- * WHAT IT IS FOR. Until this shipped, supervising an admin meant opening one
- * licence at a time — /admin/licences → a licence → Administrators → Notices —
- * so "who is frozen right now" could not be asked, only assembled. Every power
- * the question implies already existed (D134 opens an account, D135 freezes it,
- * D136 works the notice, D137 pushes the decision to a branch); what was
- * missing was somewhere to see them all standing next to each other.
+ * Every administrator and where each stands, on one screen (D138's history is in DECISIONS.md).
  *
  * THE GROUPS ARE H9'S OWN MODEL, and its copy states why: "There is no global
  * accounts table. HQ asks each branch over its private link and groups what
@@ -33,10 +28,7 @@ export { supportNoticeOutcome, SupportNoticeOutcome } from './team/SupportSessio
  *
  * THE FILTER NARROWS A COMPLETE LIST, WHICH IS THE WHOLE POINT. The roster
  * comes from a query with a predicate and no LIMIT, so narrowing it in the
- * browser hides nothing. `SuperAdminHolders` used to filter a PAGE — the newest
- * hundred accounts — to `role === 'admin'`, and admins are among the oldest
- * accounts, so it silently dropped them. Filtering a complete list narrows it;
- * filtering a page hides rows.
+ * browser hides nothing. Filtering a complete list narrows it; filtering a page hides rows.
  *
  * D5044 — ONE FILE PER CONCERN. This file composes; the parts live in `team/`:
  *   `useHqTeamRoster.js`      the page's one supervision read (`GET /api/admin/hq/admins`), race-safe
@@ -46,6 +38,7 @@ export { supportNoticeOutcome, SupportNoticeOutcome } from './team/SupportSessio
  *   `governedAction.js`       the one state model every destructive action shares
  *   `teamInvalidation.js`     which of the page's reads each act invalidates
  * Each act reports itself through `onChanged(act)`, and the page re-reads what that act changed.
+ * Focus around each action form is `team/actionFocus.js` (D5045).
  */
 
 export default function HqTeamTable({ reloadKey = 0, onLoaded, onChanged }) {

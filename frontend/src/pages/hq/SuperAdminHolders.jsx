@@ -21,22 +21,15 @@ import ActionNotice from './team/ActionNotice';
  * holder. Those refusals are shown verbatim: each is a sentence written for a
  * person, not a code to translate.
  *
- * D221 — A GRANT OR TRANSFER CARRIES A TYPED REASON. It was the one act H20
- * draws as HQ's with no why: opening a support session, demoting an admin and
- * overriding a binding agreement each take ten characters, and the elevation
- * that governs all three took none. The floor is the server's
+ * D221 — A GRANT OR TRANSFER CARRIES A TYPED REASON. The floor is the server's
  * (`HOLDER_REASON_MIN` in routes/admin_super_admins.ts); the form mirrors it so
  * it never offers a submission the server can only refuse.
  *
  * D5044 — TWO READS, NEITHER WAITING ON THE OTHER. The holders are
  * `GET /api/admin/super-admins`; the transfer picker is its own read,
  * `GET /api/admin/super-admins/candidates`, filtered on the server to active
- * administrators who do not hold it. The picker used to be filled from HQ
- * Team's whole supervision read (`api.hqAdmins()`), which the Team table makes
- * anyway, so the page read it twice — and the two were awaited together, so a
- * failed picker read threw the holder list away with it. Now the holders
- * render whatever the candidates read does, and a failed candidates read says
- * so beside the picker.
+ * administrators who do not hold it. The holders render whatever the
+ * candidates read does, and a failed candidates read says so beside the picker.
  *
  * D5044 — REVOKE IS NOT A NORMAL ACTION. With one active holder (the enforced
  * state) there is nothing to revoke: the route refuses the last holder and the
@@ -130,10 +123,8 @@ export default function SuperAdminHolders({ onChanged, onTransferred, viewerId =
   const [reason, setReason] = useState('');
   // D221 — WHO THIS ACCOUNT JUST HANDED THE PLATFORM TO. After a transfer it no
   // longer holds the elevation, so the reads this card and the Team table make
-  // answer 403. Reloading them read that refusal back as an error on a change
-  // that had SUCCEEDED ("Only a current holder can change who holds the
-  // elevation"), which is the one message a successful handover must never
-  // show. The card says what happened instead, and stops reading.
+  // answer 403. Re-reading would show that refusal as
+  // an error on a change that succeeded, so the card says what happened and stops reading.
   const [handed, setHanded] = useState(null);
 
   const loadHolders = useCallback(async () => {
