@@ -115,6 +115,8 @@ export type DocRow = {
 export type VersionRow = {
   id: number; document_uid: string; version: number; signed: number; r2_key: string; file_sha256: string; file_bytes: number;
   content_type: string; note: string | null; uploaded_by: number | null; created_at: string;
+  // D4811 part 12: set on a signed copy's INSERT (migration 202611092105); NULL before it.
+  signed_on?: string | null; signatory?: string | null; attested_by?: number | null;
 };
 
 /** A document as the tab draws it. */
@@ -127,7 +129,24 @@ export const docView = (d: DocRow, latest: VersionRow | null, versions: number) 
 export const versionView = (v: VersionRow) => ({
   version: Number(v.version), signed: !!Number(v.signed), file_bytes: Number(v.file_bytes), content_type: v.content_type,
   file_sha256: v.file_sha256, note: v.note, created_at: v.created_at,
+  signed_on: v.signed_on ?? null, signatory: v.signatory ?? null, attested: v.attested_by != null,
 });
+
+/**
+ * D4811 part 12 (board CT-12 B): what a version uploaded as the signed copy must
+ * say — the date it was signed (not after today), who signed it, and the
+ * uploader's attestation that it is the complete, fully signed copy. Pure:
+ * `{ ok: true, signed_on, signatory }` or `{ ok: false, code, message }`.
+ */
+export function signedCopyOf(form: { signed_on?: unknown; signatory?: unknown; attest?: unknown }, today: string) {
+  const signedOn = dateOf(typeof form.signed_on === 'string' ? form.signed_on.trim() : form.signed_on);
+  if (!signedOn) return { ok: false as const, code: 'signed_on_required', message: 'Give the date the copy was signed, YYYY-MM-DD. Nothing was uploaded.' };
+  if (signedOn > today) return { ok: false as const, code: 'signed_on_future', message: 'The signature date is after today. Nothing was uploaded.' };
+  const signatory = typeof form.signatory === 'string' ? form.signatory.trim().replace(/\s+/g, ' ') : '';
+  if (signatory.length < 2 || signatory.length > 200) return { ok: false as const, code: 'signatory_required', message: 'Name who signed it, with their capacity (2 to 200 characters). Nothing was uploaded.' };
+  if (String(form.attest ?? '') !== 'true') return { ok: false as const, code: 'attestation_required', message: 'Confirm this is the complete, fully signed copy. Nothing was uploaded.' };
+  return { ok: true as const, signed_on: signedOn, signatory };
+}
 
 export async function readDoc(env: Env, uid: string): Promise<DocRow | null> {
   return (await env.DB.prepare('SELECT * FROM governance_documents WHERE uid = ?').bind(uid).first<DocRow>()) ?? null;

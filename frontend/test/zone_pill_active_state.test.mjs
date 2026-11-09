@@ -215,8 +215,8 @@ test('the route modules that resolve a zone carry the root opt-out', () => {
   ]) {
     const src = codeOnly(read(file));
     assert.match(src, /location\.pathname === bucket\.prefix/, `${file} must compute isRoot`);
-    // D1236 (#2423): /deals/compare lights no pill either.
-    assert.match(src, /activeSlug=\{isRoot(?: \|\| isCompare)? \? null : undefined\}/,
+    // D1236 (#2423): /deals/compare lights no pill either; D4815: nor does /deals/rooms.
+    assert.match(src, /activeSlug=\{isRoot(?: \|\| isCompare)?(?: \|\| isRooms)? \? null : undefined\}/,
       `${file} must light no pill on a bucket root`);
     // Was `bucket?.label`. Same invariant, one level up: the root's heading is
     // derived from the BUCKET rather than from a zone it is not on — and it is

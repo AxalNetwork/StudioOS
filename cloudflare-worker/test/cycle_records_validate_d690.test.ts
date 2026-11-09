@@ -497,7 +497,7 @@ test('#1692 test 5: each record has its title, four facts, its sections in the c
   const attach = sig.actions.find((a: any) => a.key === 'attach');
   assert.equal(attach.multipart, true);
   const claim = (await real(db, 10, 'GET', rec('experiments', '5'))).body;
-  assert.deepEqual(claim.facts.map((f: any) => f.value ?? f.reason), ['5 of 8 interviewees', 'No condition written', '0 for · 0 against', 'Anecdote']);
+  assert.deepEqual(claim.facts.map((f: any) => f.value ?? f.reason), ['5 of 8 interviewees', 'No condition written', '0 for · 0 against · 0 interviews', 'Anecdote']);
   assert.deepEqual(claim.main[1].rows.map((r: any) => [r.a, r.c]), [['Landing page', 'Running']]);
 });
 

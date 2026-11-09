@@ -397,11 +397,11 @@ test(`B8. a message that never starts goes to the DLQ: repaired before it is ack
     w.queue.push(message);
     const replay = await deliver(w);
     assert.deepEqual([replay.acked, w.workflows.instances.size], [[0], 0]);
-    // FINDING (D4594 §4): the repair writes D1 only, so the scope object's live view still lists the
-    // failed run. Admission is decided by D1 (doRuntime.ts), so the agent is not blocked; a rebuild clears it.
-    assert.deepEqual((await w.runtime.status(P)).live.map((x: any) => x.run_uid), [uid], 'the live view is stale after the repair (the finding)');
+    // B8b (D4594 §4, fixed): the repair also tells the scope's object, so its live view drops the failed run.
+    // Mutation checked: removing `untrackEnded` from the repair → the failed run stays listed.
+    assert.deepEqual((await w.runtime.status(P)).live.map((x: any) => x.run_uid), [], 'the live view drops the run the repair ended');
     const again = await w.runtime.admit(P, { agentId: AGENT, taskId: 200, by: SPONSOR, source: 'person' });
-    assert.ok(again.ok, `the stale view does not block the agent: ${JSON.stringify(again)}`);
+    assert.ok(again.ok, `a fresh start is admitted: ${JSON.stringify(again)}`);
     w.db.prepare("UPDATE agent_task_runs SET status = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE uid = ?").run(again.ok ? again.run.uid : '');
     await w.runtime.rebuild(P);
     const l = await assertClean(w, 'B8 after rebuild');
@@ -409,7 +409,6 @@ test(`B8. a message that never starts goes to the DLQ: repaired before it is ack
   } finally { w.close(); }
 });
 
-test.todo('B8b. the DLQ repair also clears the run from the scope object\'s live view (finding; proposed one-line fix in D4594 §4, for #4593\'s owner)');
 
 test(`B9. the evidence is labelled for what it is [${EVIDENCE_LABEL}]`, () => {
   // #4594: results separate LOCAL SIMULATION, HOSTED PLATFORM WITH STUB, REAL PROVIDER and PRODUCTION OBSERVATION.
