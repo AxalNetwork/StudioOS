@@ -66,7 +66,35 @@ export function rehearsalConfig({ dbName, databaseId }) {
 /** Objects the engine or D1 makes on its own, never part of the comparison. */
 export const ENGINE_OWNED = /^(_cf_[A-Z]|sqlite_)/;
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const norm = (sql) => String(sql ?? '').replace(/\s+/g, ' ').trim();
+/**
+ * DDL without its comments. SQLite stores a CREATE statement's text as written,
+ * comments included; the restore path (export, split, import) does not keep
+ * them, so the restored text of a commented table differs only in comments
+ * (measured on the first local rehearsal: identical columns, types, defaults
+ * and constraints). Comments are dropped outside quotes only, so a `--` inside
+ * a string default or a quoted name is kept.
+ */
+export function stripSqlComments(sql) {
+  const s = String(sql ?? '');
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    const close = { "'": "'", '"': '"', '`': '`', '[': ']' }[c];
+    if (close) {
+      let j = i + 1;
+      while (j < s.length) {
+        if (s[j] === close) { if (close !== ']' && s[j + 1] === close) { j += 2; continue; } break; }
+        j++;
+      }
+      out += s.slice(i, j + 1); i = j; continue;
+    }
+    if (c === '-' && s[i + 1] === '-') { while (i < s.length && s[i] !== '\n') i++; out += '\n'; continue; }
+    if (c === '/' && s[i + 1] === '*') { const e = s.indexOf('*/', i + 2); i = e === -1 ? s.length : e + 1; out += ' '; continue; }
+    out += c;
+  }
+  return out;
+}
+const norm = (sql) => stripSqlComments(sql).replace(/\s+/g, ' ').replace(/\s+([,)])/g, '$1').trim();
 
 /** `sqlite_master` rows reduced to what is compared: `type:name` → normalised SQL. */
 export function schemaMap(rows) {

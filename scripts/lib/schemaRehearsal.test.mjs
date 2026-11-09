@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
-  rehearsalNames, createdDatabaseId, rehearsalConfig, schemaMap, rowCountQueries, countMap, compareRestore, FIXTURE_TABLES,
+  rehearsalNames, createdDatabaseId, rehearsalConfig, schemaMap, stripSqlComments, rowCountQueries, countMap, compareRestore, FIXTURE_TABLES,
 } from './schemaRehearsal.mjs';
 import { resolveTarget } from './migrationTargets.mjs';
 import { seedStatements, toSqlFile } from './agentSyntheticFixtures.mjs';
@@ -48,6 +48,20 @@ test('the created database id is read from either form wrangler prints, and its 
   assert.equal(createdDatabaseId(`[[d1_databases]]\nbinding = "DB"\ndatabase_name = "x"\ndatabase_id = "${UUID}"`), UUID);
   assert.equal(createdDatabaseId(`{ "d1_databases": [{ "binding": "DB", "database_id": "${UUID}" }] }`), UUID);
   assert.throws(() => createdDatabaseId('Successfully created DB'), /no database_id/);
+});
+
+test('comments in stored DDL are not a schema difference, but anything else is', () => {
+  // The restore path drops the comments SQLite keeps in CREATE TABLE text
+  // (first local rehearsal: same columns, types, defaults and constraints).
+  const src = schemaMap([{ type: 'table', name: 't', sql: "CREATE TABLE t (\n  a TEXT NOT NULL,   -- why a exists\n  b TEXT DEFAULT 'x' /* note */\n, c INTEGER)" }]);
+  const restored = schemaMap([{ type: 'table', name: 't', sql: "CREATE TABLE t (\n  a TEXT NOT NULL,   \n  b TEXT DEFAULT 'x' \n, c INTEGER)" }]);
+  assert.equal(compareRestore({ schema: src, counts: new Map() }, { schema: restored, counts: new Map() }).ok, true);
+  const changed = schemaMap([{ type: 'table', name: 't', sql: "CREATE TABLE t (a TEXT NOT NULL, b TEXT DEFAULT 'y', c INTEGER)" }]);
+  assert.deepEqual(compareRestore({ schema: src, counts: new Map() }, { schema: changed, counts: new Map() }).sqlDiffers, ['table:t'], 'a changed default is a difference');
+  // A `--` inside a quoted default is text, not a comment.
+  assert.equal(stripSqlComments("CREATE TABLE t (a TEXT DEFAULT '--keep', b \"x--y\") -- drop"), "CREATE TABLE t (a TEXT DEFAULT '--keep', b \"x--y\") \n");
+  assert.notEqual(schemaMap([{ type: 'table', name: 't', sql: "CREATE TABLE t (a DEFAULT '--1')" }]).get('table:t'),
+    schemaMap([{ type: 'table', name: 't', sql: "CREATE TABLE t (a DEFAULT '--2')" }]).get('table:t'));
 });
 
 test('objects D1 or SQLite make on their own are never compared', () => {
