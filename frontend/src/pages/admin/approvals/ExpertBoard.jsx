@@ -5,10 +5,10 @@ import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { safeExternalUrl } from '../../../lib/url';
 import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
 import { AssignDialog, BandPill, OwnerCell, UrgencyPill } from './AdminApprovals';
-import { DECIDED_HERE, REGISTER_NOTE, afterDecision, boardCrumb, boardStrip, slaOfBand } from './boardGrammar';
+import { DECIDED_HERE, REGISTER_NOTE, afterDecision, boardCrumb, boardStep, boardStrip, slaOfBand } from './boardGrammar';
 import { BOARDS, EXPERT_TABS, dayText, decisionCopy, doneLine, expertBoard, expertState, reasonReady, tabPath } from './approvalsModel';
 import {
-  BTN, BTN_PRIMARY, BoardStrip, CARD, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
+  BTN, BTN_PRIMARY, BoardStrip, CARD, DrawerStep, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
   TD, TH, WARN_PILL, nf, useBoardOwners, useLoad,
 } from './boardParts';
 import Sheet from '../../../ui/Sheet.jsx';
@@ -86,7 +86,7 @@ const DECISION_WORD = { verified: 'Verified', unverified: 'Verification removed'
 const STATE_EYEBROW = { verify: 'Needs verification', incomplete: 'Profile incomplete', verified: 'Verified', declined: 'Declined', hidden: 'Hidden' };
 
 /** One expert at their own address (APR8d), over the board. */
-function ExpertDrawer({ uid, onClose, onDecided, own }) {
+function ExpertDrawer({ uid, onClose, onDecided, own, step, from }) {
   const read = useLoad(() => approvalBoardsApi.expert(uid), `expert-${uid}`, { what: 'approvals:expert' });
   const profile = useLoad(() => api.wellbeingExpertGet(uid), `expert-profile-${uid}`, { what: 'approvals:expert:profile' });
   const [dialog, setDialog] = useState(null);
@@ -107,6 +107,7 @@ function ExpertDrawer({ uid, onClose, onDecided, own }) {
     <>
       <Sheet label={ready ? `${e.name}, wellbeing expert` : 'Wellbeing expert'} eyebrow={ready ? `Wellbeing expert · ${STATE_EYEBROW[state] || 'Expert'}` : 'Wellbeing expert'}
         title={ready ? (e.name || 'Name not recorded') : 'Wellbeing expert'} sub={ready ? (e.headline || 'Esc to close') : null} onClose={onClose} testId="expert-drawer" width={600}
+        headerActions={<DrawerStep step={step} from={from} testId="expert-step" prevTo={step?.prev ? `/admin/approvals/wellbeing-experts/${encodeURIComponent(step.prev.key)}` : null} nextTo={step?.next ? `/admin/approvals/wellbeing-experts/${encodeURIComponent(step.next.key)}` : null} />}
         footer={ready && ACTIONS[state] ? (
           <div className="flex flex-col gap-2">
             <div className={`${FOOT} flex-wrap items-center`}>
@@ -265,7 +266,7 @@ export default function ExpertBoard({ at }) {
               ) : <p className={`m-0 ${SUB}`} data-testid="experts-empty">{`No expert is in ${tab.label}.`}</p>}
             </>
           )}
-      {at.item ? <ExpertDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} /> : null}
+      {at.item ? <ExpertDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={board ? boardStep(board.rows, at.item) : null} from={from} /> : null}
       {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={own.finish} /> : null}
     </div>
   );

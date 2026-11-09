@@ -299,3 +299,22 @@ export function OwnerBox({ owner, callerId, canTake, onTake, onAssign, testId })
     </section>
   );
 }
+
+/**
+ * D4814 (#4814, part 6, AP-09/11/13): a board drawer's place in its tab —
+ * "2 of 6" with ‹ and ›, each a link to the item before or after it, carrying
+ * the tab the drawer came from so closing still returns there.
+ */
+export function DrawerStep({ step, prevTo, nextTo, from, testId }) {
+  if (!step) return null;
+  const BOX = 'inline-flex h-11 w-11 items-center justify-center rounded-[7px] border border-axal-hairline text-[13px] font-bold text-axal-ink hover:bg-gray-50 sm:h-8 sm:w-8 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
+  return (
+    <div className="flex items-center gap-1.5" data-testid={testId}>
+      <span className={`${SUB} ${MONO}`} data-testid={`${testId}-pos`}>{step.pos}</span>
+      {prevTo ? <Link to={prevTo} state={{ from }} aria-label="Previous item" className={BOX} data-testid={`${testId}-prev`}>‹</Link>
+        : <span aria-hidden="true" className={`${BOX} opacity-40`}>‹</span>}
+      {nextTo ? <Link to={nextTo} state={{ from }} aria-label="Next item" className={BOX} data-testid={`${testId}-next`}>›</Link>
+        : <span aria-hidden="true" className={`${BOX} opacity-40`}>›</span>}
+    </div>
+  );
+}

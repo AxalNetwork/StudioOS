@@ -173,3 +173,16 @@ export function afterDecision(line, reply, who) {
   }
   return { warn: false, text: line };
 }
+
+/**
+ * D4814 (#4814, part 6, AP-09/11/13): where a board's drawer stands in the
+ * tab it was opened from — "2 of 6", with the rows before and after it, in
+ * the tab's own order and filters. Null when the item is not in that list
+ * (opened from a link), so no position is invented.
+ */
+export function boardStep(rows, key) {
+  const list = Array.isArray(rows) ? rows : [];
+  const i = list.findIndex((r) => String(r.key) === String(key));
+  if (i < 0) return null;
+  return { pos: `${(i + 1).toLocaleString('en-US')} of ${list.length.toLocaleString('en-US')}`, prev: list[i - 1] || null, next: list[i + 1] || null };
+}

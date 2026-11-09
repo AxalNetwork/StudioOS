@@ -829,6 +829,8 @@ export function decidedRows(reply) {
   return (Array.isArray(reply?.items) ? reply.items : []).map((r) => ({
     key: `${r.lane}:${r.item_id}:${r.decided_at}`,
     laneKey: r.lane,
+    itemId: Number.isInteger(Number(r.item_id)) ? Number(r.item_id) : null,
+    itemUid: r.item_uid || null,
     when: stampText(r.decided_at) || 'Not recorded',
     lane: laneLabelOf(r.lane, r.lane_label),
     who: r.who || 'Not recorded',
