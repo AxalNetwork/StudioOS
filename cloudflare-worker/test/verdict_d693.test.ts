@@ -22,7 +22,7 @@ import { SignJWT } from 'jose';
 import cycleVerdict from '../src/routes/cycle_verdict.ts';
 import founderValidate from '../src/routes/founder_validate.ts';
 import {
-  recordDecision, currentDecision, decisionsFor, decisionById, DECISION_EVIDENCE_BAR, NO_EVIDENCE_REASON,
+  recordDecision, currentDecision, decisionsFor, decisionById, decisionMethod, DECISION_EVIDENCE_BAR, NO_EVIDENCE_REASON,
   VerdictError, adaptEvidenceReader, evidenceFor, verdictCard, decisionRecords, TIMELINE_CAP,
   type EvidenceItem, type EvidenceSource, type PivotStatements,
 } from '../src/services/verdict.ts';
@@ -31,7 +31,7 @@ import { hardDeleteProject } from '../src/services/projectTrash.ts';
 import { ensurePainGroupsSchema } from '../src/services/painGroups.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import cycleValidateRoute from '../src/routes/cycle_validate.ts';
-import { verdictSpec } from '../src/services/records/verdict.ts';
+import { verdictSpec, V1_REASON } from '../src/services/records/verdict.ts';
 import { createHypothesis } from '../src/services/validateWriters.ts';
 import { evidenceFor as validateEvidenceFor } from '../src/services/validateEvidence.ts';
 import { activityFor } from '../src/services/cycleActivity.ts';
@@ -75,6 +75,8 @@ function fixture({ fk = false }: { fk?: boolean } = {}) {
   // real evidence reader's `hypothesis_evidence_links` and the Pivot's
   // createHypothesis columns. Applied once: its ALTERs cannot run twice.
   db.exec(sqlOf('460_validate_record_stores.sql'));
+  // D4586: the methodology a decision was counted under, and the links that did not count.
+  db.exec(sqlOf('202611091102_validate_decision_methodology.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001, 0);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002, 0);
@@ -138,10 +140,13 @@ function hypothesis(db: any, pid: number, code: string, claim = `${code} claim`)
 }
 
 /** Made-up evidence items, keyed the way #1692 names them. */
-function items(n: number, { contradicting = 0, prefix = 'evidence' } = {}): EvidenceItem[] {
+function items(n: number, { contradicting = 0, prefix = 'evidence', hypothesis = undefined as number | undefined } = {}): EvidenceItem[] {
+  // D4586: a hypothesis-level decision counts only evidence linked to that hypothesis, so an item
+  // made for one names it. Each item is its own source (no `ref_id`), as distinct records are.
   return Array.from({ length: n }, (_, i) => ({
     id: `${prefix}-${i + 1}`, kind: 'hypothesis_evidence', label: `Item ${i + 1} · H1`,
     strength: 'measured', direction: i < contradicting ? 'contradicts' : 'supports', date: '2026-10-12',
+    ...(hypothesis === undefined ? {} : { hypothesis_id: hypothesis }),
   }));
 }
 const fixed = (list: EvidenceItem[]): EvidenceSource => async () => list;
@@ -205,13 +210,16 @@ test('1: deleting a project with a hypothesis\'s decision, its evidence and a co
   const db = fixture({ fk: true });
   const env = envOf(db);
   const h = hypothesis(db, P, 'H1');
-  const r = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: h, evidence: keys(items(5)) }, { evidenceSource: fixed(items(5)) });
-  await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'stop', for: h, evidence: keys(items(5)) }, { evidenceSource: fixed(items(5)) });
+  const r = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: h, evidence: keys(items(5)) }, { evidenceSource: fixed(items(5, { hypothesis: h })) });
+  await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'stop', for: h, evidence: keys(items(6)) }, { evidenceSource: fixed(items(6, { hypothesis: h, prefix: 'evidence' }).map((it, i) => (i === 5 ? { ...it, hypothesis_id: h + 99 } : it))) });
   db.prepare(`INSERT INTO validation_decision_commitments (uid, decision_id, project_id, text, owner_user_id, created_by)
               VALUES ('c-1', ?, ?, 'Call five carriers', ?, ?)`).run(r.id, P, FOUNDER, FOUNDER);
   assert.ok((db.prepare('SELECT COUNT(*) AS n FROM validation_decision_evidence').get() as any).n >= 5);
+  // D4586: the methodology rows, and an excluded link (the sixth item is another claim's), go too.
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM validation_decision_method').get() as any).n, 2);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM validation_decision_exclusions').get() as any).n, 1);
   await hardDeleteProject(env, P);
-  for (const t of ['validation_decisions', 'validation_decision_evidence', 'validation_decision_commitments']) {
+  for (const t of ['validation_decisions', 'validation_decision_evidence', 'validation_decision_commitments', 'validation_decision_method', 'validation_decision_exclusions']) {
     assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as any).n, 0, t);
   }
   assert.equal(db.prepare('SELECT id FROM projects WHERE id = ?').get(P), undefined);
@@ -246,8 +254,7 @@ test('3: a decision supersedes only its own scope, and two in one scope leave on
   const db = fixture();
   const env = envOf(db);
   const h2 = hypothesis(db, P, 'H2');
-  const ev = fixed(items(5));
-  const rec = (d: string, f: any) => recordDecision(env, userOf(FOUNDER), { id: P }, { decision: d, for: f, evidence: keys(items(5)) }, { evidenceSource: ev });
+  const rec = (d: string, f: any) => recordDecision(env, userOf(FOUNDER), { id: P }, { decision: d, for: f, evidence: keys(items(5)) }, { evidenceSource: fixed(items(5, f === 'venture' ? {} : { hypothesis: f })) });
 
   const v1 = await rec('proceed', 'venture');
   const hA = await rec('pivot', h2);
@@ -423,9 +430,12 @@ test('5: each stored item keeps its label, strength, direction and date after it
   const r = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: 'venture', evidence: keys(ev) }, { evidenceSource: fromLinks });
   db.prepare(`UPDATE discovery_interviews SET interviewee_name = 'Renamed', interview_date = '2026-10-15' WHERE id = ?`).run(iv);
   const rec = await decisionById(env, P, r.id);
+  // D4586: the two links reach one interview, so one counts and the other is kept as a repeat source.
   assert.deepEqual(rec!.evidence.map((e) => [e.ref_id, e.label, e.strength, e.direction, e.on_date]), [
     [`pain-${l1}-${iv}`, 'Rae Carrier · H1', 'anecdote', 'supports', '2026-10-01'],
-    [`pain-${l2}-${iv}`, 'Rae Carrier · H2', 'anecdote', 'supports', '2026-10-01'],
+  ]);
+  assert.deepEqual((await decisionMethod(env, r.id)).excluded.map((e) => [e.ref_id, e.label, e.source_key, e.reason]), [
+    [`pain-${l2}-${iv}`, 'Rae Carrier · H2', `interview:${iv}`, 'duplicate_source'],
   ]);
 });
 
@@ -453,7 +463,8 @@ test('6: the founder, an admitted Lab member on their own venture and an admin r
     const p = await post(db, who, { decision: 'proceed', for: 'venture' }, pid);
     assert.equal(p.status, 201, `${roleOf[who]} POST ${JSON.stringify(p.body)}`);
     assert.equal(p.body.state, 'withheld');
-    assert.deepEqual(Object.keys(p.body).sort(), ['id', 'pivot_hypothesis_id', 'state', 'supersedes_id']);
+    assert.deepEqual(Object.keys(p.body).sort(), ['coverage', 'id', 'pivot_hypothesis_id', 'state', 'supersedes_id']);
+    assert.equal(p.body.coverage.methodology_version, 2);
     assert.equal((await summaryCsv(db, who, pid)).status, 200, `${roleOf[who]} CSV`);
   }
 });
@@ -495,7 +506,7 @@ test('7: a decision logs one validate.verdict row; a superseding one also logs o
   const db = fixture();
   const env = envOf(db);
   const h2 = hypothesis(db, P, 'H2');
-  const ev = fixed(items(5));
+  const ev = fixed(items(5, { hypothesis: h2 }));
   const SECRET = 'Margins collapse below forty carriers';
   const first = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'pivot', for: h2, reasoning: SECRET, evidence: keys(items(5)) }, { evidenceSource: ev });
   const second = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: h2, reasoning: SECRET, evidence: keys(items(5)) }, { evidenceSource: ev });
@@ -535,7 +546,7 @@ test('10: the summary CSV reads the venture\'s current given decision, never a h
   const db = fixture();
   const env = envOf(db);
   const h2 = hypothesis(db, P, 'H2');
-  const ev = fixed(items(5));
+  const ev = fixed(items(5, { hypothesis: h2 }));
   const venture = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: 'venture', reasoning: 'Venture call', evidence: keys(items(5)) }, { evidenceSource: ev });
   await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'stop', for: h2, reasoning: 'H2 call', evidence: keys(items(5)) }, { evidenceSource: ev });
   await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'pivot', for: 'venture', reasoning: 'Withheld call' }, { evidenceSource: ev });
@@ -641,8 +652,10 @@ async function rec(db: any, who: number, method: string, path: string, body?: un
 const recordOf = (db: any, who: number, id: number, pid = P) => rec(db, who, 'GET', `/records/${id}?project=${pid}`);
 const actOn = (db: any, who: number, id: number, key: string, body: unknown = {}, pid = P) =>
   rec(db, who, 'POST', `/records/${id}/actions/${key}?project=${pid}`, body);
+/** D4586: on a hypothesis-level decision, the items are that hypothesis's own. */
+const ownedBy = (list: EvidenceItem[], scope: unknown) => (typeof scope === 'number' ? list.map((e) => ({ ...e, hypothesis_id: scope })) : list);
 const given = (db: any, who: number, input: any, pid = P) =>
-  recordDecision(envOf(db), userOf(who), { id: pid }, { evidence: keys(EVIDENCE), ...input }, { evidenceSource: fixed(EVIDENCE) });
+  recordDecision(envOf(db), userOf(who), { id: pid }, { evidence: keys(EVIDENCE), ...input }, { evidenceSource: fixed(ownedBy(EVIDENCE, input.for)) });
 const commitments = (db: any) => db.prepare('SELECT * FROM validation_decision_commitments ORDER BY id').all() as any[];
 
 test('1: on the record, a pre-464 row is a given venture decision whose Evidence is Not recorded, with the reason', async () => {
@@ -656,6 +669,8 @@ test('1: on the record, a pre-464 row is a given venture decision whose Evidence
   assert.equal(r.body.sub, 'Recorded 3 Sep by Fay Founder', 'no evidence clause on an old-route decision');
   assert.deepEqual(r.body.facts[2], { label: 'Evidence', value: null, reason: NO_EVIDENCE_REASON });
   assert.deepEqual(r.body.facts[3], { label: 'Supersedes', value: 'Nothing, the first for the venture' });
+  // D4586 § 6: a decision from before methodology v2 is not recounted; it says which method it had.
+  assert.deepEqual(r.body.facts[4], { label: 'Counted', value: null, reason: V1_REASON });
   assert.equal(r.body.main[1].empty, NO_EVIDENCE_REASON);
 });
 
@@ -757,6 +772,8 @@ test('13: the record follows CO:368', async () => {
     { label: 'For', value: 'The venture' },
     { label: 'Evidence', value: '5 items' },
     { label: 'Supersedes', value: 'Pivot · 3 Sep' },
+    // D4586: what it was counted on (the fixture's items are five distinct records, none an interview).
+    { label: 'Counted (methodology v2)', value: '5 relationships · 5 sources · 0 interviews · 5 of 5 counted: 4 supporting, 1 contradicting' },
   ]);
   assert.deepEqual(r.body.main.map((s: any) => [s.key, s.title]), [['reasoning', 'Reasoning'], ['evidence', 'Evidence it rests on']]);
   assert.deepEqual(r.body.main[0].rows, [{ a: 'Margins hold at forty carriers' }]);
@@ -801,7 +818,10 @@ test('13: the record follows CO:368', async () => {
   assert.ok(!wr.body.actions.some((a: any) => a.key === 'plan-build'), 'a withheld decision offers no plan (VB14 says why on the plan)');
   assert.ok(!h.body.actions.some((a: any) => a.key === 'plan-build'), 'a Stop plans nothing');
   assert.equal(wr.body.sub.endsWith('rests on 1 piece of evidence'), true, wr.body.sub);
-  assert.deepEqual(wr.body.facts.slice(2), [{ label: 'Evidence', value: '1 item' }, { label: 'Supersedes', value: 'Nothing, withheld' }]);
+  assert.deepEqual(wr.body.facts.slice(2), [
+    { label: 'Evidence', value: '1 item' }, { label: 'Supersedes', value: 'Nothing, withheld' },
+    { label: 'Counted (methodology v2)', value: '1 relationship · 1 source · 0 interviews · 1 of 5 counted: 0 supporting, 1 contradicting' },
+  ]);
   assert.equal(wr.body.main[0].empty, 'No reasoning recorded.');
   assert.deepEqual(wr.body.main[0].rows, []);
 });
@@ -893,8 +913,9 @@ test('14: form-options lists The venture then the open hypotheses, and each evid
   ]);
   assert.equal(r.body.evidence.bar, DECISION_EVIDENCE_BAR);
   assert.deepEqual(r.body.evidence.options, [
-    { value: 'evidence-7', label: 'Pilot invoice · H1 · Measured', meta: '12 Oct', hypothesis_id: h1 },
-    { value: 'pain-3-9', label: 'Interview · H1 · Strength not recorded', meta: null, hypothesis_id: null },
+    // D4586: each option names its source; with no `ref_id` the link is its own source.
+    { value: 'evidence-7', label: 'Pilot invoice · H1 · Measured', meta: '12 Oct', hypothesis_id: h1, source: 'hypothesis_evidence:evidence-7' },
+    { value: 'pain-3-9', label: 'Interview · H1 · Strength not recorded', meta: null, hypothesis_id: null, source: 'interview:pain-3-9' },
   ]);
   // D757 §2.6 (#1925): with no decision yet, every interview item is preselected; the others never are.
   assert.deepEqual(r.body.evidence.suggested_evidence, ['pain-3-9']);
@@ -913,7 +934,7 @@ const table = (db: any, q: Record<string, unknown> = {}, pid = P) => decisionRec
 
 /** One decision through the writer, dated `on` and written by `who`: given at the bar, withheld below it. */
 async function decide(db: any, o: { decision?: string; for?: 'venture' | number; n?: number; reasoning?: string; on?: string; who?: number; pid?: number } = {}) {
-  const list = items(o.n ?? DECISION_EVIDENCE_BAR, { prefix: `e${Math.random().toString(36).slice(2, 8)}` });
+  const list = items(o.n ?? DECISION_EVIDENCE_BAR, { prefix: `e${Math.random().toString(36).slice(2, 8)}`, hypothesis: typeof o.for === 'number' ? o.for : undefined });
   const r = await recordDecision(envOf(db), userOf(o.who ?? FOUNDER), { id: o.pid ?? P },
     { decision: o.decision ?? 'proceed', for: o.for ?? 'venture', reasoning: o.reasoning, evidence: keys(list) },
     { evidenceSource: fixed(list) });
@@ -1220,13 +1241,21 @@ test('5 integration: real evidence uses distinct link keys, names claims, and sn
   assert.ok(selected.every((it) => it.label.includes(`${it.hypothesis_id === links.h1 ? 'H1' : 'H2'} claim`)));
   const r = await post(db, FOUNDER, { decision: 'pivot', for: 'venture', pivot_claim: 'Dispatch by phone', evidence: keys(selected) });
   assert.equal(r.status, 201, r.text);
-  assert.equal(r.body.state, 'given');
+  // D4586: five links, but the first two reach one interview (once supporting, once contradicting):
+  // four sources, so the Pivot is recorded and withheld, with the shortfall and both directions visible.
+  assert.equal(r.body.state, 'withheld');
+  assert.deepEqual(
+    [r.body.coverage.links, r.body.coverage.sources, r.body.coverage.counted, r.body.coverage.counted_supporting, r.body.coverage.counted_contradicting, r.body.coverage.interviews, r.body.coverage.interviewees, r.body.coverage.organizations],
+    [5, 4, 4, 4, 1, 4, 2, null],
+  );
   assert.ok(r.body.pivot_hypothesis_id);
   db.exec("UPDATE pain_groups SET title = 'Changed theme'; UPDATE hypotheses SET claim = 'Changed claim'; UPDATE hypothesis_pain_links SET strength = 'measured', direction = 'contradicts'; UPDATE hypothesis_evidence_links SET strength = 'anecdote', direction = 'contradicts'; UPDATE discovery_interviews SET interview_date = '2026-10-16'");
   assert.notDeepEqual(await evidenceFor(env, P), selected);
   const saved = await decisionById(env, P, r.body.id);
   assert.deepEqual(saved!.evidence.map((it) => [it.ref_id, it.label, it.strength, it.direction, it.on_date]),
-    selected.map((it) => [it.id, it.label, it.strength, it.direction, it.date]));
+    selected.filter((_, i) => i !== 1).map((it) => [it.id, it.label, it.strength, it.direction, it.date]));
+  assert.deepEqual((await decisionMethod(env, r.body.id)).excluded.map((x) => [x.ref_id, x.label, x.direction, x.reason]),
+    [[selected[1].id, selected[1].label, 'contradicts', 'duplicate_source']]);
 });
 
 test('5 integration: a foreign real evidence key is 404 before any Pivot, decision, snapshot or activity write', async () => {

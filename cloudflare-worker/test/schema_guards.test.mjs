@@ -321,9 +321,14 @@ test('a tagged-template interpolation is the bound ? it becomes', () => {
 test('the guard reports how much of the SQL it actually read', () => {
   unknownColumns();
   // Raw `.prepare(`/`.exec(` interpolation can splice an identifier, so those
-  // stay skipped and the count is printed rather than hidden.
+  // stay skipped and the count is printed rather than hidden. D5022 (#5022)
+  // added five reviewed, ledgered sites (`sql-prepare-baseline.json`) for
+  // `licencePackagesStore.ts`'s column allow-list and `?`-placeholder
+  // builder, pushing the count past the old 500 ceiling — raised with
+  // headroom rather than just past the new total, since this is a loose
+  // growth alarm, not an exact ratchet.
   assert.ok(coverage.read > 3500, `expected most strings read, got ${coverage.read}`);
-  assert.ok(coverage.skipped > 0 && coverage.skipped < 500, `unexpected skip count ${coverage.skipped}`);
+  assert.ok(coverage.skipped > 0 && coverage.skipped < 600, `unexpected skip count ${coverage.skipped}`);
 });
 
 test('the ten tagged-template defects are corrected at the source', () => {

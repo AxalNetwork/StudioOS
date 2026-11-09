@@ -33,7 +33,7 @@ import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
 export const BUILD_MODULES = [
-  ['solution-design', 'Solution design', 'mvp_features and venture_risks', 'Features linked to a pain theme, and risks by severity.', 'Features'],
+  ['solution-design', 'Solution design', 'mvp_features and venture_risks', 'Features linked to a pain theme or a hypothesis, and risks by severity.', 'Features'],
   ['prototype-mvp', 'Prototype / MVP', 'mvp_features', 'Must-haves done over time against the total.', 'Must-haves'],
   ['product-roadmap', 'Product roadmap', 'roadmap_okrs and okr_column_moves', 'Items in Now, Next and Later; items shipped per month.', 'Roadmap items'],
   ['founding-team', 'Founding team', 'cap_table_holders and cap_table_vesting', 'The equity split and each founder’s vesting.', 'Founders'],
@@ -148,13 +148,19 @@ function dueWindow(state: string, due: unknown): string {
   return state === 'overdue' ? 'overdue' : days == null ? 'none' : days < 0 ? 'past' : days <= 30 ? 'next_30' : 'later';
 }
 /**
- * Stored is a proof uploaded under `build-proof/`; Key recorded is a key typed
- * before 461, which opens nothing. A filing that is filed, overdue or due
- * within 30 days with no proof reads Missing.
+ * D5066 (#5066): four explicit proof states, never the ambiguous dash this
+ * replaced. Stored is a proof uploaded under `build-proof/`. Unreadable is a
+ * key typed before 461, which opens nothing — #4600's upload/open
+ * permissions and file validation are unchanged by this: a key outside that
+ * prefix still gets no "Open proof" action (`companyCreation.actions` in
+ * `services/records/build.ts`), it is just named honestly here instead of
+ * "Key recorded". With no key at all: Not expected yet for a filing that is
+ * not yet due or overdue (there is nothing to chase), Missing for one that
+ * is filed, overdue or due within 30 days and still has no proof on record.
  */
 function proofText(key: unknown, state: string): string {
-  if (typeof key === 'string' && key) return key.startsWith('build-proof/') ? 'Stored' : 'Key recorded';
-  return state === 'upcoming' ? '—' : 'Missing';
+  if (typeof key === 'string' && key) return key.startsWith('build-proof/') ? 'Stored' : 'Unreadable';
+  return state === 'upcoming' ? 'Not expected yet' : 'Missing';
 }
 function filingKeys(state: string, due: unknown): RecordRow['keys'] {
   const day = typeof due === 'string' && dateOnly(due.slice(0, 10)) ? due.slice(0, 10) : null;
@@ -261,7 +267,9 @@ const FEATURE_ORDERS = { impact: ['high', 'medium', 'low'], effort: ['low', 'med
 /** Solution design's list keys, the mapping the row's `keys` use (`LEVEL`, `IMPACT_KEY`, `EFFORT_KEY`). */
 const FEATURE_LIST: ListSql = {
   keys: {
-    linked: "(CASE WHEN pg.title IS NOT NULL THEN 'yes' ELSE 'no' END)",
+    // #5067: a hypothesis is a link too (the row already read it that way;
+    // the filter and the chart had not).
+    linked: "(CASE WHEN pg.title IS NOT NULL OR h.claim IS NOT NULL THEN 'yes' ELSE 'no' END)",
     impact: "(CASE f.added_value WHEN 'High' THEN 'high' WHEN 'Medium' THEN 'medium' WHEN 'Low' THEN 'low' END)",
     effort: "(CASE f.effort WHEN 'S' THEN 'low' WHEN 'M' THEN 'medium' WHEN 'L' THEN 'high' WHEN 'XL' THEN 'high' END)",
   },
@@ -271,11 +279,12 @@ const FEATURE_LIST: ListSql = {
 function featureRow(f: any): RecordRow {
   const impact = known(IMPACT_KEY, f.added_value), effort = known(EFFORT_KEY, f.effort);
   // A feature with neither a pain theme nor a hypothesis links to nothing.
-  // keys.linked is the chart's linked count: a stored pain theme.
+  // #5067: keys.linked agrees with that — the chart's and the filter's linked
+  // count is a stored pain theme OR a stored hypothesis, never pain theme alone.
   return record(f.id, {
     feature: f.title, pain_theme: f.pain_theme ?? (f.hypothesis == null ? { text: 'Links to nothing', tone: 'bad' } : null), hypothesis: f.hypothesis,
     impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null,
-  }, { linked: f.pain_theme != null ? 'yes' : 'no', impact, effort },
+  }, { linked: (f.pain_theme != null || f.hypothesis != null) ? 'yes' : 'no', impact, effort },
   { title: f.title, description: f.description ?? null, pain_group_id: f.pain_group_id ?? null, hypothesis_id: f.hypothesis_id ?? null,
     added_value: f.added_value ?? null, effort: f.effort ?? null, scope: f.scope ?? null });
 }
@@ -295,9 +304,12 @@ export async function solutionFeatureRows(env: Env, projectId: number): Promise<
 
 async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // #4603 part 2: the card's counts are aggregates; neither the overview nor the card reads a feature row.
+  // #5067: linked agrees with the row and the list filter — a pain theme OR a hypothesis.
   const counts = await env.DB.prepare(
-    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN pg.title IS NOT NULL THEN 1 ELSE 0 END), 0) AS linked
-       FROM mvp_features f LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
+    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN pg.title IS NOT NULL OR h.claim IS NOT NULL THEN 1 ELSE 0 END), 0) AS linked
+       FROM mvp_features f
+       LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
+       LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
       WHERE f.project_id = ?`,
   ).bind(p.id).first<{ n: number; linked: number }>();
   const featureCount = number(counts?.n), linked = number(counts?.linked);
@@ -323,7 +335,7 @@ async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
   }
   const levels = options([['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]);
   const any = featureCount || riskCount;
-  return { card: card('solution-design', any ? 'ok' : 'empty', series, 'Now', any ? null : 'No features yet. Linked and unlinked features appear here.', any ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme` : null) : next(p, 'solution-design', 'Add feature', true)),
+  return { card: card('solution-design', any ? 'ok' : 'empty', series, 'Now', any ? null : 'No features yet. Linked and unlinked features appear here.', any ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme or hypothesis` : null) : next(p, 'solution-design', 'Add feature', true)),
     cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
     list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
       sort: { key: 'impact', label: 'Impact' }, orders: { impact: [...FEATURE_ORDERS.impact], effort: [...FEATURE_ORDERS.effort] } },
@@ -737,10 +749,14 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
       ORDER BY created_at DESC, id DESC LIMIT 1`,
   ).bind(p.id).first<any>();
   let obligations: any[] = [];
+  // D5066 (#5066): every open obligation reaches the list, not just the
+  // first three — the generic page read below (`pageBuildRows`, D690/#1693)
+  // already pages, filters and sorts every module's `rows`, so a real cap
+  // here only hid rows that pagination already had a place for.
   if (p.entity_id != null) obligations = rows(await env.DB.prepare(
     `SELECT o.id, o.title, o.due_date, o.status, o.proof_file_key, o.kind, e.jurisdiction
        FROM entity_obligations o JOIN entities e ON e.id = o.entity_id
-      WHERE o.entity_id = ? AND o.status = 'open' ORDER BY o.due_date, o.id LIMIT 3`,
+      WHERE o.entity_id = ? AND o.status = 'open' ORDER BY o.due_date, o.id`,
   ).bind(p.entity_id).all<any>());
   const series: ChartSpec[] = [];
   const labSteps = order ? [
@@ -765,7 +781,23 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
       return record(`obligation-${o.id}`, { filing: o.title, jurisdiction: o.jurisdiction, due: o.due_date, state: filingText(state, o.due_date), proof: proofText(o.proof_file_key, state) },
         filingKeys(state, o.due_date), { title: o.title, due_date: o.due_date ?? null, status: o.status }); }),
   ];
-  return { card: card('company-creation', combined.length ? 'ok' : 'empty', series, 'Next filings', combined.length ? null : 'No filings yet. Formation steps and their dates appear here.', combined.length ? next(p, 'company-creation', steps.find(s => s.state !== 'done')?.title ? `Complete ${steps.find(s => s.state !== 'done')!.title}` : null) : next(p, 'company-creation', 'Add filing', true)),
+  // D5066 (#5066): the next action is the single highest-priority open item
+  // across every actionable source this card combines — a Lab step, a
+  // formation step or an entity obligation — never formation steps alone.
+  // Overdue beats due soon beats any other open item; `combined`'s own
+  // `keys.state`/`keys.due` (decision 8, above) are reused so the priority
+  // here can never disagree with what the Due and State columns already
+  // show. Ties keep `combined`'s own order (Lab, then step, then
+  // obligation), then the earliest due date.
+  const FILING_RANK: Record<string, number> = { overdue: 0, due_soon: 1, upcoming: 2 };
+  const openFilings = combined.filter(r => r.keys!.state !== 'filed');
+  const nextFiling = openFilings.length ? openFilings.slice().sort((a, b) => {
+    const byRank = FILING_RANK[a.keys!.state as string] - FILING_RANK[b.keys!.state as string];
+    if (byRank !== 0) return byRank;
+    const ad = a.keys!.due as string | null, bd = b.keys!.due as string | null;
+    return ad == null && bd == null ? 0 : ad == null ? 1 : bd == null ? -1 : ad.localeCompare(bd);
+  })[0] : null;
+  return { card: card('company-creation', combined.length ? 'ok' : 'empty', series, 'Next filings', combined.length ? null : 'No filings yet. Formation steps and their dates appear here.', combined.length ? next(p, 'company-creation', nextFiling ? `Complete ${nextFiling.cells.filing}` : null) : next(p, 'company-creation', 'Add filing', true)),
     cols: [['filing', 'Filing'], ['jurisdiction', 'Jurisdiction'], ['due', 'Due'], ['state', 'State'], ['proof', 'Proof']].map(([key, label]) => ({ key, label })), rows: combined,
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(FILING_LABEL)) },
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],

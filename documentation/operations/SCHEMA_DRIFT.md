@@ -206,8 +206,44 @@ A clean local rebuild, from `schema_baseline.sql` plus the migrations in a
 local SQLite, proves the committed artifacts are complete. It is **not** a
 hosted provisioning run or a restore, and must not be reported as one.
 
+The hosted rehearsal is `.github/workflows/schema-rehearsal.yml`. The owner
+approved it on 2026-11-09. It runs only when someone starts it by hand
+(Actions → *Schema rehearsal* → *Run workflow*), because each run creates two
+databases. It runs `scripts/schema-rehearsal.mjs`, which:
+
+1. creates an empty EU D1, `studioos-rehearsal-<run>-src`;
+2. provisions it through `migrate-d1.mjs --rehearsal` itself: `--bootstrap`,
+   then a plain run, then `--dry-run`, which must report nothing pending;
+3. compares it with a fresh local build of the same files, using the
+   functions `check-baseline-drift.mjs` holds production to;
+4. seeds the #4566 synthetic fixtures (`synthetic.invalid` only) and checks
+   foreign keys;
+5. exports it, creates `studioos-rehearsal-<run>-dst`, and imports the export
+   through the D4558 drill's chunked import (`dr-drill-split.mjs`);
+6. compares the two: every object's SQL, every table's row count, and foreign
+   keys;
+7. deletes both databases, pass or fail.
+
+It reads and writes only the two databases it created. Each is reached
+through a generated config that declares that one database and nothing else.
+The log, step summary and artifact hold counts and verdicts only.
+
+`node scripts/schema-rehearsal.mjs --run <id> --local` runs the same steps
+against wrangler's local D1, to prove the script before a hosted run. A local
+run is never reported as a hosted one.
+
 | Evidence | Status for #4591 |
 | --- | --- |
+| Clean local rebuild with constraint-level regression | Done: #4852 (`legal_template_research_schema_4591.test.mjs`). |
+| Hosted provisioning from committed artifacts, with synthetic fixtures | The first `schema-rehearsal.yml` run, linked on #4591. |
+| Restore rehearsal through the D4558 drill's import path | The same run. |
+
+The rehearsal is not a Time Travel restore, and it reads no production data.
+It shows that the repository can build and restore a database. It does not
+show that production's own backup restores; that is the monthly
+`dr-drill.yml` (`D1_RECOVERY.md` §5).
+
+--- | --- |
 | Clean local rebuild with constraint-level regression | Done: #4852 (`legal_template_research_schema_4591.test.mjs`). |
 | Hosted preview provisioning from committed artifacts, with synthetic fixtures (`AGENT_EXECUTION_VALIDATION.md`, D4566) | **NOT RUN.** Waits on explicit owner approval. |
 | Restore rehearsal through the existing recovery path (`D1_RECOVERY.md`, D4558) | **NOT RUN.** Waits on explicit owner approval. |

@@ -124,6 +124,10 @@ function stubs(over = {}) {
     keepCompareNote: rec('keepCompareNote', { saved: { uid: 'n1', text: 'Acme Robotics has the stronger band on Team.' } }),
   });
   api.listDeals = rec('listDeals', DEALS());
+  // D4815: the "Other deal activity" line's two zone reads.
+  was.screening = api.dealScreening; was.commitRoom = api.icCommitRoom;
+  api.dealScreening = rec('screening', { desk: { available: true, rows: [] } });
+  api.icCommitRoom = rec('commitRoom', { decisions: { available: true, rows: [] } });
   Object.assign(ventureScoresApi, { batch: rec('batch', BATCH()), weights: rec('weights', { weights: null, equal: true }), deal: rec('deal', { locked: true }) });
   Object.assign(dealViewsApi, { fit: rec('fit', FIT()), list: rec('views', { items: [], default_uid: null }) });
   for (const [k, v] of Object.entries(over)) {
@@ -132,7 +136,7 @@ function stubs(over = {}) {
   }
   return { calls, restore: () => {
     for (const n of names) dealFlowApi[n] = was[n];
-    api.listDeals = was.listDeals;
+    api.listDeals = was.listDeals; api.dealScreening = was.screening; api.icCommitRoom = was.commitRoom;
     Object.assign(ventureScoresApi, { batch: was.batch, weights: was.weights, deal: was.deal });
     Object.assign(dealViewsApi, { fit: was.fit, list: was.list });
   } };

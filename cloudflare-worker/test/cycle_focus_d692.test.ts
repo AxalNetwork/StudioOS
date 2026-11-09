@@ -379,7 +379,7 @@ test('7: Build\'s index is the canvas\'s seven rows with Tools first, from the s
   assert.deepEqual(r.body.index.map((x: any) => x.key),
     ['tools', 'solution-design', 'prototype-mvp', 'product-roadmap', 'founding-team', 'company-creation', 'operating-systems']);
   assert.deepEqual(row(r.body, 'tools'), { key: 'tools', title: 'Tools', detail: '2 connected · 1 failing', value: '3', href: `/build/operating-systems?project=${P}#tools` });
-  assert.deepEqual([row(r.body, 'solution-design').detail, row(r.body, 'solution-design').value], ['2 features linked to a pain', '']);
+  assert.deepEqual([row(r.body, 'solution-design').detail, row(r.body, 'solution-design').value], ['2 features linked to a pain or hypothesis', '']);
   assert.deepEqual([row(r.body, 'company-creation').detail, row(r.body, 'company-creation').value], [`Next filing ${dayMonth(day(20))}`, '']);
   assert.deepEqual([row(r.body, 'operating-systems').detail, row(r.body, 'operating-systems').value], ['Systems connected', '1 of 5']);
   for (const x of r.body.index) assert.equal(new URL(x.href, 'https://unit.test').searchParams.toString(), `project=${P}`, x.key);

@@ -15,6 +15,9 @@ export type WeekDef = {
   unlockedFeatures: string[];
 };
 
+/** The sprint's length: four weeks of seven days. The public pages say "28 days" (founder_lp_duration_consistency). */
+export const SPRINT_DAYS = 28;
+
 export const MILESTONES: WeekDef[] = [
   {
     week: 1,

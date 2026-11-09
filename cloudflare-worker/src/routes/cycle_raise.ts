@@ -103,6 +103,7 @@
  *   GET  /capital-relationships/proposals?project=   the caller's open proposals and drafts
  *   POST /capital-relationships/proposals            { prospect_id, event_id }  one run over a logged note
  *   POST /capital-relationships/proposals/:uid/accept { edited? }  written through the one prospect writer
+ *   POST /capital-relationships/proposals/accept-batch { uids }    D5073: up to 50, one result per proposal
  *   POST /capital-relationships/drafts               { prospect_id, purpose, via? }  one run; the founder sends it
  *   A draft or proposal is edited or dismissed through `/api/ai/rail/proposals/:uid/decide`.
  *
@@ -188,7 +189,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
-import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PROPOSAL_PAGE, acceptProposal, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
+import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PROPOSAL_PAGE, acceptProposal, acceptProposals, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
 import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
@@ -199,7 +200,7 @@ import {
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
 import { prospectBrief } from '../services/prospectBrief';
-import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
+import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 cycleRaise.route('/use-of-funds', useOfFunds);
@@ -579,6 +580,15 @@ cycleRaise.post('/capital-relationships/proposals', async (c) => {
     if (!proposals) return refuseRun(c, result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not read that note just now. Try again.' });
     return c.json({ proposals });
   } catch (e) { return capRelTabFailed(c, e, 'proposals run'); }
+});
+
+// D5073: the proposals of one note accepted in one request. Each runs `acceptProposal`, so every check is per proposal;
+// one that is no longer open is its own refusal and does not stop the rest.
+cycleRaise.post('/capital-relationships/proposals/accept-batch', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try { return c.json(await acceptProposals(c.env, s.projectId, Number(s.user.id), b.uids)); } catch (e) { return capRelTabFailed(c, e, 'accept batch'); }
 });
 
 cycleRaise.post('/capital-relationships/proposals/:uid/accept', async (c) => {
@@ -1703,6 +1713,13 @@ cycleRaise.get('/evidence/preview', async c => {
 });
 cycleRaise.post('/evidence/refresh', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await readRaiseEvidence(ctx, { ...evidencePage(c), refresh: true })); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+// D5073: many decisions in one request, one authoritative result per row (see `decideMany`).
+cycleRaise.post('/evidence/items/batch', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; const body = await evidenceBody(c);
+    if (Object.keys(body).some(k => k !== 'action' && k !== 'items')) throw new RaiseEvidenceError('invalid', 400);
+    return c.json(await decideEvidenceMany(ctx, body.action, body.items)); }
   catch (error) { return evidenceFailure(c, error); }
 });
 cycleRaise.post('/evidence/items/:id/accept', async c => {

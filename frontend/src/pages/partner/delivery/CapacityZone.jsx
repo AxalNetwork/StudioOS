@@ -17,6 +17,7 @@ import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { HoursEntries, SeatScopeEditor } from './deliveryEdits';
 import { useMutations, useZoneRead } from './useZoneMutations';
+import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 
 /**
  * Delivery · Capacity — `/delivery/capacity`.
@@ -175,9 +176,25 @@ export default function PartnerCapacityZone() {
 
   const d = state.data;
   const people = Array.isArray(d?.people) ? d.people : [];
-  const seats = Array.isArray(d?.seats) ? d.seats : [];
+  // D4822 part 2: `?engagement=` narrows the seats to that engagement. The roster stays the firm's: a person's room
+  // is a fact about their whole month, not one client's slice of it, and the bar says so.
+  const focus = useEngagementFocus();
+  const allSeats = Array.isArray(d?.seats) ? d.seats : [];
+  const seats = allSeats.filter((s) => matchesFocus(s, focus.key));
   const roster = state.people || [];
   const engagements = state.engagements || [];
+  const focusId = focusEngagementId([engagements, allSeats], focus.key);
+  useEffect(() => {
+    if (!focusId) return;
+    setGrant((g) => (g.engagement_id ? g : { ...g, engagement_id: focusId }));
+    setHours((h) => (h.engagement_id ? h : { ...h, engagement_id: focusId }));
+  }, [focusId]);
+  // D4822 (canvas `Capacity limits not set`): no firm default and no personal limit means nobody can be over.
+  const limitsUnset = d?.cap_hours == null && !people.some((p) => p.cap_hours != null);
+  const periodWords = (() => {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(d?.period || ''));
+    return m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : null;
+  })();
   const liveSeats = seats.filter((s) => !s.revoked_at);
   const over = people.filter((p) => p.over_committed === true);
 
@@ -280,6 +297,7 @@ export default function PartnerCapacityZone() {
               Nothing here computes a cap or offers a default. A firm types what
               it considers a full week; leaving it empty and saving clears the
               statement, so the first number typed is never permanent. */}
+          <div id="capacity-limits" />
           <Section title="The week this firm says it has">
             <div className="grid gap-3 md:grid-cols-4">
               <Field label="Whose" hint="The firm's default, or one person's override.">
@@ -501,20 +519,29 @@ export default function PartnerCapacityZone() {
         <div className="space-y-6" aria-busy={read.refreshing || undefined}>
           {refreshNote}
           {grantedNote}
+          <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allSeats, ...engagements], focus.key)} shown={seats.length} total={allSeats.length} noun="seats · the roster below is the whole firm’s" onClear={focus.clear} />
           <ZoneHeading
-            title="Capacity & allocation"
-            blurb={
-              'People, not projects. Where the firm is over-committed — and where '
-              + 'an over-committed person also holds a granted seat inside a '
-              + 'client’s systems, which is a trust exposure rather than only a '
-              + 'throughput one.'
-            }
+            title="People and allocation"
+            blurb="Know who has room, who is overloaded and which commitments are difficult to move."
             action={engagements.length > 0 && (
               <button type="button" ref={grantToggle} className={ghostButtonClass} aria-expanded={granting} onClick={() => setGranting((v) => !v)}>
                 {granting ? 'Cancel' : 'Grant a seat'}
               </button>
             )}
           />
+
+          {/* D4822: the time basis, impossible to misread. Hours are monthly totals; limits are hours a week. */}
+          <p className="text-[14px] font-semibold text-axal-ink dark:text-gray-100" data-testid="capacity-basis">
+            {periodWords ? `${periodWords} · monthly totals` : 'Monthly totals'}
+            <span className="font-normal text-axal-muted"> · limits are hours a week, compared over the month’s days</span>
+          </p>
+          {limitsUnset && (
+            <div className="rounded-lg border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid="capacity-limits-unset">
+              <p className="text-[14.5px] font-bold text-axal-ink dark:text-gray-100">Capacity limits not set</p>
+              <p className="mt-0.5 text-[13px] text-axal-muted">Set available hours to identify over-allocation.</p>
+              <a href="#capacity-limits" className="mt-2 inline-flex min-h-[44px] items-center text-[14px] font-semibold text-amber-700 underline">Set capacity →</a>
+            </div>
+          )}
 
           {/* ══ THE `pd3` STRIP ═══════════════════════════════════════════════
               `Over-committed · Seats held · Project hours · Seat hours`, each
@@ -527,7 +554,7 @@ export default function PartnerCapacityZone() {
               value={String(d?.over_committed_count ?? 0)}
               nr={d?.over_committed_count == null}
               note={d?.over_committed_count == null
-                ? 'no cap is stated, so nobody is over one'
+                ? 'Capacity limits not set'
                 : (firstNames(over) || 'none')}
             />
             <CapTile

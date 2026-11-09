@@ -4724,6 +4724,94 @@
     }
    ],
    "more": []
+  },
+  {
+   "pageKey": "Super Admin · Revenue",
+   "optionKey": "summarise:period",
+   "optionLabel": "Summarise the selected period",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Revenue",
+   "optionKey": "explain:incomplete-sources",
+   "optionLabel": "Explain incomplete sources",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Revenue",
+   "optionKey": "show:overdue-receivables",
+   "optionLabel": "Show overdue receivables",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Revenue",
+   "optionKey": "review:open-disputes",
+   "optionLabel": "Review open disputes",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Revenue",
+   "optionKey": "compare:subsidiary-reporting",
+   "optionLabel": "Compare subsidiary reporting",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Revenue",
+   "optionKey": "explain:ai-margin",
+   "optionLabel": "Explain the AI margin",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Revenue · Disputes",
+   "optionKey": "review:open-disputes",
+   "optionLabel": "Review open disputes",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Revenue · Statements",
+   "optionKey": "show:overdue-receivables",
+   "optionLabel": "Show overdue receivables",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
   }
  ]
 }
