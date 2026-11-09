@@ -19,7 +19,10 @@ import { mapError, nowIso, newUid, trimOrNull } from './_t13t14t15_helpers';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import { ensureCohortGuidanceSchema } from '../services/cohortGuidanceSchema';
 import { founderAdvisorAccess, optedOutFounderIds, setFounderVisibility, syncCohortAdvisorNotices } from '../services/cohortAdvisorAccess';
-import { guidanceCounts, oldestOpenHours, collisions, withinDays, type GuidanceRow, type CalendarItem } from './_advisor_cohort_helpers';
+import {
+  guidanceCounts, oldestOpenHours, collisions, withinDays, guidanceStatus, parseGuidanceWeek,
+  GUIDANCE_WEEK_FALLBACK_MAX, type GuidanceRow, type CalendarItem,
+} from './_advisor_cohort_helpers';
 import { pageFacts, pageWindow } from '../services/listPage';
 import {
   THINKING_PAGE, myAdvisor,
@@ -380,6 +383,126 @@ async function requireOwnCohort(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// D4813 (#4813, package 2) — titles, drafts, versions and edit history
+// (migration 202611091920). Shared by the guidance routes below.
+// ---------------------------------------------------------------------------
+
+type GuidanceStore = GuidanceRow & {
+  uid: string; cohort_cycle_id: number; advisor_user_id: number;
+  title: string | null; body: string; week_number: number | null;
+  is_draft: number; version: number; updated_at: string;
+};
+
+/** A title is one line; longer text belongs in the body. */
+const TITLE_MAX = 200;
+
+/**
+ * The widest week this cohort's guidance may name: the last week the Lab
+ * recorded a window for, else `GUIDANCE_WEEK_FALLBACK_MAX` for a cycle that
+ * predates week windows (migration 156). Read, never assumed: the canvas draws
+ * four weeks, and a cycle with a different record keeps its own.
+ */
+async function guidanceWeekLimit(env: Env, cycleId: number): Promise<{ max: number; source: 'week_windows' | 'default' }> {
+  try {
+    const r = await env.DB.prepare(
+      'SELECT MAX(week_number) AS n FROM week_windows WHERE cohort_cycle_id = ?'
+    ).bind(cycleId).first<{ n: number | null }>();
+    const n = Number(r?.n);
+    if (Number.isInteger(n) && n >= 1) return { max: n, source: 'week_windows' };
+  } catch (e) {
+    console.warn('[advisors] week window read failed:', (e as Error).message);
+  }
+  return { max: GUIDANCE_WEEK_FALLBACK_MAX, source: 'default' };
+}
+
+function weekRefusal(c: Context<{ Bindings: Env }>, message: string, max: number): Response {
+  return refuse(c, 400, { code: 'guidance_week_invalid', message, extra: { field: 'week_number', max_week: max } });
+}
+
+/** What the page reads for one piece of guidance. Status is derived (212). */
+function guidanceDto(r: GuidanceStore, actedBy: Array<{ user_id: number; name: string | null; acted_at: string }> = []) {
+  return {
+    id: r.id,
+    uid: r.uid,
+    cohort_cycle_id: r.cohort_cycle_id,
+    asked_by_user_id: r.asked_by_user_id,
+    title: r.title ?? null,
+    body: r.body,
+    answer: r.answer,
+    answered_at: r.answered_at,
+    week_number: r.week_number,
+    posted_at: r.posted_at,
+    retired_at: r.retired_at,
+    updated_at: r.updated_at,
+    is_draft: Boolean(r.is_draft),
+    version: Number(r.version) || 1,
+    status: guidanceStatus(r),
+    kind: r.asked_by_user_id == null ? 'broadcast' : 'question',
+    acted_by: actedBy,
+  };
+}
+
+/** The author's own row, or null. Ownership is the advisor column (see PATCH). */
+async function ownGuidance(env: Env, uid: string, advisorUserId: number): Promise<GuidanceStore | null> {
+  return env.DB.prepare(
+    `SELECT id, uid, cohort_cycle_id, advisor_user_id, asked_by_user_id, title, body,
+            answer, answered_at, week_number, posted_at, retired_at, updated_at, is_draft, version
+       FROM cohort_guidance WHERE uid = ? AND advisor_user_id = ?`
+  ).bind(uid, advisorUserId).first<GuidanceStore>();
+}
+
+/**
+ * ONE WRITE PATH FOR EVERY CHANGE, so every change is versioned the same way.
+ *
+ * `next` is the whole row as it should read afterwards. The UPDATE only lands
+ * while the row is still at `expected`; when another tab got there first it
+ * changes nothing and the caller answers 409 with the row as it now stands,
+ * so the page can compare rather than overwrite. The history row is written in
+ * the same batch, from the row as updated, and only when the update landed
+ * (it selects the row at the new version, which a skipped update never made).
+ */
+async function writeGuidanceVersion(
+  env: Env, row: GuidanceStore, expected: number, actorUserId: number, action: string,
+  next: { title: string | null; body: string; week_number: number | null; is_draft: number;
+    answer: string | null; answered_at: string | null; retired_at: string | null; posted_at: string },
+): Promise<boolean> {
+  const now = nowIso();
+  const [upd] = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE cohort_guidance
+          SET title = ?, body = ?, week_number = ?, is_draft = ?, answer = ?, answered_at = ?,
+              retired_at = ?, posted_at = ?, version = version + 1, updated_at = ?
+        WHERE id = ? AND version = ?`
+    ).bind(next.title, next.body, next.week_number, next.is_draft, next.answer, next.answered_at,
+      next.retired_at, next.posted_at, now, row.id, expected),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO cohort_guidance_versions
+         (guidance_id, version, action, title, body, week_number, is_draft, actor_user_id, created_at)
+       SELECT id, version, ?, title, body, week_number, is_draft, ?, ?
+         FROM cohort_guidance WHERE id = ? AND version = ? AND updated_at = ?`
+    ).bind(action, actorUserId, now, row.id, expected + 1, now),
+  ]);
+  return Number(upd?.meta?.changes) > 0;
+}
+
+/** 409 with the row as it stands, so the page offers reload and compare. */
+async function conflict(c: Context<{ Bindings: Env }>, uid: string, advisorUserId: number): Promise<Response> {
+  const fresh = await ownGuidance(c.env, uid, advisorUserId);
+  return refuse(c, 409, {
+    code: 'guidance_version_conflict',
+    message: 'This guidance changed somewhere else since you opened it. Nothing was saved; your text is kept so you can compare.',
+    extra: { current: fresh ? guidanceDto(fresh) : null },
+  });
+}
+
+/** A version the caller names: a positive whole number, or undefined when absent. */
+function readVersion(raw: unknown): number | null | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 ? n : null;
+}
+
 /**
  * Cohorts · Guidance — what was said to the batch, and who acted on it.
  *
@@ -408,16 +531,17 @@ advisors.get('/me/cohort/:cycleId/guidance', async (c) => {
     // U6: who acted is a founder's name; a founder hidden from this advisor is left out.
     const hidden = await noticeThenOptOuts(c.env, user.id, cycleId);
 
+    // D4813: `advisor_user_id = ?` is also what keeps a draft private — the
+    // only reader of a row is the advisor who wrote it. Another advisor on the
+    // same cohort reads their own guidance and never this one's drafts.
     const rows = await c.env.DB.prepare(
-      `SELECT id, uid, asked_by_user_id, body, answer, answered_at,
-              week_number, posted_at, retired_at
+      `SELECT id, uid, cohort_cycle_id, advisor_user_id, asked_by_user_id, title, body,
+              answer, answered_at, week_number, posted_at, retired_at, updated_at, is_draft, version
          FROM cohort_guidance
         WHERE cohort_cycle_id = ? AND advisor_user_id = ?
         ORDER BY posted_at DESC, id DESC
         LIMIT 200`
-    ).bind(cycleId, user.id).all<GuidanceRow & {
-      uid: string; body: string; week_number: number | null;
-    }>();
+    ).bind(cycleId, user.id).all<GuidanceStore>();
     const items = rows.results || [];
 
     // Who acted, by name — the card's second sentence. A count would answer
@@ -449,11 +573,13 @@ advisors.get('/me/cohort/:cycleId/guidance', async (c) => {
       oldest_open_hours: oldestOpenHours(items, nowIso()),
       // Named so no reader mistakes its absence for zero.
       commitment_hours: null,
-      items: items.map((r) => ({
-        ...r,
-        kind: r.asked_by_user_id == null ? 'broadcast' : 'question',
-        acted_by: ackBy.get(r.id) || [],
-      })),
+      // D4813: the composer checks the week against the same bound the write
+      // enforces; the server stays the authority.
+      week_limit: await guidanceWeekLimit(c.env, cycleId),
+      // D4813: nothing a founder uses writes an acknowledgement yet, so the
+      // page says "not recorded" rather than "0 acknowledged".
+      acknowledgements_recorded: false,
+      items: items.map((r) => guidanceDto(r, ackBy.get(r.id) || [])),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -468,20 +594,37 @@ advisors.post('/me/cohort/:cycleId/guidance', async (c) => {
     if (refused) return refused;
 
     const b = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const draft = b.draft === true;
+    const title = trimOrNull(b.title, TITLE_MAX);
     const body = trimOrNull(b.body);
-    if (!body) return c.json({ detail: 'Guidance needs something to say' }, 400);
+    // A draft may be only a title for now; published guidance needs a body.
+    if (!body && !(draft && title)) return c.json({ detail: 'Guidance needs something to say' }, 400);
     // A week is optional and stays NULL when unstated: guidance about the whole
-    // programme has no week, and stamping one from `posted_at` would file a
-    // general note under whichever week it happened to be typed in.
-    const raw = Number(b.week_number);
-    const week = Number.isInteger(raw) && raw >= 1 && raw <= 52 ? raw : null;
+    // programme has no week. D4813: a week that is stated but not one of this
+    // cohort's is REFUSED. It used to be stored as NULL — general guidance —
+    // so a typo published a note to the whole programme without a word.
+    const limit = await guidanceWeekLimit(c.env, cycleId);
+    const week = parseGuidanceWeek(b.week_number, limit.max);
+    if (!week.ok) return weekRefusal(c, week.message, limit.max);
 
     const uid = newUid();
-    await c.env.DB.prepare(
-      `INSERT INTO cohort_guidance (uid, cohort_cycle_id, advisor_user_id, body, week_number)
-       VALUES (?, ?, ?, ?, ?)`
-    ).bind(uid, cycleId, user.id, body, week).run();
-    return c.json({ uid, body, week_number: week }, 201);
+    const now = nowIso();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO cohort_guidance
+           (uid, cohort_cycle_id, advisor_user_id, title, body, week_number, is_draft, version,
+            posted_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
+      ).bind(uid, cycleId, user.id, title, body || '', week.week, draft ? 1 : 0, now, now, now),
+      c.env.DB.prepare(
+        `INSERT INTO cohort_guidance_versions
+           (guidance_id, version, action, title, body, week_number, is_draft, actor_user_id, created_at)
+         SELECT id, 1, ?, title, body, week_number, is_draft, ?, ?
+           FROM cohort_guidance WHERE uid = ?`
+      ).bind(draft ? 'created' : 'published', user.id, now, uid),
+    ]);
+    const row = await ownGuidance(c.env, uid, user.id);
+    return c.json(row ? guidanceDto(row) : { uid, body, week_number: week.week }, 201);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -499,37 +642,156 @@ advisors.patch('/me/guidance/:uid', async (c) => {
     // Ownership is the advisor column on the row itself — the assignment may
     // since have been withdrawn, and guidance already written must still be
     // editable by the person who wrote it and nobody else.
-    const row = await c.env.DB.prepare(
-      'SELECT id, cohort_cycle_id FROM cohort_guidance WHERE uid = ? AND advisor_user_id = ?'
-    ).bind(uid, user.id).first<{ id: number; cohort_cycle_id: number }>();
+    const row = await ownGuidance(c.env, uid, user.id);
     if (!row) return c.json({ detail: 'Guidance not found' }, 404);
 
     const b = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const editsTitle = Object.prototype.hasOwnProperty.call(b, 'title');
+    const editsWeek = Object.prototype.hasOwnProperty.call(b, 'week_number');
     const body = trimOrNull(b.body);
     const answer = trimOrNull(b.answer);
     const retire = b.retired === true ? nowIso() : b.retired === false ? null : undefined;
-    if (body === null && answer === null && retire === undefined) {
+    if (!editsTitle && !editsWeek && body === null && answer === null && retire === undefined) {
       return c.json({ detail: 'Nothing to change' }, 400);
     }
-    if (body !== null) {
-      await c.env.DB.prepare(
-        "UPDATE cohort_guidance SET body = ?, updated_at = datetime('now') WHERE id = ?"
-      ).bind(body, row.id).run();
+
+    // D4813: a write names the version it was made against. An edit of the
+    // words must (two tabs editing one note is the case this exists for); an
+    // answer or a retirement from a page that predates versions may omit it
+    // and is checked against the row as just read.
+    const named = readVersion(b.version);
+    if (named === null) return c.json({ detail: 'version must be a positive whole number' }, 400);
+    if ((editsTitle || editsWeek || body !== null) && named === undefined) {
+      return refuse(c, 400, {
+        code: 'guidance_version_required',
+        message: 'Reload this guidance before editing it: the edit has to name the version it was made against.',
+      });
     }
-    if (answer !== null) {
+    const expected = named ?? Number(row.version);
+    if (expected !== Number(row.version)) return conflict(c, uid, user.id);
+
+    let week = row.week_number;
+    if (editsWeek) {
+      const limit = await guidanceWeekLimit(c.env, row.cohort_cycle_id);
+      const parsed = parseGuidanceWeek(b.week_number, limit.max);
+      if (!parsed.ok) return weekRefusal(c, parsed.message, limit.max);
+      week = parsed.week;
+    }
+    const nextBody = body ?? row.body;
+    if (editsTitle && b.title !== null && typeof b.title !== 'string') {
+      return c.json({ detail: 'title must be text' }, 400);
+    }
+    const nextTitle = editsTitle ? trimOrNull(b.title, TITLE_MAX) : row.title;
+    if (!row.is_draft && !String(nextBody).trim()) {
+      return c.json({ detail: 'Published guidance needs something to say' }, 400);
+    }
+
+    const action = answer !== null ? 'answered'
+      : retire !== undefined ? (retire ? 'retired' : 'restored')
+        : 'edited';
+    const ok = await writeGuidanceVersion(c.env, row, expected, user.id, action, {
+      title: nextTitle,
+      body: nextBody,
+      week_number: week,
+      is_draft: Number(row.is_draft) ? 1 : 0,
       // `answered_at` is stamped with the answer and never separately: the
       // median response time is the gap between the two, so a stamp without a
       // reply would report an answer nobody wrote.
-      await c.env.DB.prepare(
-        "UPDATE cohort_guidance SET answer = ?, answered_at = ?, updated_at = datetime('now') WHERE id = ?"
-      ).bind(answer, nowIso(), row.id).run();
+      answer: answer ?? row.answer,
+      answered_at: answer !== null ? nowIso() : row.answered_at,
+      retired_at: retire === undefined ? row.retired_at : retire,
+      posted_at: row.posted_at,
+    });
+    if (!ok) return conflict(c, uid, user.id);
+    const fresh = await ownGuidance(c.env, uid, user.id);
+    return c.json({ ok: true, item: fresh ? guidanceDto(fresh) : null });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D4813 — publish a draft. Publishing reaches the batch, so it needs the
+ * assignment as it stands today (`requireOwnCohort`), not only authorship:
+ * an advisor whose access ended can still edit what they wrote, but cannot
+ * send something new to founders they no longer advise.
+ */
+advisors.post('/me/guidance/:uid/publish', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    await ensureCohortGuidanceSchema(c.env);
+    if (!mayHoldCohortAssignment(user)) {
+      return c.json({ detail: 'Only an advisor can open a cohort batch' }, 403);
     }
-    if (retire !== undefined) {
-      await c.env.DB.prepare(
-        "UPDATE cohort_guidance SET retired_at = ?, updated_at = datetime('now') WHERE id = ?"
-      ).bind(retire, row.id).run();
+    const uid = String(c.req.param('uid') || '');
+    const row = await ownGuidance(c.env, uid, user.id);
+    if (!row) return c.json({ detail: 'Guidance not found' }, 404);
+    const refused = await requireOwnCohort(c, user as User, row.cohort_cycle_id);
+    if (refused) return refused;
+
+    const b = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const named = readVersion(b.version);
+    if (named == null) {
+      return refuse(c, 400, {
+        code: 'guidance_version_required',
+        message: 'Reload this guidance before publishing it: the publish has to name the version it was made against.',
+      });
     }
-    return c.json({ ok: true });
+    if (named !== Number(row.version)) return conflict(c, uid, user.id);
+    if (!Number(row.is_draft)) {
+      return refuse(c, 409, { code: 'guidance_not_draft', message: 'This guidance is already published.' });
+    }
+    if (row.retired_at) {
+      return refuse(c, 409, { code: 'guidance_retired', message: 'Restore this draft before publishing it.' });
+    }
+    if (!String(row.body || '').trim()) {
+      return c.json({ detail: 'Guidance needs something to say before it is published' }, 400);
+    }
+    // The week is checked again: the Lab may have changed the cohort's weeks
+    // since the draft was saved.
+    if (row.week_number != null) {
+      const limit = await guidanceWeekLimit(c.env, row.cohort_cycle_id);
+      const parsed = parseGuidanceWeek(row.week_number, limit.max);
+      if (!parsed.ok) return weekRefusal(c, parsed.message, limit.max);
+    }
+    const ok = await writeGuidanceVersion(c.env, row, named, user.id, 'published', {
+      title: row.title, body: row.body, week_number: row.week_number, is_draft: 0,
+      answer: row.answer, answered_at: row.answered_at, retired_at: null,
+      // The published date is when it reached the batch, not when it was begun.
+      posted_at: nowIso(),
+    });
+    if (!ok) return conflict(c, uid, user.id);
+    const fresh = await ownGuidance(c.env, uid, user.id);
+    return c.json({ ok: true, item: fresh ? guidanceDto(fresh) : null });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** D4813 — the edit history, newest first. The author's only. */
+advisors.get('/me/guidance/:uid/history', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    await ensureCohortGuidanceSchema(c.env);
+    if (!mayHoldCohortAssignment(user)) {
+      return c.json({ detail: 'Only an advisor can open a cohort batch' }, 403);
+    }
+    const uid = String(c.req.param('uid') || '');
+    const row = await ownGuidance(c.env, uid, user.id);
+    if (!row) return c.json({ detail: 'Guidance not found' }, 404);
+    const versions = await c.env.DB.prepare(
+      `SELECT version, action, title, body, week_number, is_draft, created_at
+         FROM cohort_guidance_versions
+        WHERE guidance_id = ?
+        ORDER BY version DESC
+        LIMIT 100`
+    ).bind(row.id).all<{
+      version: number; action: string; title: string | null; body: string;
+      week_number: number | null; is_draft: number; created_at: string;
+    }>();
+    return c.json({
+      uid,
+      version: Number(row.version) || 1,
+      items: (versions.results || []).map((v) => ({ ...v, is_draft: Boolean(v.is_draft) })),
+    });
   } catch (e) { return mapError(c, e); }
 });
 
