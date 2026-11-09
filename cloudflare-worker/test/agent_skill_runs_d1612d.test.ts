@@ -42,10 +42,12 @@ function world() {
   for (const m of ['712_team_agents.sql', '202611021724_team_agents_persona.sql']) db.exec(sql(`migrations/${m}`));
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   for (const m of ['759_agent_skills.sql', '202611022326_agent_skill_context_tokens.sql', '202611022055_agent_skill_moderation.sql', '202611022140_hq_skill_lifecycle.sql']) db.exec(sql(`migrations/${m}`));
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(AI_BUDGET_MIGRATION + sql('migrations/465_ai_rail_preferences.sql') + sql('migrations/510_member_ai_pauses.sql')
     + sql('migrations/525_ai_reservation_idempotency.sql') + sql('migrations/632_ai_hold_context.sql'));
   // The migration under test, over the AI log schema's ai_usage_logs.
   db.exec(sql('migrations/202611022313_agent_skill_runs.sql'));
+  db.exec(sql('migrations/202611090905_skill_version_eval_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null, 'free');
   user.run(EDITOR, 'u-editor', 'editor@example.test', 'Eve Editor', 'founder', 100, 'growth');
@@ -257,4 +259,31 @@ test('#4531 slice 2: the published evaluation judges the new assertions; a passi
     assert.deepEqual([row().result, row().detail], ['fail', 'It has no "Runway" section.']);
     assert.equal(notices().length, 1, 'told once');
   } finally { EVAL_DEPS.run = real; }
+});
+
+test('#4531 slice 3: each published result names the evaluator and the case text it ran, and the report tells a changed case from a regression', async () => {
+  const { EVALUATOR, caseSha } = await import('../src/services/agents/skillLifecycle.ts');
+  const { compareResults } = await import('../src/services/agents/skillEvalCompare.ts');
+  const w = world();
+  let result: 'pass' | 'fail' = 'pass';
+  const deps = { runCase: async () => ({ result, detail: result === 'fail' ? 'It left out "37".' : null, usage_log_id: null }), tellHq: async () => 1 };
+  const kv = new Map<string, string>();
+  w.env.RATE_LIMITS = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => { kv.set(k, v); } };
+  await evaluatePublished(w.env, SUPER, [RUN_MODEL], deps as any, 1);
+  const rows = () => w.db.prepare('SELECT case_key, case_name, case_sha256, model_id, result, evaluator_version, detail, run_at FROM agent_skill_version_evals WHERE skill_id = 1 ORDER BY id').all() as any[];
+  const first = rows();
+  // Mutation checked: EVAL_INSERT without the two columns → both null and this fails.
+  assert.equal(first[0].evaluator_version, EVALUATOR.version);
+  assert.equal(first[0].case_sha256, await caseSha(starterCase('board-meeting-brief')!), 'the starter case as checked and run');
+  // The same case and evaluator, a pass then a fail: a regression.
+  result = 'fail';
+  await evaluatePublished(w.env, SUPER, [RUN_MODEL], deps as any, 1);
+  const second = rows();
+  assert.deepEqual(compareResults([second[0]], [second[1]]).regressions.map((p) => p.case_key), [STARTER_KEY]);
+  // The same key with other text (a starter case shipped anew) is a changed case, not a regression.
+  // Mutation checked: `pairOutcome` without the case check → this reads `regressed` and fails.
+  assert.equal(compareResults([second[0]], [{ ...second[1], case_sha256: 'c'.repeat(64) }]).pairs[0].outcome, 'case_changed');
+  // A row from before migration 202611090905 records neither, and is never read as matching.
+  w.db.prepare("UPDATE agent_skill_version_evals SET evaluator_version = NULL, case_sha256 = NULL WHERE id = (SELECT MIN(id) FROM agent_skill_version_evals)").run();
+  assert.equal(compareResults([rows()[0]], [rows()[1]]).pairs[0].outcome, 'not_recorded');
 });

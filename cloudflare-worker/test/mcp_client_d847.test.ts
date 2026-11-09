@@ -37,7 +37,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import {
-  discoverMcp, exchangeMcpCode, mintMcpSetupTicket, onProviderHosts, headerParams, headerValue, issuerAccepted, LEASE_POLL_MS, MAX_TOOL_PAGES, mcpAccessFor, mcpClientFor,
+  discoverMcp, exchangeMcpCode, mintMcpPublishTicket, mintMcpSetupTicket, onProviderHosts, headerParams, headerValue, issuerAccepted, LEASE_POLL_MS, MAX_TOOL_PAGES, mcpAccessFor, mcpClientFor,
   mcpCredentialsOf, MCP_MAX_BODY_BYTES, openMcpSession, refreshMcpCredentials, revokeMcpConnection, toolFingerprint, authorizeMcpUrl,
   type McpCredentials,
 } from '../src/integrations/mcpClient.ts';
@@ -161,14 +161,16 @@ test('2. the client\'s callers are named; the client, the records and src/mcp/ n
   // D1085 (#2950): Notion's provider (its disconnect and revoke) and its typed reads are the fourth.
   // D1385 (#3731): PostHog's provider and typed reads, in Notion's shape.
   // D855 §4 (#3733): Linear's provider and its typed reads, as Notion's are.
-  // D2407 (#2407): Beehiiv's provider and its typed reads, as PostHog's are.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]|from\s+['"]\.\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/beehiiv.ts', 'cloudflare-worker/src/integrations/providers/linear.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/integrations/providers/posthog.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/beehiiv/reads.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/linear/reads.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts', 'cloudflare-worker/src/services/posthog/reads.ts']);
+  // D2407 (#2407): Beehiiv's provider and its typed reads, as PostHog's are; part 3 adds its one draft call (drafts.ts).
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]|from\s+['"]\.\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/beehiiv.ts', 'cloudflare-worker/src/integrations/providers/linear.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/integrations/providers/posthog.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/beehiiv/drafts.ts', 'cloudflare-worker/src/services/beehiiv/reads.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/linear/reads.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts', 'cloudflare-worker/src/services/posthog/reads.ts']);
   // D856 (#2501): the setup route mints a setup ticket only after the founder's confirm.
   // D1343 (#3551): `sendThroughCustom` mints one for a member's own mail-send tool, only after the composer's send nonce is spent.
   assert.deepEqual(importers(/\bmintMcpSetupTicket\(/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/routes/channels.ts']);
+  // D2407 part 3: a publish ticket is minted only by Beehiiv's draft call, which only the provider's publish reaches.
+  assert.deepEqual(importers(/\bmintMcpPublishTicket\(/), ['cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/services/beehiiv/drafts.ts']);
   // #2549: public status reads provider metadata only. The transport importer
   // assertion above still permits only the two actual client callers.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]|from\s+['"]\.\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/beehiiv.ts', 'cloudflare-worker/src/integrations/providers/linear.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/integrations/providers/posthog.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/beehiiv/mcp.ts', 'cloudflare-worker/src/services/beehiiv/reads.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/linear/reads.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts', 'cloudflare-worker/src/services/posthog/reads.ts']);
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]|from\s+['"]\.\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/beehiiv.ts', 'cloudflare-worker/src/integrations/providers/linear.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/integrations/providers/posthog.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/beehiiv/drafts.ts', 'cloudflare-worker/src/services/beehiiv/mcp.ts', 'cloudflare-worker/src/services/beehiiv/reads.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/linear/reads.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts', 'cloudflare-worker/src/services/posthog/reads.ts']);
   const client = files.find((f) => f.path.endsWith('integrations/mcpClient.ts'))!.text;
   const records = files.find((f) => f.path.endsWith('integrations/mcpProviders.ts'))!.text;
   assert.doesNotMatch(client, /from\s+['"][^'"]*\/mcp\/|from\s+['"]\.\.\/mcp['"]/, 'the client imports StudioOS\'s own MCP server');
@@ -380,13 +382,15 @@ test('7. drift: unknown, write, annotated, invalid and changed tools are never c
   for (const name of ['export_everything', FAKE_WRITE_TOOL, 'not_listed']) await assert.rejects(() => s.callTool(name), (e: any) => e.code === 'path_not_allowed', name);
   assert.equal(fake.calls.length, before, 'refused before any request');
 
-  // A write tool on a publishing record is still refused: there is no ticket yet.
+  // A write tool on a publishing record is refused without a publish ticket, and a destructive one is never offered (D2407 part 3).
   const publishing = notes({ write_tools: [FAKE_WRITE_TOOL], publish_issue: 9999 });
   const w = await openMcpSession(publishing, { accessToken: fake.signedIn(), fetcher: fake.fetch, ...quiet });
   const n = fake.calls.length;
   await assert.rejects(() => w.callTool(FAKE_WRITE_TOOL), (e: any) => e.code === 'path_not_allowed');
   assert.equal(fake.calls.length, n);
-  assert.equal(w.drift.some((d) => d.tool === FAKE_WRITE_TOOL), false, 'a recorded write tool is not unknown');
+  assert.equal(w.drift.some((d) => d.tool === FAKE_WRITE_TOOL && d.why === 'unknown'), false, 'a recorded write tool is not unknown');
+  assert.deepEqual([...w.write_offered], [], 'a write tool the server calls destructive is never offered');
+  assert.ok(w.drift.some((d) => d.tool === FAKE_WRITE_TOOL && d.why === 'annotated'), 'and is logged as annotated');
 
   // A read tool the server annotates as writing, or destructive.
   for (const annotations of [{ readOnlyHint: false }, { destructiveHint: true }]) {
@@ -644,7 +648,7 @@ test('13. D856: a setup tool needs a live ticket for its provider and step, once
   for (const names of [[], ['get_note'], [FAKE_WRITE_TOOL], ['not_listed']]) {
     assert.throws(() => mintMcpSetupTicket(notes({ write_tools: [FAKE_WRITE_TOOL], publish_issue: 9999, setup_tools: [TAG], setup_issue: 9998 }), names), (e: any) => e.code === 'path_not_allowed', names.join());
   }
-  // The write lock is unchanged by a ticket: a write tool is never callable.
+  // A setup ticket never opens a write tool: a write tool needs its own publish ticket (test 14).
   const both = notes({ write_tools: [FAKE_WRITE_TOOL], publish_issue: 9999, setup_tools: [TAG], setup_issue: 9998 });
   const w = await openMcpSession(both, { accessToken: fake.signedIn(), fetcher: fake.fetch, ...quiet });
   await assert.rejects(() => w.callTool(FAKE_WRITE_TOOL, {}, mintMcpSetupTicket(both, [TAG])), (e: any) => e.code === 'path_not_allowed');
@@ -656,4 +660,47 @@ test('13. D856: a setup tool needs a live ticket for its provider and step, once
   assert.deepEqual([...a.setup_offered], []);
   assert.deepEqual(a.drift.filter((d) => d.tool === TAG || d.tool === ARCHIVE), [{ tool: TAG, why: 'changed' }, { tool: ARCHIVE, why: 'annotated' }]);
   await assert.rejects(() => a.callTool(TAG, {}, mintMcpSetupTicket(pinned, [TAG])), (e: any) => e.code === 'path_not_allowed');
+});
+
+test('14. D2407 part 3: a write tool needs a live publish ticket for its provider and tool, once; destructive and unpinned ones are never offered', async () => {
+  const CREATE = 'create_note_draft';
+  const tools = () => [...defaultNotesTools(), { name: CREATE, inputSchema: { type: 'object', properties: { title: { type: 'string' } } }, annotations: { readOnlyHint: false } }];
+  const publishing = notes({ write_tools: [CREATE], publish_issue: 9999 });
+  const fake = notesFake({ tools: tools() });
+  const s = await openMcpSession(publishing, { accessToken: fake.signedIn(), fetcher: fake.fetch, ...quiet });
+  assert.deepEqual([...s.write_offered], [CREATE]);
+  assert.deepEqual([...s.offered], ['search_notes', 'get_note'], 'a write tool is not a read');
+  assert.equal(s.drift.some((d) => d.tool === CREATE), false);
+
+  // Refused before any request: no ticket, a hand-built one, a setup ticket, another provider's, a spent one.
+  const before = fake.calls.length;
+  const otherProvider = mintMcpPublishTicket(notes({ key: 'other_fake', write_tools: [CREATE], publish_issue: 9999 }), CREATE);
+  const handBuilt = { provider: 'notes_fake', tool: CREATE, kind: 'publish' };
+  for (const ticket of [undefined, handBuilt, otherProvider]) {
+    await assert.rejects(() => s.callTool(CREATE, { title: 'x' }, ticket as any), (e: any) => e.code === 'path_not_allowed', JSON.stringify(ticket));
+  }
+  assert.equal(fake.calls.length, before, 'refused before any request');
+
+  const ticket = mintMcpPublishTicket(publishing, CREATE);
+  assert.deepEqual(await s.callTool(CREATE, { title: 'x' }, ticket), { tool: CREATE, arguments: { title: 'x' } });
+  await assert.rejects(() => s.callTool(CREATE, { title: 'x' }, ticket), (e: any) => e.code === 'path_not_allowed', 'a publish ticket buys one call');
+  assert.deepEqual(fake.toolCalls().filter((t: string) => t === CREATE), [CREATE], 'one write call');
+
+  // Only a write tool of a record with a publishing issue is mintable.
+  for (const [record, name] of [[notes({ write_tools: [CREATE], publish_issue: null } as any), CREATE], [notes({ write_tools: [], publish_issue: 9999 }), CREATE], [publishing, 'get_note'], [publishing, 'not_listed']] as const) {
+    assert.throws(() => mintMcpPublishTicket(record, name), (e: any) => e.code === 'path_not_allowed', name);
+  }
+  // A record with no publishing issue offers no write tool, whatever the server lists.
+  const noIssue = await openMcpSession(notes({ write_tools: [CREATE] as any, publish_issue: null } as any), { accessToken: fake.signedIn(), fetcher: fake.fetch, ...quiet });
+  assert.deepEqual([...noIssue.write_offered], []);
+
+  // A write tool the server calls destructive, or whose schema left its pin, is never offered.
+  const destructive = notesFake({ tools: tools().map((t: any) => t.name === CREATE ? { ...t, annotations: { destructiveHint: true } } : t) });
+  const d = await openMcpSession(publishing, { accessToken: destructive.signedIn(), fetcher: destructive.fetch, ...quiet });
+  assert.deepEqual([...d.write_offered], []);
+  await assert.rejects(() => d.callTool(CREATE, {}, mintMcpPublishTicket(publishing, CREATE)), (e: any) => e.code === 'path_not_allowed');
+  const pinned = notes({ write_tools: [CREATE], publish_issue: 9999, tool_pins: { search_notes: await toolFingerprint(defaultNotesTools()[0]), get_note: await toolFingerprint(defaultNotesTools()[1]), [CREATE]: 'not-the-schema' } });
+  const p = await openMcpSession(pinned, { accessToken: fake.signedIn(), fetcher: fake.fetch, ...quiet });
+  assert.deepEqual([...p.write_offered], []);
+  assert.ok(p.drift.some((x) => x.tool === CREATE && x.why === 'changed'));
 });

@@ -52,6 +52,7 @@ function world() {
   addColumnsFrom(db, sql('migrations/597_company_archive_and_events.sql'), 'company_profiles');
   for (const m of ['712_team_agents.sql', '202611021724_team_agents_persona.sql', '202611041609_outside_assistant_bindings.sql']) db.exec(sql(`migrations/${m}`));
   for (const m of ['759_agent_skills.sql', '202611022326_agent_skill_context_tokens.sql', '202611022055_agent_skill_moderation.sql', '202611022140_hq_skill_lifecycle.sql']) db.exec(sql(`migrations/${m}`));
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Synthetic Super', 'admin', null, 'free');
   user.run(EDITOR, 'u-editor', 'editor@example.test', 'Synthetic Editor', 'founder', 100, 'growth');
