@@ -34,11 +34,12 @@ type Scenario = {
 
 const SET = JSON.parse(readFileSync(new URL('../../documentation/architecture/skill-discovery/queries.v1.json', import.meta.url), 'utf8')) as { version: number; scenarios: Scenario[] };
 
+/** A frontmatter line's value (`key: value`), read without building a pattern from `key`. */
+const one = (md: string, key: string): string => md.split('\n').find((l) => l.startsWith(`${key}:`))?.slice(key.length + 1).trim() ?? '';
 const list = (md: string, key: string): string[] => {
-  const m = new RegExp(`^${key}: ?\\[(.*)\\]$`, 'm').exec(md);
-  return m ? m[1].split(',').map((s) => s.trim()).filter(Boolean) : [];
+  const v = one(md, key);
+  return v.startsWith('[') && v.endsWith(']') ? v.slice(1, -1).split(',').map((s) => s.trim()).filter(Boolean) : [];
 };
-const one = (md: string, key: string): string => new RegExp(`^${key}: ?(.*)$`, 'm').exec(md)?.[1]?.trim() ?? '';
 const LIBRARY = new Map<string, Skill>(SKILL_LIBRARY.map((e) => [e.slug, {
   slug: e.slug, scope: 'hq', roles: list(e.skill_md, 'roles'), tools: list(e.skill_md, 'tools'), output: one(e.skill_md, 'output'), status: 'published',
 }]));
