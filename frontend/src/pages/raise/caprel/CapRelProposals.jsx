@@ -107,10 +107,14 @@ export default function CapRelProposals({ projectId, prospect = null, onClose, o
   };
   const acceptAll = async (group) => {
     setAll({ busy: true, failed: 0, open: '' });
-    let failed = 0;
-    for (const p of group.items.slice(0, ACCEPT_ALL_MAX)) {
-      try { await capitalRelationshipsApi.acceptProposal(projectId, p.uid, null); } catch { failed += 1; }
-    }
+    // D5073: one request for the whole note, one result per proposal. A refusal on one (no longer open) is counted
+    // and the rest are written; a request that fails as a whole counts every proposal as not accepted.
+    const uids = group.items.slice(0, ACCEPT_ALL_MAX).map((p) => p.uid);
+    let failed = uids.length;
+    try {
+      const out = await capitalRelationshipsApi.acceptProposals(projectId, uids);
+      failed = Array.isArray(out?.results) ? out.results.filter((r) => r.ok !== true).length : uids.length;
+    } catch { failed = uids.length; }
     setAll({ busy: false, failed, open: '' });
     reload();
   };
