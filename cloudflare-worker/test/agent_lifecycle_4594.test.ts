@@ -30,7 +30,7 @@ import { removeMigratedDatabases } from './_storage_schema.ts';
 import { AGENT, MEMBER, MODULE, OPTION, PROJECT, SPONSOR, STRANGER, hex, loopDeps, type World } from './_agent_engine_fixture.ts';
 import { EVIDENCE_LABEL, STUB_ANSWER, batchOf, ledger, lifecycleStep, lifecycleWorld, modelCalls, until, type LifeWorld } from './_agent_lifecycle_fixture.ts';
 import { agentRun } from '../src/services/agents/agentRun.ts';
-import { runTaskLoop, after } from '../src/agents/loop.ts';
+import { runTaskLoop } from '../src/agents/loop.ts';
 import { agentDlqConsumer, agentQueueConsumer, dispatchQueue, DLQ_FINAL_ATTEMPT } from '../src/agents/agentQueue.ts';
 import { scopeOfRow } from '../src/agents/engine.ts';
 import engineRoutes, { __setEngineRouteDeps } from '../src/routes/agent_engine.ts';
