@@ -74,7 +74,7 @@ import {
 } from '../services/securityIdentity';
 import { loadTokenAnomalies } from '../services/tokenAnomalies';
 import { logAdminAction } from '../services/adminAudit';
-import { loadGuardrailCounters } from '../services/aiRouter';
+import { loadGuardrailCounters, loadRecentGuardVerdicts } from '../services/aiRouter';
 import {
   loadSecurityEventCounts, SECURITY_EVENT_KINDS, SECURITY_EVENT_RETENTION_DAYS, SECURITY_EVENTS_NOT_COUNTED,
 } from '../services/securityEvents';
@@ -178,7 +178,12 @@ async function aiSafetyBlock(env: Env) {
   // D481 — the token anomalies carry their own availability, their own table
   // and their own window (24 hours against the seven days before), stated in
   // their own `how`; they answer whatever the rollup below does.
-  const always = { token_anomalies: await loadTokenAnomalies(env), not_counted: AI_SAFETY_NOT_COUNTED };
+  const always = {
+    token_anomalies: await loadTokenAnomalies(env),
+    // D4803 — SE08's "Recent guard verdicts", its own read with its own availability.
+    recent_verdicts: await loadRecentGuardVerdicts(env, AI_SAFETY_WINDOW_DAYS),
+    not_counted: AI_SAFETY_NOT_COUNTED,
+  };
   // D4691 — `available` is earned, not asserted: a rollup that threw is the
   // whole block unreadable, with its reason, never a block of zeros.
   let counters: Awaited<ReturnType<typeof loadGuardrailCounters>>;
@@ -501,6 +506,9 @@ r.get('/overview', async (c) => {
     // its own key; never one green light inferred from the other.
     backup_dr: {
       backup: await readBackupHeartbeat(env, 'd1'),
+      // D4803 — SE09's KV snapshots card: the worker cron's own heartbeat,
+      // read with the same validation. KV has no restore drill.
+      kv: await readBackupHeartbeat(env, 'kv'),
       drill: await readRestoreDrill(env),
       not_recorded: DR_NOT_RECORDED,
     },

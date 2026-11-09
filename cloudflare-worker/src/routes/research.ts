@@ -745,8 +745,19 @@ export function withinBudget(passages: EligiblePassage[], budget = ASK_CONTEXT_B
   return kept;
 }
 
+/**
+ * D3701 (Research v2, RS-07): how much of the cited passage a citation keeps,
+ * so the answer can show "its exact passage" without the page re-reading the
+ * index. The excerpt is the start of the text the model was given for that
+ * citation, never a summary of it, and `passage_truncated` says when it is
+ * cut. It is stored in the answer's citations JSON (migration 221), which is
+ * read only by the answer's owner, about the owner's own document.
+ */
+export const CITATION_PASSAGE_CHARS = 600;
+
 /** D4605: a citation names the document, the index run, the chunk and its page. */
-function citationOf(p: EligiblePassage, documentUid: string) {
+export function citationOf(p: EligiblePassage, documentUid: string) {
+  const text = String(p.text || '').trim();
   return {
     title: p.hit.title,
     document_uid: documentUid,
@@ -754,6 +765,9 @@ function citationOf(p: EligiblePassage, documentUid: string) {
     chunk: p.hit.chunk ?? null,
     page: p.hit.page ?? null,
     score: Number(p.hit.score.toFixed(3)),
+    // D3701: the passage itself. Null, not '', when the index gave no text.
+    passage: text ? text.slice(0, CITATION_PASSAGE_CHARS) : null,
+    passage_truncated: text.length > CITATION_PASSAGE_CHARS,
   };
 }
 
