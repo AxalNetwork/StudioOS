@@ -8,7 +8,7 @@
 //   GET   /api/admin/programs/proposals/mine?q=&status=&sort=&page=        Your proposals
 //   GET   /api/admin/programs/proposals?q=&status=&licence=&sort=&page=    HQ's queue (Super Admin)
 //   GET   /api/admin/programs/proposals/:uid           → { proposal }
-//   POST  /api/admin/programs/proposals/:uid/decision  { outcome, note } (Super Admin)
+//   POST  /api/admin/programs/proposals/:uid/decision  { outcome, note, expected_revision } (Super Admin; D4873)
 //   POST  /api/admin/programs                          New program (Super Admin) → 201 the program
 import { request } from '../api.js';
 
